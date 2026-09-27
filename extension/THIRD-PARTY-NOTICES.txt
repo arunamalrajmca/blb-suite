@@ -1,0 +1,14 @@
+Blue Letter Bible Suite — Third-Party Notice for Case-Sensitive KJV Corpus
+
+Source repository:
+https://github.com/renniemaharaj/kjv-bible
+
+The original-case KJV companion corpus in kjv-corpus-original-case.js is derived
+from the repository above. The repository metadata identifies the repository as
+MIT licensed. The KJV text is identified there as public domain in many
+jurisdictions. The companion corpus preserves original capitalization and is
+aligned to the Suite's existing 31,102-verse normalized corpus by
+(book number, chapter, verse).
+
+This notice does not alter the Suite's existing normalized KJV corpus or its
+search/index architecture.

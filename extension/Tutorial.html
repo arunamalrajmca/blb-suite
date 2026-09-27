@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html data-theme="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Blue Letter Bible Suite 5.2.45 — User Guide</title>
+<style>
+:root{--blue:#17365d;--blue-light:#2d5f8b;--blue-pale:#eef4fa;--border:#c9d8e7;--text:#222;--muted:#666;--white:#fff;--page-bg:#f3f5f7;--code-bg:#f1f3f5;--table-head:#dce8f5;--toc-bg:#f8fafc;--ok:#eaf7ef;--warn:#fff7e6}
+[data-theme="dark"]{--blue:#8fc7ff;--blue-light:#72b3e8;--blue-pale:#19324a;--border:#3c5268;--text:#e7edf3;--muted:#aeb8c3;--white:#18212b;--page-bg:#10161d;--code-bg:#25313d;--table-head:#263b50;--toc-bg:#1e2934;--ok:#183524;--warn:#3d321b}
+*{box-sizing:border-box}body{margin:0;background:var(--page-bg);color:var(--text);font-family:Arial,Helvetica,sans-serif;line-height:1.62}.container{max-width:1050px;margin:0 auto;background:var(--white);min-height:100vh}header{position:relative;background:linear-gradient(135deg,#17365d,#2d5f8b);color:#fff;padding:48px 60px 42px}header h1{margin:0 0 8px;font-size:32px;line-height:1.2}header p{margin:6px 0;font-size:16px;opacity:.94}.version{display:inline-block;margin-top:14px;padding:5px 12px;border:1px solid rgba(255,255,255,.4);border-radius:20px;font-size:13px}.theme-toggle{position:absolute;top:20px;right:25px;border:1px solid rgba(255,255,255,.45);border-radius:7px;padding:7px 11px;background:rgba(255,255,255,.12);color:#fff;cursor:pointer;font-size:13px}main{padding:32px 60px 60px}h2{color:var(--blue);font-size:23px;margin-top:40px;margin-bottom:12px;padding-bottom:7px;border-bottom:2px solid var(--border)}h3{color:var(--blue-light);font-size:18px;margin-top:24px;margin-bottom:7px}p{margin:9px 0 14px}ul,ol{padding-left:25px}li{margin:5px 0}.toc{background:var(--toc-bg);border:1px solid var(--border);border-radius:10px;padding:18px 22px}.toc a{color:var(--blue-light);text-decoration:none}.toc a:hover{text-decoration:underline}.tip,.note,.warning{border-left:4px solid var(--blue-light);background:var(--blue-pale);padding:12px 15px;border-radius:6px;margin:14px 0}.warning{background:var(--warn);border-color:#c9a43b}.success{background:var(--ok);border-left:4px solid #4c9b68;padding:12px 15px;border-radius:6px;margin:14px 0}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.card{border:1px solid var(--border);border-radius:10px;padding:16px;background:var(--white)}.card h3{margin-top:0}.steps li::marker{font-weight:bold}code{background:var(--code-bg);padding:2px 5px;border-radius:4px}pre{background:var(--code-bg);border:1px solid var(--border);padding:13px 15px;border-radius:8px;overflow:auto;white-space:pre-wrap}.command-shell{display:inline-flex;align-items:center;gap:5px}.command-tools{display:inline-flex;gap:3px}.command-tool{border:1px solid var(--border);background:var(--white);color:var(--text);border-radius:5px;padding:2px 6px;cursor:pointer}.command-tool:hover{background:var(--code-bg)}.command-url{display:inline-flex;align-items:center;gap:5px}table{width:100%;border-collapse:collapse;margin:13px 0 18px}th,td{border:1px solid var(--border);padding:9px 10px;vertical-align:top;text-align:left}th{background:var(--table-head)}.small{font-size:13px;color:var(--muted)}.kbd{display:inline-block;border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:1px 6px;background:var(--code-bg);font-family:monospace;font-size:13px}.hero-list{margin-top:10px}.hero-list li{margin:8px 0}footer{border-top:1px solid var(--border);padding:22px 60px 30px;color:var(--muted);font-size:13px}@media(max-width:760px){header,main,footer{padding-left:22px;padding-right:22px}.grid{grid-template-columns:1fr}header h1{font-size:26px}.theme-toggle{position:static;margin-bottom:15px}}
+@media print{body{background:#fff}.container{max-width:none}.theme-toggle,.command-tools{display:none}header{padding:28px 35px}main{padding:20px 35px}h2{break-after:avoid}.card,.toc,.tip,.warning,.success{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="container">
+<header>
+<button class="theme-toggle" id="themeToggle" type="button">🌙 Dark</button>
+<h1>Blue Letter Bible Suite</h1>
+<p>A practical guide to searching, opening, studying, and copying Bible content with Blue Letter Bible.</p>
+<span class="version">User Guide • Version 5.2.45</span>
+</header>
+<main>
+<h2 id="contents">Contents</h2>
+<div class="toc">
+<ol>
+<li><a href="#getting-started">Get Started</a></li>
+<li><a href="#address-bar">Search from the Address Bar</a></li>
+<li><a href="#selection">Select Text and Open It in BLB</a></li>
+<li><a href="#multiverse">Multiple References and MultiVerse</a></li>
+<li><a href="#show">Show on BLB</a></li>
+<li><a href="#double-click">Double-Click BLB</a></li>
+<li><a href="#pdf">Bible References in Web Pages and PDFs</a></li>
+<li><a href="#webster">Webster's 1828</a></li>
+<li><a href="#redirect">Bible-Link Redirection</a></li>
+<li><a href="#study">Study Sessions and History</a></li>
+<li><a href="#copy">Copy Bible Text with Links</a></li>
+<li><a href="#ranges">Search Ranges</a></li>
+<li><a href="#case-sensitive">Case-Sensitive KJV Search</a></li>
+<li><a href="#quick-reference">Quick Reference</a></li>
+<li><a href="#troubleshooting">Troubleshooting</a></li>
+</ol>
+</div>
+
+<h2 id="getting-started">1. Get Started</h2>
+<p>Blue Letter Bible Suite adds quick ways to send Bible references, words, phrases, and selected passages to <strong>Blue Letter Bible (BLB)</strong>.</p>
+<div class="grid">
+<div class="card"><h3>Install</h3><ol class="steps"><li>Open your browser's extensions page.</li><li>Turn on <strong>Developer mode</strong> if you are installing an unpacked extension.</li><li>Choose <strong>Load unpacked</strong> and select the extension folder.</li></ol><p><span class="command-url"><code>chrome://extensions</code><button class="command-tool url-copy" data-copy="chrome://extensions" aria-label="Copy chrome://extensions" title="Copy chrome://extensions">⧉</button></span></p><p><span class="command-url"><code>brave://extensions</code><button class="command-tool url-copy" data-copy="brave://extensions" aria-label="Copy brave://extensions" title="Copy brave://extensions">⧉</button></span></p></div>
+<div class="card"><h3>Open the Suite controls</h3><p>Click the <strong>Blue Letter Bible Suite</strong> extension icon. The popup contains the main switches and study controls.</p><p>Settings are remembered for the websites where you use them.</p></div>
+</div>
+<div class="tip"><strong>Good to know:</strong> Bible-related websites can have useful features enabled automatically. On ordinary websites, you can turn the features on when you need them.</div>
+
+<h2 id="address-bar">2. Search from the Address Bar</h2>
+<p>The quickest way to send a search to BLB is the browser's address bar.</p>
+<ol class="steps"><li>Focus the address bar.</li><li>Type <span class="kbd">b</span>, then a space.</li><li>Enter a Bible reference, word, phrase, Strong's number, or search with a range.</li><li>Press <span class="kbd">Enter</span>.</li></ol>
+<table><tr><th>Type</th><th>Example</th><th>What opens</th></tr>
+<tr><td>Bible reference</td><td><code>b Romans 8:28</code></td><td>Romans 8:28 in BLB</td></tr>
+<tr><td>Book and chapter</td><td><code>b Psalm 150</code></td><td>Psalm 150</td></tr>
+<tr><td>Strong's</td><td><code>b G3056</code></td><td>The Strong's entry</td></tr>
+<tr><td>Phrase</td><td><code>b "body of Christ"</code></td><td>A BLB phrase search</td></tr>
+<tr><td>Range</td><td><code>b faith NT</code></td><td>A search limited to the New Testament</td></tr></table>
+<div class="note">You can use common Bible abbreviations such as <code>Rom 8:28</code>, <code>Ps 150:1-6</code>, and <code>1 Cor 13:4-7</code>.</div>
+
+<h2 id="selection">3. Select Text and Open It in BLB</h2>
+<p>On supported pages, select text and use <strong>Show on BLB</strong>. The Suite examines the <strong>entire selection</strong>, so a long paragraph or several paragraphs can be used.</p>
+<div class="success"><strong>Important:</strong> You do not need to select only the reference. If a larger selection contains Bible references, the Suite looks through the whole selection and opens the references it can identify.</div>
+<h3>What happens to your selection?</h3>
+<table><tr><th>Your selection contains</th><th>Result</th></tr>
+<tr><td>One resolvable Bible reference</td><td>That reference opens in a normal BLB verse view.</td></tr>
+<tr><td>Two or more resolvable Bible references</td><td>All of the references open together in one <strong>MultiVerse</strong> view.</td></tr>
+<tr><td>No resolvable Bible reference</td><td>The Suite can use the selection as a search when appropriate; it does not treat random or incomplete text as a Bible reference.</td></tr></table>
+<h3>Example: selecting a whole passage</h3>
+<pre id="multiVerseExample">Scripture tells us to “exercise thyself unto godliness” (1 Timothy 4:7). This isn't a passive suggestion—it’s an active command. Godliness requires work, effort, and intentionality.
+
+The Apostle Paul instructs us to “work out your own salvation with fear and trembling” (Philippians 2:12).</pre>
+<p>The two references in this selection are <strong>1 Timothy 4:7</strong> and <strong>Philippians 2:12</strong>. The expected result is one MultiVerse view containing both references.</p>
+<button class="command-tool" id="selectMultiVerseExample" type="button">↖ Select this example</button>
+<div class="tip">When references are found in a selection, the Suite opens those references directly. You will not get an extra Criteria Search window for the same selection.</div>
+<div class="tip">When a selection has no explicit Bible reference, the Suite scans the whole selection for KJV wording. It prefers a meaningful phrase that identifies one verse, records that verse, then moves past the matched KJV region before continuing. This reduces repeated or noisy search fragments while still allowing later distinct verses to be found.</div>
+
+<h2 id="multiverse">4. Multiple References and MultiVerse</h2>
+<p>MultiVerse is used when a selection contains more than one Bible reference.</p>
+<ol class="steps"><li>Select text containing the references.</li><li>Choose <strong>Show on BLB</strong> by floating button, right-click, or <span class="kbd">Alt + B</span>.</li><li>The Suite collects the references it finds.</li><li>BLB opens them together in MultiVerse.</li></ol>
+<table><tr><th>Selection</th><th>Expected result</th></tr>
+<tr><td><code>Romans 8:28</code></td><td>One normal reference view.</td></tr>
+<tr><td><code>Romans 8:28; Philippians 2:12</code></td><td>One MultiVerse view with both references.</td></tr>
+<tr><td>A whole article or paragraph containing several references</td><td>References found throughout the selection are collected together.</td></tr></table>
+<div class="note">Repeated references are not opened as separate copies just because they appear more than once in the selected text.</div>
+
+<h2 id="show">5. Show on BLB</h2>
+<p><strong>Show on BLB</strong> is available in three convenient ways:</p>
+<div class="grid">
+<div class="card"><h3>Floating button</h3><p>When enabled for the current website, a small <strong>Show on BLB</strong> button appears near the bottom-right of the page. Select text, then click it.</p></div>
+<div class="card"><h3>Right-click menu</h3><p>Select text, right-click, and choose <strong>Show on BLB</strong>.</p></div>
+<div class="card"><h3>Keyboard shortcut</h3><p>Select text and press <span class="kbd">Alt + B</span>.</p></div>
+<div class="card"><h3>Site setting</h3><p>The <strong>Show on BLB</strong> setting controls the floating button and the right-click menu. It is remembered separately for websites.</p></div>
+</div>
+<div class="tip">The <span class="kbd">Alt + B</span> shortcut is available independently of the floating button and right-click menu.</div>
+
+<h2 id="double-click">6. Double-Click BLB</h2>
+<p>Turn on <strong>Double-Click BLB</strong> in the Suite popup for a fast way to open Bible-related text.</p>
+<table><tr><th>Double-click</th><th>Typical result</th></tr>
+<tr><td>A KJV word</td><td>Open that word in BLB.</td></tr>
+<tr><td>A Strong's number such as <code>G3056</code> or <code>H430</code></td><td>Open the Strong's entry.</td></tr>
+<tr><td>A Bible book or supported abbreviation</td><td>Open the corresponding Bible book.</td></tr>
+<tr><td>A part of a nearby Bible reference</td><td>Use the surrounding reference to open the correct verse.</td></tr></table>
+<p>Examples include selecting or double-clicking <strong>150</strong> in <code>Psalm 150</code>, or <strong>28</strong> in <code>Romans 8:28</code>.</p>
+<div class="note">The same nearby-reference understanding is used by Double-Click BLB, Show on BLB, right-click Show on BLB, and <span class="kbd">Alt + B</span>.</div>
+
+<h2 id="pdf">7. Bible References in Web Pages and PDFs</h2>
+<p>On supported web pages and PDF documents, you can select Bible references and send them to BLB.</p>
+<ol class="steps"><li>Select the reference or a larger passage containing references.</li><li>Right-click and choose <strong>Show on BLB</strong>, or use <span class="kbd">Alt + B</span>.</li><li>One reference opens normally; multiple references open in MultiVerse.</li></ol>
+<div class="tip"><strong>PDF tip:</strong> If the PDF text is selectable, the Suite can work with the selected text just like a web page.</div>
+
+<h2 id="webster">8. Webster's 1828</h2>
+<p>On supported Webster's 1828 dictionary pages, the Suite can find Bible references and provide a convenient BLB button.</p>
+<ul><li>Use the <strong>Show on BLB</strong> button provided on the page.</li><li>If the page contains one Bible reference, that reference opens normally.</li><li>If the page contains multiple Bible references, they can open together in MultiVerse.</li><li>The dictionary word itself is not treated as a Bible reference.</li></ul>
+
+<h2 id="redirect">9. Bible-Link Redirection</h2>
+<p>When <strong>Redirect External Bible Links</strong> is enabled, supported Bible links from other websites can open through BLB instead of sending you to the original destination.</p>
+<ol class="steps"><li>Open the Suite popup.</li><li>Turn on <strong>Redirect External Bible Links</strong>.</li><li>Click a supported Bible reference link on a web page.</li></ol>
+<div class="note">This setting is separate from <strong>Show on BLB</strong> and <strong>Double-Click BLB</strong>.</div>
+
+<h2 id="study">10. Study Sessions and History</h2>
+<p>Study Sessions help you collect Bible references, Strong's entries, search terms, and notes under a topic while you study.</p>
+<h3>Start a study</h3>
+<ol class="steps"><li>Open the Suite popup.</li><li>Choose or create a study topic.</li><li>Start recording.</li><li>Study normally. The Suite records supported study activity for that topic.</li><li>Add your own notes in the Notes area.</li><li>Stop the session when you are finished.</li></ol>
+<h3>History</h3>
+<p>The <strong>History</strong> controls let you review the study information by category:</p>
+<ul><li><strong>Verse References</strong> — open the references collected for the topic.</li><li><strong>Strong's</strong> — open the Strong's entries collected for the topic.</li><li><strong>Search Terms</strong> — search the terms collected during the study.</li></ul>
+<h3>Download your study</h3>
+<p>Use <strong>Download PDF</strong> to save study notes. You can download:</p>
+<ul><li><strong>Selected Topic</strong> — the current topic.</li><li><strong>All Topics</strong> — all stored topics together.</li><li><strong>By Date</strong> — studies within a selected date range.</li></ul>
+<div class="warning"><strong>Reminder:</strong> Study Sessions are optional. You can use the Bible-search features without recording a study.</div>
+
+<h2 id="copy">11. Copy Bible Text with Links</h2>
+<p>BLB's copy controls can preserve clickable Bible links when rich text is copied from supported BLB pages.</p>
+<ul><li>Use BLB's normal <strong>Copy</strong> or <strong>Copy to Clipboard</strong> button.</li><li>This also applies to supported MultiVerse views.</li><li>When you want plain text only, use <span class="kbd">Ctrl + Shift + V</span> in apps that support plain-text paste.</li></ul>
+
+<h2 id="ranges">12. Search Ranges</h2>
+<p>Add a range keyword to an address-bar search to limit where BLB searches.</p>
+<table><tr><th>Range</th><th>Example</th><th>Meaning</th></tr>
+<tr><td>Old Testament</td><td><code>b faith OT</code></td><td>Search the Old Testament.</td></tr>
+<tr><td>New Testament</td><td><code>b faith NT</code></td><td>Search the New Testament.</td></tr>
+<tr><td>Torah</td><td><code>b covenant Torah</code></td><td>Search the Torah.</td></tr>
+<tr><td>Gospels</td><td><code>b kingdom gep</code></td><td>Use the Gospels range.</td></tr></table>
+<p class="small">The range keywords are shortcuts for BLB's search-range controls. You can also search without a range.</p>
+
+
+<h2 id="case-sensitive">13. Case-Sensitive KJV Search</h2>
+<p>The <strong>case-sensitive KJV routing</strong> is available from the browser address bar with the <code>cs</code> command.</p>
+<table><tr><th>Command</th><th>What it does</th></tr>
+<tr><td><code>b cs Jesus</code></td><td>Uses native BLB search for the ordinary <strong>Jesus</strong> query.</td></tr>
+<tr><td><code>b cs JESUS</code></td><td>Uses the local verified KJV corpus when the exact all-caps form matters.</td></tr>
+<tr><td><code>b cs LORD</code></td><td>Finds the exact KJV capitalization <strong>LORD</strong> and sends the matching references to BLB MultiVerse.</td></tr>
+<tr><td><code>b cs "Lord God"</code></td><td>Finds the exact case-sensitive phrase.</td></tr>
+</table>
+<div class="tip"><strong>Corpus:</strong> the local engine searches the verified original-case KJV corpus containing all 31,102 verses. Capitalization is significant for both individual words and phrases.</div>
+<div class="success"><strong>Destination:</strong> matching local exact-case references are sent directly to <strong>Blue Letter Bible's native MultiVerse</strong> in the current tab. The preserved <code>case-sensitive-search.html</code> page is an internal testing/visual page and is not the user-facing destination of <code>b cs</code>.</div>
+<div class="note"><strong>Normal search is unchanged:</strong> <code>b ...</code> continues to use the existing normal BLB Suite search behavior. Only <code>b cs ...</code> enters the new case-sensitive routing layer.</div>
+
+<h2 id="quick-reference">14. Quick Reference</h2>
+<table><tr><th>Want to...</th><th>Use</th></tr>
+<tr><td>Search from the address bar</td><td><code>b</code> + space + your search</td></tr>
+<tr><td>Open selected text in BLB</td><td>Floating <strong>Show on BLB</strong>, right-click → <strong>Show on BLB</strong>, or <span class="kbd">Alt + B</span></td></tr>
+<tr><td>Open several references together</td><td>Select text containing the references → <strong>Show on BLB</strong></td></tr>
+<tr><td>Open a KJV word quickly</td><td>Turn on <strong>Double-Click BLB</strong> and double-click the word</td></tr>
+<tr><td>Open a Strong's entry</td><td>Double-click a Strong's number or search it with <code>b</code></td></tr>
+<tr><td>Record a study</td><td>Open the popup → choose a topic → Start</td></tr>
+<tr><td>Save study notes</td><td>Study Sessions → <strong>Download PDF</strong></td></tr></table>
+
+<h2 id="troubleshooting">15. Troubleshooting</h2>
+<h3>Show on BLB is not visible</h3>
+<ul><li>Open the Suite popup and make sure <strong>Show on BLB</strong> is ON for that website.</li><li>Remember that the floating button and right-click menu are controlled by this setting.</li><li>You can still try <span class="kbd">Alt + B</span>.</li></ul>
+<h3>A selected reference opened incorrectly</h3>
+<ul><li>Select a little more surrounding text so the complete Bible reference is included.</li><li>For a larger passage, you can select the whole passage; the Suite checks the entire selection for references.</li><li>Check that the book name and chapter/verse are written clearly.</li></ul>
+<h3>Several references are not opening together</h3>
+<ul><li>Make sure the references are part of the same selection.</li><li>Use <strong>Show on BLB</strong> or <span class="kbd">Alt + B</span> after selecting the passage.</li><li>If references are found, the Suite opens them in MultiVerse rather than a separate Criteria Search window.</li></ul>
+<h3>Double-click is not doing anything</h3>
+<ul><li>Open the Suite popup and turn on <strong>Double-Click BLB</strong>.</li><li>Try it on ordinary page text rather than links, buttons, form fields, or editable text.</li></ul>
+<h3>Study information is not being recorded</h3>
+<ul><li>Check that the correct study topic is selected and recording is started.</li><li>Open <strong>History</strong> after you have performed a supported study action.</li></ul>
+
+<div class="success"><strong>In short:</strong> Search with <code>b</code>, select text and use <strong>Show on BLB</strong>, double-click when you want a quick lookup, and use Study Sessions when you want to keep a record of your study.</div>
+</main>
+<footer>
+Blue Letter Bible Suite 5.2.45 — User Guide<br/>
+This guide describes the user-facing behavior of the 5.2.45 baseline. It intentionally avoids implementation details.
+</footer>
+</div>
+<script src="Tutorial.js"></script>
+</body>
+</html>

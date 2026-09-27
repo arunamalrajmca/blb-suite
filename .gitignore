@@ -1,0 +1,6 @@
+node_modules/
+test-results/
+playwright-report/
+*.log
+local-runner/Legacy-Brave-E2E-Runner/BUILD/*.zip
+local-runner/Legacy-Brave-E2E-Runner/REPORTS/*

@@ -1,0 +1,105 @@
+{
+  "manifest_version": 3,
+  "name": "Blue Letter Bible Suite",
+  "version": "5.2.51.32",
+  "description": "Bible study tools for BLB search, Bible references, Show on BLB, Double-Click BLB, and KJV case-sensitive search.",
+  "permissions": [
+    "clipboardWrite",
+    "activeTab",
+    "omnibox",
+    "storage",
+    "downloads",
+    "declarativeNetRequest",
+    "contextMenus",
+    "scripting",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://www.bible.com/*",
+    "https://www.blueletterbible.org/*",
+    "http://www.blueletterbible.org/*",
+    "https://www.kingjamesbibleonline.org/*",
+    "https://kjbo.org/*",
+    "https://www.kjbo.org/*",
+    "https://www.kjv.site/*",
+    "https://kjv.site/*",
+    "https://m.kjv.site/*",
+    "https://officialkingjamesbible.com/*",
+    "https://www.officialkingjamesbible.com/*",
+    "https://www.biblegateway.com/*",
+    "https://bibleportal.com/*",
+    "https://www.bibleref.com/*",
+    "https://webstersdictionary1828.com/*",
+    "https://biblehub.com/*",
+    "https://www.bibleportal.com/*",
+    "https://www.biblehub.com/*"
+  ],
+  "omnibox": {
+    "keyword": "b"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.bible.com/*",
+        "https://www.blueletterbible.org/*",
+        "http://www.blueletterbible.org/*",
+        "https://www.kingjamesbibleonline.org/*",
+        "https://kjbo.org/*",
+        "https://www.kjbo.org/*",
+        "https://www.kjv.site/*",
+        "https://kjv.site/*",
+        "https://m.kjv.site/*",
+        "https://officialkingjamesbible.com/*",
+        "https://www.officialkingjamesbible.com/*",
+        "https://www.biblegateway.com/*",
+        "https://bibleportal.com/*",
+        "https://www.bibleref.com/*",
+        "https://webstersdictionary1828.com/*",
+        "https://biblehub.com/*",
+        "https://www.bibleportal.com/*",
+        "https://www.biblehub.com/*",
+        "file:///*.pdf",
+        "file:///*.html",
+        "file:///*.htm"
+      ],
+      "js": [
+        "kjv-corpus-word-index.js",
+        "books.js",
+        "book-aliases.js",
+        "reference-core.js",
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "options_page": "options.html",
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "commands": {
+    "open-bible-selection-in-blb": {
+      "suggested_key": {
+        "default": "Alt+B"
+      },
+      "description": "Open selected Bible text or references in BLB"
+    }
+  },
+  "action": {
+    "default_title": "BLB Suite",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    },
+    "default_popup": "popup.html"
+  },
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ]
+}

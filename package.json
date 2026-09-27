@@ -1,0 +1,15 @@
+{
+  "name": "blb-suite",
+  "private": true,
+  "version": "5.2.51.32",
+  "description": "Blue Letter Bible Suite source and reproducible browser test harness",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:ui": "playwright test --ui",
+    "test:static": "node scripts/validate-build.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0"
+  }
+}

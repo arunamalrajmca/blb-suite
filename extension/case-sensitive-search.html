@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BLB Suite — Case-Sensitive KJV Search Sample</title><style>
+:root{color-scheme:dark;--bg:#101820;--surface:#18232d;--surface2:#1d2a35;--line:#334553;--text:#e9e6dc;--muted:#aeb8bf;--blue:#78a9cf;--blue2:#9bc5e5;--cream:#d9cfb7;--gold:#c6a45a}
+*{box-sizing:border-box}
+html,body{min-height:100%;background:var(--bg)}
+body{margin:0;font-family:Arial,Helvetica,sans-serif;background:var(--bg);color:var(--text);font-size:15px;line-height:1.55}
+.wrap{max-width:1000px;margin:0 auto;padding:0 22px 44px}
+.blb-head{margin:0 -22px 22px;padding:12px 22px 10px;background:#0b1218;border-bottom:3px solid #315d7d;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.brand{font-size:15px;font-weight:700;letter-spacing:.15px;color:#e6e1d4}.brand span{color:var(--blue2)}
+.query{font-size:19px;font-weight:600;line-height:1.4;color:var(--cream);word-break:break-word;margin-top:4px}
+.meta{font-size:13px;font-weight:400;color:var(--muted);margin:5px 0 17px}
+.actions{padding:0 0 16px}.multiverse{padding:8px 13px;border:1px solid #476b86;border-radius:2px;background:#203747;color:#e8edf0;cursor:pointer;font-size:13px;font-weight:600}.multiverse:hover:not(:disabled){background:#29485b;border-color:var(--blue)}.multiverse:disabled{opacity:.6;cursor:wait}
+.book-group{margin:0 0 24px;border-top:1px solid var(--line);background:transparent}
+.book-title{display:block;padding:9px 10px 7px;background:var(--surface);color:var(--blue2);font-size:17px;font-weight:600;line-height:1.35;border-bottom:1px solid var(--line);text-decoration:none}.book-title:hover{color:#b9dcf5;text-decoration:underline}
+.result{display:grid;grid-template-columns:58px minmax(0,1fr);gap:12px;padding:9px 10px;border-bottom:1px solid #293945;background:#141e26}
+.result:hover{background:#182833}
+.ref{font-size:14px;line-height:1.55;font-weight:600;text-decoration:none;color:var(--blue);white-space:nowrap}.ref:hover{color:#b9dcf5;text-decoration:underline}.ref .chapter,.ref .verse{font-weight:600;color:var(--blue)}
+.text{margin:0;font-size:15px;font-weight:400;line-height:1.62;color:var(--text);letter-spacing:0}
+.empty{padding:14px 15px;font-size:14px;color:var(--muted);border:1px solid var(--line);background:var(--surface);border-radius:2px}.hint{font-size:12px;color:#8998a2;margin-top:22px;line-height:1.5}.error{color:#d88989}
+@media(max-width:640px){.wrap{padding:0 14px 34px}.blb-head{margin:0 -14px 18px;padding-left:14px;padding-right:14px}.result{grid-template-columns:52px minmax(0,1fr);gap:9px}.text{font-size:14px}.query{font-size:18px}}
+</style></head>
+<body><main class="wrap"><header class="blb-head"><div class="brand">Blue Letter Bible <span>Suite</span></div></header><div class="query" id="query"></div><div class="meta" id="meta">Searching the original-case KJV corpus…</div><section id="results"></section><div class="hint">Case-sensitive KJV search from the verified local 31,102-verse corpus. Punctuation is ignored for matching; capitalization is significant.</div></main><script src="books.js"></script><script src="kjv-corpus-original-case.js"></script><script src="case-sensitive-search-core.js"></script><script src="case-sensitive-search.js"></script></body></html>

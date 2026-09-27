@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BLB Suite</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;width:360px;padding:10px;background:#1b1c1f;color:#e8eaed;font-family:Arial,Helvetica,sans-serif;font-size:12px;color-scheme:dark}
+button,input,textarea{font:inherit}
+.app-header{display:flex;align-items:center;gap:9px;padding:1px 3px 10px;border-bottom:1px solid #3b3e43;margin-bottom:9px}
+.header-icon{width:32px;height:32px;border-radius:7px}.header-copy{min-width:0;flex:1}.header-title{font-size:14px;font-weight:700;line-height:17px;color:#f5f5f5}.header-subtitle{font-size:9px;line-height:12px;color:#9aa0a6}
+.popup-card{border:1px solid #3b3e43;border-radius:10px;background:#25262a;box-shadow:0 2px 8px rgba(0,0,0,.35);overflow:visible}
+.suite-section{padding:9px;background:#222327;border-radius:10px;display:block}
+.suite-group{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.suite-group + .suite-group{margin-top:8px;padding-top:8px;border-top:1px solid #3b3e43;grid-template-columns:1fr}
+.suite-group-label{grid-column:1 / -1;font-size:8px;font-weight:700;letter-spacing:.2px;color:#858b92;text-transform:none;margin:0 1px -1px;min-width:0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+.secondary-control{height:30px;display:flex;align-items:center;justify-content:space-between;padding:0 9px;border:1px solid #41454b;border-radius:7px;background:#292b2f;color:#c9cdd2;min-width:0}
+.secondary-control.disabled{opacity:.48}.secondary-control>span{font-size:9px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#masterSetting{display:flex;align-items:center;justify-content:flex-end;margin-left:auto;min-width:78px}
+#masterSetting .suite-master-title{display:none}.master-right{display:flex;align-items:center;justify-content:center}.master-state{display:none}
+.study-section{padding:11px;position:relative}.study-section.suite-off{display:none}.section-title{font-size:12px;font-weight:700;color:#f1f3f4;margin-bottom:6px}.topic-row{display:flex;gap:6px;align-items:center}.topic-row .topic-input-wrap{border-radius:7px}.topic-row input[type=text]{border-radius:7px}.topic-row .topic-start-btn{background:#315b93;color:#fff;border-color:#7ea3d3;border-radius:8px;box-shadow:0 1px 3px rgba(0,0,0,.32),inset 0 1px 0 rgba(255,255,255,.14)}.topic-row .topic-start-btn:hover:not(:disabled){background:#3f70ad;border-color:#a7c8ef;box-shadow:0 2px 5px rgba(0,0,0,.4),inset 0 1px 0 rgba(255,255,255,.18)}.topic-row .topic-start-btn:active:not(:disabled){background:#294f80;box-shadow:inset 0 1px 2px rgba(0,0,0,.35)}.topic-row .topic-start-btn.paused{background:#315b93;border-color:#8ab4f8;color:#fff}.topic-input-wrap{position:relative;flex:1;min-width:0}input[type=text],textarea{width:100%;border:1px solid #5f6368;border-radius:7px;background:#1d1e21;color:#f1f3f4;outline:none}input[type=text]{height:34px;padding:0 88px 0 9px;font-size:12px}input[type=text]:focus,textarea:focus{border-color:#8ab4f8;box-shadow:0 0 0 1px #8ab4f8}.topic-arrow{position:absolute;right:2px;top:2px;width:29px;height:30px;border:0;background:transparent;color:#bfc4ca;border-radius:5px;padding:0}.topic-arrow:hover:not(:disabled),.topic-import-btn:hover{background:#3a3d42}.topic-import-btn{position:absolute;right:31px;top:2px;width:29px;height:30px;border:0;background:transparent;color:#bfc4ca;border-radius:5px;padding:0;display:flex;align-items:center;justify-content:center}.topic-import-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.topic-clear-btn{position:absolute;right:60px;top:2px;width:29px;height:30px;border:0;background:transparent;color:#bfc4ca;border-radius:5px;padding:0;display:flex;align-items:center;justify-content:center}.topic-clear-btn:hover{background:#3a3d42}.topic-clear-btn:disabled{opacity:.4;color:#777;cursor:default}.topic-clear-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.topic-start-btn{height:44px;width:44px;min-width:44px;padding:0;border:1px solid #6389bd;border-left:1px solid #7ea3d3;border-radius:0 7px 7px 0;background:#315b93;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}.topic-start-btn:hover:not(:disabled){background:#3b6ca9;border-color:#7ea3d3}.topic-start-btn:active:not(:disabled){background:#294f80}.topic-start-btn.recording{background:#543235;border-color:#7a4d50;color:#f0c6c6;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}.topic-start-btn.recording:hover:not(:disabled){background:#664043}.topic-start-btn:disabled{opacity:.4;cursor:default}.topic-start-btn svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}.square-btn,.date-btn{height:34px;border:1px solid #59616a;border-radius:7px;background:#36393e;color:#f1f3f4;cursor:pointer}.square-btn{width:34px;min-width:34px;padding:0;display:flex;align-items:center;justify-content:center}.square-btn svg{width:16px;height:16px}.autostop-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:5px;font-size:9px;color:#aeb4bb}.autostop-row select{height:24px;min-width:72px;padding:0 4px;border:1px solid #59616a;border-radius:5px;background:#2a2d31;color:#f1f3f4;font-size:9px}.autostop-row #resumeStudy{display:none;width:24px;height:24px;min-width:24px;padding:0;border:1px solid #59616a;border-radius:5px;background:#36393e;color:#f1f3f4;align-items:center;justify-content:center;cursor:pointer;font-size:12px}.autostop-row #resumeStudy:hover{background:#45484e}.topic-hint{font-size:8.5px;color:#858b92;margin-top:4px;line-height:11px}.topic-menu{position:absolute;left:0;right:0;top:calc(100% + 4px);max-height:180px;overflow-y:auto;z-index:100;display:none;border:1px solid #5f6368;border-radius:7px;background:#1d1e21;box-shadow:0 6px 18px rgba(0,0,0,.5);padding:4px}.topic-menu.open{display:block}.topic-option{display:block;width:100%;text-align:left;min-height:30px;padding:6px 8px;border:0;background:transparent;color:#e8eaed;border-radius:5px;font-size:11px}.topic-option:hover,.topic-option.active{background:#3b3e43}.topic-empty{padding:7px 8px;color:#8d939a;font-size:10px}
+.action-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:9px;width:100%}.action-row>*{min-width:0;width:100%;box-sizing:border-box}.action-btn{height:38px;min-width:0;padding:0;border:1px solid #555a61;border-radius:8px;background:#35383d;color:#f1f3f4;cursor:pointer;display:flex;align-items:center;justify-content:center}.action-btn svg{width:17px;height:17px;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.action-btn:hover:not(:disabled),.date-btn:hover:not(:disabled){background:#45494f}.action-btn.primary{background:#315b93;border-color:#6389bd}.action-btn.primary:hover:not(:disabled){background:#3b6ca9}.action-btn.primary.recording{background:#543235;border-color:#7a4d50;color:#f0c6c6}.action-btn.primary.recording:hover:not(:disabled){background:#664043}.action-btn.danger{background:#332628;border-color:#654447;color:#e7b8b3}.action-btn:disabled,.date-btn:disabled,.square-btn:disabled{opacity:.4;cursor:default}
+.history-wrap{position:relative;min-width:0;width:100%;box-sizing:border-box}.history-main{width:100%;min-width:0;box-sizing:border-box}.history-main svg{width:29px;height:21px;stroke-width:1.8}.history-menu{position:absolute;left:0;top:calc(100% + 4px);width:190px;z-index:122;display:none;padding:4px;border:1px solid #5f6368;border-radius:7px;background:#1d1e21;box-shadow:0 6px 18px rgba(0,0,0,.5)}.history-menu.open{display:block}.history-menu button{display:flex;align-items:center;gap:9px;width:100%;height:32px;padding:0 9px;border:0;border-radius:5px;background:transparent;color:#e8eaed;text-align:left;font-size:10px;cursor:pointer}.history-menu button:hover:not(:disabled){background:#3b3e43}.history-menu button:disabled{opacity:.4;color:#777;cursor:default}.history-menu button svg,.download-menu button svg,.clear-menu button svg,.date-quick-menu button svg{width:14px;height:14px;flex:0 0 14px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.history-menu button span,.download-menu button span,.clear-menu button span,.date-quick-menu button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.download-wrap{position:relative;min-width:0}.clear-wrap{position:relative;min-width:0;width:100%}.clear-wrap>.action-btn{width:100%;min-width:0}.download-main{width:100%;display:flex;align-items:center;justify-content:center;gap:5px}.download-chevron{font-size:9px;color:#c8cdd3}.download-menu{position:absolute;right:0;top:calc(100% + 4px);width:220px;z-index:120;display:none;padding:4px;border:1px solid #5f6368;border-radius:7px;background:#1d1e21;box-shadow:0 6px 18px rgba(0,0,0,.5)}.download-menu.open{display:block}.clear-menu{position:absolute;right:0;top:calc(100% + 4px);width:220px;z-index:120;display:none;padding:4px;border:1px solid #5f6368;border-radius:7px;background:#1d1e21;box-shadow:0 6px 18px rgba(0,0,0,.5)}.clear-menu.open{display:block}.clear-menu button{display:flex;align-items:center;gap:9px;width:100%;height:32px;padding:0 9px;border:0;border-radius:5px;background:transparent;color:#e8eaed;text-align:left;font-size:10px;cursor:pointer}.clear-menu button:hover{background:#3b3e43}.download-menu button{display:flex;align-items:center;gap:9px;width:100%;height:32px;padding:0 9px;border:0;border-radius:5px;background:transparent;color:#e8eaed;text-align:left;font-size:10px;cursor:pointer}.download-menu button:hover:not(:disabled),.clear-menu button:hover:not(:disabled){background:#3b3e43}.download-menu button:disabled,.clear-menu button:disabled{opacity:.4;color:#777;cursor:default}.date-quick-menu{position:absolute;right:0;top:calc(100% + 4px);width:142px;z-index:121;display:none;padding:4px;border:1px solid #5f6368;border-radius:7px;background:#1d1e21;box-shadow:0 6px 18px rgba(0,0,0,.5)}.date-quick-menu.open{display:block}.date-quick-menu button{display:flex;align-items:center;gap:9px;width:100%;height:32px;padding:0 9px;border:0;border-radius:5px;background:transparent;color:#e8eaed;text-align:left;font-size:10px;cursor:pointer}.date-quick-menu button:hover{background:#3b3e43}.date-quick-divider{height:1px;margin:4px 2px;background:#4a4d52}.date-picker-proxy{position:fixed;left:4px;top:4px;width:2px;height:2px;opacity:.01;z-index:9999;padding:0;margin:0;border:0;pointer-events:auto}
+.topic-status{margin-top:7px;min-height:31px;padding:7px 9px;border:1px solid #3d4147;border-radius:7px;background:#202125;color:#9da3aa;font-size:9px;line-height:12px}.topic-status strong{display:block;color:#f0f1f2;font-size:10px;margin-bottom:1px}.topic-status .stat-line{color:#90969d}
+
+.notes-block{margin-top:9px}.notes-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px}.notes-header>span:first-child{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.3px;color:#bfc4ca}.notes-help{font-size:8px;color:#7f858c}textarea{height:62px;min-height:62px;max-height:90px;resize:vertical;padding:7px 8px;line-height:15px;font-size:11px}textarea:disabled{background:#151619;color:#686d73;border-color:#34373b;cursor:default;box-shadow:none}textarea:disabled::placeholder{color:#686d73}.status{min-height:12px;margin-top:5px;color:#8f959c;font-size:8.5px;line-height:11px}
+.switch{position:relative;width:34px;height:19px;display:inline-block;flex:0 0 auto}.switch input{position:absolute;opacity:0;width:0;height:0}.slider{position:absolute;inset:0;cursor:pointer;background:#5f6368;border-radius:20px;transition:.18s}.slider:before{content:"";position:absolute;width:15px;height:15px;left:2px;top:2px;background:#e8eaed;border-radius:50%;box-shadow:0 1px 3px rgba(0,0,0,.4);transition:.18s}.switch input:checked+.slider{background:#7fa7dc}.switch input:checked+.slider:before{background:#173f75;transform:translateX(15px)}.master-switch{width:78px;height:30px}.master-switch .slider{background:#4b4e53;border:1px solid #666a70}.master-switch .slider:after{content:"OFF";position:absolute;right:9px;top:50%;transform:translateY(-50%);font-size:10px;font-weight:800;letter-spacing:.4px;color:#e8eaed}.master-switch .slider:before{width:22px;height:22px;left:3px;top:3px;background:#c93434;color:#fff;content:"×";display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;line-height:1;box-shadow:0 1px 3px rgba(0,0,0,.45)}.master-switch input:checked+.slider{background:#365a43;border-color:#5c8d69}.master-switch input:checked+.slider:after{content:"ON";left:10px;right:auto;color:#f3fff5}.master-switch input:checked+.slider:before{background:#35a853;transform:translateX(47px);content:"✓";font-size:13px}
+.header-master-label{font-size:8px;font-weight:800;letter-spacing:.5px;color:#858b92;margin-right:6px;text-transform:uppercase}.small-switch{width:30px;height:17px}.small-switch .slider:before{width:13px;height:13px}.small-switch input:checked+.slider:before{transform:translateX(13px)}.switch input:disabled+.slider{opacity:.45;cursor:default}
+.guide-footer{display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:5px 10px 6px;border-top:1px solid #3b3e43;color:#858b92;font-size:8px;line-height:1}.guide-label{margin-right:auto;white-space:nowrap}.guide-btn{height:20px;min-width:42px;padding:0 7px;border:1px solid #4f555c;border-radius:5px;background:#25272a;color:#cfd4da;font-size:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:4px;text-decoration:none}.guide-btn svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.guide-btn:hover{background:#34373b;color:#fff}.guide-btn:focus-visible{outline:1px solid #8ab4f8;outline-offset:1px}
+</style>
+</head>
+<body>
+  <header class="app-header">
+    <img class="header-icon" src="icons/icon48.png" alt="KJV Bible Study">
+    <div class="header-copy">
+      <div class="header-title">KJV Bible Study</div>
+      <div class="header-subtitle">Blue Letter Bible Suite</div>
+    </div>
+    <div id="masterSetting">
+      <div class="master-right">
+        <span class="master-state" id="masterState">ON</span>
+        <label class="switch master-switch" title="Turn the Blue Letter Bible Suite on or off">
+          <input id="master" type="checkbox" checked aria-label="Turn BLB Suite on or off">
+          <span class="slider"></span>
+        </label>
+      </div>
+    </div>
+  </header>
+
+  <main class="popup-card">
+    <section class="suite-section" aria-label="Suite controls">
+      <div class="suite-group" aria-label="Page controls">
+        <div class="suite-group-label" id="pageGroupLabel">This Page</div>
+        <div class="secondary-control" id="pageSetting" title="Show or hide the Show on BLB button on this page">
+          <span>Show on BLB</span>
+          <label class="switch small-switch"><input id="pageButton" type="checkbox" aria-label="Show or hide the Show on BLB button"><span class="slider"></span></label>
+        </div>
+        <div class="secondary-control" id="doubleSetting" title="Turn Double-click KJV Words on or off for this page">
+          <span>Double-click KJV Words</span>
+          <label class="switch small-switch"><input id="doubleClick" type="checkbox" aria-label="Turn Double-click KJV Words on or off"><span class="slider"></span></label>
+        </div>
+      </div>
+      <div class="suite-group" aria-label="Extension controls">
+        <div class="suite-group-label">Suite</div>
+        <div class="secondary-control" id="redirectSetting" title="Redirect external Bible links to BLB across the extension">
+          <span>Redirect External Bible Links</span>
+          <label class="switch small-switch"><input id="redirectEnabled" type="checkbox" aria-label="Redirect external Bible links to BLB"><span class="slider"></span></label>
+        </div>
+      </div>
+    </section>
+
+    <section class="study-section" id="studyPanel">
+      <div class="section-title">Study Topic</div>
+      <div class="topic-row">
+        <div class="topic-input-wrap">
+          <input id="studyTopic" type="text" placeholder="Type or select a topic" autocomplete="off" aria-label="Study topic">
+          <button id="topicArrow" class="topic-arrow" type="button" aria-label="Show all topics" title="Show saved topics">▾</button>
+          <button id="importTestData" class="topic-import-btn" type="button" aria-label="Import test data" title="Import test data">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21V10"/><path d="m7 14 5-5 5 5"/><path d="M4 4h16"/></svg>
+          </button>
+          <button id="clearSelectedTopicInput" class="topic-clear-btn" type="button" aria-label="Clear selected topic" title="Clear selected topic">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="m9 9 6 6M15 9l-6 6"/></svg>
+          </button>
+          <div id="topicMenu" class="topic-menu" role="listbox" aria-label="Saved topics"></div>
+        </div>
+        <button id="startTopic" class="topic-start-btn" type="button" title="Start recording" aria-label="Start recording">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>
+        </button>
+      </div>
+      <div class="topic-hint">Choose a topic, then start or stop recording.</div>
+      <div class="autostop-row"><span id="autoStopLabel">Stop if no Study activity:</span><select id="studyAutoStop" aria-label="Stop if no Study activity" title="Stop recording when there is no Study-related activity"><option value="5">5 min</option><option value="10">10 min</option><option value="15">15 min</option><option value="20">20 min</option><option value="30">30 min</option><option value="45">45 min</option><option value="60">60 min</option><option value="90">90 min</option><option value="120">120 min</option><option value="0">Never</option></select><button id="resumeStudy" type="button" title="Resume Bible Study" aria-label="Resume Bible Study">▶</button></div>
+
+      <div class="action-row">
+        <div class="history-wrap">
+          <button id="multiView" class="action-btn history-main" type="button" title="History" aria-label="History" aria-haspopup="menu" aria-expanded="false">
+            <svg viewBox="0 0 32 24" aria-hidden="true"><path d="M5 8.5A9 9 0 1 1 4.5 13"/><path d="M4.5 5.5v5h5"/><path d="M14 7.5v5l3.5 2"/><path d="M21 8.5h6M21 12h6M21 15.5h6"/></svg>
+          </button>
+          <div id="historyMenu" class="history-menu" role="menu" aria-label="History actions">
+            <button id="historyStrongs" type="button" role="menuitem" title="Open all KJV Strong's entries from this topic">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg><span>Strong's</span>
+            </button>
+            <button id="historySearchTerms" type="button" role="menuitem" title="Search all history terms together">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14v14H5z"/><path d="M8 9h8M8 12h6M8 15h7"/></svg><span>Search Terms</span>
+            </button>
+            <button id="historyVerseRefs" type="button" role="menuitem" title="Open all KJV verse references from this topic">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7.5 7.5 6A3.5 3.5 0 0 0 2.6 11l2.8 2.8a3.5 3.5 0 0 0 4.9 0l1.2-1.2"/><path d="m15 16.5 1.5 1.5a3.5 3.5 0 0 0 4.9-5l-2.8-2.8a3.5 3.5 0 0 0-4.9 0l-1.2 1.2"/><path d="m8.5 15.5 7-7"/></svg><span>Verse References</span>
+            </button>
+          </div>
+        </div>
+        <div class="download-wrap">
+          <button id="downloadMenuButton" class="action-btn download-main" type="button" title="Download PDF" aria-label="Download PDF">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg>
+          </button>
+          <div id="downloadMenu" class="download-menu" role="menu">
+            <button id="downloadTopic" type="button" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10l4 4v12H5z"/><path d="M15 4v5h5"/><path d="M8 13h8M8 17h6"/></svg><span id="downloadTopicLabel">Selected Topic</span></button>
+            <button id="downloadWhole" type="button" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h10l4 4v12H5z"/><path d="M15 4v5h5"/><path d="M8 13h8M8 17h8"/></svg><span>All Topics</span></button>
+            <button id="downloadDate" type="button" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg><span>By Date</span></button>
+          </div>
+          <div id="dateQuickMenu" class="date-quick-menu" role="menu" aria-label="Choose study date">
+            <button id="dateToday" type="button" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="7"/><path d="M12 8v4l3 2"/></svg><span>Today</span></button>
+            <button id="dateYesterday" type="button" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5"/><path d="M5 12h9a5 5 0 0 1 5 5"/></svg><span>Yesterday</span></button>
+            <button id="dateTwoDaysAgo" type="button" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 7 4 12l5 5"/><path d="M5 12h9a5 5 0 0 1 5 5"/><path d="M9 4 5 8"/></svg><span>2 days ago</span></button>
+            <div class="date-quick-divider" aria-hidden="true"></div>
+            <button id="dateChoose" type="button" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 17h.01M12 17h.01"/></svg><span>Choose date…</span></button>
+          </div>
+          <input id="studyDate" class="date-picker-proxy" type="date" aria-hidden="true" tabindex="-1">
+        </div>
+        <div class="clear-wrap">
+          <button id="clearStudy" class="action-btn danger" type="button" title="Delete" aria-label="Delete">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M7 7l1 13h8l1-13"/><path d="M10 11v5M14 11v5"/></svg>
+          </button>
+          <div id="clearMenu" class="clear-menu" role="menu">
+            <button id="clearSelectedTopic" type="button" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6h14M9 6V4h6v2M7 6l1 14h8l1-14"/></svg><span id="clearSelectedTopicLabel">Delete: Selected Topic</span></button>
+            <button id="clearAllTopics" type="button" role="menuitem"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13"/></svg><span>Delete: All Topics</span></button>
+          </div>
+        </div>
+      </div>
+
+      <div class="topic-status" id="currentStudyInfo" style="display:none"></div>
+
+
+      <div class="notes-block">
+        <div class="notes-header"><span>Notes</span><span id="notesHelp" class="notes-help">Auto-saves on leaving the box</span></div>
+        <textarea id="studyNote" placeholder="Add a note to the selected topic..."></textarea>
+      </div>
+      <div id="studyStatus" class="status"></div>
+    </section>
+    <div class="guide-footer" aria-label="Tutorial and feature guide">
+      <span class="guide-label">Tutorial &amp; Feature Guide</span>
+      <button id="guideHtml" class="guide-btn" type="button" title="Open and download HTML Tutorial">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg><span>HTML</span>
+      </button>
+      <button id="guidePdf" class="guide-btn" type="button" title="Open and download PDF Feature Guide">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v11"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg><span>PDF</span>
+      </button>
+    </div>
+  </main>
+
+  <script src="popup.js"></script>
+</body>
+</html>
