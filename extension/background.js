@@ -2089,27 +2089,52 @@ async function hasHostAccessForTab(tab) {
   catch (_) { return false; }
 }
 
+const contentScriptInjectionLocks = new Map();
+
 async function ensureContentScriptInTab(tabId) {
   if (!Number.isInteger(tabId) || tabId < 0) return false;
-  try {
-    const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
-    if (response?.ok === true) return true;
-  } catch (_) {}
 
-  // Known bundled sites are covered by the declarative content-script matches.
-  // Arbitrary sites are injected only after the user has explicitly enabled a
-  // site and Chrome has granted host access for that tab's origin.
+  // Multiple paths can request initialization at the same time after an
+  // optional host permission is granted: the popup toggle, storage.onChanged,
+  // permissions.onAdded, and tab completion can all converge here. Without a
+  // per-tab lock, each caller can observe "no content script yet" and call
+  // executeScript() concurrently, causing top-level const declarations such as
+  // BOOKS and KJV_CORPUS_WORD_INDEX to be parsed twice in the same content
+  // script world. The second injection then fails with a SyntaxError before
+  // the floating-button and double-click initialization can run.
+  const existing = contentScriptInjectionLocks.get(tabId);
+  if (existing) return existing;
+
+  const operation = (async () => {
+    try {
+      try {
+        const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
+        if (response?.ok === true) return true;
+      } catch (_) {}
+
+      // Known bundled sites are covered by the declarative content-script
+      // matches. Arbitrary sites are injected only after the user has explicitly
+      // enabled a site and Chrome has granted host access for that tab's origin.
+      const tab = await chrome.tabs.get(tabId);
+      if (!isHttpPageUrl(tab?.url)) return false;
+      if (!(await hasHostAccessForTab(tab))) return false;
+      await chrome.scripting.executeScript({
+        target:{tabId},
+        files:BLB_CONTENT_SCRIPT_FILES
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  })();
+
+  contentScriptInjectionLocks.set(tabId, operation);
   try {
-    const tab = await chrome.tabs.get(tabId);
-    if (!isHttpPageUrl(tab?.url)) return false;
-    if (!(await hasHostAccessForTab(tab))) return false;
-    await chrome.scripting.executeScript({
-      target:{tabId},
-      files:BLB_CONTENT_SCRIPT_FILES
-    });
-    return true;
-  } catch (_) {
-    return false;
+    return await operation;
+  } finally {
+    if (contentScriptInjectionLocks.get(tabId) === operation) {
+      contentScriptInjectionLocks.delete(tabId);
+    }
   }
 }
 
