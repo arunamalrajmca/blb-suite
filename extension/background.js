@@ -3910,18 +3910,39 @@ async function searchSelectionInKjv(selectionText, decision = null) {
   return true;
 }
 
-let kjvVerseTextByRefKey = null;
+// Resolve a KJV verse directly from the canonical corpus position instead
+// of lazily building a 31,102-entry Map on the first paragraph selection.
+// BOOKS already contains every chapter's verse count, so chapter offsets can
+// be built once from only the small book/chapter metadata.
+let kjvBookChapterOffsets = null;
 function getKjvVerseTextByRefKey(bookNumber, chapter, verse) {
   if (!Array.isArray(KJV_CORPUS_VERSES)) return null;
-  if (!kjvVerseTextByRefKey) {
-    const index = new Map();
-    for (const entry of KJV_CORPUS_VERSES) {
-      const key = `${Number(entry[0])}:${Number(entry[1])}:${Number(entry[2])}`;
-      index.set(key, String(entry[3] || '').trim());
+
+  const bookNo = Number(bookNumber);
+  const chapterNo = Number(chapter);
+  const verseNo = Number(verse);
+  if (!Number.isInteger(bookNo) || !Number.isInteger(chapterNo) || !Number.isInteger(verseNo) || verseNo < 1) return null;
+
+  if (!kjvBookChapterOffsets) {
+    const offsets = new Map();
+    let offset = 0;
+    for (const book of bookData) {
+      const number = Number(book.bookNumber);
+      const chapterCount = Number(book.chapterCount || book.verses?.length || 0);
+      for (let ch = 1; ch <= chapterCount; ch++) {
+        offsets.set(number + ':' + ch, offset);
+        offset += Number(book.verses?.[ch - 1] || 0);
+      }
     }
-    kjvVerseTextByRefKey = index;
+    kjvBookChapterOffsets = offsets;
   }
-  return kjvVerseTextByRefKey.get(`${Number(bookNumber)}:${Number(chapter)}:${Number(verse)}`) || null;
+
+  const chapterOffset = kjvBookChapterOffsets.get(bookNo + ':' + chapterNo);
+  if (!Number.isInteger(chapterOffset)) return null;
+  const entry = KJV_CORPUS_VERSES[chapterOffset + verseNo - 1];
+  if (!entry) return null;
+  if (Number(entry[0]) !== bookNo || Number(entry[1]) !== chapterNo || Number(entry[2]) !== verseNo) return null;
+  return String(entry[3] || '').trim() || null;
 }
 
 function getKjvVerseTextForSelectionRef(ref) {
