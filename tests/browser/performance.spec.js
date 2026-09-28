@@ -16,11 +16,14 @@ async function selectReference(page, id) {
   }, id);
 }
 
-async function writeSample(scenario, handoffMs) {
+async function writeSample(scenario, handoffMs, extra = {}) {
   const output = process.env.BLB_PERF_OUTPUT;
   if (!output) throw new Error('BLB_PERF_OUTPUT is required');
-  fs.appendFileSync(output, JSON.stringify({ scenario, handoffMs }) + '\n');
-  console.log(`BLB performance sample: ${scenario} ${handoffMs} ms`);
+  fs.appendFileSync(output, JSON.stringify({ scenario, handoffMs, ...extra }) + '\n');
+  const detail = extra.firstTabMs != null || extra.secondTabMs != null
+    ? ` firstTab=${extra.firstTabMs}ms secondTab=${extra.secondTabMs}ms`
+    : '';
+  console.log(`BLB performance sample: ${scenario} ${handoffMs} ms${detail}`);
 }
 
 test('Show on BLB performance benchmark', async ({ page, context, extensionStorage, extensionId }) => {
@@ -133,13 +136,25 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     const started = Date.now();
     await button.click();
 
-    await expect.poll(() => context.pages().filter(p => !pagesBefore.has(p)).length, { timeout: 10000 }).toBeGreaterThanOrEqual(2);
+    // Measure actual tab-creation milestones separately from BLB page loading.
+    await expect.poll(
+      () => context.pages().filter(p => !pagesBefore.has(p)).length,
+      { timeout: 10000 }
+    ).toBeGreaterThanOrEqual(1);
+    const firstTabMs = Date.now() - started;
+
+    await expect.poll(
+      () => context.pages().filter(p => !pagesBefore.has(p)).length,
+      { timeout: 10000 }
+    ).toBeGreaterThanOrEqual(2);
+    const secondTabMs = Date.now() - started;
+
     const opened = context.pages().filter(p => !pagesBefore.has(p));
-    await expect.poll(() => opened.some(p => /blueletterbible\.org\/search\/search\.cfm\?Criteria=/i.test(p.url())), { timeout: 10000 }).toBeTruthy();
-    await expect.poll(() => opened.some(p => /blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm\?.*blbSuiteMultiVerse=1)/i.test(p.url())), { timeout: 10000 }).toBeTruthy();
+    await expect.poll(() => opened.some(p => /blueletterbible\\.org\\/search\\/search\\.cfm\\?Criteria=/i.test(p.url())), { timeout: 10000 }).toBeTruthy();
+    await expect.poll(() => opened.some(p => /blueletterbible\\.org\\/(?:tools\\/MultiVerse\\.cfm|search\\/search\\.cfm\\?.*blbSuiteMultiVerse=1)/i.test(p.url())), { timeout: 10000 }).toBeTruthy();
 
     const handoffMs = Date.now() - started;
-    await writeSample(scenario, handoffMs);
+    await writeSample(scenario, handoffMs, { firstTabMs, secondTabMs });
     return;
   }
 
