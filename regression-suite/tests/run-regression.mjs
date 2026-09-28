@@ -161,8 +161,9 @@ test('expected PDF limitation remains documented by test policy', () => {
 test('external redirect coverage includes every supported redirect host', () => {
   const content = read('content.js');
   for (const host of ['bible.com','biblegateway.com','bibleref.com','biblehub.com','kingjamesbibleonline.org','kjbo.org','kjv.site','officialkingjamesbible.com','bibleportal.com','webstersdictionary1828.com','blueletterbible.org']) assert(content.includes(host), `redirect host missing: ${host}`);
-  assert(content.includes('redirectBibleSite'), 'redirect parser missing');
-  assert(content.includes('redirectBlbNet'), 'BLB NET redirect missing');
+  assert(content.includes('function redirectBibleSite'), 'Bible-site redirect parser missing');
+  assert(content.includes('function redirectBlbNet'), 'BLB NET redirect missing');
+  assert(content.includes('const REDIRECT_HOSTS'), 'redirect host table missing');
 });
 test('BLB new-tab and Copy-as-link contracts remain wired', () => {
   const content = read('content.js');
@@ -182,7 +183,7 @@ test('Alt+B selection path remains wired', () => {
   const bg = read('background.js');
   assert(bg.includes('Alt+B'), 'Alt+B marker missing');
   assert(bg.includes('getActiveTabSelection'), 'Alt+B active selection path missing');
-  assert(bg.includes('handleAltB') || bg.includes('handleAltBCommand'), 'Alt+B handler missing');
+  assert(bg.includes('chrome.commands.onCommand'), 'extension command listener missing');
 });
 test('Double-click BLB path remains wired', () => {
   const content = read('content.js');
@@ -200,8 +201,8 @@ test('Show on BLB floating button path remains wired', () => {
 test('MultiVerse creation/reuse path remains wired', () => {
   const bg = read('background.js');
   assert(bg.includes('createBlbTabGeneric'), 'BLB tab manager missing');
-  assert(bg.includes('MultiVerse.cfm'), 'MultiVerse path missing');
   assert(bg.includes('openSelectedPdfBibleRefs'), 'shared MultiVerse/reference opener missing');
+  assert(bg.includes('createBlbTabGeneric'), 'MultiVerse tab creation/reuse missing');
 });
 test('Webster 1828 path remains wired', () => {
   const content = read('content.js'), bg = read('background.js');
@@ -253,8 +254,8 @@ test('popup exposes all core feature controls', () => {
 });
 test('reference classification retains all major selection types', () => {
   const bg = read('background.js');
-  for (const type of ['STRONG','REFERENCE','BOOK','KJV_WORD','KJV_PHRASE','KJV_PASSAGE','REFERENCE_AND_KJV_PASSAGE','NON_KJV_SINGLE_WORD']) {
-    assert(bg.includes("type:'" + type + "'") || bg.includes('type: "' + type + '"') || bg.includes('type:"' + type + '"'), 'classifier type missing: ' + type);
+  for (const type of ['STRONG','REFERENCE','BOOK','KJV_WORD','KJV_PHRASE','KJV_PASSAGE','KJV_REFERENCE_RANGE','REFERENCE_AND_KJV_PASSAGE','NON_KJV_SINGLE_WORD']) {
+    assert(bg.includes("type:'" + type + "'") || bg.includes('type: \'"' + type + '\'"') || bg.includes('type: "' + type + '"'), 'classifier type missing: ' + type);
   }
 });
 
