@@ -150,8 +150,8 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     const secondTabMs = Date.now() - started;
 
     const opened = context.pages().filter(p => !pagesBefore.has(p));
-    await expect.poll(() => opened.some(p => /blueletterbible\\.org\\/search\\/search\\.cfm\\?Criteria=/i.test(p.url())), { timeout: 10000 }).toBeTruthy();
-    await expect.poll(() => opened.some(p => /blueletterbible\\.org\\/(?:tools\\/MultiVerse\\.cfm|search\\/search\\.cfm\\?.*blbSuiteMultiVerse=1)/i.test(p.url())), { timeout: 10000 }).toBeTruthy();
+    await expect.poll(() => opened.some(p => /blueletterbible\.org\/search\/search\.cfm\?Criteria=/i.test(p.url())), { timeout: 10000 }).toBeTruthy();
+    await expect.poll(() => opened.some(p => /blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm\?.*blbSuiteMultiVerse=1)/i.test(p.url())), { timeout: 10000 }).toBeTruthy();
 
     const handoffMs = Date.now() - started;
     await writeSample(scenario, handoffMs, { firstTabMs, secondTabMs });
