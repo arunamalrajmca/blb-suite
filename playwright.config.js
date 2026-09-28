@@ -10,7 +10,6 @@ module.exports = defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }], ['json', { outputFile: 'test-results/results.json' }]],
   use: {
-    baseURL: 'http://127.0.0.1:4173',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure'
@@ -24,12 +23,6 @@ module.exports = defineConfig({
       }
     }
   ],
-  webServer: {
-    command: 'node tests/browser/e2e-server.js',
-    url: 'http://127.0.0.1:4173/selection-fixture.html',
-    reuseExistingServer: !process.env.CI,
-    timeout: 10000
-  },
   metadata: {
     extensionPath: path.resolve(__dirname, 'extension')
   }
