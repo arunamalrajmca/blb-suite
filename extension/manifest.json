@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Blue Letter Bible Suite",
-  "version": "5.2.51.32",
+  "version": "5.2.51.43",
   "description": "Bible study tools for BLB search, Bible references, Show on BLB, Double-Click BLB, and KJV case-sensitive search.",
   "permissions": [
     "clipboardWrite",
     "activeTab",
+    "tabs",
     "omnibox",
     "storage",
     "downloads",
@@ -15,24 +16,8 @@
     "alarms"
   ],
   "host_permissions": [
-    "https://www.bible.com/*",
-    "https://www.blueletterbible.org/*",
-    "http://www.blueletterbible.org/*",
-    "https://www.kingjamesbibleonline.org/*",
-    "https://kjbo.org/*",
-    "https://www.kjbo.org/*",
-    "https://www.kjv.site/*",
-    "https://kjv.site/*",
-    "https://m.kjv.site/*",
-    "https://officialkingjamesbible.com/*",
-    "https://www.officialkingjamesbible.com/*",
-    "https://www.biblegateway.com/*",
-    "https://bibleportal.com/*",
-    "https://www.bibleref.com/*",
-    "https://webstersdictionary1828.com/*",
-    "https://biblehub.com/*",
-    "https://www.bibleportal.com/*",
-    "https://www.biblehub.com/*"
+    "http://*/*",
+    "https://*/*"
   ],
   "omnibox": {
     "keyword": "b"
@@ -43,24 +28,8 @@
   "content_scripts": [
     {
       "matches": [
-        "https://www.bible.com/*",
-        "https://www.blueletterbible.org/*",
-        "http://www.blueletterbible.org/*",
-        "https://www.kingjamesbibleonline.org/*",
-        "https://kjbo.org/*",
-        "https://www.kjbo.org/*",
-        "https://www.kjv.site/*",
-        "https://kjv.site/*",
-        "https://m.kjv.site/*",
-        "https://officialkingjamesbible.com/*",
-        "https://www.officialkingjamesbible.com/*",
-        "https://www.biblegateway.com/*",
-        "https://bibleportal.com/*",
-        "https://www.bibleref.com/*",
-        "https://webstersdictionary1828.com/*",
-        "https://biblehub.com/*",
-        "https://www.bibleportal.com/*",
-        "https://www.biblehub.com/*",
+        "http://*/*",
+        "https://*/*",
         "file:///*.pdf",
         "file:///*.html",
         "file:///*.htm"
@@ -97,9 +66,5 @@
       "128": "icons/icon128.png"
     },
     "default_popup": "popup.html"
-  },
-  "optional_host_permissions": [
-    "http://*/*",
-    "https://*/*"
-  ]
+  }
 }

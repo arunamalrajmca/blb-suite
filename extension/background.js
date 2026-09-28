@@ -1805,11 +1805,10 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
 
   const matches = BLBCaseSensitiveCore.searchCaseSensitiveCorpus(parsed.query, KJV_CORPUS_ORIGINAL_CASE, KJV_CORPUS_CASE_VERSE_INDEX);
   if (!matches.length) {
-    const homeUrl='https://www.blueletterbible.org/';
-    if (disposition === 'newForegroundTab') return chrome.tabs.create({url:homeUrl, active:true});
-    if (disposition === 'newBackgroundTab') return chrome.tabs.create({url:homeUrl, active:false});
-    if (disposition === 'newWindow') return chrome.windows.create({url:homeUrl, focused:true});
-    return chrome.tabs.update({url:homeUrl});
+    // Zero exact-case corpus matches fall back to BLB's native search.
+    // Never discard the user's query by redirecting to BLB home.
+    await openCaseSensitiveNativeSearch(parsed.rawQuery, disposition);
+    return true;
   }
 
   const refMap=new Map();
@@ -1821,8 +1820,11 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
   const refs=[...refMap.values()].sort((a,b)=>a.bookNumber-b.bookNumber||a.chapter-b.chapter||a.verse-b.verse);
   const urls=buildCaseSensitiveMultiVerseUrls(refs,6000);
   if (!urls.length) {
-    const homeUrl='https://www.blueletterbible.org/';
-    return chrome.tabs.update({url:homeUrl});
+    // A valid case-sensitive query must never fall through to BLB home simply
+    // because the local MultiVerse URL builder could not construct a target.
+    // Preserve the established behavior: use BLB's native search instead.
+    await openCaseSensitiveNativeSearch(parsed.rawQuery, disposition);
+    return true;
   }
   await openCaseSensitiveDestinations(urls, disposition);
   return true;
@@ -1977,6 +1979,20 @@ async function createBlbTabGeneric(url, active = true, {forceNew = false} = {}) 
     const remembered = await getLiveTabById(rememberedId);
     if (remembered?.id != null) return {tab: remembered, reused: true};
     if (rememberedId != null) blbLogicalTabRegistry.delete(key);
+
+    // Service workers can be suspended between two user invocations, so the
+    // in-memory registry is not sufficient for durable tab reuse. Recover the
+    // matching extension destination from the live browser tab list before
+    // creating another BLB tab. This is especially important for Criteria
+    // searches, where the same query may be invoked minutes apart.
+    try {
+      const liveTabs = await chrome.tabs.query({});
+      const existing = liveTabs.find(t => canonicalBlbTabKey(t?.url || t?.pendingUrl || '') === key);
+      if (existing?.id != null) {
+        rememberBlbTab(key, existing.id);
+        return {tab: existing, reused: true};
+      }
+    } catch (_) {}
   }
 
   // chrome.tabs.create returns as soon as the tab exists; it does not wait for
@@ -2089,27 +2105,95 @@ async function hasHostAccessForTab(tab) {
   catch (_) { return false; }
 }
 
-async function ensureContentScriptInTab(tabId) {
-  if (!Number.isInteger(tabId) || tabId < 0) return false;
-  try {
-    const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
-    if (response?.ok === true) return true;
-  } catch (_) {}
+const contentScriptInjectionLocks = new Map();
 
-  // Known bundled sites are covered by the declarative content-script matches.
-  // Arbitrary sites are injected only after the user has explicitly enabled a
-  // site and Chrome has granted host access for that tab's origin.
+function runtimeContentScriptIdForPattern(pattern) {
+  const raw = String(pattern || '');
+  let hash = 2166136261;
+  for (let i = 0; i < raw.length; i++) {
+    hash ^= raw.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `blb-suite-runtime-${(hash >>> 0).toString(36)}`;
+}
+
+async function ensureRuntimeContentScriptRegistered(tab) {
+  const pattern = originPatternForUrl(tab?.url);
+  if (!pattern || !chrome.scripting?.registerContentScripts) return false;
+  const id = runtimeContentScriptIdForPattern(pattern);
   try {
-    const tab = await chrome.tabs.get(tabId);
-    if (!isHttpPageUrl(tab?.url)) return false;
-    if (!(await hasHostAccessForTab(tab))) return false;
-    await chrome.scripting.executeScript({
-      target:{tabId},
-      files:BLB_CONTENT_SCRIPT_FILES
-    });
+    const existing = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
+    if (!existing.length) {
+      await chrome.scripting.registerContentScripts([{
+        id,
+        matches:[pattern],
+        js:BLB_CONTENT_SCRIPT_FILES,
+        runAt:'document_start',
+        persistAcrossSessions:true
+      }]);
+    } else if (JSON.stringify(existing[0].js || []) !== JSON.stringify(BLB_CONTENT_SCRIPT_FILES)) {
+      await chrome.scripting.updateContentScripts({
+        ids:[id],
+        js:BLB_CONTENT_SCRIPT_FILES,
+        runAt:'document_start'
+      });
+    }
     return true;
   } catch (_) {
     return false;
+  }
+}
+
+async function unregisterRuntimeContentScriptForPattern(pattern) {
+  const id = runtimeContentScriptIdForPattern(pattern);
+  try {
+    if (chrome.scripting?.unregisterContentScripts) {
+      await chrome.scripting.unregisterContentScripts({ids:[id]});
+    }
+  } catch (_) {}
+}
+
+async function ensureContentScriptInTab(tabId) {
+  if (!Number.isInteger(tabId) || tabId < 0) return false;
+  const existing = contentScriptInjectionLocks.get(tabId);
+  if (existing) return existing;
+
+  const operation = (async () => {
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      if (!isHttpPageUrl(tab?.url)) return false;
+      if (!(await hasHostAccessForTab(tab))) return false;
+
+      // Register the complete dependency bundle before checking the current
+      // document. This avoids the old race where an existing content-script
+      // instance could answer first and prevent registration for future loads.
+      if (!(await ensureRuntimeContentScriptRegistered(tab))) return false;
+
+      try {
+        const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
+        if (response?.ok === true) return true;
+      } catch (_) {}
+
+      // The current document may have loaded before registration. Reload once
+      // so Chrome injects the complete bundle at document_start.
+      try {
+        await chrome.tabs.reload(tabId);
+      } catch (_) {
+        return false;
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  })();
+
+  contentScriptInjectionLocks.set(tabId, operation);
+  try {
+    return await operation;
+  } finally {
+    if (contentScriptInjectionLocks.get(tabId) === operation) {
+      contentScriptInjectionLocks.delete(tabId);
+    }
   }
 }
 
@@ -2702,6 +2786,42 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     const book = resolveBook(rawBook);
     if (!book) continue;
     addRef(book, Number(m[2]), Number(m[3]), Number(m[3]), m[0]);
+  }
+
+  // Robust explicit-book pass. The older generic expressions above allow
+  // several words before the chapter number so they can recognize aliases,
+  // but that greediness can consume ordinary prose immediately before a real
+  // book name (for example "... says, Hebrews 10:7") and then fail book
+  // resolution. Scan the authoritative book forms directly as a final safety
+  // net. Also accept conventional Roman-numeral forms such as "I Timothy".
+  const explicitForms = [];
+  for (const book of BOOKS) {
+    const forms = new Set(getBibleBookForms(book));
+    // Roman-numeral book forms are based on the book's leading series
+    // number (1/2/3), not the canonical 66-book number (for example,
+    // 1 Thessalonians is book 52). This keeps I/II/III Timothy,
+    // Thessalonians, Corinthians, Peter, John, etc. aligned with their
+    // ordinary numeric forms.
+    const leadingSeriesNumber = String(book.name || '').match(/^([123])\s+/)?.[1];
+    const roman = leadingSeriesNumber ? ({1:'I',2:'II',3:'III'}[leadingSeriesNumber] || null) : null;
+    if (roman) {
+      forms.add(book.name.replace(/^[123]/, roman));
+    }
+    for (const form of forms) {
+      const clean = String(form || '').trim();
+      if (clean) explicitForms.push({book, form:clean});
+    }
+  }
+  explicitForms.sort((a,b)=>b.form.length-a.form.length);
+  for (const item of explicitForms) {
+    const escaped = item.form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const re = new RegExp(`(?<![A-Za-z0-9])${escaped}\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?`, 'gi');
+    while ((m = re.exec(source))) {
+      const chapter = Number(m[1]);
+      const from = Number(m[2]);
+      const to = Number(m[3] || m[2]);
+      addRef(item.book, chapter, from, to, m[0]);
+    }
   }
 
   // Pass 2: chapter-only references such as "Ephesians 5", "Eph 5",
@@ -4143,9 +4263,22 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // contextual-reference fast path while adding the requested second tab.
   if (contextualRef?.url) {
     const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
+    // PDF/local selections can expose slightly different reference text to
+    // the contextual resolver and to the full classifier. Use both views
+    // before deciding that the selection contains only one reference.
+    const contextualDecision = classifySelectionForBlb(text);
+    const classifiedRefs = Array.isArray(contextualDecision?.refs) ? contextualDecision.refs : [];
+    const mergedRefs = [...selectedRefs, ...classifiedRefs];
+    const mergedRefKeys = new Set();
+    const allSelectedRefs = mergedRefs.filter(ref => {
+      const key = `${String(ref?.book || '').toLowerCase()}|${Number(ref?.chapter)}|${Number(ref?.from)}|${Number(ref?.to)}`;
+      if (!ref?.url || mergedRefKeys.has(key)) return false;
+      mergedRefKeys.add(key);
+      return true;
+    });
     // A contextual single-reference answer remains authoritative only when the
-    // selection itself does not contain multiple explicit references.
-    if (selectedRefs.length < 2) {
+    // combined selection analysis does not contain multiple explicit references.
+    if (allSelectedRefs.length < 2) {
       await recordStudyRefs([parseBlbKjvUrlToStudyRef(contextualRef.url)].filter(Boolean));
 
       // Start the reference navigation before the residual Criteria scan.
@@ -4158,12 +4291,11 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       // Do not route the selection through the generic opener a second time:
       // that could reopen the same reference. Extract only the existing KJV
       // passage result and place Criteria Search in a new background tab.
-      const contextualDecision = classifySelectionForBlb(text);
       const criteriaQuery = contextualDecision?.kjvPassageQuery || '';
       await referenceOpen;
       if (criteriaQuery) {
         const criteriaUrl = `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(criteriaQuery).replace(/%20/g,'+')}`;
-        await createBlbTabGeneric(criteriaUrl, false, {forceNew:true});
+        await openBlbDestination(criteriaUrl, false, false);
       }
       return;
     }
@@ -4219,7 +4351,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     // multiple references use the existing MultiVerse window.
     if (decision.kjvPassageQuery) {
       const criteriaUrl = `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(decision.kjvPassageQuery).replace(/%20/g,'+')}`;
-      await createBlbTabGeneric(criteriaUrl, false, {forceNew:true});
+      await openBlbDestination(criteriaUrl, false, false);
     }
     return;
   }
