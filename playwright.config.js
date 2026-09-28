@@ -23,6 +23,12 @@ module.exports = defineConfig({
       }
     }
   ],
+  webServer: {
+    command: 'node tests/browser/e2e-server.js',
+    url: 'http://127.0.0.1:4173/selection-fixture.html',
+    reuseExistingServer: !process.env.CI,
+    timeout: 10000
+  },
   metadata: {
     extensionPath: path.resolve(__dirname, 'extension')
   }
