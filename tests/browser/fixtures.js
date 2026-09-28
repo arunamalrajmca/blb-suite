@@ -36,7 +36,14 @@ const test = base.extend({
         await chrome.storage.local.clear();
       })
     });
-  }
+  },
+  extensionTabs: async ({ context }, use) => {
+    let [worker] = context.serviceWorkers();
+    if (!worker) worker = await context.waitForEvent('serviceworker');
+    await use({
+      list: async () => worker.evaluate(async () => chrome.tabs.query({}))
+    });
+  },
 });
 
 module.exports = { test, expect };
