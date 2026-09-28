@@ -1054,11 +1054,40 @@ async function updateBlbPageSelectionButtonFromSelection() {
   blbPageButtonSelection = text;
   blbPageButtonContextualReference = null;
   if (text) {
-    const contextual = getContextualBibleReference(text);
-    if (contextual?.url) {
-      blbPageButtonContextualReference = contextual;
-      lastSelectionContextualReference = contextual;
-      lastSelectionContextualText = text;
+    // Fast path: resolve a complete, unambiguous reference directly from the
+    // selected text. This avoids the expensive DOM-boundary/context scan for
+    // the common case such as "John 3:16" or "Romans 8:28".
+    //
+    // Only accept exactly one reference whose normalized text covers the
+    // complete selection. Multi-reference and partial-reference selections
+    // continue through the existing contextual resolver so their behavior is
+    // unchanged.
+    const directRefs = resolveBibleReferenceText(normalizeSelectionText(text));
+    if (directRefs.length === 1) {
+      const direct = directRefs[0];
+      const selectedNormalized = normalizeSelectionText(text).replace(/\\s+/g, ' ').trim();
+      const referenceNormalized = normalizeSelectionText(direct.text || '').replace(/\\s+/g, ' ').trim();
+      if (selectedNormalized && referenceNormalized === selectedNormalized && direct.url) {
+        const contextual = {
+          book: direct.book,
+          chapter: direct.chapter,
+          from: direct.from,
+          to: direct.to,
+          url: direct.url
+        };
+        blbPageButtonContextualReference = contextual;
+        lastSelectionContextualReference = contextual;
+        lastSelectionContextualText = text;
+      }
+    }
+
+    if (!blbPageButtonContextualReference) {
+      const contextual = getContextualBibleReference(text);
+      if (contextual?.url) {
+        blbPageButtonContextualReference = contextual;
+        lastSelectionContextualReference = contextual;
+        lastSelectionContextualText = text;
+      }
     }
   }
   setBlbPageButtonVisible(false);
