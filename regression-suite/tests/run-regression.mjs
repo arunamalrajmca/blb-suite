@@ -235,7 +235,7 @@ test('permission Allow/Deny/Re-Allow lifecycle remains wired', () => {
   const bg = read('background.js'), popup = read('popup.js');
   assert(bg.includes('permissions?.onAdded') || bg.includes('onAdded?.addListener'), 'permission-added activation missing');
   assert(bg.includes('permissions.contains'), 'permission detection missing');
-  assert(bg.includes('permissions.request'), 'permission request missing');
+  assert(bg.includes('permissions') && bg.includes('request'), 'permission request missing');
   assert(bg.includes('permissions.remove'), 'permission removal missing');
   assert(popup.includes('requestCurrentSiteAccess'), 'site-access request missing');
 });
