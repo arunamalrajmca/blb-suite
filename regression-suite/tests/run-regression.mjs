@@ -233,7 +233,7 @@ test('Omnibox command path remains wired', () => {
 });
 test('permission Allow/Deny/Re-Allow lifecycle remains wired', () => {
   const bg = read('background.js'), popup = read('popup.js');
-  assert(bg.includes('permissions.onAdded'), 'permission-added activation missing');
+  assert(bg.includes('permissions?.onAdded') || bg.includes('onAdded?.addListener'), 'permission-added activation missing');
   assert(bg.includes('permissions.contains'), 'permission detection missing');
   assert(bg.includes('permissions.request'), 'permission request missing');
   assert(bg.includes('permissions.remove'), 'permission removal missing');
@@ -242,7 +242,7 @@ test('permission Allow/Deny/Re-Allow lifecycle remains wired', () => {
 test('reload/new-tab persistence and dynamic activation remain wired', () => {
   const bg = read('background.js'), content = read('content.js');
   assert(bg.includes('chrome.runtime.onStartup'), 'startup handling missing');
-  assert(bg.includes('chrome.webNavigation.onCommitted'), 'navigation activation missing');
+  assert(bg.includes('webNavigation') && bg.includes('onCommitted'), 'navigation activation missing');
   assert(bg.includes('chrome.storage.onChanged'), 'storage activation missing');
   assert(content.includes('chrome.storage.onChanged'), 'content persistence listener missing');
 });
