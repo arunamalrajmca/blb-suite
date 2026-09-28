@@ -94,6 +94,21 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     return;
   }
 
+  if (scenario === 'paragraph-classify') {
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    const started = Date.now();
+    const response = await page.evaluate(async () => chrome.runtime.sendMessage({
+      type: 'blbSuiteClassifySelection',
+      text: 'Romans 6:23 and John 3:16 teach that the free gift is offered through Christ.'
+    }));
+    const handoffMs = Date.now() - started;
+    expect(response?.ok).toBeTruthy();
+    expect(response?.valid).toBeTruthy();
+    expect(Array.isArray(response?.refs)).toBeTruthy();
+    await writeSample(scenario, handoffMs);
+    return;
+  }
+
   if (scenario === 'paragraph-two-tab') {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
