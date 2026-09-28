@@ -12,7 +12,7 @@ async function selectText(page, selector) {
 }
 
 async function waitForBlbTab(extensionTabs) {
-  await expect.poll(async () => (await extensionTabs.list()).map(t => t.url || t.pendingUrl || ''), { timeout: 30000 }).toContainEqual(expect.stringMatching(/https:\/\/www\.blueletterbible\.org\/kjv\/.*john.*3.*16/i));
+  await expect.poll(async () => (await extensionTabs()).map(t => t.url || t.pendingUrl || ''), { timeout: 30000 }).toContainEqual(expect.stringMatching(/https:\/\/www\.blueletterbible\.org\/kjv\/.*john.*3.*16/i));
 }
 
 test.beforeEach(async ({ extensionStorage }) => {
