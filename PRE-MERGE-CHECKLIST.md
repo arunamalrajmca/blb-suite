@@ -29,3 +29,5 @@
 Both automatic gates and required browser tests must pass with no unexplained failures.
 
 CI Chromium E2E covers real browser behavior. Brave/Chrome manual testing remains required for browser-specific UI, native context menus, permissions and protected PDF behavior.
+
+<!-- CI retrigger: 2026-09-28 corrected E2E harness -->
