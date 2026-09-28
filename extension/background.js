@@ -2089,27 +2089,90 @@ async function hasHostAccessForTab(tab) {
   catch (_) { return false; }
 }
 
-async function ensureContentScriptInTab(tabId) {
-  if (!Number.isInteger(tabId) || tabId < 0) return false;
-  try {
-    const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
-    if (response?.ok === true) return true;
-  } catch (_) {}
+const contentScriptInjectionLocks = new Map();
 
-  // Known bundled sites are covered by the declarative content-script matches.
-  // Arbitrary sites are injected only after the user has explicitly enabled a
-  // site and Chrome has granted host access for that tab's origin.
+function runtimeContentScriptIdForPattern(pattern) {
+  const raw = String(pattern || '');
+  let hash = 2166136261;
+  for (let i = 0; i < raw.length; i++) {
+    hash ^= raw.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `blb-suite-runtime-${(hash >>> 0).toString(36)}`;
+}
+
+async function ensureRuntimeContentScriptRegistered(tab) {
+  const pattern = originPatternForUrl(tab?.url);
+  if (!pattern || !chrome.scripting?.registerContentScripts) return false;
+  const id = runtimeContentScriptIdForPattern(pattern);
   try {
-    const tab = await chrome.tabs.get(tabId);
-    if (!isHttpPageUrl(tab?.url)) return false;
-    if (!(await hasHostAccessForTab(tab))) return false;
-    await chrome.scripting.executeScript({
-      target:{tabId},
-      files:BLB_CONTENT_SCRIPT_FILES
-    });
+    const existing = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
+    const desiredFiles = BLB_CONTENT_SCRIPT_FILES;
+    if (!existing.length) {
+      await chrome.scripting.registerContentScripts([{
+        id,
+        matches:[pattern],
+        js:desiredFiles,
+        runAt:'document_start',
+        persistAcrossSessions:true
+      }]);
+    } else if (JSON.stringify(existing[0].js || []) !== JSON.stringify(desiredFiles)) {
+      await chrome.scripting.updateContentScripts({
+        ids:[id],
+        js:desiredFiles,
+        runAt:'document_start'
+      });
+    }
     return true;
   } catch (_) {
     return false;
+  }
+}
+
+async function unregisterRuntimeContentScriptForPattern(pattern) {
+  const id = runtimeContentScriptIdForPattern(pattern);
+  try {
+    if (chrome.scripting?.unregisterContentScripts) {
+      await chrome.scripting.unregisterContentScripts({ids:[id]});
+    }
+  } catch (_) {}
+}
+
+async function ensureContentScriptInTab(tabId) {
+  if (!Number.isInteger(tabId) || tabId < 0) return false;
+  const existing = contentScriptInjectionLocks.get(tabId);
+  if (existing) return existing;
+
+  const operation = (async () => {
+    try {
+      const tab = await chrome.tabs.get(tabId);
+      if (!isHttpPageUrl(tab?.url)) return false;
+      if (!(await hasHostAccessForTab(tab))) return false;
+      if (!(await ensureRuntimeContentScriptRegistered(tab))) return false;
+
+      try {
+        const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
+        if (response?.ok === true) return true;
+      } catch (_) {}
+
+      try {
+        await chrome.tabs.reload(tabId);
+      } catch (_) {
+        return false;
+      }
+      return true;
+    } catch (_) {
+      return false;
+    }
+  })();
+
+  contentScriptInjectionLocks.set(tabId, operation);
+  try {
+    return await operation;
+  } finally {
+    if (contentScriptInjectionLocks.get(tabId) === operation) {
+      contentScriptInjectionLocks.delete(tabId);
+    }
   }
 }
 
