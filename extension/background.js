@@ -1986,7 +1986,11 @@ async function createBlbTabGeneric(url, active = true, {forceNew = false} = {}) 
     // creating another BLB tab. This is especially important for Criteria
     // searches, where the same query may be invoked minutes apart.
     try {
-      const liveTabs = await chrome.tabs.query({});
+      // BLB destinations are the only URLs handled by this tab manager.
+      // Query only BLB tabs instead of every browser tab; this keeps the
+      // latency-sensitive Show on BLB/right-click/Alt+B path independent of
+      // unrelated tabs the user has open.
+      const liveTabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
       const existing = liveTabs.find(t => canonicalBlbTabKey(t?.url || t?.pendingUrl || '') === key);
       if (existing?.id != null) {
         rememberBlbTab(key, existing.id);
@@ -2005,6 +2009,13 @@ async function createBlbTabGeneric(url, active = true, {forceNew = false} = {}) 
   }
   return {tab: created, reused: false};
 }
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  const url = String(tab?.url || changeInfo?.url || '');
+  if (!/^https:\/\/www\.blueletterbible\.org\//i.test(url)) return;
+  const key = canonicalBlbTabKey(url);
+  if (key) rememberBlbTab(key, tabId);
+});
 
 chrome.tabs.onRemoved.addListener(tabId => {
   forgetBlbTab(tabId);
@@ -2442,6 +2453,16 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       // If an adjacent reference is found, it is authoritative and we return
       // immediately. We do NOT run the KJV Criteria Search for that selection.
       // This preserves the selected reference's chapter/verse information.
+      const directUrl = typeof message.directUrl === 'string' ? message.directUrl.trim() : '';
+      if (directUrl && /^https:\/\/www\.blueletterbible\.org\/kjv\//i.test(directUrl)
+          && message.contextualReference?.url === directUrl) {
+        const referenceOpen = openBlbDestination(directUrl, !!behavior.activeIfNew, !!behavior.activateExisting);
+        const studyRef = parseBlbKjvUrlToStudyRef(directUrl);
+        const studyCapture = studyRef ? recordStudyRefs([studyRef]) : Promise.resolve();
+        await Promise.all([referenceOpen, studyCapture]);
+        sendResponse({ok:true, direct:true});
+        return true;
+      }
       const normalized = normalizeSelectedScriptureText(text);
       const direct = getDirectSelectedReference(normalized);
       const strong = canonicalStrongValue(normalized);
@@ -4426,6 +4447,14 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
 }
 
 async function getActiveTabSelection(tabId) {
+  // Prefer the resident content script on normal web pages. This avoids a
+  // scripting.executeScript round-trip and its injection/context overhead on
+  // the latency-sensitive Alt+B path. Protected pages (notably PDF viewers)
+  // fall back to scripting and retain the documented PDF behavior.
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteGetActiveSelectionText'});
+    if (response?.ok) return String(response.text || '').trim();
+  } catch (_) {}
   try {
     const result = await chrome.scripting.executeScript({
       target: {tabId},
