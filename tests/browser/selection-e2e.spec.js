@@ -11,8 +11,8 @@ async function selectText(page, selector) {
   });
 }
 
-async function waitForBlbTab(context) {
-  await expect.poll(() => context.pages().map(p => p.url()), { timeout: 30000 }).toContainEqual(expect.stringMatching(/https:\/\/www\.blueletterbible\.org\/kjv\/.*john.*3.*16/i));
+async function waitForBlbTab(extensionTabs) {
+  await expect.poll(async () => (await extensionTabs.list()).map(t => t.url || t.pendingUrl || ''), { timeout: 30000 }).toContainEqual(expect.stringMatching(/https:\/\/www\.blueletterbible\.org\/kjv\/.*john.*3.*16/i));
 }
 
 test.beforeEach(async ({ extensionStorage }) => {
@@ -23,7 +23,7 @@ test.beforeEach(async ({ extensionStorage }) => {
   });
 });
 
-test('Show on BLB performs real selection -> button -> BLB navigation', async ({ page }) => {
+test('Show on BLB performs real selection -> button -> BLB navigation', async ({ page, extensionTabs }) => {
   await page.goto('/selection-fixture.html', { waitUntil: 'domcontentloaded' });
   const button = page.locator('#blb-suite-page-selection-button');
   await expect(button).toHaveCount(1);
@@ -31,10 +31,10 @@ test('Show on BLB performs real selection -> button -> BLB navigation', async ({
   await selectText(page, '#reference');
   await expect(button).toBeVisible({ timeout: 10000 });
   await button.click();
-  await waitForBlbTab(page.context());
+  await waitForBlbTab(extensionTabs);
 });
 
-test('Double-click performs real selection -> extension handler -> BLB navigation', async ({ page }) => {
+test('Double-click performs real selection -> extension handler -> BLB navigation', async ({ page, extensionTabs }) => {
   await page.goto('/selection-fixture.html', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#blb-suite-page-selection-button')).toHaveCount(1);
   await page.locator('#reference').dblclick();
