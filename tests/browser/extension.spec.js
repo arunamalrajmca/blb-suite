@@ -32,7 +32,7 @@ test.describe('core user-visible E2E', () => {
     const popupPromise = context.waitForEvent('page');
     await button.click();
     const blb = await popupPromise;
-    expect(blb.url()).toMatch(/blueletterbible.org/kjv/john/3/16/i);
+    expect(blb.url()).toMatch(/blueletterbible\.org\/kjv\/.*john.*3.*16/i);
   });
 
   test('Double-click opens an exact selected reference', async ({ page, context, extensionStorage }) => {
@@ -52,12 +52,12 @@ test.describe('core user-visible E2E', () => {
     const popupPromise = context.waitForEvent('page');
     await page.locator('p').first().dblclick();
     const blb = await popupPromise;
-    expect(blb.url()).toMatch(/blueletterbible.org/kjv/john/3/16/i);
+    expect(blb.url()).toMatch(/blueletterbible\.org\/kjv\/.*john.*3.*16/i);
   });
 
     const popupPromise = context.waitForEvent('page');
     await page.keyboard.press('Alt+b');
     const blb = await popupPromise;
-    expect(blb.url()).toMatch(/blueletterbible.org/kjv/john/3/16/i);
+    expect(blb.url()).toMatch(/blueletterbible\.org\/kjv\/.*john.*3.*16/i);
   });
 });
