@@ -11,13 +11,13 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
   await expect(page.locator('body')).toBeVisible();
 });
 
-
 test.describe('core user-visible E2E', () => {
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
       const el = document.createElement('p');
+      el.id = 'blb-e2e-reference';
       el.textContent = 'John 3:16';
       document.body.appendChild(el);
       const range = document.createRange();
@@ -38,25 +38,15 @@ test.describe('core user-visible E2E', () => {
   test('Double-click opens an exact selected reference', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    const el = await page.locator('body').locator('p').first().evaluateHandle(node => {
-      node.textContent = 'John 3:16';
-      return node;
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-reference';
+      el.textContent = 'John 3:16';
+      document.body.appendChild(el);
     });
-    await page.evaluate(node => {
-      const range = document.createRange();
-      range.selectNodeContents(node);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
-    }, el);
+    const reference = page.locator('#blb-e2e-reference');
     const popupPromise = context.waitForEvent('page');
-    await page.locator('p').first().dblclick();
-    const blb = await popupPromise;
-    expect(blb.url()).toMatch(/blueletterbible\.org\/kjv\/.*john.*3.*16/i);
-  });
-
-    const popupPromise = context.waitForEvent('page');
-    await page.keyboard.press('Alt+b');
+    await reference.dblclick();
     const blb = await popupPromise;
     expect(blb.url()).toMatch(/blueletterbible\.org\/kjv\/.*john.*3.*16/i);
   });
