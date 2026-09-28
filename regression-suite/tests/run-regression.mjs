@@ -236,8 +236,9 @@ test('permission Allow/Deny/Re-Allow lifecycle remains wired', () => {
   assert(bg.includes('permissions?.onAdded') || bg.includes('onAdded?.addListener'), 'permission-added activation missing');
   assert(bg.includes('permissions.contains'), 'permission detection missing');
   assert(bg.includes('permissions') && bg.includes('request'), 'permission request missing');
-  assert(bg.includes('permissions.remove'), 'permission removal missing');
   assert(popup.includes('requestCurrentSiteAccess'), 'site-access request missing');
+  assert(popup.includes('setPageButton(on)'), 'site feature enable/disable state missing');
+  assert(popup.includes('sites[state.siteKey] = !!on'), 'site feature state persistence missing');
 });
 test('reload/new-tab persistence and dynamic activation remain wired', () => {
   const bg = read('background.js'), content = read('content.js');
