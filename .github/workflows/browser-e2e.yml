@@ -44,7 +44,7 @@ jobs:
         run: |
           : > "$BLB_BASELINE_OUTPUT"
           : > "$BLB_CANDIDATE_OUTPUT"
-          for scenario in selection fresh reuse paragraph-two-tab; do
+          for scenario in selection fresh reuse paragraph-two-tab paragraph-classify; do
             for iteration in 1 2 3 4 5 6 7; do
               BLB_EXTENSION_PATH="$BLB_BASELINE_EXTENSION_PATH" \
               BLB_PERF_OUTPUT="$BLB_BASELINE_OUTPUT" \
@@ -62,6 +62,7 @@ jobs:
         env:
           BLB_PERF_MIN_TARGETED_IMPROVEMENT: 0.03
           BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT: 0.10
+          BLB_PERF_MIN_PARAGRAPH_CLASSIFY_IMPROVEMENT: 0.10
           BLB_PERF_MAX_FRESH_REGRESSION: 0.10
         run: set -o pipefail; node scripts/compare-performance.mjs "$RUNNER_TEMP/baseline-performance.jsonl" "$RUNNER_TEMP/candidate-performance.jsonl" | tee "$RUNNER_TEMP/performance-report.md"
 
