@@ -2688,6 +2688,9 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     })()
   );
   const resolveBook = resolveBibleBook;
+  const source = String(text || '')
+    .replace(/[\u00a0\u2007\u202f]/g, ' ')
+    .replace(/[\u2010\u2011\u2012\u2013\u2014]/g, '-');
 
   const addRef = (book, chapter, from, to, originalText) => {
     if (!book || !Number.isInteger(chapter) || !Number.isInteger(from) || !Number.isInteger(to)) return;
