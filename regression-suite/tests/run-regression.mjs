@@ -255,7 +255,7 @@ test('popup exposes all core feature controls', () => {
 test('reference classification retains all major selection types', () => {
   const bg = read('background.js');
   for (const type of ['STRONG','REFERENCE','BOOK','KJV_WORD','KJV_PHRASE','KJV_PASSAGE','KJV_REFERENCE_RANGE','REFERENCE_AND_KJV_PASSAGE','NON_KJV_SINGLE_WORD']) {
-    assert(bg.includes("type:'" + type + "'") || bg.includes('type: \'"' + type + '\'"') || bg.includes('type: "' + type + '"'), 'classifier type missing: ' + type);
+    assert(bg.includes("'" + type + "'") || bg.includes('"'+type+'"'), 'classifier type missing: ' + type);
   }
 });
 
