@@ -1,7 +1,9 @@
 const { test: base, expect, chromium } = require('@playwright/test');
 const path = require('path');
 
-const extensionPath = path.resolve(__dirname, '../../extension');
+const extensionPath = process.env.BLB_EXTENSION_PATH
+  ? path.resolve(process.env.BLB_EXTENSION_PATH)
+  : path.resolve(__dirname, '../../extension');
 
 const test = base.extend({
   context: async ({}, use) => {
