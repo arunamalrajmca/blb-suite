@@ -1,3 +1,9 @@
+5.2.51.41 — Regression fixes after 5.2.51.40 browser testing
+- Fixed repeated Reference-Criteria invocation so an identical Criteria destination is reused instead of forcing another tab.
+- Fixed `b cs` zero-match behavior: exact-case local no-match now falls back to native BLB search with the original query instead of BLB home.
+- Strengthened local/PDF selection reference collection by combining the contextual resolver with the full selection classifier before choosing the single-reference path, preventing an intermittently omitted reference from suppressing MultiVerse routing.
+- Preserved the 5.2.51.40 universal content-script/required-host-permission architecture that restored the four major regression gates.
+
 5.2.51.24 — Experimental Reference-Criteria performance optimization
 - EXPERIMENTAL ONLY; 5.2.51.23 remains the approved master / rollback baseline.
 - Replaced per-reference linear KJV verse lookup with a lazy O(1) book/chapter/verse map.
@@ -250,3 +256,15 @@ Approved master/rollback baseline as of 2026-09-27. Future builds should branch 
 - Includes exact corpus-backed short KJV phrase gate correction for `walk by faith`.
 - 5.2.51.23 is retained as the previous approved master / known-good rollback package.
 - Future builds branch from 5.2.51.26 unless explicitly authorized otherwise.
+
+5.2.51.40 — Content-script activation regression fix
+- Restored the approved 5.2.51.26 permanent HTTP/HTTPS host access model.
+- Restored declarative content-script coverage to all HTTP/HTTPS pages.
+- Restored the tabs permission used by the approved baseline.
+- Preserved the 5.2.51.38 background/popup feature code; no content.js or search-core changes.
+- Purpose: recover New Tab, Copy as link, external Bible redirects, and Reference-Criteria continuation on sites that previously depended on universal content-script injection.
+5.2.51.43 — ROMAN REFERENCE REGRESSION FIX
+- Corrected Roman-numeral Bible-book extraction for I/II/III forms.
+- Mapping now derives from the book name's leading 1/2/3 series number rather than the canonical 66-book number.
+- Preserves shared resolver/classifier/tab-manager architecture from 5.2.51.42.
+- Source-level resolver, cross-file, manifest, syntax, and package regression tests rerun.

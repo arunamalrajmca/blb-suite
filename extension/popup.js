@@ -147,14 +147,6 @@ async function requestCurrentSiteAccess(origin = currentSiteOrigin) {
 async function setPageButton(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
-  if (on && currentSiteOrigin) {
-    const granted = await requestCurrentSiteAccess();
-    if (!granted) {
-      await chrome.storage.local.set({pageSelectionButtonSites:{...(await chrome.storage.local.get({pageSelectionButtonSites:{}})).pageSelectionButtonSites, [state.siteKey]:false}});
-      render(await getState());
-      return;
-    }
-  }
   const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
   const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
   sites[state.siteKey] = !!on;
@@ -168,14 +160,6 @@ async function setPageButton(on) {
 async function setDoubleClick(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
-  if (on && currentSiteOrigin) {
-    const granted = await requestCurrentSiteAccess();
-    if (!granted) {
-      await chrome.storage.local.set({doubleClickBlbSites:{...(await chrome.storage.local.get({doubleClickBlbSites:{}})).doubleClickBlbSites, [state.siteKey]:false}});
-      render(await getState());
-      return;
-    }
-  }
   const data = await chrome.storage.local.get({doubleClickBlbSites:{}});
   const sites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
   sites[state.siteKey] = !!on;
@@ -940,19 +924,39 @@ guideHtmlButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.
 guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
 async function handlePageButtonToggle(on) {
-  if (on && !(await requestCurrentSiteAccess())) {
-    render(await getState());
+  if (!on) {
+    await setPageButton(false);
     return;
   }
-  await setPageButton(on);
+  await setPageButton(true, {deferActivation:true});
+  if (!(await requestCurrentSiteAccess())) {
+    await setPageButton(false);
+    return;
+  }
+  try {
+    const tabs = await chrome.tabs.query({active:true,currentWindow:true});
+    const tabId = tabs[0]?.id;
+    if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
+  } catch (_) {}
+  render(await getState());
 }
 
 async function handleDoubleClickToggle(on) {
-  if (on && !(await requestCurrentSiteAccess())) {
-    render(await getState());
+  if (!on) {
+    await setDoubleClick(false);
     return;
   }
-  await setDoubleClick(on);
+  await setDoubleClick(true, {deferActivation:true});
+  if (!(await requestCurrentSiteAccess())) {
+    await setDoubleClick(false);
+    return;
+  }
+  try {
+    const tabs = await chrome.tabs.query({active:true,currentWindow:true});
+    const tabId = tabs[0]?.id;
+    if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
+  } catch (_) {}
+  render(await getState());
 }
 
 document.getElementById('pageButton').addEventListener('change', e => handlePageButtonToggle(e.target.checked));
