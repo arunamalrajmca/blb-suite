@@ -158,6 +158,106 @@ test('expected PDF limitation remains documented by test policy', () => {
   assert.equal(fixture.pdfPolicy,'expected-limitation');
 });
 
+test('external redirect coverage includes every supported redirect host', () => {
+  const content = read('content.js');
+  for (const host of ['bible.com','biblegateway.com','bibleref.com','biblehub.com','kingjamesbibleonline.org','kjbo.org','kjv.site','officialkingjamesbible.com','bibleportal.com','webstersdictionary1828.com','blueletterbible.org']) assert(content.includes(host), `redirect host missing: ${host}`);
+  assert(content.includes('redirectBibleSite'), 'redirect parser missing');
+  assert(content.includes('redirectBlbNet'), 'BLB NET redirect missing');
+});
+test('BLB new-tab and Copy-as-link contracts remain wired', () => {
+  const content = read('content.js');
+  assert(content.includes('modifyLinks'), 'BLB link modifier missing');
+  assert(content.includes('target="_blank"'), 'BLB new-tab target missing');
+  assert(content.includes('formatBlbTextToHtml'), 'HTML clipboard formatter missing');
+  assert(content.includes('setData("text/html"'), 'HTML clipboard write missing');
+  assert(content.includes('setData("text/plain"'), 'plain-text clipboard fallback missing');
+});
+test('context-menu Show on BLB wiring remains present', () => {
+  const bg = read('background.js'), content = read('content.js');
+  assert(bg.includes('contextMenus'), 'contextMenus API wiring missing');
+  assert(bg.includes('blbSuiteOpenSelectionText'), 'context-menu selection opener missing');
+  assert(content.includes('blbSuiteSyncSelectionContextMenu'), 'context-menu synchronization missing');
+});
+test('Alt+B selection path remains wired', () => {
+  const bg = read('background.js');
+  assert(bg.includes('Alt+B'), 'Alt+B marker missing');
+  assert(bg.includes('getActiveTabSelection'), 'Alt+B active selection path missing');
+  assert(bg.includes('handleAltB') || bg.includes('handleAltBCommand'), 'Alt+B handler missing');
+});
+test('Double-click BLB path remains wired', () => {
+  const content = read('content.js');
+  assert(content.includes('handleDoubleClickBlb'), 'double-click handler missing');
+  assert(content.includes("addEventListener('dblclick'"), 'dblclick listener missing');
+  assert(content.includes('blbSuiteOpenSelectionText'), 'double-click opener missing');
+});
+test('Show on BLB floating button path remains wired', () => {
+  const content = read('content.js');
+  assert(content.includes('BLB_PAGE_BUTTON_ID'), 'floating button missing');
+  assert(content.includes('addBlbPageSelectionButton'), 'button creation missing');
+  assert(content.includes('updateBlbPageSelectionButtonFromSelection'), 'selection update path missing');
+  assert(content.includes('blbSuiteOpenSelectionText'), 'button opener missing');
+});
+test('MultiVerse creation/reuse path remains wired', () => {
+  const bg = read('background.js');
+  assert(bg.includes('createBlbTabGeneric'), 'BLB tab manager missing');
+  assert(bg.includes('MultiVerse.cfm'), 'MultiVerse path missing');
+  assert(bg.includes('openSelectedPdfBibleRefs'), 'shared MultiVerse/reference opener missing');
+});
+test('Webster 1828 path remains wired', () => {
+  const content = read('content.js'), bg = read('background.js');
+  assert(content.includes('webstersdictionary1828.com'), 'Webster host missing');
+  assert(content.includes('collectWebsterBibleRefs'), 'Webster collector missing');
+  assert(content.includes('blbSuiteOpenBackgroundUrl'), 'Webster opener missing');
+  assert(bg.includes('blbSuiteOpenWebsterMultiVerse'), 'Webster MultiVerse handler missing');
+});
+test('Study Sessions command surface remains wired', () => {
+  const bg = read('background.js'), popup = read('popup.js');
+  for (const type of ['blbSuiteStartStudyTopic','blbSuiteStopStudyRecording','blbSuiteAddStudyNoteToTopic','blbSuiteUpdateStudyNoteToTopic','blbSuiteStudyTopicHistory','blbSuiteStudyTopicMultiVerse','blbSuiteOpenStrongHistory','blbSuiteOpenHistorySearchTerms']) {
+    assert(bg.includes(type), `background Study Sessions handler missing: ${type}`);
+    assert(popup.includes(type), `popup Study Sessions caller missing: ${type}`);
+  }
+});
+test('Study Sessions download paths remain wired', () => {
+  const bg = read('background.js'), popup = read('popup.js');
+  for (const type of ['blbSuiteDownloadStudyTopic','blbSuiteDownloadStudyWhole','blbSuiteDownloadStudyDate']) {
+    assert(bg.includes(type), `download handler missing: ${type}`);
+    assert(popup.includes(type), `download caller missing: ${type}`);
+  }
+});
+test('Omnibox command path remains wired', () => {
+  const bg = read('background.js');
+  assert(bg.includes('omnibox.onInputEntered'), 'omnibox listener missing');
+  assert(bg.includes('handleOmniboxCommand'), 'omnibox handler missing');
+  assert(bg.includes('SEARCH_RANGES'), 'Criteria search ranges missing');
+});
+test('permission Allow/Deny/Re-Allow lifecycle remains wired', () => {
+  const bg = read('background.js'), popup = read('popup.js');
+  assert(bg.includes('permissions.onAdded'), 'permission-added activation missing');
+  assert(bg.includes('permissions.contains'), 'permission detection missing');
+  assert(bg.includes('permissions.request'), 'permission request missing');
+  assert(bg.includes('permissions.remove'), 'permission removal missing');
+  assert(popup.includes('requestCurrentSiteAccess'), 'site-access request missing');
+});
+test('reload/new-tab persistence and dynamic activation remain wired', () => {
+  const bg = read('background.js'), content = read('content.js');
+  assert(bg.includes('chrome.runtime.onStartup'), 'startup handling missing');
+  assert(bg.includes('chrome.webNavigation.onCommitted'), 'navigation activation missing');
+  assert(bg.includes('chrome.storage.onChanged'), 'storage activation missing');
+  assert(content.includes('chrome.storage.onChanged'), 'content persistence listener missing');
+});
+test('popup exposes all core feature controls', () => {
+  const popup = read('popup.js');
+  for (const control of ['master','pageButton','doubleClick','redirectEnabled']) {
+    assert(popup.includes("getElementById('" + control + "')") || popup.includes('getElementById("' + control + '")'), 'popup control missing: ' + control);
+  }
+});
+test('reference classification retains all major selection types', () => {
+  const bg = read('background.js');
+  for (const type of ['STRONG','REFERENCE','BOOK','KJV_WORD','KJV_PHRASE','KJV_PASSAGE','REFERENCE_AND_KJV_PASSAGE','NON_KJV_SINGLE_WORD']) {
+    assert(bg.includes("type:'" + type + "'") || bg.includes('type: "' + type + '"') || bg.includes('type:"' + type + '"'), 'classifier type missing: ' + type);
+  }
+});
+
 console.log(`\nRESULT: ${failures.length ? 'FAIL' : 'PASS'} — ${passed} passed, ${failures.length} failed`);
 if (failures.length) {
   console.error('\nFailures:');
