@@ -2669,40 +2669,16 @@ function extractBibleRefsFromSelectedTextUncached(text) {
       const forms = [];
       for (const book of BOOKS) {
         const bookForms = new Set(getBibleBookForms(book));
-        const leadingSeriesNumber = String(book.name || '').match(/^([123])\\s+/)?.[1];
+        const leadingSeriesNumber = String(book.name || '').match(/^([123])\s+/)?.[1];
         const roman = leadingSeriesNumber ? ({1:'I',2:'II',3:'III'}[leadingSeriesNumber] || null) : null;
         if (roman) bookForms.add(book.name.replace(/^[123]/, roman));
         for (const form of bookForms) {
           const clean = String(form || '').trim();
           if (!clean) continue;
-          const escaped = clean.replace(/[.*+?^\\$()|[\\]\\\\]/g, '\\const cachedExplicitBibleReferencePatterns = (() => {
-  const forms = [];
-  for (const book of BOOKS) {
-    const bookForms = new Set(getBibleBookForms(book));
-    const leadingSeriesNumber = String(book.name || '').match(/^([123])\s+/)?.[1];
-    const roman = leadingSeriesNumber ? ({1:'I',2:'II',3:'III'}[leadingSeriesNumber] || null) : null;
-    if (roman) bookForms.add(book.name.replace(/^[123]/, roman));
-    for (const form of bookForms) {
-      const clean = String(form || '').trim();
-      if (!clean) continue;
-      const escaped = clean.replace(/[.*+?^\\$()|[\\]\\\\]/g, '\\$&');
-      forms.push({
-        book,
-        form: clean,
-        re: new RegExp('(?<![A-Za-z0-9])' + escaped + '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?', 'gi')
-      });
-    }
-  }
-  forms.sort((a,b) => b.form.length - a.form.length);
-  return forms;
-})();
-
-function extractBibleRefsFromSelectedTextUncached(text) {
-  const refs = [];');
           forms.push({
             book,
             form: clean,
-            re: new RegExp('(?<![A-Za-z0-9])' + escaped + '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?', 'gi')
+            re: new RegExp('(?<![A-Za-z0-9])' + escapeRegex(clean).replace(/\s+/g, '\\s+') + '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?', 'gi')
           });
         }
       }
@@ -2710,10 +2686,6 @@ function extractBibleRefsFromSelectedTextUncached(text) {
       return forms;
     })()
   );
-  const seen = new Set();
-  const source = String(text || '')
-    .replace(/[\u00a0\u2007\u202f]/g, ' ')
-    .replace(/[\u2010\u2011\u2012\u2013\u2014]/g, '-');
   const resolveBook = resolveBibleBook;
 
   const addRef = (book, chapter, from, to, originalText) => {
