@@ -9,6 +9,7 @@ const test = base.extend({
       channel: 'chromium',
       headless: true,
       args: [
+        '--headless=new',
         `--disable-extensions-except=${extensionPath}`,
         `--load-extension=${extensionPath}`,
         '--no-first-run',
@@ -21,8 +22,22 @@ const test = base.extend({
   extensionId: async ({ context }, use) => {
     let [worker] = context.serviceWorkers();
     if (!worker) worker = await context.waitForEvent('serviceworker');
-    const id = worker.url().split('/')[2];
-    await use(id);
+    await use(worker.url().split('/')[2]);
+  },
+  extensionWorker: async ({ context }, use) => {
+    let [worker] = context.serviceWorkers();
+    if (!worker) worker = await context.waitForEvent('serviceworker');
+    await use(worker);
+  },
+  extensionStorage: async ({ extensionWorker }, use) => {
+    await use({
+      set: async (values) => extensionWorker.evaluate(async (data) => {
+        await chrome.storage.local.set(data);
+      }, values),
+      clear: async () => extensionWorker.evaluate(async () => {
+        await chrome.storage.local.clear();
+      })
+    });
   }
 });
 

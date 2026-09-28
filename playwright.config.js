@@ -8,7 +8,7 @@ module.exports = defineConfig({
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,
-  reporter: [['list'], ['html', { outputFolder: 'test-results/html', open: 'never' }], ['json', { outputFile: 'test-results/results.json' }]],
+  reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }], ['json', { outputFile: 'test-results/results.json' }]],
   use: {
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
