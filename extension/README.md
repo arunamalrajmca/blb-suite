@@ -1,3 +1,11 @@
+## Current production baseline
+
+**5.2.51.43 — APPROVED MASTER / PRODUCTION BASELINE**
+
+The 5.2.51.43 source and Git `main` are the active production/development baseline. Future functional builds should branch from 5.2.51.43 unless explicitly changed.
+
+The former 5.2.51.26 master/rollback package is retained as a historical archive only and is no longer an active rollback target.
+
 
 ## 5.2.51.10 — Chrome Web Store Submission Preparation
 
@@ -87,5 +95,5 @@ Ordinary searches continue directly to native Blue Letter Bible. A corpus-derive
 `b cs` treats mixed/scrambled capitalization (for example `LoRd`) as a native BLB search after uppercasing the query. This avoids a false zero-match result and BLB home-page fallback. Normal title case remains subject to corpus-derived case-sensitive routing.
 
 
-[MASTER BASELINE — 5.2.51.9]
-This build is the approved production master and rollback baseline. Future builds branch from 5.2.51.9 unless explicitly changed.
+[HISTORICAL BASELINE — 5.2.51.9]
+This marker records the historical 5.2.51.9 baseline documented at the time. It is superseded by the current 5.2.51.43 production baseline above.

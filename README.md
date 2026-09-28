@@ -1,36 +1,29 @@
 # Blue Letter Bible Suite
 
-This repository is the source/test baseline for the Blue Letter Bible Suite Chrome/Brave extension.
+This repository is the source and regression-test baseline for the Blue Letter Bible Suite Chrome/Brave extension.
 
-## Current experimental build
+## Current production baseline
 
-**5.2.51.32 — GRANT-PATH-FIX-EXPERIMENTAL**
+**5.2.51.43 — APPROVED MASTER / PRODUCTION BASELINE**
 
-Source archive SHA-256:
+Git `main` at the 5.2.51.43 release commit is the source of truth for current development and production packaging.
 
-`d92f96efa4ef8ef167867a4132829550deeb72eb15db4d9a3658b2d598096249`
+The former **5.2.51.26** master/rollback package is retained as a historical archive only. It is no longer the active development baseline.
 
-The approved rollback/master baseline remains **5.2.51.26** and is not modified by this repository setup.
+## Regression gate
+
+The repository's GitHub Actions workflow runs the deterministic **5.2.51.43 HARD-GATE** regression suite on pushes and pull requests targeting `main`.
+
+The gate validates the extension source and key reference/search behaviors. It is deterministic/source-level CI; browser-dependent actions such as native permission prompts, native context menus, trusted physical gestures, Alt+B, and local `file://` access remain manual regression checks unless reproducible without weakening test validity.
 
 ## Local tests
 
 ```text
-npm ci
-npx playwright install chromium
-npm run test:static
-npm test
+node regression-suite/tests/run-regression.mjs extension
 ```
 
-For a visible browser:
-
-```text
-npm run test:headed
-```
-
-The extension is loaded as an unpacked MV3 extension. Playwright documents persistent Chromium contexts as the supported pattern for extension testing.
+The extension is loaded as an unpacked MV3 extension for local/browser testing.
 
 ## Scope
 
-Automated CI covers deterministic extension loading, manifest/permission architecture, popup loading, known-host page smoke tests, and selected declarative content-script initialization.
-
-Native permission prompts, native context menus, trusted physical gestures, Alt+B, and local `file://` access remain local/manual tests until they can be reproduced reliably without weakening the test's validity.
+Blue Letter Bible Suite combines practical BLB study tools in one Chrome/Brave extension. See `extension/README.md` and `extension/Tutorial.html` for feature documentation.
