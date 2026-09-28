@@ -4380,23 +4380,33 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     // classifier runs afterward while the service worker remains active.
     const [referenceTab, criteriaTab] = await Promise.all([referenceOpen, criteriaOpen, studyCapture]);
 
-    const authoritativeDecision = classifySelectionForBlb(text);
-    const authoritativeQuery = authoritativeDecision?.kjvPassageQuery || '';
-    if (authoritativeQuery !== fastCriteriaQuery) {
-      if (criteriaTab?.id != null && authoritativeQuery) {
-        try {
-          await chrome.tabs.update(criteriaTab.id, {
-            url: `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(authoritativeQuery).replace(/%20/g,'+')}`
-          });
-        } catch (_) {}
-      } else if (authoritativeQuery) {
-        await openBlbDestination(
-          `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(authoritativeQuery).replace(/%20/g,'+')}`,
-          false,
-          false
-        );
+    // Return immediately after both destination tabs are created. The full
+    // classifier is correctness/reconciliation work, not part of the user's
+    // tab-opening critical path. If it produces a different authoritative
+    // Criteria query, update the already-open Criteria tab in the background.
+    void (async () => {
+      try {
+        const authoritativeDecision = classifySelectionForBlb(text);
+        const authoritativeQuery = authoritativeDecision?.kjvPassageQuery || '';
+        if (authoritativeQuery === fastCriteriaQuery) return;
+
+        if (criteriaTab?.id != null && authoritativeQuery) {
+          try {
+            await chrome.tabs.update(criteriaTab.id, {
+              url: `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(authoritativeQuery).replace(/%20/g,'+')}`
+            });
+          } catch (_) {}
+        } else if (authoritativeQuery) {
+          await openBlbDestination(
+            `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(authoritativeQuery).replace(/%20/g,'+')}`,
+            false,
+            false
+          );
+        }
+      } catch (err) {
+        console.warn('BLB Suite paragraph Criteria reconciliation:', err);
       }
-    }
+    })();
     return;
   }
 
