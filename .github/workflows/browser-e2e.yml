@@ -61,8 +61,9 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BLB_PERF_MIN_TARGETED_IMPROVEMENT: 0.03
-          BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT: 0.10
-          BLB_PERF_MIN_PARAGRAPH_CLASSIFY_IMPROVEMENT: 0.10
+          BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT: 0.50
+          BLB_PERF_MIN_PARAGRAPH_FIRST_TAB_IMPROVEMENT: 0.50
+          BLB_PERF_MIN_PARAGRAPH_SECOND_TAB_IMPROVEMENT: 0.50
           BLB_PERF_MAX_FRESH_REGRESSION: 0.10
         run: set -o pipefail; node scripts/compare-performance.mjs "$RUNNER_TEMP/baseline-performance.jsonl" "$RUNNER_TEMP/candidate-performance.jsonl" | tee "$RUNNER_TEMP/performance-report.md"
 
