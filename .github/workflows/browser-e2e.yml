@@ -44,7 +44,7 @@ jobs:
         run: |
           : > "$BLB_BASELINE_OUTPUT"
           : > "$BLB_CANDIDATE_OUTPUT"
-          for scenario in selection fresh reuse paragraph-two-tab paragraph-classify; do
+          for scenario in paragraph-classify paragraph-two-tab selection fresh reuse; do
             for iteration in 1 2 3 4 5 6 7; do
               BLB_EXTENSION_PATH="$BLB_BASELINE_EXTENSION_PATH" \
               BLB_PERF_OUTPUT="$BLB_BASELINE_OUTPUT" \
