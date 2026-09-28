@@ -4347,11 +4347,62 @@ async function getContextualSelectionReference(tabId, selectionText) {
 async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNew:true, activateExisting:true}, contextualRef = null) {
   const text = normalizeSelectedScriptureText(selectionText);
 
+  // FAST MULTI-REFERENCE PATH:
+  // The explicit-reference parser is already the authoritative source for
+  // MultiVerse routing. Do not block tab creation on the full KJV classifier.
+  // Start MultiVerse immediately, derive a corpus-validated residual Criteria
+  // term in parallel, then run the full classifier only for reconciliation.
+  const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
+  if (selectedRefs.length >= 2) {
+    const excludedVerseTexts = selectedRefs
+      .map(ref => getKjvVerseTextForSelectionRef(ref))
+      .filter(Boolean);
+    let residualText = removeKjvVerseTextFromSelection(text, selectedRefs);
+    residualText = removeQuotedTextFromSelection(residualText);
+    const fastCriteriaQuery = extractResidualProseShortCriteriaQuery(residualText, excludedVerseTexts);
+
+    const studyCapture = recordStudyRefs(selectedRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
+    const referenceOpen = openBlbMultiVerseRefs(
+      selectedRefs,
+      !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
+    );
+    const criteriaOpen = fastCriteriaQuery
+      ? openBlbDestination(
+          `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(fastCriteriaQuery).replace(/%20/g,'+')}`,
+          false,
+          false
+        )
+      : Promise.resolve(null);
+
+    // Await only the actual tab creation/storage handoff. This is the point
+    // at which the user has both destinations available; the expensive
+    // classifier runs afterward while the service worker remains active.
+    const [referenceTab, criteriaTab] = await Promise.all([referenceOpen, criteriaOpen, studyCapture]);
+
+    const authoritativeDecision = classifySelectionForBlb(text);
+    const authoritativeQuery = authoritativeDecision?.kjvPassageQuery || '';
+    if (authoritativeQuery !== fastCriteriaQuery) {
+      if (criteriaTab?.id != null && authoritativeQuery) {
+        try {
+          await chrome.tabs.update(criteriaTab.id, {
+            url: `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(authoritativeQuery).replace(/%20/g,'+')}`
+          });
+        } catch (_) {}
+      } else if (authoritativeQuery) {
+        await openBlbDestination(
+          `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(authoritativeQuery).replace(/%20/g,'+')}`,
+          false,
+          false
+        );
+      }
+    }
+    return;
+  }
+
   // A validated adjacent citation is authoritative for the reference tab,
   // but it must no longer suppress Criteria Search for the selected paragraph.
   // The reference is opened first; the same selection is then classified only
-  // for an independently validated KJV passage query. This preserves the
-  // contextual-reference fast path while adding the requested second tab.
+  // for an independently validated KJV passage query.
   let contextualDecision = null;
   if (contextualRef?.url) {
     const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
@@ -4424,9 +4475,10 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   if (decision.type === 'REFERENCE_AND_KJV_PASSAGE') {
     const parsedRefs = decision.refs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean);
     if (parsedRefs.length > 1) {
+      // Normally unreachable because the explicit-reference fast path above
+      // handles multi-reference selections first. Keep this fallback for
+      // classifier-only callers and unusual parser discrepancies.
       const studyCapture = recordStudyRefs(parsedRefs);
-      // Start MultiVerse and Criteria together. Neither destination needs the
-      // other to finish before Chrome can create its tab.
       const referenceOpen = openBlbMultiVerseRefs(
         decision.refs,
         !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
