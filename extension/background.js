@@ -2442,6 +2442,16 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       // If an adjacent reference is found, it is authoritative and we return
       // immediately. We do NOT run the KJV Criteria Search for that selection.
       // This preserves the selected reference's chapter/verse information.
+      const directUrl = typeof message.directUrl === 'string' ? message.directUrl.trim() : '';
+      if (directUrl && /^https:\/\/www\.blueletterbible\.org\/kjv\//i.test(directUrl)
+          && message.contextualReference?.url === directUrl) {
+        const referenceOpen = openBlbDestination(directUrl, !!behavior.activeIfNew, !!behavior.activateExisting);
+        const studyRef = parseBlbKjvUrlToStudyRef(directUrl);
+        await referenceOpen;
+        if (studyRef) await recordStudyRefs([studyRef]);
+        sendResponse({ok:true, direct:true});
+        return true;
+      }
       const normalized = normalizeSelectedScriptureText(text);
       const direct = getDirectSelectedReference(normalized);
       const strong = canonicalStrongValue(normalized);
