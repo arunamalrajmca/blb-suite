@@ -10,7 +10,7 @@ function median(values) {
 }
 function summarize(samples) {
   const byScenario = {};
-  for (const scenario of ['selection', 'fresh', 'reuse']) {
+  for (const scenario of ['selection', 'fresh', 'reuse', 'paragraph-two-tab']) {
     const values = samples.filter(s => s.scenario === scenario).map(s => s.handoffMs);
     if (!values.length) throw new Error(`Missing ${scenario} samples`);
     byScenario[scenario] = { median: median(values), count: values.length };
@@ -38,7 +38,8 @@ console.log('|---|---:|---:|---:|');
 for (const [name, key] of [
   ['Selection → BLB handoff', 'selection'],
   ['Fresh-tab handoff', 'fresh'],
-  ['Existing-tab reuse', 'reuse']
+  ['Existing-tab reuse', 'reuse'],
+  ['Paragraph → MultiVerse + Criteria', 'paragraph-two-tab']
 ]) {
   const before = baseline[key].median;
   const after = candidate[key].median;
@@ -49,19 +50,23 @@ for (const [name, key] of [
 const selectionImprovement = pairedMedianImprovement('selection');
 const freshImprovement = pairedMedianImprovement('fresh');
 const reuseImprovement = pairedMedianImprovement('reuse');
+const paragraphTwoTabImprovement = pairedMedianImprovement('paragraph-two-tab');
 
 console.log(`Samples: baseline selection/fresh/reuse ${baseline.selection.count}/${baseline.fresh.count}/${baseline.reuse.count}; PR #8 ${candidate.selection.count}/${candidate.fresh.count}/${candidate.reuse.count}`);
 console.log('Gate calculations use paired per-iteration improvement medians; scenario medians above are descriptive.');
 console.log(`Required selection-path paired improvement: ${(minTargetedImprovement * 100).toFixed(1)}%`);
 console.log(`Required existing-tab handoff paired improvement: ${(minTargetedImprovement * 100).toFixed(1)}%`);
+console.log(`Required paragraph two-tab paired improvement: ${(Number(process.env.BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT || 0.10) * 100).toFixed(1)}%`);
 console.log(`Maximum allowed fresh-tab handoff paired regression: ${(maxFreshRegression * 100).toFixed(1)}%`);
 
+const minParagraphTwoTabImprovement = Number(process.env.BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT || 0.10);
 const passed = selectionImprovement >= minTargetedImprovement
   && reuseImprovement >= minTargetedImprovement
+  && paragraphTwoTabImprovement >= minParagraphTwoTabImprovement
   && freshImprovement >= -maxFreshRegression;
 
 if (!passed) {
-  console.error('PERFORMANCE GATE FAILED: the targeted selection and existing-tab handoff paths must improve by the required amount, and fresh-tab handoff must not regress excessively.');
+  console.error('PERFORMANCE GATE FAILED: the targeted selection, existing-tab handoff, and paragraph two-tab path must improve by the required amounts, and fresh-tab handoff must not regress excessively.');
   process.exit(1);
 }
 console.log('PERFORMANCE GATE PASSED: PR #8 has measured before/after improvement on the targeted paths with no excessive fresh-tab regression.');
