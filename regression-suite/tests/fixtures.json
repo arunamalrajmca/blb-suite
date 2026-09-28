@@ -1,0 +1,19 @@
+{
+  "baselineVersion": "5.2.51.43",
+  "pdfPolicy": "expected-limitation",
+  "references": [
+    {"input":"I Thessalonians 2:13","book":"1 thessalonians","chapter":2,"from":13,"to":13},
+    {"input":"I Timothy 6:15","book":"1 timothy","chapter":6,"from":15,"to":15},
+    {"input":"Phil. 2:10","book":"philippians","chapter":2,"from":10,"to":10},
+    {"input":"Hebrews 10:7","book":"hebrews","chapter":10,"from":7,"to":7}
+  ],
+  "multiReferenceText": "John 1:1; Hebrews 10:7; I Timothy 6:15; Colossians 1:16; Phil. 2:10",
+  "criteriaQuery": "in every one",
+  "caseSensitive": {
+    "nativeFallback": "Jesus",
+    "scrambled": "jEsUs",
+    "exact": "JESUS",
+    "quoted": "\"JESUS\""
+  },
+  "manualGates": 18
+}
