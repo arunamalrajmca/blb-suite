@@ -2662,7 +2662,20 @@ function compactPdfBookName(value) {
   return normalizePdfBookName(value).replace(/\s+/g, '');
 }
 
-const cachedExplicitBibleReferencePatterns = (() => {
+function extractBibleRefsFromSelectedTextUncached(text) {
+  const refs = [];
+  const cachedPatterns = extractBibleRefsFromSelectedTextUncached.cachedPatterns || (
+    extractBibleRefsFromSelectedTextUncached.cachedPatterns = (() => {
+      const forms = [];
+      for (const book of BOOKS) {
+        const bookForms = new Set(getBibleBookForms(book));
+        const leadingSeriesNumber = String(book.name || '').match(/^([123])\\s+/)?.[1];
+        const roman = leadingSeriesNumber ? ({1:'I',2:'II',3:'III'}[leadingSeriesNumber] || null) : null;
+        if (roman) bookForms.add(book.name.replace(/^[123]/, roman));
+        for (const form of bookForms) {
+          const clean = String(form || '').trim();
+          if (!clean) continue;
+          const escaped = clean.replace(/[.*+?^\\$()|[\\]\\\\]/g, '\\const cachedExplicitBibleReferencePatterns = (() => {
   const forms = [];
   for (const book of BOOKS) {
     const bookForms = new Set(getBibleBookForms(book));
@@ -2685,7 +2698,18 @@ const cachedExplicitBibleReferencePatterns = (() => {
 })();
 
 function extractBibleRefsFromSelectedTextUncached(text) {
-  const refs = [];
+  const refs = [];');
+          forms.push({
+            book,
+            form: clean,
+            re: new RegExp('(?<![A-Za-z0-9])' + escaped + '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?', 'gi')
+          });
+        }
+      }
+      forms.sort((a,b) => b.form.length - a.form.length);
+      return forms;
+    })()
+  );
   const seen = new Set();
   const source = String(text || '')
     .replace(/[\u00a0\u2007\u202f]/g, ' ')
@@ -2855,7 +2879,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // book name (for example "... says, Hebrews 10:7") and then fail book
   // resolution. Scan the authoritative book forms directly as a final safety
   // net. Also accept conventional Roman-numeral forms such as "I Timothy".
-  for (const item of cachedExplicitBibleReferencePatterns) {
+  for (const item of cachedPatterns) {
     item.re.lastIndex = 0;
     while ((m = item.re.exec(source))) {
       const chapter = Number(m[1]);
