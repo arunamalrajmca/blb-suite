@@ -3447,9 +3447,38 @@ function isResidualProseShortKjvPhraseCandidate(phraseWords) {
     if (residualContentWords.length === 1 && (!firstIsStop || !lastIsContent)) return false;
     if (residualContentWords.length === 1 && countResidualKjvPhraseOccurrences(normalized) > 4) return false;
   }
-  return normalized.length === 2
-    ? isResidualProseShortKjvPhraseInCorpus(normalized)
-    : getKjvResidualPhraseIndex(3)?.has(phrase) === true;
+  if (normalized.length === 2) return isResidualProseShortKjvPhraseInCorpus(normalized);
+
+  // Avoid lazily constructing a corpus-wide 3-word Set. Intersect the
+  // existing compact word→verse postings, then verify the exact adjacent
+  // triple only in those candidate verses.
+  if (normalized.length === 3) {
+    const postings = normalized.map(word => decodeKjvResidualWordVerseIndexes(word));
+    if (postings.some(list => !list.length)) return false;
+    let anchor = 0;
+    for (let i = 1; i < postings.length; i++) {
+      if (postings[i].length < postings[anchor].length) anchor = i;
+    }
+    const candidateSet = new Set(postings[anchor]);
+    for (let i = 0; i < postings.length; i++) {
+      if (i === anchor) continue;
+      const allowed = new Set(postings[i]);
+      for (const verseIndex of candidateSet) {
+        if (!allowed.has(verseIndex)) candidateSet.delete(verseIndex);
+      }
+      if (!candidateSet.size) return false;
+    }
+    for (const verseIndex of candidateSet) {
+      const entry = KJV_CORPUS_VERSES[verseIndex];
+      const verseWords = entry ? normalizeKjvPassageWords(entry[3]) : [];
+      for (let i = 0; i <= verseWords.length - 3; i++) {
+        if (verseWords[i] === normalized[0] &&
+            verseWords[i + 1] === normalized[1] &&
+            verseWords[i + 2] === normalized[2]) return true;
+      }
+    }
+  }
+  return false;
 }
 
 function removeQuotedTextFromSelection(source) {
