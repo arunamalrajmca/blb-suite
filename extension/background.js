@@ -4350,12 +4350,13 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // The reference is opened first; the same selection is then classified only
   // for an independently validated KJV passage query. This preserves the
   // contextual-reference fast path while adding the requested second tab.
+  let contextualDecision = null;
   if (contextualRef?.url) {
     const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
     // PDF/local selections can expose slightly different reference text to
     // the contextual resolver and to the full classifier. Use both views
     // before deciding that the selection contains only one reference.
-    const contextualDecision = classifySelectionForBlb(text);
+    contextualDecision = classifySelectionForBlb(text);
     const classifiedRefs = Array.isArray(contextualDecision?.refs) ? contextualDecision.refs : [];
     const mergedRefs = [...selectedRefs, ...classifiedRefs];
     const mergedRefKeys = new Set();
@@ -4375,22 +4376,27 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       // begin creating the first result while the synchronous local classifier
       // prepares the second result. The reference tab remains the first/active
       // destination; Criteria is still opened in the background.
-      const referenceOpen = openBlbDestination(contextualRef.url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
-
       // Do not route the selection through the generic opener a second time:
-      // that could reopen the same reference. Extract only the existing KJV
-      // passage result and place Criteria Search in a new background tab.
+      // that could reopen the same reference. Start the reference and Criteria
+      // destinations together so network/tab creation overlaps.
+      const referenceOpen = openBlbDestination(contextualRef.url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
       const criteriaQuery = contextualDecision?.kjvPassageQuery || '';
-      await referenceOpen;
-      if (criteriaQuery) {
-        const criteriaUrl = `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(criteriaQuery).replace(/%20/g,'+')}`;
-        await openBlbDestination(criteriaUrl, false, false);
-      }
+      const criteriaOpen = criteriaQuery
+        ? openBlbDestination(
+            `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(criteriaQuery).replace(/%20/g,'+')}`,
+            false,
+            false
+          )
+        : Promise.resolve(null);
+      await Promise.all([referenceOpen, criteriaOpen]);
       return;
     }
   }
 
-  const decision = classifySelectionForBlb(text);
+  // Reuse the classification already performed above when a contextual
+  // reference was supplied. A multi-reference paragraph must never pay the
+  // full corpus-classification cost twice.
+  const decision = contextualDecision || classifySelectionForBlb(text);
   if (!decision.valid) return;
   const cleanedText = decision.text;
   if (!cleanedText) return;
