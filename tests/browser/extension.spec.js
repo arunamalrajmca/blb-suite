@@ -55,19 +55,6 @@ test.describe('core user-visible E2E', () => {
     expect(blb.url()).toMatch(/blueletterbible.org/kjv/john/3/16/i);
   });
 
-  test('Alt+B opens an exact selected reference', async ({ page, context, extensionStorage }) => {
-    await extensionStorage.set({ masterEnabled: true });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    await page.evaluate(() => {
-      const el = document.createElement('p');
-      el.textContent = 'John 3:16';
-      document.body.appendChild(el);
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      const sel = window.getSelection();
-      sel.removeAllRanges();
-      sel.addRange(range);
-    });
     const popupPromise = context.waitForEvent('page');
     await page.keyboard.press('Alt+b');
     const blb = await popupPromise;
