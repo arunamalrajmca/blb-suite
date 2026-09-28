@@ -876,6 +876,7 @@ suiteSettingsReadyPromise.then(refreshDoubleClickBlb).catch(()=>{});
 const BLB_PAGE_BUTTON_ID = 'blb-suite-page-selection-button';
 let blbPageButtonSelection = '';
 let blbPageButtonContextualReference = null;
+let blbPageButtonDirectUrl = null;
 let lastSelectionContextualReference = null;
 let lastSelectionContextualText = '';
 let blbPageButtonVisible = false;
@@ -967,6 +968,7 @@ function hasLocalValidBibleReference(text) {
 function invalidateBlbPageSelectionButton() {
   blbPageButtonSelection = '';
   blbPageButtonContextualReference = null;
+  blbPageButtonDirectUrl = null;
   blbPageButtonVisible = false;
   const button = document.getElementById(BLB_PAGE_BUTTON_ID);
   if (button) button.style.display = 'none';
@@ -1034,7 +1036,7 @@ function addBlbPageSelectionButton() {
       return;
     }
     // Ignore stale content-script contexts if the extension was reloaded.
-    safeRuntimeSendMessage({type:'blbSuiteOpenSelectionText', text, contextualReference: blbPageButtonContextualReference || null});
+    safeRuntimeSendMessage({type:'blbSuiteOpenSelectionText', text, contextualReference: blbPageButtonContextualReference || null, directUrl: blbPageButtonDirectUrl || null});
     setTimeout(() => { pageButtonActionInProgress = false; }, 0);
   });
 
@@ -1053,12 +1055,38 @@ async function updateBlbPageSelectionButtonFromSelection() {
   const text = getSelectedPageText();
   blbPageButtonSelection = text;
   blbPageButtonContextualReference = null;
+  blbPageButtonDirectUrl = null;
   if (text) {
-    const contextual = getContextualBibleReference(text);
-    if (contextual?.url) {
-      blbPageButtonContextualReference = contextual;
-      lastSelectionContextualReference = contextual;
-      lastSelectionContextualText = text;
+    // Fast path: resolve a complete, unambiguous reference directly from the
+    // selected text. The resolved URL is retained so the click handler can
+    // hand it directly to the background opener without reclassifying the
+    // selection.
+    const directRefs = resolveBibleReferenceText(normalizeSelectionText(text));
+    if (directRefs.length === 1) {
+      const direct = directRefs[0];
+      const selectedNormalized = normalizeSelectionText(text).replace(/\s+/g, ' ').trim();
+      const referenceNormalized = normalizeSelectionText(direct.text || '').replace(/\s+/g, ' ').trim();
+      if (selectedNormalized && referenceNormalized === selectedNormalized && direct.url) {
+        const contextual = {
+          book: direct.book,
+          chapter: direct.chapter,
+          from: direct.from,
+          to: direct.to,
+          url: direct.url
+        };
+        blbPageButtonContextualReference = contextual;
+        blbPageButtonDirectUrl = direct.url;
+        lastSelectionContextualReference = contextual;
+        lastSelectionContextualText = text;
+      }
+    }
+    if (!blbPageButtonContextualReference) {
+      const contextual = getContextualBibleReference(text);
+      if (contextual?.url) {
+        blbPageButtonContextualReference = contextual;
+        lastSelectionContextualReference = contextual;
+        lastSelectionContextualText = text;
+      }
     }
   }
   setBlbPageButtonVisible(false);
