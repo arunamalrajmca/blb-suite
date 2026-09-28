@@ -1,0 +1,36 @@
+{
+  "baseline": "5.2.51.43",
+  "manualPolicy": "required",
+  "gates": [
+    {"id":1,"name":"Content-script responder on supported hosts","expected":"PASS"},
+    {"id":2,"name":"BLB new-tab links","expected":"PASS"},
+    {"id":3,"name":"Copy as link / HTML clipboard","expected":"PASS"},
+    {"id":4,"name":"Configured external redirects","expected":"PASS"},
+    {"id":5,"name":"Reference-Criteria full continuation","expected":"PASS"},
+    {"id":6,"name":"Criteria repeated invocation reuses matching tab","expected":"PASS"},
+    {"id":7,"name":"Web partial I Thessalonians 2:13 contextual resolution","expected":"PASS"},
+    {"id":8,"name":"MultiVerse creation/reuse","expected":"PASS"},
+    {"id":9,"name":"Context menus","expected":"PASS"},
+    {"id":10,"name":"Alt+B","expected":"PASS"},
+    {"id":11,"name":"Double-click","expected":"PASS"},
+    {"id":12,"name":"Floating Show on BLB","expected":"PASS"},
+    {"id":13,"name":"Webster","expected":"PASS"},
+    {"id":14,"name":"Study Sessions/history","expected":"PASS"},
+    {"id":15,"name":"PDF/local HTML/HTM","expected":"PASS"},
+    {"id":16,"name":"Downloads","expected":"PASS"},
+    {"id":17,"name":"Omnibox","expected":"PASS"},
+    {"id":18,"name":"Case-sensitive search/routing + permissions + reload/new-tab persistence","expected":"PASS"}
+  ],
+  "focusedCases": [
+    "I Thessalonians 2:13",
+    "I Timothy 6:15",
+    "Phil. 2:10",
+    "Hebrews 10:7",
+    "five-reference paragraph extraction",
+    "in every one",
+    "b cs Jesus",
+    "scrambled-case native fallback",
+    "quoted b cs query"
+  ],
+  "pdfExpectedLimitation": "Partial selection inside a protected PDF viewer may lack adjacent reading context; do not treat that as a regression unless PDF context acquisition is intentionally changed."
+}
