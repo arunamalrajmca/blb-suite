@@ -35,7 +35,11 @@ const maxFreshRegression = Number(process.env.BLB_PERF_MAX_FRESH_REGRESSION || 0
 
 console.log('| Scenario | 5.2.51.43 baseline | PR #8 | Improvement |');
 console.log('|---|---:|---:|---:|');
-for (const [name, key] of [['Selection → button', 'selection'], ['Fresh-tab handoff', 'fresh'], ['Existing-tab reuse', 'reuse']]) {
+for (const [name, key] of [
+  ['Selection → BLB handoff', 'selection'],
+  ['Fresh-tab handoff', 'fresh'],
+  ['Existing-tab reuse', 'reuse']
+]) {
   const before = baseline[key].median;
   const after = candidate[key].median;
   const improvement = before > 0 ? (before - after) / before : 0;
