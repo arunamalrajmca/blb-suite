@@ -12,8 +12,7 @@ async function selectText(page, selector) {
 }
 
 async function waitForBlbPage(page) {
-  await page.waitForURL(/https:\/\/www\.blueletterbible\.org\/kjv\//, { timeout: 30000 });
-  expect(page.url()).toMatch(/\/kjv\/.*john.*3.*16/i);
+  await expect.poll(() => page.url(), { timeout: 30000 }).toMatch(/https:\/\/www\.blueletterbible\.org\/kjv\/.*john.*3.*16/i);
 }
 
 test.beforeEach(async ({ extensionStorage }) => {
