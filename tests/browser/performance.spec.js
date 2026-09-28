@@ -136,22 +136,42 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     const started = Date.now();
     await button.click();
 
-    // Measure actual tab-creation milestones separately from BLB page loading.
+    // Measure the time until BOTH destination tabs are actually populated,
+    // not merely until Chrome allocates their tab objects. Criteria may be
+    // opened by the fast residual path or shortly afterward by authoritative
+    // classifier reconciliation, so wait for the final destination URLs.
+    const getOpened = () => context.pages().filter(p => !pagesBefore.has(p));
+    const isCriteria = p => /blueletterbible\.org\/search\/search\.cfm\?Criteria=/i.test(p.url());
+    const isMultiVerse = p => /blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm\?.*blbSuiteMultiVerse=1)/i.test(p.url());
+
     await expect.poll(
-      () => context.pages().filter(p => !pagesBefore.has(p)).length,
-      { timeout: 10000 }
-    ).toBeGreaterThanOrEqual(1);
+      () => getOpened().some(isMultiVerse),
+      { timeout: 15000 }
+    ).toBeTruthy();
     const firstTabMs = Date.now() - started;
 
     await expect.poll(
-      () => context.pages().filter(p => !pagesBefore.has(p)).length,
-      { timeout: 10000 }
-    ).toBeGreaterThanOrEqual(2);
+      () => getOpened().some(isCriteria),
+      { timeout: 15000 }
+    ).toBeTruthy();
     const secondTabMs = Date.now() - started;
 
-    const opened = context.pages().filter(p => !pagesBefore.has(p));
-    await expect.poll(() => opened.some(p => /blueletterbible\.org\/search\/search\.cfm\?Criteria=/i.test(p.url())), { timeout: 10000 }).toBeTruthy();
-    await expect.poll(() => opened.some(p => /blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm\?.*blbSuiteMultiVerse=1)/i.test(p.url())), { timeout: 10000 }).toBeTruthy();
+    const opened = getOpened();
+    const multiVerseTab = opened.find(isMultiVerse);
+    const criteriaTab = opened.find(isCriteria);
+    expect(multiVerseTab).toBeTruthy();
+    expect(criteriaTab).toBeTruthy();
+
+    // URL correctness is part of the populated-state check. Then wait for
+    // document readiness so the measured endpoint includes the actual BLB
+    // destination being usable, rather than stopping at URL creation.
+    await Promise.all(
+      [multiVerseTab, criteriaTab].map(async tab => {
+        await tab.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+      })
+    );
+    expect(new URL(criteriaTab.url()).searchParams.get('Criteria')).toBeTruthy();
+    expect(new URL(multiVerseTab.url()).searchParams.toString()).toMatch(/(?:^|&)blbSuiteMultiVerse=1(?:&|$)/i);
 
     const handoffMs = Date.now() - started;
     await writeSample(scenario, handoffMs, { firstTabMs, secondTabMs });
