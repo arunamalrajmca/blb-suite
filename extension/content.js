@@ -876,6 +876,7 @@ suiteSettingsReadyPromise.then(refreshDoubleClickBlb).catch(()=>{});
 const BLB_PAGE_BUTTON_ID = 'blb-suite-page-selection-button';
 let blbPageButtonSelection = '';
 let blbPageButtonContextualReference = null;
+let blbPageButtonDirectUrl = null;
 let lastSelectionContextualReference = null;
 let lastSelectionContextualText = '';
 let blbPageButtonVisible = false;
@@ -967,6 +968,7 @@ function hasLocalValidBibleReference(text) {
 function invalidateBlbPageSelectionButton() {
   blbPageButtonSelection = '';
   blbPageButtonContextualReference = null;
+  blbPageButtonDirectUrl = null;
   blbPageButtonVisible = false;
   const button = document.getElementById(BLB_PAGE_BUTTON_ID);
   if (button) button.style.display = 'none';
@@ -1034,7 +1036,7 @@ function addBlbPageSelectionButton() {
       return;
     }
     // Ignore stale content-script contexts if the extension was reloaded.
-    safeRuntimeSendMessage({type:'blbSuiteOpenSelectionText', text, contextualReference: blbPageButtonContextualReference || null});
+    safeRuntimeSendMessage({type:'blbSuiteOpenSelectionText', text, contextualReference: blbPageButtonContextualReference || null, directUrl: blbPageButtonDirectUrl || null});
     setTimeout(() => { pageButtonActionInProgress = false; }, 0);
   });
 
@@ -1053,12 +1055,37 @@ async function updateBlbPageSelectionButtonFromSelection() {
   const text = getSelectedPageText();
   blbPageButtonSelection = text;
   blbPageButtonContextualReference = null;
+  blbPageButtonDirectUrl = null;
   if (text) {
-    const contextual = getContextualBibleReference(text);
-    if (contextual?.url) {
-      blbPageButtonContextualReference = contextual;
-      lastSelectionContextualReference = contextual;
-      lastSelectionContextualText = text;
+    // Fast path: an exact single reference can be resolved locally once while
+    // the selection is being classified. Retain its validated BLB URL so the
+    // click does not repeat selection classification in the background worker.
+    const directRefs = resolveBibleReferenceText(normalizeSelectionText(text));
+    if (directRefs.length === 1) {
+      const direct = directRefs[0];
+      const selectedNormalized = normalizeSelectionText(text).replace(/\s+/g, ' ').trim();
+      const referenceNormalized = normalizeSelectionText(direct.text || '').replace(/\s+/g, ' ').trim();
+      if (selectedNormalized && referenceNormalized === selectedNormalized && direct.url) {
+        const contextual = {
+          book: direct.book,
+          chapter: direct.chapter,
+          from: direct.from,
+          to: direct.to,
+          url: direct.url
+        };
+        blbPageButtonContextualReference = contextual;
+        blbPageButtonDirectUrl = direct.url;
+        lastSelectionContextualReference = contextual;
+        lastSelectionContextualText = text;
+      }
+    }
+    if (!blbPageButtonContextualReference) {
+      const contextual = getContextualBibleReference(text);
+      if (contextual?.url) {
+        blbPageButtonContextualReference = contextual;
+        lastSelectionContextualReference = contextual;
+        lastSelectionContextualText = text;
+      }
     }
   }
   setBlbPageButtonVisible(false);
@@ -1186,6 +1213,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
   if (message?.type === 'blbSuiteGetPageSelectionVisibility') {
     sendResponse({visible: !!(suiteEnabled && pageButtonMonitoring && blbPageButtonVisible)});
+    return;
+  }
+  if (message?.type === 'blbSuiteGetActiveSelectionText') {
+    try {
+      sendResponse({ok:true, text:window.getSelection ? window.getSelection().toString() : ''});
+    } catch (_) {
+      sendResponse({ok:true, text:''});
+    }
     return;
   }
 });
