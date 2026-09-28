@@ -91,7 +91,7 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
       const el = document.createElement('p');
       el.id = 'blb-perf-paragraph';
       el.textContent =
-        '1 Timothy 4:7 and Philippians 2:12 remind us to work out your own salvation with fear and trembling.';
+        'Romans 6:23 and John 3:16 teach that the free gift is offered through Christ.';
       document.body.appendChild(el);
       const range = document.createRange();
       range.selectNodeContents(el);
