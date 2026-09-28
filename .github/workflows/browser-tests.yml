@@ -1,4 +1,4 @@
-name: BLB Suite Browser Tests
+name: BLB Suite 5.2.51.43 HARD-GATE
 
 on:
   push:
@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  browser-tests:
+  regression-gate:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -20,22 +20,7 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-
-      - name: Validate extension build
-        run: npm run test:static
-
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-
-      - name: Run browser tests
-        run: npm test
-
-      - name: Upload Playwright report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: blb-suite-playwright-report
-          path: test-results/
-          if-no-files-found: ignore
+      - name: Run 5.2.51.43 deterministic regression gate
+        env:
+          BLB_EXPECTED_VERSION: 5.2.51.43
+        run: node regression-suite/tests/run-regression.mjs extension
