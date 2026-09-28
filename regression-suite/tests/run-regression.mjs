@@ -242,7 +242,7 @@ test('permission Allow/Deny/Re-Allow lifecycle remains wired', () => {
 test('reload/new-tab persistence and dynamic activation remain wired', () => {
   const bg = read('background.js'), content = read('content.js');
   assert(bg.includes('chrome.runtime.onStartup'), 'startup handling missing');
-  assert(bg.includes('webNavigation') && bg.includes('onCommitted'), 'navigation activation missing');
+  assert(bg.includes('chrome.tabs.onUpdated'), 'navigation activation missing');
   assert(bg.includes('chrome.storage.onChanged'), 'storage activation missing');
   assert(content.includes('chrome.storage.onChanged'), 'content persistence listener missing');
 });
