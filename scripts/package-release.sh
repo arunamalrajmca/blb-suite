@@ -2,7 +2,8 @@
 set -euo pipefail
 
 VERSION="$1"
-OUT_DIR="$2"
+mkdir -p "$2"
+OUT_DIR="$(cd "$2" && pwd)"
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 EXT_DIR="$ROOT_DIR/extension"
 OUT_FILE="$OUT_DIR/Blue-Letter-Bible-Suite-${VERSION}.zip"
