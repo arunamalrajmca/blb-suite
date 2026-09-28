@@ -2662,6 +2662,28 @@ function compactPdfBookName(value) {
   return normalizePdfBookName(value).replace(/\s+/g, '');
 }
 
+const cachedExplicitBibleReferencePatterns = (() => {
+  const forms = [];
+  for (const book of BOOKS) {
+    const bookForms = new Set(getBibleBookForms(book));
+    const leadingSeriesNumber = String(book.name || '').match(/^([123])\s+/)?.[1];
+    const roman = leadingSeriesNumber ? ({1:'I',2:'II',3:'III'}[leadingSeriesNumber] || null) : null;
+    if (roman) bookForms.add(book.name.replace(/^[123]/, roman));
+    for (const form of bookForms) {
+      const clean = String(form || '').trim();
+      if (!clean) continue;
+      const escaped = clean.replace(/[.*+?^\\$()|[\\]\\\\]/g, '\\$&');
+      forms.push({
+        book,
+        form: clean,
+        re: new RegExp('(?<![A-Za-z0-9])' + escaped + '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?', 'gi')
+      });
+    }
+  }
+  forms.sort((a,b) => b.form.length - a.form.length);
+  return forms;
+})();
+
 function extractBibleRefsFromSelectedTextUncached(text) {
   const refs = [];
   const seen = new Set();
@@ -2833,29 +2855,9 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // book name (for example "... says, Hebrews 10:7") and then fail book
   // resolution. Scan the authoritative book forms directly as a final safety
   // net. Also accept conventional Roman-numeral forms such as "I Timothy".
-  const explicitForms = [];
-  for (const book of BOOKS) {
-    const forms = new Set(getBibleBookForms(book));
-    // Roman-numeral book forms are based on the book's leading series
-    // number (1/2/3), not the canonical 66-book number (for example,
-    // 1 Thessalonians is book 52). This keeps I/II/III Timothy,
-    // Thessalonians, Corinthians, Peter, John, etc. aligned with their
-    // ordinary numeric forms.
-    const leadingSeriesNumber = String(book.name || '').match(/^([123])\s+/)?.[1];
-    const roman = leadingSeriesNumber ? ({1:'I',2:'II',3:'III'}[leadingSeriesNumber] || null) : null;
-    if (roman) {
-      forms.add(book.name.replace(/^[123]/, roman));
-    }
-    for (const form of forms) {
-      const clean = String(form || '').trim();
-      if (clean) explicitForms.push({book, form:clean});
-    }
-  }
-  explicitForms.sort((a,b)=>b.form.length-a.form.length);
-  for (const item of explicitForms) {
-    const escaped = item.form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp(`(?<![A-Za-z0-9])${escaped}\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?`, 'gi');
-    while ((m = re.exec(source))) {
+  for (const item of cachedExplicitBibleReferencePatterns) {
+    item.re.lastIndex = 0;
+    while ((m = item.re.exec(source))) {
       const chapter = Number(m[1]);
       const from = Number(m[2]);
       const to = Number(m[3] || m[2]);
