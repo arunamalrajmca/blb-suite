@@ -1,0 +1,28 @@
+name: Temporary Main Build
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build reproducible extension package
+        run: |
+          mkdir -p dist
+          bash scripts/package-release.sh "$(node -p "require('./extension/manifest.json').version")" dist
+          unzip -t "dist/Blue-Letter-Bible-Suite-$(node -p "require('./extension/manifest.json').version").zip"
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: blb-suite-main-build
+          path: |
+            dist/Blue-Letter-Bible-Suite-*.zip
+            dist/Blue-Letter-Bible-Suite-*.zip.sha256
+          if-no-files-found: error
+          retention-days: 7
