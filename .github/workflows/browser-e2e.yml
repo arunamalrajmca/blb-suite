@@ -30,7 +30,7 @@ jobs:
 
       - name: Prepare approved 5.2.51.43 baseline
         if: github.event_name == 'pull_request'
-        run: git worktree add "$RUNNER_TEMP/blb-baseline" 4442d131de5286271101bc18f9d8a46f60a86aad
+        run: git worktree add "$RUNNER_TEMP/blb-baseline" "${{ github.event.pull_request.base.sha }}"
 
       - name: Benchmark approved baseline and PR candidate (interleaved)
         if: github.event_name == 'pull_request'
@@ -44,7 +44,7 @@ jobs:
         run: |
           : > "$BLB_BASELINE_OUTPUT"
           : > "$BLB_CANDIDATE_OUTPUT"
-          for scenario in selection fresh reuse; do
+          for scenario in selection fresh reuse paragraph-two-tab; do
             for iteration in 1 2 3 4 5 6 7; do
               BLB_EXTENSION_PATH="$BLB_BASELINE_EXTENSION_PATH" \
               BLB_PERF_OUTPUT="$BLB_BASELINE_OUTPUT" \
@@ -61,6 +61,7 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BLB_PERF_MIN_TARGETED_IMPROVEMENT: 0.03
+          BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT: 0.10
           BLB_PERF_MAX_FRESH_REGRESSION: 0.10
         run: set -o pipefail; node scripts/compare-performance.mjs "$RUNNER_TEMP/baseline-performance.jsonl" "$RUNNER_TEMP/candidate-performance.jsonl" | tee "$RUNNER_TEMP/performance-report.md"
 
