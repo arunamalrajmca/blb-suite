@@ -144,7 +144,7 @@ async function requestCurrentSiteAccess(origin = currentSiteOrigin) {
 }
 
 
-async function setPageButton(on) {
+async function setPageButton(on, options = {}) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
   if (on && currentSiteOrigin) {
