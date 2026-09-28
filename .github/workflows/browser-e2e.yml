@@ -36,3 +36,5 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 14
+
+# CI retrigger marker: 2026-09-28
