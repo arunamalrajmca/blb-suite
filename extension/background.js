@@ -2067,6 +2067,11 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'reference-core.js',
   'content.js'
 ];
+// Arbitrary-site runtime injection deliberately uses only content.js.
+// The declarative known-site path still receives the full dependency bundle.
+// content.js is an IIFE and therefore safe to re-run without redeclaring
+// the top-level corpus/reference constants that caused the prior failures.
+const BLB_RUNTIME_CONTENT_SCRIPT_FILES = ['content.js'];
 
 function isHttpPageUrl(url) {
   return /^https?:\/\//i.test(String(url || ''));
@@ -2107,14 +2112,24 @@ async function ensureRuntimeContentScriptRegistered(tab) {
   const id = runtimeContentScriptIdForPattern(pattern);
   try {
     const existing = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
+    const desiredFiles = BLB_RUNTIME_CONTENT_SCRIPT_FILES;
     if (!existing.length) {
       await chrome.scripting.registerContentScripts([{
         id,
         matches:[pattern],
-        js:BLB_CONTENT_SCRIPT_FILES,
+        js:desiredFiles,
         runAt:'document_start',
         persistAcrossSessions:true
       }]);
+    } else if (JSON.stringify(existing[0].js || []) !== JSON.stringify(desiredFiles)) {
+      // Upgrade any 5.2.51.34 registration that still points at the old
+      // five-file bundle. Chrome documents updateContentScripts() for changing
+      // an existing dynamic registration.
+      await chrome.scripting.updateContentScripts({
+        ids:[id],
+        js:desiredFiles,
+        runAt:'document_start'
+      });
     }
     return true;
   } catch (_) {
@@ -2142,21 +2157,22 @@ async function ensureContentScriptInTab(tabId) {
 
   const operation = (async () => {
     try {
+      const tab = await chrome.tabs.get(tabId);
+      if (!isHttpPageUrl(tab?.url)) return false;
+      if (!(await hasHostAccessForTab(tab))) return false;
+
+      // Make the dynamic registration authoritative before consulting the
+      // current document. This also upgrades stale 5.2.51.34 registrations
+      // that still contain the old five-file bundle.
+      if (!(await ensureRuntimeContentScriptRegistered(tab))) return false;
+
       try {
         const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
         if (response?.ok === true) return true;
       } catch (_) {}
 
-      const tab = await chrome.tabs.get(tabId);
-      if (!isHttpPageUrl(tab?.url)) return false;
-      if (!(await hasHostAccessForTab(tab))) return false;
-
-      // Arbitrary sites are registered dynamically only after explicit host
-      // permission. Registration prevents repeated executeScript() calls from
-      // re-parsing top-level declarations such as BOOKS and KJV_CORPUS_WORD_INDEX.
-      // The current document was loaded before registration, so reload it once;
-      // the registered script then injects normally at document_start.
-      if (!(await ensureRuntimeContentScriptRegistered(tab))) return false;
+      // The current document may have been loaded before registration. Reload
+      // once so Chrome injects the registered content.js at document_start.
       try {
         await chrome.tabs.reload(tabId);
       } catch (_) {
