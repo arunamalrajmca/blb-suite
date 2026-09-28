@@ -16,23 +16,35 @@ async function selectReference(page, id) {
   }, id);
 }
 
+async function writeSample(scenario, handoffMs) {
+  const output = process.env.BLB_PERF_OUTPUT;
+  if (!output) throw new Error('BLB_PERF_OUTPUT is required');
+  fs.appendFileSync(output, JSON.stringify({ scenario, handoffMs }) + '\n');
+  console.log(`BLB performance sample: ${scenario} ${handoffMs} ms`);
+}
+
 test('Show on BLB performance benchmark', async ({ page, context, extensionStorage, extensionId }) => {
   await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
 
   const scenario = process.env.BLB_PERF_SCENARIO || 'fresh';
+
   if (scenario === 'selection') {
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    const button = page.locator('#blb-suite-page-selection-button');
-    const started = Date.now();
     await selectReference(page, 'blb-perf-selection');
+    const button = page.locator('#blb-suite-page-selection-button');
     await expect(button).toBeVisible({ timeout: 10000 });
+
+    const newPagePromise = context.waitForEvent('page');
+    const started = Date.now();
+    await button.click();
+    const blb = await newPagePromise;
     const handoffMs = Date.now() - started;
-    const output = process.env.BLB_PERF_OUTPUT;
-    if (!output) throw new Error('BLB_PERF_OUTPUT is required');
-    fs.appendFileSync(output, JSON.stringify({ scenario, handoffMs }) + '\n');
-    console.log(`BLB performance sample: ${scenario} ${handoffMs} ms`);
+
+    expect(new URL(blb.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16\//);
+    await writeSample(scenario, handoffMs);
     return;
   }
+
   if (scenario === 'fresh' || scenario === 'reuse') {
     let existing = null;
     if (scenario === 'reuse') {
@@ -68,32 +80,9 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
       expect(new URL(existing.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16\/(?:s_\d+)?$/);
     }
 
-    const output = process.env.BLB_PERF_OUTPUT;
-    if (!output) throw new Error('BLB_PERF_OUTPUT is required');
-    fs.appendFileSync(output, JSON.stringify({ scenario, handoffMs }) + '\n');
-    console.log(`BLB performance sample: ${scenario} ${handoffMs} ms`);
+    await writeSample(scenario, handoffMs);
     return;
   }
 
-  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-  await selectReference(page, `blb-perf-${scenario}`);
-  const button = page.locator('#blb-suite-page-selection-button');
-  await expect(button).toBeVisible({ timeout: 10000 });
-
-  const started = Date.now();
-  const popupPromise = scenario === 'fresh' ? context.waitForEvent('page') : null;
-  await button.click();
-  if (popupPromise) {
-    const blb = await popupPromise;
-    expect(new URL(blb.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16\//);
-  } else {
-    const blbTabs = context.pages().filter(p => p.url().includes('blueletterbible.org/kjv/jhn/3/16/'));
-    expect(blbTabs.length).toBeGreaterThan(0);
-  }
-  const handoffMs = Date.now() - started;
-
-  const output = process.env.BLB_PERF_OUTPUT;
-  if (!output) throw new Error('BLB_PERF_OUTPUT is required');
-  fs.appendFileSync(output, JSON.stringify({ scenario, handoffMs }) + '\n');
-  console.log(`BLB performance sample: ${scenario} ${handoffMs} ms`);
+  throw new Error(`Unknown performance scenario: ${scenario}`);
 });
