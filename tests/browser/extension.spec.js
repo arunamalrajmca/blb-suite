@@ -32,7 +32,7 @@ test.describe('core user-visible E2E', () => {
     const popupPromise = context.waitForEvent('page');
     await button.click();
     const blb = await popupPromise;
-    expect(new URL(blb.url()).pathname).toMatch(/^\\/kjv\\/(?:john|jhn)\\/3\\/16\\/?$/i);
+    expect(new URL(blb.url()).pathname).toBe('/kjv/jhn/3/16/');
   });
 
   test('Double-click opens an exact selected reference', async ({ page, context, extensionStorage }) => {
@@ -48,6 +48,6 @@ test.describe('core user-visible E2E', () => {
     const popupPromise = context.waitForEvent('page');
     await reference.dblclick();
     const blb = await popupPromise;
-    expect(new URL(blb.url()).pathname).toMatch(/^\\/kjv\\/(?:john|jhn)\\/3\\/16\\/?$/i);
+    expect(new URL(blb.url()).pathname).toBe('/kjv/jhn/3/16/');
   });
 });
