@@ -73,6 +73,16 @@ function safeRuntimeSendMessage(message) {
   }
 }
 
+function safeGetContextualBibleReference(text) {
+  try {
+    return typeof getContextualBibleReference === 'function'
+      ? getContextualBibleReference(text)
+      : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function normalizeSelectionText(s) {
   return String(s || '')
     // Facebook and some rich-text sites can insert invisible bidirectional
@@ -749,7 +759,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
   };
 }
 
-function getContextualBibleReference(selectionText) {
+function safeGetContextualBibleReference(selectionText) {
   const selected = normalizeSelectionText(selectionText);
   if (!selected) return null;
 
@@ -805,7 +815,7 @@ function handleDoubleClickBlb(event) {
         for (const [key, ts] of recentDoubleClickDestinations) {
           if (now - ts > 5000) recentDoubleClickDestinations.delete(key);
         }
-        const contextualReference = getContextualBibleReference(selection);
+        const contextualReference = safeGetContextualBibleReference(selection);
         safeRuntimeSendMessage({
           type:'blbSuiteOpenSelectionText',
           text:selection,
@@ -1054,7 +1064,7 @@ async function updateBlbPageSelectionButtonFromSelection() {
   blbPageButtonSelection = text;
   blbPageButtonContextualReference = null;
   if (text) {
-    const contextual = getContextualBibleReference(text);
+    const contextual = safeGetContextualBibleReference(text);
     if (contextual?.url) {
       blbPageButtonContextualReference = contextual;
       lastSelectionContextualReference = contextual;
@@ -1179,7 +1189,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     try {
       const selected = String(message.selectionText || '').trim();
       const cached = lastSelectionContextualText === selected ? lastSelectionContextualReference : null;
-      const resolved = cached || getContextualBibleReference(selected);
+      const resolved = cached || safeGetContextualBibleReference(selected);
       sendResponse(resolved ? {ok:true, reference:resolved} : {ok:true, reference:null});
     } catch (_) { sendResponse({ok:true, reference:null}); }
     return true;
