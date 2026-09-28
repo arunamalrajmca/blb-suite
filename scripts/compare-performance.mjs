@@ -10,7 +10,7 @@ function median(values) {
 }
 function summarize(samples) {
   const byScenario = {};
-  for (const scenario of ['selection', 'fresh', 'reuse', 'paragraph-two-tab']) {
+  for (const scenario of ['selection', 'fresh', 'reuse', 'paragraph-two-tab', 'paragraph-classify']) {
     const values = samples.filter(s => s.scenario === scenario).map(s => s.handoffMs);
     if (!values.length) throw new Error(`Missing ${scenario} samples`);
     byScenario[scenario] = { median: median(values), count: values.length };
@@ -39,7 +39,8 @@ for (const [name, key] of [
   ['Selection → BLB handoff', 'selection'],
   ['Fresh-tab handoff', 'fresh'],
   ['Existing-tab reuse', 'reuse'],
-  ['Paragraph → MultiVerse + Criteria', 'paragraph-two-tab']
+  ['Paragraph → MultiVerse + Criteria', 'paragraph-two-tab'],
+  ['Paragraph classification only', 'paragraph-classify']
 ]) {
   const before = baseline[key].median;
   const after = candidate[key].median;
@@ -51,18 +52,22 @@ const selectionImprovement = pairedMedianImprovement('selection');
 const freshImprovement = pairedMedianImprovement('fresh');
 const reuseImprovement = pairedMedianImprovement('reuse');
 const paragraphTwoTabImprovement = pairedMedianImprovement('paragraph-two-tab');
+const paragraphClassifyImprovement = pairedMedianImprovement('paragraph-classify');
 
 console.log(`Samples: baseline selection/fresh/reuse ${baseline.selection.count}/${baseline.fresh.count}/${baseline.reuse.count}; PR #8 ${candidate.selection.count}/${candidate.fresh.count}/${candidate.reuse.count}`);
 console.log('Gate calculations use paired per-iteration improvement medians; scenario medians above are descriptive.');
 console.log(`Required selection-path paired improvement: ${(minTargetedImprovement * 100).toFixed(1)}%`);
 console.log(`Required existing-tab handoff paired improvement: ${(minTargetedImprovement * 100).toFixed(1)}%`);
 console.log(`Required paragraph two-tab paired improvement: ${(Number(process.env.BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT || 0.10) * 100).toFixed(1)}%`);
+console.log(`Required paragraph classification paired improvement: ${(Number(process.env.BLB_PERF_MIN_PARAGRAPH_CLASSIFY_IMPROVEMENT || 0.10) * 100).toFixed(1)}%`);
 console.log(`Maximum allowed fresh-tab handoff paired regression: ${(maxFreshRegression * 100).toFixed(1)}%`);
 
 const minParagraphTwoTabImprovement = Number(process.env.BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT || 0.10);
+const minParagraphClassifyImprovement = Number(process.env.BLB_PERF_MIN_PARAGRAPH_CLASSIFY_IMPROVEMENT || 0.10);
 const passed = selectionImprovement >= minTargetedImprovement
   && reuseImprovement >= minTargetedImprovement
   && paragraphTwoTabImprovement >= minParagraphTwoTabImprovement
+  && paragraphClassifyImprovement >= minParagraphClassifyImprovement
   && freshImprovement >= -maxFreshRegression;
 
 if (!passed) {
