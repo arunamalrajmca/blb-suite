@@ -13,7 +13,7 @@ function pass(msg) { console.log('PASS:', msg); }
 if (!fs.existsSync(manifestPath)) fail('extension/manifest.json missing');
 else {
   const m = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  if (m.version !== '5.2.51.32') fail(`expected version 5.2.51.32, got ${m.version}`); else pass('version 5.2.51.32');
+  if (m.version !== '5.2.51.33') fail(`expected version 5.2.51.33, got ${m.version}`); else pass('version 5.2.51.33');
   if ((m.permissions || []).includes('tabs')) fail('tabs permission present'); else pass('tabs permission absent');
   if ((m.host_permissions || []).some(x => x === 'http://*/*' || x === 'https://*/*')) fail('wildcard permanent host permission present'); else pass('wildcard permanent hosts absent');
   const optional = m.optional_host_permissions || [];
@@ -43,4 +43,4 @@ for (const s of ['chrome.permissions.request', 'chrome.permissions.contains', 'c
   if (present) pass(`architecture API present: ${s}`); else fail(`architecture API missing: ${s}`);
 }
 
-console.log('Expected 5.2.51.32 ZIP SHA-256:', expectedSha);
+console.log('Expected baseline ZIP SHA-256:', expectedSha);
