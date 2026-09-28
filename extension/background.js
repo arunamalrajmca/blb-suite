@@ -4400,49 +4400,47 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     return;
   }
 
-  // A validated adjacent citation is authoritative for the reference tab,
-  // but it must no longer suppress Criteria Search for the selected paragraph.
-  // The reference is opened first; the same selection is then classified only
-  // for an independently validated KJV passage query.
+  // A validated adjacent citation is authoritative for the reference tab.
+  // Open it immediately. Full KJV classification is only needed afterward for
+  // an optional Criteria Search destination, so it must never delay the user's
+  // first visible BLB tab.
   let contextualDecision = null;
   if (contextualRef?.url) {
-    const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
-    // PDF/local selections can expose slightly different reference text to
-    // the contextual resolver and to the full classifier. Use both views
-    // before deciding that the selection contains only one reference.
-    contextualDecision = classifySelectionForBlb(text);
-    const classifiedRefs = Array.isArray(contextualDecision?.refs) ? contextualDecision.refs : [];
-    const mergedRefs = [...selectedRefs, ...classifiedRefs];
-    const mergedRefKeys = new Set();
-    const allSelectedRefs = mergedRefs.filter(ref => {
-      const key = `${String(ref?.book || '').toLowerCase()}|${Number(ref?.chapter)}|${Number(ref?.from)}|${Number(ref?.to)}`;
-      if (!ref?.url || mergedRefKeys.has(key)) return false;
-      mergedRefKeys.add(key);
-      return true;
-    });
-    // A contextual single-reference answer remains authoritative only when the
-    // combined selection analysis does not contain multiple explicit references.
-    if (allSelectedRefs.length < 2) {
-      await recordStudyRefs([parseBlbKjvUrlToStudyRef(contextualRef.url)].filter(Boolean));
+    const contextualRefs = selectedRefs.length
+      ? selectedRefs
+      : [contextualRef];
 
-      // Start the reference navigation before the residual Criteria scan.
-      // chrome.tabs.create resolves when the tab exists, so this lets Chrome
-      // begin creating the first result while the synchronous local classifier
-      // prepares the second result. The reference tab remains the first/active
-      // destination; Criteria is still opened in the background.
-      // Do not route the selection through the generic opener a second time:
-      // that could reopen the same reference. Start the reference and Criteria
-      // destinations together so network/tab creation overlaps.
-      const referenceOpen = openBlbDestination(contextualRef.url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
-      const criteriaQuery = contextualDecision?.kjvPassageQuery || '';
-      const criteriaOpen = criteriaQuery
-        ? openBlbDestination(
-            `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(criteriaQuery).replace(/%20/g,'+')}`,
-            false,
-            false
-          )
-        : Promise.resolve(null);
-      await Promise.all([referenceOpen, criteriaOpen]);
+    if (contextualRefs.length < 2) {
+      const excludedVerseTexts = contextualRefs
+        .map(ref => getKjvVerseTextForSelectionRef(ref))
+        .filter(Boolean);
+      let residualText = removeKjvVerseTextFromSelection(text, contextualRefs);
+      residualText = removeQuotedTextFromSelection(residualText);
+      const fastCriteriaQuery = extractResidualProseShortCriteriaQuery(residualText, excludedVerseTexts);
+
+      const studyCapture = recordStudyRefs(
+        contextualRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean)
+      );
+      const referenceTab = await openBlbDestination(
+        contextualRef.url,
+        !!tabBehavior.activeIfNew,
+        !!tabBehavior.activateExisting
+      );
+      await studyCapture;
+
+      // The reference tab is already created. Now run the authoritative
+      // classifier and reconcile/open Criteria Search without blocking that
+      // first-tab milestone.
+      contextualDecision = classifySelectionForBlb(text);
+      const authoritativeQuery = contextualDecision?.kjvPassageQuery || '';
+      const criteriaQuery = authoritativeQuery || fastCriteriaQuery;
+      if (criteriaQuery) {
+        await openBlbDestination(
+          `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(criteriaQuery).replace(/%20/g,'+')}`,
+          false,
+          false
+        );
+      }
       return;
     }
   }
