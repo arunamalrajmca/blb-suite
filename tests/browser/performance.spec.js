@@ -34,10 +34,15 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     const button = page.locator('#blb-suite-page-selection-button');
     await expect(button).toBeVisible({ timeout: 10000 });
 
-    const newPagePromise = context.waitForEvent('page');
+    const pagesBefore = new Set(context.pages());
     const started = Date.now();
     await button.click();
-    const blb = await newPagePromise;
+    await expect.poll(
+      () => context.pages().filter(p => !pagesBefore.has(p)).length,
+      { timeout: 10000 }
+    ).toBeGreaterThanOrEqual(1);
+    const blb = context.pages().find(p => !pagesBefore.has(p) && /blueletterbible\.org\/kjv\/jhn\/3\/16\//i.test(p.url()));
+    expect(blb).toBeTruthy();
     const handoffMs = Date.now() - started;
 
     expect(new URL(blb.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16\//);
@@ -54,7 +59,7 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
       await existing.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil: 'commit', timeout: 15000 });
     }
 
-    const newPagePromise = scenario === 'fresh' ? context.waitForEvent('page') : null;
+    const pagesBefore = new Set(context.pages());
     await page.goto(`chrome-extension://${extensionId}/popup.html`);
     const started = Date.now();
     const response = await page.evaluate(async () => chrome.runtime.sendMessage({
@@ -74,7 +79,12 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     expect(response?.ok).toBeTruthy();
 
     if (scenario === 'fresh') {
-      const blb = await newPagePromise;
+      await expect.poll(
+        () => context.pages().filter(p => !pagesBefore.has(p)).length,
+        { timeout: 10000 }
+      ).toBeGreaterThanOrEqual(1);
+      const blb = context.pages().find(p => !pagesBefore.has(p) && /blueletterbible\.org\/kjv\/jhn\/3\/16\//i.test(p.url()));
+      expect(blb).toBeTruthy();
       expect(new URL(blb.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16\//);
     } else {
       expect(new URL(existing.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16\/(?:s_\d+)?$/);
