@@ -2664,6 +2664,7 @@ function compactPdfBookName(value) {
 
 function extractBibleRefsFromSelectedTextUncached(text) {
   const refs = [];
+  const seen = new Set();
   const cachedPatterns = extractBibleRefsFromSelectedTextUncached.cachedPatterns || (
     extractBibleRefsFromSelectedTextUncached.cachedPatterns = (() => {
       const forms = [];
