@@ -1065,8 +1065,8 @@ async function updateBlbPageSelectionButtonFromSelection() {
     const directRefs = resolveBibleReferenceText(normalizeSelectionText(text));
     if (directRefs.length === 1) {
       const direct = directRefs[0];
-      const selectedNormalized = normalizeSelectionText(text).replace(/\\s+/g, ' ').trim();
-      const referenceNormalized = normalizeSelectionText(direct.text || '').replace(/\\s+/g, ' ').trim();
+      const selectedNormalized = normalizeSelectionText(text).replace(/\s+/g, ' ').trim();
+      const referenceNormalized = normalizeSelectionText(direct.text || '').replace(/\s+/g, ' ').trim();
       if (selectedNormalized && referenceNormalized === selectedNormalized && direct.url) {
         const contextual = {
           book: direct.book,
