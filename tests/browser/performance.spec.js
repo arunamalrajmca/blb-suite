@@ -84,5 +84,39 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     return;
   }
 
+  if (scenario === 'paragraph-two-tab') {
+    await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-perf-paragraph';
+      el.textContent =
+        '1 Timothy 4:7 and Philippians 2:12 remind us to work out your own salvation with fear and trembling.';
+      document.body.appendChild(el);
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+
+    const pagesBefore = new Set(context.pages());
+    const started = Date.now();
+    await button.click();
+
+    await expect.poll(() => context.pages().filter(p => !pagesBefore.has(p)).length, { timeout: 10000 }).toBeGreaterThanOrEqual(2);
+    const opened = context.pages().filter(p => !pagesBefore.has(p));
+    await expect.poll(() => opened.some(p => /blueletterbible\.org\/search\/search\.cfm\?Criteria=/i.test(p.url())), { timeout: 10000 }).toBeTruthy();
+    await expect.poll(() => opened.some(p => /blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm\?.*blbSuiteMultiVerse=1)/i.test(p.url())), { timeout: 10000 }).toBeTruthy();
+
+    const handoffMs = Date.now() - started;
+    await writeSample(scenario, handoffMs);
+    return;
+  }
+
   throw new Error(`Unknown performance scenario: ${scenario}`);
 });
