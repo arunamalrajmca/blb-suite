@@ -2667,6 +2667,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   const cachedPatterns = extractBibleRefsFromSelectedTextUncached.cachedPatterns || (
     extractBibleRefsFromSelectedTextUncached.cachedPatterns = (() => {
       const forms = [];
+      const escapePattern = value => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       for (const book of BOOKS) {
         const bookForms = new Set(getBibleBookForms(book));
         const leadingSeriesNumber = String(book.name || '').match(/^([123])\s+/)?.[1];
@@ -2678,7 +2679,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
           forms.push({
             book,
             form: clean,
-            re: new RegExp('(?<![A-Za-z0-9])' + escapeRegex(clean).replace(/\s+/g, '\\s+') + '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?', 'gi')
+            re: new RegExp('(?<![A-Za-z0-9])' + escapePattern(clean).replace(/\s+/g, '\\s+') + '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?', 'gi')
           });
         }
       }
