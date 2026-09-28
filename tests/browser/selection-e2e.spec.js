@@ -31,13 +31,17 @@ test('Show on BLB performs real selection -> button -> BLB navigation', async ({
   await expect(button).toBeHidden();
   await selectText(page, '#reference');
   await expect(button).toBeVisible({ timeout: 10000 });
+  const blbPagePromise = page.context().waitForEvent('page');
   await button.click();
-  await waitForBlbPage(page);
+  const blbPage = await blbPagePromise;
+  await waitForBlbPage(blbPage);
 });
 
 test('Double-click performs real selection -> extension handler -> BLB navigation', async ({ page }) => {
   await page.goto('/selection-fixture.html', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#blb-suite-page-selection-button')).toHaveCount(1);
+  const blbPagePromise = page.context().waitForEvent('page');
   await page.locator('#reference').dblclick();
-  await waitForBlbPage(page);
+  const blbPage = await blbPagePromise;
+  await waitForBlbPage(blbPage);
 });
