@@ -2091,17 +2091,52 @@ async function hasHostAccessForTab(tab) {
 
 const contentScriptInjectionLocks = new Map();
 
+function runtimeContentScriptIdForPattern(pattern) {
+  const raw = String(pattern || '');
+  let hash = 2166136261;
+  for (let i = 0; i < raw.length; i++) {
+    hash ^= raw.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `blb-suite-runtime-${(hash >>> 0).toString(36)}`;
+}
+
+async function ensureRuntimeContentScriptRegistered(tab) {
+  const pattern = originPatternForUrl(tab?.url);
+  if (!pattern || !chrome.scripting?.registerContentScripts) return false;
+  const id = runtimeContentScriptIdForPattern(pattern);
+  try {
+    const existing = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
+    if (!existing.length) {
+      await chrome.scripting.registerContentScripts([{
+        id,
+        matches:[pattern],
+        js:BLB_CONTENT_SCRIPT_FILES,
+        runAt:'document_start',
+        persistAcrossSessions:true
+      }]);
+    }
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function unregisterRuntimeContentScriptForPattern(pattern) {
+  const id = runtimeContentScriptIdForPattern(pattern);
+  try {
+    if (chrome.scripting?.unregisterContentScripts) {
+      await chrome.scripting.unregisterContentScripts({ids:[id]});
+    }
+  } catch (_) {}
+}
+
 async function ensureContentScriptInTab(tabId) {
   if (!Number.isInteger(tabId) || tabId < 0) return false;
 
   // Multiple paths can request initialization at the same time after an
-  // optional host permission is granted: the popup toggle, storage.onChanged,
-  // permissions.onAdded, and tab completion can all converge here. Without a
-  // per-tab lock, each caller can observe "no content script yet" and call
-  // executeScript() concurrently, causing top-level const declarations such as
-  // BOOKS and KJV_CORPUS_WORD_INDEX to be parsed twice in the same content
-  // script world. The second injection then fails with a SyntaxError before
-  // the floating-button and double-click initialization can run.
+  // optional host permission is granted. The per-tab lock prevents duplicate
+  // registration/reload operations from racing.
   const existing = contentScriptInjectionLocks.get(tabId);
   if (existing) return existing;
 
@@ -2112,16 +2147,21 @@ async function ensureContentScriptInTab(tabId) {
         if (response?.ok === true) return true;
       } catch (_) {}
 
-      // Known bundled sites are covered by the declarative content-script
-      // matches. Arbitrary sites are injected only after the user has explicitly
-      // enabled a site and Chrome has granted host access for that tab's origin.
       const tab = await chrome.tabs.get(tabId);
       if (!isHttpPageUrl(tab?.url)) return false;
       if (!(await hasHostAccessForTab(tab))) return false;
-      await chrome.scripting.executeScript({
-        target:{tabId},
-        files:BLB_CONTENT_SCRIPT_FILES
-      });
+
+      // Arbitrary sites are registered dynamically only after explicit host
+      // permission. Registration prevents repeated executeScript() calls from
+      // re-parsing top-level declarations such as BOOKS and KJV_CORPUS_WORD_INDEX.
+      // The current document was loaded before registration, so reload it once;
+      // the registered script then injects normally at document_start.
+      if (!(await ensureRuntimeContentScriptRegistered(tab))) return false;
+      try {
+        await chrome.tabs.reload(tabId);
+      } catch (_) {
+        return false;
+      }
       return true;
     } catch (_) {
       return false;
@@ -4604,6 +4644,27 @@ chrome.runtime.onInstalled.addListener(async details => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
+  if (changes.pageSelectionButtonSites || changes.doubleClickBlbSites) {
+    chrome.tabs.query({}).then(async tabs => {
+      const pageSites = (changes.pageSelectionButtonSites?.newValue && typeof changes.pageSelectionButtonSites.newValue === 'object')
+        ? changes.pageSelectionButtonSites.newValue : null;
+      const doubleSites = (changes.doubleClickBlbSites?.newValue && typeof changes.doubleClickBlbSites.newValue === 'object')
+        ? changes.doubleClickBlbSites.newValue : null;
+      const keys = new Set([
+        ...Object.keys(pageSites || {}),
+        ...Object.keys(doubleSites || {})
+      ]);
+      for (const key of keys) {
+        const enabled = pageSites?.[key] === true || doubleSites?.[key] === true;
+        if (enabled) continue;
+        for (const tab of tabs) {
+          if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
+          if (normalizeSiteHostname(hostnameFromTabUrl(tab.url)) !== normalizeSiteHostname(key)) continue;
+          await unregisterRuntimeContentScriptForPattern(originPatternForUrl(tab.url));
+        }
+      }
+    }).catch(() => {});
+  }
   if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites) {
     installRules();
     // Keep the existing web-selection menu item in place. Only its visibility
