@@ -543,7 +543,15 @@ async function openBlbMultiVerseRefs(refs, active = true) {
   const canonical = canonicalMultiVerseSet(refs);
   if (!canonical.key || canonical.refs.length < 2) return {ok:false, reason:"not-enough-references", count:canonical.refs.length};
 
-  const tabs = await chrome.tabs.query({});
+  // Restrict the lookup to BLB MultiVerse handoff tabs rather than every
+  // browser tab. This keeps MultiVerse selection latency independent of the
+  // user's total tab count.
+  const tabs = await chrome.tabs.query({
+    url: [
+      'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
+      'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
+    ]
+  });
   const existing = await findMatchingMultiVerseTab(canonical.key, tabs);
   if (existing?.id != null) {
     if (active) {
@@ -559,11 +567,21 @@ async function openBlbMultiVerseRefs(refs, active = true) {
   // nearly the same time.
   const tab = await chrome.tabs.create({url:'about:blank', active:!!active});
   if (tab?.id == null) return {ok:false, reason:'tab-create-failed'};
-  await setTrackedMultiVerseTab(tab.id, canonical.key);
-  const pending = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
-  const pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
+  // Batch tracking and pending-handoff storage into one read/write pair.
+  const pending = await chrome.storage.local.get({
+    blbSuiteMultiVerseTabSets:{},
+    blbSuitePendingMultiVerseRefsByTab:{}
+  });
+  const trackedMap = pending.blbSuiteMultiVerseTabSets && typeof pending.blbSuiteMultiVerseTabSets === 'object'
+    ? {...pending.blbSuiteMultiVerseTabSets} : {};
+  trackedMap[String(tab.id)] = {key:canonical.key, updatedAt:Date.now()};
+  const pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object'
+    ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
   pendingMap[String(tab.id)] = canonical.refs;
-  await chrome.storage.local.set({blbSuitePendingMultiVerseRefsByTab:pendingMap});
+  await chrome.storage.local.set({
+    blbSuiteMultiVerseTabSets:trackedMap,
+    blbSuitePendingMultiVerseRefsByTab:pendingMap
+  });
   try {
     await chrome.tabs.update(tab.id, {url:searchUrl, active:!!active});
   } catch (_) {}
@@ -4348,31 +4366,32 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   if (decision.type === 'REFERENCE_AND_KJV_PASSAGE') {
     const parsedRefs = decision.refs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean);
     if (parsedRefs.length > 1) {
-      await recordStudyRefs(parsedRefs);
-      const firstBookIdentity = String(parsedRefs[0]?.urlKey || parsedRefs[0]?.book || '').toLowerCase();
-      const allSameChapter = parsedRefs.every(r => String(r.urlKey || r.book || '').toLowerCase() === firstBookIdentity && r.chapter === parsedRefs[0].chapter);
-      const rangeCount = parsedRefs.filter(r => r.from != null && r.to != null && r.to !== r.from).length;
-      // Selection-area rule: one resolved verse/reference uses the normal BLB
-      // verse window; two or more resolved references always use MultiVerse.
-      // Do not collapse multiple selected references to the first one merely
-      // because they happen to share a chapter.
-      if (parsedRefs.length === 1) {
-        await openBlbDestination(decision.refs[0].url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
-      } else {
-        await openBlbMultiVerseRefs(decision.refs, !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting);
-      }
+      const studyCapture = recordStudyRefs(parsedRefs);
+      // Start MultiVerse and Criteria together. Neither destination needs the
+      // other to finish before Chrome can create its tab.
+      const referenceOpen = openBlbMultiVerseRefs(
+        decision.refs,
+        !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
+      );
+      const criteriaOpen = decision.kjvPassageQuery
+        ? openBlbDestination(
+            `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(decision.kjvPassageQuery).replace(/%20/g,'+')}`,
+            false,
+            false
+          )
+        : Promise.resolve(null);
+      await Promise.all([referenceOpen, criteriaOpen, studyCapture]);
     } else if (parsedRefs.length === 1) {
-      await recordStudyRefs(parsedRefs);
-      await openBlbDestination(decision.refs[0].url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
-    }
-    // Preserve the existing reference destination as the first result, then
-    // independently open the already-validated KJV passage retrieval as a
-    // second, background Criteria Search tab. The reference path above is
-    // intentionally unchanged: one reference uses the normal verse window;
-    // multiple references use the existing MultiVerse window.
-    if (decision.kjvPassageQuery) {
-      const criteriaUrl = `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(decision.kjvPassageQuery).replace(/%20/g,'+')}`;
-      await openBlbDestination(criteriaUrl, false, false);
+      const studyCapture = recordStudyRefs(parsedRefs);
+      const referenceOpen = openBlbDestination(decision.refs[0].url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
+      const criteriaOpen = decision.kjvPassageQuery
+        ? openBlbDestination(
+            `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(decision.kjvPassageQuery).replace(/%20/g,'+')}`,
+            false,
+            false
+          )
+        : Promise.resolve(null);
+      await Promise.all([referenceOpen, criteriaOpen, studyCapture]);
     }
     return;
   }
