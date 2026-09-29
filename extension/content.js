@@ -783,7 +783,7 @@ function getStandaloneBookReference(selectionText) {
     const selected = normalizeSelectionText(selectionText);
     if (!selected || !/^(?:[1-9]|[1-5][0-9]|6[0-6]|[A-Za-z][A-Za-z0-9 .'-]*)$/.test(selected)) return null;
 
-    const book = /^\\d+$/.test(selected)
+    const book = /^\d+$/.test(selected)
       ? (Array.isArray(BOOKS) ? BOOKS.find(candidate => String(candidate.bookNumber) === selected) : null)
       : (typeof resolveBibleBook === 'function' ? resolveBibleBook(selected) : null);
     if (!book) return null;
