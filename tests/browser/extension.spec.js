@@ -129,7 +129,7 @@ test.describe('core user-visible E2E', () => {
     await page.evaluate(() => {
       const container = document.createElement('div');
       container.id = 'blb-e2e-standalone-book-numbers';
-      container.innerHTML = '<div id="book-number-1">1</div><div id="book-number-2">2</div><div id="book-number-3">3</div><div id="book-number-16">16</div>';
+      container.innerHTML = '<p id="book-number-1">1</p><p id="book-number-2">2</p><p id="book-number-3">3</p><p id="book-number-16">16</p>';
       document.body.appendChild(container);
     });
 
