@@ -1,0 +1,27 @@
+name: Temporary main build
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build release ZIP
+        run: |
+          VERSION="$(node -p "require('./extension/manifest.json').version")"
+          bash scripts/package-release.sh "$VERSION" dist
+          unzip -t "dist/Blue-Letter-Bible-Suite-$VERSION.zip"
+
+      - name: Upload build
+        uses: actions/upload-artifact@v4
+        with:
+          name: blb-suite-main-build
+          path: |
+            dist/Blue-Letter-Bible-Suite-*.zip
