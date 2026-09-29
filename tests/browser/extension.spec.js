@@ -125,6 +125,11 @@ test.describe('core user-visible E2E', () => {
   });
   test('Double-click isolated book tokens use their own book identity and ignore unrelated page references', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><title>BLB E2E target</title><p>BLB target</p>'
+    }));
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
       const heading = document.createElement('h2');
