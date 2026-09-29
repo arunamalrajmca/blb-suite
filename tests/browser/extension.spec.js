@@ -168,27 +168,71 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-clicking unrelated headings does not open a Bible reference', async ({ page, context, extensionStorage }) => {
+  test('Double-click uses the browser token, not the whole surrounding line', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
-      const container = document.createElement('div');
-      container.id = 'blb-e2e-unrelated-headings';
-      container.innerHTML = '<h2 id="heading-one">1. Install the downloaded ZIP</h2><h2 id="heading-three">3. Test the aliases and numbered books</h2>';
-      document.body.appendChild(container);
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-doubleclick-token-isolation';
+      el.textContent = '1-66 Install the downloaded ZIP';
+      el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(el);
     });
 
-    for (const id of ['heading-one', 'heading-three']) {
-      const pagesBefore = context.pages();
-      await page.evaluate((id) => {
-        const heading = document.getElementById(id);
+    const cases = [
+      ['1', '/kjv/gen/1/1/'],
+      ['66', '/kjv/rev/1/1/']
+    ];
+
+    for (const [fragment, expectedPath] of cases) {
+      const rect = await page.evaluate((fragment) => {
+        const el = document.getElementById('blb-e2e-doubleclick-token-isolation');
+        const text = el.firstChild;
+        const start = el.textContent.indexOf(fragment);
         const range = document.createRange();
-        range.selectNodeContents(heading);
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-        heading.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true, view: window }));
-      }, id);
+        range.setStart(text, start);
+        range.setEnd(text, start + fragment.length);
+        const box = range.getBoundingClientRect();
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      }, fragment);
+
+      const pagesBefore = context.pages();
+      await page.mouse.dblclick(rect.x, rect.y);
+      await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), { timeout: 3000 }).toBe(fragment);
+      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      expect(blb).toBeTruthy();
+      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
+      await blb.close();
+    }
+  });
+
+  test('Double-clicking ordinary heading words does not open a Bible reference', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const heading = document.createElement('h2');
+      heading.id = 'blb-e2e-doubleclick-heading';
+      heading.textContent = '1. Install the downloaded ZIP';
+      heading.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(heading);
+    });
+
+    for (const fragment of ['Install', 'downloaded']) {
+      const rect = await page.evaluate((fragment) => {
+        const el = document.getElementById('blb-e2e-doubleclick-heading');
+        const text = el.firstChild;
+        const start = el.textContent.indexOf(fragment);
+        const range = document.createRange();
+        range.setStart(text, start);
+        range.setEnd(text, start + fragment.length);
+        const box = range.getBoundingClientRect();
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      }, fragment);
+
+      const pagesBefore = context.pages();
+      await page.mouse.dblclick(rect.x, rect.y);
+      await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), { timeout: 3000 }).toBe(fragment);
       await page.waitForTimeout(300);
       expect(context.pages().length).toBe(pagesBefore.length);
     }
