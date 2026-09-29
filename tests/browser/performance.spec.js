@@ -16,11 +16,14 @@ async function selectReference(page, id) {
   }, id);
 }
 
-async function writeSample(scenario, handoffMs) {
+async function writeSample(scenario, handoffMs, extra = {}) {
   const output = process.env.BLB_PERF_OUTPUT;
   if (!output) throw new Error('BLB_PERF_OUTPUT is required');
-  fs.appendFileSync(output, JSON.stringify({ scenario, handoffMs }) + '\n');
-  console.log(`BLB performance sample: ${scenario} ${handoffMs} ms`);
+  fs.appendFileSync(output, JSON.stringify({ scenario, handoffMs, ...extra }) + '\n');
+  const detail = extra.firstTabMs != null || extra.secondTabMs != null
+    ? ` firstTab=${extra.firstTabMs}ms secondTab=${extra.secondTabMs}ms`
+    : '';
+  console.log(`BLB performance sample: ${scenario} ${handoffMs} ms${detail}`);
 }
 
 test('Show on BLB performance benchmark', async ({ page, context, extensionStorage, extensionId }) => {
@@ -34,10 +37,15 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     const button = page.locator('#blb-suite-page-selection-button');
     await expect(button).toBeVisible({ timeout: 10000 });
 
-    const newPagePromise = context.waitForEvent('page');
+    const pagesBefore = new Set(context.pages());
     const started = Date.now();
     await button.click();
-    const blb = await newPagePromise;
+    await expect.poll(
+      () => context.pages().filter(p => !pagesBefore.has(p)).length,
+      { timeout: 10000 }
+    ).toBeGreaterThanOrEqual(1);
+    const blb = context.pages().find(p => !pagesBefore.has(p) && /blueletterbible\.org\/kjv\/jhn\/3\/16\//i.test(p.url()));
+    expect(blb).toBeTruthy();
     const handoffMs = Date.now() - started;
 
     expect(new URL(blb.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16\//);
@@ -54,7 +62,7 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
       await existing.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil: 'commit', timeout: 15000 });
     }
 
-    const newPagePromise = scenario === 'fresh' ? context.waitForEvent('page') : null;
+    const pagesBefore = new Set(context.pages());
     await page.goto(`chrome-extension://${extensionId}/popup.html`);
     const started = Date.now();
     const response = await page.evaluate(async () => chrome.runtime.sendMessage({
@@ -74,13 +82,99 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     expect(response?.ok).toBeTruthy();
 
     if (scenario === 'fresh') {
-      const blb = await newPagePromise;
+      await expect.poll(
+        () => context.pages().filter(p => !pagesBefore.has(p)).length,
+        { timeout: 10000 }
+      ).toBeGreaterThanOrEqual(1);
+      const blb = context.pages().find(p => !pagesBefore.has(p) && /blueletterbible\.org\/kjv\/jhn\/3\/16\//i.test(p.url()));
+      expect(blb).toBeTruthy();
       expect(new URL(blb.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16\//);
     } else {
       expect(new URL(existing.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16\/(?:s_\d+)?$/);
     }
 
     await writeSample(scenario, handoffMs);
+    return;
+  }
+
+  if (scenario === 'paragraph-classify') {
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    const started = Date.now();
+    const response = await page.evaluate(async () => chrome.runtime.sendMessage({
+      type: 'blbSuiteClassifySelection',
+      text: 'Romans 6:23 and John 3:16 teach that the free gift is offered through Christ.'
+    }));
+    const handoffMs = Date.now() - started;
+    expect(response?.ok).toBeTruthy();
+    expect(response?.valid).toBeTruthy();
+    expect(Array.isArray(response?.refs)).toBeTruthy();
+    await writeSample(scenario, handoffMs);
+    return;
+  }
+
+  if (scenario === 'paragraph-two-tab') {
+    await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-perf-paragraph';
+      el.textContent =
+        'Romans 6:23 and John 3:16 teach that the free gift is offered through Christ.';
+      document.body.appendChild(el);
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+
+    const pagesBefore = new Set(context.pages());
+    const started = Date.now();
+    await button.click();
+
+    // Measure the time until BOTH destination tabs are actually populated,
+    // not merely until Chrome allocates their tab objects. Criteria may be
+    // opened by the fast residual path or shortly afterward by authoritative
+    // classifier reconciliation, so wait for the final destination URLs.
+    const getOpened = () => context.pages().filter(p => !pagesBefore.has(p));
+    const isCriteria = p => /blueletterbible\.org\/search\/search\.cfm\?Criteria=/i.test(p.url());
+    const isMultiVerse = p => /blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm\?.*blbSuiteMultiVerse=1)/i.test(p.url());
+
+    await expect.poll(
+      () => getOpened().some(isMultiVerse),
+      { timeout: 15000 }
+    ).toBeTruthy();
+    const firstTabMs = Date.now() - started;
+
+    await expect.poll(
+      () => getOpened().some(isCriteria),
+      { timeout: 15000 }
+    ).toBeTruthy();
+    const secondTabMs = Date.now() - started;
+
+    const opened = getOpened();
+    const multiVerseTab = opened.find(isMultiVerse);
+    const criteriaTab = opened.find(isCriteria);
+    expect(multiVerseTab).toBeTruthy();
+    expect(criteriaTab).toBeTruthy();
+
+    // URL correctness is part of the populated-state check. Then wait for
+    // document readiness so the measured endpoint includes the actual BLB
+    // destination being usable, rather than stopping at URL creation.
+    await Promise.all(
+      [multiVerseTab, criteriaTab].map(async tab => {
+        await tab.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+      })
+    );
+    expect(new URL(criteriaTab.url()).searchParams.get('Criteria')).toBeTruthy();
+    expect(new URL(multiVerseTab.url()).searchParams.toString()).toMatch(/(?:^|&)blbSuiteMultiVerse=1(?:&|$)/i);
+
+    const handoffMs = Date.now() - started;
+    await writeSample(scenario, handoffMs, { firstTabMs, secondTabMs });
     return;
   }
 

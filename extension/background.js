@@ -543,7 +543,15 @@ async function openBlbMultiVerseRefs(refs, active = true) {
   const canonical = canonicalMultiVerseSet(refs);
   if (!canonical.key || canonical.refs.length < 2) return {ok:false, reason:"not-enough-references", count:canonical.refs.length};
 
-  const tabs = await chrome.tabs.query({});
+  // Restrict the lookup to BLB MultiVerse handoff tabs rather than every
+  // browser tab. This keeps MultiVerse selection latency independent of the
+  // user's total tab count.
+  const tabs = await chrome.tabs.query({
+    url: [
+      'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
+      'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
+    ]
+  });
   const existing = await findMatchingMultiVerseTab(canonical.key, tabs);
   if (existing?.id != null) {
     if (active) {
@@ -554,19 +562,27 @@ async function openBlbMultiVerseRefs(refs, active = true) {
   }
 
   const searchUrl = "https://www.blueletterbible.org/search/search.cfm?Criteria=Jesus&t=KJV&blbSuiteMultiVerse=1";
-  // Create a neutral tab first so the tab id is known before the hand-off data
-  // is stored. This makes multiple different MultiVerse tabs safe to launch at
-  // nearly the same time.
-  const tab = await chrome.tabs.create({url:'about:blank', active:!!active});
+  // Create the actual MultiVerse destination immediately. The previous
+  // about:blank -> storage -> tabs.update sequence added a second navigation
+  // to the user's critical path. The tab id is still available from create()
+  // for the same tracking/storage bookkeeping.
+  const tab = await chrome.tabs.create({url:searchUrl, active:!!active});
   if (tab?.id == null) return {ok:false, reason:'tab-create-failed'};
-  await setTrackedMultiVerseTab(tab.id, canonical.key);
-  const pending = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
-  const pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
+  // Batch tracking and pending-handoff storage into one read/write pair.
+  const pending = await chrome.storage.local.get({
+    blbSuiteMultiVerseTabSets:{},
+    blbSuitePendingMultiVerseRefsByTab:{}
+  });
+  const trackedMap = pending.blbSuiteMultiVerseTabSets && typeof pending.blbSuiteMultiVerseTabSets === 'object'
+    ? {...pending.blbSuiteMultiVerseTabSets} : {};
+  trackedMap[String(tab.id)] = {key:canonical.key, updatedAt:Date.now()};
+  const pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object'
+    ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
   pendingMap[String(tab.id)] = canonical.refs;
-  await chrome.storage.local.set({blbSuitePendingMultiVerseRefsByTab:pendingMap});
-  try {
-    await chrome.tabs.update(tab.id, {url:searchUrl, active:!!active});
-  } catch (_) {}
+  await chrome.storage.local.set({
+    blbSuiteMultiVerseTabSets:trackedMap,
+    blbSuitePendingMultiVerseRefsByTab:pendingMap
+  });
   return {ok:true, count:canonical.refs.length, reused:false, tabId:tab.id};
 }
 
@@ -2647,10 +2663,33 @@ function compactPdfBookName(value) {
 function extractBibleRefsFromSelectedTextUncached(text) {
   const refs = [];
   const seen = new Set();
+  const cachedPatterns = extractBibleRefsFromSelectedTextUncached.cachedPatterns || (
+    extractBibleRefsFromSelectedTextUncached.cachedPatterns = (() => {
+      const forms = [];
+      const escapePattern = value => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      for (const book of BOOKS) {
+        const bookForms = new Set(getBibleBookForms(book));
+        const leadingSeriesNumber = String(book.name || '').match(/^([123])\s+/)?.[1];
+        const roman = leadingSeriesNumber ? ({1:'I',2:'II',3:'III'}[leadingSeriesNumber] || null) : null;
+        if (roman) bookForms.add(book.name.replace(/^[123]/, roman));
+        for (const form of bookForms) {
+          const clean = String(form || '').trim();
+          if (!clean) continue;
+          forms.push({
+            book,
+            form: clean,
+            re: new RegExp('(?<![A-Za-z0-9])' + escapePattern(clean).replace(/\s+/g, '\\s+') + '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?', 'gi')
+          });
+        }
+      }
+      forms.sort((a,b) => b.form.length - a.form.length);
+      return forms;
+    })()
+  );
+  const resolveBook = resolveBibleBook;
   const source = String(text || '')
     .replace(/[\u00a0\u2007\u202f]/g, ' ')
     .replace(/[\u2010\u2011\u2012\u2013\u2014]/g, '-');
-  const resolveBook = resolveBibleBook;
 
   const addRef = (book, chapter, from, to, originalText) => {
     if (!book || !Number.isInteger(chapter) || !Number.isInteger(from) || !Number.isInteger(to)) return;
@@ -2815,29 +2854,9 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // book name (for example "... says, Hebrews 10:7") and then fail book
   // resolution. Scan the authoritative book forms directly as a final safety
   // net. Also accept conventional Roman-numeral forms such as "I Timothy".
-  const explicitForms = [];
-  for (const book of BOOKS) {
-    const forms = new Set(getBibleBookForms(book));
-    // Roman-numeral book forms are based on the book's leading series
-    // number (1/2/3), not the canonical 66-book number (for example,
-    // 1 Thessalonians is book 52). This keeps I/II/III Timothy,
-    // Thessalonians, Corinthians, Peter, John, etc. aligned with their
-    // ordinary numeric forms.
-    const leadingSeriesNumber = String(book.name || '').match(/^([123])\s+/)?.[1];
-    const roman = leadingSeriesNumber ? ({1:'I',2:'II',3:'III'}[leadingSeriesNumber] || null) : null;
-    if (roman) {
-      forms.add(book.name.replace(/^[123]/, roman));
-    }
-    for (const form of forms) {
-      const clean = String(form || '').trim();
-      if (clean) explicitForms.push({book, form:clean});
-    }
-  }
-  explicitForms.sort((a,b)=>b.form.length-a.form.length);
-  for (const item of explicitForms) {
-    const escaped = item.form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp(`(?<![A-Za-z0-9])${escaped}\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?`, 'gi');
-    while ((m = re.exec(source))) {
+  for (const item of cachedPatterns) {
+    item.re.lastIndex = 0;
+    while ((m = item.re.exec(source))) {
       const chapter = Number(m[1]);
       const from = Number(m[2]);
       const to = Number(m[3] || m[2]);
@@ -3429,9 +3448,38 @@ function isResidualProseShortKjvPhraseCandidate(phraseWords) {
     if (residualContentWords.length === 1 && (!firstIsStop || !lastIsContent)) return false;
     if (residualContentWords.length === 1 && countResidualKjvPhraseOccurrences(normalized) > 4) return false;
   }
-  return normalized.length === 2
-    ? isResidualProseShortKjvPhraseInCorpus(normalized)
-    : getKjvResidualPhraseIndex(3)?.has(phrase) === true;
+  if (normalized.length === 2) return isResidualProseShortKjvPhraseInCorpus(normalized);
+
+  // Avoid lazily constructing a corpus-wide 3-word Set. Intersect the
+  // existing compact word→verse postings, then verify the exact adjacent
+  // triple only in those candidate verses.
+  if (normalized.length === 3) {
+    const postings = normalized.map(word => decodeKjvResidualWordVerseIndexes(word));
+    if (postings.some(list => !list.length)) return false;
+    let anchor = 0;
+    for (let i = 1; i < postings.length; i++) {
+      if (postings[i].length < postings[anchor].length) anchor = i;
+    }
+    const candidateSet = new Set(postings[anchor]);
+    for (let i = 0; i < postings.length; i++) {
+      if (i === anchor) continue;
+      const allowed = new Set(postings[i]);
+      for (const verseIndex of candidateSet) {
+        if (!allowed.has(verseIndex)) candidateSet.delete(verseIndex);
+      }
+      if (!candidateSet.size) return false;
+    }
+    for (const verseIndex of candidateSet) {
+      const entry = KJV_CORPUS_VERSES[verseIndex];
+      const verseWords = entry ? normalizeKjvPassageWords(entry[3]) : [];
+      for (let i = 0; i <= verseWords.length - 3; i++) {
+        if (verseWords[i] === normalized[0] &&
+            verseWords[i + 1] === normalized[1] &&
+            verseWords[i + 2] === normalized[2]) return true;
+      }
+    }
+  }
+  return false;
 }
 
 function removeQuotedTextFromSelection(source) {
@@ -3892,18 +3940,39 @@ async function searchSelectionInKjv(selectionText, decision = null) {
   return true;
 }
 
-let kjvVerseTextByRefKey = null;
+// Resolve a KJV verse directly from the canonical corpus position instead
+// of lazily building a 31,102-entry Map on the first paragraph selection.
+// BOOKS already contains every chapter's verse count, so chapter offsets can
+// be built once from only the small book/chapter metadata.
+let kjvBookChapterOffsets = null;
 function getKjvVerseTextByRefKey(bookNumber, chapter, verse) {
   if (!Array.isArray(KJV_CORPUS_VERSES)) return null;
-  if (!kjvVerseTextByRefKey) {
-    const index = new Map();
-    for (const entry of KJV_CORPUS_VERSES) {
-      const key = `${Number(entry[0])}:${Number(entry[1])}:${Number(entry[2])}`;
-      index.set(key, String(entry[3] || '').trim());
+
+  const bookNo = Number(bookNumber);
+  const chapterNo = Number(chapter);
+  const verseNo = Number(verse);
+  if (!Number.isInteger(bookNo) || !Number.isInteger(chapterNo) || !Number.isInteger(verseNo) || verseNo < 1) return null;
+
+  if (!kjvBookChapterOffsets) {
+    const offsets = new Map();
+    let offset = 0;
+    for (const book of bookData) {
+      const number = Number(book.bookNumber);
+      const chapterCount = Number(book.chapterCount || book.verses?.length || 0);
+      for (let ch = 1; ch <= chapterCount; ch++) {
+        offsets.set(number + ':' + ch, offset);
+        offset += Number(book.verses?.[ch - 1] || 0);
+      }
     }
-    kjvVerseTextByRefKey = index;
+    kjvBookChapterOffsets = offsets;
   }
-  return kjvVerseTextByRefKey.get(`${Number(bookNumber)}:${Number(chapter)}:${Number(verse)}`) || null;
+
+  const chapterOffset = kjvBookChapterOffsets.get(bookNo + ':' + chapterNo);
+  if (!Number.isInteger(chapterOffset)) return null;
+  const entry = KJV_CORPUS_VERSES[chapterOffset + verseNo - 1];
+  if (!entry) return null;
+  if (Number(entry[0]) !== bookNo || Number(entry[1]) !== chapterNo || Number(entry[2]) !== verseNo) return null;
+  return String(entry[3] || '').trim() || null;
 }
 
 function getKjvVerseTextForSelectionRef(ref) {
@@ -4277,52 +4346,117 @@ async function getContextualSelectionReference(tabId, selectionText) {
 async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNew:true, activateExisting:true}, contextualRef = null) {
   const text = normalizeSelectedScriptureText(selectionText);
 
-  // A validated adjacent citation is authoritative for the reference tab,
-  // but it must no longer suppress Criteria Search for the selected paragraph.
-  // The reference is opened first; the same selection is then classified only
-  // for an independently validated KJV passage query. This preserves the
-  // contextual-reference fast path while adding the requested second tab.
+  // FAST MULTI-REFERENCE PATH:
+  // The explicit-reference parser is already the authoritative source for
+  // MultiVerse routing. Do not block tab creation on the full KJV classifier.
+  // Start MultiVerse immediately, derive a corpus-validated residual Criteria
+  // term in parallel, then run the full classifier only for reconciliation.
+  const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
+  if (selectedRefs.length >= 2) {
+    const excludedVerseTexts = selectedRefs
+      .map(ref => getKjvVerseTextForSelectionRef(ref))
+      .filter(Boolean);
+    let residualText = removeKjvVerseTextFromSelection(text, selectedRefs);
+    residualText = removeQuotedTextFromSelection(residualText);
+    const fastCriteriaQuery = extractResidualProseShortCriteriaQuery(residualText, excludedVerseTexts);
+
+    const studyCapture = recordStudyRefs(selectedRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
+    const referenceOpen = openBlbMultiVerseRefs(
+      selectedRefs,
+      !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
+    );
+    const criteriaOpen = fastCriteriaQuery
+      ? openBlbDestination(
+          `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(fastCriteriaQuery).replace(/%20/g,'+')}`,
+          false,
+          false
+        )
+      : Promise.resolve(null);
+
+    // Await only the actual tab creation/storage handoff. This is the point
+    // at which the user has both destinations available; the expensive
+    // classifier runs afterward while the service worker remains active.
+    const [referenceTab, criteriaTab] = await Promise.all([referenceOpen, criteriaOpen, studyCapture]);
+
+    // Return immediately after both destination tabs are created. The full
+    // classifier is correctness/reconciliation work, not part of the user's
+    // tab-opening critical path. If it produces a different authoritative
+    // Criteria query, update the already-open Criteria tab in the background.
+    void (async () => {
+      try {
+        const authoritativeDecision = classifySelectionForBlb(text);
+        const authoritativeQuery = authoritativeDecision?.kjvPassageQuery || '';
+        if (authoritativeQuery === fastCriteriaQuery) return;
+
+        if (criteriaTab?.id != null && authoritativeQuery) {
+          try {
+            await chrome.tabs.update(criteriaTab.id, {
+              url: `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(authoritativeQuery).replace(/%20/g,'+')}`
+            });
+          } catch (_) {}
+        } else if (authoritativeQuery) {
+          await openBlbDestination(
+            `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(authoritativeQuery).replace(/%20/g,'+')}`,
+            false,
+            false
+          );
+        }
+      } catch (err) {
+        console.warn('BLB Suite paragraph Criteria reconciliation:', err);
+      }
+    })();
+    return;
+  }
+
+  // A validated adjacent citation is authoritative for the reference tab.
+  // Open it immediately. Full KJV classification is only needed afterward for
+  // an optional Criteria Search destination, so it must never delay the user's
+  // first visible BLB tab.
+  let contextualDecision = null;
   if (contextualRef?.url) {
-    const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
-    // PDF/local selections can expose slightly different reference text to
-    // the contextual resolver and to the full classifier. Use both views
-    // before deciding that the selection contains only one reference.
-    const contextualDecision = classifySelectionForBlb(text);
-    const classifiedRefs = Array.isArray(contextualDecision?.refs) ? contextualDecision.refs : [];
-    const mergedRefs = [...selectedRefs, ...classifiedRefs];
-    const mergedRefKeys = new Set();
-    const allSelectedRefs = mergedRefs.filter(ref => {
-      const key = `${String(ref?.book || '').toLowerCase()}|${Number(ref?.chapter)}|${Number(ref?.from)}|${Number(ref?.to)}`;
-      if (!ref?.url || mergedRefKeys.has(key)) return false;
-      mergedRefKeys.add(key);
-      return true;
-    });
-    // A contextual single-reference answer remains authoritative only when the
-    // combined selection analysis does not contain multiple explicit references.
-    if (allSelectedRefs.length < 2) {
-      await recordStudyRefs([parseBlbKjvUrlToStudyRef(contextualRef.url)].filter(Boolean));
+    const contextualRefs = selectedRefs.length
+      ? selectedRefs
+      : [contextualRef];
 
-      // Start the reference navigation before the residual Criteria scan.
-      // chrome.tabs.create resolves when the tab exists, so this lets Chrome
-      // begin creating the first result while the synchronous local classifier
-      // prepares the second result. The reference tab remains the first/active
-      // destination; Criteria is still opened in the background.
-      const referenceOpen = openBlbDestination(contextualRef.url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
+    if (contextualRefs.length < 2) {
+      const excludedVerseTexts = contextualRefs
+        .map(ref => getKjvVerseTextForSelectionRef(ref))
+        .filter(Boolean);
+      let residualText = removeKjvVerseTextFromSelection(text, contextualRefs);
+      residualText = removeQuotedTextFromSelection(residualText);
+      const fastCriteriaQuery = extractResidualProseShortCriteriaQuery(residualText, excludedVerseTexts);
 
-      // Do not route the selection through the generic opener a second time:
-      // that could reopen the same reference. Extract only the existing KJV
-      // passage result and place Criteria Search in a new background tab.
-      const criteriaQuery = contextualDecision?.kjvPassageQuery || '';
-      await referenceOpen;
+      const studyCapture = recordStudyRefs(
+        contextualRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean)
+      );
+      const referenceTab = await openBlbDestination(
+        contextualRef.url,
+        !!tabBehavior.activeIfNew,
+        !!tabBehavior.activateExisting
+      );
+      await studyCapture;
+
+      // The reference tab is already created. Now run the authoritative
+      // classifier and reconcile/open Criteria Search without blocking that
+      // first-tab milestone.
+      contextualDecision = classifySelectionForBlb(text);
+      const authoritativeQuery = contextualDecision?.kjvPassageQuery || '';
+      const criteriaQuery = authoritativeQuery || fastCriteriaQuery;
       if (criteriaQuery) {
-        const criteriaUrl = `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(criteriaQuery).replace(/%20/g,'+')}`;
-        await openBlbDestination(criteriaUrl, false, false);
+        await openBlbDestination(
+          `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(criteriaQuery).replace(/%20/g,'+')}`,
+          false,
+          false
+        );
       }
       return;
     }
   }
 
-  const decision = classifySelectionForBlb(text);
+  // Reuse the classification already performed above when a contextual
+  // reference was supplied. A multi-reference paragraph must never pay the
+  // full corpus-classification cost twice.
+  const decision = contextualDecision || classifySelectionForBlb(text);
   if (!decision.valid) return;
   const cleanedText = decision.text;
   if (!cleanedText) return;
@@ -4348,31 +4482,33 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   if (decision.type === 'REFERENCE_AND_KJV_PASSAGE') {
     const parsedRefs = decision.refs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean);
     if (parsedRefs.length > 1) {
-      await recordStudyRefs(parsedRefs);
-      const firstBookIdentity = String(parsedRefs[0]?.urlKey || parsedRefs[0]?.book || '').toLowerCase();
-      const allSameChapter = parsedRefs.every(r => String(r.urlKey || r.book || '').toLowerCase() === firstBookIdentity && r.chapter === parsedRefs[0].chapter);
-      const rangeCount = parsedRefs.filter(r => r.from != null && r.to != null && r.to !== r.from).length;
-      // Selection-area rule: one resolved verse/reference uses the normal BLB
-      // verse window; two or more resolved references always use MultiVerse.
-      // Do not collapse multiple selected references to the first one merely
-      // because they happen to share a chapter.
-      if (parsedRefs.length === 1) {
-        await openBlbDestination(decision.refs[0].url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
-      } else {
-        await openBlbMultiVerseRefs(decision.refs, !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting);
-      }
+      // Normally unreachable because the explicit-reference fast path above
+      // handles multi-reference selections first. Keep this fallback for
+      // classifier-only callers and unusual parser discrepancies.
+      const studyCapture = recordStudyRefs(parsedRefs);
+      const referenceOpen = openBlbMultiVerseRefs(
+        decision.refs,
+        !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
+      );
+      const criteriaOpen = decision.kjvPassageQuery
+        ? openBlbDestination(
+            `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(decision.kjvPassageQuery).replace(/%20/g,'+')}`,
+            false,
+            false
+          )
+        : Promise.resolve(null);
+      await Promise.all([referenceOpen, criteriaOpen, studyCapture]);
     } else if (parsedRefs.length === 1) {
-      await recordStudyRefs(parsedRefs);
-      await openBlbDestination(decision.refs[0].url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
-    }
-    // Preserve the existing reference destination as the first result, then
-    // independently open the already-validated KJV passage retrieval as a
-    // second, background Criteria Search tab. The reference path above is
-    // intentionally unchanged: one reference uses the normal verse window;
-    // multiple references use the existing MultiVerse window.
-    if (decision.kjvPassageQuery) {
-      const criteriaUrl = `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(decision.kjvPassageQuery).replace(/%20/g,'+')}`;
-      await openBlbDestination(criteriaUrl, false, false);
+      const studyCapture = recordStudyRefs(parsedRefs);
+      const referenceOpen = openBlbDestination(decision.refs[0].url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
+      const criteriaOpen = decision.kjvPassageQuery
+        ? openBlbDestination(
+            `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(decision.kjvPassageQuery).replace(/%20/g,'+')}`,
+            false,
+            false
+          )
+        : Promise.resolve(null);
+      await Promise.all([referenceOpen, criteriaOpen, studyCapture]);
     }
     return;
   }
