@@ -99,20 +99,40 @@ test.describe('core user-visible E2E', () => {
     expect(handoffMs).toBeLessThan(1500);
   });
 
-  test('Double-click opens an exact selected reference', async ({ page, context, extensionStorage }) => {
+  test('Double-click resolves any part of an adjacent Bible reference', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
       const el = document.createElement('p');
-      el.id = 'blb-e2e-reference';
-      el.textContent = 'John 3:16';
+      el.id = 'blb-e2e-doubleclick-context-reference';
+      el.textContent = 'Acts 17:11';
       document.body.appendChild(el);
     });
-    const reference = page.locator('#blb-e2e-reference');
-    const popupPromise = context.waitForEvent('page');
-    await reference.dblclick();
-    const blb = await popupPromise;
-    expect(new URL(blb.url()).pathname).toBe('/kjv/jhn/3/16/');
+
+    const expectedPath = '/kjv/act/17/11/';
+    const cases = ['Acts', '17', '11'];
+
+    for (const fragment of cases) {
+      await page.evaluate((fragment) => {
+        const el = document.getElementById('blb-e2e-doubleclick-context-reference');
+        const text = el.firstChild;
+        const start = el.textContent.indexOf(fragment);
+        const range = document.createRange();
+        range.setStart(text, start);
+        range.setEnd(text, start + fragment.length);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }, fragment);
+
+      const pagesBefore = context.pages();
+      await page.locator('#blb-e2e-doubleclick-context-reference').dblclick({ position: { x: 10, y: 10 } });
+      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      expect(blb).toBeTruthy();
+      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
+      await blb.close();
+    }
   });
 
   test('Bible reference parsing rejects numeric-prefix false positives and preserves partial adjacent selection', async ({ page, context, extensionStorage, extensionWorker }) => {
