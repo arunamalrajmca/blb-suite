@@ -130,6 +130,7 @@ test.describe('core user-visible E2E', () => {
       const el = document.createElement('p');
       el.id = 'blb-e2e-doubleclick-plain-reference';
       el.textContent = 'Acts 17:11';
+      el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
       document.body.appendChild(el);
     });
 
