@@ -121,7 +121,9 @@ test('reference-context matrix resolves aliases, numbered books, and exact dupli
   const contextualStart = content.indexOf('function getContextualBibleReference');
   const contextual = content.slice(contextualStart, resolverEnd);
   assert(resolver.includes('selectionStart < refEnd && selectionEnd > refStart'), 'context resolver must match the exact selected occurrence');
-  assert(contextual.indexOf('const position = getSelectionContextPosition()') < contextual.indexOf('const before = getAdjacentBoundaryText'), 'exact DOM selection must precede broad fallback');
+  assert(contextual.includes('const position = getSelectionContextPosition()'), 'context resolver must prefer exact DOM selection');
+  assert(!contextual.includes('getAdjacentBoundaryText('), 'context resolver must not use document-wide fallback text');
+  assert(content.includes('getDoubleClickBlockContextReference(selection, event.target)'), 'double-click fallback must remain block-local');
   assert(resolver.includes('source.indexOf(needle, fromIndex)'), 'resolver must examine every reference occurrence, not only the first');
 });
 test('numeric prefix cannot reinterpret a chapter as a numbered book', () => {
