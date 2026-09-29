@@ -2501,6 +2501,12 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
           }
         }
       }
+      if (bookOnly?.url && !message.contextualReference?.url) {
+        await recordStudyRefs([parseBlbKjvUrlToStudyRef(bookOnly.url)].filter(Boolean));
+        await openBlbDestination(bookOnly.url, !!behavior.activeIfNew, !!behavior.activateExisting);
+        sendResponse({ok:true, bookOnly:true});
+        return true;
+      }
       await openSelectedPdfBibleRefs(text, behavior, null);
       sendResponse({ok:true});
     } catch (error) {
