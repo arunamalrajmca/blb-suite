@@ -131,6 +131,16 @@ test('numeric prefix cannot reinterpret a chapter as a numbered book', () => {
   assert.equal(refs[0].chapter, 17);
   assert.equal(refs[0].from, 11);
 });
+test('repeated references separated by a conjunction resolve both occurrences', () => {
+  const refs = refCtx.resolveBibleReferenceText('Jn 3:16 and Jn 3:36');
+  assert.equal(refs.length, 2);
+  assert.equal(refs[0].book, 'john');
+  assert.equal(refs[0].chapter, 3);
+  assert.equal(refs[0].from, 16);
+  assert.equal(refs[1].book, 'john');
+  assert.equal(refs[1].chapter, 3);
+  assert.equal(refs[1].from, 36);
+});
 test('direct reference resolver rejects prose and accepts exact refs', () => {
   assert(refCtx.resolveDirectBibleReference('1 Thessalonians 2:13'));
   assert.equal(refCtx.resolveDirectBibleReference('in every one'), null);
