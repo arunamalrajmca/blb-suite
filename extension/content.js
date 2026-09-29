@@ -616,6 +616,8 @@ if (location.hostname.toLowerCase().replace(/^www\./,'') === 'blueletterbible.or
   else runStudyCapture();
 }
 
+function nowOrElapsed(started) { return Date.now() - started; }
+
 // ---------- Double-Click BLB ----------
 // Double-click a single KJV word, Bible book name, or standalone book number.
 // Uses the Suite's own selection logic and never invokes BLB's native search.
@@ -909,6 +911,21 @@ function handleDoubleClickBlb(event) {
         const blockContext = getDoubleClickBlockContextReference(selection, event.target);
         const standaloneBook = getStandaloneBookReference(selection);
         const contextualReference = blockContext || standaloneBook;
+
+        // Double-click is a Bible-reference gesture, not a generic search
+        // gesture. Once the browser token has been isolated, it must either
+        // establish a standalone book (1-66) or belong to a real Bible
+        // reference in the same DOM block. Do not hand an unrelated token
+        // such as "176" or "109565645022" to the generic classifier, where it
+        // could acquire meaning from search/corpus fallback logic.
+        if (!contextualReference) {
+          if (nowOrElapsed(started) < 180) {
+            requestAnimationFrame(dispatch);
+            return true;
+          }
+          return true;
+        }
+
         const now = Date.now();
         const destinationKey = selection.toLowerCase();
         const previous = recentDoubleClickDestinations.get(destinationKey) || 0;
