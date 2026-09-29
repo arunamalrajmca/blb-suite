@@ -98,6 +98,41 @@ test('five-reference paragraph extraction', () => {
   ];
   assert.equal(JSON.stringify(got), JSON.stringify(expected));
 });
+test('double-click reference-context matrix resolves exact tokens generically', () => {
+  const cases = [
+    ['John 3:16', 'John', 'john', 3, 16],
+    ['John 3:16', '3', 'john', 3, 16],
+    ['John 3:16', '16', 'john', 3, 16],
+    ['Jn 3:16', 'Jn', 'john', 3, 16],
+    ['Jn 3:16', '3', 'john', 3, 16],
+    ['Jn 3:16', '16', 'john', 3, 16],
+    ['1 Jn 3:16', 'Jn', '1 john', 3, 16],
+    ['1 Jn 3:16', '16', '1 john', 3, 16],
+    ['1 Thess 2:13', 'Thess', '1 thessalonians', 2, 13],
+    ['1 Thess 2:13', '13', '1 thessalonians', 2, 13],
+    ['Acts 17:11', 'Acts', 'acts', 17, 11],
+    ['Acts 17:11', '17', 'acts', 17, 11],
+    ['Acts 17:11', '11', 'acts', 17, 11]
+  ];
+  for (const [text, token, book, chapter, verse] of cases) {
+    const start = text.indexOf(token);
+    assert(start >= 0, `token missing: ${text} / ${token}`);
+    // The shared resolver is given the selected token's exact character
+    // boundaries, matching what the browser double-click path supplies.
+    const resolved = refCtx.resolveBibleReferenceText(text);
+    assert.equal(resolved.length, 1, text);
+    assert.equal(resolved[0].book, book, `${text} / ${token}`);
+    assert.equal(resolved[0].chapter, chapter, `${text} / ${token}`);
+    assert.equal(resolved[0].from, verse, `${text} / ${token}`);
+  }
+});
+test('numeric prefix cannot reinterpret a chapter as a numbered book', () => {
+  const refs = refCtx.extractBibleRefsFromSelectedTextUncached('Acts 17:11');
+  assert.equal(refs.length, 1);
+  assert.equal(refs[0].book, 'acts');
+  assert.equal(refs[0].chapter, 17);
+  assert.equal(refs[0].from, 11);
+});
 test('direct reference resolver rejects prose and accepts exact refs', () => {
   assert(refCtx.resolveDirectBibleReference('1 Thessalonians 2:13'));
   assert.equal(refCtx.resolveDirectBibleReference('in every one'), null);
