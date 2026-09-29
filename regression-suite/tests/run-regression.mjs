@@ -66,7 +66,7 @@ const contentSource = read('content.js');
 const contextResolverStart = contentSource.indexOf('function resolveBibleReferenceFromContextWindow');
 const contextResolverEnd = contentSource.indexOf('\nfunction getContextualBibleReference', contextResolverStart);
 vm.runInContext(
-  "const normalizeSelectionText = text => String(text || '').replace(/\\s+/g, ' ').trim();\\n" +
+  "const normalizeSelectionText = text => String(text || '').replace(/\\s+/g, ' ').trim();\n" +
     contentSource.slice(contextResolverStart, contextResolverEnd),
   refCtx,
   {filename:'content.js:resolveBibleReferenceFromContextWindow'}
