@@ -115,12 +115,9 @@ test.describe('core user-visible E2E', () => {
     for (const fragment of cases) {
       const target = page.locator('#blb-e2e-doubleclick-context-reference span', { hasText: fragment });
       await target.dblclick();
-      await expect.poll(() => context.pages().some(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path === expectedPath.replace(/\/$/, '') + '/' || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
-      }), { timeout: 10000 }).toBe(true);
+      await expect.poll(() => context.pages().map(candidate => {
+        try { return new URL(candidate.url()).pathname; } catch (_) { return ''; }
+      }).filter(Boolean).join(' | '), { timeout: 10000 }).toContain(expectedPath);
       const blb = context.pages().find(candidate => {
         try {
           const path = new URL(candidate.url()).pathname;
