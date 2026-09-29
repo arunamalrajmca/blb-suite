@@ -508,6 +508,34 @@ test.describe('core user-visible E2E', () => {
   });
 
 
+  test('Double-click uses canonical clamping only after a reference is established', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const el = document.createElement('div');
+      el.id = 'blb-e2e-doubleclick-clamping-boundary';
+      el.innerHTML = '<p id="psalm-over">Psalm 119:177</p><p id="romans-over">Romans 17</p>';
+      el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(el);
+    });
+
+    const cases = [
+      ['psalm-over', '/kjv/psa/119/176/'],
+      ['romans-over', '/kjv/rom/16/']
+    ];
+
+    for (const [id, expectedPath] of cases) {
+      const target = page.locator('#' + id);
+      const pagesBefore = context.pages();
+      await target.dblclick();
+      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      expect(blb).toBeTruthy();
+      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
+      await blb.close();
+    }
+  });
+
   test('Double-click alias Jn 3:16 resolves every token to John 3:16', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
