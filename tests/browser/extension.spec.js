@@ -262,6 +262,39 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  test('Double-click duplicate verse tokens resolve the clicked occurrence', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-doubleclick-duplicate-references';
+      el.textContent = 'Jn 3:16 and Jn 3:36';
+      el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(el);
+    });
+    for (const fragment of ['16', '36']) {
+      const rect = await page.evaluate((fragment) => {
+        const el = document.getElementById('blb-e2e-doubleclick-duplicate-references');
+        const text = el.firstChild;
+        const start = el.textContent.indexOf(fragment);
+        const range = document.createRange();
+        range.setStart(text, start);
+        range.setEnd(text, start + fragment.length);
+        const box = range.getBoundingClientRect();
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      }, fragment);
+      const pagesBefore = context.pages();
+      await page.mouse.dblclick(rect.x, rect.y);
+      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      expect(blb).toBeTruthy();
+      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(
+        fragment === '16' ? '/kjv/jhn/3/16/' : '/kjv/jhn/3/36/'
+      );
+      await blb.close();
+    }
+  });
+
   test('Bible-book aliases resolve through the shared alias table', async ({ extensionWorker }) => {
     const cases = [
       ['Ac 17:11', 'acts', 17, 11],
