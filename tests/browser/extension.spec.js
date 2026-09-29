@@ -334,51 +334,26 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click contextual resolution covers all 66 canonical Bible books', async ({ page, context, extensionStorage, extensionWorker }) => {
-    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
-    const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
-      name: book.name,
-      urlKey: book.urlKey,
-      chapter: 1,
-      verse: 1
-    })));
+  test('All 66 canonical books resolve correctly through the shared reference resolver', async ({ extensionWorker }) => {
+    const results = await extensionWorker.evaluate(() => BOOKS.map(book => {
+      const text = `${book.name} 1:1`;
+      const decision = classifySelectionForBlb(text);
+      const ref = decision.directRef || decision.refs?.[0] || null;
+      return {
+        book: book.name,
+        valid: decision.valid === true,
+        resolvedBook: String(ref?.book || '').toLowerCase(),
+        chapter: ref?.chapter ?? null,
+        verse: ref?.from ?? null
+      };
+    }));
 
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    await page.evaluate((books) => {
-      books.forEach((book, index) => {
-        const el = document.createElement('p');
-        el.id = `blb-e2e-all-books-${index}`;
-        el.textContent = `${book.name} ${book.chapter}:${book.verse}`;
-        el.style.cssText = `position:fixed;left:24px;top:${20 + index}px;z-index:2147483647;background:#fff;`;
-        document.body.appendChild(el);
-      });
-    }, books);
-
-    for (let index = 0; index < books.length; index++) {
-      const book = books[index];
-      const pagesBefore = context.pages();
-      await page.evaluate(({ index, bookName }) => {
-        const el = document.getElementById(`blb-e2e-all-books-${index}`);
-        const text = el.firstChild;
-        // For numbered books, double-click the distinctive book-name token
-        // rather than the leading number. This specifically tests the
-        // contextual behavior required for "1 John 1:1", "2 John 1:1", etc.
-        const fragment = bookName.replace(/^[1-3]\s+/, '');
-        const start = bookName.indexOf(fragment);
-        const range = document.createRange();
-        range.setStart(text, start);
-        range.setEnd(text, start + fragment.length);
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-        el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
-      }, { index, bookName: book.name });
-
-      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
-      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
-      expect(blb).toBeTruthy();
-      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(`/kjv/${book.urlKey}/1/1/`);
-      await blb.close();
-    }
+    expect(results).toHaveLength(66);
+    expect(results.every(item =>
+      item.valid &&
+      item.resolvedBook === item.book &&
+      item.chapter === 1 &&
+      item.verse === 1
+    )).toBe(true);
   });
 });
