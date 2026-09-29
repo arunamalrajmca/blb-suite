@@ -836,8 +836,10 @@ function getDoubleClickBlockContextReference(selectionText, target) {
       return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
     }
 
-    // When the same token occurs more than once, use the clicked text node's
-    // current selection offset to choose the nearest reference occurrence.
+    // If the same token occurs more than once inside this exact block,
+    // choose the nearest occurrence — but only among genuine book/chapter/
+    // verse references that actually contain the selected token. Never let a
+    // parser interpretation of a bare number become contextual.
     const sel = window.getSelection?.();
     if (sel?.rangeCount && !sel.isCollapsed) {
       const range = sel.getRangeAt(0);
@@ -848,7 +850,8 @@ function getDoubleClickBlockContextReference(selectionText, target) {
       let best = null;
       for (const ref of refs) {
         const needle = normalizeSelectionText(ref.text || '');
-        if (!needle) continue;
+        if (!needle || !/:\\s*\\d+/.test(needle) ||
+            !needle.toLowerCase().includes(selected.toLowerCase())) continue;
         let from = 0;
         while (from <= source.length) {
           const start = source.indexOf(needle, from);
