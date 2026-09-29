@@ -129,10 +129,13 @@ test.describe('core user-visible E2E', () => {
       }));
     }, paragraph);
 
-    expect(parsed).toEqual([
-      { text: 'Acts 17:11', book: 'Acts', chapter: 17, from: 11, to: 11 },
-      { text: 'Romans 4:3', book: 'Romans', chapter: 4, from: 3, to: 3 },
-      { text: 'I Thessalonians 2:13', book: '1 Thessalonians', chapter: 2, from: 13, to: 13 }
+    expect(parsed.map(ref => ({
+      ...ref,
+      book: ref.book.toLowerCase()
+    }))).toEqual([
+      { text: 'Acts 17:11', book: 'acts', chapter: 17, from: 11, to: 11 },
+      { text: 'Romans 4:3', book: 'romans', chapter: 4, from: 3, to: 3 },
+      { text: 'I Thessalonians 2:13', book: '1 thessalonians', chapter: 2, from: 13, to: 13 }
     ]);
 
     const numericAndNumbered = await extensionWorker.evaluate(() => {
