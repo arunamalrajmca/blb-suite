@@ -131,6 +131,17 @@ test('numeric prefix cannot reinterpret a chapter as a numbered book', () => {
   assert.equal(refs[0].chapter, 17);
   assert.equal(refs[0].from, 11);
 });
+test('contextual resolver uses exact selection and scans every occurrence', () => {
+  const content = read('content.js');
+  const resolverStart = content.indexOf('function resolveBibleReferenceFromContextWindow');
+  const resolverEnd = content.indexOf('function getDoubleClickBlockContextReference', resolverStart);
+  const resolver = content.slice(resolverStart, resolverEnd);
+  const contextualStart = content.indexOf('function getContextualBibleReference');
+  const contextual = content.slice(contextualStart, resolverEnd);
+  assert(resolver.includes('selectionStart < refEnd && selectionEnd > refStart'), 'context resolver must match the exact selected occurrence');
+  assert(contextual.indexOf('const position = getSelectionContextPosition()') < contextual.indexOf('const before = getAdjacentBoundaryText'), 'exact DOM selection must precede broad fallback');
+  assert(resolver.includes('source.indexOf(needle, fromIndex)'), 'resolver must examine every reference occurrence, not only the first');
+});
 test('direct reference resolver rejects prose and accepts exact refs', () => {
   assert(refCtx.resolveDirectBibleReference('1 Thessalonians 2:13'));
   assert.equal(refCtx.resolveDirectBibleReference('in every one'), null);
