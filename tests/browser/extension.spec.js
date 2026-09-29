@@ -114,4 +114,77 @@ test.describe('core user-visible E2E', () => {
     const blb = await popupPromise;
     expect(new URL(blb.url()).pathname).toBe('/kjv/jhn/3/16/');
   });
+
+  test('Bible reference parsing rejects numeric-prefix false positives and preserves partial adjacent selection', async ({ page, context, extensionStorage, extensionWorker }) => {
+    const paragraph = 'As you read, we pray that you will be like the noble Bereans who received the word with all readiness of mind, and searched the scriptures daily, whether those things were so (Acts 17:11). As you read, ask, For what saith the scripture? (Romans 4:3), and look up each verse referenced. It is also the word of God, which effectually worketh also in you that believe (I Thessalonians 2:13).';
+
+    const parsed = await extensionWorker.evaluate((text) => {
+      const refs = extractBibleRefsFromSelectedTextUncached(text);
+      return refs.map(ref => ({
+        text: ref.text,
+        book: ref.book,
+        chapter: ref.chapter,
+        from: ref.from,
+        to: ref.to
+      }));
+    }, paragraph);
+
+    expect(parsed).toEqual([
+      { text: 'Acts 17:11', book: 'Acts', chapter: 17, from: 11, to: 11 },
+      { text: 'Romans 4:3', book: 'Romans', chapter: 4, from: 3, to: 3 },
+      { text: 'I Thessalonians 2:13', book: '1 Thessalonians', chapter: 2, from: 13, to: 13 }
+    ]);
+
+    const numericAndNumbered = await extensionWorker.evaluate(() => {
+      const cases = [
+        ['1 7:11', 'Genesis', 7, 11],
+        ['1 John 3:16', '1 John', 3, 16],
+        ['2 Peter 1:4', '2 Peter', 1, 4],
+        ['1 Timothy 2:5', '1 Timothy', 2, 5],
+        ['1 Corinthians 13:4', '1 Corinthians', 13, 4],
+        ['1 Thessalonians 2:13', '1 Thessalonians', 2, 13]
+      ];
+      return cases.map(([text, book, chapter, verse]) => {
+        const refs = extractBibleRefsFromSelectedTextUncached(text);
+        const match = refs.find(ref => ref.book === book && ref.chapter === chapter && ref.from === verse);
+        return {text, found: !!match};
+      });
+    });
+    expect(numericAndNumbered.every(item => item.found)).toBe(true);
+
+    await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate((text) => {
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-partial-context-reference';
+      el.textContent = text;
+      document.body.appendChild(el);
+    }, 'Acts 17:11');
+
+    const el = page.locator('#blb-e2e-partial-context-reference');
+    const selections = ['Acts', '17', '11'];
+    for (const fragment of selections) {
+      await page.evaluate((fragment) => {
+        const el = document.getElementById('blb-e2e-partial-context-reference');
+        const text = el.firstChild;
+        const start = el.textContent.indexOf(fragment);
+        const range = document.createRange();
+        range.setStart(text, start);
+        range.setEnd(text, start + fragment.length);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        document.dispatchEvent(new MouseEvent('mouseup', {bubbles:true}));
+      }, fragment);
+
+      const button = page.locator('#blb-suite-page-selection-button');
+      await expect(button).toBeVisible({timeout:10000});
+      const popupPromise = context.waitForEvent('page');
+      await button.click();
+      const blb = await popupPromise;
+      expect(new URL(blb.url()).pathname).toBe('/kjv/act/17/11/');
+      await blb.close();
+    }
+  });
+
 });
