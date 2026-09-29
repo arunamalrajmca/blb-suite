@@ -260,6 +260,15 @@ test('reference classification retains all major selection types', () => {
   }
 });
 
+test('repeated abbreviated references separated by conjunction resolve independently', () => {
+  const refs = refCtx.resolveBibleReferenceText('Jn 3:16 and Jn 3:36');
+  assert.equal(refs.length, 2);
+  assert.equal(refs[0].book, 'john');
+  assert.equal(refs[0].from, 16);
+  assert.equal(refs[1].book, 'john');
+  assert.equal(refs[1].from, 36);
+});
+
 console.log(`\nRESULT: ${failures.length ? 'FAIL' : 'PASS'} — ${passed} passed, ${failures.length} failed`);
 if (failures.length) {
   console.error('\nFailures:');
