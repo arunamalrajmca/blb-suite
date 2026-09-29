@@ -4534,6 +4534,14 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   }
 
   if (decision.type === 'BOOK') {
+    // Standalone book names/numbers are defined as Book 1:1 selections for
+    // Double-Click / Alt+B / Show on BLB. Open the explicit verse URL rather
+    // than the chapter-home URL so BLB cannot restore an unrelated last verse.
+    const directUrl = String(decision.directRef?.url || '').trim();
+    if (directUrl) {
+      await openBlbDestination(directUrl, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
+      return;
+    }
     const book = decision.bookOnly?.book || (decision.directRef?.book ? bookData.find(b => b.name === decision.directRef.book) : null);
     if (book) {
       await openBlbBook(book.bookNumber, tabBehavior);
