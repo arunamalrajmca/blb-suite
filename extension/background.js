@@ -2483,7 +2483,6 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       const direct = getDirectSelectedReference(normalized);
       const strong = canonicalStrongValue(normalized);
       const bookOnly = getSelectedBookOnlyReference(normalized);
-      const standaloneBook = getStandaloneBookSelectionReference(normalized);
       if (!direct && !strong) {
         // Context is authoritative for partial selections, but NOT when the
         // selected text itself contains multiple explicit Bible references.
@@ -2502,9 +2501,9 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
           }
         }
       }
-      if (standaloneBook?.url && !message.contextualReference?.url) {
-        await recordStudyRefs([parseBlbKjvUrlToStudyRef(standaloneBook.url)].filter(Boolean));
-        await openBlbDestination(standaloneBook.url, !!behavior.activeIfNew, !!behavior.activateExisting);
+      if (bookOnly?.url && !message.contextualReference?.url) {
+        await recordStudyRefs([parseBlbKjvUrlToStudyRef(bookOnly.url)].filter(Boolean));
+        await openBlbDestination(bookOnly.url, !!behavior.activeIfNew, !!behavior.activateExisting);
         sendResponse({ok:true, bookOnly:true});
         return true;
       }
@@ -4271,27 +4270,6 @@ function classifySelectionForBlb(selectionText) {
   }
 
   return {valid:false, type:'INVALID', text:source};
-}
-
-function getStandaloneBookSelectionReference(selectionText) {
-  const source = normalizeSelectedScriptureText(selectionText);
-  if (!source) return null;
-
-  let book = null;
-  if (/^\d{1,2}$/.test(source)) {
-    book = bookData.find(candidate => String(candidate.bookNumber) === source) || null;
-  } else {
-    book = typeof resolveBibleBook === 'function' ? resolveBibleBook(source) : null;
-  }
-
-  if (!book?.urlKey) return null;
-  return {
-    book: book.name,
-    chapter: 1,
-    from: 1,
-    to: 1,
-    url: `https://www.blueletterbible.org/kjv/${book.urlKey}/1/1/`
-  };
 }
 
 function getSelectedBookOnlyReference(selectionText) {
