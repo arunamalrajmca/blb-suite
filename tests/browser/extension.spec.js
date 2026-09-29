@@ -123,6 +123,38 @@ test.describe('core user-visible E2E', () => {
       await blb.close();
     }
   });
+  test('Double-click plain-text Acts 17:11 tokens uses adjacent context', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-doubleclick-plain-reference';
+      el.textContent = 'Acts 17:11';
+      document.body.appendChild(el);
+    });
+
+    for (const fragment of ['Acts', '17', '11']) {
+      const rect = await page.evaluate((fragment) => {
+        const el = document.getElementById('blb-e2e-doubleclick-plain-reference');
+        const text = el.firstChild;
+        const start = el.textContent.indexOf(fragment);
+        const range = document.createRange();
+        range.setStart(text, start);
+        range.setEnd(text, start + fragment.length);
+        const box = range.getBoundingClientRect();
+        return {x: box.left + box.width / 2, y: box.top + box.height / 2};
+      }, fragment);
+
+      const pagesBefore = context.pages();
+      await page.mouse.dblclick(rect.x, rect.y);
+      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      expect(blb).toBeTruthy();
+      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe('/kjv/act/17/11/');
+      await blb.close();
+    }
+  });
+
   test('Bible reference parsing rejects numeric-prefix false positives and preserves partial adjacent selection', async ({ page, context, extensionStorage, extensionWorker }) => {
     const paragraph = 'As you read, we pray that you will be like the noble Bereans who received the word with all readiness of mind, and searched the scriptures daily, whether those things were so (Acts 17:11). As you read, ask, For what saith the scripture? (Romans 4:3), and look up each verse referenced. It is also the word of God, which effectually worketh also in you that believe (I Thessalonians 2:13).';
 
