@@ -123,6 +123,8 @@ test('reference-context matrix resolves aliases, numbered books, and exact dupli
   assert(resolver.includes('selectionStart < refEnd && selectionEnd > refStart'), 'context resolver must match the exact selected occurrence');
   assert(contextual.includes('const position = getSelectionContextPosition()'), 'exact DOM selection resolver is required');
   assert(!contextual.includes('getAdjacentBoundaryText('), 'document-wide fallback must not guess an unrelated reference for an isolated token');
+  assert(content.includes('now - started < 250'), 'double-click must retry briefly while Chromium selection settles');
+  assert(content.includes('resolveBibleBookOnly(candidate)'), 'double-click must safely recover an exact standalone book when selection is temporarily unavailable');
   assert(resolver.includes('source.indexOf(needle, fromIndex)'), 'resolver must examine every reference occurrence, not only the first');
 });
 test('numeric prefix cannot reinterpret a chapter as a numbered book', () => {
