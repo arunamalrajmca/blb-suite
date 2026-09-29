@@ -131,6 +131,29 @@ test('numeric prefix cannot reinterpret a chapter as a numbered book', () => {
   assert.equal(refs[0].chapter, 17);
   assert.equal(refs[0].from, 11);
 });
+test('reference-context aliases and numbered references resolve deterministically', () => {
+  const cases = [
+    ['John 3:16', 'john', 3, 16],
+    ['Jn 3:16', 'john', 3, 16],
+    ['1 Jn 3:16', '1 john', 3, 16],
+    ['1 Thess 2:13', '1 thessalonians', 2, 13],
+    ['Acts 17:11', 'acts', 17, 11]
+  ];
+  for (const [text, book, chapter, verse] of cases) {
+    const refs = refCtx.resolveBibleReferenceText(text);
+    assert.equal(refs.length, 1, text);
+    assert.equal(refs[0].book, book, text);
+    assert.equal(refs[0].chapter, chapter, text);
+    assert.equal(refs[0].from, verse, text);
+  }
+});
+test('numeric prefix cannot reinterpret a chapter as a numbered book', () => {
+  const refs = refCtx.extractBibleRefsFromSelectedTextUncached('Acts 17:11');
+  assert.equal(refs.length, 1);
+  assert.equal(refs[0].book, 'acts');
+  assert.equal(refs[0].chapter, 17);
+  assert.equal(refs[0].from, 11);
+});
 test('direct reference resolver rejects prose and accepts exact refs', () => {
   assert(refCtx.resolveDirectBibleReference('1 Thessalonians 2:13'));
   assert.equal(refCtx.resolveDirectBibleReference('in every one'), null);
