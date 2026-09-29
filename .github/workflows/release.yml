@@ -30,8 +30,8 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          if ! printf '%s\n' "$RELEASE_TAG" | grep -Eq '^v[0-9]+[.][0-9]+[.][0-9]+$'; then
-            echo "Release tags must use vMAJOR.MINOR.PATCH"
+          if ! printf '%s\n' "$RELEASE_TAG" | grep -Eq '^v[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$'; then
+            echo "Release tags must use vMAJOR.MINOR.PATCH.BUILD"
             exit 1
           fi
           VERSION="${RELEASE_TAG#v}"
