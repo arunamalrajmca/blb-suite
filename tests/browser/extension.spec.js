@@ -300,4 +300,79 @@ test.describe('core user-visible E2E', () => {
     )).toBe(true);
   });
 
+
+  test('Double-click alias Jn 3:16 resolves every token to John 3:16', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-doubleclick-jn-3-16';
+      el.textContent = 'Jn 3:16';
+      el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(el);
+    });
+
+    for (const fragment of ['Jn', '3', '16']) {
+      const rect = await page.evaluate((fragment) => {
+        const el = document.getElementById('blb-e2e-doubleclick-jn-3-16');
+        const text = el.firstChild;
+        const start = el.textContent.indexOf(fragment);
+        const range = document.createRange();
+        range.setStart(text, start);
+        range.setEnd(text, start + fragment.length);
+        const box = range.getBoundingClientRect();
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      }, fragment);
+
+      const pagesBefore = context.pages();
+      await page.mouse.dblclick(rect.x, rect.y);
+      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      expect(blb).toBeTruthy();
+      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe('/kjv/jhn/3/16/');
+      await blb.close();
+    }
+  });
+
+  test('Double-click contextual resolution covers all 66 canonical Bible books', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
+      name: book.name,
+      urlKey: book.urlKey,
+      chapter: 1,
+      verse: 1
+    })));
+
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate((books) => {
+      books.forEach((book, index) => {
+        const el = document.createElement('p');
+        el.id = `blb-e2e-all-books-${index}`;
+        el.textContent = `${book.name} ${book.chapter}:${book.verse}`;
+        el.style.cssText = `position:fixed;left:24px;top:${20 + index}px;z-index:2147483647;background:#fff;`;
+        document.body.appendChild(el);
+      });
+    }, books);
+
+    for (let index = 0; index < books.length; index++) {
+      const book = books[index];
+      const pagesBefore = context.pages();
+      await page.evaluate((index) => {
+        const el = document.getElementById(`blb-e2e-all-books-${index}`);
+        const text = el.firstChild;
+        const range = document.createRange();
+        range.selectNodeContents(text.parentNode);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
+      }, index);
+
+      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      expect(blb).toBeTruthy();
+      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(`/kjv/${book.urlKey}/1/1/`);
+      await blb.close();
+    }
+  });
 });
