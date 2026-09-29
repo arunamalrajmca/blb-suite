@@ -69,8 +69,12 @@ jobs:
       - name: Run browser E2E
         env:
           BLB_EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
-        run: npx playwright test
-      - name: Upload Playwright diagnostics
+          BLB_PERF_OUTPUT: ${{ runner.temp }}/release-performance.jsonl
+          BLB_PERF_SCENARIO: fresh
+        run: |
+          : > "$BLB_PERF_OUTPUT"
+          npx playwright test
+      - name: Upload Playwright diagnostics and performance data
         if: always()
         uses: actions/upload-artifact@v4
         with:
@@ -78,6 +82,7 @@ jobs:
           path: |
             playwright-report/
             test-results/
+            ${{ runner.temp }}/release-performance.jsonl
           if-no-files-found: ignore
           retention-days: 14
 
