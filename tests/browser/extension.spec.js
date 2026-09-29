@@ -148,6 +148,21 @@ test.describe('core user-visible E2E', () => {
       document.body.appendChild(reference);
     });
 
+    const isolatedDecisions = await extensionWorker.evaluate(() => ['Jn', '3', '16'].map(text => {
+      const decision = classifySelectionForBlb(text);
+      return {
+        text,
+        type: decision.type,
+        url: decision.directRef?.url || decision.bookOnly?.url || null,
+        book: decision.directRef?.book || decision.bookOnly?.book?.name || null
+      };
+    }));
+    expect(isolatedDecisions).toEqual([
+      { text: 'Jn', type: 'BOOK', url: 'https://www.blueletterbible.org/kjv/jhn/1/1/', book: 'john' },
+      { text: '3', type: 'BOOK', url: 'https://www.blueletterbible.org/kjv/lev/1/1/', book: 'leviticus' },
+      { text: '16', type: 'BOOK', url: 'https://www.blueletterbible.org/kjv/neh/1/1/', book: 'nehemiah' }
+    ]);
+
     // Standalone book/number tokens must resolve to their own book home,
     // not inherit a reference elsewhere on the page.
     const cases = [
