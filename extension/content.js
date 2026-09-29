@@ -776,7 +776,7 @@ function getContextualBibleReference(selectionText) {
   const boundaryCandidates = [
     { text: before + selected + after, start: before.length, end: before.length + selected.length },
     { text: selected + after, start: 0, end: selected.length },
-    { text: before + selected, start: before.length, end: selected.length }
+    { text: before + selected, start: before.length, end: before.length + selected.length }
   ];
   for (const candidate of boundaryCandidates) {
     const resolved = resolveBibleReferenceFromContextWindow(candidate.text, candidate.start, candidate.end);
