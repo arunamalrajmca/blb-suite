@@ -209,10 +209,12 @@ test.describe('core user-visible E2E', () => {
 
       const button = page.locator('#blb-suite-page-selection-button');
       await expect(button).toBeVisible({timeout:10000});
-      const popupPromise = context.waitForEvent('page');
+      const pagesBefore = context.pages();
       await button.click();
-      const blb = await popupPromise;
-      expect(new URL(blb.url()).pathname).toBe('/kjv/act/17/11/');
+      await expect.poll(() => context.pages().length, {timeout:10000}).toBeGreaterThan(pagesBefore.length);
+      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      expect(blb).toBeTruthy();
+      await expect.poll(() => new URL(blb.url()).pathname, {timeout:10000}).toBe('/kjv/act/17/11/');
       await blb.close();
     }
   });
