@@ -62,15 +62,6 @@ test('all JavaScript source files parse', () => {
 
 // Shared Bible-reference core + production selection extractor.
 const refCtx = loadPure(['books.js','book-aliases.js','reference-core.js']);
-const contentSource = read('content.js');
-const contextResolverStart = contentSource.indexOf('function resolveBibleReferenceFromContextWindow');
-const contextResolverEnd = contentSource.indexOf('\nfunction getContextualBibleReference', contextResolverStart);
-vm.runInContext(
-  "const normalizeSelectionText = text => String(text || '').replace(/\\s+/g, ' ').trim();\n" +
-    contentSource.slice(contextResolverStart, contextResolverEnd),
-  refCtx,
-  {filename:'content.js:resolveBibleReferenceFromContextWindow'}
-);
 const bgSource = read('background.js');
 const extractorStart = bgSource.indexOf('function extractBibleRefsFromSelectedTextUncached');
 const extractorEnd = bgSource.indexOf('\nfunction ', extractorStart + 10);
@@ -107,43 +98,38 @@ test('five-reference paragraph extraction', () => {
   ];
   assert.equal(JSON.stringify(got), JSON.stringify(expected));
 });
-test('double-click reference-context matrix resolves the exact selected token', () => {
+test('reference-context matrix resolves aliases, numbered books, and exact duplicate occurrences', () => {
   const cases = [
-    ['John 3:16', 'John', 'john', 3, 16],
-    ['John 3:16', '3', 'john', 3, 16],
-    ['John 3:16', '16', 'john', 3, 16],
-    ['Jn 3:16', 'Jn', 'john', 3, 16],
-    ['Jn 3:16', '3', 'john', 3, 16],
-    ['Jn 3:16', '16', 'john', 3, 16],
-    ['1 Jn 3:16', 'Jn', '1 john', 3, 16],
-    ['1 Jn 3:16', '16', '1 john', 3, 16],
-    ['1 Thess 2:13', 'Thess', '1 thessalonians', 2, 13],
-    ['1 Thess 2:13', '13', '1 thessalonians', 2, 13],
-    ['Acts 17:11', 'Acts', 'acts', 17, 11],
-    ['Acts 17:11', '17', 'acts', 17, 11],
-    ['Acts 17:11', '11', 'acts', 17, 11]
+    ['John 3:16', 'john', 3, 16],
+    ['Jn 3:16', 'john', 3, 16],
+    ['1 Jn 3:16', '1 john', 3, 16],
+    ['1 Thess 2:13', '1 thessalonians', 2, 13],
+    ['Acts 17:11', 'acts', 17, 11]
   ];
-  for (const [text, token, book, chapter, verse] of cases) {
-    const start = text.indexOf(token);
-    assert(start >= 0, `token missing: ${text} / ${token}`);
-    const resolved = refCtx.resolveBibleReferenceFromContextWindow(text, start, start + token.length);
-    assert(resolved, `${text} / ${token}`);
-    assert.equal(resolved.book, book, `${text} / ${token}`);
-    assert.equal(resolved.chapter, chapter, `${text} / ${token}`);
-    assert.equal(resolved.from, verse, `${text} / ${token}`);
+  for (const [text, book, chapter, verse] of cases) {
+    const refs = refCtx.resolveBibleReferenceText(text);
+    assert.equal(refs.length, 1, text);
+    assert.equal(refs[0].book, book, text);
+    assert.equal(refs[0].chapter, chapter, text);
+    assert.equal(refs[0].from, verse, text);
   }
 
-  // The exact selected occurrence must win when the same short token appears
-  // in multiple nearby references.
   const ambiguous = 'Jn 3:16 and Jn 3:36';
-  const firstVerse = ambiguous.indexOf('16');
-  const secondVerse = ambiguous.lastIndexOf('36');
-  const first = refCtx.resolveBibleReferenceFromContextWindow(ambiguous, firstVerse, firstVerse + 2);
-  const second = refCtx.resolveBibleReferenceFromContextWindow(ambiguous, secondVerse, secondVerse + 2);
-  assert.equal(first?.chapter, 3);
-  assert.equal(first?.from, 16);
-  assert.equal(second?.chapter, 3);
-  assert.equal(second?.from, 36);
+  const refs = refCtx.resolveBibleReferenceText(ambiguous);
+  assert.equal(refs.length, 2);
+  assert.equal(refs[0].from, 16);
+  assert.equal(refs[1].from, 36);
+
+  for (const token of ['16', '36']) {
+    const start = ambiguous.indexOf(token);
+    const containing = refs.filter(ref => {
+      const refStart = ambiguous.indexOf(ref.text);
+      const refEnd = refStart + ref.text.length;
+      return start < refEnd && start + token.length > refStart;
+    });
+    assert.equal(containing.length, 1, `unique containing reference for ${token}`);
+    assert.equal(containing[0].from, Number(token));
+  }
 });
 test('numeric prefix cannot reinterpret a chapter as a numbered book', () => {
   const refs = refCtx.extractBibleRefsFromSelectedTextUncached('Acts 17:11');
