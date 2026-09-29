@@ -2675,10 +2675,18 @@ function extractBibleRefsFromSelectedTextUncached(text) {
         for (const form of bookForms) {
           const clean = String(form || '').trim();
           if (!clean) continue;
+          const numericBookForm = /^\\d+$/.test(clean);
+          const bookBoundary = numericBookForm ? '(?!\\d)' : '';
           forms.push({
             book,
             form: clean,
-            re: new RegExp('(?<![A-Za-z0-9])' + escapePattern(clean).replace(/\s+/g, '\\s+') + '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?', 'gi')
+            re: new RegExp(
+              '(?<![A-Za-z0-9])' +
+              escapePattern(clean).replace(/\\s+/g, '\\\\s+') +
+              bookBoundary +
+              '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?',
+              'gi'
+            )
           });
         }
       }
