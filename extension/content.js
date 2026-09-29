@@ -758,6 +758,19 @@ function getContextualBibleReference(selectionText) {
   // those boundaries, then delegates all book/number interpretation to the
   // shared reference core. No separate strict/legacy/alias parser is allowed
   // to override this result.
+  // Prefer the exact DOM Range context first. The broad before/after window
+  // can contain other Bible references, and a short token such as "Jn" or
+  // "16" may occur in more than one reference in that window. The Range gives
+  // us the actual clicked occurrence, so it must be authoritative whenever
+  // the browser exposes a usable selection.
+  const position = getSelectionContextPosition();
+  if (position?.text) {
+    const resolved = resolveBibleReferenceFromContextWindow(position.text, position.start, position.end);
+    if (resolved) return resolved;
+  }
+
+  // Fall back to bounded adjacent text only when the browser has not exposed
+  // stable Range boundaries yet (a common dblclick timing condition).
   const before = getAdjacentBoundaryText('before', 220);
   const after = getAdjacentBoundaryText('after', 220);
   const boundaryCandidates = [
@@ -767,12 +780,6 @@ function getContextualBibleReference(selectionText) {
   ];
   for (const candidate of boundaryCandidates) {
     const resolved = resolveBibleReferenceFromContextWindow(candidate.text, candidate.start, candidate.end);
-    if (resolved) return resolved;
-  }
-
-  const position = getSelectionContextPosition();
-  if (position?.text) {
-    const resolved = resolveBibleReferenceFromContextWindow(position.text, position.start, position.end);
     if (resolved) return resolved;
   }
 

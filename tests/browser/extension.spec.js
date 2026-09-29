@@ -300,4 +300,102 @@ test.describe('core user-visible E2E', () => {
     )).toBe(true);
   });
 
+
+  test('Double-click alias Jn 3:16 resolves every token to John 3:16', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-doubleclick-jn-3-16';
+      el.textContent = 'Jn 3:16';
+      el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(el);
+    });
+
+    for (const fragment of ['Jn', '3', '16']) {
+      const rect = await page.evaluate((fragment) => {
+        const el = document.getElementById('blb-e2e-doubleclick-jn-3-16');
+        const text = el.firstChild;
+        const start = el.textContent.indexOf(fragment);
+        const range = document.createRange();
+        range.setStart(text, start);
+        range.setEnd(text, start + fragment.length);
+        const box = range.getBoundingClientRect();
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      }, fragment);
+
+      const pagesBefore = context.pages();
+      await page.mouse.dblclick(rect.x, rect.y);
+      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      expect(blb).toBeTruthy();
+      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe('/kjv/jhn/3/16/');
+      await blb.close();
+    }
+  });
+
+  test('Double-click numbered-book aliases preserve full context', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+
+    const cases = [
+      ['1 Jn 3:16', '/kjv/1jo/3/16/'],
+      ['1 Thess 2:13', '/kjv/1th/2/13/']
+    ];
+
+    for (let index = 0; index < cases.length; index++) {
+      const [reference, expectedPath] = cases[index];
+      await page.evaluate(({ index, reference }) => {
+        const el = document.createElement('p');
+        el.id = `blb-e2e-doubleclick-numbered-alias-${index}`;
+        el.textContent = reference;
+        el.style.cssText = `position:fixed;left:24px;top:${24 + index * 40}px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;`;
+        document.body.appendChild(el);
+      }, { index, reference });
+
+      for (const fragment of (index === 0 ? ['Jn', '16'] : ['Thess', '13'])) {
+        const rect = await page.evaluate(({ index, fragment }) => {
+          const el = document.getElementById(`blb-e2e-doubleclick-numbered-alias-${index}`);
+          const text = el.firstChild;
+          const start = el.textContent.indexOf(fragment);
+          const range = document.createRange();
+          range.setStart(text, start);
+          range.setEnd(text, start + fragment.length);
+          const box = range.getBoundingClientRect();
+          return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+        }, { index, fragment });
+
+        const pagesBefore = context.pages();
+        await page.mouse.dblclick(rect.x, rect.y);
+        await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+        const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+        expect(blb).toBeTruthy();
+        await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
+        await blb.close();
+      }
+    }
+  });
+
+  test('All 66 canonical books resolve correctly through the shared reference resolver', async ({ extensionWorker }) => {
+    const results = await extensionWorker.evaluate(() => BOOKS.map(book => {
+      const text = `${book.name} 1:1`;
+      const decision = classifySelectionForBlb(text);
+      const ref = decision.directRef || decision.refs?.[0] || null;
+      return {
+        book: book.name,
+        valid: decision.valid === true,
+        resolvedBook: String(ref?.book || '').toLowerCase(),
+        chapter: ref?.chapter ?? null,
+        verse: ref?.from ?? null
+      };
+    }));
+
+    expect(results).toHaveLength(66);
+    expect(results.every(item =>
+      item.valid &&
+      item.resolvedBook === item.book &&
+      item.chapter === 1 &&
+      item.verse === 1
+    )).toBe(true);
+  });
 });
