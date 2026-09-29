@@ -4278,7 +4278,7 @@ function getStandaloneBookSelectionReference(selectionText) {
   if (!source) return null;
 
   let book = null;
-  if (/^\\d{1,2}$/.test(source)) {
+  if (/^\d{1,2}$/.test(source)) {
     book = bookData.find(candidate => String(candidate.bookNumber) === source) || null;
   } else {
     book = typeof resolveBibleBook === 'function' ? resolveBibleBook(source) : null;
