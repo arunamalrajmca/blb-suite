@@ -173,7 +173,7 @@ test.describe('core user-visible E2E', () => {
     const cases = [
       ['standalone-acts', 'Acts', '/kjv/act/1/1/s_1019001'],
       ['standalone-17', '17', '/kjv/est/1/1/s_427001'],
-      ['standalone-11', '11', '/kjv/lev/'],
+      ['standalone-11', '11', '/kjv/1ki/1/1/s_292001'],
       ['connected', 'Acts', '/kjv/act/17/11/'],
       ['connected', '17', '/kjv/act/17/11/'],
       ['connected', '11', '/kjv/act/17/11/']
