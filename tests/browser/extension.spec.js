@@ -262,6 +262,58 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  test('Double-click reference-context matrix covers aliases, numbered books, and duplicate tokens', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+
+    const cases = [
+      ['John 3:16', ['John', '3', '16'], '/kjv/jhn/3/16/'],
+      ['Jn 3:16', ['Jn', '3', '16'], '/kjv/jhn/3/16/'],
+      ['1 Jn 3:16', ['Jn', '16'], '/kjv/1jo/3/16/'],
+      ['1 Thess 2:13', ['Thess', '13'], '/kjv/1th/2/13/'],
+      ['Acts 17:11', ['Acts', '17', '11'], '/kjv/act/17/11/'],
+      ['Jn 3:16 and Jn 3:36', ['16', '36'], null]
+    ];
+
+    for (let index = 0; index < cases.length; index++) {
+      const [reference, fragments, expectedPath] = cases[index];
+      await page.evaluate(({ index, reference }) => {
+        const el = document.createElement('p');
+        el.id = `blb-e2e-reference-context-matrix-${index}`;
+        el.textContent = reference;
+        el.style.cssText = `position:fixed;left:24px;top:${24 + index * 55}px;z-index:2147483647;background:#fff;padding:10px;font:24px Arial,sans-serif;`;
+        document.body.appendChild(el);
+      }, { index, reference });
+
+      for (const fragment of fragments) {
+        const rect = await page.evaluate(({ index, fragment }) => {
+          const el = document.getElementById(`blb-e2e-reference-context-matrix-${index}`);
+          const text = el.firstChild;
+          const start = el.textContent.indexOf(fragment);
+          const range = document.createRange();
+          range.setStart(text, start);
+          range.setEnd(text, start + fragment.length);
+          const box = range.getBoundingClientRect();
+          return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+        }, { index, fragment });
+
+        const pagesBefore = context.pages();
+        await page.mouse.dblclick(rect.x, rect.y);
+        await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+        const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+        expect(blb).toBeTruthy();
+
+        if (expectedPath) {
+          await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
+        } else {
+          const expected = fragment === '16' ? '/kjv/jhn/3/16/' : '/kjv/jhn/3/36/';
+          await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expected);
+        }
+        await blb.close();
+      }
+    }
+  });
+
   test('Bible-book aliases resolve through the shared alias table', async ({ extensionWorker }) => {
     const cases = [
       ['Ac 17:11', 'acts', 17, 11],
