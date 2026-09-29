@@ -357,16 +357,22 @@ test.describe('core user-visible E2E', () => {
     for (let index = 0; index < books.length; index++) {
       const book = books[index];
       const pagesBefore = context.pages();
-      await page.evaluate((index) => {
+      await page.evaluate(({ index, bookName }) => {
         const el = document.getElementById(`blb-e2e-all-books-${index}`);
         const text = el.firstChild;
+        // For numbered books, double-click the distinctive book-name token
+        // rather than the leading number. This specifically tests the
+        // contextual behavior required for "1 John 1:1", "2 John 1:1", etc.
+        const fragment = bookName.replace(/^[1-3]\s+/, '');
+        const start = bookName.indexOf(fragment);
         const range = document.createRange();
-        range.selectNodeContents(text.parentNode);
+        range.setStart(text, start);
+        range.setEnd(text, start + fragment.length);
         const selection = window.getSelection();
         selection.removeAllRanges();
         selection.addRange(range);
         el.dispatchEvent(new MouseEvent('dblclick', { bubbles: true, cancelable: true }));
-      }, index);
+      }, { index, bookName: book.name });
 
       await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
       const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
