@@ -769,20 +769,12 @@ function getContextualBibleReference(selectionText) {
     if (resolved) return resolved;
   }
 
-  // Fall back to bounded adjacent text only when the browser has not exposed
-  // stable Range boundaries yet (a common dblclick timing condition).
-  const before = getAdjacentBoundaryText('before', 220);
-  const after = getAdjacentBoundaryText('after', 220);
-  const boundaryCandidates = [
-    { text: before + selected + after, start: before.length, end: before.length + selected.length },
-    { text: selected + after, start: 0, end: selected.length },
-    { text: before + selected, start: before.length, end: before.length + selected.length }
-  ];
-  for (const candidate of boundaryCandidates) {
-    const resolved = resolveBibleReferenceFromContextWindow(candidate.text, candidate.start, candidate.end);
-    if (resolved) return resolved;
-  }
-
+  // Do not fall back to document/body-wide text when the browser has not
+  // exposed stable Range boundaries yet. That can borrow a Bible reference
+  // from a different line, heading, paragraph, or unrelated section and turn
+  // a standalone token into an unrelated destination. The dblclick handler
+  // already has a block-local fallback (getDoubleClickBlockContextReference)
+  // and waits briefly for the native selection to settle.
   return null;
 }
 
