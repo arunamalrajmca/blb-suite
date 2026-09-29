@@ -769,19 +769,11 @@ function getContextualBibleReference(selectionText) {
     if (resolved) return resolved;
   }
 
-  // Fall back to bounded adjacent text only when the browser has not exposed
-  // stable Range boundaries yet (a common dblclick timing condition).
-  const before = getAdjacentBoundaryText('before', 220);
-  const after = getAdjacentBoundaryText('after', 220);
-  const boundaryCandidates = [
-    { text: before + selected + after, start: before.length, end: before.length + selected.length },
-    { text: selected + after, start: 0, end: selected.length },
-    { text: before + selected, start: before.length, end: before.length + selected.length }
-  ];
-  for (const candidate of boundaryCandidates) {
-    const resolved = resolveBibleReferenceFromContextWindow(candidate.text, candidate.start, candidate.end);
-    if (resolved) return resolved;
-  }
+  // Do not fall back to document-wide text around an isolated token.
+  // That context can contain unrelated Bible references elsewhere on the page
+  // and would make a standalone "Jn", "3", or "16" inherit a distant citation.
+  // The double-click block resolver below can still recover a reference from
+  // the clicked block when a usable Range is temporarily unavailable.
 
   return null;
 }
