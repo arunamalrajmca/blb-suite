@@ -138,7 +138,7 @@ test.describe('core user-visible E2E', () => {
       { text: 'I Thessalonians 2:13', book: '1 thessalonians', chapter: 2, from: 13, to: 13 }
     ]);
 
-    const numericAndNumbered = await extensionWorker.evaluate(() => {
+    const numberedBookSelections = await extensionWorker.evaluate(() => {
       const cases = [
         ['1 John 3:16', '1 John', 3, 16],
         ['2 Peter 1:4', '2 Peter', 1, 4],
@@ -147,12 +147,26 @@ test.describe('core user-visible E2E', () => {
         ['1 Thessalonians 2:13', '1 Thessalonians', 2, 13]
       ];
       return cases.map(([text, book, chapter, verse]) => {
-        const refs = extractBibleRefsFromSelectedTextUncached(text);
-        const match = refs.find(ref => ref.book === book && ref.chapter === chapter && ref.from === verse);
-        return {text, found: !!match};
+        const decision = classifySelectionForBlb(text);
+        const ref = decision.directRef || decision.refs?.[0] || null;
+        return {
+          text,
+          valid: decision.valid === true,
+          book: String(ref?.book || '').toLowerCase(),
+          chapter: ref?.chapter ?? null,
+          verse: ref?.from ?? null,
+          expectedBook: book.toLowerCase(),
+          expectedChapter: chapter,
+          expectedVerse: verse
+        };
       });
     });
-    expect(numericAndNumbered.every(item => item.found)).toBe(true);
+    expect(numberedBookSelections.every(item =>
+      item.valid &&
+      item.book === item.expectedBook &&
+      item.chapter === item.expectedChapter &&
+      item.verse === item.expectedVerse
+    )).toBe(true);
 
     const standaloneBooks = await extensionWorker.evaluate(() => {
       return ['1', '2', '19', '43', '66'].map(text => {
