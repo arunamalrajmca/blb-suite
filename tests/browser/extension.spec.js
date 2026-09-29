@@ -171,7 +171,7 @@ test.describe('core user-visible E2E', () => {
     });
 
     const cases = [
-      ['standalone-acts', 'Acts', '/kjv/act/'],
+      ['standalone-acts', 'Acts', '/kjv/act/1/1/s_1019001'],
       ['standalone-17', '17', '/kjv/psa/'],
       ['standalone-11', '11', '/kjv/lev/'],
       ['connected', 'Acts', '/kjv/act/17/11/'],
