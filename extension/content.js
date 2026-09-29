@@ -813,37 +813,13 @@ function getDoubleClickBlockContextReference(selectionText, target) {
       return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
     }
 
-    // When the same token occurs more than once, use the clicked text node's
-    // current selection offset to choose the nearest reference occurrence.
-    const sel = window.getSelection?.();
-    if (sel?.rangeCount && !sel.isCollapsed) {
-      const range = sel.getRangeAt(0);
-      const scratch = document.createRange();
-      scratch.selectNodeContents(block);
-      scratch.setEnd(range.startContainer, range.startOffset);
-      const offset = normalizeSelectionText(scratch.toString()).length;
-      let best = null;
-      for (const ref of refs) {
-        const needle = normalizeSelectionText(ref.text || '');
-        if (!needle) continue;
-        let from = 0;
-        while (from <= source.length) {
-          const start = source.indexOf(needle, from);
-          if (start < 0) break;
-          const distance = offset < start
-            ? start - offset
-            : offset > start + needle.length
-              ? offset - (start + needle.length)
-              : 0;
-          if (!best || distance < best.distance) best = {ref, distance};
-          from = start + Math.max(1, needle.length);
-        }
-      }
-      if (best) {
-        const ref = best.ref;
-        return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
-      }
-    }
+    // If the selected token is not literally part of a reference, do not
+    // guess from the nearest reference in the block. A block can contain a
+    // heading, prose, or several unrelated citations; nearest-reference
+    // fallback turns ordinary text such as "1. Install the downloaded ZIP"
+    // into an unrelated Bible navigation. The exact DOM Range resolver above
+    // is authoritative when boundaries are available, and the unique-token
+    // match above is the only safe fallback when they are not.
   } catch (_) {}
   return null;
 }
