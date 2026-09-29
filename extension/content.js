@@ -778,6 +778,29 @@ function getContextualBibleReference(selectionText) {
   return null;
 }
 
+function getStandaloneBookReference(selectionText) {
+  try {
+    const selected = normalizeSelectionText(selectionText);
+    if (!selected || !/^(?:[1-9]|[1-5][0-9]|6[0-6]|[A-Za-z][A-Za-z0-9 .'-]*)$/.test(selected)) return null;
+
+    const book = typeof resolveBibleBook === 'function' ? resolveBibleBook(selected) : null;
+    if (!book) return null;
+
+    const urlKey = String(book.urlKey || '').trim();
+    if (!urlKey) return null;
+
+    return {
+      book: book.name,
+      chapter: 1,
+      from: 1,
+      to: 1,
+      url: `https://www.blueletterbible.org/kjv/${urlKey}/1/1/`
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
 function getDoubleClickBlockContextReference(selectionText, target) {
   try {
     const selected = normalizeSelectionText(selectionText);
@@ -866,7 +889,7 @@ function handleDoubleClickBlb(event) {
         const selection = normalizeSelectionText(window.getSelection ? window.getSelection().toString() : '');
         if (!selection) return false;
 
-        const contextualReference = getContextualBibleReference(selection) || getDoubleClickBlockContextReference(selection, event.target);
+        const contextualReference = getContextualBibleReference(selection) || getDoubleClickBlockContextReference(selection, event.target) || getStandaloneBookReference(selection);
         const now = Date.now();
         const destinationKey = selection.toLowerCase();
         const previous = recentDoubleClickDestinations.get(destinationKey) || 0;
