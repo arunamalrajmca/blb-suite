@@ -140,7 +140,6 @@ test.describe('core user-visible E2E', () => {
 
     const numericAndNumbered = await extensionWorker.evaluate(() => {
       const cases = [
-        ['1 7:11', 'Genesis', 7, 11],
         ['1 John 3:16', '1 John', 3, 16],
         ['2 Peter 1:4', '2 Peter', 1, 4],
         ['1 Timothy 2:5', '1 Timothy', 2, 5],
@@ -154,6 +153,20 @@ test.describe('core user-visible E2E', () => {
       });
     });
     expect(numericAndNumbered.every(item => item.found)).toBe(true);
+
+    const standaloneBooks = await extensionWorker.evaluate(() => {
+      return ['1', '2', '19', '43', '66'].map(text => {
+        const decision = classifySelectionForBlb(text);
+        return {text, valid:decision.valid === true, type:decision.type, book:decision.directRef?.book || ''};
+      });
+    });
+    expect(standaloneBooks).toEqual([
+      {text:'1', valid:true, type:'BOOK', book:'Genesis'},
+      {text:'2', valid:true, type:'BOOK', book:'Exodus'},
+      {text:'19', valid:true, type:'BOOK', book:'Psalms'},
+      {text:'43', valid:true, type:'BOOK', book:'John'},
+      {text:'66', valid:true, type:'BOOK', book:'Revelation'}
+    ]);
 
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
