@@ -616,8 +616,6 @@ if (location.hostname.toLowerCase().replace(/^www\./,'') === 'blueletterbible.or
   else runStudyCapture();
 }
 
-function nowOrElapsed(started) { return Date.now() - started; }
-
 // ---------- Double-Click BLB ----------
 // Double-click a single KJV word, Bible book name, or standalone book number.
 // Uses the Suite's own selection logic and never invokes BLB's native search.
@@ -919,7 +917,7 @@ function handleDoubleClickBlb(event) {
         // such as "176" or "109565645022" to the generic classifier, where it
         // could acquire meaning from search/corpus fallback logic.
         if (!contextualReference) {
-          if (nowOrElapsed(started) < 180) {
+          if (Date.now() - started < 180) {
             requestAnimationFrame(dispatch);
             return true;
           }
