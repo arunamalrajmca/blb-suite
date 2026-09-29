@@ -821,9 +821,15 @@ function getDoubleClickBlockContextReference(selectionText, target) {
     // Prefer the reference whose literal text contains the selected token.
     // This handles ordinary text nodes such as "Acts 17:11" even when the
     // browser has not yet exposed stable Range boundaries at dblclick time.
+    // Only treat a parsed reference as contextual when it is a real
+    // book/chapter reference. A bare number such as "1", "2", "3", or "16"
+    // must remain a standalone-book selection rather than being interpreted
+    // from an unrelated numeric fragment.
     const matches = refs.filter(ref => {
       const needle = normalizeSelectionText(ref.text || '');
-      return needle && needle.toLowerCase().includes(selected.toLowerCase());
+      return needle &&
+        /:\s*\d+/.test(needle) &&
+        needle.toLowerCase().includes(selected.toLowerCase());
     });
     if (matches.length === 1) {
       const ref = matches[0];
