@@ -158,6 +158,54 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  test('Double-click keeps standalone numeric books separate from contextual Acts 17:11', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+
+    await page.evaluate(() => {
+      const el = document.createElement('div');
+      el.id = 'blb-e2e-doubleclick-semantics';
+      el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      el.innerHTML = '<p id="standalone-acts">Acts</p><p id="standalone-17">17</p><p id="standalone-11">11</p><p id="connected">Acts 17:11</p>';
+      document.body.appendChild(el);
+    });
+
+    const cases = [
+      ['standalone-acts', 'Acts', '/kjv/act/'],
+      ['standalone-17', '17', '/kjv/psa/'],
+      ['standalone-11', '11', '/kjv/lev/'],
+      ['connected', 'Acts', '/kjv/act/17/11/'],
+      ['connected', '17', '/kjv/act/17/11/'],
+      ['connected', '11', '/kjv/act/17/11/']
+    ];
+
+    for (const [id, fragment, expectedPath] of cases) {
+      const target = page.locator(`#${id}`);
+      const rect = await target.boundingBox();
+      const text = await target.textContent();
+      const start = text.indexOf(fragment);
+      expect(start).toBeGreaterThanOrEqual(0);
+      const rangeInfo = await page.evaluate(({id, fragment}) => {
+        const el = document.getElementById(id);
+        const textNode = el.firstChild;
+        const start = el.textContent.indexOf(fragment);
+        const range = document.createRange();
+        range.setStart(textNode, start);
+        range.setEnd(textNode, start + fragment.length);
+        const box = range.getBoundingClientRect();
+        return {x: box.left + box.width / 2, y: box.top + box.height / 2};
+      }, {id, fragment});
+
+      const pagesBefore = context.pages();
+      await page.mouse.dblclick(rangeInfo.x, rangeInfo.y);
+      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      expect(blb).toBeTruthy();
+      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
+      await blb.close();
+    }
+  });
+
   test('Bible reference parsing rejects numeric-prefix false positives and preserves partial adjacent selection', async ({ page, context, extensionStorage, extensionWorker }) => {
     const paragraph = 'As you read, we pray that you will be like the noble Bereans who received the word with all readiness of mind, and searched the scriptures daily, whether those things were so (Acts 17:11). As you read, ask, For what saith the scripture? (Romans 4:3), and look up each verse referenced. It is also the word of God, which effectually worketh also in you that believe (I Thessalonians 2:13).';
 
