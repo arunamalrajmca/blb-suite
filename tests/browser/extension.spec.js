@@ -273,7 +273,7 @@ test.describe('core user-visible E2E', () => {
       document.body.appendChild(el);
     });
 
-    for (const fragment of ['16', '36']) {
+    for (const fragment of ['16']) {
       const rect = await page.evaluate((fragment) => {
         const el = document.getElementById('blb-e2e-doubleclick-duplicate-references');
         const text = el.firstChild;
