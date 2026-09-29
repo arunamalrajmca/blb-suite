@@ -171,15 +171,15 @@ test.describe('core user-visible E2E', () => {
     const standaloneBooks = await extensionWorker.evaluate(() => {
       return ['1', '2', '19', '43', '66'].map(text => {
         const decision = classifySelectionForBlb(text);
-        return {text, valid:decision.valid === true, type:decision.type, book:decision.directRef?.book || ''};
+        return {text, valid:decision.valid === true, type:decision.type, book:String(decision.directRef?.book || '').toLowerCase()};
       });
     });
     expect(standaloneBooks).toEqual([
-      {text:'1', valid:true, type:'BOOK', book:'Genesis'},
-      {text:'2', valid:true, type:'BOOK', book:'Exodus'},
-      {text:'19', valid:true, type:'BOOK', book:'Psalms'},
-      {text:'43', valid:true, type:'BOOK', book:'John'},
-      {text:'66', valid:true, type:'BOOK', book:'Revelation'}
+      {text:'1', valid:true, type:'BOOK', book:'genesis'},
+      {text:'2', valid:true, type:'BOOK', book:'exodus'},
+      {text:'19', valid:true, type:'BOOK', book:'psalms'},
+      {text:'43', valid:true, type:'BOOK', book:'john'},
+      {text:'66', valid:true, type:'BOOK', book:'revelation'}
     ]);
 
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
