@@ -262,4 +262,57 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  test('Bible-book aliases resolve through the shared alias table', async ({ extensionWorker }) => {
+    const results = await extensionWorker.evaluate(() => {
+      return Object.entries(BOOK_ALIASES).map(([alias, expectedBook]) => {
+        const refs = resolveBibleReferenceText(alias + ' 1:1');
+        const ref = refs[0] || null;
+        return {
+          alias,
+          expectedBook: String(expectedBook || '').toLowerCase(),
+          book: String(ref?.book || '').toLowerCase(),
+          chapter: ref?.chapter ?? null,
+          verse: ref?.from ?? null
+        };
+      });
+    });
+
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.every(item =>
+      item.book === item.expectedBook && item.chapter === 1 && item.verse === 1
+    )).toBe(true);
+
+    const representative = await extensionWorker.evaluate(() => {
+      const cases = [
+        ['Ac 17:11', 'acts', 17, 11],
+        ['Rom 4:3', 'romans', 4, 3],
+        ['Jn 3:16', 'john', 3, 16],
+        ['1 Jn 3:16', '1 john', 3, 16],
+        ['1 Thess 2:13', '1 thessalonians', 2, 13],
+        ['1 Pet 2:24', '1 peter', 2, 24]
+      ];
+      return cases.map(([text, book, chapter, verse]) => {
+        const decision = classifySelectionForBlb(text);
+        const ref = decision.directRef || decision.refs?.[0] || null;
+        return {
+          text,
+          valid: decision.valid === true,
+          book: String(ref?.book || '').toLowerCase(),
+          chapter: ref?.chapter ?? null,
+          verse: ref?.from ?? null,
+          expectedBook: book,
+          expectedChapter: chapter,
+          expectedVerse: verse
+        };
+      });
+    });
+
+    expect(representative.every(item =>
+      item.valid &&
+      item.book === item.expectedBook &&
+      item.chapter === item.expectedChapter &&
+      item.verse === item.expectedVerse
+    )).toBe(true);
+  });
+
 });
