@@ -147,6 +147,8 @@ test.describe('core user-visible E2E', () => {
 
       const pagesBefore = context.pages();
       await page.mouse.dblclick(rect.x, rect.y);
+      const selectedAfterDoubleClick = await page.evaluate(() => window.getSelection()?.toString() || '');
+      expect(selectedAfterDoubleClick).toBe(fragment);
       await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
       const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
       expect(blb).toBeTruthy();
