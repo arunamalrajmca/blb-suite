@@ -334,6 +334,48 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  test('Double-click numbered-book aliases preserve full context', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+
+    const cases = [
+      ['1 Jn 3:16', '/kjv/1jo/3/16/'],
+      ['1 Thess 2:13', '/kjv/1th/2/13/']
+    ];
+
+    for (let index = 0; index < cases.length; index++) {
+      const [reference, expectedPath] = cases[index];
+      await page.evaluate(({ index, reference }) => {
+        const el = document.createElement('p');
+        el.id = `blb-e2e-doubleclick-numbered-alias-${index}`;
+        el.textContent = reference;
+        el.style.cssText = `position:fixed;left:24px;top:${24 + index * 40}px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;`;
+        document.body.appendChild(el);
+      }, { index, reference });
+
+      for (const fragment of [reference.split(' ').slice(1).join(' ').split(':')[0], reference.match(/\d+$/)[0]]) {
+        const rect = await page.evaluate(({ index, fragment }) => {
+          const el = document.getElementById(`blb-e2e-doubleclick-numbered-alias-${index}`);
+          const text = el.firstChild;
+          const start = el.textContent.indexOf(fragment);
+          const range = document.createRange();
+          range.setStart(text, start);
+          range.setEnd(text, start + fragment.length);
+          const box = range.getBoundingClientRect();
+          return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+        }, { index, fragment });
+
+        const pagesBefore = context.pages();
+        await page.mouse.dblclick(rect.x, rect.y);
+        await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+        const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+        expect(blb).toBeTruthy();
+        await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
+        await blb.close();
+      }
+    }
+  });
+
   test('All 66 canonical books resolve correctly through the shared reference resolver', async ({ extensionWorker }) => {
     const results = await extensionWorker.evaluate(() => BOOKS.map(book => {
       const text = `${book.name} 1:1`;
