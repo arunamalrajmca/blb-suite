@@ -171,27 +171,22 @@ test.describe('core user-visible E2E', () => {
     await page.evaluate(() => {
       const el = document.createElement('p');
       el.id = 'blb-e2e-doubleclick-token-isolation';
-      el.textContent = '1-66 Install the downloaded ZIP';
+      el.innerHTML = '<span id="book-token-1">1</span> <span id="book-token-66">66</span> <span>Install the downloaded ZIP</span>';
       el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
       document.body.appendChild(el);
     });
 
     const cases = [
-      ['1', '/kjv/gen/1/1/'],
-      ['66', '/kjv/rev/1/1/']
+      ['book-token-1', '1', '/kjv/gen/1/1/'],
+      ['book-token-66', '66', '/kjv/rev/1/1/']
     ];
 
-    for (const [fragment, expectedPath] of cases) {
-      const rect = await page.evaluate((fragment) => {
-        const el = document.getElementById('blb-e2e-doubleclick-token-isolation');
-        const text = el.firstChild;
-        const start = el.textContent.indexOf(fragment);
-        const range = document.createRange();
-        range.setStart(text, start);
-        range.setEnd(text, start + fragment.length);
-        const box = range.getBoundingClientRect();
+    for (const [id, fragment, expectedPath] of cases) {
+      const rect = await page.evaluate((id) => {
+        const el = document.getElementById(id);
+        const box = el.getBoundingClientRect();
         return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
-      }, fragment);
+      }, id);
 
       const pagesBefore = context.pages();
       await page.mouse.dblclick(rect.x, rect.y);
@@ -230,6 +225,32 @@ test.describe('core user-visible E2E', () => {
       const pagesBefore = context.pages();
       await page.mouse.dblclick(rect.x, rect.y);
       await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), { timeout: 3000 }).toBe(fragment);
+      await page.waitForTimeout(300);
+      expect(context.pages().length).toBe(pagesBefore.length);
+    }
+
+    await page.evaluate(() => {
+      const p = document.createElement('p');
+      p.id = 'blb-e2e-doubleclick-non-book-numbers';
+      p.textContent = '67 150 176 109565645022';
+      p.style.cssText = 'position:fixed;left:24px;top:72px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(p);
+    });
+
+    for (const fragment of ['67', '150', '176', '109565645022']) {
+      const rect = await page.evaluate((fragment) => {
+        const el = document.getElementById('blb-e2e-doubleclick-non-book-numbers');
+        const text = el.firstChild;
+        const start = el.textContent.indexOf(fragment);
+        const range = document.createRange();
+        range.setStart(text, start);
+        range.setEnd(text, start + fragment.length);
+        const box = range.getBoundingClientRect();
+        return {x: box.left + box.width / 2, y: box.top + box.height / 2};
+      }, fragment);
+      const pagesBefore = context.pages();
+      await page.mouse.dblclick(rect.x, rect.y);
+      await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), {timeout:3000}).toBe(fragment);
       await page.waitForTimeout(300);
       expect(context.pages().length).toBe(pagesBefore.length);
     }
@@ -371,6 +392,44 @@ test.describe('core user-visible E2E', () => {
       {text:'19', valid:true, type:'BOOK', book:'psalms'},
       {text:'43', valid:true, type:'BOOK', book:'john'},
       {text:'66', valid:true, type:'BOOK', book:'revelation'}
+    ]);
+
+    const clampedReferences = await extensionWorker.evaluate(() => {
+      const cases = [
+        ['Psalm 151', 'psalms', 150, null],
+        ['Romans 17', 'romans', 16, null],
+        ['Psalm 119:177', 'psalms', 119, 176],
+        ['Psalm 119:999', 'psalms', 119, 176]
+      ];
+      return cases.map(([text, book, chapter, verse]) => {
+        const decision = classifySelectionForBlb(text);
+        const ref = decision.directRef || decision.refs?.[0] || null;
+        return {
+          text,
+          book: String(ref?.book || '').toLowerCase(),
+          chapter: ref?.chapter ?? null,
+          verse: ref?.from ?? null
+        };
+      });
+    });
+    expect(clampedReferences).toEqual([
+      {text:'Psalm 151', book:'psalms', chapter:150, verse:null},
+      {text:'Romans 17', book:'romans', chapter:16, verse:null},
+      {text:'Psalm 119:177', book:'psalms', chapter:119, verse:176},
+      {text:'Psalm 119:999', book:'psalms', chapter:119, verse:176}
+    ]);
+
+    const standaloneNonBooks = await extensionWorker.evaluate(() => {
+      return ['67', '150', '176', '109565645022'].map(text => {
+        const decision = classifySelectionForBlb(text);
+        return {text, valid:decision.valid === true, type:decision.type || ''};
+      });
+    });
+    expect(standaloneNonBooks).toEqual([
+      {text:'67', valid:false, type:'INVALID'},
+      {text:'150', valid:false, type:'INVALID'},
+      {text:'176', valid:false, type:'INVALID'},
+      {text:'109565645022', valid:false, type:'INVALID'}
     ]);
 
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
