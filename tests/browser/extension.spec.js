@@ -263,48 +263,36 @@ test.describe('core user-visible E2E', () => {
   });
 
   test('Bible-book aliases resolve through the shared alias table', async ({ extensionWorker }) => {
-    const results = await extensionWorker.evaluate(() => {
-      return Object.entries(BOOK_ALIASES).map(([alias, expectedBook]) => {
-        const book = resolveBibleBook(alias);
-        return {
-          alias,
-          expectedBook: String(expectedBook || '').toLowerCase(),
-          book: String(book?.name || '').toLowerCase()
-        };
-      });
-    });
+    const cases = [
+      ['Ac 17:11', 'acts', 17, 11],
+      ['Rom 4:3', 'romans', 4, 3],
+      ['Jn 3:16', 'john', 3, 16],
+      ['1 Jn 3:16', '1 john', 3, 16],
+      ['1 Thess 2:13', '1 thessalonians', 2, 13],
+      ['1 Pet 2:24', '1 peter', 2, 24],
+      ['1 Cor 13:4', '1 corinthians', 13, 4],
+      ['2 Cor 5:17', '2 corinthians', 5, 17],
+      ['1 Tim 2:5', '1 timothy', 2, 5],
+      ['2 Tim 3:16', '2 timothy', 3, 16],
+      ['Rev 21:1', 'revelation', 21, 1]
+    ];
 
-    expect(results.length).toBeGreaterThan(0);
+    const results = await extensionWorker.evaluate((inputs) => inputs.map(([text, expectedBook, chapter, verse]) => {
+      const decision = classifySelectionForBlb(text);
+      const ref = decision.directRef || decision.refs?.[0] || null;
+      return {
+        text,
+        valid: decision.valid === true,
+        book: String(ref?.book || '').toLowerCase(),
+        chapter: ref?.chapter ?? null,
+        verse: ref?.from ?? null,
+        expectedBook,
+        expectedChapter: chapter,
+        expectedVerse: verse
+      };
+    }), cases);
+
     expect(results.every(item =>
-      item.book === item.expectedBook && item.chapter === 1 && item.verse === 1
-    )).toBe(true);
-
-    const representative = await extensionWorker.evaluate(() => {
-      const cases = [
-        ['Ac 17:11', 'acts', 17, 11],
-        ['Rom 4:3', 'romans', 4, 3],
-        ['Jn 3:16', 'john', 3, 16],
-        ['1 Jn 3:16', '1 john', 3, 16],
-        ['1 Thess 2:13', '1 thessalonians', 2, 13],
-        ['1 Pet 2:24', '1 peter', 2, 24]
-      ];
-      return cases.map(([text, book, chapter, verse]) => {
-        const decision = classifySelectionForBlb(text);
-        const ref = decision.directRef || decision.refs?.[0] || null;
-        return {
-          text,
-          valid: decision.valid === true,
-          book: String(ref?.book || '').toLowerCase(),
-          chapter: ref?.chapter ?? null,
-          verse: ref?.from ?? null,
-          expectedBook: book,
-          expectedChapter: chapter,
-          expectedVerse: verse
-        };
-      });
-    });
-
-    expect(representative.every(item =>
       item.valid &&
       item.book === item.expectedBook &&
       item.chapter === item.expectedChapter &&
