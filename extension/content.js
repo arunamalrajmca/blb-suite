@@ -793,27 +793,47 @@ function isDoubleClickExcludedTarget(target) {
 function handleDoubleClickBlb(event) {
   try {
     if (!doubleClickBlbEnabled || !suiteEnabled || isDoubleClickExcludedTarget(event.target)) return;
-    setTimeout(() => {
+
+    // Browser selection state can lag the dblclick event on ordinary text nodes,
+    // especially when the selected token is only part of a Bible reference.
+    // Wait briefly for the final selection boundary, preferring a contextual
+    // reference before dispatching the action. A bounded fallback still sends
+    // the raw selection if the page cannot expose contextual text.
+    const started = Date.now();
+    const dispatch = () => {
       try {
         const selection = normalizeSelectionText(window.getSelection ? window.getSelection().toString() : '');
-        if (!selection) return;
-        const destinationKey = selection.toLowerCase();
+        if (!selection) return false;
+
+        const contextualReference = getContextualBibleReference(selection);
         const now = Date.now();
+        const destinationKey = selection.toLowerCase();
         const previous = recentDoubleClickDestinations.get(destinationKey) || 0;
-        if (now - previous < 1200) return;
+
+        if (!contextualReference && now - started < 180) {
+          requestAnimationFrame(dispatch);
+          return true;
+        }
+
+        if (now - previous < 1200) return true;
         recentDoubleClickDestinations.set(destinationKey, now);
         for (const [key, ts] of recentDoubleClickDestinations) {
           if (now - ts > 5000) recentDoubleClickDestinations.delete(key);
         }
-        const contextualReference = getContextualBibleReference(selection);
+
         safeRuntimeSendMessage({
           type:'blbSuiteOpenSelectionText',
           text:selection,
           contextualReference: contextualReference || null,
           tabBehavior:{activeIfNew:false, activateExisting:true}
         });
-      } catch (_) {}
-    }, 0);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    };
+
+    requestAnimationFrame(dispatch);
   } catch (_) {}
 }
 
