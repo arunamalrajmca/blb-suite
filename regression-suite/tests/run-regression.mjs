@@ -114,6 +114,11 @@ test('reference-context matrix resolves aliases, numbered books, and exact dupli
     assert.equal(refs[0].from, verse, text);
   }
 
+  const repeated = refCtx.resolveBibleReferenceText('Jn 3:16 and Jn 3:36');
+  assert.equal(repeated.length, 2);
+  assert.equal(repeated[0].from, 16);
+  assert.equal(repeated[1].from, 36);
+
   const content = read('content.js');
   const resolverStart = content.indexOf('function resolveBibleReferenceFromContextWindow');
   const resolverEnd = content.indexOf('function getDoubleClickBlockContextReference', resolverStart);
