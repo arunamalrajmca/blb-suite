@@ -900,11 +900,15 @@ function handleDoubleClickBlb(event) {
         const selection = normalizeSelectionText(window.getSelection ? window.getSelection().toString() : '');
         if (!selection) return false;
 
-        const standaloneBook = getStandaloneBookReference(selection);
+        // Double-click has a different selection contract from Show on BLB,
+        // Alt+B, and right-click. The browser has already selected one word/token;
+        // only use context from the DOM block containing that token. Never run the
+        // explicit-selection/document-range resolver here, because it can borrow
+        // a reference from an unrelated range/line while the browser selection is
+        // still settling.
         const blockContext = getDoubleClickBlockContextReference(selection, event.target);
-        const contextualReference = standaloneBook
-          ? (blockContext || standaloneBook)
-          : (getContextualBibleReference(selection) || blockContext || standaloneBook);
+        const standaloneBook = getStandaloneBookReference(selection);
+        const contextualReference = blockContext || standaloneBook;
         const now = Date.now();
         const destinationKey = selection.toLowerCase();
         const previous = recentDoubleClickDestinations.get(destinationKey) || 0;
