@@ -778,40 +778,24 @@ function getContextualBibleReference(selectionText) {
   return null;
 }
 
-function getDoubleClickBlockContextReference(selectionText, target) {
+function getDoubleClickBlockContextReference(selectionText) {
   try {
     const selected = normalizeSelectionText(selectionText);
     if (!selected) return null;
-    const node = target instanceof Element
-      ? target
-      : (target?.parentElement || null);
-    const block = node?.closest?.('p,li,td,th,blockquote,article,section,div') || node;
-    if (!block) return null;
 
-    const source = normalizeSelectionText(block.textContent || '');
-    if (!source) return null;
-    const refs = resolveBibleReferenceText(source);
-    if (!refs.length) return null;
+    // Reuse the exact DOM selection offsets. Never infer context merely from
+    // the clicked block's text: separate lines in one container can contain
+    // unrelated tokens that happen to form a Bible reference when whitespace
+    // is normalized (for example "Jn", "3", "16").
+    const position = getSelectionContextPosition();
+    if (!position || !position.text || position.end <= position.start) return null;
 
-    // Prefer the reference whose literal text contains the selected token.
-    // This handles ordinary text nodes such as "Acts 17:11" even when the
-    // browser has not yet exposed stable Range boundaries at dblclick time.
-    const matches = refs.filter(ref => {
-      const needle = normalizeSelectionText(ref.text || '');
-      return needle && needle.toLowerCase().includes(selected.toLowerCase());
-    });
-    if (matches.length === 1) {
-      const ref = matches[0];
-      return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
-    }
-
-    // If the selected token is not literally part of a reference, do not
-    // guess from the nearest reference in the block. A block can contain a
-    // heading, prose, or several unrelated citations; nearest-reference
-    // fallback turns ordinary text such as "1. Install the downloaded ZIP"
-    // into an unrelated Bible navigation. The exact DOM Range resolver above
-    // is authoritative when boundaries are available, and the unique-token
-    // match above is the only safe fallback when they are not.
+    const resolved = resolveBibleReferenceFromContextWindow(
+      position.text,
+      position.start,
+      position.end
+    );
+    return resolved || null;
   } catch (_) {}
   return null;
 }
