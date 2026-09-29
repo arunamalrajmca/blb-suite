@@ -1,0 +1,24 @@
+name: Temporary main build
+on:
+  pull_request:
+    branches: [ main ]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Build exact main
+        run: |
+          VERSION="$(node -p "require('./extension/manifest.json').version")"
+          test "$VERSION" = "5.2.51.43"
+          bash scripts/package-release.sh "$VERSION" dist
+          unzip -t "dist/Blue-Letter-Bible-Suite-$VERSION.zip"
+          sha256sum "dist/Blue-Letter-Bible-Suite-$VERSION.zip" > "dist/Blue-Letter-Bible-Suite-$VERSION.zip.sha256"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: blb-suite-main-build
+          path: dist/
