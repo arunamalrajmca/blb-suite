@@ -30,7 +30,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: |
-          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          if ! printf '%s\n' "$RELEASE_TAG" | grep -Eq '^v[0-9]+[.][0-9]+[.][0-9]+$'; then
             echo "Release tags must use vMAJOR.MINOR.PATCH"
             exit 1
           fi
@@ -118,4 +118,4 @@ jobs:
           SHA-256:
           $(cat "dist/Blue-Letter-Bible-Suite-$VERSION.zip.sha256")
           EOF
-          gh release create "$TAG"             "dist/Blue-Letter-Bible-Suite-$VERSION.zip"             "dist/Blue-Letter-Bible-Suite-$VERSION.zip.sha256"             "dist/RELEASE-CHECKSUMS.txt"             --title "Blue Letter Bible Suite $VERSION"             --generate-notes
+          gh release create "$TAG" "dist/Blue-Letter-Bible-Suite-$VERSION.zip" "dist/Blue-Letter-Bible-Suite-$VERSION.zip.sha256" "dist/RELEASE-CHECKSUMS.txt" --title "Blue Letter Bible Suite $VERSION" --generate-notes
