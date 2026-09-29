@@ -105,7 +105,7 @@ test.describe('core user-visible E2E', () => {
     await page.evaluate(() => {
       const el = document.createElement('p');
       el.id = 'blb-e2e-doubleclick-context-reference';
-      el.textContent = 'Acts 17:11';
+      el.innerHTML = '<span>Acts</span> <span>17</span>:<span>11</span>';
       document.body.appendChild(el);
     });
 
@@ -113,20 +113,9 @@ test.describe('core user-visible E2E', () => {
     const cases = ['Acts', '17', '11'];
 
     for (const fragment of cases) {
-      await page.evaluate((fragment) => {
-        const el = document.getElementById('blb-e2e-doubleclick-context-reference');
-        const text = el.firstChild;
-        const start = el.textContent.indexOf(fragment);
-        const range = document.createRange();
-        range.setStart(text, start);
-        range.setEnd(text, start + fragment.length);
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-      }, fragment);
-
+      const target = page.locator('#blb-e2e-doubleclick-context-reference span', { hasText: fragment });
       const pagesBefore = context.pages();
-      await page.locator('#blb-e2e-doubleclick-context-reference').dblclick({ position: { x: 10, y: 10 } });
+      await target.dblclick();
       await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
       const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
       expect(blb).toBeTruthy();
@@ -134,7 +123,6 @@ test.describe('core user-visible E2E', () => {
       await blb.close();
     }
   });
-
   test('Bible reference parsing rejects numeric-prefix false positives and preserves partial adjacent selection', async ({ page, context, extensionStorage, extensionWorker }) => {
     const paragraph = 'As you read, we pray that you will be like the noble Bereans who received the word with all readiness of mind, and searched the scriptures daily, whether those things were so (Acts 17:11). As you read, ask, For what saith the scripture? (Romans 4:3), and look up each verse referenced. It is also the word of God, which effectually worketh also in you that believe (I Thessalonians 2:13).';
 
