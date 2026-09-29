@@ -115,7 +115,6 @@ test.describe('core user-visible E2E', () => {
     for (const fragment of cases) {
       const target = page.locator('#blb-e2e-doubleclick-context-reference span', { hasText: fragment });
       await target.dblclick();
-      console.log('BLB-STANDALONE-PAGES', context.pages().map(candidate => candidate.url()));
       await expect.poll(() => context.pages().some(candidate => {
         try {
           const path = new URL(candidate.url()).pathname;
