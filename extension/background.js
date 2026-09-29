@@ -4537,9 +4537,19 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     // Standalone book names/numbers are defined as Book 1:1 selections for
     // Double-Click / Alt+B / Show on BLB. Open the explicit verse URL rather
     // than the chapter-home URL so BLB cannot restore an unrelated last verse.
-    const directUrl = String(decision.directRef?.url || '').trim();
+    const directRef = decision.directRef;
+    const directUrl = String(directRef?.url || '').trim();
     if (directUrl) {
-      await openBlbDestination(directUrl, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
+      let stableUrl = directUrl;
+      if (directRef?.book && Number.isInteger(directRef.chapter) && Number.isInteger(directRef.from)) {
+        const book = bookData.find(b => String(b.name).toLowerCase() === String(directRef.book).toLowerCase());
+        const beforeChapters = book
+          ? bookData.filter(b => Number(b.bookNumber) < Number(book.bookNumber)).reduce((sum, b) => sum + Number(b.chapterCount || 0), 0)
+          : 0;
+        const verseAddress = beforeChapters * 1000 + Number(directRef.chapter) * 1000 + Number(directRef.from);
+        if (verseAddress > 0) stableUrl = directUrl.replace(/\/$/, '') + '/s_' + verseAddress + '/';
+      }
+      await openBlbDestination(stableUrl, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
       return;
     }
     const book = decision.bookOnly?.book || (decision.directRef?.book ? bookData.find(b => b.name === decision.directRef.book) : null);
