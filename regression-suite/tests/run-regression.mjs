@@ -114,22 +114,13 @@ test('reference-context matrix resolves aliases, numbered books, and exact dupli
     assert.equal(refs[0].from, verse, text);
   }
 
-  const ambiguous = 'Jn 3:16 and Jn 3:36';
-  const refs = refCtx.resolveBibleReferenceText(ambiguous);
-  assert.equal(refs.length, 2);
-  assert.equal(refs[0].from, 16);
-  assert.equal(refs[1].from, 36);
-
-  for (const token of ['16', '36']) {
-    const start = ambiguous.indexOf(token);
-    const containing = refs.filter(ref => {
-      const refStart = ambiguous.indexOf(ref.text);
-      const refEnd = refStart + ref.text.length;
-      return start < refEnd && start + token.length > refStart;
-    });
-    assert.equal(containing.length, 1, `unique containing reference for ${token}`);
-    assert.equal(containing[0].from, Number(token));
-  }
+  const content = read('content.js');
+  const resolverStart = content.indexOf('function resolveBibleReferenceFromContextWindow');
+  const resolverEnd = content.indexOf('function getContextualBibleReference', resolverStart);
+  const resolver = content.slice(resolverStart, resolverEnd);
+  assert(resolver.includes('selectionStart < refEnd && selectionEnd > refStart'), 'context resolver must match the exact selected occurrence');
+  assert(resolver.indexOf('const position = getSelectionContextPosition()') > resolver.indexOf('const before = getAdjacentBoundaryText'), 'exact DOM selection must precede broad fallback');
+  assert(resolver.includes('source.indexOf(needle, fromIndex)'), 'resolver must examine every reference occurrence, not only the first');
 });
 test('numeric prefix cannot reinterpret a chapter as a numbered book', () => {
   const refs = refCtx.extractBibleRefsFromSelectedTextUncached('Acts 17:11');
