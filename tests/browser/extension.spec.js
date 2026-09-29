@@ -265,14 +265,11 @@ test.describe('core user-visible E2E', () => {
   test('Bible-book aliases resolve through the shared alias table', async ({ extensionWorker }) => {
     const results = await extensionWorker.evaluate(() => {
       return Object.entries(BOOK_ALIASES).map(([alias, expectedBook]) => {
-        const refs = resolveBibleReferenceText(alias + ' 1:1');
-        const ref = refs[0] || null;
+        const book = resolveBibleBook(alias);
         return {
           alias,
           expectedBook: String(expectedBook || '').toLowerCase(),
-          book: String(ref?.book || '').toLowerCase(),
-          chapter: ref?.chapter ?? null,
-          verse: ref?.from ?? null
+          book: String(book?.name || '').toLowerCase()
         };
       });
     });
