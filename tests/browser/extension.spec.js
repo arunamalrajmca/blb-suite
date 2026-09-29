@@ -99,20 +99,63 @@ test.describe('core user-visible E2E', () => {
     expect(handoffMs).toBeLessThan(1500);
   });
 
-  test('Double-click opens an exact selected reference', async ({ page, context, extensionStorage }) => {
+  test('Double-click resolves any part of an adjacent Bible reference', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
       const el = document.createElement('p');
-      el.id = 'blb-e2e-reference';
-      el.textContent = 'John 3:16';
+      el.id = 'blb-e2e-doubleclick-context-reference';
+      el.innerHTML = '<span>Acts</span> <span>17</span>:<span>11</span>';
       document.body.appendChild(el);
     });
-    const reference = page.locator('#blb-e2e-reference');
-    const popupPromise = context.waitForEvent('page');
-    await reference.dblclick();
-    const blb = await popupPromise;
-    expect(new URL(blb.url()).pathname).toBe('/kjv/jhn/3/16/');
+
+    const expectedPath = '/kjv/act/17/11/';
+    const cases = ['Acts', '17', '11'];
+
+    for (const fragment of cases) {
+      const target = page.locator('#blb-e2e-doubleclick-context-reference span', { hasText: fragment });
+      const pagesBefore = context.pages();
+      await target.dblclick();
+      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      expect(blb).toBeTruthy();
+      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
+      await blb.close();
+    }
+  });
+  test('Double-click plain-text Acts 17:11 tokens uses adjacent context', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-doubleclick-plain-reference';
+      el.textContent = 'Acts 17:11';
+      el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(el);
+    });
+
+    for (const fragment of ['Acts', '17', '11']) {
+      const rect = await page.evaluate((fragment) => {
+        const el = document.getElementById('blb-e2e-doubleclick-plain-reference');
+        const text = el.firstChild;
+        const start = el.textContent.indexOf(fragment);
+        const range = document.createRange();
+        range.setStart(text, start);
+        range.setEnd(text, start + fragment.length);
+        const box = range.getBoundingClientRect();
+        return {x: box.left + box.width / 2, y: box.top + box.height / 2};
+      }, fragment);
+
+      const pagesBefore = context.pages();
+      await page.mouse.dblclick(rect.x, rect.y);
+      const selectedAfterDoubleClick = await page.evaluate(() => window.getSelection()?.toString() || '');
+      expect(selectedAfterDoubleClick).toBe(fragment);
+      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      expect(blb).toBeTruthy();
+      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe('/kjv/act/17/11/');
+      await blb.close();
+    }
   });
 
   test('Bible reference parsing rejects numeric-prefix false positives and preserves partial adjacent selection', async ({ page, context, extensionStorage, extensionWorker }) => {

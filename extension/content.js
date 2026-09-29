@@ -779,6 +779,68 @@ function getContextualBibleReference(selectionText) {
   return null;
 }
 
+function getDoubleClickBlockContextReference(selectionText, target) {
+  try {
+    const selected = normalizeSelectionText(selectionText);
+    if (!selected) return null;
+    const node = target instanceof Element
+      ? target
+      : (target?.parentElement || null);
+    const block = node?.closest?.('p,li,td,th,blockquote,article,section,div') || node;
+    if (!block) return null;
+
+    const source = normalizeSelectionText(block.textContent || '');
+    if (!source) return null;
+    const refs = resolveBibleReferenceText(source);
+    if (!refs.length) return null;
+
+    // Prefer the reference whose literal text contains the selected token.
+    // This handles ordinary text nodes such as "Acts 17:11" even when the
+    // browser has not yet exposed stable Range boundaries at dblclick time.
+    const matches = refs.filter(ref => {
+      const needle = normalizeSelectionText(ref.text || '');
+      return needle && needle.toLowerCase().includes(selected.toLowerCase());
+    });
+    if (matches.length === 1) {
+      const ref = matches[0];
+      return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
+    }
+
+    // When the same token occurs more than once, use the clicked text node's
+    // current selection offset to choose the nearest reference occurrence.
+    const sel = window.getSelection?.();
+    if (sel?.rangeCount && !sel.isCollapsed) {
+      const range = sel.getRangeAt(0);
+      const scratch = document.createRange();
+      scratch.selectNodeContents(block);
+      scratch.setEnd(range.startContainer, range.startOffset);
+      const offset = normalizeSelectionText(scratch.toString()).length;
+      let best = null;
+      for (const ref of refs) {
+        const needle = normalizeSelectionText(ref.text || '');
+        if (!needle) continue;
+        let from = 0;
+        while (from <= source.length) {
+          const start = source.indexOf(needle, from);
+          if (start < 0) break;
+          const distance = offset < start
+            ? start - offset
+            : offset > start + needle.length
+              ? offset - (start + needle.length)
+              : 0;
+          if (!best || distance < best.distance) best = {ref, distance};
+          from = start + Math.max(1, needle.length);
+        }
+      }
+      if (best) {
+        const ref = best.ref;
+        return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
 // ---------- Double-Click BLB ----------
 // Double-click is an entry point into the same background selection resolver.
 // It must not maintain a second Bible/reference parser here.
@@ -793,27 +855,47 @@ function isDoubleClickExcludedTarget(target) {
 function handleDoubleClickBlb(event) {
   try {
     if (!doubleClickBlbEnabled || !suiteEnabled || isDoubleClickExcludedTarget(event.target)) return;
-    setTimeout(() => {
+
+    // Browser selection state can lag the dblclick event on ordinary text nodes,
+    // especially when the selected token is only part of a Bible reference.
+    // Wait briefly for the final selection boundary, preferring a contextual
+    // reference before dispatching the action. A bounded fallback still sends
+    // the raw selection if the page cannot expose contextual text.
+    const started = Date.now();
+    const dispatch = () => {
       try {
         const selection = normalizeSelectionText(window.getSelection ? window.getSelection().toString() : '');
-        if (!selection) return;
-        const destinationKey = selection.toLowerCase();
+        if (!selection) return false;
+
+        const contextualReference = getContextualBibleReference(selection) || getDoubleClickBlockContextReference(selection, event.target);
         const now = Date.now();
+        const destinationKey = selection.toLowerCase();
         const previous = recentDoubleClickDestinations.get(destinationKey) || 0;
-        if (now - previous < 1200) return;
+
+        if (!contextualReference && now - started < 180) {
+          requestAnimationFrame(dispatch);
+          return true;
+        }
+
+        if (now - previous < 1200) return true;
         recentDoubleClickDestinations.set(destinationKey, now);
         for (const [key, ts] of recentDoubleClickDestinations) {
           if (now - ts > 5000) recentDoubleClickDestinations.delete(key);
         }
-        const contextualReference = getContextualBibleReference(selection);
+
         safeRuntimeSendMessage({
           type:'blbSuiteOpenSelectionText',
           text:selection,
           contextualReference: contextualReference || null,
           tabBehavior:{activeIfNew:false, activateExisting:true}
         });
-      } catch (_) {}
-    }, 0);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    };
+
+    requestAnimationFrame(dispatch);
   } catch (_) {}
 }
 
