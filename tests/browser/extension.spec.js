@@ -146,9 +146,9 @@ test.describe('core user-visible E2E', () => {
     // Standalone book/number tokens must resolve to their own book home,
     // not inherit a reference elsewhere on the page.
     const cases = [
-      ['#blb-e2e-isolated-book-tokens p:nth-child(1)', '/kjv/jhn/1/1/'],
-      ['#blb-e2e-isolated-book-tokens p:nth-child(2)', '/kjv/lev/1/1/'],
-      ['#blb-e2e-isolated-book-tokens p:nth-child(3)', '/kjv/neh/1/1/']
+      ['#blb-e2e-isolated-book-tokens p:nth-child(1)', '/kjv/jhn/1/1/s_998001/'],
+      ['#blb-e2e-isolated-book-tokens p:nth-child(2)', '/kjv/lev/1/1/s_91001/'],
+      ['#blb-e2e-isolated-book-tokens p:nth-child(3)', '/kjv/neh/1/1/s_414001/']
     ];
 
     for (const [selector, expectedPath] of cases) {
