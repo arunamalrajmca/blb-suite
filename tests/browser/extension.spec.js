@@ -99,6 +99,22 @@ test.describe('core user-visible E2E', () => {
     expect(handoffMs).toBeLessThan(1500);
   });
 
+  test('Jn 3:36 selection assertion', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-isolated-john-reference';
+      el.innerHTML = '<span>Jn</span> <span>3</span>:<span>16</span> and <span>Jn</span> <span>3</span>:<span>36</span>';
+      document.body.appendChild(el);
+    });
+    const target = page.locator('#blb-e2e-isolated-john-reference span').filter({ hasText: '36' });
+    const pagesBefore = context.pages();
+    await target.dblclick();
+    const selected = await page.evaluate(() => window.getSelection()?.toString() || '');
+    expect(selected).toBe('36');
+  });
+
   test('Double-click resolves any part of an adjacent Bible reference', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
