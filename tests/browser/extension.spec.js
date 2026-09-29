@@ -123,6 +123,62 @@ test.describe('core user-visible E2E', () => {
       await blb.close();
     }
   });
+  test('Double-click isolated book tokens use their own book identity and ignore unrelated page references', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const heading = document.createElement('h2');
+      heading.id = 'blb-e2e-unrelated-heading';
+      heading.textContent = '1. Install the downloaded ZIP';
+      document.body.appendChild(heading);
+
+      const lines = document.createElement('div');
+      lines.id = 'blb-e2e-isolated-book-tokens';
+      lines.innerHTML = '<p>Jn</p><p>3</p><p>16</p>';
+      document.body.appendChild(lines);
+
+      const reference = document.createElement('p');
+      reference.id = 'blb-e2e-unrelated-reference';
+      reference.textContent = '1 Thess 2:13';
+      document.body.appendChild(reference);
+    });
+
+    // Standalone book/number tokens must resolve to their own book home,
+    // not inherit a reference elsewhere on the page.
+    const cases = [
+      ['#blb-e2e-isolated-book-tokens p:nth-child(1)', '/kjv/jhn/1/'],
+      ['#blb-e2e-isolated-book-tokens p:nth-child(2)', '/kjv/lev/1/'],
+      ['#blb-e2e-isolated-book-tokens p:nth-child(3)', '/kjv/neh/1/']
+    ];
+
+    for (const [selector, expectedPath] of cases) {
+      const target = page.locator(selector);
+      const pagesBefore = context.pages();
+      await target.dblclick();
+      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      expect(blb).toBeTruthy();
+      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
+      await blb.close();
+    }
+
+    // A complete non-reference heading must not inherit the unrelated
+    // 1 Thessalonians citation elsewhere in the document.
+    const heading = page.locator('#blb-e2e-unrelated-heading');
+    await page.evaluate(() => {
+      const el = document.getElementById('blb-e2e-unrelated-heading');
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    const pagesBeforeHeading = context.pages();
+    await heading.dispatchEvent('dblclick', { bubbles: true });
+    await page.waitForTimeout(500);
+    expect(context.pages().length).toBe(pagesBeforeHeading.length);
+  });
+
   test('Double-click plain-text Acts 17:11 tokens uses adjacent context', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
