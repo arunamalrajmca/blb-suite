@@ -159,7 +159,6 @@ test.describe('core user-visible E2E', () => {
       const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
       expect(blb).toBeTruthy();
       await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
-      await blb.close();
     }
 
     // A complete non-reference heading must not inherit the unrelated
