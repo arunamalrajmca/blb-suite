@@ -839,11 +839,34 @@ function handleDoubleClickBlb(event) {
     const started = Date.now();
     const dispatch = () => {
       try {
-        const selection = normalizeSelectionText(window.getSelection ? window.getSelection().toString() : '');
+        let selection = normalizeSelectionText(window.getSelection ? window.getSelection().toString() : '');
+        const now = Date.now();
+
+        // Chromium can deliver dblclick before the final word selection is
+        // observable through window.getSelection(). Retry briefly instead of
+        // abandoning the gesture. This matters especially for standalone
+        // aliases/numbers such as "Jn", "3", and "16".
+        if (!selection && now - started < 250) {
+          requestAnimationFrame(dispatch);
+          return true;
+        }
+
+        // If selection state is still unavailable, recover only an exact
+        // standalone book/number from the clicked block. Never use a partial
+        // token from a larger block (e.g. "Jn" inside "Jn 3:16"), because
+        // that would bypass the contextual resolver.
+        if (!selection) {
+          const node = event.target instanceof Element
+            ? event.target
+            : (event.target?.parentElement || null);
+          const block = node?.closest?.('p,li,td,th,blockquote,article,section,div') || node;
+          const candidate = normalizeSelectionText(block?.textContent || '');
+          if (resolveBibleBookOnly(candidate)) selection = candidate;
+          else if (/^\d+$/.test(candidate) && Number(candidate) >= 1 && Number(candidate) <= 66) selection = candidate;
+        }
         if (!selection) return false;
 
         const contextualReference = getContextualBibleReference(selection) || getDoubleClickBlockContextReference(selection, event.target);
-        const now = Date.now();
         const destinationKey = selection.toLowerCase();
         const previous = recentDoubleClickDestinations.get(destinationKey) || 0;
 
