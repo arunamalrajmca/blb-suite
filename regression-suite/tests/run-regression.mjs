@@ -269,6 +269,32 @@ test('repeated abbreviated references separated by conjunction resolve independe
   assert.equal(refs[1].from, 36);
 });
 
+test('reference-context matrix resolves aliases, numbered books, and exact duplicate occurrences', () => {
+  const cases = [
+    ['John 3:16', 'john', 3, 16],
+    ['Jn 3:16', 'john', 3, 16],
+    ['1 Jn 3:16', '1 john', 3, 16],
+    ['1 Thess 2:13', '1 thessalonians', 2, 13],
+    ['Acts 17:11', 'acts', 17, 11]
+  ];
+  for (const [text, book, chapter, verse] of cases) {
+    const refs = refCtx.resolveBibleReferenceText(text);
+    assert.equal(refs.length, 1, text);
+    assert.equal(refs[0].book, book, text);
+    assert.equal(refs[0].chapter, chapter, text);
+    assert.equal(refs[0].from, verse, text);
+  }
+
+  const content = read('content.js');
+  const resolverStart = content.indexOf('function resolveBibleReferenceFromContextWindow');
+  const resolverEnd = content.indexOf('function getDoubleClickBlockContextReference', resolverStart);
+  const resolver = content.slice(resolverStart, resolverEnd);
+  const contextualStart = content.indexOf('function getContextualBibleReference');
+  const contextual = content.slice(contextualStart, resolverEnd);
+  assert(resolver.includes('selectionStart < refEnd && selectionEnd > refStart'), 'context resolver must match the exact selected occurrence');
+  assert(contextual.indexOf('const position = getSelectionContextPosition()') < contextual.indexOf('const before = getAdjacentBoundaryText'), 'exact DOM selection must precede broad fallback');
+  assert(resolver.includes('source.indexOf(needle, fromIndex)'), 'resolver must examine every reference occurrence, not only the first');
+});
 console.log(`\nRESULT: ${failures.length ? 'FAIL' : 'PASS'} — ${passed} passed, ${failures.length} failed`);
 if (failures.length) {
   console.error('\nFailures:');
