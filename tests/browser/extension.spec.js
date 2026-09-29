@@ -123,7 +123,7 @@ test.describe('core user-visible E2E', () => {
       await blb.close();
     }
   });
-  test('Double-click isolated book tokens use their own book identity and ignore unrelated page references', async ({ page, context, extensionStorage }) => {
+  test('Double-click isolated book tokens use their own book identity and ignore unrelated page references', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
       status: 200,
