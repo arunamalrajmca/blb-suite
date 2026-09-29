@@ -114,12 +114,14 @@ test.describe('core user-visible E2E', () => {
 
     for (const fragment of cases) {
       const target = page.locator('#blb-e2e-doubleclick-context-reference span', { hasText: fragment });
-      const pagesBefore = context.pages();
       await target.dblclick();
-      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
-      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      await expect.poll(() => context.pages().some(candidate => {
+        try { return new URL(candidate.url()).pathname === expectedPath; } catch (_) { return false; }
+      }), { timeout: 10000 }).toBe(true);
+      const blb = context.pages().find(candidate => {
+        try { return new URL(candidate.url()).pathname === expectedPath; } catch (_) { return false; }
+      });
       expect(blb).toBeTruthy();
-      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
       await blb.close();
     }
   });
@@ -142,12 +144,14 @@ test.describe('core user-visible E2E', () => {
 
     for (const [id, expectedPath] of cases) {
       const target = page.locator('#' + id);
-      const pagesBefore = context.pages();
       await target.dblclick();
-      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
-      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      await expect.poll(() => context.pages().some(candidate => {
+        try { return new URL(candidate.url()).pathname === expectedPath; } catch (_) { return false; }
+      }), { timeout: 10000 }).toBe(true);
+      const blb = context.pages().find(candidate => {
+        try { return new URL(candidate.url()).pathname === expectedPath; } catch (_) { return false; }
+      });
       expect(blb).toBeTruthy();
-      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
       await blb.close();
     }
   });
@@ -196,12 +200,14 @@ test.describe('core user-visible E2E', () => {
 
     for (const [id, expectedPath] of cases) {
       const target = page.locator('#' + id);
-      const pagesBefore = context.pages();
       await target.dblclick();
-      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
-      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      await expect.poll(() => context.pages().some(candidate => {
+        try { return new URL(candidate.url()).pathname === expectedPath; } catch (_) { return false; }
+      }), { timeout: 10000 }).toBe(true);
+      const blb = context.pages().find(candidate => {
+        try { return new URL(candidate.url()).pathname === expectedPath; } catch (_) { return false; }
+      });
       expect(blb).toBeTruthy();
-      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
       await blb.close();
     }
   });
