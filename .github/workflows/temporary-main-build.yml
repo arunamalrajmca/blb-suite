@@ -1,0 +1,45 @@
+name: Temporary main build
+
+on:
+  workflow_dispatch:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact main candidate
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install
+      - name: Build extension ZIP
+        run: |
+          VERSION="$(node -p "require('./extension/manifest.json').version")"
+          bash scripts/package-release.sh "$VERSION" dist
+          unzip -t "dist/Blue-Letter-Bible-Suite-${VERSION}.zip"
+      - name: Verify manifest
+        run: |
+          node - <<'NODE'
+          const fs = require('fs');
+          const manifest = JSON.parse(fs.readFileSync('extension/manifest.json', 'utf8'));
+          if (manifest.manifest_version !== 3) throw new Error('Expected MV3');
+          if (manifest.version !== '5.2.51.43') throw new Error(`Unexpected version: ${manifest.version}`);
+          console.log(JSON.stringify({ manifest_version: manifest.manifest_version, name: manifest.name, version: manifest.version }, null, 2));
+          NODE
+      - name: Generate SHA-256
+        run: |
+          VERSION="$(node -p "require('./extension/manifest.json').version")"
+          sha256sum "dist/Blue-Letter-Bible-Suite-${VERSION}.zip" > "dist/Blue-Letter-Bible-Suite-${VERSION}.zip.sha256"
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: blb-suite-main-build
+          path: dist/
