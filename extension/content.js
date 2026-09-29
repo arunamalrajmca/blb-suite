@@ -850,7 +850,7 @@ function getDoubleClickBlockContextReference(selectionText, target) {
       let best = null;
       for (const ref of refs) {
         const needle = normalizeSelectionText(ref.text || '');
-        if (!needle || !/:\\s*\\d+/.test(needle) ||
+        if (!needle || !/:\s*\d+/.test(needle) ||
             !needle.toLowerCase().includes(selected.toLowerCase())) continue;
         let from = 0;
         while (from <= source.length) {
@@ -900,7 +900,11 @@ function handleDoubleClickBlb(event) {
         const selection = normalizeSelectionText(window.getSelection ? window.getSelection().toString() : '');
         if (!selection) return false;
 
-        const contextualReference = getContextualBibleReference(selection) || getDoubleClickBlockContextReference(selection, event.target) || getStandaloneBookReference(selection);
+        const standaloneBook = getStandaloneBookReference(selection);
+        const blockContext = getDoubleClickBlockContextReference(selection, event.target);
+        const contextualReference = standaloneBook
+          ? (blockContext || standaloneBook)
+          : (getContextualBibleReference(selection) || blockContext || standaloneBook);
         const now = Date.now();
         const destinationKey = selection.toLowerCase();
         const previous = recentDoubleClickDestinations.get(destinationKey) || 0;
