@@ -353,7 +353,7 @@ test.describe('core user-visible E2E', () => {
         document.body.appendChild(el);
       }, { index, reference });
 
-      for (const fragment of [reference.split(' ').slice(1).join(' ').split(':')[0], reference.match(/\d+$/)[0]]) {
+      for (const fragment of (index === 0 ? ['Jn', '16'] : ['Thess', '13'])) {
         const rect = await page.evaluate(({ index, fragment }) => {
           const el = document.getElementById(`blb-e2e-doubleclick-numbered-alias-${index}`);
           const text = el.firstChild;
