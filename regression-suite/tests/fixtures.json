@@ -2,12 +2,141 @@
   "baselineVersion": "5.2.51.43",
   "pdfPolicy": "expected-limitation",
   "references": [
-    {"input":"I Thessalonians 2:13","book":"1 thessalonians","chapter":2,"from":13,"to":13},
-    {"input":"I Timothy 6:15","book":"1 timothy","chapter":6,"from":15,"to":15},
-    {"input":"Phil. 2:10","book":"philippians","chapter":2,"from":10,"to":10},
-    {"input":"Hebrews 10:7","book":"hebrews","chapter":10,"from":7,"to":7}
+    {
+      "input": "Phil. 2:10",
+      "book": "philippians",
+      "chapter": 2,
+      "from": 10,
+      "to": 10
+    },
+    {
+      "input": "Hebrews 10:7",
+      "book": "hebrews",
+      "chapter": 10,
+      "from": 7,
+      "to": 7
+    },
+    {
+      "input": "I Samuel 17:11",
+      "book": "1 samuel",
+      "chapter": 17,
+      "from": 11,
+      "to": 11
+    },
+    {
+      "input": "II Samuel 7:1",
+      "book": "2 samuel",
+      "chapter": 7,
+      "from": 1,
+      "to": 1
+    },
+    {
+      "input": "I Kings 18:21",
+      "book": "1 kings",
+      "chapter": 18,
+      "from": 21,
+      "to": 21
+    },
+    {
+      "input": "II Kings 2:2",
+      "book": "2 kings",
+      "chapter": 2,
+      "from": 2,
+      "to": 2
+    },
+    {
+      "input": "I Chronicles 4:10",
+      "book": "1 chronicles",
+      "chapter": 4,
+      "from": 10,
+      "to": 10
+    },
+    {
+      "input": "II Chronicles 7:14",
+      "book": "2 chronicles",
+      "chapter": 7,
+      "from": 14,
+      "to": 14
+    },
+    {
+      "input": "I Corinthians 13:4",
+      "book": "1 corinthians",
+      "chapter": 13,
+      "from": 4,
+      "to": 4
+    },
+    {
+      "input": "II Corinthians 5:17",
+      "book": "2 corinthians",
+      "chapter": 5,
+      "from": 17,
+      "to": 17
+    },
+    {
+      "input": "I Thessalonians 2:13",
+      "book": "1 thessalonians",
+      "chapter": 2,
+      "from": 13,
+      "to": 13
+    },
+    {
+      "input": "II Thessalonians 2:13",
+      "book": "2 thessalonians",
+      "chapter": 2,
+      "from": 13,
+      "to": 13
+    },
+    {
+      "input": "I Timothy 6:15",
+      "book": "1 timothy",
+      "chapter": 6,
+      "from": 15,
+      "to": 15
+    },
+    {
+      "input": "II Timothy 2:15",
+      "book": "2 timothy",
+      "chapter": 2,
+      "from": 15,
+      "to": 15
+    },
+    {
+      "input": "I Peter 2:9",
+      "book": "1 peter",
+      "chapter": 2,
+      "from": 9,
+      "to": 9
+    },
+    {
+      "input": "II Peter 3:9",
+      "book": "2 peter",
+      "chapter": 3,
+      "from": 9,
+      "to": 9
+    },
+    {
+      "input": "I John 4:8",
+      "book": "1 john",
+      "chapter": 4,
+      "from": 8,
+      "to": 8
+    },
+    {
+      "input": "II John 1:9",
+      "book": "2 john",
+      "chapter": 1,
+      "from": 9,
+      "to": 9
+    },
+    {
+      "input": "III John 1:4",
+      "book": "3 john",
+      "chapter": 1,
+      "from": 4,
+      "to": 4
+    }
   ],
-  "multiReferenceText": "John 1:1; Hebrews 10:7; I Timothy 6:15; Colossians 1:16; Phil. 2:10",
+  "multiReferenceText": "I Samuel 17:11; II Kings 2:2; I Chronicles 4:10; II Chronicles 7:14; I Corinthians 13:4; II Corinthians 5:17; I Thessalonians 2:13; II Thessalonians 2:13; I Timothy 6:15; II Timothy 2:15; I Peter 2:9; II Peter 3:9; I John 4:8; II John 1:9; III John 1:4",
   "criteriaQuery": "in every one",
   "caseSensitive": {
     "nativeFallback": "Jesus",
