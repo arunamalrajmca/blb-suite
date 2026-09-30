@@ -162,6 +162,61 @@ test('generic double-click reference grammar resolves all 66 books and every sha
   assert.equal(refCtx.resolveBibleBook('III'), null, 'standalone III');
 });
 
+test('property-based reference grammar generation covers deterministic valid and invalid forms', () => {
+  // Deterministic property-style generation: the seed and source-of-truth data
+  // make failures reproducible while exercising many combinations beyond the
+  // hand-authored matrix above.
+  const books = refCtx.BOOKS;
+  const aliasesByBook = Object.create(null);
+  for (const [alias, target] of Object.entries(refCtx.BOOK_ALIASES || {})) {
+    (aliasesByBook[target] ||= []).push(alias);
+  }
+
+  let seed = 0x5a17;
+  const next = (max) => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed % max;
+  };
+  const forms = [];
+  for (const book of books) {
+    forms.push(book.name, book.urlKey, String(book.bookNumber));
+    for (const alias of aliasesByBook[book.name] || []) forms.push(alias);
+  }
+
+  const syntax = [
+    (form, ch, verse) => `${form} ${ch}:${verse}`,
+    (form, ch, verse) => `${form} ${ch}.${verse}`,
+    (form, ch, verse) => `${form} ${ch} ${verse}`,
+    (form, ch) => `${form} ${ch}`
+  ];
+
+  for (let i = 0; i < 600; i++) {
+    const form = forms[next(forms.length)];
+    const book = books.find(b =>
+      b.name === form ||
+      b.urlKey === form ||
+      String(b.bookNumber) === form ||
+      (aliasesByBook[b.name] || []).includes(form)
+    );
+    assert(book, `generated form has no source book: ${form}`);
+
+    const chapter = 1 + next(book.chapterCount);
+    const verse = 1 + next(8);
+    const formatter = syntax[next(syntax.length)];
+    const input = formatter(form, chapter, verse);
+    const refs = refCtx.resolveBibleReferenceText(input);
+
+    assert.equal(refs.length, 1, `generated reference: ${input}`);
+    assert.equal(refs[0].book, book.name, `generated book: ${input}`);
+    assert.equal(refs[0].chapter, chapter, `generated chapter: ${input}`);
+    if (formatter.length >= 3) assert.equal(refs[0].from, verse, `generated verse: ${input}`);
+  }
+
+  for (const invalid of ['0:1', '67:1', '68:1', '999:1', 'I 1:1', 'II 1:1', 'III 1:1']) {
+    assert.equal(refCtx.resolveBibleReferenceText(invalid).length, 0, `invalid generated form: ${invalid}`);
+  }
+});
+
 test('reference-context matrix resolves aliases, numbered books, and exact duplicate occurrences', () => {
   const cases = [
     ['John 3:16', 'john', 3, 16],
