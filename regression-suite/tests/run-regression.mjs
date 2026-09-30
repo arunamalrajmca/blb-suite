@@ -108,6 +108,60 @@ test('five-reference paragraph extraction', () => {
   ];
   assert.equal(JSON.stringify(got), JSON.stringify(expected));
 });
+test('generic double-click reference grammar resolves all 66 books and every shared alias', () => {
+  const books = refCtx.BOOKS;
+  assert.equal(books.length, 66);
+  const aliasesByBook = Object.create(null);
+  for (const [alias, target] of Object.entries(refCtx.BOOK_ALIASES || {})) {
+    (aliasesByBook[target] ||= []).push(alias);
+  }
+
+  for (const book of books) {
+    const canonicalForms = [book.name, book.urlKey, String(book.bookNumber)];
+    const aliases = aliasesByBook[book.name] || [];
+    const forms = [...new Set([...canonicalForms, ...aliases])];
+
+    for (const form of forms) {
+      const variants = [
+        [`${form} 1:1`, 1, 1, 1],
+        [`${form} 1:1-2`, 1, 1, 2],
+        [`${form} 1.1`, 1, 1, 1],
+        [`${form} 1 1`, 1, 1, 1]
+      ];
+      if (book.chapterCount > 1) variants.push([`${form} 1`, 1, null, null]);
+      if (book.chapterCount === 1) variants.push([`${form} 1-2`, 1, 1, 2]);
+
+      for (const [input, chapter, from, to] of variants) {
+        const refs = refCtx.resolveBibleReferenceText(input);
+        assert.equal(refs.length, 1, `${book.name}: ${input}`);
+        assert.equal(refs[0].book, book.name, `${book.name}: ${input}`);
+        assert.equal(refs[0].chapter, chapter, `${book.name}: ${input}`);
+        if (from !== null) assert.equal(refs[0].from, from, `${book.name}: ${input}`);
+        if (to !== null) assert.equal(refs[0].to, to, `${book.name}: ${input}`);
+      }
+    }
+  }
+
+  // Numbered-book Roman forms are tested from the same 66-book source of truth.
+  const roman = {1:'I',2:'II',3:'III'};
+  for (const book of books.filter(b => /^[123] /.test(b.name))) {
+    const n = Number(book.name[0]);
+    const remainder = book.name.slice(2);
+    const form = `${roman[n]} ${remainder} 1:1`;
+    const refs = refCtx.resolveBibleReferenceText(form);
+    assert.equal(refs.length, 1, form);
+    assert.equal(refs[0].book, book.name, form);
+  }
+
+  // Standalone numbers outside the book-number domain must not become books.
+  for (const value of ['0','67','68','150','176','99999']) {
+    assert.equal(refCtx.resolveBibleBook(value), null, `standalone ${value}`);
+  }
+  assert.equal(refCtx.resolveBibleBook('I'), null, 'standalone I');
+  assert.equal(refCtx.resolveBibleBook('II'), null, 'standalone II');
+  assert.equal(refCtx.resolveBibleBook('III'), null, 'standalone III');
+});
+
 test('reference-context matrix resolves aliases, numbered books, and exact duplicate occurrences', () => {
   const cases = [
     ['John 3:16', 'john', 3, 16],
