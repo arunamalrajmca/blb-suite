@@ -85,7 +85,7 @@ test('production selection extractor resolves every Roman-numeral numbered book 
     const prefix = Number(book.name[0]);
     const form = `${roman[prefix]} ${book.name.slice(2)} 1:1`;
     const refs = refCtx.extractBibleRefsFromSelectedTextUncached(form);
-    assert.equal(refs.length, 1, form);
+    assert.equal(refs.length, 1, `${form}: ${refs.map(ref => ref.text).join(' | ')}`);
     assert.equal(refs[0].book, book.name, form);
     assert.equal(refs[0].chapter, 1, form);
     assert.equal(refs[0].from, 1, form);
@@ -103,7 +103,7 @@ test('multi-reference paragraph extraction covers every numbered book family', (
     return `${roman[prefix]} ${book.name.slice(2)} ${index + 1}:1`;
   }).join('; ');
   const refs = refCtx.extractBibleRefsFromSelectedTextUncached(source);
-  assert.equal(refs.length, numbered.length);
+  assert.equal(refs.length, numbered.length, refs.map(ref => ref.text).join(' | '));
   refs.forEach((ref, index) => {
     const book = numbered[index];
     assert.equal(ref.book, book.name, book.name);
