@@ -869,14 +869,14 @@ function getDoubleClickBlockContextReference(selectionText, target) {
         debugOccurrences.push({refText:ref.text, occurrence, selectionStart, selectionEnd});
         if (selectionStart >= occurrence.start && selectionEnd <= occurrence.end) {
           if (/^\d+$/.test(selected)) {
-            chrome.storage.local.set({__blbE2EDebugContext:{selected,source,refs:refs.map(r => ({text:r.text,url:r.url,chapter:r.chapter,from:r.from})),selectionStart,selectionEnd,debugOccurrences,time:Date.now()}}).catch(() => {});
+            chrome.storage.local.set({__blbE2EDebugContext:{selected,matched:true,source,refs:refs.map(r => ({text:r.text,url:r.url,chapter:r.chapter,from:r.from})),selectionStart,selectionEnd,debugOccurrences,time:Date.now()}}).catch(() => {});
           }
           return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
         }
       }
     }
     if (/^\d+$/.test(selected)) {
-      chrome.storage.local.set({__blbE2EDebugContext:{selected,source,refs:refs.map(r => ({text:r.text,url:r.url,chapter:r.chapter,from:r.from})),selectionStart,selectionEnd,debugOccurrences,time:Date.now()}}).catch(() => {});
+      chrome.storage.local.set({__blbE2EDebugContext:{selected,matched:false,source,refs:refs.map(r => ({text:r.text,url:r.url,chapter:r.chapter,from:r.from})),selectionStart,selectionEnd,debugOccurrences,time:Date.now()}}).catch(() => {});
     }
   } catch (_) {}
   return null;
