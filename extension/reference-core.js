@@ -168,9 +168,6 @@ function resolveBibleReferenceText(text, options = {}) {
   const colonRangeRe = /(?<![A-Za-z0-9])(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)(?!and\b|or\b)((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(-?\d+)\s*:\s*(-?\d+)\s*[-–—]\s*(-?\d+)(?![A-Za-z0-9])/gi;
   while ((m = colonRangeRe.exec(source))) {
     if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
-    const matchedBookText = String(m[1] || '').trim();
-    if (/^(?:[1-3]|i{1,3})\s+/i.test(matchedBookText) === false &&
-        /(?:^|\s)(?:[1-3]|i{1,3})\s+$/i.test(source.slice(Math.max(0, m.index - 8), m.index))) continue;
     const book = resolveBibleBook(m[1]);
     if (book) add(book, Number(m[2]), Number(m[3]), Number(m[4]), m[0]);
   }
