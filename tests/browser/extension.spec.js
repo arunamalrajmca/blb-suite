@@ -37,6 +37,7 @@ async function activateBlbTabForPath(extensionWorker, expectedPath, debug = {}) 
     console.error('Double-click activation failure', {
       fragment: debug.fragment || '',
       selector: debug.selector || '',
+      selectedText: debug.selectedText || '',
       expectedPath,
       tabs
     });
