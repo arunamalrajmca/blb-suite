@@ -67,16 +67,14 @@ const extractorStart = bgSource.indexOf('function extractBibleRefsFromSelectedTe
 const extractorEnd = bgSource.indexOf('\nfunction ', extractorStart + 10);
 vm.runInContext(bgSource.slice(extractorStart, extractorEnd > extractorStart ? extractorEnd : undefined), refCtx, {filename:'background.js:extractBibleRefsFromSelectedTextUncached'});
 
-test('shared core resolves numbered references', () => {
-  for (const c of fixture.references.slice(1)) {
-    const numeric = c.input.replace(/^I /,'1 ').replace(/^II /,'2 ').replace(/^III /,'3 ');
-    const refs = refCtx.resolveBibleReferenceText(numeric);
-    assert.equal(refs.length,1,numeric);
-    const r=refs[0];
-    assert.equal(r.book,c.book,numeric);
-    assert.equal(r.chapter,c.chapter,numeric);
-    assert.equal(r.from,c.from,numeric);
-    assert.equal(r.to,c.to,numeric);
+test('shared core resolves every numbered Bible-book family', () => {
+  for (const book of refCtx.BOOKS.filter(book => /^[123] /.test(book.name))) {
+    const refs = refCtx.resolveBibleReferenceText(`${book.name} 1:1`);
+    assert.equal(refs.length, 1, book.name);
+    assert.equal(refs[0].book, book.name, book.name);
+    assert.equal(refs[0].chapter, 1, book.name);
+    assert.equal(refs[0].from, 1, book.name);
+    assert.equal(refs[0].to, 1, book.name);
   }
 });
 test('production selection extractor resolves every Roman-numeral numbered book family', () => {
@@ -97,16 +95,22 @@ test('production selection extractor resolves every Roman-numeral numbered book 
     assert.equal(refCtx.extractBibleRefsFromSelectedTextUncached(prefix).length, 0, `standalone ${prefix} must remain unresolved`);
   }
 });
-test('multi-reference paragraph extraction', () => {
-  const refs = refCtx.extractBibleRefsFromSelectedTextUncached(fixture.multiReferenceText);
-  const got = refs.map(r=>`${r.book}|${r.chapter}|${r.from}|${r.to}`);
-  const expected = [
-    '1 samuel|17|11|11','2 kings|2|2|2','1 chronicles|4|10|10','2 chronicles|7|14|14',
-    '1 corinthians|13|4|4','2 corinthians|5|17|17','1 thessalonians|2|13|13','2 thessalonians|2|13|13',
-    '1 timothy|6|15|15','2 timothy|2|15|15','1 peter|2|9|9','2 peter|3|9|9',
-    '1 john|4|8|8','2 john|1|9|9','3 john|1|4|4'
-  ];
-  assert.equal(JSON.stringify(got), JSON.stringify(expected));
+test('multi-reference paragraph extraction covers every numbered book family', () => {
+  const roman = {1: 'I', 2: 'II', 3: 'III'};
+  const numbered = refCtx.BOOKS.filter(book => /^[123] /.test(book.name));
+  const source = numbered.map((book, index) => {
+    const prefix = Number(book.name[0]);
+    return `${roman[prefix]} ${book.name.slice(2)} ${index + 1}:1`;
+  }).join('; ');
+  const refs = refCtx.extractBibleRefsFromSelectedTextUncached(source);
+  assert.equal(refs.length, numbered.length);
+  refs.forEach((ref, index) => {
+    const book = numbered[index];
+    assert.equal(ref.book, book.name, book.name);
+    assert.equal(ref.chapter, index + 1, book.name);
+    assert.equal(ref.from, 1, book.name);
+    assert.equal(ref.to, 1, book.name);
+  });
 });
 test('generic double-click reference grammar resolves all 66 books and every shared alias', () => {
   const books = refCtx.BOOKS;
