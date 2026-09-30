@@ -22,7 +22,10 @@ jobs:
 
       - name: Read manifest version
         id: version
-        run: echo "version=$(node -p \"require('./extension/manifest.json').version\")" >> "$GITHUB_OUTPUT"
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./extension/manifest.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Run deterministic regression gate
         env:
