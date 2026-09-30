@@ -2885,6 +2885,17 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   for (const item of cachedPatterns) {
     item.re.lastIndex = 0;
     while ((m = item.re.exec(source))) {
+      // If an unnumbered form is found immediately inside a numbered/Roman
+      // book name (for example "John" inside "2 John" or "I John"), the
+      // longer numbered form is the authoritative occurrence. This is a
+      // generic overlap rule so every numbered-book family behaves alike.
+      const prefixStart = Math.max(0, m.index - 8);
+      const prefix = source.slice(prefixStart, m.index);
+      const prefixMatch = prefix.match(/(?:^|\\s)((?:[1-3]|i{1,3})\\s+)$/i);
+      if (prefixMatch && !/^(?:[1-3]|i{1,3})\\s+/i.test(item.form)) {
+        const combined = prefixMatch[1] + item.form;
+        if (resolveBook(combined)) continue;
+      }
       const chapter = Number(m[1]);
       const from = Number(m[2]);
       const to = Number(m[3] || m[2]);
