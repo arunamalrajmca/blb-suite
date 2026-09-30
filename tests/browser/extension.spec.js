@@ -331,13 +331,6 @@ test.describe('core user-visible E2E', () => {
 
     await dblclickAt(page.locator(selector), rect);
     if (/^\d+$/.test(fragment)) {
-      await page.waitForTimeout(300);
-      const debugContext = await extensionWorker.evaluate(() => chrome.storage.local.get('__blbE2EDebugContext'));
-      const debugOpen = await extensionWorker.evaluate(() => chrome.storage.local.get('__blbE2EDebugSelectionOpen'));
-      const debugPhase = await extensionWorker.evaluate(() => chrome.storage.local.get('__blbE2EDebugOpenPhase'));
-      console.log('BLB_E2E_DEBUG_CONTEXT', JSON.stringify(debugContext));
-      console.log('BLB_E2E_DEBUG_SELECTION_OPEN', JSON.stringify(debugOpen));
-      console.log('BLB_E2E_DEBUG_OPEN_PHASE', JSON.stringify(debugPhase));
     }
     await activateBlbTabForPath(extensionWorker, expectedPath);
     await expect.poll(() => context.pages().some(candidate => {
