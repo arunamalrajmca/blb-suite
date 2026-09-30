@@ -17,7 +17,7 @@ jobs:
       matrix:
         include:
           - group: positional
-            grep: 'Double-click resolves any part|positional context|browser token|separate lines|standalone book numbers'
+            grep: 'Double-click resolves any part|positional context|browser token|separate lines|standalone book numbers|ordinary heading words'
           - group: grammar
             grep: 'generic reference grammar|generic reference syntax|canonical references|reference syntax — colon'
           - group: aliases-and-roman
