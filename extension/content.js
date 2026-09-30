@@ -807,65 +807,54 @@ function getDoubleClickBlockContextReference(selectionText, target) {
   try {
     const selected = normalizeSelectionText(selectionText);
     if (!selected) return null;
-    const node = target instanceof Element
-      ? target
-      : (target?.parentElement || null);
+    const node = target instanceof Element ? target : (target?.parentElement || null);
     const block = node?.closest?.('p,li,td,th,blockquote,article,section,div') || node;
     if (!block) return null;
 
-    const source = normalizeSelectionText(block.textContent || '');
+    const rawSource = String(block.textContent || '');
+    const source = normalizeSelectionText(rawSource);
     if (!source) return null;
     const refs = resolveBibleReferenceText(source);
     if (!refs.length) return null;
 
-    // Prefer the reference whose literal text contains the selected token.
-    // This handles both full references such as "Acts 17:11" and established
-    // book/chapter references such as "Romans 17". A bare number remains a
-    // standalone-book selection only when the containing block has no parsed
-    // Bible reference that establishes its meaning.
-    const matches = refs.filter(ref => {
-      const needle = normalizeSelectionText(ref.text || '');
-      return needle &&
-        ref.chapter != null &&
-        needle.toLowerCase().includes(selected.toLowerCase());
-    });
-    if (matches.length === 1) {
-      const ref = matches[0];
-      return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
-    }
-
-    // If the same token occurs more than once inside this exact block,
-    // choose the nearest occurrence — but only among genuine book/chapter/
-    // verse references that actually contain the selected token. Never let a
-    // parser interpretation of a bare number become contextual.
+    // Context is positional: the selected browser range must be inside the
+    // exact occurrence of the parsed reference. Sharing a paragraph is not
+    // enough, so an orphan 16/36 cannot borrow an earlier reference.
     const sel = window.getSelection?.();
-    if (sel?.rangeCount && !sel.isCollapsed) {
-      const range = sel.getRangeAt(0);
+    if (!sel?.rangeCount || sel.isCollapsed) return null;
+    const range = sel.getRangeAt(0);
+
+    const getOffset = (container, offset) => {
       const scratch = document.createRange();
       scratch.selectNodeContents(block);
-      scratch.setEnd(range.startContainer, range.startOffset);
-      const offset = normalizeSelectionText(scratch.toString()).length;
-      let best = null;
-      for (const ref of refs) {
-        const needle = normalizeSelectionText(ref.text || '');
-        if (!needle || ref.chapter == null ||
-            !needle.toLowerCase().includes(selected.toLowerCase())) continue;
-        let from = 0;
-        while (from <= source.length) {
-          const start = source.indexOf(needle, from);
-          if (start < 0) break;
-          const distance = offset < start
-            ? start - offset
-            : offset > start + needle.length
-              ? offset - (start + needle.length)
-              : 0;
-          if (!best || distance < best.distance) best = {ref, distance};
-          from = start + Math.max(1, needle.length);
-        }
+      scratch.setEnd(container, offset);
+      return scratch.toString().length;
+    };
+    const selectionStart = getOffset(range.startContainer, range.startOffset);
+    const selectionEnd = getOffset(range.endContainer, range.endOffset);
+
+    const findOccurrences = (needle) => {
+      const value = normalizeSelectionText(needle || '');
+      if (!value) return [];
+      const escapeRegex = part => part.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
+      const parts = value.split(/\s+/).map(escapeRegex);
+      if (!parts.length) return [];
+      const pattern = new RegExp(parts.join('\\s+'), 'gi');
+      const occurrences = [];
+      let match;
+      while ((match = pattern.exec(rawSource))) {
+        occurrences.push({start: match.index, end: match.index + match[0].length});
+        if (match[0].length === 0) pattern.lastIndex++;
       }
-      if (best) {
-        const ref = best.ref;
-        return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
+      return occurrences;
+    };
+
+    for (const ref of refs) {
+      if (!ref || ref.chapter == null || !ref.text) continue;
+      for (const occurrence of findOccurrences(ref.text)) {
+        if (selectionStart >= occurrence.start && selectionEnd <= occurrence.end) {
+          return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
+        }
       }
     }
   } catch (_) {}
