@@ -79,16 +79,26 @@ test('shared core resolves numbered references', () => {
     assert.equal(r.to,c.to,numeric);
   }
 });
-test('production selection extractor resolves Roman numeral books', () => {
-  for (const c of fixture.references) {
-    const refs = refCtx.extractBibleRefsFromSelectedTextUncached(c.input);
-    assert.equal(refs.length,1,c.input);
-    const r=refs[0];
-    assert.equal(r.book,c.book,c.input);
-    assert.equal(r.chapter,c.chapter,c.input);
-    assert.equal(r.from,c.from,c.input);
-    assert.equal(r.to,c.to,c.input);
+test('production selection extractor resolves every Roman-numeral numbered book family', () => {
+  const romanFamilies = [
+    ['I Samuel 17:11','1 samuel',17,11],['II Samuel 7:1','2 samuel',7,1],
+    ['I Kings 18:21','1 kings',18,21],['II Kings 2:2','2 kings',2,2],
+    ['I Chronicles 4:10','1 chronicles',4,10],['II Chronicles 7:14','2 chronicles',7,14],
+    ['I Corinthians 13:4','1 corinthians',13,4],['II Corinthians 5:17','2 corinthians',5,17],
+    ['I Thessalonians 2:13','1 thessalonians',2,13],['II Thessalonians 2:13','2 thessalonians',2,13],
+    ['I Timothy 6:15','1 timothy',6,15],['II Timothy 2:15','2 timothy',2,15],
+    ['I Peter 2:9','1 peter',2,9],['II Peter 3:9','2 peter',3,9],
+    ['I John 4:8','1 john',4,8],['II John 1:9','2 john',1,9],['III John 1:4','3 john',1,4]
+  ];
+  for (const [input,book,chapter,verse] of romanFamilies) {
+    const refs = refCtx.extractBibleRefsFromSelectedTextUncached(input);
+    assert.equal(refs.length,1,input);
+    assert.equal(refs[0].book,book,input);
+    assert.equal(refs[0].chapter,chapter,input);
+    assert.equal(refs[0].from,verse,input);
+    assert.equal(refs[0].to,verse,input);
   }
+  assert.equal(refCtx.extractBibleRefsFromSelectedTextUncached('I').length,0,'standalone I must remain unresolved');
 });
 test('five-reference paragraph extraction', () => {
   const refs = refCtx.extractBibleRefsFromSelectedTextUncached(fixture.multiReferenceText);
