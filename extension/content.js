@@ -958,6 +958,16 @@ function handleDoubleClickBlb(event) {
           recentDoubleClickDestinations.set(gestureTarget, now);
         }
 
+        if (/^\d+$/.test(selection)) {
+          chrome.storage.local.set({
+            __blbE2EDebugDispatch:{
+              selection,
+              contextualUrl:contextualReference?.url || '',
+              requestId,
+              time:Date.now()
+            }
+          }).catch(() => {});
+        }
         safeRuntimeSendMessage({
           type:'blbSuiteOpenSelectionText',
           text:selection,
