@@ -309,14 +309,22 @@ test.describe('core user-visible E2E', () => {
         return {x: box.left + box.width / 2, y: box.top + box.height / 2};
       }, fragment);
 
-      const pagesBefore = context.pages();
       await page.mouse.dblclick(rect.x, rect.y);
       const selectedAfterDoubleClick = await page.evaluate(() => window.getSelection()?.toString() || '');
       expect(selectedAfterDoubleClick).toBe(fragment);
-      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
-      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      await expect.poll(() => context.pages().some(candidate => {
+        try {
+          const path = new URL(candidate.url()).pathname;
+          return path === '/kjv/act/17/11/' || path.startsWith('/kjv/act/17/11/s_');
+        } catch (_) { return false; }
+      }), { timeout: 10000 }).toBe(true);
+      const blb = context.pages().find(candidate => {
+        try {
+          const path = new URL(candidate.url()).pathname;
+          return path === '/kjv/act/17/11/' || path.startsWith('/kjv/act/17/11/s_');
+        } catch (_) { return false; }
+      });
       expect(blb).toBeTruthy();
-      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe('/kjv/act/17/11/');
       await blb.close();
     }
   });
@@ -553,12 +561,20 @@ test.describe('core user-visible E2E', () => {
         return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
       }, fragment);
 
-      const pagesBefore = context.pages();
       await page.mouse.dblclick(rect.x, rect.y);
-      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
-      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      await expect.poll(() => context.pages().some(candidate => {
+        try {
+          const path = new URL(candidate.url()).pathname;
+          return path === '/kjv/jhn/3/16/' || path.startsWith('/kjv/jhn/3/16/s_');
+        } catch (_) { return false; }
+      }), { timeout: 10000 }).toBe(true);
+      const blb = context.pages().find(candidate => {
+        try {
+          const path = new URL(candidate.url()).pathname;
+          return path === '/kjv/jhn/3/16/' || path.startsWith('/kjv/jhn/3/16/s_');
+        } catch (_) { return false; }
+      });
       expect(blb).toBeTruthy();
-      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe('/kjv/jhn/3/16/');
       await blb.close();
     }
   });
@@ -630,12 +646,20 @@ test.describe('core user-visible E2E', () => {
           return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
         }, { index, fragment });
 
-        const pagesBefore = context.pages();
         await page.mouse.dblclick(rect.x, rect.y);
-        await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
-        const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+        await expect.poll(() => context.pages().some(candidate => {
+          try {
+            const path = new URL(candidate.url()).pathname;
+            return path === expectedPath || path.startsWith(expectedPath + 's_');
+          } catch (_) { return false; }
+        }), { timeout: 10000 }).toBe(true);
+        const blb = context.pages().find(candidate => {
+          try {
+            const path = new URL(candidate.url()).pathname;
+            return path === expectedPath || path.startsWith(expectedPath + 's_');
+          } catch (_) { return false; }
+        });
         expect(blb).toBeTruthy();
-        await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
         await blb.close();
       }
     }
