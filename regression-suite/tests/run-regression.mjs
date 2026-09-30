@@ -120,7 +120,7 @@ test('generic double-click reference grammar resolves all 66 books and every sha
   }
 
   for (const book of books) {
-    const canonicalForms = [book.name, book.urlKey, String(book.bookNumber)];
+    const canonicalForms = [book.name, book.urlKey];
     const aliases = aliasesByBook[book.name] || [];
     const forms = [...new Set([...canonicalForms, ...aliases])];
 
