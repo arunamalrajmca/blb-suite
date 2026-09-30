@@ -815,6 +815,19 @@ function getDoubleClickBlockContextReference(selectionText, target) {
     const source = normalizeSelectionText(rawSource);
     if (!source) return null;
     const refs = resolveBibleReferenceText(source);
+    if (/^\d+$/.test(selected)) {
+      try {
+        chrome.storage.local.set({
+          __blbE2EDebugContext: {
+            selected,
+            source,
+            refs: refs.map(ref => ({text:ref.text,url:ref.url,chapter:ref.chapter,from:ref.from})),
+            targetTag: node?.tagName || '',
+            time: Date.now()
+          }
+        }).catch(() => {});
+      } catch (_) {}
+    }
     if (!refs.length) return null;
 
     // Context is positional: the selected browser range must be inside the
