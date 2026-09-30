@@ -1949,8 +1949,11 @@ let blbTabCreationQueue = Promise.resolve();
 const recentSelectionOpenRequests = new Map();
 const SELECTION_OPEN_DEDUP_MS = 1200;
 
-function shouldAcceptSelectionOpenRequest(tabId, text) {
-  const key = `${Number.isInteger(tabId) ? tabId : 'no-tab'}|${String(text || '').trim().replace(/\s+/g, ' ').toLowerCase()}`;
+function shouldAcceptSelectionOpenRequest(tabId, text, requestId = '') {
+  const normalizedRequestId = String(requestId || '').trim();
+  const key = normalizedRequestId
+    ? `request|${normalizedRequestId}`
+    : `${Number.isInteger(tabId) ? tabId : 'no-tab'}|${String(text || '').trim().replace(/\s+/g, ' ').toLowerCase()}`;
   const now = Date.now();
   const previous = recentSelectionOpenRequests.get(key) || 0;
   if (now - previous < SELECTION_OPEN_DEDUP_MS) return false;
@@ -2448,7 +2451,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     // Deduplicate at the message boundary. This is intentionally generic: it
     // protects Show on BLB, Double-Click BLB, and any other future caller from
     // duplicate delivery before the request reaches tab management.
-    if (!shouldAcceptSelectionOpenRequest(sender?.tab?.id, text)) {
+    if (!shouldAcceptSelectionOpenRequest(sender?.tab?.id, text, message.requestId)) {
       sendResponse({ok:true, deduplicated:true});
       return true;
     }
