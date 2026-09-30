@@ -931,6 +931,16 @@ function handleDoubleClickBlb(event) {
         // Only the block containing the browser-selected token may establish
         // contextual Bible meaning. No document/body-wide resolver is used.
         const blockContext = getDoubleClickBlockContextReference(selection, event.target);
+
+        // Numeric tokens are ambiguous: 3/17/etc. are valid standalone book
+        // numbers, but inside "Jn 3:16" / "Acts 17:11" they belong to the
+        // positional reference. Do not let an early native-selection frame
+        // commit the standalone-book meaning before positional context settles.
+        if (!blockContext && /^\d+$/.test(selection) && Date.now() - started < 1500) {
+          requestAnimationFrame(dispatch);
+          return true;
+        }
+
         const standaloneBook = getStandaloneBookReference(selection);
         const contextualReference = blockContext || standaloneBook;
 
