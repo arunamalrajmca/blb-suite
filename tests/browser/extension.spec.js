@@ -402,7 +402,7 @@ test.describe('core user-visible E2E', () => {
       const chapter = 1;
       const verse = 1;
       const reference = `${item.form} ${chapter}:${verse}`;
-      const tokens = reference.trim().split(/\\s+/);
+      const tokens = reference.trim().split(/\s+/);
       await setupDoubleClickReferencePage(
         page,
         extensionStorage,
@@ -442,7 +442,7 @@ test.describe('core user-visible E2E', () => {
         : [`${item.form} 1:1`, `${item.form} 1.1`, `${item.form} 1 1`, `${item.form} 1`];
 
       for (const reference of variants) {
-        const tokens = reference.trim().split(/\\s+/);
+        const tokens = reference.trim().split(/\s+/);
         await setupDoubleClickReferencePage(
           page, extensionStorage,
           `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
@@ -511,12 +511,16 @@ test.describe('core user-visible E2E', () => {
     expect(books).toHaveLength(66);
 
     for (const book of books) {
+      const bookTokens = book.name.trim().split(/\s+/);
       await setupDoubleClickReferencePage(
         page, extensionStorage,
-        `<p id="ref"><span class="book">${book.name}</span> <span class="chapter">1</span>:<span class="verse">1</span></p>`
+        `<p id="ref">${bookTokens.map((token, index) => `<span class="book" data-index="${index}">${token}</span>`).join(' ')} <span class="chapter">1</span>:<span class="verse">1</span></p>`
       );
       const expectedPath = `/kjv/${book.urlKey}/1/1/`;
-      for (const selector of ['#ref .book', '#ref .chapter', '#ref .verse']) {
+      for (let index = 0; index < bookTokens.length; index++) {
+        await assertDoubleClickPath(page, context, extensionWorker, `#ref .book[data-index="${index}"]`, expectedPath);
+      }
+      for (const selector of ['#ref .chapter', '#ref .verse']) {
         await assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath);
       }
     }
