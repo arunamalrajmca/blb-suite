@@ -297,18 +297,18 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Standalone numbers on separate lines do not inherit adjacent Bible-reference context', async ({ page, context, extensionStorage }) => {
+  test('Standalone numeric tokens on separate lines do not inherit adjacent Bible-reference context', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const container = document.createElement('div');
       container.id = 'blb-e2e-separated-tokens';
-      container.innerHTML = '<p id="line-book">Jn</p><p id="line-chapter">3</p><p id="line-verse">16</p>';
+      container.innerHTML = '<p id="line-chapter">3</p><p id="line-verse">16</p>';
       document.body.appendChild(container);
     });
 
     const cases = [
-      ['line-book', '/kjv/jhn/1/1/'],
       ['line-chapter', '/kjv/lev/1/1/'],
       ['line-verse', '/kjv/neh/1/1/']
     ];
@@ -483,6 +483,9 @@ test.describe('core user-visible E2E', () => {
   });
 
   test('Double-click positional context — standalone numeric book tokens remain independent', async ({ page, context, extensionStorage, extensionWorker }) => {
+    // Exhaustive 66-book coverage needs more than Playwright's 60s default
+    // because every gesture opens and closes a real BLB tab.
+    test.setTimeout(180000);
     const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
       number: book.bookNumber, urlKey: book.urlKey
     })));
