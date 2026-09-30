@@ -875,12 +875,10 @@ function getDoubleClickBlockContextReference(selectionText, target) {
         }
       }
     }
-  } catch (_) {}
-  if (/^\d+$/.test(selected)) {
-    try {
+    if (/^\d+$/.test(selected)) {
       chrome.storage.local.set({__blbE2EDebugContext:{selected,source,refs:refs.map(r => ({text:r.text,url:r.url,chapter:r.chapter,from:r.from})),selectionStart,selectionEnd,debugOccurrences,time:Date.now()}}).catch(() => {});
-    } catch (_) {}
-  }
+    }
+  } catch (_) {}
   return null;
 }
 
