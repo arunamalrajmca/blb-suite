@@ -17,15 +17,14 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
     steps:
- 
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-     - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
       - name: Validate tag points to main history
         run: |
           git fetch origin main --no-tags
