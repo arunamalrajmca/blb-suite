@@ -582,7 +582,7 @@ test.describe('core user-visible E2E', () => {
 
     const cases = [
       ['#ref-line span', '/kjv/jhn/3/16/'],
-      ['#orphan-36 span', '/kjv/zeph/1/1/'],
+      ['#orphan-36 span', '/kjv/zep/1/1/'],
       ['#orphan-16 span', '/kjv/neh/1/1/'],
       ['#same-line-orphan span:nth-of-type(3)', '/kjv/neh/1/1/']
     ];
