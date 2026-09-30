@@ -8,6 +8,40 @@ on:
   workflow_dispatch:
 
 jobs:
+  focused-doubleclick-e2e:
+    name: Focused double-click E2E (${{ matrix.case }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - case: plain-text-Acts-17-11
+            grep: "Double-click plain-text Acts 17:11 tokens uses adjacent context"
+          - case: alias-Jn-3-16
+            grep: "Double-click alias Jn 3:16 resolves every token to John 3:16"
+          - case: numbered-book-aliases
+            grep: "Double-click numbered-book aliases preserve full context"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run focused test
+        env:
+          BLB_EXPECTED_VERSION: 5.2.51.43
+        run: >-
+          npx playwright test tests/browser/extension.spec.js
+          --grep "${{ matrix.grep }}"
+
   browser-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -70,27 +104,6 @@ jobs:
           BLB_PERF_MIN_PARAGRAPH_SECOND_TAB_IMPROVEMENT: 0.50
           BLB_PERF_MAX_FRESH_REGRESSION: 0.10
         run: set -o pipefail; node scripts/compare-performance.mjs "$RUNNER_TEMP/baseline-performance.jsonl" "$RUNNER_TEMP/candidate-performance.jsonl" | tee "$RUNNER_TEMP/performance-report.md"
-
-      - name: Focused E2E — plain-text Acts 17:11
-        env:
-          BLB_EXPECTED_VERSION: 5.2.51.43
-        run: >-
-          npx playwright test tests/browser/extension.spec.js
-          --grep "Double-click plain-text Acts 17:11 tokens uses adjacent context"
-
-      - name: Focused E2E — alias Jn 3:16
-        env:
-          BLB_EXPECTED_VERSION: 5.2.51.43
-        run: >-
-          npx playwright test tests/browser/extension.spec.js
-          --grep "Double-click alias Jn 3:16 resolves every token to John 3:16"
-
-      - name: Focused E2E — numbered-book aliases
-        env:
-          BLB_EXPECTED_VERSION: 5.2.51.43
-        run: >-
-          npx playwright test tests/browser/extension.spec.js
-          --grep "Double-click numbered-book aliases preserve full context"
 
       - name: Run full extension browser E2E
         env:
