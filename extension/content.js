@@ -783,12 +783,12 @@ function getStandaloneBookReference(selectionText) {
     const selected = normalizeSelectionText(selectionText);
     if (!selected || !/^(?:[1-9]|[1-5][0-9]|6[0-6]|[A-Za-z][A-Za-z0-9 .'-]*)$/.test(selected)) return null;
 
-    // Use the shared Bible-book resolver for numeric book numbers too.
-    // This keeps standalone 1-66 handling on the same canonical book identity
-    // used by the reference parser and avoids a second numeric-book lookup.
-    const book = typeof resolveBibleBook === 'function'
-      ? resolveBibleBook(selected)
-      : (Array.isArray(BOOKS) ? BOOKS.find(candidate => String(candidate.bookNumber) === selected) : null);
+    // Standalone 1-66 is a numeric-book gesture. Resolve it from the
+    // authoritative BOOKS table rather than treating the number as a textual
+    // book name; reference parsing remains responsible for contextual numbers.
+    const book = Array.isArray(BOOKS)
+      ? BOOKS.find(candidate => String(candidate.bookNumber) === selected)
+      : null;
     if (!book) return null;
 
     const urlKey = String(book.urlKey || '').trim();
