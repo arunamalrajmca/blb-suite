@@ -2444,14 +2444,6 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       return true;
     }
     const text = String(message.text || '').trim();
-    chrome.storage.local.set({
-      __blbE2EDebugSelectionOpen: {
-        text,
-        contextualUrl: message.contextualReference?.url || '',
-        requestId: message.requestId || '',
-        time: Date.now()
-      }
-    }).catch(() => {});
     if (!text) {
       sendResponse({ok:false});
       return true;
@@ -2503,17 +2495,7 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       // Orphan standalone numbers have no contextualReference and therefore
       // continue through the normal standalone-book path.
       if (message.contextualReference?.url && selectedRefs.length < 2) {
-        await chrome.storage.local.set({__blbE2EDebugOpenPhase:{phase:'before-context-open',url:message.contextualReference.url,time:Date.now()}}).catch(()=>{});
         await openSelectedPdfBibleRefs(text, behavior, message.contextualReference);
-        const debugTabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'}).catch(()=>[]);
-        await chrome.storage.local.set({
-          __blbE2EDebugOpenPhase:{
-            phase:'after-context-open',
-            url:message.contextualReference.url,
-            tabs:debugTabs.map(tab => ({id:tab.id,url:tab.url||''})),
-            time:Date.now()
-          }
-        }).catch(()=>{});
         sendResponse({ok:true, contextual:true});
         return true;
       }
