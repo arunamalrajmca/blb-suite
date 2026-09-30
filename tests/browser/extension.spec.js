@@ -1,5 +1,13 @@
 const { test, expect } = require('./fixtures');
 
+async function dblclickAt(locator, rect) {
+  const box = await locator.boundingBox();
+  expect(box).toBeTruthy();
+  await locator.dblclick({
+    position: { x: rect.x - box.x, y: rect.y - box.y }
+  });
+}
+
 test('MV3 service worker starts', async ({ context, extensionId }) => {
   expect(extensionId).toMatch(/^[a-z]{32}$/);
   expect(context.serviceWorkers().length).toBeGreaterThan(0);
@@ -309,7 +317,7 @@ test.describe('core user-visible E2E', () => {
         return {x: box.left + box.width / 2, y: box.top + box.height / 2};
       }, fragment);
 
-      await page.mouse.dblclick(rect.x, rect.y);
+      await dblclickAt(page.locator('#blb-e2e-doubleclick-plain-reference'), rect);
       const selectedAfterDoubleClick = await page.evaluate(() => window.getSelection()?.toString() || '');
       expect(selectedAfterDoubleClick).toBe(fragment);
       await expect.poll(() => context.pages().some(candidate => {
@@ -561,7 +569,7 @@ test.describe('core user-visible E2E', () => {
         return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
       }, fragment);
 
-      await page.mouse.dblclick(rect.x, rect.y);
+      await dblclickAt(page.locator('#blb-e2e-doubleclick-jn-3-16'), rect);
       await expect.poll(() => context.pages().some(candidate => {
         try {
           const path = new URL(candidate.url()).pathname;
@@ -646,7 +654,7 @@ test.describe('core user-visible E2E', () => {
           return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
         }, { index, fragment });
 
-        await page.mouse.dblclick(rect.x, rect.y);
+        await dblclickAt(page.locator(`#blb-e2e-doubleclick-numbered-alias-${index}`), rect);
         await expect.poll(() => context.pages().some(candidate => {
           try {
             const path = new URL(candidate.url()).pathname;
