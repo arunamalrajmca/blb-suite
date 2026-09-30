@@ -563,6 +563,42 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+
+  test('Double-click orphan numeric tokens do not borrow a nearby Bible reference', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const root = document.createElement('div');
+      root.id = 'blb-e2e-doubleclick-positional-context';
+      root.innerHTML = [
+        '<p id="ref-line"><span>Jn 3:16</span></p>',
+        '<p id="orphan-36"><span>36</span></p>',
+        '<p id="orphan-16"><span>16</span></p>',
+        '<p id="same-line-orphan"><span>Jn 3:16</span> <span>explanation</span> <span>16</span></p>'
+      ].join('');
+      root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(root);
+    });
+
+    const cases = [
+      ['#ref-line span', '/kjv/jhn/3/16/'],
+      ['#orphan-36 span', '/kjv/zeph/1/1/'],
+      ['#orphan-16 span', '/kjv/neh/1/1/'],
+      ['#same-line-orphan span:nth-of-type(3)', '/kjv/neh/1/1/']
+    ];
+
+    for (const [selector, expectedPath] of cases) {
+      const target = page.locator(selector);
+      const pagesBefore = context.pages();
+      await target.dblclick();
+      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      expect(blb).toBeTruthy();
+      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
+      await blb.close();
+    }
+  });
+
   test('Double-click numbered-book aliases preserve full context', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
