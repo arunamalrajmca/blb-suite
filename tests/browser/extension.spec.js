@@ -361,58 +361,90 @@ test.describe('core user-visible E2E', () => {
     }, html);
   }
 
-  for (const [name, fragment] of [['Acts 17:11 — Acts', 'Acts'], ['Acts 17:11 — 17', '17'], ['Acts 17:11 — 11', '11']]) {
-    test(`Double-click isolated token — ${name}`, async ({ page, context, extensionStorage, extensionWorker }) => {
-      await setupDoubleClickReferencePage(page, extensionStorage, '<p id="ref">Acts 17:11</p>');
-      await runDoubleClickReferenceToken(page, context, extensionWorker, '#ref', fragment, '/kjv/act/17/11/');
+  // Reference coverage is generated exclusively from BOOKS/BOOK_ALIASES so no
+  // individual Bible reference is privileged as a special case.
+  test('Double-click generic reference grammar — exhaustive token coverage', async ({ page, context, extensionStorage, extensionWorker }) => {
+    const data = await extensionWorker.evaluate(() => {
+      const forms = [];
+      const roman = {1: 'I', 2: 'II', 3: 'III'};
+      for (const book of BOOKS) {
+        const aliases = Object.entries(BOOK_ALIASES || {})
+          .filter(([, target]) => target === book.name)
+          .map(([alias]) => alias);
+        const names = [...new Set([book.name, book.urlKey, ...aliases])];
+        if (/^[123] /.test(book.name)) {
+          const n = Number(book.name[0]);
+          names.push(book.name.replace(/^[123]/, roman[n]));
+        }
+        for (const form of [...new Set(names)]) {
+          forms.push({ form, urlKey: book.urlKey, chapterCount: book.chapterCount });
+        }
+      }
+      return forms;
     });
-  }
 
-  for (const [name, fragment] of [['Jn 3:16 — Jn', 'Jn'], ['Jn 3:16 — 3', '3'], ['Jn 3:16 — 16', '16']]) {
-    test(`Double-click isolated token — ${name}`, async ({ page, context, extensionStorage, extensionWorker }) => {
-      await setupDoubleClickReferencePage(page, extensionStorage, '<p id="ref">Jn 3:16</p>');
-      await runDoubleClickReferenceToken(page, context, extensionWorker, '#ref', fragment, '/kjv/jhn/3/16/');
-    });
-  }
+    expect(data.length).toBeGreaterThan(66);
 
-  const numberedAliasCases = [
-    ['1 Jn 3:16 — Jn', '1 Jn 3:16', 'Jn', '/kjv/1jo/3/16/'],
-    ['1 Jn 3:16 — 16', '1 Jn 3:16', '16', '/kjv/1jo/3/16/'],
-    ['1 Thess 2:13 — Thess', '1 Thess 2:13', 'Thess', '/kjv/1th/2/13/'],
-    ['1 Thess 2:13 — 13', '1 Thess 2:13', '13', '/kjv/1th/2/13/']
-  ];
-  for (const [name, reference, fragment, expectedPath] of numberedAliasCases) {
-    test(`Double-click isolated token — ${name}`, async ({ page, context, extensionStorage, extensionWorker }) => {
-      await setupDoubleClickReferencePage(page, extensionStorage, `<p id="ref">${reference}</p>`);
-      await runDoubleClickReferenceToken(page, context, extensionWorker, '#ref', fragment, expectedPath);
-    });
-  }
+    for (const item of data) {
+      const chapter = 1;
+      const verse = 1;
+      const reference = `${item.form} ${chapter}:${verse}`;
+      const tokens = reference.trim().split(/\\s+/);
+      await setupDoubleClickReferencePage(
+        page,
+        extensionStorage,
+        `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
+      );
+      const expectedPath = `/kjv/${item.urlKey}/${chapter}/${verse}/`;
+      for (let i = 0; i < tokens.length; i++) {
+        await assertDoubleClickPath(
+          page, context, extensionWorker,
+          `#ref .reference-token[data-index="${i}"]`,
+          expectedPath
+        );
+      }
+    }
+  });
 
-  const romanNumberedBookCases = [
-    ['I Samuel 17:11 — I', 'I Samuel 17:11', 'I', '/kjv/1sa/17/11/'], ['I Samuel 17:11 — Samuel', 'I Samuel 17:11', 'Samuel', '/kjv/1sa/17/11/'],
-    ['II Samuel 7:1 — II', 'II Samuel 7:1', 'II', '/kjv/2sa/7/1/'], ['II Samuel 7:1 — Samuel', 'II Samuel 7:1', 'Samuel', '/kjv/2sa/7/1/'],
-    ['I Kings 18:21 — I', 'I Kings 18:21', 'I', '/kjv/1ki/18/21/'], ['I Kings 18:21 — Kings', 'I Kings 18:21', 'Kings', '/kjv/1ki/18/21/'],
-    ['II Kings 2:2 — II', 'II Kings 2:2', 'II', '/kjv/2ki/2/2/'], ['II Kings 2:2 — Kings', 'II Kings 2:2', 'Kings', '/kjv/2ki/2/2/'],
-    ['I Chronicles 4:10 — I', 'I Chronicles 4:10', 'I', '/kjv/1ch/4/10/'], ['I Chronicles 4:10 — Chronicles', 'I Chronicles 4:10', 'Chronicles', '/kjv/1ch/4/10/'],
-    ['II Chronicles 7:14 — II', 'II Chronicles 7:14', 'II', '/kjv/2ch/7/14/'], ['II Chronicles 7:14 — Chronicles', 'II Chronicles 7:14', 'Chronicles', '/kjv/2ch/7/14/'],
-    ['I Corinthians 13:4 — I', 'I Corinthians 13:4', 'I', '/kjv/1co/13/4/'], ['I Corinthians 13:4 — Corinthians', 'I Corinthians 13:4', 'Corinthians', '/kjv/1co/13/4/'],
-    ['II Corinthians 5:17 — II', 'II Corinthians 5:17', 'II', '/kjv/2co/5/17/'], ['II Corinthians 5:17 — Corinthians', 'II Corinthians 5:17', 'Corinthians', '/kjv/2co/5/17/'],
-    ['I Thessalonians 2:13 — I', 'I Thessalonians 2:13', 'I', '/kjv/1th/2/13/'], ['I Thessalonians 2:13 — Thessalonians', 'I Thessalonians 2:13', 'Thessalonians', '/kjv/1th/2/13/'],
-    ['II Thessalonians 2:13 — II', 'II Thessalonians 2:13', 'II', '/kjv/2th/2/13/'], ['II Thessalonians 2:13 — Thessalonians', 'II Thessalonians 2:13', 'Thessalonians', '/kjv/2th/2/13/'],
-    ['I Timothy 6:15 — I', 'I Timothy 6:15', 'I', '/kjv/1ti/6/15/'], ['I Timothy 6:15 — Timothy', 'I Timothy 6:15', 'Timothy', '/kjv/1ti/6/15/'],
-    ['II Timothy 2:15 — II', 'II Timothy 2:15', 'II', '/kjv/2ti/2/15/'], ['II Timothy 2:15 — Timothy', 'II Timothy 2:15', 'Timothy', '/kjv/2ti/2/15/'],
-    ['I Peter 2:9 — I', 'I Peter 2:9', 'I', '/kjv/1pe/2/9/'], ['I Peter 2:9 — Peter', 'I Peter 2:9', 'Peter', '/kjv/1pe/2/9/'],
-    ['II Peter 3:9 — II', 'II Peter 3:9', 'II', '/kjv/2pe/3/9/'], ['II Peter 3:9 — Peter', 'II Peter 3:9', 'Peter', '/kjv/2pe/3/9/'],
-    ['I John 4:8 — I', 'I John 4:8', 'I', '/kjv/1jo/4/8/'], ['I John 4:8 — John', 'I John 4:8', 'John', '/kjv/1jo/4/8/'],
-    ['II John 1:9 — II', 'II John 1:9', 'II', '/kjv/2jo/1/9/'], ['II John 1:9 — John', 'II John 1:9', 'John', '/kjv/2jo/1/9/'],
-    ['III John 1:4 — III', 'III John 1:4', 'III', '/kjv/3jo/1/4/'], ['III John 1:4 — John', 'III John 1:4', 'John', '/kjv/3jo/1/4/']
-  ];
-  for (const [name, reference, fragment, expectedPath] of romanNumberedBookCases) {
-    test(`Double-click isolated token — ${name}`, async ({ page, context, extensionStorage, extensionWorker }) => {
-      await setupDoubleClickReferencePage(page, extensionStorage, `<p id="ref">${reference}</p>`);
-      await runDoubleClickReferenceToken(page, context, extensionWorker, '#ref', fragment, expectedPath);
+  test('Double-click generic reference syntax — exhaustive supported forms', async ({ page, context, extensionStorage, extensionWorker }) => {
+    const data = await extensionWorker.evaluate(() => {
+      const roman = {1: 'I', 2: 'II', 3: 'III'};
+      return BOOKS.flatMap(book => {
+        const aliases = Object.entries(BOOK_ALIASES || {})
+          .filter(([, target]) => target === book.name)
+          .map(([alias]) => alias);
+        const forms = [...new Set([book.name, book.urlKey, ...aliases])];
+        if (/^[123] /.test(book.name)) {
+          forms.push(book.name.replace(/^[123]/, roman[Number(book.name[0])]));
+        }
+        return [...new Set(forms)].map(form => ({
+          form, urlKey: book.urlKey, oneChapter: book.chapterCount === 1
+        }));
+      });
     });
-  }
+
+    for (const item of data) {
+      const variants = item.oneChapter
+        ? [`${item.form} 1:1`, `${item.form} 1.1`, `${item.form} 1 1`, `${item.form} 1:1-2`]
+        : [`${item.form} 1:1`, `${item.form} 1.1`, `${item.form} 1 1`, `${item.form} 1`];
+
+      for (const reference of variants) {
+        const tokens = reference.trim().split(/\\s+/);
+        await setupDoubleClickReferencePage(
+          page, extensionStorage,
+          `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
+        );
+        const expectedPath = `/kjv/${item.urlKey}/1/1/`;
+        for (let i = 0; i < tokens.length; i++) {
+          await assertDoubleClickPath(
+            page, context, extensionWorker,
+            `#ref .reference-token[data-index="${i}"]`,
+            expectedPath
+          );
+        }
+      }
+    }
+  });
 
   test('Roman numeral prefix — standalone I remains independent', async ({ page, context, extensionStorage }) => {
     await setupDoubleClickReferencePage(page, extensionStorage, '<p id="ref">I</p>');
