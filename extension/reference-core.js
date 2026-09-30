@@ -76,6 +76,11 @@ function getBibleBookForms(book) {
   if (!resolved) return [];
   const forms = new Set([resolved.name, resolved.urlKey]);
   if (resolved.bookNumber) forms.add(String(resolved.bookNumber));
+  const seriesNumber = String(resolved.name || '').match(/^([123])\s+/)?.[1];
+  if (seriesNumber) {
+    const roman = {1: 'I', 2: 'II', 3: 'III'}[seriesNumber];
+    if (roman) forms.add(resolved.name.replace(/^[123]/, roman));
+  }
   for (const [alias, target] of Object.entries(BOOK_ALIASES || {})) {
     if (target === resolved.name) forms.add(alias);
   }
