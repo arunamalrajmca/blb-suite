@@ -912,7 +912,7 @@ function handleDoubleClickBlb(event) {
       try {
         const selection = getDoubleClickSelection(event);
         if (!selection) {
-          if (Date.now() - started < 180) {
+          if (Date.now() - started < 500) {
             requestAnimationFrame(dispatch);
           }
           return true;
@@ -930,7 +930,7 @@ function handleDoubleClickBlb(event) {
         // same DOM block. Unrelated numbers such as 176 or 109565645022 are
         // therefore a no-op and never enter classifier/corpus fallback logic.
         if (!contextualReference) {
-          if (Date.now() - started < 180) requestAnimationFrame(dispatch);
+          if (Date.now() - started < 500) requestAnimationFrame(dispatch);
           return true;
         }
 
