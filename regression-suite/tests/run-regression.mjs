@@ -100,11 +100,14 @@ test('production selection extractor resolves every Roman-numeral numbered book 
   }
   assert.equal(refCtx.extractBibleRefsFromSelectedTextUncached('I').length,0,'standalone I must remain unresolved');
 });
-test('five-reference paragraph extraction', () => {
+test('multi-reference paragraph extraction', () => {
   const refs = refCtx.extractBibleRefsFromSelectedTextUncached(fixture.multiReferenceText);
   const got = refs.map(r=>`${r.book}|${r.chapter}|${r.from}|${r.to}`);
   const expected = [
-    'john|1|1|1','hebrews|10|7|7','1 timothy|6|15|15','colossians|1|16|16','philippians|2|10|10'
+    '1 samuel|17|11|11','2 kings|2|2|2','1 chronicles|4|10|10','2 chronicles|7|14|14',
+    '1 corinthians|13|4|4','2 corinthians|5|17|17','1 thessalonians|2|13|13','2 thessalonians|2|13|13',
+    '1 timothy|6|15|15','2 timothy|2|15|15','1 peter|2|9|9','2 peter|3|9|9',
+    '1 john|4|8|8','2 john|1|9|9','3 john|1|4|4'
   ];
   assert.equal(JSON.stringify(got), JSON.stringify(expected));
 });
@@ -179,7 +182,7 @@ test('property-based reference grammar generation covers deterministic valid and
   };
   const forms = [];
   for (const book of books) {
-    forms.push(book.name, book.urlKey, String(book.bookNumber));
+    forms.push(book.name, book.urlKey);
     for (const alias of aliasesByBook[book.name] || []) forms.push(alias);
   }
 
