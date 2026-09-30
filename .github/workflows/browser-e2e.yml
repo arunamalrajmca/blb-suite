@@ -34,62 +34,9 @@ jobs:
             grep: "Double-click isolated token — 1 Thess 2:13 — Thess"
           - case: 1-Thess-2-13-13
             grep: "Double-click isolated token — 1 Thess 2:13 — 13"
-          - case: Roman-I-Samuel-I
-            grep: "Double-click isolated token — I Samuel 17:11 — I"
-          - case: Roman-I-Samuel-Samuel
-            grep: "Double-click isolated token — I Samuel 17:11 — Samuel"
-          - case: Roman-II-Samuel-II
-            grep: "Double-click isolated token — II Samuel 7:1 — II"
-          - case: Roman-II-Samuel-Samuel
-            grep: "Double-click isolated token — II Samuel 7:1 — Samuel"
-          - case: Roman-I-Kings-I
-            grep: "Double-click isolated token — I Kings 18:21 — I"
-          - case: Roman-I-Kings-Kings
-            grep: "Double-click isolated token — I Kings 18:21 — Kings"
-          - case: Roman-II-Kings-II
-            grep: "Double-click isolated token — II Kings 2:2 — II"
-          - case: Roman-II-Kings-Kings
-            grep: "Double-click isolated token — II Kings 2:2 — Kings"
-          - case: Roman-I-Chronicles-I
-            grep: "Double-click isolated token — I Chronicles 4:10 — I"
-          - case: Roman-I-Chronicles-Chronicles
-            grep: "Double-click isolated token — I Chronicles 4:10 — Chronicles"
-          - case: Roman-II-Chronicles-II
-            grep: "Double-click isolated token — II Chronicles 7:14 — II"
-          - case: Roman-II-Chronicles-Chronicles
-            grep: "Double-click isolated token — II Chronicles 7:14 — Chronicles"
-          - case: Roman-I-Corinthians-I
-            grep: "Double-click isolated token — I Corinthians 13:4 — I"
-          - case: Roman-I-Corinthians-Corinthians
-            grep: "Double-click isolated token — I Corinthians 13:4 — Corinthians"
-          - case: Roman-II-Corinthians-II
-            grep: "Double-click isolated token — II Corinthians 5:17 — II"
-          - case: Roman-II-Corinthians-Corinthians
-            grep: "Double-click isolated token — II Corinthians 5:17 — Corinthians"
-          - case: Roman-I-Thessalonians-I
-            grep: "Double-click isolated token — I Thessalonians 2:13 — I"
-          - case: Roman-I-Thessalonians-Thessalonians
-            grep: "Double-click isolated token — I Thessalonians 2:13 — Thessalonians"
-          - case: Roman-II-Thessalonians-II
-            grep: "Double-click isolated token — II Thessalonians 2:13 — II"
-          - case: Roman-II-Thessalonians-Thessalonians
-            grep: "Double-click isolated token — II Thessalonians 2:13 — Thessalonians"
-          - case: Roman-I-Timothy-I
-            grep: "Double-click isolated token — I Timothy 6:15 — I"
-          - case: Roman-I-Timothy-Timothy
-            grep: "Double-click isolated token — I Timothy 6:15 — Timothy"
-          - case: Roman-II-Timothy-II
-            grep: "Double-click isolated token — II Timothy 2:15 — II"
-          - case: Roman-II-Timothy-Timothy
-            grep: "Double-click isolated token — II Timothy 2:15 — Timothy"
-          - case: Roman-I-Peter-I
-            grep: "Double-click isolated token — I Peter 2:9 — I"
-          - case: Roman-I-Peter-Peter
-            grep: "Double-click isolated token — I Peter 2:9 — Peter"
-          - case: Roman-II-Peter-II
-            grep: "Double-click isolated token — II Peter 3:9 — II"
-          - case: Roman-II-Peter-Peter
-            grep: "Double-click isolated token — II Peter 3:9 — Peter"
+          # Keep only representative focused diagnostics here. The full Browser E2E
+          # below exercises every numbered/Roman family generically; duplicating each
+          # token as a separate CI job only increases noise and runtime.
           - case: Roman-I-John-I
             grep: "Double-click isolated token — I John 4:8 — I"
           - case: Roman-I-John-John
