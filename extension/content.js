@@ -945,7 +945,15 @@ function handleDoubleClickBlb(event, initialSelection = '', initialContext = nul
         }
 
         const standaloneBook = getStandaloneBookReference(selection);
-        const contextualReference = blockContext || standaloneBook;
+        // A numeric token that occupies its entire DOM block is an explicit
+        // standalone book-number gesture. Give that shared numeric-book
+        // interpretation precedence over any incidental block-level parse.
+        const blockText = normalizeSelectionText(event?.target?.closest?.('p,li,td,th,blockquote,article,section,div')?.textContent || '');
+        const isStandaloneNumericBook = standaloneBook && /^\d+$/.test(selection)
+          && blockText === selection;
+        const contextualReference = isStandaloneNumericBook
+          ? standaloneBook
+          : (blockContext || standaloneBook);
 
         // Double-click is a Bible-reference gesture, not a generic search
         // gesture. Once the token is isolated, it must either establish a
