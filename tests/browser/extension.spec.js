@@ -514,12 +514,12 @@ test.describe('core user-visible E2E', () => {
     });
 
     const cases = [
-      ['psalm-over', '/kjv/psa/119/176/'],
-      ['romans-over', '/kjv/rom/16/']
+      ['psalm-over', 'span:nth-of-type(2)', '/kjv/psa/119/176/'],
+      ['romans-over', 'span:nth-of-type(2)', '/kjv/rom/16/']
     ];
 
-    for (const [id, expectedPath] of cases) {
-      const target = page.locator('#' + id);
+    for (const [id, selector, expectedPath] of cases) {
+      const target = page.locator('#' + id + ' ' + selector);
       const pagesBefore = context.pages();
       await target.dblclick();
       await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
