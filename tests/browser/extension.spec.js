@@ -8,6 +8,29 @@ async function dblclickAt(locator, rect) {
   });
 }
 
+async function activateBlbTabForPath(extensionWorker, expectedPath) {
+  await expect.poll(async () => extensionWorker.evaluate((path) => {
+    return chrome.tabs.query({}).then(async tabs => {
+      const tab = tabs.find(candidate => {
+        const value = String(candidate.url || candidate.pendingUrl || '');
+        try {
+          const pathname = new URL(value).pathname;
+          return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+        } catch (_) {
+          return false;
+        }
+      });
+      if (!tab?.id) return false;
+      try {
+        await chrome.tabs.update(tab.id, {active:true});
+      } catch (_) {
+        return false;
+      }
+      return true;
+    });
+  }, expectedPath), { timeout: 10000 }).toBe(true);
+}
+
 test('MV3 service worker starts', async ({ context, extensionId }) => {
   expect(extensionId).toMatch(/^[a-z]{32}$/);
   expect(context.serviceWorkers().length).toBeGreaterThan(0);
@@ -322,14 +345,10 @@ test.describe('core user-visible E2E', () => {
       }, fragment);
 
       await dblclickAt(page.locator('#blb-e2e-doubleclick-plain-reference'), rect);
-      await page.waitForTimeout(300);
-      const debugOpen = await extensionWorker.evaluate(() => chrome.storage.local.get('__blbE2EDebugSelectionOpen'));
-      const debugPhase = await extensionWorker.evaluate(() => chrome.storage.local.get('__blbE2EDebugOpenPhase'));
-      console.log('BLB_E2E_DEBUG_SELECTION_OPEN', JSON.stringify(debugOpen));
-      console.log('BLB_E2E_DEBUG_OPEN_PHASE', JSON.stringify(debugPhase));
       const selectedAfterDoubleClick = await page.evaluate(() => window.getSelection()?.toString() || '');
       expect(selectedAfterDoubleClick).toBe(fragment);
       await expect.poll(() => page.evaluate(() => window.__blbTestDblClickCount), { timeout: 3000 }).toBeGreaterThan(0);
+      await activateBlbTabForPath(extensionWorker, '/kjv/act/17/11/');
       await expect.poll(() => context.pages().some(candidate => {
         try {
           const path = new URL(candidate.url()).pathname;
@@ -580,6 +599,7 @@ test.describe('core user-visible E2E', () => {
       }, fragment);
 
       await dblclickAt(page.locator('#blb-e2e-doubleclick-jn-3-16'), rect);
+      await activateBlbTabForPath(extensionWorker, '/kjv/jhn/3/16/');
       await expect.poll(() => context.pages().some(candidate => {
         try {
           const path = new URL(candidate.url()).pathname;
@@ -665,6 +685,7 @@ test.describe('core user-visible E2E', () => {
         }, { index, fragment });
 
         await dblclickAt(page.locator(`#blb-e2e-doubleclick-numbered-alias-${index}`), rect);
+        await activateBlbTabForPath(extensionWorker, expectedPath);
         await expect.poll(() => context.pages().some(candidate => {
           try {
             const path = new URL(candidate.url()).pathname;
