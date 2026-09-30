@@ -415,7 +415,7 @@ test.describe('core user-visible E2E', () => {
     await expect.poll(() => context.pages().filter(candidate => {
       try { return new URL(candidate.url()).hostname === 'www.blueletterbible.org'; } catch (_) { return false; }
     }).length, { timeout: 3000 }).toBe(0);
-  }
+  });
 
   test('Double-click positional context — orphan tokens remain independent', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
