@@ -12,9 +12,13 @@ const fixture = JSON.parse(fs.readFileSync(path.join(HERE, 'fixtures.json'), 'ut
 const expectedVersion = process.env.BLB_EXPECTED_VERSION || fixture.baselineVersion;
 const failures = [];
 let passed = 0;
+const requestedGroup = process.argv.find(arg => arg.startsWith('--group='))?.slice('--group='.length) || 'all';
+let currentGroup = 'features';
+function section(group) { currentGroup = group; }
 function test(name, fn) {
-  try { fn(); passed++; console.log(`✓ ${name}`); }
-  catch (e) { failures.push({name, error:e.message}); console.log(`✗ ${name}\n  ${e.message}`); }
+  if (requestedGroup !== 'all' && requestedGroup !== currentGroup) return;
+  try { fn(); passed++; console.log(`✓ [${currentGroup}] ${name}`); }
+  catch (e) { failures.push({name, error:e.message, group:currentGroup}); console.log(`✗ [${currentGroup}] ${name}\n  ${e.message}`); }
 }
 function read(name){ return fs.readFileSync(path.join(ROOT,name),'utf8'); }
 function sha256(file){ return crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT,file))).digest('hex'); }
@@ -27,6 +31,7 @@ function loadPure(files){
 console.log(`BLB Suite Regression Suite — baseline ${fixture.baselineVersion} | expected package ${expectedVersion}`);
 console.log(`Package: ${ROOT}\n`);
 
+section('package');
 // Manifest/package invariants.
 test('manifest JSON + MV3 + version', () => {
   const m = JSON.parse(read('manifest.json'));
@@ -60,6 +65,7 @@ test('all JavaScript source files parse', () => {
   }
 });
 
+section('resolver');
 // Shared Bible-reference core + production selection extractor.
 const refCtx = loadPure(['books.js','book-aliases.js','reference-core.js']);
 const bgSource = read('background.js');
@@ -260,6 +266,7 @@ test('direct reference resolver rejects prose and accepts exact refs', () => {
   assert(refCtx.extractBibleRefsFromSelectedTextUncached('I Thessalonians 2:13').length === 1);
 });
 
+section('features');
 // Case-sensitive core + corpus.
 const csCtx = loadPure(['case-sensitive-search-core.js','kjv-corpus-original-case.js','kjv-corpus-case-verse-index.js']);
 test('case-sensitive parser preserves raw query', () => {
@@ -282,9 +289,11 @@ test('scrambled-case detection', () => {
   assert.equal(routingCtx.hasScrambledCase('JESUS'), false);
 });
 
+section('features');
 // Static cross-file contracts for high-risk regressions.
 const bg=read('background.js');
 const content=read('content.js');
+section('selection');
 test('web contextual resolver is present', () => {
   for (const s of ['getContextualBibleReference','resolveBibleReferenceFromContextWindow','blbSuiteResolveContextualSelection']) assert(bg.includes(s)||content.includes(s), s);
 });
@@ -340,6 +349,7 @@ test('Alt+B selection path remains wired', () => {
   assert(bg.includes('getActiveTabSelection'), 'Alt+B active selection path missing');
   assert(bg.includes('chrome.commands.onCommand'), 'extension command listener missing');
 });
+section('selection');
 test('Double-click BLB path remains wired', () => {
   const content = read('content.js');
   assert(content.includes('handleDoubleClickBlb'), 'double-click handler missing');
@@ -353,12 +363,14 @@ test('Show on BLB floating button path remains wired', () => {
   assert(content.includes('updateBlbPageSelectionButtonFromSelection'), 'selection update path missing');
   assert(content.includes('blbSuiteOpenSelectionText'), 'button opener missing');
 });
+section('selection');
 test('MultiVerse creation/reuse path remains wired', () => {
   const bg = read('background.js');
   assert(bg.includes('createBlbTabGeneric'), 'BLB tab manager missing');
   assert(bg.includes('openSelectedPdfBibleRefs'), 'shared MultiVerse/reference opener missing');
   assert(bg.includes('createBlbTabGeneric'), 'MultiVerse tab creation/reuse missing');
 });
+section('features');
 test('Webster 1828 path remains wired', () => {
   const content = read('content.js'), bg = read('background.js');
   assert(content.includes('webstersdictionary1828.com'), 'Webster host missing');
@@ -366,6 +378,7 @@ test('Webster 1828 path remains wired', () => {
   assert(content.includes('blbSuiteOpenBackgroundUrl'), 'Webster opener missing');
   assert(bg.includes('blbSuiteOpenWebsterMultiVerse'), 'Webster MultiVerse handler missing');
 });
+section('features');
 test('Study Sessions command surface remains wired', () => {
   const bg = read('background.js'), popup = read('popup.js');
   for (const type of ['blbSuiteStartStudyTopic','blbSuiteStopStudyRecording','blbSuiteAddStudyNoteToTopic','blbSuiteUpdateStudyNoteToTopic','blbSuiteStudyTopicHistory','blbSuiteStudyTopicMultiVerse','blbSuiteOpenStrongHistory','blbSuiteOpenHistorySearchTerms']) {
@@ -408,6 +421,7 @@ test('popup exposes all core feature controls', () => {
     assert(popup.includes("getElementById('" + control + "')") || popup.includes('getElementById("' + control + '")'), 'popup control missing: ' + control);
   }
 });
+section('selection');
 test('reference classification retains all major selection types', () => {
   const bg = read('background.js');
   for (const type of ['STRONG','REFERENCE','BOOK','KJV_WORD','KJV_PHRASE','KJV_PASSAGE','KJV_REFERENCE_RANGE','REFERENCE_AND_KJV_PASSAGE','NON_KJV_SINGLE_WORD']) {
@@ -415,7 +429,7 @@ test('reference classification retains all major selection types', () => {
   }
 });
 
-console.log(`\nRESULT: ${failures.length ? 'FAIL' : 'PASS'} — ${passed} passed, ${failures.length} failed`);
+console.log(`\nGROUP: ${requestedGroup}\nRESULT: ${failures.length ? 'FAIL' : 'PASS'} — ${passed} passed, ${failures.length} failed`);
 if (failures.length) {
   console.error('\nFailures:');
   for (const f of failures) console.error(`- ${f.name}: ${f.error}`);
