@@ -82,6 +82,9 @@ test('shared alias source is authoritative for Omnibox and reference resolver', 
   assert.deepEqual(aliasMap, expectedAliases, 'derived alias map diverges from shared source');
   for (const [alias, target] of Object.entries(expectedAliases)) {
     assert.equal(refCtx.resolveBibleBook(alias)?.name, target, `reference resolver mismatch: ${alias}`);
+    const refs = refCtx.resolveBibleReferenceText(`${alias} 1:1`);
+    assert.equal(refs.length, 1, `reference grammar mismatch: ${alias}`);
+    assert.equal(refs[0].book, target, `reference grammar target mismatch: ${alias}`);
   }
   assert(bgSource.includes("importScripts('kjv-corpus-word-index.js'"), 'background import list missing');
   assert(bgSource.includes("'book-aliases.js'"), 'background does not import shared alias source');
