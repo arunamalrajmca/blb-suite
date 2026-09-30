@@ -481,14 +481,14 @@ test.describe('core user-visible E2E', () => {
     const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
       number: book.bookNumber, urlKey: book.urlKey
     })));
-    await setupDoubleClickReferencePage(
-      page,
-      extensionStorage,
-      `<div id="refs">${books.map(book => `<p><span class="standalone-number">${book.number}</span></p>`).join('')}</div>`
-    );
     for (let index = 0; index < books.length; index++) {
       const book = books[index];
-      const target = page.locator('#refs .standalone-number').nth(index);
+      await setupDoubleClickReferencePage(
+        page,
+        extensionStorage,
+        `<p id="ref"><span class="standalone-number">${book.number}</span></p>`
+      );
+      const target = page.locator('#ref .standalone-number');
       await target.scrollIntoViewIfNeeded();
       await target.dblclick();
       await expect.poll(() => context.pages().filter(candidate => {
