@@ -14,12 +14,26 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - case: plain-text-Acts-17-11
-            grep: "Double-click plain-text Acts 17:11 tokens uses adjacent context"
-          - case: alias-Jn-3-16
-            grep: "Double-click alias Jn 3:16 resolves every token to John 3:16"
-          - case: numbered-book-aliases
-            grep: "Double-click numbered-book aliases preserve full context"
+          - case: Acts-17-11-Acts
+            grep: "Double-click isolated token — Acts 17:11 — Acts"
+          - case: Acts-17-11-17
+            grep: "Double-click isolated token — Acts 17:11 — 17"
+          - case: Acts-17-11-11
+            grep: "Double-click isolated token — Acts 17:11 — 11"
+          - case: Jn-3-16-Jn
+            grep: "Double-click isolated token — Jn 3:16 — Jn"
+          - case: Jn-3-16-3
+            grep: "Double-click isolated token — Jn 3:16 — 3"
+          - case: Jn-3-16-16
+            grep: "Double-click isolated token — Jn 3:16 — 16"
+          - case: 1-Jn-3-16-Jn
+            grep: "Double-click isolated token — 1 Jn 3:16 — Jn"
+          - case: 1-Jn-3-16-16
+            grep: "Double-click isolated token — 1 Jn 3:16 — 16"
+          - case: 1-Thess-2-13-Thess
+            grep: "Double-click isolated token — 1 Thess 2:13 — Thess"
+          - case: 1-Thess-2-13-13
+            grep: "Double-click isolated token — 1 Thess 2:13 — 13"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
