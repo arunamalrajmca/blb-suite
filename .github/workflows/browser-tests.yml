@@ -1,4 +1,5 @@
 name: BLB Suite HARD-GATE
+run-name: HARD-GATE — PR #${{ github.event.pull_request.number || 'main' }} — Run ${{ github.run_number }} — Attempt ${{ github.run_attempt }}
 
 on:
   push:
