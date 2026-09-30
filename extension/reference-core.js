@@ -35,6 +35,19 @@ function resolveBibleBook(value) {
     if (numberedBook) return numberedBook;
   }
 
+  // Numeric prefixes are also part of the book identity. Resolve the
+  // complete numbered form before considering an unnumbered canonical name.
+  const numericPrefixMatch = lower.match(/^([1-3])\s+(.+)$/);
+  if (numericPrefixMatch) {
+    const numberedBook = BOOKS.find(book =>
+      normalizeBibleReferenceText(book.name).toLowerCase() === lower ||
+      normalizeBibleReferenceText(book.urlKey).toLowerCase() === lower
+    );
+    if (numberedBook) return numberedBook;
+    const aliasTarget = BOOK_ALIASES && (BOOK_ALIASES[lower] || BOOK_ALIASES[compact]);
+    if (aliasTarget) return BOOKS.find(book => book.name === aliasTarget) || null;
+  }
+
   for (const book of BOOKS) {
     const forms = [book.name, book.urlKey, book.bookNumber];
     if (forms.some(form => {
