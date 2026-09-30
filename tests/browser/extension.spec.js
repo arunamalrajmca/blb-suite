@@ -368,7 +368,7 @@ test.describe('core user-visible E2E', () => {
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     // Allow the newly injected content script to finish its asynchronous
     // double-click settings initialization before the first gesture.
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(1000);
     await page.evaluate((html) => {
       const root = document.createElement('div');
       root.id = 'blb-e2e-focused-root';
