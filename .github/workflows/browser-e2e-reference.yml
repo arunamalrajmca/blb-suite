@@ -9,9 +9,21 @@ on:
 
 jobs:
   browser-e2e:
-    name: BROWSER E2E — REFERENCES & DOUBLE-CLICK
+    name: BROWSER E2E — References — ${{ matrix.group }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: positional
+            grep: 'Double-click resolves any part|positional context|browser token|separate lines|standalone book numbers'
+          - group: grammar
+            grep: 'generic reference grammar|generic reference syntax|canonical references|reference syntax — colon'
+          - group: aliases-and-roman
+            grep: 'generic aliases|numbered aliases and Roman prefixes|standalone Roman prefixes'
+          - group: resolver
+            grep: 'All 66 canonical'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -28,15 +40,15 @@ jobs:
       - name: Read manifest version
         id: version
         run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
-      - name: Run Browser E2E
+      - name: Run Browser E2E — ${{ matrix.group }}
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: npx playwright test tests/browser/extension.spec.js --grep 'Double-click|All 66 canonical'
-      - name: Upload Playwright diagnostics
+        run: npx playwright test tests/browser/extension.spec.js --grep "${{ matrix.grep }}"
+      - name: Upload Playwright diagnostics — ${{ matrix.group }}
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: blb-suite-browser-e2e-references-double-click
+          name: blb-suite-browser-e2e-references-${{ matrix.group }}
           path: |
             playwright-report/
             test-results/
