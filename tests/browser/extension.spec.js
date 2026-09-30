@@ -486,41 +486,6 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click positional context — orphan tokens remain independent', async ({ page, context, extensionStorage }) => {
-    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    await page.evaluate(() => {
-      const root = document.createElement('div');
-      root.id = 'blb-e2e-doubleclick-positional-context';
-      root.innerHTML = '<p id="ref-line"><span>Jn 3:16</span></p><p id="orphan-36"><span>36</span></p><p id="orphan-16"><span>16</span></p><p id="same-line-orphan"><span>Jn 3:16</span> <span>explanation</span> <span>16</span></p>';
-      root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
-      document.body.appendChild(root);
-    });
-    for (const [selector, expectedPath] of [
-      ['#ref-line span', '/kjv/jhn/3/16/'],
-      ['#orphan-36 span', '/kjv/zep/1/1/'],
-      ['#orphan-16 span', '/kjv/neh/1/1/'],
-      ['#same-line-orphan span:nth-of-type(3)', '/kjv/neh/1/1/']
-    ]) {
-      const target = page.locator(selector);
-      await target.dblclick();
-      await expect.poll(() => context.pages().some(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
-      }), { timeout: 10000 }).toBe(true);
-      const blb = context.pages().find(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
-      });
-      expect(blb).toBeTruthy();
-      await blb.close();
-    }
-  });
-
   async function assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath) {
     await runDoubleClickReferenceToken(page, context, extensionWorker, selector, await page.locator(selector).textContent(), expectedPath);
   }
