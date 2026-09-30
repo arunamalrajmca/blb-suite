@@ -865,6 +865,8 @@ function getDoubleClickBlockContextReference(selectionText, target) {
 // Double-click is an entry point into the same background selection resolver.
 // It must not maintain a second Bible/reference parser here.
 let doubleClickBound = false;
+let doubleClickSettingsReady = false;
+let doubleClickSettingsRefreshPromise = null;
 const recentDoubleClickDestinations = new WeakMap();
 let doubleClickRequestSequence = 0;
 const DOUBLE_CLICK_WINDOW_GUARD = '__blbSuiteDoubleClickBoundV2';
@@ -889,7 +891,17 @@ function getDoubleClickSelection(event) {
 
 function handleDoubleClickBlb(event) {
   try {
-    if (!doubleClickBlbEnabled || !suiteEnabled || isDoubleClickExcludedTarget(event.target)) return;
+    if (!suiteEnabled || isDoubleClickExcludedTarget(event.target)) return;
+    // Site settings are loaded asynchronously. A real user gesture can arrive
+    // before that refresh finishes, so defer this exact gesture until the
+    // shared double-click initialization is complete instead of dropping it.
+    if (!doubleClickSettingsReady) {
+      void ensureDoubleClickSettingsReady().then(() => {
+        if (doubleClickBlbEnabled) handleDoubleClickBlb(event);
+      });
+      return;
+    }
+    if (!doubleClickBlbEnabled) return;
 
     // The dblclick gesture has a different selection contract from Show on BLB,
     // Alt+B, and right-click. Wait for Chromium's native token selection before
@@ -1015,7 +1027,20 @@ async function refreshDoubleClickBlb() {
   else disableDoubleClickBlb();
 }
 
-suiteSettingsReadyPromise.then(refreshDoubleClickBlb).catch(()=>{});
+function ensureDoubleClickSettingsReady() {
+  if (doubleClickSettingsReady) return Promise.resolve();
+  if (!doubleClickSettingsRefreshPromise) {
+    doubleClickSettingsRefreshPromise = suiteSettingsReadyPromise
+      .then(() => refreshDoubleClickBlb())
+      .catch(() => {})
+      .then(() => {
+        doubleClickSettingsReady = true;
+      });
+  }
+  return doubleClickSettingsRefreshPromise;
+}
+
+void ensureDoubleClickSettingsReady();
 
 // ---------- Floating page selection button ----------
 // This feature is intentionally dormant unless the user enables "Show on BLB".
