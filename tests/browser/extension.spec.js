@@ -21,13 +21,7 @@ async function activateBlbTabForPath(extensionWorker, expectedPath, debug = {}) 
             return false;
           }
         });
-        if (!tab?.id) return false;
-        try {
-          await chrome.tabs.update(tab.id, {active:true});
-        } catch (_) {
-          return false;
-        }
-        return true;
+        return !!tab;
       });
     }, expectedPath), { timeout: 10000 }).toBe(true);
   } catch (error) {
