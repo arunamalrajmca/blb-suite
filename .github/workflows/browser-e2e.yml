@@ -71,12 +71,26 @@ jobs:
           BLB_PERF_MAX_FRESH_REGRESSION: 0.10
         run: set -o pipefail; node scripts/compare-performance.mjs "$RUNNER_TEMP/baseline-performance.jsonl" "$RUNNER_TEMP/candidate-performance.jsonl" | tee "$RUNNER_TEMP/performance-report.md"
 
-      - name: Run focused non-working double-click E2E
+      - name: Focused E2E — plain-text Acts 17:11
         env:
           BLB_EXPECTED_VERSION: 5.2.51.43
         run: >-
           npx playwright test tests/browser/extension.spec.js
-          --grep "Double-click (plain-text Acts 17:11 tokens uses adjacent context|alias Jn 3:16 resolves every token to John 3:16|numbered-book aliases preserve full context)"
+          --grep "Double-click plain-text Acts 17:11 tokens uses adjacent context"
+
+      - name: Focused E2E — alias Jn 3:16
+        env:
+          BLB_EXPECTED_VERSION: 5.2.51.43
+        run: >-
+          npx playwright test tests/browser/extension.spec.js
+          --grep "Double-click alias Jn 3:16 resolves every token to John 3:16"
+
+      - name: Focused E2E — numbered-book aliases
+        env:
+          BLB_EXPECTED_VERSION: 5.2.51.43
+        run: >-
+          npx playwright test tests/browser/extension.spec.js
+          --grep "Double-click numbered-book aliases preserve full context"
 
       - name: Run full extension browser E2E
         env:
