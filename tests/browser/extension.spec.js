@@ -489,7 +489,6 @@ test.describe('core user-visible E2E', () => {
     for (let index = 0; index < books.length; index++) {
       const book = books[index];
       const target = page.locator('#refs .standalone-number').nth(index);
-      console.log(`[standalone-book] index=${index + 1} number=${book.number} urlKey=${book.urlKey}`);
       await target.scrollIntoViewIfNeeded();
       await target.dblclick();
       await expect.poll(() => context.pages().filter(candidate => {
