@@ -2486,17 +2486,28 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       const direct = getDirectSelectedReference(normalized);
       const strong = canonicalStrongValue(normalized);
       const bookOnly = getSelectedBookOnlyReference(normalized);
+      const selectedRefs = extractBibleRefsFromSelectedTextUncached(normalized);
+
+      // An explicit contextualReference from the double-click entry point is
+      // authoritative for a single-token selection, even when that token also
+      // has an independent meaning. For example, "Jn" and "16" inside
+      // "Jn 3:16" must open John 3:16, not the standalone book/number meaning.
+      // Orphan standalone numbers have no contextualReference and therefore
+      // continue through the normal standalone-book path.
+      if (message.contextualReference?.url && selectedRefs.length < 2) {
+        await openSelectedPdfBibleRefs(text, behavior, message.contextualReference);
+        sendResponse({ok:true, contextual:true});
+        return true;
+      }
+
       if (!direct && !strong) {
         // Context is authoritative for partial selections, but NOT when the
         // selected text itself contains multiple explicit Bible references.
         // In that case a single page-context result can incorrectly short-circuit
         // the full-selection classifier and make a two-reference selection open
         // only its first citation (and suppress Criteria Search).
-        const selectedRefs = extractBibleRefsFromSelectedTextUncached(normalized);
         if (selectedRefs.length < 2) {
-          const contextualRef = message.contextualReference?.url
-          ? message.contextualReference
-          : await getContextualSelectionReference(sender?.tab?.id, text);
+          const contextualRef = await getContextualSelectionReference(sender?.tab?.id, text);
           if (contextualRef?.url) {
             await openSelectedPdfBibleRefs(text, behavior, contextualRef);
             sendResponse({ok:true, contextual:true});
