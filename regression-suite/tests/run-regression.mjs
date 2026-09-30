@@ -63,6 +63,23 @@ test('all JavaScript source files parse', () => {
 // Shared Bible-reference core + production selection extractor.
 const refCtx = loadPure(['books.js','book-aliases.js','reference-core.js']);
 const bgSource = read('background.js');
+test('shared alias source is authoritative for Omnibox and reference resolver', () => {
+  const aliasSource = vm.runInContext('EXTRA_BOOK_ALIASES', refCtx);
+  const aliasMap = refCtx.BOOK_ALIASES || {};
+  assert(aliasSource && Object.keys(aliasSource).length > 0, 'shared alias source is empty');
+  assert.equal(Object.keys(aliasMap).length, Object.keys(aliasSource).length, 'derived alias map diverges from shared source');
+  for (const [alias, target] of Object.entries(aliasSource)) {
+    assert.equal(aliasMap[alias], target, `alias map mismatch: ${alias}`);
+    assert.equal(refCtx.resolveBibleBook(alias)?.name, target, `reference resolver mismatch: ${alias}`);
+  }
+  assert(bgSource.includes("importScripts('kjv-corpus-word-index.js'"), 'background import list missing');
+  assert(bgSource.includes("'book-aliases.js'"), 'background does not import shared alias source');
+  assert(bgSource.includes('bookData.forEach(book => { book.aliases = buildBookAliases(book); });'), 'Omnibox book aliases are not built from shared source');
+  assert(bgSource.includes('const explicitAlias = BOOK_ALIASES[base] || BOOK_ALIASES[base.replace(/\\s/g,"")];'), 'Omnibox resolver does not use shared alias map');
+  assert.equal((read('book-aliases.js').match(/const EXTRA_BOOK_ALIASES\\s*=/g) || []).length, 1, 'duplicate alias source detected');
+  assert(!read('reference-core.js').includes('const EXTRA_BOOK_ALIASES'), 'reference resolver contains a duplicate alias source');
+});
+
 const extractorStart = bgSource.indexOf('function extractBibleRefsFromSelectedTextUncached');
 const extractorEnd = bgSource.indexOf('\nfunction ', extractorStart + 10);
 vm.runInContext(bgSource.slice(extractorStart, extractorEnd > extractorStart ? extractorEnd : undefined), refCtx, {filename:'background.js:extractBibleRefsFromSelectedTextUncached'});
