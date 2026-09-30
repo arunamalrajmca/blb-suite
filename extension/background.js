@@ -2689,9 +2689,6 @@ function extractBibleRefsFromSelectedTextUncached(text) {
       const escapePattern = value => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       for (const book of BOOKS) {
         const bookForms = new Set(getBibleBookForms(book));
-        const leadingSeriesNumber = String(book.name || '').match(/^([123])\s+/)?.[1];
-        const roman = leadingSeriesNumber ? ({1:'I',2:'II',3:'III'}[leadingSeriesNumber] || null) : null;
-        if (roman) bookForms.add(book.name.replace(/^[123]/, roman));
         for (const form of bookForms) {
           const clean = String(form || '').trim();
           if (!clean) continue;
