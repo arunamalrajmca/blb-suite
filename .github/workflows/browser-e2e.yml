@@ -72,9 +72,12 @@ jobs:
         run: npm install
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
+      - name: Read manifest version
+        id: version
+        run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
       - name: Run focused test
         env:
-          BLB_EXPECTED_VERSION: 5.2.51.43
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: >-
           npx playwright test tests/browser/extension.spec.js
           --grep "${{ matrix.grep }}"
@@ -98,6 +101,9 @@ jobs:
 
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
+      - name: Read manifest version
+        id: version
+        run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
 
       # Performance qualification is required for performance PRs. Correctness-only
       # PRs still run the deterministic hard gate and full Browser E2E, but must not
@@ -144,7 +150,7 @@ jobs:
 
       - name: Run full extension browser E2E
         env:
-          BLB_EXPECTED_VERSION: 5.2.51.43
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: npx playwright test tests/browser/extension.spec.js
 
       - name: Publish performance report
