@@ -866,6 +866,7 @@ function getDoubleClickBlockContextReference(selectionText, target) {
 // It must not maintain a second Bible/reference parser here.
 let doubleClickBound = false;
 const recentDoubleClickDestinations = new WeakMap();
+let doubleClickRequestSequence = 0;
 const DOUBLE_CLICK_WINDOW_GUARD = '__blbSuiteDoubleClickBoundV2';
 
 function isDoubleClickExcludedTarget(target) {
@@ -895,6 +896,7 @@ function handleDoubleClickBlb(event) {
     // resolving context. If selection is still empty, a single-token target is
     // a safe fallback; a multiword block is never treated as the selection.
     const started = Date.now();
+    const requestId = `dblclick-${Date.now()}-${++doubleClickRequestSequence}`;
     const dispatch = () => {
       try {
         const selection = getDoubleClickSelection(event);
@@ -939,6 +941,7 @@ function handleDoubleClickBlb(event) {
           type:'blbSuiteOpenSelectionText',
           text:selection,
           contextualReference,
+          requestId,
           tabBehavior:{activeIfNew:false, activateExisting:true}
         });
         return true;
