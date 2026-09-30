@@ -370,7 +370,7 @@ test.describe('core user-visible E2E', () => {
       const root = document.createElement('div');
       root.id = 'blb-e2e-focused-root';
       root.innerHTML = html;
-      root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;max-height:calc(100vh - 48px);overflow:auto;';
       document.body.appendChild(root);
     }, html);
   }
