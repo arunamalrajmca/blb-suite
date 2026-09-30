@@ -102,6 +102,14 @@ jobs:
             grep: "Double-click isolated token — III John 1:4 — III"
           - case: Roman-III-John-John
             grep: "Double-click isolated token — III John 1:4 — John"
+          - case: All-66-canonical-double-click
+            grep: "Double-click generic canonical references — all 66 books × book/chapter/verse tokens"
+          - case: All-alias-double-click
+            grep: "Double-click generic aliases — every shared alias across all books"
+          - case: Numbered-and-Roman-double-click
+            grep: "Double-click generic numbered aliases and Roman prefixes — every numbered family"
+          - case: Reference-syntax-double-click
+            grep: "Double-click generic reference syntax — colon/dot/spaced/chapter/range forms"
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
