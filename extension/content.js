@@ -889,15 +889,24 @@ function getDoubleClickSelection(event) {
   return '';
 }
 
-function handleDoubleClickBlb(event) {
+function handleDoubleClickBlb(event, initialSelection = '', initialContext = null) {
   try {
     if (!suiteEnabled || isDoubleClickExcludedTarget(event.target)) return;
+    // Capture the browser's selection/range before waiting on asynchronous
+    // settings. The live Selection can change after the event dispatches.
+    const capturedSelection = initialSelection || getDoubleClickSelection(event);
+    const capturedContext = initialContext || (
+      capturedSelection ? getDoubleClickBlockContextReference(capturedSelection, event.target) : null
+    );
+
     // Site settings are loaded asynchronously. A real user gesture can arrive
     // before that refresh finishes, so defer this exact gesture until the
     // shared double-click initialization is complete instead of dropping it.
     if (!doubleClickSettingsReady) {
       void ensureDoubleClickSettingsReady().then(() => {
-        if (doubleClickBlbEnabled) handleDoubleClickBlb(event);
+        if (doubleClickBlbEnabled) {
+          handleDoubleClickBlb(event, capturedSelection, capturedContext);
+        }
       });
       return;
     }
@@ -911,7 +920,7 @@ function handleDoubleClickBlb(event) {
     const requestId = `dblclick-${Date.now()}-${++doubleClickRequestSequence}`;
     const dispatch = () => {
       try {
-        const selection = getDoubleClickSelection(event);
+        const selection = capturedSelection || getDoubleClickSelection(event);
         if (!selection) {
           if (Date.now() - started < 1500) {
             requestAnimationFrame(dispatch);
@@ -921,7 +930,7 @@ function handleDoubleClickBlb(event) {
 
         // Only the block containing the browser-selected token may establish
         // contextual Bible meaning. No document/body-wide resolver is used.
-        const blockContext = getDoubleClickBlockContextReference(selection, event.target);
+        const blockContext = capturedContext || getDoubleClickBlockContextReference(selection, event.target);
 
         // Numeric tokens are ambiguous: 3/17/etc. are valid standalone book
         // numbers, but inside "Jn 3:16" / "Acts 17:11" they belong to the
