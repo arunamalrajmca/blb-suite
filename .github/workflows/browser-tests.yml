@@ -9,8 +9,17 @@ on:
 
 jobs:
   regression-gate:
+    name: Regression — ${{ matrix.group }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        group:
+          - package
+          - resolver
+          - selection
+          - features
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -27,7 +36,7 @@ jobs:
           VERSION=$(node -p "require('./extension/manifest.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      - name: Run deterministic regression gate
+      - name: Run deterministic regression gate — ${{ matrix.group }}
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: node regression-suite/tests/run-regression.mjs extension
+        run: node regression-suite/tests/run-regression.mjs extension --group=${{ matrix.group }}
