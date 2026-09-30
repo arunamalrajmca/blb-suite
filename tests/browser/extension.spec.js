@@ -8,27 +8,40 @@ async function dblclickAt(locator, rect) {
   });
 }
 
-async function activateBlbTabForPath(extensionWorker, expectedPath) {
-  await expect.poll(async () => extensionWorker.evaluate((path) => {
-    return chrome.tabs.query({}).then(async tabs => {
-      const tab = tabs.find(candidate => {
-        const value = String(candidate.url || candidate.pendingUrl || '');
+async function activateBlbTabForPath(extensionWorker, expectedPath, debug = {}) {
+  try {
+    await expect.poll(async () => extensionWorker.evaluate((path) => {
+      return chrome.tabs.query({}).then(async tabs => {
+        const tab = tabs.find(candidate => {
+          const value = String(candidate.url || candidate.pendingUrl || '');
+          try {
+            const pathname = new URL(value).pathname;
+            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+          } catch (_) {
+            return false;
+          }
+        });
+        if (!tab?.id) return false;
         try {
-          const pathname = new URL(value).pathname;
-          return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+          await chrome.tabs.update(tab.id, {active:true});
         } catch (_) {
           return false;
         }
+        return true;
       });
-      if (!tab?.id) return false;
-      try {
-        await chrome.tabs.update(tab.id, {active:true});
-      } catch (_) {
-        return false;
-      }
-      return true;
+    }, expectedPath), { timeout: 10000 }).toBe(true);
+  } catch (error) {
+    const tabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
+      items.map(tab => ({id: tab.id, url: tab.url || tab.pendingUrl || '', active: !!tab.active}))
+    ));
+    console.error('Double-click activation failure', {
+      fragment: debug.fragment || '',
+      selector: debug.selector || '',
+      expectedPath,
+      tabs
     });
-  }, expectedPath), { timeout: 10000 }).toBe(true);
+    throw error;
+  }
 }
 
 test('MV3 service worker starts', async ({ context, extensionId }) => {
@@ -332,7 +345,7 @@ test.describe('core user-visible E2E', () => {
     await dblclickAt(page.locator(selector), rect);
     if (/^\d+$/.test(fragment)) {
     }
-    await activateBlbTabForPath(extensionWorker, expectedPath);
+    await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector});
     await expect.poll(() => context.pages().some(candidate => {
       try {
         const path = new URL(candidate.url()).pathname;
@@ -475,6 +488,7 @@ test.describe('core user-visible E2E', () => {
     for (let index = 0; index < books.length; index++) {
       const book = books[index];
       const target = page.locator('#refs .standalone-number').nth(index);
+      await target.scrollIntoViewIfNeeded();
       await target.dblclick();
       await expect.poll(() => context.pages().filter(candidate => {
         try { return new URL(candidate.url()).pathname === `/kjv/${book.urlKey}/1/1/`; } catch (_) { return false; }
