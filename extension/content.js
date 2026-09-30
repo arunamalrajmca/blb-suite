@@ -819,16 +819,14 @@ function getDoubleClickBlockContextReference(selectionText, target) {
     if (!refs.length) return null;
 
     // Prefer the reference whose literal text contains the selected token.
-    // This handles ordinary text nodes such as "Acts 17:11" even when the
-    // browser has not yet exposed stable Range boundaries at dblclick time.
-    // Only treat a parsed reference as contextual when it is a real
-    // book/chapter reference. A bare number such as "1", "2", "3", or "16"
-    // must remain a standalone-book selection rather than being interpreted
-    // from an unrelated numeric fragment.
+    // This handles both full references such as "Acts 17:11" and established
+    // book/chapter references such as "Romans 17". A bare number remains a
+    // standalone-book selection only when the containing block has no parsed
+    // Bible reference that establishes its meaning.
     const matches = refs.filter(ref => {
       const needle = normalizeSelectionText(ref.text || '');
       return needle &&
-        /:\s*\d+/.test(needle) &&
+        ref.chapter != null &&
         needle.toLowerCase().includes(selected.toLowerCase());
     });
     if (matches.length === 1) {
@@ -850,7 +848,7 @@ function getDoubleClickBlockContextReference(selectionText, target) {
       let best = null;
       for (const ref of refs) {
         const needle = normalizeSelectionText(ref.text || '');
-        if (!needle || !/:\s*\d+/.test(needle) ||
+        if (!needle || ref.chapter == null ||
             !needle.toLowerCase().includes(selected.toLowerCase())) continue;
         let from = 0;
         while (from <= source.length) {
