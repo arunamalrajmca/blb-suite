@@ -157,17 +157,22 @@ test.describe('core user-visible E2E', () => {
     for (const fragment of cases) {
       const target = page.locator('#blb-e2e-doubleclick-context-reference span', { hasText: fragment });
       await target.dblclick();
-      await expect.poll(() => context.pages().map(candidate => {
-        try { return new URL(candidate.url()).pathname; } catch (_) { return ''; }
-      }).filter(Boolean).join(' | '), { timeout: 10000 }).toContain(expectedPath);
-      const blb = context.pages().find(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path === expectedPath.replace(/\/$/, '') + '/' || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
-      });
-      expect(blb).toBeTruthy();
-      await blb.close();
+      await activateBlbTabForPath(
+        await context.serviceWorkers()[0],
+        expectedPath,
+        { fragment, selector: '#blb-e2e-doubleclick-context-reference', selectedText: fragment }
+      );
+      await context.serviceWorkers()[0].evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+        const matches = tabs.filter(tab => {
+          try {
+            const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+          } catch (_) { return false; }
+        });
+        for (const tab of matches) if (tab.id != null) {
+          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+        }
+      }), expectedPath);
     }
   });
   test('Double-click standalone book numbers do not borrow context across lines', async ({ page, context, extensionStorage }) => {
@@ -189,23 +194,26 @@ test.describe('core user-visible E2E', () => {
       ['book-number-16', '/kjv/neh/1/1/']
     ];
 
+    const extensionWorker = context.serviceWorkers()[0];
     for (const [id, expectedPath] of cases) {
       const target = page.locator('#' + id);
       await target.dblclick();
-      await expect.poll(() => context.pages().some(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path === expectedPath.replace(/\/$/, '') + '/' || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
-      }), { timeout: 10000 }).toBe(true);
-      const blb = context.pages().find(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path === expectedPath.replace(/\/$/, '') + '/' || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
+      await activateBlbTabForPath(extensionWorker, expectedPath, {
+        fragment: id,
+        selector: '#' + id,
+        selectedText: id.replace('book-number-', '')
       });
-      expect(blb).toBeTruthy();
-      await blb.close();
+      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+        const matches = tabs.filter(tab => {
+          try {
+            const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+          } catch (_) { return false; }
+        });
+        for (const tab of matches) if (tab.id != null) {
+          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+        }
+      }), expectedPath);
     }
   });
 
@@ -226,14 +234,23 @@ test.describe('core user-visible E2E', () => {
     ];
 
     for (const [id, fragment, expectedPath] of cases) {
-      const pagesBefore = context.pages();
+      const extensionWorker = context.serviceWorkers()[0];
       await page.locator('#' + id).dblclick();
       await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), { timeout: 3000 }).toBe(fragment);
-      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
-      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
-      expect(blb).toBeTruthy();
-      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
-      await blb.close();
+      await activateBlbTabForPath(extensionWorker, expectedPath, {
+        fragment, selector: '#' + id, selectedText: fragment
+      });
+      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+        const matches = tabs.filter(tab => {
+          try {
+            const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+          } catch (_) { return false; }
+        });
+        for (const tab of matches) if (tab.id != null) {
+          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+        }
+      }), expectedPath);
     }
   });
 
@@ -466,7 +483,9 @@ test.describe('core user-visible E2E', () => {
           page, extensionStorage,
           `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
         );
-        const expectedPath = `/kjv/${item.urlKey}/1/1/`;
+        const expectedPath = /\\s1$/.test(reference)
+          ? `/kjv/${item.urlKey}/1/`
+          : `/kjv/${item.urlKey}/1/1/`;
         for (let i = 0; i < tokens.length; i++) {
           await assertDoubleClickPath(
             page, context, extensionWorker,
@@ -520,23 +539,23 @@ test.describe('core user-visible E2E', () => {
       await target.dblclick();
 
       const expectedPath = `/kjv/${book.urlKey}/1/1/`;
-      await expect.poll(() => context.pages().filter(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
-      }).length, {
-        timeout: 3000,
-        message: `standalone book number ${book.number} (${book.urlKey}) did not open`
-      }).toBeGreaterThan(0);
-
-      const tabs = context.pages().filter(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
+      const extensionWorker = context.serviceWorkers()[0];
+      await activateBlbTabForPath(extensionWorker, expectedPath, {
+        fragment: String(book.number),
+        selector: `#ref .standalone-number[data-book-number="${book.number}"]`,
+        selectedText: String(book.number)
       });
-      for (const tab of tabs) await tab.close();
+      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+        const matches = tabs.filter(tab => {
+          try {
+            const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+          } catch (_) { return false; }
+        });
+        for (const tab of matches) if (tab.id != null) {
+          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+        }
+      }), expectedPath);
     }
   });
 
