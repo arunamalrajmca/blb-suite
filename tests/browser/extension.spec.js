@@ -499,7 +499,11 @@ test.describe('core user-visible E2E', () => {
         } catch (_) { return false; }
       }).length, { timeout: 3000, message: `standalone book number ${book.number} (${book.urlKey}) did not open` }).toBeGreaterThan(0);
       const tabs = context.pages().filter(candidate => {
-        try { return new URL(candidate.url()).pathname === `/kjv/${book.urlKey}/1/1/`; } catch (_) { return false; }
+        try {
+          const path = new URL(candidate.url()).pathname;
+          const expectedPath = `/kjv/${book.urlKey}/1/1/`;
+          return path === expectedPath || path.startsWith(expectedPath + 's_');
+        } catch (_) { return false; }
       });
       for (const tab of tabs) await tab.close();
     }
