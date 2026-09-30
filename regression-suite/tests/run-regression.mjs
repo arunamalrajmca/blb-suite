@@ -65,7 +65,7 @@ const refCtx = loadPure(['books.js','book-aliases.js','reference-core.js']);
 const bgSource = read('background.js');
 test('shared alias source is authoritative for Omnibox and reference resolver', () => {
   const aliasSource = vm.runInContext('EXTRA_BOOK_ALIASES', refCtx);
-  const aliasMap = refCtx.BOOK_ALIASES || {};
+  const aliasMap = vm.runInContext('BOOK_ALIASES', refCtx);
   assert(aliasSource && Object.keys(aliasSource).length > 0, 'shared alias source is empty');
   assert.equal(Object.keys(aliasMap).length, Object.keys(aliasSource).length, 'derived alias map diverges from shared source');
   for (const [alias, target] of Object.entries(aliasSource)) {
