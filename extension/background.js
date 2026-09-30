@@ -2715,8 +2715,9 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   const resolveBook = resolveBibleBook;
   const isShadowedBookMatch = index => {
     if (index <= 0) return false;
-    const prefix = source.slice(Math.max(0, index - 8), index);
-    return /(?:^|\\s)(?:[1-3]|i{1,3})\\s+$/i.test(prefix);
+    const lowerSource = source.toLowerCase();
+    return ['1 ', '2 ', '3 ', 'i ', 'ii ', 'iii ']
+      .some(prefix => lowerSource.slice(Math.max(0, index - prefix.length), index) === prefix);
   };
   const source = String(text || '')
     .replace(/[\u00a0\u2007\u202f]/g, ' ')
