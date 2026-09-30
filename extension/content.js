@@ -215,7 +215,7 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
 
 // ---------- BLB Auto Hyperlinker ----------
 function formatBlbTextToHtml(rawText) {
-  const refs=rawText.match(/\b(?:[1-3]\s*)?[A-Za-z0-9.]+\s+\d+:\d+(?:-\d+)?\b/gi);
+  const refs=rawText.match(/\b(?:[1-3]\s*|i{1,3}\s*)?[A-Za-z0-9.]+\s+\d+:\d+(?:-\d+)?\b/gi);
   if (!refs) return null;
   let html=rawText;
   refs.forEach(ref=>{
@@ -689,7 +689,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
   //                            normal boundary rule clamps it to Psalm 1:6.
   // Full book names resolve directly through BOOKS; short forms still use
   // BOOK_ALIASES through resolveBibleBook().
-  const commaContinuationRe = /((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*:\s*(\d+)\s*,\s*(\d+)(?:\s*:\s*(\d+))?/gi;
+  const commaContinuationRe = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*:\s*(\d+)\s*,\s*(\d+)(?:\s*:\s*(\d+))?/gi;
   let commaMatch;
   while ((commaMatch = commaContinuationRe.exec(source))) {
     const book = resolveBibleBook(commaMatch[1]);
