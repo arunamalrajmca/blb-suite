@@ -67,9 +67,20 @@ test('shared alias source is authoritative for Omnibox and reference resolver', 
   const aliasSource = vm.runInContext('EXTRA_BOOK_ALIASES', refCtx);
   const aliasMap = vm.runInContext('BOOK_ALIASES', refCtx);
   assert(aliasSource && Object.keys(aliasSource).length > 0, 'shared alias source is empty');
-  assert.equal(Object.keys(aliasMap).length, Object.keys(aliasSource).length, 'derived alias map diverges from shared source');
+  const expectedAliases = Object.create(null);
   for (const [alias, target] of Object.entries(aliasSource)) {
-    assert.equal(aliasMap[alias], target, `alias map mismatch: ${alias}`);
+    const book = refCtx.BOOKS.find(item => item.name === target);
+    assert(book, `alias source target is not a canonical book: ${alias}`);
+    const normalized = String(alias).toLowerCase().trim();
+    const canonical = String(book.name || '').toLowerCase().trim();
+    const urlKey = String(book.urlKey || '').toLowerCase().trim();
+    const number = String(book.bookNumber || '').trim();
+    if (normalized && normalized !== canonical && normalized !== urlKey && normalized !== number) {
+      expectedAliases[normalized] = target;
+    }
+  }
+  assert.deepEqual(aliasMap, expectedAliases, 'derived alias map diverges from shared source');
+  for (const [alias, target] of Object.entries(expectedAliases)) {
     assert.equal(refCtx.resolveBibleBook(alias)?.name, target, `reference resolver mismatch: ${alias}`);
   }
   assert(bgSource.includes("importScripts('kjv-corpus-word-index.js'"), 'background import list missing');
