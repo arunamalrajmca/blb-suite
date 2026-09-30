@@ -114,8 +114,77 @@ test.describe('core user-visible E2E', () => {
 
     for (const fragment of cases) {
       const target = page.locator('#blb-e2e-doubleclick-context-reference span', { hasText: fragment });
-      const pagesBefore = context.pages();
       await target.dblclick();
+      await expect.poll(() => context.pages().map(candidate => {
+        try { return new URL(candidate.url()).pathname; } catch (_) { return ''; }
+      }).filter(Boolean).join(' | '), { timeout: 10000 }).toContain(expectedPath);
+      const blb = context.pages().find(candidate => {
+        try {
+          const path = new URL(candidate.url()).pathname;
+          return path === expectedPath || path === expectedPath.replace(/\/$/, '') + '/' || path.startsWith(expectedPath + 's_');
+        } catch (_) { return false; }
+      });
+      expect(blb).toBeTruthy();
+      await blb.close();
+    }
+  });
+  test('Double-click standalone book numbers do not borrow context across lines', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const container = document.createElement('div');
+      container.id = 'blb-e2e-standalone-book-numbers';
+      container.innerHTML = '<p id="book-number-1">1</p><p id="book-number-2">2</p><p id="book-number-3">3</p><p id="book-number-16">16</p>';
+      document.body.appendChild(container);
+    });
+
+    const cases = [
+      ['book-number-1', '/kjv/gen/1/1/'],
+      ['book-number-2', '/kjv/exo/1/1/'],
+      ['book-number-3', '/kjv/lev/1/1/'],
+      ['book-number-16', '/kjv/neh/1/1/']
+    ];
+
+    for (const [id, expectedPath] of cases) {
+      const target = page.locator('#' + id);
+      await target.dblclick();
+      await expect.poll(() => context.pages().some(candidate => {
+        try {
+          const path = new URL(candidate.url()).pathname;
+          return path === expectedPath || path === expectedPath.replace(/\/$/, '') + '/' || path.startsWith(expectedPath + 's_');
+        } catch (_) { return false; }
+      }), { timeout: 10000 }).toBe(true);
+      const blb = context.pages().find(candidate => {
+        try {
+          const path = new URL(candidate.url()).pathname;
+          return path === expectedPath || path === expectedPath.replace(/\/$/, '') + '/' || path.startsWith(expectedPath + 's_');
+        } catch (_) { return false; }
+      });
+      expect(blb).toBeTruthy();
+      await blb.close();
+    }
+  });
+
+  test('Double-click uses the browser token, not the whole surrounding line', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-doubleclick-token-isolation';
+      el.innerHTML = '<span id="book-token-1">1</span> <span id="book-token-66">66</span> <span>Install the downloaded ZIP</span>';
+      el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(el);
+    });
+
+    const cases = [
+      ['book-token-1', '1', '/kjv/gen/1/1/'],
+      ['book-token-66', '66', '/kjv/rev/1/1/']
+    ];
+
+    for (const [id, fragment, expectedPath] of cases) {
+      const pagesBefore = context.pages();
+      await page.locator('#' + id).dblclick();
+      await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), { timeout: 3000 }).toBe(fragment);
       await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
       const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
       expect(blb).toBeTruthy();
@@ -123,6 +192,100 @@ test.describe('core user-visible E2E', () => {
       await blb.close();
     }
   });
+
+  test('Double-clicking ordinary heading words does not open a Bible reference', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const heading = document.createElement('h2');
+      heading.id = 'blb-e2e-doubleclick-heading';
+      heading.textContent = '1. Install the downloaded ZIP';
+      heading.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(heading);
+    });
+
+    for (const fragment of ['Install', 'downloaded']) {
+      const rect = await page.evaluate((fragment) => {
+        const el = document.getElementById('blb-e2e-doubleclick-heading');
+        const text = el.firstChild;
+        const start = el.textContent.indexOf(fragment);
+        const range = document.createRange();
+        range.setStart(text, start);
+        range.setEnd(text, start + fragment.length);
+        const box = range.getBoundingClientRect();
+        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      }, fragment);
+
+      const pagesBefore = context.pages();
+      await page.mouse.dblclick(rect.x, rect.y);
+      await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), { timeout: 3000 }).toBe(fragment);
+      await page.waitForTimeout(300);
+      expect(context.pages().length).toBe(pagesBefore.length);
+    }
+
+    await page.evaluate(() => {
+      const p = document.createElement('p');
+      p.id = 'blb-e2e-doubleclick-non-book-numbers';
+      p.textContent = '67 150 176 109565645022';
+      p.style.cssText = 'position:fixed;left:24px;top:72px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(p);
+    });
+
+    for (const fragment of ['67', '150', '176', '109565645022']) {
+      const rect = await page.evaluate((fragment) => {
+        const el = document.getElementById('blb-e2e-doubleclick-non-book-numbers');
+        const text = el.firstChild;
+        const start = el.textContent.indexOf(fragment);
+        const range = document.createRange();
+        range.setStart(text, start);
+        range.setEnd(text, start + fragment.length);
+        const box = range.getBoundingClientRect();
+        return {x: box.left + box.width / 2, y: box.top + box.height / 2};
+      }, fragment);
+      const pagesBefore = context.pages();
+      await page.mouse.dblclick(rect.x, rect.y);
+      await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), {timeout:3000}).toBe(fragment);
+      await page.waitForTimeout(300);
+      expect(context.pages().length).toBe(pagesBefore.length);
+    }
+  });
+
+  test('Standalone numbers on separate lines do not inherit adjacent Bible-reference context', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const container = document.createElement('div');
+      container.id = 'blb-e2e-separated-tokens';
+      container.innerHTML = '<p id="line-book">Jn</p><p id="line-chapter">3</p><p id="line-verse">16</p>';
+      document.body.appendChild(container);
+    });
+
+    const cases = [
+      ['line-book', '/kjv/jhn/1/1/'],
+      ['line-chapter', '/kjv/lev/1/1/'],
+      ['line-verse', '/kjv/neh/1/1/']
+    ];
+
+    for (const [id, expectedPath] of cases) {
+      const target = page.locator('#' + id);
+      await target.dblclick();
+      await expect.poll(() => context.pages().some(candidate => {
+        try {
+          const path = new URL(candidate.url()).pathname;
+          return path === expectedPath || path === expectedPath.replace(/\/$/, '') + '/' || path.startsWith(expectedPath + 's_');
+        } catch (_) { return false; }
+      }), { timeout: 10000 }).toBe(true);
+      const blb = context.pages().find(candidate => {
+        try {
+          const path = new URL(candidate.url()).pathname;
+          return path === expectedPath || path === expectedPath.replace(/\/$/, '') + '/' || path.startsWith(expectedPath + 's_');
+        } catch (_) { return false; }
+      });
+      expect(blb).toBeTruthy();
+      await blb.close();
+    }
+  });
+
   test('Double-click plain-text Acts 17:11 tokens uses adjacent context', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
@@ -225,6 +388,44 @@ test.describe('core user-visible E2E', () => {
       {text:'66', valid:true, type:'BOOK', book:'revelation'}
     ]);
 
+    const clampedReferences = await extensionWorker.evaluate(() => {
+      const cases = [
+        ['Psalm 151', 'psalms', 150, null],
+        ['Romans 17', 'romans', 16, null],
+        ['Psalm 119:177', 'psalms', 119, 176],
+        ['Psalm 119:999', 'psalms', 119, 176]
+      ];
+      return cases.map(([text, book, chapter, verse]) => {
+        const decision = classifySelectionForBlb(text);
+        const ref = decision.directRef || decision.refs?.[0] || null;
+        return {
+          text,
+          book: String(ref?.book || '').toLowerCase(),
+          chapter: ref?.chapter ?? null,
+          verse: ref?.from ?? null
+        };
+      });
+    });
+    expect(clampedReferences).toEqual([
+      {text:'Psalm 151', book:'psalms', chapter:150, verse:null},
+      {text:'Romans 17', book:'romans', chapter:16, verse:null},
+      {text:'Psalm 119:177', book:'psalms', chapter:119, verse:176},
+      {text:'Psalm 119:999', book:'psalms', chapter:119, verse:176}
+    ]);
+
+    const standaloneNonBooks = await extensionWorker.evaluate(() => {
+      return ['67', '150', '176', '109565645022'].map(text => {
+        const decision = classifySelectionForBlb(text);
+        return {text, valid:decision.valid === true, type:decision.type || ''};
+      });
+    });
+    expect(standaloneNonBooks).toEqual([
+      {text:'67', valid:false, type:'INVALID'},
+      {text:'150', valid:false, type:'INVALID'},
+      {text:'176', valid:false, type:'INVALID'},
+      {text:'109565645022', valid:false, type:'INVALID'}
+    ]);
+
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.evaluate((text) => {
@@ -300,6 +501,34 @@ test.describe('core user-visible E2E', () => {
     )).toBe(true);
   });
 
+
+  test('Double-click uses canonical clamping only after a reference is established', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const el = document.createElement('div');
+      el.id = 'blb-e2e-doubleclick-clamping-boundary';
+      el.innerHTML = '<p id="psalm-over"><span>Psalm</span> <span>119:177</span></p><p id="romans-over"><span>Romans</span> <span>17</span></p>';
+      el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(el);
+    });
+
+    const cases = [
+      ['psalm-over', 'span:nth-of-type(2)', '/kjv/psa/119/176/'],
+      ['romans-over', 'span:nth-of-type(2)', '/kjv/rom/16/']
+    ];
+
+    for (const [id, selector, expectedPath] of cases) {
+      const target = page.locator('#' + id + ' ' + selector);
+      const pagesBefore = context.pages();
+      await target.dblclick();
+      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
+      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      expect(blb).toBeTruthy();
+      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
+      await blb.close();
+    }
+  });
 
   test('Double-click alias Jn 3:16 resolves every token to John 3:16', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });

@@ -769,21 +769,38 @@ function getContextualBibleReference(selectionText) {
     if (resolved) return resolved;
   }
 
-  // Fall back to bounded adjacent text only when the browser has not exposed
-  // stable Range boundaries yet (a common dblclick timing condition).
-  const before = getAdjacentBoundaryText('before', 220);
-  const after = getAdjacentBoundaryText('after', 220);
-  const boundaryCandidates = [
-    { text: before + selected + after, start: before.length, end: before.length + selected.length },
-    { text: selected + after, start: 0, end: selected.length },
-    { text: before + selected, start: before.length, end: before.length + selected.length }
-  ];
-  for (const candidate of boundaryCandidates) {
-    const resolved = resolveBibleReferenceFromContextWindow(candidate.text, candidate.start, candidate.end);
-    if (resolved) return resolved;
-  }
-
+  // Do not fall back to document/body-wide text when the browser has not
+  // exposed stable Range boundaries yet. That can borrow a Bible reference
+  // from a different line, heading, paragraph, or unrelated section and turn
+  // a standalone token into an unrelated destination. The dblclick handler
+  // already has a block-local fallback (getDoubleClickBlockContextReference)
+  // and waits briefly for the native selection to settle.
   return null;
+}
+
+function getStandaloneBookReference(selectionText) {
+  try {
+    const selected = normalizeSelectionText(selectionText);
+    if (!selected || !/^(?:[1-9]|[1-5][0-9]|6[0-6]|[A-Za-z][A-Za-z0-9 .'-]*)$/.test(selected)) return null;
+
+    const book = /^\d+$/.test(selected)
+      ? (Array.isArray(BOOKS) ? BOOKS.find(candidate => String(candidate.bookNumber) === selected) : null)
+      : (typeof resolveBibleBook === 'function' ? resolveBibleBook(selected) : null);
+    if (!book) return null;
+
+    const urlKey = String(book.urlKey || '').trim();
+    if (!urlKey) return null;
+
+    return {
+      book: book.name,
+      chapter: 1,
+      from: 1,
+      to: 1,
+      url: `https://www.blueletterbible.org/kjv/${urlKey}/1/1/`
+    };
+  } catch (_) {
+    return null;
+  }
 }
 
 function getDoubleClickBlockContextReference(selectionText, target) {
@@ -802,19 +819,25 @@ function getDoubleClickBlockContextReference(selectionText, target) {
     if (!refs.length) return null;
 
     // Prefer the reference whose literal text contains the selected token.
-    // This handles ordinary text nodes such as "Acts 17:11" even when the
-    // browser has not yet exposed stable Range boundaries at dblclick time.
+    // This handles both full references such as "Acts 17:11" and established
+    // book/chapter references such as "Romans 17". A bare number remains a
+    // standalone-book selection only when the containing block has no parsed
+    // Bible reference that establishes its meaning.
     const matches = refs.filter(ref => {
       const needle = normalizeSelectionText(ref.text || '');
-      return needle && needle.toLowerCase().includes(selected.toLowerCase());
+      return needle &&
+        ref.chapter != null &&
+        needle.toLowerCase().includes(selected.toLowerCase());
     });
     if (matches.length === 1) {
       const ref = matches[0];
       return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
     }
 
-    // When the same token occurs more than once, use the clicked text node's
-    // current selection offset to choose the nearest reference occurrence.
+    // If the same token occurs more than once inside this exact block,
+    // choose the nearest occurrence — but only among genuine book/chapter/
+    // verse references that actually contain the selected token. Never let a
+    // parser interpretation of a bare number become contextual.
     const sel = window.getSelection?.();
     if (sel?.rangeCount && !sel.isCollapsed) {
       const range = sel.getRangeAt(0);
@@ -825,7 +848,8 @@ function getDoubleClickBlockContextReference(selectionText, target) {
       let best = null;
       for (const ref of refs) {
         const needle = normalizeSelectionText(ref.text || '');
-        if (!needle) continue;
+        if (!needle || ref.chapter == null ||
+            !needle.toLowerCase().includes(selected.toLowerCase())) continue;
         let from = 0;
         while (from <= source.length) {
           const start = source.indexOf(needle, from);
@@ -859,31 +883,58 @@ function isDoubleClickExcludedTarget(target) {
   return !!target?.closest?.('input,textarea,select,button,[contenteditable="true"],[contenteditable=""]');
 }
 
+function getDoubleClickSelection(event) {
+  const selection = normalizeSelectionText(window.getSelection ? window.getSelection().toString() : '');
+  if (selection) return selection;
+
+  // Chromium can deliver dblclick before the native Range is populated. Only
+  // fall back to the event target when that target is itself a single token;
+  // never turn an entire paragraph/heading into the selected reference.
+  const targetText = normalizeSelectionText(event?.target?.textContent || '');
+  if (targetText && !/\s/.test(targetText) && /^[A-Za-z0-9][A-Za-z0-9.'-]*$/.test(targetText)) {
+    return targetText;
+  }
+  return '';
+}
+
 function handleDoubleClickBlb(event) {
   try {
     if (!doubleClickBlbEnabled || !suiteEnabled || isDoubleClickExcludedTarget(event.target)) return;
 
-    // Browser selection state can lag the dblclick event on ordinary text nodes,
-    // especially when the selected token is only part of a Bible reference.
-    // Wait briefly for the final selection boundary, preferring a contextual
-    // reference before dispatching the action. A bounded fallback still sends
-    // the raw selection if the page cannot expose contextual text.
+    // The dblclick gesture has a different selection contract from Show on BLB,
+    // Alt+B, and right-click. Wait for Chromium's native token selection before
+    // resolving context. If selection is still empty, a single-token target is
+    // a safe fallback; a multiword block is never treated as the selection.
     const started = Date.now();
     const dispatch = () => {
       try {
-        const selection = normalizeSelectionText(window.getSelection ? window.getSelection().toString() : '');
-        if (!selection) return false;
-
-        const contextualReference = getContextualBibleReference(selection) || getDoubleClickBlockContextReference(selection, event.target);
-        const now = Date.now();
-        const destinationKey = selection.toLowerCase();
-        const previous = recentDoubleClickDestinations.get(destinationKey) || 0;
-
-        if (!contextualReference && now - started < 180) {
-          requestAnimationFrame(dispatch);
+        const selection = getDoubleClickSelection(event);
+        if (!selection) {
+          if (Date.now() - started < 500) {
+            requestAnimationFrame(dispatch);
+          }
           return true;
         }
 
+        // Only the block containing the browser-selected token may establish
+        // contextual Bible meaning. No document/body-wide resolver is used.
+        const blockContext = getDoubleClickBlockContextReference(selection, event.target);
+        const standaloneBook = getStandaloneBookReference(selection);
+        const contextualReference = blockContext || standaloneBook;
+
+        // Double-click is a Bible-reference gesture, not a generic search
+        // gesture. Once the token is isolated, it must either establish a
+        // standalone book (1-66) or belong to a real Bible reference in the
+        // same DOM block. Unrelated numbers such as 176 or 109565645022 are
+        // therefore a no-op and never enter classifier/corpus fallback logic.
+        if (!contextualReference) {
+          if (Date.now() - started < 500) requestAnimationFrame(dispatch);
+          return true;
+        }
+
+        const now = Date.now();
+        const destinationKey = selection.toLowerCase();
+        const previous = recentDoubleClickDestinations.get(destinationKey) || 0;
         if (now - previous < 1200) return true;
         recentDoubleClickDestinations.set(destinationKey, now);
         for (const [key, ts] of recentDoubleClickDestinations) {
@@ -893,7 +944,7 @@ function handleDoubleClickBlb(event) {
         safeRuntimeSendMessage({
           type:'blbSuiteOpenSelectionText',
           text:selection,
-          contextualReference: contextualReference || null,
+          contextualReference,
           tabBehavior:{activeIfNew:false, activateExisting:true}
         });
         return true;
