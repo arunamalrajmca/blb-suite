@@ -493,7 +493,7 @@ test.describe('core user-visible E2E', () => {
       await target.dblclick();
       await expect.poll(() => context.pages().filter(candidate => {
         try { return new URL(candidate.url()).pathname === `/kjv/${book.urlKey}/1/1/`; } catch (_) { return false; }
-      }).length, { timeout: 3000 }).toBeGreaterThan(0);
+      }).length, { timeout: 3000, message: `standalone book number ${book.number} (${book.urlKey}) did not open` }).toBeGreaterThan(0);
       const tabs = context.pages().filter(candidate => {
         try { return new URL(candidate.url()).pathname === `/kjv/${book.urlKey}/1/1/`; } catch (_) { return false; }
       });
