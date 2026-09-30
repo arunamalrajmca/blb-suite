@@ -457,6 +457,116 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  async function assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath) {
+    await runDoubleClickReferenceToken(page, context, extensionWorker, selector, await page.locator(selector).textContent(), expectedPath);
+  }
+
+  test('Double-click generic canonical references — all 66 books × book/chapter/verse tokens', async ({ page, context, extensionStorage, extensionWorker }) => {
+    const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
+      name: book.name, urlKey: book.urlKey, chapters: book.chapterCount
+    })));
+    expect(books).toHaveLength(66);
+
+    for (const book of books) {
+      await setupDoubleClickReferencePage(
+        page, extensionStorage,
+        `<p id="ref"><span class="book">${book.name}</span> <span class="chapter">1</span>:<span class="verse">1</span></p>`
+      );
+      const expectedPath = `/kjv/${book.urlKey}/1/1/`;
+      for (const selector of ['#ref .book', '#ref .chapter', '#ref .verse']) {
+        await assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath);
+      }
+    }
+  });
+
+  test('Double-click generic aliases — every shared alias across all books', async ({ page, context, extensionStorage, extensionWorker }) => {
+    const data = await extensionWorker.evaluate(() => {
+      const byBook = Object.create(null);
+      for (const book of BOOKS) byBook[book.name] = { name: book.name, urlKey: book.urlKey };
+      return Object.entries(BOOK_ALIASES || {}).map(([alias, target]) => ({
+        alias, book: byBook[target]?.name, urlKey: byBook[target]?.urlKey
+      })).filter(x => x.book && x.alias);
+    });
+
+    expect(data.length).toBeGreaterThan(0);
+    for (const item of data) {
+      const tokens = item.alias.trim().split(/\s+/);
+      const tokenHtml = tokens.map((token, i) => `<span class="alias-token" data-index="${i}">${token}</span>`).join(' ');
+      await setupDoubleClickReferencePage(
+        page, extensionStorage,
+        `<p id="ref">${tokenHtml} <span class="chapter">1</span>:<span class="verse">1</span></p>`
+      );
+      const expectedPath = `/kjv/${item.urlKey}/1/1/`;
+
+      // Every token in a multi-token alias must resolve through the same
+      // surrounding reference, not be reinterpreted independently.
+      for (let i = 0; i < tokens.length; i++) {
+        await assertDoubleClickPath(page, context, extensionWorker, `#ref .alias-token[data-index="${i}"]`, expectedPath);
+      }
+    }
+  });
+
+  test('Double-click generic numbered aliases and Roman prefixes — every numbered family', async ({ page, context, extensionStorage, extensionWorker }) => {
+    const numbered = await extensionWorker.evaluate(() => BOOKS
+      .filter(book => /^[123] /.test(book.name))
+      .map(book => ({ name: book.name, urlKey: book.urlKey })));
+    expect(numbered.length).toBeGreaterThan(0);
+
+    for (const book of numbered) {
+      const n = Number(book.name[0]);
+      const roman = ['I', 'II', 'III'][n - 1];
+      const remainder = book.name.slice(2);
+      const forms = [
+        { label: `${roman} ${remainder}`, tokens: [roman, remainder] },
+        { label: `${n} ${remainder}`, tokens: [String(n), remainder] }
+      ];
+
+      for (const form of forms) {
+        await setupDoubleClickReferencePage(
+          page, extensionStorage,
+          `<p id="ref">${form.tokens.map((token, i) => `<span class="book-token" data-index="${i}">${token}</span>`).join(' ')} <span class="chapter">1</span>:<span class="verse">1</span></p>`
+        );
+        const expectedPath = `/kjv/${book.urlKey}/1/1/`;
+        for (let i = 0; i < form.tokens.length; i++) {
+          await assertDoubleClickPath(page, context, extensionWorker, `#ref .book-token[data-index="${i}"]`, expectedPath);
+        }
+        for (const selector of ['#ref .chapter', '#ref .verse']) {
+          await assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath);
+        }
+      }
+    }
+  });
+
+  test('Double-click generic reference syntax — colon/dot/spaced/chapter/range forms', async ({ page, context, extensionStorage, extensionWorker }) => {
+    const cases = await extensionWorker.evaluate(() => BOOKS.map(book => ({
+      name: book.name, urlKey: book.urlKey, oneChapter: book.chapterCount === 1
+    })));
+
+    for (const book of cases) {
+      const variants = book.oneChapter
+        ? [`${book.name} 1:1`, `${book.name} 1.1`, `${book.name} 1 1`, `${book.name} 1:1-2`]
+        : [`${book.name} 1:1`, `${book.name} 1.1`, `${book.name} 1 1`, `${book.name} 1`];
+
+      for (const reference of variants) {
+        await setupDoubleClickReferencePage(page, extensionStorage, `<p id="ref">${reference}</p>`);
+        const expectedPath = `/kjv/${book.urlKey}/1/1/`;
+        // Locate each whitespace-delimited token independently. This
+        // deliberately exercises the same single-token contract as a real
+        // double-click rather than selecting the entire reference.
+        const tokenCount = reference.trim().split(/\s+/).length;
+        for (let i = 0; i < tokenCount; i++) {
+          const selector = `#ref-token-${i}`;
+          await page.evaluate(({reference}) => {
+            const p = document.querySelector('#ref');
+            const tokens = reference.trim().split(/\s+/);
+            p.innerHTML = tokens.map((token, i) => `<span id="ref-token-${i}">${token}</span>${i < tokens.length - 1 ? ' ' : ''}`).join('');
+          }, {reference});
+          await assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath);
+        }
+      }
+    }
+  });
+
   test('All 66 canonical books resolve correctly through the shared reference resolver', async ({ extensionWorker }) => {
     const results = await extensionWorker.evaluate(() => BOOKS.map(book => {
       const text = `${book.name} 1:1`;
