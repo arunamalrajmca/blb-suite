@@ -879,16 +879,16 @@ function isDoubleClickExcludedTarget(target) {
 }
 
 function getDoubleClickSelection(event) {
-  // A dblclick on a dedicated single-token element has an unambiguous target.
-  // Prefer it over the live Selection, which can still contain the previous
-  // token when repeated double-clicks are performed in quick succession.
+  const selection = normalizeSelectionText(window.getSelection ? window.getSelection().toString() : '');
+  if (selection) return selection;
+
+  // Chromium can deliver dblclick before the native Range is populated. Only
+  // fall back to the event target when that target is itself a single token;
+  // never turn an entire paragraph/heading into the selected reference.
   const targetText = normalizeSelectionText(event?.target?.textContent || '');
   if (targetText && !/\s/.test(targetText) && /^[A-Za-z0-9][A-Za-z0-9.'-]*$/.test(targetText)) {
     return targetText;
   }
-
-  const selection = normalizeSelectionText(window.getSelection ? window.getSelection().toString() : '');
-  if (selection) return selection;
   return '';
 }
 
