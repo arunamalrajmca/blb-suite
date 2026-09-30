@@ -294,7 +294,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click plain-text Acts 17:11 tokens uses adjacent context', async ({ page, context, extensionStorage }) => {
+  test('Double-click plain-text Acts 17:11 tokens uses adjacent context', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
@@ -322,6 +322,9 @@ test.describe('core user-visible E2E', () => {
       }, fragment);
 
       await dblclickAt(page.locator('#blb-e2e-doubleclick-plain-reference'), rect);
+      await page.waitForTimeout(300);
+      const debugOpen = await extensionWorker.evaluate(() => chrome.storage.local.get('__blbE2EDebugSelectionOpen'));
+      console.log('BLB_E2E_DEBUG_SELECTION_OPEN', JSON.stringify(debugOpen));
       const selectedAfterDoubleClick = await page.evaluate(() => window.getSelection()?.toString() || '');
       expect(selectedAfterDoubleClick).toBe(fragment);
       await expect.poll(() => page.evaluate(() => window.__blbTestDblClickCount), { timeout: 3000 }).toBeGreaterThan(0);
