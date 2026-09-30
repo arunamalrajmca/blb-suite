@@ -324,7 +324,9 @@ test.describe('core user-visible E2E', () => {
       await dblclickAt(page.locator('#blb-e2e-doubleclick-plain-reference'), rect);
       await page.waitForTimeout(300);
       const debugOpen = await extensionWorker.evaluate(() => chrome.storage.local.get('__blbE2EDebugSelectionOpen'));
+      const debugPhase = await extensionWorker.evaluate(() => chrome.storage.local.get('__blbE2EDebugOpenPhase'));
       console.log('BLB_E2E_DEBUG_SELECTION_OPEN', JSON.stringify(debugOpen));
+      console.log('BLB_E2E_DEBUG_OPEN_PHASE', JSON.stringify(debugPhase));
       const selectedAfterDoubleClick = await page.evaluate(() => window.getSelection()?.toString() || '');
       expect(selectedAfterDoubleClick).toBe(fragment);
       await expect.poll(() => page.evaluate(() => window.__blbTestDblClickCount), { timeout: 3000 }).toBeGreaterThan(0);
