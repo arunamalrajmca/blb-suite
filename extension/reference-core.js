@@ -28,7 +28,7 @@ function resolveBibleBook(value) {
   // Support Roman-numeral prefixes for every numbered Bible-book family.
   // Only normalize I/II/III when the remainder resolves to an existing
   // numbered book; a standalone "I" therefore remains unresolved.
-  const romanPrefixMatch = lower.match(/^(i{1,3})\\s+(.+)$/);
+  const romanPrefixMatch = lower.match(/^(i{1,3})\s+(.+)$/);
   if (romanPrefixMatch) {
     const romanNumber = { i: '1', ii: '2', iii: '3' }[romanPrefixMatch[1]];
     const numberedBook = resolveBibleBook(`${romanNumber} ${romanPrefixMatch[2]}`);
