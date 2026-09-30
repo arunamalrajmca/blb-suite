@@ -1,14 +1,13 @@
 name: BLB Suite BROWSER E2E — PERFORMANCE
 
 on:
-  pull_request:
+  push:
     branches: [ main ]
   workflow_dispatch:
 
 jobs:
   performance:
     name: Measured performance qualification
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.pull_request.title, 'Performance')
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -16,22 +15,28 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
+
       - name: Install dependencies
         run: npm install
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
+
       - name: Read manifest version
         id: version
         run: echo "version=$(node -p 'require(\"./extension/manifest.json\").version')" >> "$GITHUB_OUTPUT"
-      - name: Prepare approved 5.2.51.43 baseline
-        if: github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Performance')
-        run: git worktree add "$RUNNER_TEMP/blb-baseline" "${{ github.event.pull_request.base.sha }}"
-      - name: Benchmark approved baseline and PR candidate (interleaved)
-        if: github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Performance')
+
+      - name: Fetch approved performance baseline
+        run: |
+          git fetch origin tag v5.2.51.43 --depth=1
+          git worktree add "$RUNNER_TEMP/blb-baseline" v5.2.51.43
+
+      - name: Benchmark approved baseline and current main (interleaved)
         env:
           BLB_EXPECTED_VERSION: 5.2.51.43
           BLB_BASELINE_EXTENSION_PATH: ${{ runner.temp }}/blb-baseline/extension
@@ -48,8 +53,8 @@ jobs:
               BLB_EXTENSION_PATH="$BLB_CANDIDATE_EXTENSION_PATH" BLB_PERF_OUTPUT="$BLB_CANDIDATE_OUTPUT" BLB_PERF_SCENARIO="$scenario" npx playwright test tests/browser/performance.spec.js --workers=1 --repeat-each=1
             done
           done
-      - name: Require measured performance improvement
-        if: github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Performance')
+
+      - name: Require measured performance qualification
         env:
           BLB_PERF_MIN_TARGETED_IMPROVEMENT: 0.03
           BLB_PERF_MAX_SELECTION_REGRESSION: 0.10
@@ -57,7 +62,10 @@ jobs:
           BLB_PERF_MIN_PARAGRAPH_FIRST_TAB_IMPROVEMENT: 0.50
           BLB_PERF_MIN_PARAGRAPH_SECOND_TAB_IMPROVEMENT: 0.50
           BLB_PERF_MAX_FRESH_REGRESSION: 0.10
-        run: set -o pipefail; node scripts/compare-performance.mjs "$RUNNER_TEMP/baseline-performance.jsonl" "$RUNNER_TEMP/candidate-performance.jsonl" | tee "$RUNNER_TEMP/performance-report.md"
+        run: |
+          set -o pipefail
+          node scripts/compare-performance.mjs "$RUNNER_TEMP/baseline-performance.jsonl" "$RUNNER_TEMP/candidate-performance.jsonl" | tee "$RUNNER_TEMP/performance-report.md"
+
       - name: Upload performance diagnostics
         if: always()
         uses: actions/upload-artifact@v4
