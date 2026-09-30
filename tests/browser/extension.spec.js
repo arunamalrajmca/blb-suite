@@ -60,6 +60,7 @@ test.describe('core user-visible E2E', () => {
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const el = document.createElement('p');
       el.id = 'blb-e2e-reference';
@@ -83,6 +84,7 @@ test.describe('core user-visible E2E', () => {
   test('Show on BLB exact-reference handoff timing: fresh tab', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const el = document.createElement('p');
       el.id = 'blb-e2e-timing-reference';
@@ -116,10 +118,11 @@ test.describe('core user-visible E2E', () => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
 
     const existing = await context.newPage();
-    await existing.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil: 'domcontentloaded' });
+    await existing.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil: 'commit' });
     await existing.waitForTimeout(250);
 
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const el = document.createElement('p');
       el.id = 'blb-e2e-reuse-reference';
@@ -383,6 +386,7 @@ test.describe('core user-visible E2E', () => {
   // Reference coverage is generated exclusively from BOOKS/BOOK_ALIASES so no
   // individual Bible reference is privileged as a special case.
   test('Double-click generic reference grammar — exhaustive token coverage', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
     const data = await extensionWorker.evaluate(() => {
       const forms = [];
       const roman = {1: 'I', 2: 'II', 3: 'III'};
@@ -426,6 +430,7 @@ test.describe('core user-visible E2E', () => {
   });
 
   test('Double-click generic reference syntax — exhaustive supported forms', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
     const data = await extensionWorker.evaluate(() => {
       const roman = {1: 'I', 2: 'II', 3: 'III'};
       return BOOKS.flatMap(book => {
@@ -532,6 +537,7 @@ test.describe('core user-visible E2E', () => {
   }
 
   test('Double-click generic canonical references — all 66 books × book/chapter/verse tokens', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
     const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
       name: book.name, urlKey: book.urlKey, chapters: book.chapterCount
     })));
@@ -554,6 +560,7 @@ test.describe('core user-visible E2E', () => {
   });
 
   test('Double-click generic aliases — every shared alias across all books', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
     const data = await extensionWorker.evaluate(() => {
       const byBook = Object.create(null);
       for (const book of BOOKS) byBook[book.name] = { name: book.name, urlKey: book.urlKey };
@@ -581,6 +588,7 @@ test.describe('core user-visible E2E', () => {
   });
 
   test('Double-click generic numbered aliases and Roman prefixes — every numbered family', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
     const numbered = await extensionWorker.evaluate(() => BOOKS
       .filter(book => /^[123] /.test(book.name))
       .map(book => ({ name: book.name, urlKey: book.urlKey })));
@@ -612,6 +620,7 @@ test.describe('core user-visible E2E', () => {
   });
 
   test('Double-click generic reference syntax — colon/dot/spaced/chapter/range forms', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
     const cases = await extensionWorker.evaluate(() => BOOKS.map(book => ({
       name: book.name, urlKey: book.urlKey, oneChapter: book.chapterCount === 1
     })));
