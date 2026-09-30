@@ -330,6 +330,11 @@ test.describe('core user-visible E2E', () => {
     }, { selector, fragment });
 
     await dblclickAt(page.locator(selector), rect);
+    if (/^\\d+$/.test(fragment)) {
+      await page.waitForTimeout(300);
+      const debugContext = await extensionWorker.evaluate(() => chrome.storage.local.get('__blbE2EDebugContext'));
+      console.log('BLB_E2E_DEBUG_CONTEXT', JSON.stringify(debugContext));
+    }
     await activateBlbTabForPath(extensionWorker, expectedPath);
     await expect.poll(() => context.pages().some(candidate => {
       try {
