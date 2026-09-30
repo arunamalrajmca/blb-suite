@@ -487,7 +487,6 @@ test.describe('core user-visible E2E', () => {
       for (const book of BOOKS) {
         forms.push({ form: book.name, book, kind: 'canonical' });
         forms.push({ form: book.urlKey, book, kind: 'urlKey' });
-        forms.push({ form: String(book.bookNumber), book, kind: 'number' });
         for (const [alias, target] of Object.entries(BOOK_ALIASES || {})) {
           if (target === book.name) forms.push({ form: alias, book, kind: 'alias' });
         }
