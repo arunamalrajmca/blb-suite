@@ -479,6 +479,71 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  test('Double-click property-generated references — deterministic valid-form sampling', async ({ page, context, extensionStorage, extensionWorker }) => {
+    const data = await extensionWorker.evaluate(() => {
+      const byName = Object.create(null);
+      for (const book of BOOKS) byName[book.name] = book;
+      const forms = [];
+      for (const book of BOOKS) {
+        forms.push({ form: book.name, book, kind: 'canonical' });
+        forms.push({ form: book.urlKey, book, kind: 'urlKey' });
+        forms.push({ form: String(book.bookNumber), book, kind: 'number' });
+        for (const [alias, target] of Object.entries(BOOK_ALIASES || {})) {
+          if (target === book.name) forms.push({ form: alias, book, kind: 'alias' });
+        }
+      }
+
+      // Add Roman forms from the same BOOKS source of truth.
+      const roman = { 1: 'I', 2: 'II', 3: 'III' };
+      for (const book of BOOKS.filter(b => /^[123] /.test(b.name))) {
+        forms.push({
+          form: `${roman[Number(book.name[0])]} ${book.name.slice(2)}`,
+          book,
+          kind: 'roman'
+        });
+      }
+      return forms.map(({form, book, kind}) => ({
+        form, kind, urlKey: book.urlKey, chapterCount: book.chapterCount
+      }));
+    });
+
+    expect(data.length).toBeGreaterThan(66);
+
+    let seed = 0x51c0de;
+    const next = (max) => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed % max;
+    };
+
+    // Generate a reproducible sample rather than maintaining another hand-written
+    // list. Each generated case exercises the real DOM double-click contract.
+    for (let i = 0; i < 150; i++) {
+      const item = data[next(data.length)];
+      const chapter = 1 + next(item.chapterCount);
+      const syntax = next(4);
+      const verse = 1 + next(8);
+      let reference;
+      let fragment;
+
+      if (syntax === 0) {
+        reference = `${item.form} ${chapter}:${verse}`;
+        fragment = [item.form.split(/\\s+/)[0], String(chapter), String(verse)][next(3)];
+      } else if (syntax === 1) {
+        reference = `${item.form} ${chapter}.${verse}`;
+        fragment = String(chapter);
+      } else if (syntax === 2) {
+        reference = `${item.form} ${chapter} ${verse}`;
+        fragment = String(verse);
+      } else {
+        reference = `${item.form} ${chapter}`;
+        fragment = String(chapter);
+      }
+
+      await setupDoubleClickReferencePage(page, extensionStorage, `<p id="ref">${reference}</p>`);
+      await runDoubleClickReferenceToken(page, context, extensionWorker, '#ref', fragment, `/kjv/${item.urlKey}/${chapter}/${verse}/`);
+    }
+  });
+
   test('Double-click generic aliases — every shared alias across all books', async ({ page, context, extensionStorage, extensionWorker }) => {
     const data = await extensionWorker.evaluate(() => {
       const byBook = Object.create(null);
