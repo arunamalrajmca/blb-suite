@@ -176,6 +176,8 @@ test.describe('core user-visible E2E', () => {
   test('Double-click standalone book numbers do not borrow context across lines', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    // Wait for asynchronous double-click settings initialization before the first gesture.
+    await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const container = document.createElement('div');
       container.id = 'blb-e2e-standalone-book-numbers';
@@ -484,27 +486,37 @@ test.describe('core user-visible E2E', () => {
     const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
       number: book.bookNumber, urlKey: book.urlKey
     })));
-    for (let index = 0; index < books.length; index++) {
-      const book = books[index];
-      await setupDoubleClickReferencePage(
-        page,
-        extensionStorage,
-        `<p id="ref"><span class="standalone-number">${book.number}</span></p>`
-      );
-      const target = page.locator('#ref .standalone-number');
+
+    await setupDoubleClickReferencePage(
+      page,
+      extensionStorage,
+      `<p id="ref">${books.map(book =>
+        `<span class="standalone-number" data-book-number="${book.number}">${book.number}</span>`
+      ).join(' ')}</p>`
+    );
+
+    // Keep all 66 independent gestures in one initialized document. Re-loading
+    // the page between every book can make this positional test depend on
+    // asynchronous content-script initialization timing.
+    for (const book of books) {
+      const target = page.locator(`#ref .standalone-number[data-book-number="${book.number}"]`);
       await target.scrollIntoViewIfNeeded();
       await target.dblclick();
+
+      const expectedPath = `/kjv/${book.urlKey}/1/1/`;
       await expect.poll(() => context.pages().filter(candidate => {
         try {
           const path = new URL(candidate.url()).pathname;
-          const expectedPath = `/kjv/${book.urlKey}/1/1/`;
           return path === expectedPath || path.startsWith(expectedPath + 's_');
         } catch (_) { return false; }
-      }).length, { timeout: 3000, message: `standalone book number ${book.number} (${book.urlKey}) did not open` }).toBeGreaterThan(0);
+      }).length, {
+        timeout: 3000,
+        message: `standalone book number ${book.number} (${book.urlKey}) did not open`
+      }).toBeGreaterThan(0);
+
       const tabs = context.pages().filter(candidate => {
         try {
           const path = new URL(candidate.url()).pathname;
-          const expectedPath = `/kjv/${book.urlKey}/1/1/`;
           return path === expectedPath || path.startsWith(expectedPath + 's_');
         } catch (_) { return false; }
       });
