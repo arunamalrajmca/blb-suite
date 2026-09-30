@@ -352,20 +352,34 @@ test.describe('core user-visible E2E', () => {
     if (/^\d+$/.test(fragment)) {
     }
     await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')});
-    await expect.poll(() => context.pages().some(candidate => {
-      try {
-        const path = new URL(candidate.url()).pathname;
-        return path === expectedPath || path.startsWith(expectedPath + 's_');
-      } catch (_) { return false; }
-    }), { timeout: 10000 }).toBe(true);
-    const blb = context.pages().find(candidate => {
-      try {
-        const path = new URL(candidate.url()).pathname;
-        return path === expectedPath || path.startsWith(expectedPath + 's_');
-      } catch (_) { return false; }
-    });
-    expect(blb).toBeTruthy();
-    await blb.close();
+    // The extension worker is authoritative for Chrome tab state. Do not
+    // require Playwright context.pages() to observe the tab before validating
+    // the reference; that representation can lag behind chrome.tabs.query().
+    await expect.poll(() => extensionWorker.evaluate((path) => chrome.tabs.query({}).then(tabs =>
+      tabs.some(tab => {
+        try {
+          const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+          return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+        } catch (_) {
+          return false;
+        }
+      })
+    ), expectedPath), { timeout: 10000 }).toBe(true);
+    await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+      const matches = tabs.filter(tab => {
+        try {
+          const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+          return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+        } catch (_) {
+          return false;
+        }
+      });
+      for (const tab of matches) {
+        if (tab.id != null) {
+          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+        }
+      }
+    }), expectedPath);
   }
 
   async function setupDoubleClickReferencePage(page, extensionStorage, html) {
