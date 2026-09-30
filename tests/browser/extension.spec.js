@@ -182,14 +182,8 @@ test.describe('core user-visible E2E', () => {
     ];
 
     for (const [id, fragment, expectedPath] of cases) {
-      const rect = await page.evaluate((id) => {
-        const el = document.getElementById(id);
-        const box = el.getBoundingClientRect();
-        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
-      }, id);
-
       const pagesBefore = context.pages();
-      await page.mouse.dblclick(rect.x, rect.y);
+      await page.locator('#' + id).dblclick();
       await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), { timeout: 3000 }).toBe(fragment);
       await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
       const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
@@ -514,7 +508,7 @@ test.describe('core user-visible E2E', () => {
     await page.evaluate(() => {
       const el = document.createElement('div');
       el.id = 'blb-e2e-doubleclick-clamping-boundary';
-      el.innerHTML = '<p id="psalm-over">Psalm 119:177</p><p id="romans-over">Romans 17</p>';
+      el.innerHTML = '<p id="psalm-over"><span>Psalm</span> <span>119:177</span></p><p id="romans-over"><span>Romans</span> <span>17</span></p>';
       el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
       document.body.appendChild(el);
     });
