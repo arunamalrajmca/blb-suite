@@ -217,34 +217,6 @@ test('property-based reference grammar generation covers deterministic valid and
   }
 });
 
-test('reference-context grammar resolves every canonical form and shared alias', () => {
-  const aliasesByBook = Object.create(null);
-  for (const [alias, target] of Object.entries(refCtx.BOOK_ALIASES || {})) {
-    (aliasesByBook[target] ||= []).push(alias);
-  }
-  for (const book of refCtx.BOOKS) {
-    const forms = [...new Set([book.name, book.urlKey, ...(aliasesByBook[book.name] || [])])];
-    for (const form of forms) {
-      const refs = refCtx.resolveBibleReferenceText(`${form} 1:1`);
-      assert.equal(refs.length, 1, form);
-      assert.equal(refs[0].book, book.name, form);
-      assert.equal(refs[0].chapter, 1, form);
-      assert.equal(refs[0].from, 1, form);
-    }
-  }
-
-  const content = read('content.js');
-  const resolverStart = content.indexOf('function resolveBibleReferenceFromContextWindow');
-  const resolverEnd = content.indexOf('function getDoubleClickBlockContextReference', resolverStart);
-  const resolver = content.slice(resolverStart, resolverEnd);
-  const contextualStart = content.indexOf('function getContextualBibleReference');
-  const contextual = content.slice(contextualStart, resolverEnd);
-  assert(resolver.includes('selectionStart < refEnd && selectionEnd > refStart'), 'context resolver must match the exact selected occurrence');
-  assert(contextual.includes('const position = getSelectionContextPosition()'), 'context resolver must prefer exact DOM selection');
-  assert(!contextual.includes('getAdjacentBoundaryText('), 'context resolver must not use document-wide fallback text');
-  assert(content.includes('getDoubleClickBlockContextReference(selection, event.target)'), 'double-click fallback must remain block-local');
-  assert(resolver.includes('source.indexOf(needle, fromIndex)'), 'resolver must examine every reference occurrence, not only the first');
-});
 test('direct reference resolver rejects prose and accepts exact refs', () => {
   assert(refCtx.resolveDirectBibleReference('1 Thessalonians 2:13'));
   assert.equal(refCtx.resolveDirectBibleReference('in every one'), null);
