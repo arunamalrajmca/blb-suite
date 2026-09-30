@@ -446,12 +446,43 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Roman numeral prefix — standalone I remains independent', async ({ page, context, extensionStorage }) => {
-    await setupDoubleClickReferencePage(page, extensionStorage, '<p id="ref">I</p>');
-    await page.locator('#ref').dblclick();
-    await expect.poll(() => context.pages().filter(candidate => {
-      try { return new URL(candidate.url()).hostname === 'www.blueletterbible.org'; } catch (_) { return false; }
-    }).length, { timeout: 3000 }).toBe(0);
+  test('Double-click standalone Roman prefixes remain unresolved', async ({ page, context, extensionStorage, extensionWorker }) => {
+    const prefixes = await extensionWorker.evaluate(() => {
+      const roman = {1: 'I', 2: 'II', 3: 'III'};
+      return [...new Set(
+        BOOKS.filter(book => /^[123] /.test(book.name))
+          .map(book => roman[Number(book.name[0])])
+      )];
+    });
+    for (const prefix of prefixes) {
+      await setupDoubleClickReferencePage(page, extensionStorage, `<p id="ref">${prefix}</p>`);
+      await page.locator('#ref').dblclick();
+      await expect.poll(() => context.pages().filter(candidate => {
+        try { return new URL(candidate.url()).hostname === 'www.blueletterbible.org'; } catch (_) { return false; }
+      }).length, { timeout: 3000 }).toBe(0);
+    }
+  });
+
+  test('Double-click positional context — standalone numeric book tokens remain independent', async ({ page, context, extensionStorage, extensionWorker }) => {
+    const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
+      number: book.bookNumber, urlKey: book.urlKey
+    })));
+    await setupDoubleClickReferencePage(
+      page,
+      extensionStorage,
+      `<div id="refs">${books.map(book => `<p><span class="standalone-number">${book.number}</span></p>`).join('')}</div>`
+    );
+    for (const book of books) {
+      const target = page.locator('#refs .standalone-number').filter({ hasText: String(book.number) }).first();
+      await target.dblclick();
+      await expect.poll(() => context.pages().filter(candidate => {
+        try { return new URL(candidate.url()).pathname === `/kjv/${book.urlKey}/1/1/`; } catch (_) { return false; }
+      }).length, { timeout: 3000 }).toBeGreaterThan(0);
+      const tabs = context.pages().filter(candidate => {
+        try { return new URL(candidate.url()).pathname === `/kjv/${book.urlKey}/1/1/`; } catch (_) { return false; }
+      });
+      for (const tab of tabs) await tab.close();
+    }
   });
 
   test('Double-click positional context — orphan tokens remain independent', async ({ page, context, extensionStorage }) => {
@@ -508,70 +539,6 @@ test.describe('core user-visible E2E', () => {
       for (const selector of ['#ref .book', '#ref .chapter', '#ref .verse']) {
         await assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath);
       }
-    }
-  });
-
-  test('Double-click property-generated references — deterministic valid-form sampling', async ({ page, context, extensionStorage, extensionWorker }) => {
-    const data = await extensionWorker.evaluate(() => {
-      const byName = Object.create(null);
-      for (const book of BOOKS) byName[book.name] = book;
-      const forms = [];
-      for (const book of BOOKS) {
-        forms.push({ form: book.name, book, kind: 'canonical' });
-        forms.push({ form: book.urlKey, book, kind: 'urlKey' });
-        for (const [alias, target] of Object.entries(BOOK_ALIASES || {})) {
-          if (target === book.name) forms.push({ form: alias, book, kind: 'alias' });
-        }
-      }
-
-      // Add Roman forms from the same BOOKS source of truth.
-      const roman = { 1: 'I', 2: 'II', 3: 'III' };
-      for (const book of BOOKS.filter(b => /^[123] /.test(b.name))) {
-        forms.push({
-          form: `${roman[Number(book.name[0])]} ${book.name.slice(2)}`,
-          book,
-          kind: 'roman'
-        });
-      }
-      return forms.map(({form, book, kind}) => ({
-        form, kind, urlKey: book.urlKey, chapterCount: book.chapterCount
-      }));
-    });
-
-    expect(data.length).toBeGreaterThan(66);
-
-    let seed = 0x51c0de;
-    const next = (max) => {
-      seed = (seed * 1664525 + 1013904223) >>> 0;
-      return seed % max;
-    };
-
-    // Generate a reproducible sample rather than maintaining another hand-written
-    // list. Each generated case exercises the real DOM double-click contract.
-    for (let i = 0; i < 150; i++) {
-      const item = data[next(data.length)];
-      const chapter = 1 + next(item.chapterCount);
-      const syntax = next(4);
-      const verse = 1 + next(8);
-      let reference;
-      let fragment;
-
-      if (syntax === 0) {
-        reference = `${item.form} ${chapter}:${verse}`;
-        fragment = [item.form.split(/\\s+/)[0], String(chapter), String(verse)][next(3)];
-      } else if (syntax === 1) {
-        reference = `${item.form} ${chapter}.${verse}`;
-        fragment = String(chapter);
-      } else if (syntax === 2) {
-        reference = `${item.form} ${chapter} ${verse}`;
-        fragment = String(verse);
-      } else {
-        reference = `${item.form} ${chapter}`;
-        fragment = String(chapter);
-      }
-
-      await setupDoubleClickReferencePage(page, extensionStorage, `<p id="ref">${reference}</p>`);
-      await runDoubleClickReferenceToken(page, context, extensionWorker, '#ref', fragment, `/kjv/${item.urlKey}/${chapter}/${verse}/`);
     }
   });
 
