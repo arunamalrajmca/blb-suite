@@ -33,10 +33,7 @@ jobs:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: >-
           npx playwright test tests/browser/extension.spec.js
-          --grep "Double-click isolated token —
-          (Acts 17:11 — (Acts|17|11)|Jn 3:16 — (Jn|3|16)|1 Jn 3:16 — (Jn|16)|
-          1 Thess 2:13 — (Thess|13)|I John 4:8 — (I|John)|
-          II John 1:9 — (II|John)|III John 1:4 — (III|John))"
+          --grep "Double-click isolated token — (Acts 17:11 — (Acts|17|11)|Jn 3:16 — (Jn|3|16)|1 Jn 3:16 — (Jn|16)|1 Thess 2:13 — (Thess|13)|I John 4:8 — (I|John)|II John 1:9 — (II|John)|III John 1:4 — (III|John))"
   browser-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
