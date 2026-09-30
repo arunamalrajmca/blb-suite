@@ -141,7 +141,7 @@ test.describe('core user-visible E2E', () => {
     expect(handoffMs).toBeLessThan(1500);
   });
 
-  test('Double-click resolves any part of an adjacent Bible reference', async ({ page, context, extensionStorage }) => {
+  test('Double-click resolves any part of an adjacent Bible reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
@@ -158,11 +158,11 @@ test.describe('core user-visible E2E', () => {
       const target = page.locator('#blb-e2e-doubleclick-context-reference span', { hasText: fragment });
       await target.dblclick();
       await activateBlbTabForPath(
-        await context.serviceWorkers()[0],
+        extensionWorker,
         expectedPath,
         { fragment, selector: '#blb-e2e-doubleclick-context-reference', selectedText: fragment }
       );
-      await context.serviceWorkers()[0].evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
         const matches = tabs.filter(tab => {
           try {
             const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
@@ -483,7 +483,7 @@ test.describe('core user-visible E2E', () => {
           page, extensionStorage,
           `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
         );
-        const expectedPath = /\\s1$/.test(reference)
+        const expectedPath = /\s1$/.test(reference)
           ? `/kjv/${item.urlKey}/1/`
           : `/kjv/${item.urlKey}/1/1/`;
         for (let i = 0; i < tokens.length; i++) {
@@ -539,7 +539,6 @@ test.describe('core user-visible E2E', () => {
       await target.dblclick();
 
       const expectedPath = `/kjv/${book.urlKey}/1/1/`;
-      const extensionWorker = context.serviceWorkers()[0];
       await activateBlbTabForPath(extensionWorker, expectedPath, {
         fragment: String(book.number),
         selector: `#ref .standalone-number[data-book-number="${book.number}"]`,
