@@ -389,18 +389,23 @@ test.describe('core user-visible E2E', () => {
   }
 
   const romanNumberedBookCases = [
-    ['I Thessalonians 2:13 — I', 'I Thessalonians 2:13', 'I', '/kjv/1th/2/13/'],
-    ['I Thessalonians 2:13 — Thessalonians', 'I Thessalonians 2:13', 'Thessalonians', '/kjv/1th/2/13/'],
-    ['I Timothy 6:15 — I', 'I Timothy 6:15', 'I', '/kjv/1ti/6/15/'],
-    ['I Timothy 6:15 — Timothy', 'I Timothy 6:15', 'Timothy', '/kjv/1ti/6/15/'],
-    ['II Thessalonians 2:13 — II', 'II Thessalonians 2:13', 'II', '/kjv/2th/2/13/'],
-    ['II Thessalonians 2:13 — Thessalonians', 'II Thessalonians 2:13', 'Thessalonians', '/kjv/2th/2/13/'],
-    ['III John 1:15 — III', 'III John 1:15', 'III', '/kjv/3jo/1/15/'],
-    ['III John 1:15 — John', 'III John 1:15', 'John', '/kjv/3jo/1/15/'],
-    ['I Corinthians 13:4 — I', 'I Corinthians 13:4', 'I', '/kjv/1co/13/4/'],
-    ['II Kings 2:2 — II', 'II Kings 2:2', 'II', '/kjv/2ki/2/2/'],
-    ['I Chronicles 4:10 — Chronicles', 'I Chronicles 4:10', 'Chronicles', '/kjv/1ch/4/10/'],
-    ['II Samuel 7:1 — Samuel', 'II Samuel 7:1', 'Samuel', '/kjv/2sa/7/1/']
+    ['I Samuel 17:11 — I', 'I Samuel 17:11', 'I', '/kjv/1sa/17/11/'], ['I Samuel 17:11 — Samuel', 'I Samuel 17:11', 'Samuel', '/kjv/1sa/17/11/'],
+    ['II Samuel 7:1 — II', 'II Samuel 7:1', 'II', '/kjv/2sa/7/1/'], ['II Samuel 7:1 — Samuel', 'II Samuel 7:1', 'Samuel', '/kjv/2sa/7/1/'],
+    ['I Kings 18:21 — I', 'I Kings 18:21', 'I', '/kjv/1ki/18/21/'], ['I Kings 18:21 — Kings', 'I Kings 18:21', 'Kings', '/kjv/1ki/18/21/'],
+    ['II Kings 2:2 — II', 'II Kings 2:2', 'II', '/kjv/2ki/2/2/'], ['II Kings 2:2 — Kings', 'II Kings 2:2', 'Kings', '/kjv/2ki/2/2/'],
+    ['I Chronicles 4:10 — I', 'I Chronicles 4:10', 'I', '/kjv/1ch/4/10/'], ['I Chronicles 4:10 — Chronicles', 'I Chronicles 4:10', 'Chronicles', '/kjv/1ch/4/10/'],
+    ['II Chronicles 7:14 — II', 'II Chronicles 7:14', 'II', '/kjv/2ch/7/14/'], ['II Chronicles 7:14 — Chronicles', 'II Chronicles 7:14', 'Chronicles', '/kjv/2ch/7/14/'],
+    ['I Corinthians 13:4 — I', 'I Corinthians 13:4', 'I', '/kjv/1co/13/4/'], ['I Corinthians 13:4 — Corinthians', 'I Corinthians 13:4', 'Corinthians', '/kjv/1co/13/4/'],
+    ['II Corinthians 5:17 — II', 'II Corinthians 5:17', 'II', '/kjv/2co/5/17/'], ['II Corinthians 5:17 — Corinthians', 'II Corinthians 5:17', 'Corinthians', '/kjv/2co/5/17/'],
+    ['I Thessalonians 2:13 — I', 'I Thessalonians 2:13', 'I', '/kjv/1th/2/13/'], ['I Thessalonians 2:13 — Thessalonians', 'I Thessalonians 2:13', 'Thessalonians', '/kjv/1th/2/13/'],
+    ['II Thessalonians 2:13 — II', 'II Thessalonians 2:13', 'II', '/kjv/2th/2/13/'], ['II Thessalonians 2:13 — Thessalonians', 'II Thessalonians 2:13', 'Thessalonians', '/kjv/2th/2/13/'],
+    ['I Timothy 6:15 — I', 'I Timothy 6:15', 'I', '/kjv/1ti/6/15/'], ['I Timothy 6:15 — Timothy', 'I Timothy 6:15', 'Timothy', '/kjv/1ti/6/15/'],
+    ['II Timothy 2:15 — II', 'II Timothy 2:15', 'II', '/kjv/2ti/2/15/'], ['II Timothy 2:15 — Timothy', 'II Timothy 2:15', 'Timothy', '/kjv/2ti/2/15/'],
+    ['I Peter 2:9 — I', 'I Peter 2:9', 'I', '/kjv/1pe/2/9/'], ['I Peter 2:9 — Peter', 'I Peter 2:9', 'Peter', '/kjv/1pe/2/9/'],
+    ['II Peter 3:9 — II', 'II Peter 3:9', 'II', '/kjv/2pe/3/9/'], ['II Peter 3:9 — Peter', 'II Peter 3:9', 'Peter', '/kjv/2pe/3/9/'],
+    ['I John 4:8 — I', 'I John 4:8', 'I', '/kjv/1jo/4/8/'], ['I John 4:8 — John', 'I John 4:8', 'John', '/kjv/1jo/4/8/'],
+    ['II John 1:9 — II', 'II John 1:9', 'II', '/kjv/2jo/1/9/'], ['II John 1:9 — John', 'II John 1:9', 'John', '/kjv/2jo/1/9/'],
+    ['III John 1:4 — III', 'III John 1:4', 'III', '/kjv/3jo/1/4/'], ['III John 1:4 — John', 'III John 1:4', 'John', '/kjv/3jo/1/4/']
   ];
   for (const [name, reference, fragment, expectedPath] of romanNumberedBookCases) {
     test(`Double-click isolated token — ${name}`, async ({ page, context, extensionStorage, extensionWorker }) => {
