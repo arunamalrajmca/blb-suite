@@ -345,7 +345,7 @@ test.describe('core user-visible E2E', () => {
     await dblclickAt(page.locator(selector), rect);
     if (/^\d+$/.test(fragment)) {
     }
-    await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector});
+    await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')});
     await expect.poll(() => context.pages().some(candidate => {
       try {
         const path = new URL(candidate.url()).pathname;
