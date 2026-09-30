@@ -575,7 +575,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click alias Jn 3:16 resolves every token to John 3:16', async ({ page, context, extensionStorage }) => {
+  test('Double-click alias Jn 3:16 resolves every token to John 3:16', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
@@ -653,7 +653,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click numbered-book aliases preserve full context', async ({ page, context, extensionStorage }) => {
+  test('Double-click numbered-book aliases preserve full context', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
 
