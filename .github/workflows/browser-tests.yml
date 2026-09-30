@@ -1,4 +1,4 @@
-name: BLB Suite 5.2.51.43 HARD-GATE
+name: BLB Suite HARD-GATE
 
 on:
   push:
@@ -20,7 +20,14 @@ jobs:
         with:
           node-version: 22
 
-      - name: Run 5.2.51.43 deterministic regression gate
+      - name: Read manifest version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./extension/manifest.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Run deterministic regression gate
         env:
-          BLB_EXPECTED_VERSION: 5.2.51.43
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: node regression-suite/tests/run-regression.mjs extension
