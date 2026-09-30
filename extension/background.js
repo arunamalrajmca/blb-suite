@@ -2712,6 +2712,11 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     })()
   );
   const resolveBook = resolveBibleBook;
+  const isShadowedBookMatch = index => {
+    if (index <= 0) return false;
+    const prefix = source.slice(Math.max(0, index - 8), index);
+    return /(?:^|\\s)(?:[1-3]|i{1,3})\\s+$/i.test(prefix);
+  };
   const source = String(text || '')
     .replace(/[\u00a0\u2007\u202f]/g, ' ')
     .replace(/[\u2010\u2011\u2012\u2013\u2014]/g, '-');
@@ -2745,6 +2750,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   const colonRangeRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)\s*-\s*(\d+)/gi;
   let m;
   while ((m = colonRangeRe.exec(source))) {
+    if (isShadowedBookMatch(m.index)) continue;
     const rawBook = m[1].trim();
     const book = resolveBook(rawBook);
     if (!book) continue;
@@ -2834,6 +2840,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // open each verse separately in BLB MultiVerse.
   const colonCommaRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)(\s*,\s*\d+(?!\s*:))+(?![A-Za-z0-9])/gi;
   while ((m = colonCommaRe.exec(source))) {
+    if (isShadowedBookMatch(m.index)) continue;
     const rawBook = m[1].trim();
     const book = resolveBook(rawBook);
     if (!book) continue;
@@ -2867,6 +2874,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // endpoints and reduce them to only the first verse.
   const colonRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)(?!\d)(?!\s*-\s*\d)(?!\s*,\s*\d+(?:\s*$|\s*[,;]))/gi;
   while ((m = colonRe.exec(source))) {
+    if (isShadowedBookMatch(m.index)) continue;
     const rawBook = m[1].trim();
     const book = resolveBook(rawBook);
     if (!book) continue;
@@ -2907,6 +2915,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // this keeps ordinary prose numbers from being interpreted as references.
   const chapterOnlyRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)(?!\s*[:.]\s*\d)(?=$|[\s,.;:!?\)\]\}])/gi;
   while ((m = chapterOnlyRe.exec(source))) {
+    if (isShadowedBookMatch(m.index)) continue;
     const book = resolveBook(m[1]);
     if (!book) continue;
     const chapter = Number(m[2]);
@@ -2936,6 +2945,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // interpreted as Bible references.
   const oneChapterRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)(?:\s*-\s*(\d+))?(?![A-Za-z0-9])/gi;
   while ((m = oneChapterRe.exec(source))) {
+    if (isShadowedBookMatch(m.index)) continue;
     const book = resolveBook(m[1]);
     if (!book || book.chapterCount !== 1) continue;
     addRef(book, 1, Number(m[2]), Number(m[3] || m[2]), m[0]);
@@ -2945,6 +2955,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // (for example "Rom 8 28") while still validating against bookData.
   const spacedRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s+(\d+)(?:\s*-\s*(\d+))?(?![A-Za-z0-9])/gi;
   while ((m = spacedRe.exec(source))) {
+    if (isShadowedBookMatch(m.index)) continue;
     const book = resolveBook(m[1]);
     if (!book) continue;
     addRef(book, Number(m[2]), Number(m[3]), Number(m[4] || m[3]), m[0]);
