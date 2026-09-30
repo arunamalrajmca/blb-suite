@@ -9,54 +9,7 @@ on:
 
 jobs:
   focused-doubleclick-e2e:
-    name: Focused double-click E2E (${{ matrix.case }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - case: Acts-17-11-Acts
-            grep: "Double-click isolated token — Acts 17:11 — Acts"
-          - case: Acts-17-11-17
-            grep: "Double-click isolated token — Acts 17:11 — 17"
-          - case: Acts-17-11-11
-            grep: "Double-click isolated token — Acts 17:11 — 11"
-          - case: Jn-3-16-Jn
-            grep: "Double-click isolated token — Jn 3:16 — Jn"
-          - case: Jn-3-16-3
-            grep: "Double-click isolated token — Jn 3:16 — 3"
-          - case: Jn-3-16-16
-            grep: "Double-click isolated token — Jn 3:16 — 16"
-          - case: 1-Jn-3-16-Jn
-            grep: "Double-click isolated token — 1 Jn 3:16 — Jn"
-          - case: 1-Jn-3-16-16
-            grep: "Double-click isolated token — 1 Jn 3:16 — 16"
-          - case: 1-Thess-2-13-Thess
-            grep: "Double-click isolated token — 1 Thess 2:13 — Thess"
-          - case: 1-Thess-2-13-13
-            grep: "Double-click isolated token — 1 Thess 2:13 — 13"
-          # Keep only representative focused diagnostics here. The full Browser E2E
-          # below exercises every numbered/Roman family generically; duplicating each
-          # token as a separate CI job only increases noise and runtime.
-          - case: Roman-I-John-I
-            grep: "Double-click isolated token — I John 4:8 — I"
-          - case: Roman-I-John-John
-            grep: "Double-click isolated token — I John 4:8 — John"
-          - case: Roman-II-John-II
-            grep: "Double-click isolated token — II John 1:9 — II"
-          - case: Roman-II-John-John
-            grep: "Double-click isolated token — II John 1:9 — John"
-          - case: Roman-III-John-III
-            grep: "Double-click isolated token — III John 1:4 — III"
-          - case: Roman-III-John-John
-            grep: "Double-click isolated token — III John 1:4 — John"
-          - case: All-66-canonical-double-click
-            grep: "Double-click generic canonical references — all 66 books × book/chapter/verse tokens"
-          - case: All-alias-double-click
-            grep: "Double-click generic aliases — every shared alias across all books"
-          - case: Numbered-and-Roman-double-click
-            grep: "Double-click generic numbered aliases and Roman prefixes — every numbered family"
-          - case: Reference-syntax-double-click
-            grep: "Double-click generic reference syntax — colon/dot/spaced/chapter/range forms"
+    name: Focused double-click diagnostics
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -75,13 +28,15 @@ jobs:
       - name: Read manifest version
         id: version
         run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
-      - name: Run focused test
+      - name: Run focused double-click diagnostics
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: >-
           npx playwright test tests/browser/extension.spec.js
-          --grep "${{ matrix.grep }}"
-
+          --grep "Double-click isolated token —
+          (Acts 17:11 — (Acts|17|11)|Jn 3:16 — (Jn|3|16)|1 Jn 3:16 — (Jn|16)|
+          1 Thess 2:13 — (Thess|13)|I John 4:8 — (I|John)|
+          II John 1:9 — (II|John)|III John 1:4 — (III|John))"
   browser-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
