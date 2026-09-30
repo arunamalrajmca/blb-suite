@@ -815,19 +815,6 @@ function getDoubleClickBlockContextReference(selectionText, target) {
     const source = normalizeSelectionText(rawSource);
     if (!source) return null;
     const refs = resolveBibleReferenceText(source);
-    if (/^\d+$/.test(selected)) {
-      try {
-        chrome.storage.local.set({
-          __blbE2EDebugContext: {
-            selected,
-            source,
-            refs: refs.map(ref => ({text:ref.text,url:ref.url,chapter:ref.chapter,from:ref.from})),
-            targetTag: node?.tagName || '',
-            time: Date.now()
-          }
-        }).catch(() => {});
-      } catch (_) {}
-    }
     if (!refs.length) return null;
 
     // Context is positional: the selected browser range must be inside the
@@ -862,21 +849,13 @@ function getDoubleClickBlockContextReference(selectionText, target) {
       return occurrences;
     };
 
-    const debugOccurrences = [];
     for (const ref of refs) {
       if (!ref || ref.chapter == null || !ref.text) continue;
       for (const occurrence of findOccurrences(ref.text)) {
-        debugOccurrences.push({refText:ref.text, occurrence, selectionStart, selectionEnd});
         if (selectionStart >= occurrence.start && selectionEnd <= occurrence.end) {
-          if (/^\d+$/.test(selected)) {
-            chrome.storage.local.set({__blbE2EDebugContext:{selected,matched:true,source,refs:refs.map(r => ({text:r.text,url:r.url,chapter:r.chapter,from:r.from})),selectionStart,selectionEnd,debugOccurrences,time:Date.now()}}).catch(() => {});
-          }
           return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
         }
       }
-    }
-    if (/^\d+$/.test(selected)) {
-      chrome.storage.local.set({__blbE2EDebugContext:{selected,matched:false,source,refs:refs.map(r => ({text:r.text,url:r.url,chapter:r.chapter,from:r.from})),selectionStart,selectionEnd,debugOccurrences,time:Date.now()}}).catch(() => {});
     }
   } catch (_) {}
   return null;
@@ -968,16 +947,6 @@ function handleDoubleClickBlb(event) {
           recentDoubleClickDestinations.set(gestureTarget, now);
         }
 
-        if (/^\d+$/.test(selection)) {
-          chrome.storage.local.set({
-            __blbE2EDebugDispatch:{
-              selection,
-              contextualUrl:contextualReference?.url || '',
-              requestId,
-              time:Date.now()
-            }
-          }).catch(() => {});
-        }
         safeRuntimeSendMessage({
           type:'blbSuiteOpenSelectionText',
           text:selection,
