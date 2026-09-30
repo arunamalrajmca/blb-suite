@@ -865,7 +865,7 @@ function getDoubleClickBlockContextReference(selectionText, target) {
 // Double-click is an entry point into the same background selection resolver.
 // It must not maintain a second Bible/reference parser here.
 let doubleClickBound = false;
-const recentDoubleClickDestinations = new Map();
+const recentDoubleClickDestinations = new WeakMap();
 const DOUBLE_CLICK_WINDOW_GUARD = '__blbSuiteDoubleClickBoundV2';
 
 function isDoubleClickExcludedTarget(target) {
@@ -922,12 +922,17 @@ function handleDoubleClickBlb(event) {
         }
 
         const now = Date.now();
-        const destinationKey = selection.toLowerCase();
-        const previous = recentDoubleClickDestinations.get(destinationKey) || 0;
-        if (now - previous < 1200) return true;
-        recentDoubleClickDestinations.set(destinationKey, now);
-        for (const [key, ts] of recentDoubleClickDestinations) {
-          if (now - ts > 5000) recentDoubleClickDestinations.delete(key);
+        // Deduplicate repeated gestures on the same DOM target, not every
+        // occurrence of the same selected token. Separate tokens that both
+        // read "16" must remain independent gestures and must not suppress
+        // one another.
+        const gestureTarget = event?.target && (typeof event.target === 'object' || typeof event.target === 'function')
+          ? event.target
+          : null;
+        if (gestureTarget) {
+          const previous = recentDoubleClickDestinations.get(gestureTarget) || 0;
+          if (now - previous < 1200) return true;
+          recentDoubleClickDestinations.set(gestureTarget, now);
         }
 
         safeRuntimeSendMessage({
