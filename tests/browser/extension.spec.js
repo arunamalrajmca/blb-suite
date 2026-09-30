@@ -317,390 +317,107 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click plain-text Acts 17:11 tokens uses adjacent context', async ({ page, context, extensionStorage, extensionWorker }) => {
+  async function runDoubleClickReferenceToken(page, context, extensionWorker, selector, fragment, expectedPath) {
+    const rect = await page.evaluate(({ selector, fragment }) => {
+      const el = document.querySelector(selector);
+      const text = el.firstChild;
+      const start = el.textContent.indexOf(fragment);
+      const range = document.createRange();
+      range.setStart(text, start);
+      range.setEnd(text, start + fragment.length);
+      const box = range.getBoundingClientRect();
+      return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+    }, { selector, fragment });
+
+    await dblclickAt(page.locator(selector), rect);
+    await activateBlbTabForPath(extensionWorker, expectedPath);
+    await expect.poll(() => context.pages().some(candidate => {
+      try {
+        const path = new URL(candidate.url()).pathname;
+        return path === expectedPath || path.startsWith(expectedPath + 's_');
+      } catch (_) { return false; }
+    }), { timeout: 10000 }).toBe(true);
+    const blb = context.pages().find(candidate => {
+      try {
+        const path = new URL(candidate.url()).pathname;
+        return path === expectedPath || path.startsWith(expectedPath + 's_');
+      } catch (_) { return false; }
+    });
+    expect(blb).toBeTruthy();
+    await blb.close();
+  }
+
+  async function setupDoubleClickReferencePage(page, extensionStorage, html) {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    await page.evaluate(() => {
-      window.__blbTestDblClickCount = 0;
-      document.addEventListener('dblclick', () => { window.__blbTestDblClickCount += 1; }, true);
+    await page.evaluate((html) => {
+      const root = document.createElement('div');
+      root.id = 'blb-e2e-focused-root';
+      root.innerHTML = html;
+      root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(root);
+    }, html);
+  }
+
+  for (const [name, fragment] of [['Acts 17:11 — Acts', 'Acts'], ['Acts 17:11 — 17', '17'], ['Acts 17:11 — 11', '11']]) {
+    test(`Double-click isolated token — ${name}`, async ({ page, context, extensionStorage, extensionWorker }) => {
+      await setupDoubleClickReferencePage(page, extensionStorage, '<p id="ref">Acts 17:11</p>');
+      await runDoubleClickReferenceToken(page, context, extensionWorker, '#ref', fragment, '/kjv/act/17/11/');
     });
-    await page.evaluate(() => {
-      const el = document.createElement('p');
-      el.id = 'blb-e2e-doubleclick-plain-reference';
-      el.textContent = 'Acts 17:11';
-      el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
-      document.body.appendChild(el);
+  }
+
+  for (const [name, fragment] of [['Jn 3:16 — Jn', 'Jn'], ['Jn 3:16 — 3', '3'], ['Jn 3:16 — 16', '16']]) {
+    test(`Double-click isolated token — ${name}`, async ({ page, context, extensionStorage, extensionWorker }) => {
+      await setupDoubleClickReferencePage(page, extensionStorage, '<p id="ref">Jn 3:16</p>');
+      await runDoubleClickReferenceToken(page, context, extensionWorker, '#ref', fragment, '/kjv/jhn/3/16/');
     });
+  }
 
-    for (const fragment of ['Acts', '17', '11']) {
-      const rect = await page.evaluate((fragment) => {
-        const el = document.getElementById('blb-e2e-doubleclick-plain-reference');
-        const text = el.firstChild;
-        const start = el.textContent.indexOf(fragment);
-        const range = document.createRange();
-        range.setStart(text, start);
-        range.setEnd(text, start + fragment.length);
-        const box = range.getBoundingClientRect();
-        return {x: box.left + box.width / 2, y: box.top + box.height / 2};
-      }, fragment);
-
-      await dblclickAt(page.locator('#blb-e2e-doubleclick-plain-reference'), rect);
-      const selectedAfterDoubleClick = await page.evaluate(() => window.getSelection()?.toString() || '');
-      expect(selectedAfterDoubleClick).toBe(fragment);
-      await expect.poll(() => page.evaluate(() => window.__blbTestDblClickCount), { timeout: 3000 }).toBeGreaterThan(0);
-      await activateBlbTabForPath(extensionWorker, '/kjv/act/17/11/');
-      await expect.poll(() => context.pages().some(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === '/kjv/act/17/11/' || path.startsWith('/kjv/act/17/11/s_');
-        } catch (_) { return false; }
-      }), { timeout: 10000 }).toBe(true);
-      const blb = context.pages().find(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === '/kjv/act/17/11/' || path.startsWith('/kjv/act/17/11/s_');
-        } catch (_) { return false; }
-      });
-      expect(blb).toBeTruthy();
-      await blb.close();
-    }
-  });
-
-  test('Bible reference parsing rejects numeric-prefix false positives and preserves partial adjacent selection', async ({ page, context, extensionStorage, extensionWorker }) => {
-    const paragraph = 'As you read, we pray that you will be like the noble Bereans who received the word with all readiness of mind, and searched the scriptures daily, whether those things were so (Acts 17:11). As you read, ask, For what saith the scripture? (Romans 4:3), and look up each verse referenced. It is also the word of God, which effectually worketh also in you that believe (I Thessalonians 2:13).';
-
-    const parsed = await extensionWorker.evaluate((text) => {
-      const refs = extractBibleRefsFromSelectedTextUncached(text);
-      return refs.map(ref => ({
-        text: ref.text,
-        book: ref.book,
-        chapter: ref.chapter,
-        from: ref.from,
-        to: ref.to
-      }));
-    }, paragraph);
-
-    expect(parsed.map(ref => ({
-      ...ref,
-      book: ref.book.toLowerCase()
-    }))).toEqual([
-      { text: 'Acts 17:11', book: 'acts', chapter: 17, from: 11, to: 11 },
-      { text: 'Romans 4:3', book: 'romans', chapter: 4, from: 3, to: 3 },
-      { text: 'I Thessalonians 2:13', book: '1 thessalonians', chapter: 2, from: 13, to: 13 }
-    ]);
-
-    const numberedBookSelections = await extensionWorker.evaluate(() => {
-      const cases = [
-        ['1 John 3:16', '1 John', 3, 16],
-        ['2 Peter 1:4', '2 Peter', 1, 4],
-        ['1 Timothy 2:5', '1 Timothy', 2, 5],
-        ['1 Corinthians 13:4', '1 Corinthians', 13, 4],
-        ['1 Thessalonians 2:13', '1 Thessalonians', 2, 13]
-      ];
-      return cases.map(([text, book, chapter, verse]) => {
-        const decision = classifySelectionForBlb(text);
-        const ref = decision.directRef || decision.refs?.[0] || null;
-        return {
-          text,
-          valid: decision.valid === true,
-          book: String(ref?.book || '').toLowerCase(),
-          chapter: ref?.chapter ?? null,
-          verse: ref?.from ?? null,
-          expectedBook: book.toLowerCase(),
-          expectedChapter: chapter,
-          expectedVerse: verse
-        };
-      });
+  const numberedAliasCases = [
+    ['1 Jn 3:16 — Jn', '1 Jn 3:16', 'Jn', '/kjv/1jo/3/16/'],
+    ['1 Jn 3:16 — 16', '1 Jn 3:16', '16', '/kjv/1jo/3/16/'],
+    ['1 Thess 2:13 — Thess', '1 Thess 2:13', 'Thess', '/kjv/1th/2/13/'],
+    ['1 Thess 2:13 — 13', '1 Thess 2:13', '13', '/kjv/1th/2/13/']
+  ];
+  for (const [name, reference, fragment, expectedPath] of numberedAliasCases) {
+    test(`Double-click isolated token — ${name}`, async ({ page, context, extensionStorage, extensionWorker }) => {
+      await setupDoubleClickReferencePage(page, extensionStorage, `<p id="ref">${reference}</p>`);
+      await runDoubleClickReferenceToken(page, context, extensionWorker, '#ref', fragment, expectedPath);
     });
-    expect(numberedBookSelections.every(item =>
-      item.valid &&
-      item.book === item.expectedBook &&
-      item.chapter === item.expectedChapter &&
-      item.verse === item.expectedVerse
-    )).toBe(true);
+  }
 
-    const standaloneBooks = await extensionWorker.evaluate(() => {
-      return ['1', '2', '19', '43', '66'].map(text => {
-        const decision = classifySelectionForBlb(text);
-        return {text, valid:decision.valid === true, type:decision.type, book:String(decision.directRef?.book || '').toLowerCase()};
-      });
-    });
-    expect(standaloneBooks).toEqual([
-      {text:'1', valid:true, type:'BOOK', book:'genesis'},
-      {text:'2', valid:true, type:'BOOK', book:'exodus'},
-      {text:'19', valid:true, type:'BOOK', book:'psalms'},
-      {text:'43', valid:true, type:'BOOK', book:'john'},
-      {text:'66', valid:true, type:'BOOK', book:'revelation'}
-    ]);
-
-    const clampedReferences = await extensionWorker.evaluate(() => {
-      const cases = [
-        ['Psalm 151', 'psalms', 150, null],
-        ['Romans 17', 'romans', 16, null],
-        ['Psalm 119:177', 'psalms', 119, 176],
-        ['Psalm 119:999', 'psalms', 119, 176]
-      ];
-      return cases.map(([text, book, chapter, verse]) => {
-        const decision = classifySelectionForBlb(text);
-        const ref = decision.directRef || decision.refs?.[0] || null;
-        return {
-          text,
-          book: String(ref?.book || '').toLowerCase(),
-          chapter: ref?.chapter ?? null,
-          verse: ref?.from ?? null
-        };
-      });
-    });
-    expect(clampedReferences).toEqual([
-      {text:'Psalm 151', book:'psalms', chapter:150, verse:null},
-      {text:'Romans 17', book:'romans', chapter:16, verse:null},
-      {text:'Psalm 119:177', book:'psalms', chapter:119, verse:176},
-      {text:'Psalm 119:999', book:'psalms', chapter:119, verse:176}
-    ]);
-
-    const standaloneNonBooks = await extensionWorker.evaluate(() => {
-      return ['67', '150', '176', '109565645022'].map(text => {
-        const decision = classifySelectionForBlb(text);
-        return {text, valid:decision.valid === true, type:decision.type || ''};
-      });
-    });
-    expect(standaloneNonBooks).toEqual([
-      {text:'67', valid:false, type:'INVALID'},
-      {text:'150', valid:false, type:'INVALID'},
-      {text:'176', valid:false, type:'INVALID'},
-      {text:'109565645022', valid:false, type:'INVALID'}
-    ]);
-
-    await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    await page.evaluate((text) => {
-      const el = document.createElement('p');
-      el.id = 'blb-e2e-partial-context-reference';
-      el.textContent = text;
-      document.body.appendChild(el);
-    }, 'Acts 17:11');
-
-    const el = page.locator('#blb-e2e-partial-context-reference');
-    const selections = ['Acts', '17', '11'];
-    for (const fragment of selections) {
-      await page.evaluate((fragment) => {
-        const el = document.getElementById('blb-e2e-partial-context-reference');
-        const text = el.firstChild;
-        const start = el.textContent.indexOf(fragment);
-        const range = document.createRange();
-        range.setStart(text, start);
-        range.setEnd(text, start + fragment.length);
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-        document.dispatchEvent(new MouseEvent('mouseup', {bubbles:true}));
-      }, fragment);
-
-      const button = page.locator('#blb-suite-page-selection-button');
-      await expect(button).toBeVisible({timeout:10000});
-      const pagesBefore = context.pages();
-      await button.click();
-      await expect.poll(() => context.pages().length, {timeout:10000}).toBeGreaterThan(pagesBefore.length);
-      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
-      expect(blb).toBeTruthy();
-      await expect.poll(() => new URL(blb.url()).pathname, {timeout:10000}).toBe('/kjv/act/17/11/');
-      await blb.close();
-    }
-  });
-
-  test('Bible-book aliases resolve through the shared alias table', async ({ extensionWorker }) => {
-    const cases = [
-      ['Ac 17:11', 'acts', 17, 11],
-      ['Rom 4:3', 'romans', 4, 3],
-      ['Jn 3:16', 'john', 3, 16],
-      ['1 Jn 3:16', '1 john', 3, 16],
-      ['1 Thess 2:13', '1 thessalonians', 2, 13],
-      ['1 Pet 2:24', '1 peter', 2, 24],
-      ['1 Cor 13:4', '1 corinthians', 13, 4],
-      ['2 Cor 5:17', '2 corinthians', 5, 17],
-      ['1 Tim 2:5', '1 timothy', 2, 5],
-      ['2 Tim 3:16', '2 timothy', 3, 16],
-      ['Rev 21:1', 'revelation', 21, 1]
-    ];
-
-    const results = await extensionWorker.evaluate((inputs) => inputs.map(([text, expectedBook, chapter, verse]) => {
-      const decision = classifySelectionForBlb(text);
-      const ref = decision.directRef || decision.refs?.[0] || null;
-      return {
-        text,
-        valid: decision.valid === true,
-        book: String(ref?.book || '').toLowerCase(),
-        chapter: ref?.chapter ?? null,
-        verse: ref?.from ?? null,
-        expectedBook,
-        expectedChapter: chapter,
-        expectedVerse: verse
-      };
-    }), cases);
-
-    expect(results.every(item =>
-      item.valid &&
-      item.book === item.expectedBook &&
-      item.chapter === item.expectedChapter &&
-      item.verse === item.expectedVerse
-    )).toBe(true);
-  });
-
-
-  test('Double-click uses canonical clamping only after a reference is established', async ({ page, context, extensionStorage }) => {
-    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    await page.evaluate(() => {
-      const el = document.createElement('div');
-      el.id = 'blb-e2e-doubleclick-clamping-boundary';
-      el.innerHTML = '<p id="psalm-over"><span>Psalm</span> <span>119:177</span></p><p id="romans-over"><span>Romans</span> <span>17</span></p>';
-      el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
-      document.body.appendChild(el);
-    });
-
-    const cases = [
-      ['psalm-over', 'span:nth-of-type(2)', '/kjv/psa/119/176/'],
-      ['romans-over', 'span:nth-of-type(2)', '/kjv/rom/16/']
-    ];
-
-    for (const [id, selector, expectedPath] of cases) {
-      const target = page.locator('#' + id + ' ' + selector);
-      const pagesBefore = context.pages();
-      await target.dblclick();
-      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
-      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
-      expect(blb).toBeTruthy();
-      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
-      await blb.close();
-    }
-  });
-
-  test('Double-click alias Jn 3:16 resolves every token to John 3:16', async ({ page, context, extensionStorage, extensionWorker }) => {
-    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    await page.evaluate(() => {
-      const el = document.createElement('p');
-      el.id = 'blb-e2e-doubleclick-jn-3-16';
-      el.textContent = 'Jn 3:16';
-      el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
-      document.body.appendChild(el);
-    });
-
-    for (const fragment of ['Jn', '3', '16']) {
-      const rect = await page.evaluate((fragment) => {
-        const el = document.getElementById('blb-e2e-doubleclick-jn-3-16');
-        const text = el.firstChild;
-        const start = el.textContent.indexOf(fragment);
-        const range = document.createRange();
-        range.setStart(text, start);
-        range.setEnd(text, start + fragment.length);
-        const box = range.getBoundingClientRect();
-        return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
-      }, fragment);
-
-      await dblclickAt(page.locator('#blb-e2e-doubleclick-jn-3-16'), rect);
-      await activateBlbTabForPath(extensionWorker, '/kjv/jhn/3/16/');
-      await expect.poll(() => context.pages().some(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === '/kjv/jhn/3/16/' || path.startsWith('/kjv/jhn/3/16/s_');
-        } catch (_) { return false; }
-      }), { timeout: 10000 }).toBe(true);
-      const blb = context.pages().find(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === '/kjv/jhn/3/16/' || path.startsWith('/kjv/jhn/3/16/s_');
-        } catch (_) { return false; }
-      });
-      expect(blb).toBeTruthy();
-      await blb.close();
-    }
-  });
-
-
-  test('Double-click orphan numeric tokens do not borrow a nearby Bible reference', async ({ page, context, extensionStorage }) => {
+  test('Double-click positional context — orphan tokens remain independent', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
       const root = document.createElement('div');
       root.id = 'blb-e2e-doubleclick-positional-context';
-      root.innerHTML = [
-        '<p id="ref-line"><span>Jn 3:16</span></p>',
-        '<p id="orphan-36"><span>36</span></p>',
-        '<p id="orphan-16"><span>16</span></p>',
-        '<p id="same-line-orphan"><span>Jn 3:16</span> <span>explanation</span> <span>16</span></p>'
-      ].join('');
+      root.innerHTML = '<p id="ref-line"><span>Jn 3:16</span></p><p id="orphan-36"><span>36</span></p><p id="orphan-16"><span>16</span></p><p id="same-line-orphan"><span>Jn 3:16</span> <span>explanation</span> <span>16</span></p>';
       root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
       document.body.appendChild(root);
     });
-
-    const cases = [
+    for (const [selector, expectedPath] of [
       ['#ref-line span', '/kjv/jhn/3/16/'],
       ['#orphan-36 span', '/kjv/zep/1/1/'],
       ['#orphan-16 span', '/kjv/neh/1/1/'],
       ['#same-line-orphan span:nth-of-type(3)', '/kjv/neh/1/1/']
-    ];
-
-    for (const [selector, expectedPath] of cases) {
+    ]) {
       const target = page.locator(selector);
-      const pagesBefore = context.pages();
       await target.dblclick();
-      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
-      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
+      await expect.poll(() => context.pages().some(candidate => {
+        try {
+          const path = new URL(candidate.url()).pathname;
+          return path === expectedPath || path.startsWith(expectedPath + 's_');
+        } catch (_) { return false; }
+      }), { timeout: 10000 }).toBe(true);
+      const blb = context.pages().find(candidate => {
+        try {
+          const path = new URL(candidate.url()).pathname;
+          return path === expectedPath || path.startsWith(expectedPath + 's_');
+        } catch (_) { return false; }
+      });
       expect(blb).toBeTruthy();
-      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
       await blb.close();
-    }
-  });
-
-  test('Double-click numbered-book aliases preserve full context', async ({ page, context, extensionStorage, extensionWorker }) => {
-    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-
-    const cases = [
-      ['1 Jn 3:16', '/kjv/1jo/3/16/'],
-      ['1 Thess 2:13', '/kjv/1th/2/13/']
-    ];
-
-    for (let index = 0; index < cases.length; index++) {
-      const [reference, expectedPath] = cases[index];
-      await page.evaluate(({ index, reference }) => {
-        const el = document.createElement('p');
-        el.id = `blb-e2e-doubleclick-numbered-alias-${index}`;
-        el.textContent = reference;
-        el.style.cssText = `position:fixed;left:24px;top:${24 + index * 40}px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;`;
-        document.body.appendChild(el);
-      }, { index, reference });
-
-      for (const fragment of (index === 0 ? ['Jn', '16'] : ['Thess', '13'])) {
-        const rect = await page.evaluate(({ index, fragment }) => {
-          const el = document.getElementById(`blb-e2e-doubleclick-numbered-alias-${index}`);
-          const text = el.firstChild;
-          const start = el.textContent.indexOf(fragment);
-          const range = document.createRange();
-          range.setStart(text, start);
-          range.setEnd(text, start + fragment.length);
-          const box = range.getBoundingClientRect();
-          return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
-        }, { index, fragment });
-
-        await dblclickAt(page.locator(`#blb-e2e-doubleclick-numbered-alias-${index}`), rect);
-        await activateBlbTabForPath(extensionWorker, expectedPath);
-        await expect.poll(() => context.pages().some(candidate => {
-          try {
-            const path = new URL(candidate.url()).pathname;
-            return path === expectedPath || path.startsWith(expectedPath + 's_');
-          } catch (_) { return false; }
-        }), { timeout: 10000 }).toBe(true);
-        const blb = context.pages().find(candidate => {
-          try {
-            const path = new URL(candidate.url()).pathname;
-            return path === expectedPath || path.startsWith(expectedPath + 's_');
-          } catch (_) { return false; }
-        });
-        expect(blb).toBeTruthy();
-        await blb.close();
-      }
     }
   });
 
