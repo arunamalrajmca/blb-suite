@@ -100,14 +100,15 @@ test('multi-reference paragraph extraction covers every numbered book family', (
   const numbered = refCtx.BOOKS.filter(book => /^[123] /.test(book.name));
   const source = numbered.map((book, index) => {
     const prefix = Number(book.name[0]);
-    return `${roman[prefix]} ${book.name.slice(2)} ${index + 1}:1`;
+    const chapter = (index % book.chapterCount) + 1;
+    return `${roman[prefix]} ${book.name.slice(2)} ${chapter}:1`;
   }).join('; ');
   const refs = refCtx.extractBibleRefsFromSelectedTextUncached(source);
   assert.equal(refs.length, numbered.length, refs.map(ref => ref.text).join(' | '));
   refs.forEach((ref, index) => {
     const book = numbered[index];
     assert.equal(ref.book, book.name, book.name);
-    assert.equal(ref.chapter, index + 1, book.name);
+    assert.equal(ref.chapter, (index % book.chapterCount) + 1, book.name);
     assert.equal(ref.from, 1, book.name);
     assert.equal(ref.to, 1, book.name);
   });
