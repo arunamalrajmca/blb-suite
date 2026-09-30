@@ -298,6 +298,10 @@ test.describe('core user-visible E2E', () => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
+      window.__blbTestDblClickCount = 0;
+      document.addEventListener('dblclick', () => { window.__blbTestDblClickCount += 1; }, true);
+    });
+    await page.evaluate(() => {
       const el = document.createElement('p');
       el.id = 'blb-e2e-doubleclick-plain-reference';
       el.textContent = 'Acts 17:11';
@@ -320,6 +324,7 @@ test.describe('core user-visible E2E', () => {
       await dblclickAt(page.locator('#blb-e2e-doubleclick-plain-reference'), rect);
       const selectedAfterDoubleClick = await page.evaluate(() => window.getSelection()?.toString() || '');
       expect(selectedAfterDoubleClick).toBe(fragment);
+      await expect.poll(() => page.evaluate(() => window.__blbTestDblClickCount), { timeout: 3000 }).toBeGreaterThan(0);
       await expect.poll(() => context.pages().some(candidate => {
         try {
           const path = new URL(candidate.url()).pathname;
