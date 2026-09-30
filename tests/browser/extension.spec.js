@@ -472,8 +472,9 @@ test.describe('core user-visible E2E', () => {
       extensionStorage,
       `<div id="refs">${books.map(book => `<p><span class="standalone-number">${book.number}</span></p>`).join('')}</div>`
     );
-    for (const book of books) {
-      const target = page.locator('#refs .standalone-number').filter({ hasText: String(book.number) }).first();
+    for (let index = 0; index < books.length; index++) {
+      const book = books[index];
+      const target = page.locator('#refs .standalone-number').nth(index);
       await target.dblclick();
       await expect.poll(() => context.pages().filter(candidate => {
         try { return new URL(candidate.url()).pathname === `/kjv/${book.urlKey}/1/1/`; } catch (_) { return false; }
