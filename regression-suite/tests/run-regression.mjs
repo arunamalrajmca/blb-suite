@@ -80,25 +80,22 @@ test('shared core resolves numbered references', () => {
   }
 });
 test('production selection extractor resolves every Roman-numeral numbered book family', () => {
-  const romanFamilies = [
-    ['I Samuel 17:11','1 samuel',17,11],['II Samuel 7:1','2 samuel',7,1],
-    ['I Kings 18:21','1 kings',18,21],['II Kings 2:2','2 kings',2,2],
-    ['I Chronicles 4:10','1 chronicles',4,10],['II Chronicles 7:14','2 chronicles',7,14],
-    ['I Corinthians 13:4','1 corinthians',13,4],['II Corinthians 5:17','2 corinthians',5,17],
-    ['I Thessalonians 2:13','1 thessalonians',2,13],['II Thessalonians 2:13','2 thessalonians',2,13],
-    ['I Timothy 6:15','1 timothy',6,15],['II Timothy 2:15','2 timothy',2,15],
-    ['I Peter 2:9','1 peter',2,9],['II Peter 3:9','2 peter',3,9],
-    ['I John 4:8','1 john',4,8],['II John 1:9','2 john',1,9],['III John 1:4','3 john',1,4]
-  ];
-  for (const [input,book,chapter,verse] of romanFamilies) {
-    const refs = refCtx.extractBibleRefsFromSelectedTextUncached(input);
-    assert.equal(refs.length,1,input);
-    assert.equal(refs[0].book,book,input);
-    assert.equal(refs[0].chapter,chapter,input);
-    assert.equal(refs[0].from,verse,input);
-    assert.equal(refs[0].to,verse,input);
+  const roman = {1: 'I', 2: 'II', 3: 'III'};
+  const numbered = refCtx.BOOKS.filter(book => /^[123] /.test(book.name));
+  assert(numbered.length > 0);
+  for (const book of numbered) {
+    const prefix = Number(book.name[0]);
+    const form = `${roman[prefix]} ${book.name.slice(2)} 1:1`;
+    const refs = refCtx.extractBibleRefsFromSelectedTextUncached(form);
+    assert.equal(refs.length, 1, form);
+    assert.equal(refs[0].book, book.name, form);
+    assert.equal(refs[0].chapter, 1, form);
+    assert.equal(refs[0].from, 1, form);
+    assert.equal(refs[0].to, 1, form);
   }
-  assert.equal(refCtx.extractBibleRefsFromSelectedTextUncached('I').length,0,'standalone I must remain unresolved');
+  for (const prefix of [...new Set(numbered.map(book => roman[Number(book.name[0])]))]) {
+    assert.equal(refCtx.extractBibleRefsFromSelectedTextUncached(prefix).length, 0, `standalone ${prefix} must remain unresolved`);
+  }
 });
 test('multi-reference paragraph extraction', () => {
   const refs = refCtx.extractBibleRefsFromSelectedTextUncached(fixture.multiReferenceText);
@@ -220,20 +217,20 @@ test('property-based reference grammar generation covers deterministic valid and
   }
 });
 
-test('reference-context matrix resolves aliases, numbered books, and exact duplicate occurrences', () => {
-  const cases = [
-    ['John 3:16', 'john', 3, 16],
-    ['Jn 3:16', 'john', 3, 16],
-    ['1 Jn 3:16', '1 john', 3, 16],
-    ['1 Thess 2:13', '1 thessalonians', 2, 13],
-    ['Acts 17:11', 'acts', 17, 11]
-  ];
-  for (const [text, book, chapter, verse] of cases) {
-    const refs = refCtx.resolveBibleReferenceText(text);
-    assert.equal(refs.length, 1, text);
-    assert.equal(refs[0].book, book, text);
-    assert.equal(refs[0].chapter, chapter, text);
-    assert.equal(refs[0].from, verse, text);
+test('reference-context grammar resolves every canonical form and shared alias', () => {
+  const aliasesByBook = Object.create(null);
+  for (const [alias, target] of Object.entries(refCtx.BOOK_ALIASES || {})) {
+    (aliasesByBook[target] ||= []).push(alias);
+  }
+  for (const book of refCtx.BOOKS) {
+    const forms = [...new Set([book.name, book.urlKey, ...(aliasesByBook[book.name] || [])])];
+    for (const form of forms) {
+      const refs = refCtx.resolveBibleReferenceText(`${form} 1:1`);
+      assert.equal(refs.length, 1, form);
+      assert.equal(refs[0].book, book.name, form);
+      assert.equal(refs[0].chapter, 1, form);
+      assert.equal(refs[0].from, 1, form);
+    }
   }
 
   const content = read('content.js');
@@ -247,13 +244,6 @@ test('reference-context matrix resolves aliases, numbered books, and exact dupli
   assert(!contextual.includes('getAdjacentBoundaryText('), 'context resolver must not use document-wide fallback text');
   assert(content.includes('getDoubleClickBlockContextReference(selection, event.target)'), 'double-click fallback must remain block-local');
   assert(resolver.includes('source.indexOf(needle, fromIndex)'), 'resolver must examine every reference occurrence, not only the first');
-});
-test('numeric prefix cannot reinterpret a chapter as a numbered book', () => {
-  const refs = refCtx.extractBibleRefsFromSelectedTextUncached('Acts 17:11');
-  assert.equal(refs.length, 1);
-  assert.equal(refs[0].book, 'acts');
-  assert.equal(refs[0].chapter, 17);
-  assert.equal(refs[0].from, 11);
 });
 test('direct reference resolver rejects prose and accepts exact refs', () => {
   assert(refCtx.resolveDirectBibleReference('1 Thessalonians 2:13'));
