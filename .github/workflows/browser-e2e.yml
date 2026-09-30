@@ -8,6 +8,54 @@ on:
   workflow_dispatch:
 
 jobs:
+  focused-doubleclick-e2e:
+    name: Focused double-click E2E (${{ matrix.case }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - case: Acts-17-11-Acts
+            grep: "Double-click isolated token — Acts 17:11 — Acts"
+          - case: Acts-17-11-17
+            grep: "Double-click isolated token — Acts 17:11 — 17"
+          - case: Acts-17-11-11
+            grep: "Double-click isolated token — Acts 17:11 — 11"
+          - case: Jn-3-16-Jn
+            grep: "Double-click isolated token — Jn 3:16 — Jn"
+          - case: Jn-3-16-3
+            grep: "Double-click isolated token — Jn 3:16 — 3"
+          - case: Jn-3-16-16
+            grep: "Double-click isolated token — Jn 3:16 — 16"
+          - case: 1-Jn-3-16-Jn
+            grep: "Double-click isolated token — 1 Jn 3:16 — Jn"
+          - case: 1-Jn-3-16-16
+            grep: "Double-click isolated token — 1 Jn 3:16 — 16"
+          - case: 1-Thess-2-13-Thess
+            grep: "Double-click isolated token — 1 Thess 2:13 — Thess"
+          - case: 1-Thess-2-13-13
+            grep: "Double-click isolated token — 1 Thess 2:13 — 13"
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run focused test
+        env:
+          BLB_EXPECTED_VERSION: 5.2.51.43
+        run: >-
+          npx playwright test tests/browser/extension.spec.js
+          --grep "${{ matrix.grep }}"
+
   browser-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -71,7 +119,7 @@ jobs:
           BLB_PERF_MAX_FRESH_REGRESSION: 0.10
         run: set -o pipefail; node scripts/compare-performance.mjs "$RUNNER_TEMP/baseline-performance.jsonl" "$RUNNER_TEMP/candidate-performance.jsonl" | tee "$RUNNER_TEMP/performance-report.md"
 
-      - name: Run extension browser E2E
+      - name: Run full extension browser E2E
         env:
           BLB_EXPECTED_VERSION: 5.2.51.43
         run: npx playwright test tests/browser/extension.spec.js

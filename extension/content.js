@@ -807,65 +807,54 @@ function getDoubleClickBlockContextReference(selectionText, target) {
   try {
     const selected = normalizeSelectionText(selectionText);
     if (!selected) return null;
-    const node = target instanceof Element
-      ? target
-      : (target?.parentElement || null);
+    const node = target instanceof Element ? target : (target?.parentElement || null);
     const block = node?.closest?.('p,li,td,th,blockquote,article,section,div') || node;
     if (!block) return null;
 
-    const source = normalizeSelectionText(block.textContent || '');
+    const rawSource = String(block.textContent || '');
+    const source = normalizeSelectionText(rawSource);
     if (!source) return null;
     const refs = resolveBibleReferenceText(source);
     if (!refs.length) return null;
 
-    // Prefer the reference whose literal text contains the selected token.
-    // This handles both full references such as "Acts 17:11" and established
-    // book/chapter references such as "Romans 17". A bare number remains a
-    // standalone-book selection only when the containing block has no parsed
-    // Bible reference that establishes its meaning.
-    const matches = refs.filter(ref => {
-      const needle = normalizeSelectionText(ref.text || '');
-      return needle &&
-        ref.chapter != null &&
-        needle.toLowerCase().includes(selected.toLowerCase());
-    });
-    if (matches.length === 1) {
-      const ref = matches[0];
-      return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
-    }
-
-    // If the same token occurs more than once inside this exact block,
-    // choose the nearest occurrence — but only among genuine book/chapter/
-    // verse references that actually contain the selected token. Never let a
-    // parser interpretation of a bare number become contextual.
+    // Context is positional: the selected browser range must be inside the
+    // exact occurrence of the parsed reference. Sharing a paragraph is not
+    // enough, so an orphan 16/36 cannot borrow an earlier reference.
     const sel = window.getSelection?.();
-    if (sel?.rangeCount && !sel.isCollapsed) {
-      const range = sel.getRangeAt(0);
+    if (!sel?.rangeCount || sel.isCollapsed) return null;
+    const range = sel.getRangeAt(0);
+
+    const getOffset = (container, offset) => {
       const scratch = document.createRange();
       scratch.selectNodeContents(block);
-      scratch.setEnd(range.startContainer, range.startOffset);
-      const offset = normalizeSelectionText(scratch.toString()).length;
-      let best = null;
-      for (const ref of refs) {
-        const needle = normalizeSelectionText(ref.text || '');
-        if (!needle || ref.chapter == null ||
-            !needle.toLowerCase().includes(selected.toLowerCase())) continue;
-        let from = 0;
-        while (from <= source.length) {
-          const start = source.indexOf(needle, from);
-          if (start < 0) break;
-          const distance = offset < start
-            ? start - offset
-            : offset > start + needle.length
-              ? offset - (start + needle.length)
-              : 0;
-          if (!best || distance < best.distance) best = {ref, distance};
-          from = start + Math.max(1, needle.length);
-        }
+      scratch.setEnd(container, offset);
+      return scratch.toString().length;
+    };
+    const selectionStart = getOffset(range.startContainer, range.startOffset);
+    const selectionEnd = getOffset(range.endContainer, range.endOffset);
+
+    const findOccurrences = (needle) => {
+      const value = normalizeSelectionText(needle || '');
+      if (!value) return [];
+      const escapeRegex = part => part.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
+      const parts = value.split(/\s+/).map(escapeRegex);
+      if (!parts.length) return [];
+      const pattern = new RegExp(parts.join('\\s+'), 'gi');
+      const occurrences = [];
+      let match;
+      while ((match = pattern.exec(rawSource))) {
+        occurrences.push({start: match.index, end: match.index + match[0].length});
+        if (match[0].length === 0) pattern.lastIndex++;
       }
-      if (best) {
-        const ref = best.ref;
-        return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
+      return occurrences;
+    };
+
+    for (const ref of refs) {
+      if (!ref || ref.chapter == null || !ref.text) continue;
+      for (const occurrence of findOccurrences(ref.text)) {
+        if (selectionStart >= occurrence.start && selectionEnd <= occurrence.end) {
+          return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
+        }
       }
     }
   } catch (_) {}
@@ -876,7 +865,8 @@ function getDoubleClickBlockContextReference(selectionText, target) {
 // Double-click is an entry point into the same background selection resolver.
 // It must not maintain a second Bible/reference parser here.
 let doubleClickBound = false;
-const recentDoubleClickDestinations = new Map();
+const recentDoubleClickDestinations = new WeakMap();
+let doubleClickRequestSequence = 0;
 const DOUBLE_CLICK_WINDOW_GUARD = '__blbSuiteDoubleClickBoundV2';
 
 function isDoubleClickExcludedTarget(target) {
@@ -906,11 +896,12 @@ function handleDoubleClickBlb(event) {
     // resolving context. If selection is still empty, a single-token target is
     // a safe fallback; a multiword block is never treated as the selection.
     const started = Date.now();
+    const requestId = `dblclick-${Date.now()}-${++doubleClickRequestSequence}`;
     const dispatch = () => {
       try {
         const selection = getDoubleClickSelection(event);
         if (!selection) {
-          if (Date.now() - started < 500) {
+          if (Date.now() - started < 1500) {
             requestAnimationFrame(dispatch);
           }
           return true;
@@ -919,6 +910,16 @@ function handleDoubleClickBlb(event) {
         // Only the block containing the browser-selected token may establish
         // contextual Bible meaning. No document/body-wide resolver is used.
         const blockContext = getDoubleClickBlockContextReference(selection, event.target);
+
+        // Numeric tokens are ambiguous: 3/17/etc. are valid standalone book
+        // numbers, but inside "Jn 3:16" / "Acts 17:11" they belong to the
+        // positional reference. Do not let an early native-selection frame
+        // commit the standalone-book meaning before positional context settles.
+        if (!blockContext && /^\d+$/.test(selection) && Date.now() - started < 1500) {
+          requestAnimationFrame(dispatch);
+          return true;
+        }
+
         const standaloneBook = getStandaloneBookReference(selection);
         const contextualReference = blockContext || standaloneBook;
 
@@ -928,23 +929,29 @@ function handleDoubleClickBlb(event) {
         // same DOM block. Unrelated numbers such as 176 or 109565645022 are
         // therefore a no-op and never enter classifier/corpus fallback logic.
         if (!contextualReference) {
-          if (Date.now() - started < 500) requestAnimationFrame(dispatch);
+          if (Date.now() - started < 1500) requestAnimationFrame(dispatch);
           return true;
         }
 
         const now = Date.now();
-        const destinationKey = selection.toLowerCase();
-        const previous = recentDoubleClickDestinations.get(destinationKey) || 0;
-        if (now - previous < 1200) return true;
-        recentDoubleClickDestinations.set(destinationKey, now);
-        for (const [key, ts] of recentDoubleClickDestinations) {
-          if (now - ts > 5000) recentDoubleClickDestinations.delete(key);
+        // Deduplicate repeated gestures on the same DOM target, not every
+        // occurrence of the same selected token. Separate tokens that both
+        // read "16" must remain independent gestures and must not suppress
+        // one another.
+        const gestureTarget = event?.target && (typeof event.target === 'object' || typeof event.target === 'function')
+          ? event.target
+          : null;
+        if (gestureTarget) {
+          const previous = recentDoubleClickDestinations.get(gestureTarget) || 0;
+          if (now - previous < 1200) return true;
+          recentDoubleClickDestinations.set(gestureTarget, now);
         }
 
         safeRuntimeSendMessage({
           type:'blbSuiteOpenSelectionText',
           text:selection,
           contextualReference,
+          requestId,
           tabBehavior:{activeIfNew:false, activateExisting:true}
         });
         return true;
