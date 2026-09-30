@@ -388,6 +388,35 @@ test.describe('core user-visible E2E', () => {
     });
   }
 
+  const romanNumberedBookCases = [
+    ['I Thessalonians 2:13 — I', 'I Thessalonians 2:13', 'I', '/kjv/1th/2/13/'],
+    ['I Thessalonians 2:13 — Thessalonians', 'I Thessalonians 2:13', 'Thessalonians', '/kjv/1th/2/13/'],
+    ['I Timothy 6:15 — I', 'I Timothy 6:15', 'I', '/kjv/1ti/6/15/'],
+    ['I Timothy 6:15 — Timothy', 'I Timothy 6:15', 'Timothy', '/kjv/1ti/6/15/'],
+    ['II Thessalonians 2:13 — II', 'II Thessalonians 2:13', 'II', '/kjv/2th/2/13/'],
+    ['II Thessalonians 2:13 — Thessalonians', 'II Thessalonians 2:13', 'Thessalonians', '/kjv/2th/2/13/'],
+    ['III John 1:15 — III', 'III John 1:15', 'III', '/kjv/3jo/1/15/'],
+    ['III John 1:15 — John', 'III John 1:15', 'John', '/kjv/3jo/1/15/'],
+    ['I Corinthians 13:4 — I', 'I Corinthians 13:4', 'I', '/kjv/1co/13/4/'],
+    ['II Kings 2:2 — II', 'II Kings 2:2', 'II', '/kjv/2ki/2/2/'],
+    ['I Chronicles 4:10 — Chronicles', 'I Chronicles 4:10', 'Chronicles', '/kjv/1ch/4/10/'],
+    ['II Samuel 7:1 — Samuel', 'II Samuel 7:1', 'Samuel', '/kjv/2sa/7/1/']
+  ];
+  for (const [name, reference, fragment, expectedPath] of romanNumberedBookCases) {
+    test(`Double-click isolated token — ${name}`, async ({ page, context, extensionStorage, extensionWorker }) => {
+      await setupDoubleClickReferencePage(page, extensionStorage, `<p id="ref">${reference}</p>`);
+      await runDoubleClickReferenceToken(page, context, extensionWorker, '#ref', fragment, expectedPath);
+    });
+  }
+
+  test('Roman numeral prefix — standalone I remains independent', async ({ page, context, extensionStorage }) => {
+    await setupDoubleClickReferencePage(page, extensionStorage, '<p id="ref">I</p>');
+    await page.locator('#ref').dblclick();
+    await expect.poll(() => context.pages().filter(candidate => {
+      try { return new URL(candidate.url()).hostname === 'www.blueletterbible.org'; } catch (_) { return false; }
+    }).length, { timeout: 3000 }).toBe(0);
+  }
+
   test('Double-click positional context — orphan tokens remain independent', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
