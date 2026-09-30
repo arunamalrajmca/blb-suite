@@ -2444,6 +2444,14 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
       return true;
     }
     const text = String(message.text || '').trim();
+    chrome.storage.local.set({
+      __blbE2EDebugSelectionOpen: {
+        text,
+        contextualUrl: message.contextualReference?.url || '',
+        requestId: message.requestId || '',
+        time: Date.now()
+      }
+    }).catch(() => {});
     if (!text) {
       sendResponse({ok:false});
       return true;
