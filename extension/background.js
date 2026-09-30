@@ -2698,6 +2698,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
             book,
             form: clean,
             re: new RegExp(
+              (numericBookForm || /^(?:[1-3]|i{1,3})\s+/i.test(clean) ? '' : '(?<![1-3]\\s)(?<!i\\s)(?<!ii\\s)(?<!iii\\s)') +
               '(?<![A-Za-z0-9])' +
               escapePattern(clean).replace(/\s+/g, '\\s+') +
               bookBoundary +
@@ -2944,7 +2945,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // books such as "Jude 10" / "jde10". Only one-chapter books are allowed to
   // use the chapter-less form, preventing ordinary prose numbers from being
   // interpreted as Bible references.
-  const oneChapterRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)(?:\s*-\s*(\d+))?(?![A-Za-z0-9])/gi;
+  const oneChapterRe = /(?<![A-Za-z0-9])(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)(?:\s*-\s*(\d+))?(?!\s*[:.]\s*\d)(?![A-Za-z0-9])/gi;
   while ((m = oneChapterRe.exec(source))) {
     if (isShadowedBookMatch(m.index)) continue;
     const book = resolveBook(m[1]);
