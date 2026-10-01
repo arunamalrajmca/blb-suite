@@ -824,8 +824,7 @@ function getDoubleClickBlockContextReference(selectionText, target) {
     // exact occurrence of the parsed reference. Sharing a paragraph is not
     // enough, so an orphan 16/36 cannot borrow an earlier reference.
     const sel = window.getSelection?.();
-    if (!sel?.rangeCount || sel.isCollapsed) return null;
-    const range = sel.getRangeAt(0);
+    const selectedRange = sel?.rangeCount && !sel.isCollapsed ? sel.getRangeAt(0) : null;
 
     const getOffset = (container, offset) => {
       const scratch = document.createRange();
@@ -833,8 +832,32 @@ function getDoubleClickBlockContextReference(selectionText, target) {
       scratch.setEnd(container, offset);
       return scratch.toString().length;
     };
-    const selectionStart = getOffset(range.startContainer, range.startOffset);
-    const selectionEnd = getOffset(range.endContainer, range.endOffset);
+    let selectionStart = null;
+    let selectionEnd = null;
+    if (selectedRange) {
+      const selectedMeaningfulText = normalizeSelectionText(sel.toString());
+      if (selectedMeaningfulText) {
+        selectionStart = getOffset(selectedRange.startContainer, selectedRange.startOffset);
+        selectionEnd = getOffset(selectedRange.endContainer, selectedRange.endOffset);
+      }
+    }
+
+    // Chromium can transiently expose a whitespace-only Range for a real
+    // double-click on an isolated inline token. In that state, the browser
+    // selection is not authoritative, but the event target still identifies
+    // the exact DOM occurrence that was clicked. Use that occurrence only as
+    // a positional fallback inside the same block. This preserves the rule
+    // that an orphan number cannot borrow a reference from elsewhere.
+    if (selectionStart == null || selectionEnd == null) {
+      const targetElement = node instanceof Element ? node : (node?.parentElement || null);
+      if (targetElement && block.contains(targetElement)) {
+        const targetRange = document.createRange();
+        targetRange.selectNodeContents(targetElement);
+        selectionStart = getOffset(targetRange.startContainer, targetRange.startOffset);
+        selectionEnd = getOffset(targetRange.endContainer, targetRange.endOffset);
+      }
+    }
+    if (selectionStart == null || selectionEnd == null) return null;
 
     const findOccurrences = (needle) => {
       const value = normalizeSelectionText(needle || '');
