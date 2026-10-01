@@ -19,12 +19,20 @@ jobs:
         include:
           - group: positional
             grep: 'Double-click resolves any part|positional context|browser token|separate lines|standalone book numbers|ordinary heading words'
-          - group: grammar-token-coverage
-            grep: 'generic reference grammar'
-          - group: grammar-supported-forms
-            grep: 'generic reference syntax — exhaustive supported forms'
-          - group: grammar-colon-dot-spaced-range
-            grep: 'generic reference syntax — colon/dot/spaced/chapter/range forms'
+          - group: grammar-token-coverage-ot
+            grep: 'generic reference grammar — exhaustive token coverage — OT'
+          - group: grammar-token-coverage-nt
+            grep: 'generic reference grammar — exhaustive token coverage — NT'
+          - group: grammar-colon-ot-nt
+            grep: 'generic reference syntax — colon forms'
+          - group: grammar-dot-ot-nt
+            grep: 'generic reference syntax — dot forms'
+          - group: grammar-spaced-ot-nt
+            grep: 'generic reference syntax — spaced forms'
+          - group: grammar-chapter-ot-nt
+            grep: 'generic reference syntax — chapter forms'
+          - group: grammar-range-ot-nt
+            grep: 'generic reference syntax — range forms'
           - group: aliases-and-roman
             grep: 'generic aliases|numbered aliases and Roman prefixes|standalone Roman prefixes'
           - group: resolver
