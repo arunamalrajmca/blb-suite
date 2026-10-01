@@ -1097,7 +1097,7 @@ function handleDoubleClickBlb(event, initialSelection = '', initialContext = nul
         // selection resolver. Standalone numeric tokens remain reference-only:
         // they must not fall through to generic search/corpus classification.
         if (!contextualReference) {
-          if (/^[A-Za-z][A-Za-z'’-]*$/.test(selection)) {
+          if (/^[A-Za-z][A-Za-z'’-]*$/.test(selection) && !/^(?:i|ii|iii)$/i.test(selection)) {
             const now = Date.now();
             const gestureTarget = event?.target && (typeof event.target === 'object' || typeof event.target === 'function')
               ? event.target
