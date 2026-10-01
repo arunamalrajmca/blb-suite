@@ -9,42 +9,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  changes:
-    name: Detect performance-relevant changes
-    runs-on: ubuntu-latest
-    outputs:
-      run: ${{ steps.detect.outputs.run }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Detect changes
-        id: detect
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            echo "run=true" >> "$GITHUB_OUTPUT"
-          elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
-            if [[ "${{ startsWith(github.event.pull_request.title, 'Performance') }}" == "true" ]]; then
-              echo "run=true" >> "$GITHUB_OUTPUT"
-            elif git diff --quiet "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" -- extension; then
-              echo "run=false" >> "$GITHUB_OUTPUT"
-            else
-              echo "run=true" >> "$GITHUB_OUTPUT"
-            fi
-          else
-            if git diff --quiet "${GITHUB_EVENT_BEFORE}" "${GITHUB_SHA}" -- extension; then
-              echo "run=false" >> "$GITHUB_OUTPUT"
-            else
-              echo "run=true" >> "$GITHUB_OUTPUT"
-            fi
-          fi
-
   performance:
-    needs: changes
-    if: ${{ needs.changes.outputs.run == 'true' }}
     name: Measured performance qualification
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -92,33 +57,11 @@ jobs:
             done
           done
 
-      - name: Determine performance gate mode
-        id: mode
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
-            if git diff --quiet "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" -- extension; then
-              echo "enforce=0" >> "$GITHUB_OUTPUT"
-            else
-              echo "enforce=1" >> "$GITHUB_OUTPUT"
-            fi
-          elif [[ "${GITHUB_EVENT_NAME}" == "push" ]]; then
-            if git diff --quiet "${GITHUB_EVENT_BEFORE}" "${GITHUB_SHA}" -- extension; then
-              echo "enforce=0" >> "$GITHUB_OUTPUT"
-            else
-              echo "enforce=1" >> "$GITHUB_OUTPUT"
-            fi
-          else
-            echo "enforce=1" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Require measured performance qualification
         env:
           BLB_PERF_MIN_TARGETED_IMPROVEMENT: 0.03
           BLB_PERF_MAX_SELECTION_REGRESSION: 0.10
           BLB_PERF_REQUIRE_IMPROVEMENT: ${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Performance')) && '1' || '0' }}
-          BLB_PERF_ENFORCE_REGRESSION: ${{ steps.mode.outputs.enforce }}
           BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT: 0.50
           BLB_PERF_MIN_PARAGRAPH_FIRST_TAB_IMPROVEMENT: 0.50
           BLB_PERF_MIN_PARAGRAPH_SECOND_TAB_IMPROVEMENT: 0.50
