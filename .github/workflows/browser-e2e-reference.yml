@@ -20,11 +20,11 @@ jobs:
           - group: positional
             grep: 'Double-click resolves any part|positional context|browser token|separate lines|standalone book numbers|ordinary heading words'
           - group: grammar-token-coverage
-            grep: '^Double-click generic reference grammar — exhaustive token coverage$'
+            grep: 'generic reference grammar'
           - group: grammar-supported-forms
-            grep: '^Double-click generic reference syntax — exhaustive supported forms$'
+            grep: 'generic reference syntax — exhaustive supported forms'
           - group: grammar-colon-dot-spaced-range
-            grep: '^Double-click generic reference syntax — colon/dot/spaced/chapter/range forms$'
+            grep: 'generic reference syntax — colon/dot/spaced/chapter/range forms'
           - group: aliases-and-roman
             grep: 'generic aliases|numbered aliases and Roman prefixes|standalone Roman prefixes'
           - group: resolver
