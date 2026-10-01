@@ -2689,9 +2689,6 @@ function extractBibleRefsFromSelectedTextUncached(text) {
       const escapePattern = value => String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       for (const book of BOOKS) {
         const bookForms = new Set(getBibleBookForms(book));
-        const leadingSeriesNumber = String(book.name || '').match(/^([123])\s+/)?.[1];
-        const roman = leadingSeriesNumber ? ({1:'I',2:'II',3:'III'}[leadingSeriesNumber] || null) : null;
-        if (roman) bookForms.add(book.name.replace(/^[123]/, roman));
         for (const form of bookForms) {
           const clean = String(form || '').trim();
           if (!clean) continue;
@@ -2701,6 +2698,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
             book,
             form: clean,
             re: new RegExp(
+              (numericBookForm || /^(?:[1-3]|i{1,3})\s+/i.test(clean) ? '' : '(?<![1-3]\\s)(?<!i\\s)(?<!ii\\s)(?<!iii\\s)') +
               '(?<![A-Za-z0-9])' +
               escapePattern(clean).replace(/\s+/g, '\\s+') +
               bookBoundary +
@@ -2715,6 +2713,12 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     })()
   );
   const resolveBook = resolveBibleBook;
+  const isShadowedBookMatch = index => {
+    if (index <= 0) return false;
+    const lowerSource = source.toLowerCase();
+    return ['1 ', '2 ', '3 ', 'i ', 'ii ', 'iii ']
+      .some(prefix => lowerSource.slice(Math.max(0, index - prefix.length), index) === prefix);
+  };
   const source = String(text || '')
     .replace(/[\u00a0\u2007\u202f]/g, ' ')
     .replace(/[\u2010\u2011\u2012\u2013\u2014]/g, '-');
@@ -2748,6 +2752,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   const colonRangeRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)\s*-\s*(\d+)/gi;
   let m;
   while ((m = colonRangeRe.exec(source))) {
+    if (isShadowedBookMatch(m.index)) continue;
     const rawBook = m[1].trim();
     const book = resolveBook(rawBook);
     if (!book) continue;
@@ -2837,6 +2842,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // open each verse separately in BLB MultiVerse.
   const colonCommaRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)(\s*,\s*\d+(?!\s*:))+(?![A-Za-z0-9])/gi;
   while ((m = colonCommaRe.exec(source))) {
+    if (isShadowedBookMatch(m.index)) continue;
     const rawBook = m[1].trim();
     const book = resolveBook(rawBook);
     if (!book) continue;
@@ -2870,6 +2876,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // endpoints and reduce them to only the first verse.
   const colonRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)(?!\d)(?!\s*-\s*\d)(?!\s*,\s*\d+(?:\s*$|\s*[,;]))/gi;
   while ((m = colonRe.exec(source))) {
+    if (isShadowedBookMatch(m.index)) continue;
     const rawBook = m[1].trim();
     const book = resolveBook(rawBook);
     if (!book) continue;
@@ -2885,6 +2892,18 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   for (const item of cachedPatterns) {
     item.re.lastIndex = 0;
     while ((m = item.re.exec(source))) {
+      // Never allow a suffix book form to become a second reference when it
+      // occurs inside a numbered/Roman book name. This same positional rule
+      // applies to every parser pass, so all numbered-book families behave
+      // identically.
+      if (isShadowedBookMatch(m.index)) continue;
+      const prefixStart = Math.max(0, m.index - 8);
+      const prefix = source.slice(prefixStart, m.index);
+      const prefixMatch = prefix.match(/(?:^|\\s)((?:[1-3]|i{1,3})\\s+)$/i);
+      if (prefixMatch && !/^(?:[1-3]|i{1,3})\\s+/i.test(item.form)) {
+        const combined = prefixMatch[1] + item.form;
+        if (resolveBook(combined)) continue;
+      }
       const chapter = Number(m[1]);
       const from = Number(m[2]);
       const to = Number(m[3] || m[2]);
@@ -2899,6 +2918,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // this keeps ordinary prose numbers from being interpreted as references.
   const chapterOnlyRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)(?!\s*[:.]\s*\d)(?=$|[\s,.;:!?\)\]\}])/gi;
   while ((m = chapterOnlyRe.exec(source))) {
+    if (isShadowedBookMatch(m.index)) continue;
     const book = resolveBook(m[1]);
     if (!book) continue;
     const chapter = Number(m[2]);
@@ -2926,8 +2946,9 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // books such as "Jude 10" / "jde10". Only one-chapter books are allowed to
   // use the chapter-less form, preventing ordinary prose numbers from being
   // interpreted as Bible references.
-  const oneChapterRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)(?:\s*-\s*(\d+))?(?![A-Za-z0-9])/gi;
+  const oneChapterRe = /(?<![A-Za-z0-9])(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)(?:\s*-\s*(\d+))?(?!\s*[:.]\s*\d)(?![A-Za-z0-9])/gi;
   while ((m = oneChapterRe.exec(source))) {
+    if (isShadowedBookMatch(m.index)) continue;
     const book = resolveBook(m[1]);
     if (!book || book.chapterCount !== 1) continue;
     addRef(book, 1, Number(m[2]), Number(m[3] || m[2]), m[0]);
@@ -2937,6 +2958,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // (for example "Rom 8 28") while still validating against bookData.
   const spacedRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s+(\d+)(?:\s*-\s*(\d+))?(?![A-Za-z0-9])/gi;
   while ((m = spacedRe.exec(source))) {
+    if (isShadowedBookMatch(m.index)) continue;
     const book = resolveBook(m[1]);
     if (!book) continue;
     addRef(book, Number(m[2]), Number(m[3]), Number(m[4] || m[3]), m[0]);

@@ -12,9 +12,13 @@ const fixture = JSON.parse(fs.readFileSync(path.join(HERE, 'fixtures.json'), 'ut
 const expectedVersion = process.env.BLB_EXPECTED_VERSION || fixture.baselineVersion;
 const failures = [];
 let passed = 0;
+const requestedGroup = process.argv.find(arg => arg.startsWith('--group='))?.slice('--group='.length) || 'all';
+let currentGroup = 'features';
+function section(group) { currentGroup = group; }
 function test(name, fn) {
-  try { fn(); passed++; console.log(`✓ ${name}`); }
-  catch (e) { failures.push({name, error:e.message}); console.log(`✗ ${name}\n  ${e.message}`); }
+  if (requestedGroup !== 'all' && requestedGroup !== currentGroup) return;
+  try { fn(); passed++; console.log(`✓ [${currentGroup}] ${name}`); }
+  catch (e) { failures.push({name, error:e.message, group:currentGroup}); console.log(`✗ [${currentGroup}] ${name}\n  ${e.message}`); }
 }
 function read(name){ return fs.readFileSync(path.join(ROOT,name),'utf8'); }
 function sha256(file){ return crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT,file))).digest('hex'); }
@@ -27,6 +31,7 @@ function loadPure(files){
 console.log(`BLB Suite Regression Suite — baseline ${fixture.baselineVersion} | expected package ${expectedVersion}`);
 console.log(`Package: ${ROOT}\n`);
 
+section('package');
 // Manifest/package invariants.
 test('manifest JSON + MV3 + version', () => {
   const m = JSON.parse(read('manifest.json'));
@@ -60,79 +65,200 @@ test('all JavaScript source files parse', () => {
   }
 });
 
+section('resolver');
 // Shared Bible-reference core + production selection extractor.
 const refCtx = loadPure(['books.js','book-aliases.js','reference-core.js']);
 const bgSource = read('background.js');
+test('shared alias source is authoritative for Omnibox and reference resolver', () => {
+  const aliasSource = vm.runInContext('EXTRA_BOOK_ALIASES', refCtx);
+  const aliasMap = vm.runInContext('BOOK_ALIASES', refCtx);
+  assert(aliasSource && Object.keys(aliasSource).length > 0, 'shared alias source is empty');
+  const expectedAliases = Object.create(null);
+  for (const [alias, target] of Object.entries(aliasSource)) {
+    const book = refCtx.BOOKS.find(item => item.name === target);
+    assert(book, `alias source target is not a canonical book: ${alias}`);
+    const normalized = String(alias).toLowerCase().trim();
+    const canonical = String(book.name || '').toLowerCase().trim();
+    const urlKey = String(book.urlKey || '').toLowerCase().trim();
+    const number = String(book.bookNumber || '').trim();
+    if (normalized && normalized !== canonical && normalized !== urlKey && normalized !== number) {
+      expectedAliases[normalized] = target;
+    }
+  }
+  assert.deepEqual(aliasMap, expectedAliases, 'derived alias map diverges from shared source');
+  for (const [alias, target] of Object.entries(expectedAliases)) {
+    assert.equal(refCtx.resolveBibleBook(alias)?.name, target, `reference resolver mismatch: ${alias}`);
+    const refs = refCtx.resolveBibleReferenceText(`${alias} 1:1`);
+    assert.equal(refs.length, 1, `reference grammar mismatch: ${alias}`);
+    assert.equal(refs[0].book, target, `reference grammar target mismatch: ${alias}`);
+  }
+  assert(bgSource.includes("importScripts('kjv-corpus-word-index.js'"), 'background import list missing');
+  assert(bgSource.includes("'book-aliases.js'"), 'background does not import shared alias source');
+  assert(bgSource.includes('bookData.forEach(book => { book.aliases = buildBookAliases(book); });'), 'Omnibox book aliases are not built from shared source');
+  assert(bgSource.includes('const explicitAlias = BOOK_ALIASES[base] || BOOK_ALIASES[base.replace(/\\s/g,"")];'), 'Omnibox resolver does not use shared alias map');
+  assert.equal((read('book-aliases.js').match(/const EXTRA_BOOK_ALIASES\s*=/g) || []).length, 1, 'duplicate alias source detected');
+  assert(!read('reference-core.js').includes('const EXTRA_BOOK_ALIASES'), 'reference resolver contains a duplicate alias source');
+});
+
 const extractorStart = bgSource.indexOf('function extractBibleRefsFromSelectedTextUncached');
 const extractorEnd = bgSource.indexOf('\nfunction ', extractorStart + 10);
 vm.runInContext(bgSource.slice(extractorStart, extractorEnd > extractorStart ? extractorEnd : undefined), refCtx, {filename:'background.js:extractBibleRefsFromSelectedTextUncached'});
 
-test('shared core resolves numbered references', () => {
-  for (const c of fixture.references.slice(1)) {
-    const numeric = c.input.replace(/^I /,'1 ').replace(/^II /,'2 ').replace(/^III /,'3 ');
-    const refs = refCtx.resolveBibleReferenceText(numeric);
-    assert.equal(refs.length,1,numeric);
-    const r=refs[0];
-    assert.equal(r.book,c.book,numeric);
-    assert.equal(r.chapter,c.chapter,numeric);
-    assert.equal(r.from,c.from,numeric);
-    assert.equal(r.to,c.to,numeric);
+test('shared core resolves every numbered Bible-book family', () => {
+  for (const book of refCtx.BOOKS.filter(book => /^[123] /.test(book.name))) {
+    const refs = refCtx.resolveBibleReferenceText(`${book.name} 1:1`);
+    assert.equal(refs.length, 1, book.name);
+    assert.equal(refs[0].book, book.name, book.name);
+    assert.equal(refs[0].chapter, 1, book.name);
+    assert.equal(refs[0].from, 1, book.name);
+    assert.equal(refs[0].to, 1, book.name);
   }
 });
-test('production selection extractor resolves Roman numeral books', () => {
-  for (const c of fixture.references) {
-    const refs = refCtx.extractBibleRefsFromSelectedTextUncached(c.input);
-    assert.equal(refs.length,1,c.input);
-    const r=refs[0];
-    assert.equal(r.book,c.book,c.input);
-    assert.equal(r.chapter,c.chapter,c.input);
-    assert.equal(r.from,c.from,c.input);
-    assert.equal(r.to,c.to,c.input);
+test('production selection extractor resolves every Roman-numeral numbered book family', () => {
+  const roman = {1: 'I', 2: 'II', 3: 'III'};
+  const numbered = refCtx.BOOKS.filter(book => /^[123] /.test(book.name));
+  assert(numbered.length > 0);
+  for (const book of numbered) {
+    const prefix = Number(book.name[0]);
+    const form = `${roman[prefix]} ${book.name.slice(2)} 1:1`;
+    const refs = refCtx.extractBibleRefsFromSelectedTextUncached(form);
+    assert.equal(refs.length, 1, `${form}: ${refs.map(ref => ref.text).join(' | ')}`);
+    assert.equal(refs[0].book, book.name, form);
+    assert.equal(refs[0].chapter, 1, form);
+    assert.equal(refs[0].from, 1, form);
+    assert.equal(refs[0].to, 1, form);
+  }
+  for (const prefix of [...new Set(numbered.map(book => roman[Number(book.name[0])]))]) {
+    assert.equal(refCtx.extractBibleRefsFromSelectedTextUncached(prefix).length, 0, `standalone ${prefix} must remain unresolved`);
   }
 });
-test('five-reference paragraph extraction', () => {
-  const refs = refCtx.extractBibleRefsFromSelectedTextUncached(fixture.multiReferenceText);
-  const got = refs.map(r=>`${r.book}|${r.chapter}|${r.from}|${r.to}`);
-  const expected = [
-    'john|1|1|1','hebrews|10|7|7','1 timothy|6|15|15','colossians|1|16|16','philippians|2|10|10'
-  ];
-  assert.equal(JSON.stringify(got), JSON.stringify(expected));
+test('multi-reference paragraph extraction covers every numbered book family', () => {
+  const roman = {1: 'I', 2: 'II', 3: 'III'};
+  const numbered = refCtx.BOOKS.filter(book => /^[123] /.test(book.name));
+  const source = numbered.map((book, index) => {
+    const prefix = Number(book.name[0]);
+    const chapter = (index % book.chapterCount) + 1;
+    return `${roman[prefix]} ${book.name.slice(2)} ${chapter}:1`;
+  }).join('; ');
+  const refs = refCtx.extractBibleRefsFromSelectedTextUncached(source);
+  assert.equal(refs.length, numbered.length, refs.map(ref => ref.text).join(' | '));
+  refs.forEach((ref, index) => {
+    const book = numbered[index];
+    assert.equal(ref.book, book.name, book.name);
+    assert.equal(ref.chapter, (index % book.chapterCount) + 1, book.name);
+    assert.equal(ref.from, 1, book.name);
+    assert.equal(ref.to, 1, book.name);
+  });
 });
-test('reference-context matrix resolves aliases, numbered books, and exact duplicate occurrences', () => {
-  const cases = [
-    ['John 3:16', 'john', 3, 16],
-    ['Jn 3:16', 'john', 3, 16],
-    ['1 Jn 3:16', '1 john', 3, 16],
-    ['1 Thess 2:13', '1 thessalonians', 2, 13],
-    ['Acts 17:11', 'acts', 17, 11]
-  ];
-  for (const [text, book, chapter, verse] of cases) {
-    const refs = refCtx.resolveBibleReferenceText(text);
-    assert.equal(refs.length, 1, text);
-    assert.equal(refs[0].book, book, text);
-    assert.equal(refs[0].chapter, chapter, text);
-    assert.equal(refs[0].from, verse, text);
+test('generic double-click reference grammar resolves all 66 books and every shared alias', () => {
+  const books = refCtx.BOOKS;
+  assert.equal(books.length, 66);
+  const aliasesByBook = Object.create(null);
+  for (const [alias, target] of Object.entries(refCtx.BOOK_ALIASES || {})) {
+    (aliasesByBook[target] ||= []).push(alias);
   }
 
-  const content = read('content.js');
-  const resolverStart = content.indexOf('function resolveBibleReferenceFromContextWindow');
-  const resolverEnd = content.indexOf('function getDoubleClickBlockContextReference', resolverStart);
-  const resolver = content.slice(resolverStart, resolverEnd);
-  const contextualStart = content.indexOf('function getContextualBibleReference');
-  const contextual = content.slice(contextualStart, resolverEnd);
-  assert(resolver.includes('selectionStart < refEnd && selectionEnd > refStart'), 'context resolver must match the exact selected occurrence');
-  assert(contextual.includes('const position = getSelectionContextPosition()'), 'context resolver must prefer exact DOM selection');
-  assert(!contextual.includes('getAdjacentBoundaryText('), 'context resolver must not use document-wide fallback text');
-  assert(content.includes('getDoubleClickBlockContextReference(selection, event.target)'), 'double-click fallback must remain block-local');
-  assert(resolver.includes('source.indexOf(needle, fromIndex)'), 'resolver must examine every reference occurrence, not only the first');
+  for (const book of books) {
+    const canonicalForms = [book.name, book.urlKey];
+    const aliases = aliasesByBook[book.name] || [];
+    const forms = [...new Set([...canonicalForms, ...aliases])];
+
+    for (const form of forms) {
+      const variants = [
+        [`${form} 1:1`, 1, 1, 1],
+        [`${form} 1:1-2`, 1, 1, 2],
+        [`${form} 1.1`, 1, 1, 1],
+        [`${form} 1 1`, 1, 1, 1]
+      ];
+      if (book.chapterCount > 1) variants.push([`${form} 1`, 1, null, null]);
+      if (book.chapterCount === 1) variants.push([`${form} 1-2`, 1, 1, 2]);
+
+      for (const [input, chapter, from, to] of variants) {
+        const refs = refCtx.resolveBibleReferenceText(input);
+        assert.equal(refs.length, 1, `${book.name}: ${input}`);
+        assert.equal(refs[0].book, book.name, `${book.name}: ${input}`);
+        assert.equal(refs[0].chapter, chapter, `${book.name}: ${input}`);
+        if (from !== null) assert.equal(refs[0].from, from, `${book.name}: ${input}`);
+        if (to !== null) assert.equal(refs[0].to, to, `${book.name}: ${input}`);
+      }
+    }
+  }
+
+  // Numbered-book Roman forms are tested from the same 66-book source of truth.
+  const roman = {1:'I',2:'II',3:'III'};
+  for (const book of books.filter(b => /^[123] /.test(b.name))) {
+    const n = Number(book.name[0]);
+    const remainder = book.name.slice(2);
+    const form = `${roman[n]} ${remainder} 1:1`;
+    const refs = refCtx.resolveBibleReferenceText(form);
+    assert.equal(refs.length, 1, form);
+    assert.equal(refs[0].book, book.name, form);
+  }
+
+  // Standalone numbers outside the book-number domain must not become books.
+  for (const value of ['0','67','68','150','176','99999']) {
+    assert.equal(refCtx.resolveBibleBook(value), null, `standalone ${value}`);
+  }
+  assert.equal(refCtx.resolveBibleBook('I'), null, 'standalone I');
+  assert.equal(refCtx.resolveBibleBook('II'), null, 'standalone II');
+  assert.equal(refCtx.resolveBibleBook('III'), null, 'standalone III');
 });
-test('numeric prefix cannot reinterpret a chapter as a numbered book', () => {
-  const refs = refCtx.extractBibleRefsFromSelectedTextUncached('Acts 17:11');
-  assert.equal(refs.length, 1);
-  assert.equal(refs[0].book, 'acts');
-  assert.equal(refs[0].chapter, 17);
-  assert.equal(refs[0].from, 11);
+
+test('property-based reference grammar generation covers deterministic valid and invalid forms', () => {
+  // Deterministic property-style generation: the seed and source-of-truth data
+  // make failures reproducible while exercising many combinations beyond the
+  // hand-authored matrix above.
+  const books = refCtx.BOOKS;
+  const aliasesByBook = Object.create(null);
+  for (const [alias, target] of Object.entries(refCtx.BOOK_ALIASES || {})) {
+    (aliasesByBook[target] ||= []).push(alias);
+  }
+
+  let seed = 0x5a17;
+  const next = (max) => {
+    seed = (seed * 1664525 + 1013904223) >>> 0;
+    return seed % max;
+  };
+  const forms = [];
+  for (const book of books) {
+    forms.push(book.name, book.urlKey);
+    for (const alias of aliasesByBook[book.name] || []) forms.push(alias);
+  }
+
+  const syntax = [
+    (form, ch, verse) => `${form} ${ch}:${verse}`,
+    (form, ch, verse) => `${form} ${ch}.${verse}`,
+    (form, ch, verse) => `${form} ${ch} ${verse}`,
+    (form, ch) => `${form} ${ch}`
+  ];
+
+  for (let i = 0; i < 600; i++) {
+    const form = forms[next(forms.length)];
+    const book = books.find(b =>
+      b.name === form ||
+      b.urlKey === form ||
+      String(b.bookNumber) === form ||
+      (aliasesByBook[b.name] || []).includes(form)
+    );
+    assert(book, `generated form has no source book: ${form}`);
+
+    const chapter = 1 + next(book.chapterCount);
+    const verse = 1 + next(8);
+    const formatter = syntax[next(syntax.length)];
+    const input = formatter(form, chapter, verse);
+    const refs = refCtx.resolveBibleReferenceText(input);
+
+    assert.equal(refs.length, 1, `generated reference: ${input}`);
+    assert.equal(refs[0].book, book.name, `generated book: ${input}`);
+    assert.equal(refs[0].chapter, chapter, `generated chapter: ${input}`);
+    if (formatter.length >= 3) assert.equal(refs[0].from, verse, `generated verse: ${input}`);
+  }
+
+  for (const invalid of ['0:1', '67:1', '68:1', '999:1', 'I 1:1', 'II 1:1', 'III 1:1']) {
+    assert.equal(refCtx.resolveBibleReferenceText(invalid).length, 0, `invalid generated form: ${invalid}`);
+  }
 });
+
 test('direct reference resolver rejects prose and accepts exact refs', () => {
   assert(refCtx.resolveDirectBibleReference('1 Thessalonians 2:13'));
   assert.equal(refCtx.resolveDirectBibleReference('in every one'), null);
@@ -140,6 +266,7 @@ test('direct reference resolver rejects prose and accepts exact refs', () => {
   assert(refCtx.extractBibleRefsFromSelectedTextUncached('I Thessalonians 2:13').length === 1);
 });
 
+section('features');
 // Case-sensitive core + corpus.
 const csCtx = loadPure(['case-sensitive-search-core.js','kjv-corpus-original-case.js','kjv-corpus-case-verse-index.js']);
 test('case-sensitive parser preserves raw query', () => {
@@ -162,9 +289,11 @@ test('scrambled-case detection', () => {
   assert.equal(routingCtx.hasScrambledCase('JESUS'), false);
 });
 
+section('features');
 // Static cross-file contracts for high-risk regressions.
 const bg=read('background.js');
 const content=read('content.js');
+section('selection');
 test('web contextual resolver is present', () => {
   for (const s of ['getContextualBibleReference','resolveBibleReferenceFromContextWindow','blbSuiteResolveContextualSelection']) assert(bg.includes(s)||content.includes(s), s);
 });
@@ -220,6 +349,7 @@ test('Alt+B selection path remains wired', () => {
   assert(bg.includes('getActiveTabSelection'), 'Alt+B active selection path missing');
   assert(bg.includes('chrome.commands.onCommand'), 'extension command listener missing');
 });
+section('selection');
 test('Double-click BLB path remains wired', () => {
   const content = read('content.js');
   assert(content.includes('handleDoubleClickBlb'), 'double-click handler missing');
@@ -233,12 +363,14 @@ test('Show on BLB floating button path remains wired', () => {
   assert(content.includes('updateBlbPageSelectionButtonFromSelection'), 'selection update path missing');
   assert(content.includes('blbSuiteOpenSelectionText'), 'button opener missing');
 });
+section('selection');
 test('MultiVerse creation/reuse path remains wired', () => {
   const bg = read('background.js');
   assert(bg.includes('createBlbTabGeneric'), 'BLB tab manager missing');
   assert(bg.includes('openSelectedPdfBibleRefs'), 'shared MultiVerse/reference opener missing');
   assert(bg.includes('createBlbTabGeneric'), 'MultiVerse tab creation/reuse missing');
 });
+section('features');
 test('Webster 1828 path remains wired', () => {
   const content = read('content.js'), bg = read('background.js');
   assert(content.includes('webstersdictionary1828.com'), 'Webster host missing');
@@ -246,6 +378,7 @@ test('Webster 1828 path remains wired', () => {
   assert(content.includes('blbSuiteOpenBackgroundUrl'), 'Webster opener missing');
   assert(bg.includes('blbSuiteOpenWebsterMultiVerse'), 'Webster MultiVerse handler missing');
 });
+section('features');
 test('Study Sessions command surface remains wired', () => {
   const bg = read('background.js'), popup = read('popup.js');
   for (const type of ['blbSuiteStartStudyTopic','blbSuiteStopStudyRecording','blbSuiteAddStudyNoteToTopic','blbSuiteUpdateStudyNoteToTopic','blbSuiteStudyTopicHistory','blbSuiteStudyTopicMultiVerse','blbSuiteOpenStrongHistory','blbSuiteOpenHistorySearchTerms']) {
@@ -288,6 +421,7 @@ test('popup exposes all core feature controls', () => {
     assert(popup.includes("getElementById('" + control + "')") || popup.includes('getElementById("' + control + '")'), 'popup control missing: ' + control);
   }
 });
+section('selection');
 test('reference classification retains all major selection types', () => {
   const bg = read('background.js');
   for (const type of ['STRONG','REFERENCE','BOOK','KJV_WORD','KJV_PHRASE','KJV_PASSAGE','KJV_REFERENCE_RANGE','REFERENCE_AND_KJV_PASSAGE','NON_KJV_SINGLE_WORD']) {
@@ -295,7 +429,7 @@ test('reference classification retains all major selection types', () => {
   }
 });
 
-console.log(`\nRESULT: ${failures.length ? 'FAIL' : 'PASS'} — ${passed} passed, ${failures.length} failed`);
+console.log(`\nGROUP: ${requestedGroup}\nRESULT: ${failures.length ? 'FAIL' : 'PASS'} — ${passed} passed, ${failures.length} failed`);
 if (failures.length) {
   console.error('\nFailures:');
   for (const f of failures) console.error(`- ${f.name}: ${f.error}`);

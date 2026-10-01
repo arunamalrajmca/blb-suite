@@ -25,6 +25,29 @@ function resolveBibleBook(value) {
   const lower = raw.toLowerCase();
   const compact = compactBibleReferenceText(raw);
 
+  // Support Roman-numeral prefixes for every numbered Bible-book family.
+  // Only normalize I/II/III when the remainder resolves to an existing
+  // numbered book; a standalone "I" therefore remains unresolved.
+  const romanPrefixMatch = lower.match(/^(i{1,3})\s+(.+)$/);
+  if (romanPrefixMatch) {
+    const romanNumber = { i: '1', ii: '2', iii: '3' }[romanPrefixMatch[1]];
+    const numberedBook = resolveBibleBook(`${romanNumber} ${romanPrefixMatch[2]}`);
+    if (numberedBook) return numberedBook;
+  }
+
+  // Numeric prefixes are also part of the book identity. Resolve the
+  // complete numbered form before considering an unnumbered canonical name.
+  const numericPrefixMatch = lower.match(/^([1-3])\s+(.+)$/);
+  if (numericPrefixMatch) {
+    const numberedBook = BOOKS.find(book =>
+      normalizeBibleReferenceText(book.name).toLowerCase() === lower ||
+      normalizeBibleReferenceText(book.urlKey).toLowerCase() === lower
+    );
+    if (numberedBook) return numberedBook;
+    const aliasTarget = BOOK_ALIASES && (BOOK_ALIASES[lower] || BOOK_ALIASES[compact]);
+    if (aliasTarget) return BOOKS.find(book => book.name === aliasTarget) || null;
+  }
+
   for (const book of BOOKS) {
     const forms = [book.name, book.urlKey, book.bookNumber];
     if (forms.some(form => {
@@ -53,6 +76,11 @@ function getBibleBookForms(book) {
   if (!resolved) return [];
   const forms = new Set([resolved.name, resolved.urlKey]);
   if (resolved.bookNumber) forms.add(String(resolved.bookNumber));
+  const seriesNumber = String(resolved.name || '').match(/^([123])\s+/)?.[1];
+  if (seriesNumber) {
+    const roman = {1: 'I', 2: 'II', 3: 'III'}[seriesNumber];
+    if (roman) forms.add(resolved.name.replace(/^[123]/, roman));
+  }
   for (const [alias, target] of Object.entries(BOOK_ALIASES || {})) {
     if (target === resolved.name) forms.add(alias);
   }
@@ -111,6 +139,14 @@ function resolveDirectBibleReference(value) {
   };
 }
 
+function isShadowedNumberedOrRomanBookMatch(source, index) {
+  if (index <= 0) return false;
+  const prefix = source.slice(Math.max(0, index - 8), index);
+  // A suffix match such as "John 4:8" inside "2 John 4:8" or
+  // "I John 4:8" is never an independent reference occurrence.
+  return /(?:^|\s)(?:[1-3]|i{1,3})\s+$/i.test(prefix);
+}
+
 function resolveBibleReferenceText(text, options = {}) {
   const source = normalizeBibleReferenceText(text);
   if (!source) return [];
@@ -134,34 +170,39 @@ function resolveBibleReferenceText(text, options = {}) {
   };
 
   let m;
-  const colonRangeRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(-?\d+)\s*:\s*(-?\d+)\s*[-–—]\s*(-?\d+)(?![A-Za-z0-9])/gi;
+  const colonRangeRe = /(?<![A-Za-z0-9])(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)(?!and\b|or\b)((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)\s*:\s*(-?\d+)\s*[-–—]\s*(-?\d+)(?![A-Za-z0-9])/gi;
   while ((m = colonRangeRe.exec(source))) {
+    if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
     const book = resolveBibleBook(m[1]);
     if (book) add(book, Number(m[2]), Number(m[3]), Number(m[4]), m[0]);
   }
 
-  const colonRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(-?\d+)\s*[:.]\s*(-?\d+)(?:\s*[-–—]\s*(-?\d+))?(?![A-Za-z0-9])/gi;
+  const colonRe = /(?<![A-Za-z0-9])(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)(?!and\b|or\b)((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)\s*[:.]\s*(-?\d+)(?!\s*[-–—]\s*-?\d)(?![A-Za-z0-9])/gi;
   while ((m = colonRe.exec(source))) {
+    if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
     const book = resolveBibleBook(m[1]);
     if (book) add(book, Number(m[2]), Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), m[0]);
   }
 
-  const chapterOnlyRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(-?\d+)(?!\s*[:.]\s*-?\d)(?=$|[\s,.;:!?\)\]\}])/gi;
+  const chapterOnlyRe = /(?<![A-Za-z0-9])(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)(?!and\b|or\b)((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)(?!\s*[:.]\s*-?\d)(?!\s+-?\d)(?=$|[\s,.;:!?\)\]\}])/gi;
   while ((m = chapterOnlyRe.exec(source))) {
+    if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
     const book = resolveBibleBook(m[1]);
     if (!book || book.chapterCount === 1) continue;
     add(book, Number(m[2]), null, null, m[0]);
   }
 
-  const oneChapterRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(-?\d+)(?:\s*[-–—]\s*(-?\d+))?(?![A-Za-z0-9])/gi;
+  const oneChapterRe = /(?<![A-Za-z0-9])(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)(?!and\b|or\b)((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)(?:\s*[-–—]\s*(-?\d+))?(?!\s*[:.]\s*-?\d)(?!\s+-?\d)(?![A-Za-z0-9])/gi;
   while ((m = oneChapterRe.exec(source))) {
+    if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
     const book = resolveBibleBook(m[1]);
     if (!book || book.chapterCount !== 1) continue;
     add(book, 1, Number(m[2]), m[3] ? Number(m[3]) : Number(m[2]), m[0]);
   }
 
-  const spacedRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(-?\d+)\s+(-?\d+)(?:\s*[-–—]\s*(-?\d+))?(?![A-Za-z0-9])/gi;
+  const spacedRe = /(?<![A-Za-z0-9])(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)(?!and\b|or\b)((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s+(-?\d+)\s+(-?\d+)(?:\s*[-–—]\s*(-?\d+))?(?![A-Za-z0-9])/gi;
   while ((m = spacedRe.exec(source))) {
+    if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
     const book = resolveBibleBook(m[1]);
     if (book) add(book, Number(m[2]), Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), m[0]);
   }

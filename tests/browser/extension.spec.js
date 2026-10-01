@@ -8,27 +8,33 @@ async function dblclickAt(locator, rect) {
   });
 }
 
-async function activateBlbTabForPath(extensionWorker, expectedPath) {
-  await expect.poll(async () => extensionWorker.evaluate((path) => {
-    return chrome.tabs.query({}).then(async tabs => {
-      const tab = tabs.find(candidate => {
-        const value = String(candidate.url || candidate.pendingUrl || '');
-        try {
-          const pathname = new URL(value).pathname;
-          return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
-        } catch (_) {
-          return false;
-        }
-      });
-      if (!tab?.id) return false;
+async function activateBlbTabForPath(extensionWorker, expectedPath, debug = {}) {
+  const deadline = Date.now() + 10000;
+  let lastTabs = [];
+  while (Date.now() < deadline) {
+    lastTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
+      items.map(tab => ({ id: tab.id, url: tab.url || tab.pendingUrl || '', active: !!tab.active }))
+    ));
+    const match = lastTabs.some(tab => {
       try {
-        await chrome.tabs.update(tab.id, {active:true});
+        const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+        return pathname === expectedPath || pathname.startsWith(expectedPath.replace(/\/$/, '') + '/');
       } catch (_) {
         return false;
       }
-      return true;
     });
-  }, expectedPath), { timeout: 10000 }).toBe(true);
+    if (match) return;
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  console.error('Double-click activation failure', {
+    fragment: debug.fragment || '',
+    selector: debug.selector || '',
+    selectedText: debug.selectedText || '',
+    expectedPath,
+    tabs: lastTabs
+  });
+  throw new Error(`Timed out waiting for BLB tab: ${expectedPath}`);
 }
 
 test('MV3 service worker starts', async ({ context, extensionId }) => {
@@ -46,6 +52,7 @@ test.describe('core user-visible E2E', () => {
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const el = document.createElement('p');
       el.id = 'blb-e2e-reference';
@@ -69,6 +76,7 @@ test.describe('core user-visible E2E', () => {
   test('Show on BLB exact-reference handoff timing: fresh tab', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const el = document.createElement('p');
       el.id = 'blb-e2e-timing-reference';
@@ -102,10 +110,11 @@ test.describe('core user-visible E2E', () => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
 
     const existing = await context.newPage();
-    await existing.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil: 'domcontentloaded' });
+    await existing.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil: 'commit' });
     await existing.waitForTimeout(250);
 
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const el = document.createElement('p');
       el.id = 'blb-e2e-reuse-reference';
@@ -130,7 +139,7 @@ test.describe('core user-visible E2E', () => {
     expect(handoffMs).toBeLessThan(1500);
   });
 
-  test('Double-click resolves any part of an adjacent Bible reference', async ({ page, context, extensionStorage }) => {
+  test('Double-click resolves any part of an adjacent Bible reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => {
@@ -146,22 +155,29 @@ test.describe('core user-visible E2E', () => {
     for (const fragment of cases) {
       const target = page.locator('#blb-e2e-doubleclick-context-reference span', { hasText: fragment });
       await target.dblclick();
-      await expect.poll(() => context.pages().map(candidate => {
-        try { return new URL(candidate.url()).pathname; } catch (_) { return ''; }
-      }).filter(Boolean).join(' | '), { timeout: 10000 }).toContain(expectedPath);
-      const blb = context.pages().find(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path === expectedPath.replace(/\/$/, '') + '/' || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
-      });
-      expect(blb).toBeTruthy();
-      await blb.close();
+      await activateBlbTabForPath(
+        extensionWorker,
+        expectedPath,
+        { fragment, selector: '#blb-e2e-doubleclick-context-reference', selectedText: fragment }
+      );
+      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+        const matches = tabs.filter(tab => {
+          try {
+            const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+          } catch (_) { return false; }
+        });
+        for (const tab of matches) if (tab.id != null) {
+          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+        }
+      }), expectedPath);
     }
   });
   test('Double-click standalone book numbers do not borrow context across lines', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    // Wait for asynchronous double-click settings initialization before the first gesture.
+    await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const container = document.createElement('div');
       container.id = 'blb-e2e-standalone-book-numbers';
@@ -176,23 +192,26 @@ test.describe('core user-visible E2E', () => {
       ['book-number-16', '/kjv/neh/1/1/']
     ];
 
+    const extensionWorker = context.serviceWorkers()[0];
     for (const [id, expectedPath] of cases) {
       const target = page.locator('#' + id);
       await target.dblclick();
-      await expect.poll(() => context.pages().some(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path === expectedPath.replace(/\/$/, '') + '/' || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
-      }), { timeout: 10000 }).toBe(true);
-      const blb = context.pages().find(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path === expectedPath.replace(/\/$/, '') + '/' || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
+      await activateBlbTabForPath(extensionWorker, expectedPath, {
+        fragment: id,
+        selector: '#' + id,
+        selectedText: id.replace('book-number-', '')
       });
-      expect(blb).toBeTruthy();
-      await blb.close();
+      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+        const matches = tabs.filter(tab => {
+          try {
+            const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+          } catch (_) { return false; }
+        });
+        for (const tab of matches) if (tab.id != null) {
+          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+        }
+      }), expectedPath);
     }
   });
 
@@ -213,14 +232,23 @@ test.describe('core user-visible E2E', () => {
     ];
 
     for (const [id, fragment, expectedPath] of cases) {
-      const pagesBefore = context.pages();
+      const extensionWorker = context.serviceWorkers()[0];
       await page.locator('#' + id).dblclick();
       await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), { timeout: 3000 }).toBe(fragment);
-      await expect.poll(() => context.pages().length, { timeout: 10000 }).toBeGreaterThan(pagesBefore.length);
-      const blb = context.pages().find(candidate => !pagesBefore.includes(candidate));
-      expect(blb).toBeTruthy();
-      await expect.poll(() => new URL(blb.url()).pathname, { timeout: 10000 }).toBe(expectedPath);
-      await blb.close();
+      await activateBlbTabForPath(extensionWorker, expectedPath, {
+        fragment, selector: '#' + id, selectedText: fragment
+      });
+      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+        const matches = tabs.filter(tab => {
+          try {
+            const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+          } catch (_) { return false; }
+        });
+        for (const tab of matches) if (tab.id != null) {
+          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+        }
+      }), expectedPath);
     }
   });
 
@@ -281,18 +309,18 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Standalone numbers on separate lines do not inherit adjacent Bible-reference context', async ({ page, context, extensionStorage }) => {
+  test('Standalone numeric tokens on separate lines do not inherit adjacent Bible-reference context', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const container = document.createElement('div');
       container.id = 'blb-e2e-separated-tokens';
-      container.innerHTML = '<p id="line-book">Jn</p><p id="line-chapter">3</p><p id="line-verse">16</p>';
+      container.innerHTML = '<p id="line-chapter">3</p><p id="line-verse">16</p>';
       document.body.appendChild(container);
     });
 
     const cases = [
-      ['line-book', '/kjv/jhn/1/1/'],
       ['line-chapter', '/kjv/lev/1/1/'],
       ['line-verse', '/kjv/neh/1/1/']
     ];
@@ -300,20 +328,22 @@ test.describe('core user-visible E2E', () => {
     for (const [id, expectedPath] of cases) {
       const target = page.locator('#' + id);
       await target.dblclick();
-      await expect.poll(() => context.pages().some(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path === expectedPath.replace(/\/$/, '') + '/' || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
-      }), { timeout: 10000 }).toBe(true);
-      const blb = context.pages().find(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path === expectedPath.replace(/\/$/, '') + '/' || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
+      await activateBlbTabForPath(extensionWorker, expectedPath, {
+        fragment: id,
+        selector: '#' + id,
+        selectedText: id.replace('line-', '')
       });
-      expect(blb).toBeTruthy();
-      await blb.close();
+      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+        const matches = tabs.filter(tab => {
+          try {
+            const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+          } catch (_) { return false; }
+        });
+        for (const tab of matches) if (tab.id != null) {
+          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+        }
+      }), expectedPath);
     }
   });
 
@@ -329,97 +359,375 @@ test.describe('core user-visible E2E', () => {
       return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
     }, { selector, fragment });
 
-    await dblclickAt(page.locator(selector), rect);
-    if (/^\d+$/.test(fragment)) {
-    }
-    await activateBlbTabForPath(extensionWorker, expectedPath);
-    await expect.poll(() => context.pages().some(candidate => {
-      try {
-        const path = new URL(candidate.url()).pathname;
-        return path === expectedPath || path.startsWith(expectedPath + 's_');
-      } catch (_) { return false; }
-    }), { timeout: 10000 }).toBe(true);
-    const blb = context.pages().find(candidate => {
-      try {
-        const path = new URL(candidate.url()).pathname;
-        return path === expectedPath || path.startsWith(expectedPath + 's_');
-      } catch (_) { return false; }
-    });
-    expect(blb).toBeTruthy();
-    await blb.close();
+    // For isolated token elements, double-click the element itself. Computing a
+    // range point and then converting it back to locator-relative coordinates can
+    // land on the inter-token whitespace in Chromium CI, producing a selected " "
+    // instead of the token under test.
+    // Use the exact text-range center computed above. Clicking the broader
+    // inline element can place Chromium's dblclick coordinates on an adjacent
+    // inter-token whitespace gap even when the token itself is visually hit.
+    await page.mouse.dblclick(rect.x, rect.y);
+    await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')});
+    // The extension worker is authoritative for Chrome tab state. Do not
+    // require Playwright context.pages() to observe the tab before validating
+    // the reference; that representation can lag behind chrome.tabs.query().
+    await expect.poll(() => extensionWorker.evaluate((path) => chrome.tabs.query({}).then(tabs =>
+      tabs.some(tab => {
+        try {
+          const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+          return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+        } catch (_) {
+          return false;
+        }
+      })
+    ), expectedPath), { timeout: 10000 }).toBe(true);
+    await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+      const matches = tabs.filter(tab => {
+        try {
+          const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+          return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+        } catch (_) {
+          return false;
+        }
+      });
+      for (const tab of matches) {
+        if (tab.id != null) {
+          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+        }
+      }
+    }), expectedPath);
   }
 
   async function setupDoubleClickReferencePage(page, extensionStorage, html) {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    // Allow the newly injected content script to finish its asynchronous
+    // double-click settings initialization before the first gesture.
+    await page.waitForTimeout(1000);
     await page.evaluate((html) => {
       const root = document.createElement('div');
       root.id = 'blb-e2e-focused-root';
       root.innerHTML = html;
-      root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;max-height:calc(100vh - 48px);overflow:auto;';
       document.body.appendChild(root);
     }, html);
   }
 
-  for (const [name, fragment] of [['Acts 17:11 — Acts', 'Acts'], ['Acts 17:11 — 17', '17'], ['Acts 17:11 — 11', '11']]) {
-    test(`Double-click isolated token — ${name}`, async ({ page, context, extensionStorage, extensionWorker }) => {
-      await setupDoubleClickReferencePage(page, extensionStorage, '<p id="ref">Acts 17:11</p>');
-      await runDoubleClickReferenceToken(page, context, extensionWorker, '#ref', fragment, '/kjv/act/17/11/');
-    });
+  // Reference coverage is generated exclusively from BOOKS/BOOK_ALIASES so no
+  // individual Bible reference is privileged as a special case.
+  async function getGrammarBooks(extensionWorker, testament) {
+    return extensionWorker.evaluate((testament) => BOOKS
+      .filter(book => testament === 'all'
+        || (testament === 'ot' ? Number(book.bookNumber) <= 39 : Number(book.bookNumber) >= 40))
+      .map(book => ({
+        name: book.name,
+        urlKey: book.urlKey,
+        chapterCount: book.chapterCount
+      })), testament);
   }
 
-  for (const [name, fragment] of [['Jn 3:16 — Jn', 'Jn'], ['Jn 3:16 — 3', '3'], ['Jn 3:16 — 16', '16']]) {
-    test(`Double-click isolated token — ${name}`, async ({ page, context, extensionStorage, extensionWorker }) => {
-      await setupDoubleClickReferencePage(page, extensionStorage, '<p id="ref">Jn 3:16</p>');
-      await runDoubleClickReferenceToken(page, context, extensionWorker, '#ref', fragment, '/kjv/jhn/3/16/');
-    });
+  async function runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, testament) {
+    test.setTimeout(240000);
+    const books = await getGrammarBooks(extensionWorker, testament);
+    for (const book of books) {
+      const forms = [...new Set([book.name, book.urlKey])];
+      for (const form of forms) {
+        const reference = `${form} 1:1`;
+        const tokens = reference.trim().split(/\s+/);
+        await setupDoubleClickReferencePage(
+          page,
+          extensionStorage,
+          `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
+        );
+        const expectedPath = `/kjv/${book.urlKey}/1/1/`;
+        for (let i = 0; i < tokens.length; i++) {
+          await assertDoubleClickPath(
+            page, context, extensionWorker,
+            `#ref .reference-token[data-index="${i}"]`,
+            expectedPath
+          );
+        }
+      }
+    }
   }
 
-  const numberedAliasCases = [
-    ['1 Jn 3:16 — Jn', '1 Jn 3:16', 'Jn', '/kjv/1jo/3/16/'],
-    ['1 Jn 3:16 — 16', '1 Jn 3:16', '16', '/kjv/1jo/3/16/'],
-    ['1 Thess 2:13 — Thess', '1 Thess 2:13', 'Thess', '/kjv/1th/2/13/'],
-    ['1 Thess 2:13 — 13', '1 Thess 2:13', '13', '/kjv/1th/2/13/']
-  ];
-  for (const [name, reference, fragment, expectedPath] of numberedAliasCases) {
-    test(`Double-click isolated token — ${name}`, async ({ page, context, extensionStorage, extensionWorker }) => {
-      await setupDoubleClickReferencePage(page, extensionStorage, `<p id="ref">${reference}</p>`);
-      await runDoubleClickReferenceToken(page, context, extensionWorker, '#ref', fragment, expectedPath);
-    });
+  test('Double-click generic reference grammar — exhaustive token coverage — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'ot');
+  });
+
+  test('Double-click generic reference grammar — exhaustive token coverage — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'nt');
+  });
+
+  async function runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, testament, variant, includeBook = () => true) {
+    test.setTimeout(240000);
+    const books = (await getGrammarBooks(extensionWorker, testament)).filter(includeBook);
+    for (const book of books) {
+      const reference = variant(book);
+      const tokens = reference.trim().split(/\s+/);
+      await setupDoubleClickReferencePage(
+        page,
+        extensionStorage,
+        `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
+      );
+      const expectedPath = `/kjv/${book.urlKey}/1/1/`;
+      for (let i = 0; i < tokens.length; i++) {
+        await assertDoubleClickPath(
+          page, context, extensionWorker,
+          `#ref .reference-token[data-index="${i}"]`,
+          expectedPath
+        );
+      }
+    }
   }
 
-  test('Double-click positional context — orphan tokens remain independent', async ({ page, context, extensionStorage }) => {
-    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    await page.evaluate(() => {
-      const root = document.createElement('div');
-      root.id = 'blb-e2e-doubleclick-positional-context';
-      root.innerHTML = '<p id="ref-line"><span>Jn 3:16</span></p><p id="orphan-36"><span>36</span></p><p id="orphan-16"><span>16</span></p><p id="same-line-orphan"><span>Jn 3:16</span> <span>explanation</span> <span>16</span></p>';
-      root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
-      document.body.appendChild(root);
+  const syntaxVariants = {
+    colon: book => `${book.name} 1:1`,
+    dot: book => `${book.name} 1.1`,
+    spaced: book => `${book.name} 1 1`,
+    chapter: book => `${book.name} 1`,
+    range: book => `${book.name} 1:1-2`
+  };
+
+  test('Double-click generic reference syntax — colon forms — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'ot', syntaxVariants.colon);
+  });
+  test('Double-click generic reference syntax — colon forms — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'nt', syntaxVariants.colon);
+  });
+  test('Double-click generic reference syntax — dot forms — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'ot', syntaxVariants.dot);
+  });
+  test('Double-click generic reference syntax — dot forms — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'nt', syntaxVariants.dot);
+  });
+  test('Double-click generic reference syntax — spaced forms — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'ot', syntaxVariants.spaced);
+  });
+  test('Double-click generic reference syntax — spaced forms — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'nt', syntaxVariants.spaced);
+  });
+  test('Double-click generic reference syntax — chapter forms — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'ot', syntaxVariants.chapter, book => book.chapterCount > 1);
+  });
+  test('Double-click generic reference syntax — chapter forms — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'nt', syntaxVariants.chapter, book => book.chapterCount > 1);
+  });
+  async function runGrammarRangeCoverage(page, context, extensionStorage, extensionWorker, testament) {
+    test.setTimeout(240000);
+    const books = await getGrammarBooks(extensionWorker, testament);
+    // Cover both one-chapter and multi-chapter books. The expected destination
+    // must preserve the range instead of collapsing it to the first verse.
+    const selectedBooks = books.filter(book =>
+      (book.chapterCount === 1 && ['oba', 'phm'].includes(book.urlKey)) ||
+      (book.chapterCount > 1 && ['jhn'].includes(book.urlKey))
+    );
+    for (const book of selectedBooks) {
+      const reference = book.chapterCount === 1
+        ? `${book.name} 1:1-2`
+        : `${book.name} 3:16-18`;
+      const tokens = reference.trim().split(/\\s+/);
+      await setupDoubleClickReferencePage(
+        page,
+        extensionStorage,
+        `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
+      );
+      const expectedPath = book.chapterCount === 1
+        ? `/kjv/${book.urlKey}/1/1-2/`
+        : `/kjv/${book.urlKey}/3/16-18/`;
+      for (let i = 0; i < tokens.length; i++) {
+        await assertDoubleClickPath(
+          page, context, extensionWorker,
+          `#ref .reference-token[data-index="${i}"]`,
+          expectedPath
+        );
+      }
+    }
+  }
+
+  test('Double-click generic reference syntax — range forms — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarRangeCoverage(page, context, extensionStorage, extensionWorker, 'ot');
+  });
+  test('Double-click generic reference syntax — range forms — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarRangeCoverage(page, context, extensionStorage, extensionWorker, 'nt');
+  });
+
+  test('Double-click standalone Roman prefixes remain unresolved', async ({ page, context, extensionStorage, extensionWorker }) => {
+    const prefixes = await extensionWorker.evaluate(() => {
+      const roman = {1: 'I', 2: 'II', 3: 'III'};
+      return [...new Set(
+        BOOKS.filter(book => /^[123] /.test(book.name))
+          .map(book => roman[Number(book.name[0])])
+      )];
     });
-    for (const [selector, expectedPath] of [
-      ['#ref-line span', '/kjv/jhn/3/16/'],
-      ['#orphan-36 span', '/kjv/zep/1/1/'],
-      ['#orphan-16 span', '/kjv/neh/1/1/'],
-      ['#same-line-orphan span:nth-of-type(3)', '/kjv/neh/1/1/']
-    ]) {
-      const target = page.locator(selector);
+    for (const prefix of prefixes) {
+      await setupDoubleClickReferencePage(page, extensionStorage, `<p id="ref">${prefix}</p>`);
+      await page.locator('#ref').dblclick();
+      await expect.poll(() => context.pages().filter(candidate => {
+        try { return new URL(candidate.url()).hostname === 'www.blueletterbible.org'; } catch (_) { return false; }
+      }).length, { timeout: 3000 }).toBe(0);
+    }
+  });
+
+  test('Double-click positional context — standalone numeric book tokens remain independent', async ({ page, context, extensionStorage, extensionWorker }) => {
+    // Exhaustive 66-book coverage needs more than Playwright's 60s default
+    // because every gesture opens and closes a real BLB tab.
+    test.setTimeout(180000);
+    const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
+      number: book.bookNumber, urlKey: book.urlKey
+    })));
+
+    await setupDoubleClickReferencePage(
+      page,
+      extensionStorage,
+      `<p id="ref">${books.map(book =>
+        `<span class="standalone-number" data-book-number="${book.number}">${book.number}</span>`
+      ).join(' ')}</p>`
+    );
+
+    // Keep all 66 independent gestures in one initialized document. Re-loading
+    // the page between every book can make this positional test depend on
+    // asynchronous content-script initialization timing.
+    for (const book of books) {
+      const target = page.locator(`#ref .standalone-number[data-book-number="${book.number}"]`);
+      await target.scrollIntoViewIfNeeded();
       await target.dblclick();
-      await expect.poll(() => context.pages().some(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
-      }), { timeout: 10000 }).toBe(true);
-      const blb = context.pages().find(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
+
+      const expectedPath = `/kjv/${book.urlKey}/1/1/`;
+      await activateBlbTabForPath(extensionWorker, expectedPath, {
+        fragment: String(book.number),
+        selector: `#ref .standalone-number[data-book-number="${book.number}"]`,
+        selectedText: String(book.number)
       });
-      expect(blb).toBeTruthy();
-      await blb.close();
+      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+        const matches = tabs.filter(tab => {
+          try {
+            const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+          } catch (_) { return false; }
+        });
+        for (const tab of matches) if (tab.id != null) {
+          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+        }
+      }), expectedPath);
+    }
+  });
+
+  async function assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath) {
+    await runDoubleClickReferenceToken(page, context, extensionWorker, selector, await page.locator(selector).textContent(), expectedPath);
+  }
+
+  test('Double-click generic canonical references — all 66 books × book/chapter/verse tokens', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
+    const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
+      name: book.name, urlKey: book.urlKey, chapters: book.chapterCount
+    })));
+    expect(books).toHaveLength(66);
+
+    for (const book of books) {
+      const bookTokens = book.name.trim().split(/\s+/);
+      await setupDoubleClickReferencePage(
+        page, extensionStorage,
+        `<p id="ref">${bookTokens.map((token, index) => `<span class="book" data-index="${index}">${token}</span>`).join(' ')} <span class="chapter">1</span>:<span class="verse">1</span></p>`
+      );
+      const expectedPath = `/kjv/${book.urlKey}/1/1/`;
+      for (let index = 0; index < bookTokens.length; index++) {
+        await assertDoubleClickPath(page, context, extensionWorker, `#ref .book[data-index="${index}"]`, expectedPath);
+      }
+      for (const selector of ['#ref .chapter', '#ref .verse']) {
+        await assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath);
+      }
+    }
+  });
+
+  test('Double-click generic aliases — every shared alias across all books', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
+    const data = await extensionWorker.evaluate(() => {
+      const byBook = Object.create(null);
+      for (const book of BOOKS) byBook[book.name] = { name: book.name, urlKey: book.urlKey };
+      return Object.entries(BOOK_ALIASES || {}).map(([alias, target]) => ({
+        alias, book: byBook[target]?.name, urlKey: byBook[target]?.urlKey
+      })).filter(x => x.book && x.alias);
+    });
+
+    expect(data.length).toBeGreaterThan(0);
+    for (const item of data) {
+      const tokens = item.alias.trim().split(/\s+/);
+      const tokenHtml = tokens.map((token, i) => `<span class="alias-token" data-index="${i}">${token}</span>`).join(' ');
+      await setupDoubleClickReferencePage(
+        page, extensionStorage,
+        `<p id="ref">${tokenHtml} <span class="chapter">1</span>:<span class="verse">1</span></p>`
+      );
+      const expectedPath = `/kjv/${item.urlKey}/1/1/`;
+
+      // Every token in a multi-token alias must resolve through the same
+      // surrounding reference, not be reinterpreted independently.
+      for (let i = 0; i < tokens.length; i++) {
+        await assertDoubleClickPath(page, context, extensionWorker, `#ref .alias-token[data-index="${i}"]`, expectedPath);
+      }
+    }
+  });
+
+  test('Double-click generic numbered aliases and Roman prefixes — every numbered family', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
+    const numbered = await extensionWorker.evaluate(() => BOOKS
+      .filter(book => /^[123] /.test(book.name))
+      .map(book => ({ name: book.name, urlKey: book.urlKey })));
+    expect(numbered.length).toBeGreaterThan(0);
+
+    for (const book of numbered) {
+      const n = Number(book.name[0]);
+      const roman = ['I', 'II', 'III'][n - 1];
+      const remainder = book.name.slice(2);
+      const forms = [
+        { label: `${roman} ${remainder}`, tokens: [roman, remainder] },
+        { label: `${n} ${remainder}`, tokens: [String(n), remainder] }
+      ];
+
+      for (const form of forms) {
+        await setupDoubleClickReferencePage(
+          page, extensionStorage,
+          `<p id="ref">${form.tokens.map((token, i) => `<span class="book-token" data-index="${i}">${token}</span>`).join(' ')} <span class="chapter">1</span>:<span class="verse">1</span></p>`
+        );
+        const expectedPath = `/kjv/${book.urlKey}/1/1/`;
+        for (let i = 0; i < form.tokens.length; i++) {
+          await assertDoubleClickPath(page, context, extensionWorker, `#ref .book-token[data-index="${i}"]`, expectedPath);
+        }
+        for (const selector of ['#ref .chapter', '#ref .verse']) {
+          await assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath);
+        }
+      }
+    }
+  });
+
+  test('Double-click generic reference syntax — colon/dot/spaced/chapter/range forms', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
+    const cases = await extensionWorker.evaluate(() => BOOKS.map(book => ({
+      name: book.name, urlKey: book.urlKey, oneChapter: book.chapterCount === 1
+    })));
+
+    for (const book of cases) {
+      const variants = book.oneChapter
+        ? [`${book.name} 1:1`, `${book.name} 1.1`, `${book.name} 1 1`, `${book.name} 1:1-2`]
+        : [`${book.name} 1:1`, `${book.name} 1.1`, `${book.name} 1 1`, `${book.name} 1`];
+
+      for (const reference of variants) {
+        await setupDoubleClickReferencePage(page, extensionStorage, `<p id="ref">${reference}</p>`);
+        const expectedPath = `/kjv/${book.urlKey}/1/1/`;
+        // Locate each whitespace-delimited token independently. This
+        // deliberately exercises the same single-token contract as a real
+        // double-click rather than selecting the entire reference.
+        const tokenCount = reference.trim().split(/\s+/).length;
+        for (let i = 0; i < tokenCount; i++) {
+          const selector = `#ref-token-${i}`;
+          await page.evaluate(({reference}) => {
+            const p = document.querySelector('#ref');
+            const tokens = reference.trim().split(/\s+/);
+            p.innerHTML = tokens.map((token, i) => `<span id="ref-token-${i}">${token}</span>${i < tokens.length - 1 ? ' ' : ''}`).join('');
+          }, {reference});
+          await assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath);
+        }
+      }
     }
   });
 

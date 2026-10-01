@@ -1,0 +1,123 @@
+name: BLB Suite BROWSER E2E — REFERENCES & DOUBLE-CLICK
+run-name: References & Double-click — PR #${{ github.event.pull_request.number || 'main' }} — Run ${{ github.run_number }} — Attempt ${{ github.run_attempt }}
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  browser-e2e:
+    name: BROWSER E2E — References — ${{ matrix.group }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: positional
+            grep: 'Double-click resolves any part|positional context|browser token|separate lines|standalone book numbers|ordinary heading words'
+          - group: grammar-token-coverage-ot
+            grep: 'generic reference grammar — exhaustive token coverage — OT'
+          - group: grammar-token-coverage-nt
+            grep: 'generic reference grammar — exhaustive token coverage — NT'
+          - group: grammar-colon-ot-nt
+            grep: 'generic reference syntax — colon forms'
+          - group: grammar-dot-ot-nt
+            grep: 'generic reference syntax — dot forms'
+          - group: grammar-spaced-ot-nt
+            grep: 'generic reference syntax — spaced forms'
+          - group: grammar-chapter-ot-nt
+            grep: 'generic reference syntax — chapter forms'
+          - group: grammar-range-ot-nt
+            grep: 'generic reference syntax — range forms'
+          - group: aliases-and-roman
+            grep: 'generic aliases|numbered aliases and Roman prefixes|standalone Roman prefixes'
+          - group: resolver
+            grep: 'All 66 canonical'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Read manifest version
+        id: version
+        run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
+      - name: Run Browser E2E — ${{ matrix.group }}
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+        run: npx playwright test tests/browser/extension.spec.js --grep "${{ matrix.grep }}"
+      - name: Upload Playwright diagnostics — ${{ matrix.group }}
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blb-suite-browser-e2e-references-${{ matrix.group }}
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+
+  browser-e2e-features:
+    name: BROWSER E2E — FEATURES
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Read manifest version
+        id: version
+        run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
+      - name: Run Browser E2E — FEATURES
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+        run: npx playwright test tests/browser/extension.spec.js --grep 'MV3 service worker|popup loads|Show on BLB'
+      - name: Upload Playwright diagnostics — FEATURES
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blb-suite-browser-e2e-features
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  browser-e2e-summary:
+    name: browser-e2e
+    needs:
+      - browser-e2e
+      - browser-e2e-features
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all browser E2E suites to pass
+        shell: bash
+        run: |
+          if [ "${{ needs.browser-e2e.result }}" != "success" ] || [ "${{ needs.browser-e2e-features.result }}" != "success" ]; then
+            echo "References matrix: ${{ needs.browser-e2e.result }}"
+            echo "Features: ${{ needs.browser-e2e-features.result }}"
+            exit 1
+          fi
+          echo "All browser E2E suites passed."

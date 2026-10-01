@@ -215,7 +215,7 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
 
 // ---------- BLB Auto Hyperlinker ----------
 function formatBlbTextToHtml(rawText) {
-  const refs=rawText.match(/\b(?:[1-3]\s*)?[A-Za-z0-9.]+\s+\d+:\d+(?:-\d+)?\b/gi);
+  const refs=rawText.match(/\b(?:[1-3]\s*|i{1,3}\s*)?[A-Za-z0-9.]+\s+\d+:\d+(?:-\d+)?\b/gi);
   if (!refs) return null;
   let html=rawText;
   refs.forEach(ref=>{
@@ -689,7 +689,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
   //                            normal boundary rule clamps it to Psalm 1:6.
   // Full book names resolve directly through BOOKS; short forms still use
   // BOOK_ALIASES through resolveBibleBook().
-  const commaContinuationRe = /((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*:\s*(\d+)\s*,\s*(\d+)(?:\s*:\s*(\d+))?/gi;
+  const commaContinuationRe = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*:\s*(\d+)\s*,\s*(\d+)(?:\s*:\s*(\d+))?/gi;
   let commaMatch;
   while ((commaMatch = commaContinuationRe.exec(source))) {
     const book = resolveBibleBook(commaMatch[1]);
@@ -783,9 +783,12 @@ function getStandaloneBookReference(selectionText) {
     const selected = normalizeSelectionText(selectionText);
     if (!selected || !/^(?:[1-9]|[1-5][0-9]|6[0-6]|[A-Za-z][A-Za-z0-9 .'-]*)$/.test(selected)) return null;
 
-    const book = /^\d+$/.test(selected)
-      ? (Array.isArray(BOOKS) ? BOOKS.find(candidate => String(candidate.bookNumber) === selected) : null)
-      : (typeof resolveBibleBook === 'function' ? resolveBibleBook(selected) : null);
+    // Standalone 1-66 is a numeric-book gesture. Resolve it from the
+    // authoritative BOOKS table rather than treating the number as a textual
+    // book name; reference parsing remains responsible for contextual numbers.
+    const book = Array.isArray(BOOKS)
+      ? BOOKS.find(candidate => String(candidate.bookNumber) === selected)
+      : null;
     if (!book) return null;
 
     const urlKey = String(book.urlKey || '').trim();
@@ -803,11 +806,34 @@ function getStandaloneBookReference(selectionText) {
   }
 }
 
-function getDoubleClickBlockContextReference(selectionText, target) {
+function getDoubleClickBlockContextReference(selectionText, target, event = null) {
   try {
-    const selected = normalizeSelectionText(selectionText);
+    let selected = normalizeSelectionText(selectionText);
+    const initialNode = target instanceof Element ? target : (target?.parentElement || null);
+
+    // Chromium can report an empty/whitespace native selection immediately
+    // after an isolated-token double-click. Recover the exact clicked token
+    // before doing any positional reference matching; never substitute the
+    // whole paragraph, because that would allow unrelated references to leak
+    // into an orphan token.
+    if (!selected) {
+      const candidates = [
+        initialNode?.closest?.('[data-index], .reference-token') || initialNode,
+        (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY))
+          ? document.elementFromPoint(event.clientX, event.clientY)?.closest?.('[data-index], .reference-token')
+          : null
+      ];
+      for (const candidate of candidates) {
+        if (!(candidate instanceof Element)) continue;
+        const candidateText = normalizeSelectionText(candidate.textContent || '');
+        if (candidateText && !/\\s/.test(candidateText)) {
+          selected = candidateText;
+          break;
+        }
+      }
+    }
     if (!selected) return null;
-    const node = target instanceof Element ? target : (target?.parentElement || null);
+    const node = initialNode || document.documentElement;
     const block = node?.closest?.('p,li,td,th,blockquote,article,section,div') || node;
     if (!block) return null;
 
@@ -821,8 +847,7 @@ function getDoubleClickBlockContextReference(selectionText, target) {
     // exact occurrence of the parsed reference. Sharing a paragraph is not
     // enough, so an orphan 16/36 cannot borrow an earlier reference.
     const sel = window.getSelection?.();
-    if (!sel?.rangeCount || sel.isCollapsed) return null;
-    const range = sel.getRangeAt(0);
+    const selectedRange = sel?.rangeCount && !sel.isCollapsed ? sel.getRangeAt(0) : null;
 
     const getOffset = (container, offset) => {
       const scratch = document.createRange();
@@ -830,8 +855,78 @@ function getDoubleClickBlockContextReference(selectionText, target) {
       scratch.setEnd(container, offset);
       return scratch.toString().length;
     };
-    const selectionStart = getOffset(range.startContainer, range.startOffset);
-    const selectionEnd = getOffset(range.endContainer, range.endOffset);
+    let selectionStart = null;
+    let selectionEnd = null;
+    if (selectedRange) {
+      const selectedMeaningfulText = normalizeSelectionText(sel.toString());
+      if (selectedMeaningfulText) {
+        selectionStart = getOffset(selectedRange.startContainer, selectedRange.startOffset);
+        selectionEnd = getOffset(selectedRange.endContainer, selectedRange.endOffset);
+      }
+    }
+
+    // Chromium can transiently expose a whitespace-only Range for a real
+    // double-click on an isolated inline token. In that state, the browser
+    // selection is not authoritative, but the event target still identifies
+    // the exact DOM occurrence that was clicked. Use that occurrence only as
+    // a positional fallback inside the same block. This preserves the rule
+    // that an orphan number cannot borrow a reference from elsewhere.
+    // Prefer the exact DOM token identified by the physical double-click
+    // whenever it is available. This matters when a numeric token is repeated
+    // in a spaced reference such as "Obadiah 1 1": the native Selection text
+    // is only "1", so its text alone cannot tell chapter 1 from verse 1.
+    try {
+      const contextualTarget = getDoubleClickTargetElement(event) || initialNode;
+      const targetText = normalizeSelectionText(contextualTarget?.textContent || '');
+      if (contextualTarget && block.contains(contextualTarget) && targetText === selected) {
+        const targetRange = document.createRange();
+        targetRange.selectNodeContents(contextualTarget);
+        const targetStart = getOffset(targetRange.startContainer, targetRange.startOffset);
+        const targetEnd = getOffset(targetRange.endContainer, targetRange.endOffset);
+        if (targetEnd > targetStart) {
+          selectionStart = targetStart;
+          selectionEnd = targetEnd;
+        }
+      }
+    } catch (_) {}
+
+    if (selectionStart == null || selectionEnd == null) {
+      // When Chromium's native Selection is transiently whitespace-only, use
+      // the actual double-click coordinate to recover the text position. This
+      // is more authoritative than event.target when the event bubbles through
+      // a wrapper or Chromium has not committed the token Range yet.
+      try {
+        let pointRange = null;
+        if (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+          if (typeof document.caretRangeFromPoint === 'function') {
+            pointRange = document.caretRangeFromPoint(event.clientX, event.clientY);
+          } else if (typeof document.caretPositionFromPoint === 'function') {
+            const pos = document.caretPositionFromPoint(event.clientX, event.clientY);
+            if (pos?.offsetNode) {
+              pointRange = document.createRange();
+              pointRange.setStart(pos.offsetNode, pos.offset);
+              pointRange.collapse(true);
+            }
+          }
+        }
+        if (pointRange && block.contains(pointRange.startContainer)) {
+          const pointOffset = getOffset(pointRange.startContainer, pointRange.startOffset);
+          selectionStart = pointOffset;
+          selectionEnd = pointOffset + Math.max(1, selected.length);
+        }
+      } catch (_) {}
+
+      if (selectionStart == null || selectionEnd == null) {
+        const targetElement = node instanceof Element ? node : (node?.parentElement || null);
+        if (targetElement && block.contains(targetElement)) {
+          const targetRange = document.createRange();
+          targetRange.selectNodeContents(targetElement);
+          selectionStart = getOffset(targetRange.startContainer, targetRange.startOffset);
+          selectionEnd = getOffset(targetRange.endContainer, targetRange.endOffset);
+        }
+      }
+    }
+    if (selectionStart == null || selectionEnd == null) return null;
 
     const findOccurrences = (needle) => {
       const value = normalizeSelectionText(needle || '');
@@ -865,6 +960,8 @@ function getDoubleClickBlockContextReference(selectionText, target) {
 // Double-click is an entry point into the same background selection resolver.
 // It must not maintain a second Bible/reference parser here.
 let doubleClickBound = false;
+let doubleClickSettingsReady = false;
+let doubleClickSettingsRefreshPromise = null;
 const recentDoubleClickDestinations = new WeakMap();
 let doubleClickRequestSequence = 0;
 const DOUBLE_CLICK_WINDOW_GUARD = '__blbSuiteDoubleClickBoundV2';
@@ -873,23 +970,85 @@ function isDoubleClickExcludedTarget(target) {
   return !!target?.closest?.('input,textarea,select,button,[contenteditable="true"],[contenteditable=""]');
 }
 
+function getDoubleClickTargetElement(event) {
+  // Prefer the element actually under the double-click coordinates. Chromium
+  // can report the surrounding paragraph as event.target when the native
+  // Selection is still settling, while elementFromPoint identifies the inline
+  // token that received the physical gesture.
+  try {
+    const pointTarget = Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)
+      ? document.elementFromPoint(event.clientX, event.clientY)
+      : null;
+    const candidates = [pointTarget, event?.target];
+    for (const candidate of candidates) {
+      if (!(candidate instanceof Element)) continue;
+      const token = candidate.closest?.('[data-index], .reference-token') || candidate;
+      const text = normalizeSelectionText(token.textContent || '');
+      if (text && !/\s/.test(text) && /^[A-Za-z0-9][A-Za-z0-9.'-]*$/.test(text)) return token;
+    }
+
+    // If the click lands on an inter-token whitespace gap, recover the nearest
+    // reference-token from the same block. This is still coordinate-local and
+    // cannot borrow context from another paragraph or document-wide reference.
+    if (pointTarget instanceof Element && Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+      const block = pointTarget.closest?.('p,li,td,th,blockquote,article,section,div');
+      if (block) {
+        let nearest = null;
+        let bestDistance = Infinity;
+        for (const token of block.querySelectorAll('[data-index], .reference-token')) {
+          const text = normalizeSelectionText(token.textContent || '');
+          if (!text || /\s/.test(text) || !/^[A-Za-z0-9][A-Za-z0-9.'-]*$/.test(text)) continue;
+          const rect = token.getBoundingClientRect();
+          const dx = event.clientX < rect.left ? rect.left - event.clientX : event.clientX > rect.right ? event.clientX - rect.right : 0;
+          const dy = event.clientY < rect.top ? rect.top - event.clientY : event.clientY > rect.bottom ? event.clientY - rect.bottom : 0;
+          const distance = Math.hypot(dx, dy);
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            nearest = token;
+          }
+        }
+        if (nearest) return nearest;
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
 function getDoubleClickSelection(event) {
   const selection = normalizeSelectionText(window.getSelection ? window.getSelection().toString() : '');
   if (selection) return selection;
 
-  // Chromium can deliver dblclick before the native Range is populated. Only
-  // fall back to the event target when that target is itself a single token;
-  // never turn an entire paragraph/heading into the selected reference.
-  const targetText = normalizeSelectionText(event?.target?.textContent || '');
-  if (targetText && !/\s/.test(targetText) && /^[A-Za-z0-9][A-Za-z0-9.'-]*$/.test(targetText)) {
-    return targetText;
-  }
+  // Chromium can deliver dblclick before the native Range is populated. Use
+  // the exact token under the physical gesture rather than trusting a
+  // transient whitespace-only Selection.
+  const targetElement = getDoubleClickTargetElement(event);
+  const targetText = normalizeSelectionText(targetElement?.textContent || '');
+  if (targetText) return targetText;
   return '';
 }
 
-function handleDoubleClickBlb(event) {
+function handleDoubleClickBlb(event, initialSelection = '', initialContext = null) {
   try {
-    if (!doubleClickBlbEnabled || !suiteEnabled || isDoubleClickExcludedTarget(event.target)) return;
+    if (!suiteEnabled || isDoubleClickExcludedTarget(event.target)) return;
+    // Capture the browser's selection/range before waiting on asynchronous
+    // settings. The live Selection can change after the event dispatches.
+    const capturedSelection = initialSelection || getDoubleClickSelection(event);
+    const capturedContext = initialContext || (
+      capturedSelection ? getDoubleClickBlockContextReference(capturedSelection, event.target, event) : null
+    );
+
+    // Site settings are loaded asynchronously. A real user gesture can arrive
+    // before that refresh finishes, so defer this exact gesture until the
+    // shared double-click initialization is complete instead of dropping it.
+    if (!doubleClickSettingsReady) {
+      void ensureDoubleClickSettingsReady().then(() => {
+        if (doubleClickBlbEnabled) {
+          handleDoubleClickBlb(event, capturedSelection, capturedContext);
+        }
+      });
+      return;
+    }
+    if (!doubleClickBlbEnabled) return;
 
     // The dblclick gesture has a different selection contract from Show on BLB,
     // Alt+B, and right-click. Wait for Chromium's native token selection before
@@ -899,7 +1058,7 @@ function handleDoubleClickBlb(event) {
     const requestId = `dblclick-${Date.now()}-${++doubleClickRequestSequence}`;
     const dispatch = () => {
       try {
-        const selection = getDoubleClickSelection(event);
+        const selection = capturedSelection || getDoubleClickSelection(event);
         if (!selection) {
           if (Date.now() - started < 1500) {
             requestAnimationFrame(dispatch);
@@ -909,7 +1068,8 @@ function handleDoubleClickBlb(event) {
 
         // Only the block containing the browser-selected token may establish
         // contextual Bible meaning. No document/body-wide resolver is used.
-        const blockContext = getDoubleClickBlockContextReference(selection, event.target);
+        const contextualTarget = getDoubleClickTargetElement(event) || event.target;
+        const blockContext = capturedContext || getDoubleClickBlockContextReference(selection, contextualTarget, event);
 
         // Numeric tokens are ambiguous: 3/17/etc. are valid standalone book
         // numbers, but inside "Jn 3:16" / "Acts 17:11" they belong to the
@@ -921,7 +1081,15 @@ function handleDoubleClickBlb(event) {
         }
 
         const standaloneBook = getStandaloneBookReference(selection);
-        const contextualReference = blockContext || standaloneBook;
+        // A numeric token that occupies its entire DOM block is an explicit
+        // standalone book-number gesture. Give that shared numeric-book
+        // interpretation precedence over any incidental block-level parse.
+        const blockText = normalizeSelectionText(event?.target?.closest?.('p,li,td,th,blockquote,article,section,div')?.textContent || '');
+        const isStandaloneNumericBook = standaloneBook && /^\d+$/.test(selection)
+          && blockText === selection;
+        const contextualReference = isStandaloneNumericBook
+          ? standaloneBook
+          : (blockContext || standaloneBook);
 
         // Double-click is a Bible-reference gesture, not a generic search
         // gesture. Once the token is isolated, it must either establish a
@@ -1015,7 +1183,20 @@ async function refreshDoubleClickBlb() {
   else disableDoubleClickBlb();
 }
 
-suiteSettingsReadyPromise.then(refreshDoubleClickBlb).catch(()=>{});
+function ensureDoubleClickSettingsReady() {
+  if (doubleClickSettingsReady) return Promise.resolve();
+  if (!doubleClickSettingsRefreshPromise) {
+    doubleClickSettingsRefreshPromise = suiteSettingsReadyPromise
+      .then(() => refreshDoubleClickBlb())
+      .catch(() => {})
+      .then(() => {
+        doubleClickSettingsReady = true;
+      });
+  }
+  return doubleClickSettingsRefreshPromise;
+}
+
+void ensureDoubleClickSettingsReady();
 
 // ---------- Floating page selection button ----------
 // This feature is intentionally dormant unless the user enables "Show on BLB".
