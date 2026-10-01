@@ -2,6 +2,8 @@ name: BLB Suite BROWSER E2E — PERFORMANCE
 run-name: Performance — PR #${{ github.event.pull_request.number || 'main' }} — Run ${{ github.run_number }} — Attempt ${{ github.run_attempt }}
 
 on:
+  pull_request:
+    branches: [ main ]
   push:
     branches: [ main ]
   workflow_dispatch:
@@ -59,9 +61,13 @@ jobs:
         env:
           BLB_PERF_MIN_TARGETED_IMPROVEMENT: 0.03
           BLB_PERF_MAX_SELECTION_REGRESSION: 0.10
+          BLB_PERF_REQUIRE_IMPROVEMENT: ${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Performance')) && '1' || '0' }}
           BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT: 0.50
           BLB_PERF_MIN_PARAGRAPH_FIRST_TAB_IMPROVEMENT: 0.50
           BLB_PERF_MIN_PARAGRAPH_SECOND_TAB_IMPROVEMENT: 0.50
+          BLB_PERF_MAX_PARAGRAPH_REGRESSION: 0.10
+          BLB_PERF_MAX_PARAGRAPH_FIRST_TAB_REGRESSION: 0.10
+          BLB_PERF_MAX_PARAGRAPH_SECOND_TAB_REGRESSION: 0.10
           BLB_PERF_MAX_FRESH_REGRESSION: 0.10
         run: |
           set -o pipefail
