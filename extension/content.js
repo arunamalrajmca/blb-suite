@@ -808,9 +808,32 @@ function getStandaloneBookReference(selectionText) {
 
 function getDoubleClickBlockContextReference(selectionText, target, event = null) {
   try {
-    const selected = normalizeSelectionText(selectionText);
+    let selected = normalizeSelectionText(selectionText);
+    const initialNode = target instanceof Element ? target : (target?.parentElement || null);
+
+    // Chromium can report an empty/whitespace native selection immediately
+    // after an isolated-token double-click. Recover the exact clicked token
+    // before doing any positional reference matching; never substitute the
+    // whole paragraph, because that would allow unrelated references to leak
+    // into an orphan token.
+    if (!selected) {
+      const candidates = [
+        initialNode?.closest?.('[data-index], .reference-token') || initialNode,
+        (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY))
+          ? document.elementFromPoint(event.clientX, event.clientY)?.closest?.('[data-index], .reference-token')
+          : null
+      ];
+      for (const candidate of candidates) {
+        if (!(candidate instanceof Element)) continue;
+        const candidateText = normalizeSelectionText(candidate.textContent || '');
+        if (candidateText && !/\\s/.test(candidateText)) {
+          selected = candidateText;
+          break;
+        }
+      }
+    }
     if (!selected) return null;
-    const node = target instanceof Element ? target : (target?.parentElement || null);
+    const node = initialNode || document.documentElement;
     const block = node?.closest?.('p,li,td,th,blockquote,article,section,div') || node;
     if (!block) return null;
 
