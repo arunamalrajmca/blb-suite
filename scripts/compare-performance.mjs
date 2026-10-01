@@ -36,6 +36,10 @@ function pairedMedianImprovement(scenario, field = 'handoffMs') {
 const minTargetedImprovement = Number(process.env.BLB_PERF_MIN_TARGETED_IMPROVEMENT || 0.05);
 const maxSelectionRegression = Number(process.env.BLB_PERF_MAX_SELECTION_REGRESSION || 0.10);
 const maxFreshRegression = Number(process.env.BLB_PERF_MAX_FRESH_REGRESSION || 0.10);
+const maxParagraphRegression = Number(process.env.BLB_PERF_MAX_PARAGRAPH_REGRESSION || 0.10);
+const maxParagraphFirstTabRegression = Number(process.env.BLB_PERF_MAX_PARAGRAPH_FIRST_TAB_REGRESSION || 0.10);
+const maxParagraphSecondTabRegression = Number(process.env.BLB_PERF_MAX_PARAGRAPH_SECOND_TAB_REGRESSION || 0.10);
+const requireImprovement = process.env.BLB_PERF_REQUIRE_IMPROVEMENT === '1';
 
 console.log('| Scenario | main baseline | candidate | Improvement |');
 console.log('|---|---:|---:|---:|');
@@ -63,25 +67,33 @@ const paragraphClassifyImprovement = pairedMedianImprovement('paragraph-classify
 console.log(`Samples: baseline selection/fresh/reuse ${baseline.selection.count}/${baseline.fresh.count}/${baseline.reuse.count}; PR #8 ${candidate.selection.count}/${candidate.fresh.count}/${candidate.reuse.count}`);
 console.log('Gate calculations use paired per-iteration improvement medians; scenario medians above are descriptive.');
 console.log(`Maximum allowed selection-path paired regression: ${(maxSelectionRegression * 100).toFixed(1)}%`);
-console.log(`Required existing-tab handoff paired improvement: ${(minTargetedImprovement * 100).toFixed(1)}%`);
+console.log(`Performance mode: ${requireImprovement ? 'improvement qualification' : 'main regression protection'}`);
+console.log(`Required existing-tab handoff paired improvement: ${(requireImprovement ? minTargetedImprovement : 0) * 100}%`);
 console.log(`Required paragraph total handoff paired improvement: ${(Number(process.env.BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT || 0.50) * 100).toFixed(1)}%`);
 console.log(`Required paragraph first-tab creation paired improvement: ${(Number(process.env.BLB_PERF_MIN_PARAGRAPH_FIRST_TAB_IMPROVEMENT || 0.50) * 100).toFixed(1)}%`);
 console.log(`Required paragraph second-tab creation paired improvement: ${(Number(process.env.BLB_PERF_MIN_PARAGRAPH_SECOND_TAB_IMPROVEMENT || 0.50) * 100).toFixed(1)}%`);
 console.log('Paragraph classification is diagnostic only; it is no longer a release gate because it intentionally runs after the user-visible tabs are created.');
+console.log(`Maximum allowed paragraph total regression: ${(maxParagraphRegression * 100).toFixed(1)}%`);
+console.log(`Maximum allowed paragraph first-tab regression: ${(maxParagraphFirstTabRegression * 100).toFixed(1)}%`);
+console.log(`Maximum allowed paragraph second-tab regression: ${(maxParagraphSecondTabRegression * 100).toFixed(1)}%`);
 console.log(`Maximum allowed fresh-tab handoff paired regression: ${(maxFreshRegression * 100).toFixed(1)}%`);
 
 const minParagraphTwoTabImprovement = Number(process.env.BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT || 0.50);
 const minParagraphFirstTabImprovement = Number(process.env.BLB_PERF_MIN_PARAGRAPH_FIRST_TAB_IMPROVEMENT || 0.50);
 const minParagraphSecondTabImprovement = Number(process.env.BLB_PERF_MIN_PARAGRAPH_SECOND_TAB_IMPROVEMENT || 0.50);
 const passed = selectionImprovement >= -maxSelectionRegression
-  && reuseImprovement >= minTargetedImprovement
-  && paragraphTwoTabImprovement >= minParagraphTwoTabImprovement
-  && paragraphFirstTabImprovement >= minParagraphFirstTabImprovement
-  && paragraphSecondTabImprovement >= minParagraphSecondTabImprovement
+  && reuseImprovement >= (requireImprovement ? minTargetedImprovement : -maxSelectionRegression)
+  && paragraphTwoTabImprovement >= (requireImprovement ? minParagraphTwoTabImprovement : -maxParagraphRegression)
+  && paragraphFirstTabImprovement >= (requireImprovement ? minParagraphFirstTabImprovement : -maxParagraphFirstTabRegression)
+  && paragraphSecondTabImprovement >= (requireImprovement ? minParagraphSecondTabImprovement : -maxParagraphSecondTabRegression)
   && freshImprovement >= -maxFreshRegression;
 
 if (!passed) {
-  console.error('PERFORMANCE GATE FAILED: the selection path must not regress excessively, existing-tab reuse and the paragraph handoff must improve by the required amounts, and fresh-tab handoff must not regress excessively.');
+  console.error(requireImprovement
+    ? 'PERFORMANCE GATE FAILED: the Performance PR must meet its measured improvement targets without excessive regressions.'
+    : 'PERFORMANCE GATE FAILED: main must preserve the measured performance envelope without excessive regressions.');
   process.exit(1);
 }
-console.log('PERFORMANCE GATE PASSED: the targeted paths and both user-visible paragraph tab-creation milestones show measured before/after improvement with no excessive fresh-tab regression.');
+console.log(requireImprovement
+  ? 'PERFORMANCE GATE PASSED: the Performance PR shows measured improvement on its targeted paths with no excessive regression.'
+  : 'PERFORMANCE GATE PASSED: main remains within the measured performance regression envelope.');
