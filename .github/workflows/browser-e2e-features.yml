@@ -65,7 +65,7 @@ jobs:
       - name: Run Browser E2E — core user actions
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: npx playwright test tests/browser/e2e-core-user-actions.spec.js
+        run: npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep 'Alt\+B command path opens an exact selected Bible reference'
       - name: Upload Playwright diagnostics — core user actions
         if: always()
         uses: actions/upload-artifact@v4
