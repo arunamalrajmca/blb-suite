@@ -433,7 +433,7 @@ test.describe('core user-visible E2E', () => {
       const forms = [...new Set([book.name, book.urlKey])];
       for (const form of forms) {
         const reference = `${form} 1:1`;
-        const tokens = reference.trim().split(/\\s+/);
+        const tokens = reference.trim().split(/\s+/);
         await setupDoubleClickReferencePage(
           page,
           extensionStorage,
@@ -464,7 +464,7 @@ test.describe('core user-visible E2E', () => {
     const books = (await getGrammarBooks(extensionWorker, testament)).filter(includeBook);
     for (const book of books) {
       const reference = variant(book);
-      const tokens = reference.trim().split(/\\s+/);
+      const tokens = reference.trim().split(/\s+/);
       await setupDoubleClickReferencePage(
         page,
         extensionStorage,
