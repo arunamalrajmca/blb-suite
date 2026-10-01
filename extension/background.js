@@ -1719,7 +1719,16 @@ async function handleBCommand(text) {
   if (quotedMatch) {
     const phrase = t.replace(/^[\s]*([\"\'])|([\"\'])[\s]*$/g, "").trim();
     if (phrase) {
-      chrome.tabs.update({url:`https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(phrase).replace(/%20/g,"+")}`});
+      // Quoting means literal phrase semantics, but it must not bypass the
+      // exact single-result optimization. A quoted phrase with exactly one
+      // KJV verse match opens that verse directly; multiple/zero matches keep
+      // the established native BLB quoted-search behavior.
+      const singleMatch = findSingleKjvPhraseMatch(phrase);
+      if (singleMatch) {
+        await openSingleKjvVerse(singleMatch, 'currentTab');
+      } else {
+        chrome.tabs.update({url:`https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(phrase).replace(/%20/g,"+")}`});
+      }
       await recordStudySearchTerm(t);
       return;
     }
