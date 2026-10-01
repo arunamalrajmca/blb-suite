@@ -51,7 +51,7 @@ jobs:
         if: ${{ always() }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          STATUS_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          STATUS_SHA: ${{ github.sha }}
           STATUS_STATE: ${{ needs.regression-gate.result == 'success' && 'success' || 'failure' }}
           STATUS_DESCRIPTION: ${{ needs.regression-gate.result == 'success' && 'regression passed' || 'regression failed' }}
         shell: bash
