@@ -967,6 +967,30 @@ function getDoubleClickTargetElement(event) {
       const text = normalizeSelectionText(token.textContent || '');
       if (text && !/\s/.test(text) && /^[A-Za-z0-9][A-Za-z0-9.'-]*$/.test(text)) return token;
     }
+
+    // If the click lands on an inter-token whitespace gap, recover the nearest
+    // reference-token from the same block. This is still coordinate-local and
+    // cannot borrow context from another paragraph or document-wide reference.
+    if (pointTarget instanceof Element && Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+      const block = pointTarget.closest?.('p,li,td,th,blockquote,article,section,div');
+      if (block) {
+        let nearest = null;
+        let bestDistance = Infinity;
+        for (const token of block.querySelectorAll('[data-index], .reference-token')) {
+          const text = normalizeSelectionText(token.textContent || '');
+          if (!text || /\s/.test(text) || !/^[A-Za-z0-9][A-Za-z0-9.'-]*$/.test(text)) continue;
+          const rect = token.getBoundingClientRect();
+          const dx = event.clientX < rect.left ? rect.left - event.clientX : event.clientX > rect.right ? event.clientX - rect.right : 0;
+          const dy = event.clientY < rect.top ? rect.top - event.clientY : event.clientY > rect.bottom ? event.clientY - rect.bottom : 0;
+          const distance = Math.hypot(dx, dy);
+          if (distance < bestDistance) {
+            bestDistance = distance;
+            nearest = token;
+          }
+        }
+        if (nearest) return nearest;
+      }
+    }
   } catch (_) {}
   return null;
 }
