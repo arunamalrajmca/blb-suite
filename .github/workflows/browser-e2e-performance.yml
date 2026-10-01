@@ -11,7 +11,6 @@ on:
 jobs:
   performance:
     name: Measured performance qualification
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch' || startsWith(github.event.pull_request.title, 'Performance')
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
