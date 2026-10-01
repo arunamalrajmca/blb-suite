@@ -46,12 +46,12 @@ jobs:
           BLB_CANDIDATE_EXTENSION_PATH: ${{ github.workspace }}/extension
           BLB_BASELINE_OUTPUT: ${{ runner.temp }}/baseline-performance.jsonl
           BLB_CANDIDATE_OUTPUT: ${{ runner.temp }}/candidate-performance.jsonl
-          BLB_PERF_SAMPLES: 7
+          BLB_PERF_SAMPLES: 11
         run: |
           : > "$BLB_BASELINE_OUTPUT"
           : > "$BLB_CANDIDATE_OUTPUT"
           for scenario in paragraph-classify paragraph-two-tab selection fresh reuse; do
-            for iteration in 1 2 3 4 5 6 7; do
+            for iteration in $(seq 1 "$BLB_PERF_SAMPLES"); do
               BLB_EXTENSION_PATH="$BLB_BASELINE_EXTENSION_PATH" BLB_PERF_OUTPUT="$BLB_BASELINE_OUTPUT" BLB_PERF_SCENARIO="$scenario" npx playwright test tests/browser/performance.spec.js --workers=1 --repeat-each=1
               BLB_EXTENSION_PATH="$BLB_CANDIDATE_EXTENSION_PATH" BLB_PERF_OUTPUT="$BLB_CANDIDATE_OUTPUT" BLB_PERF_SCENARIO="$scenario" npx playwright test tests/browser/performance.spec.js --workers=1 --repeat-each=1
             done
