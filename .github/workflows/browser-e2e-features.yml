@@ -9,7 +9,40 @@ on:
   workflow_dispatch:
 
 jobs:
+  changes:
+    name: Detect feature-relevant changes
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.detect.outputs.run }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect changes
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            if git diff --quiet "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}" -- extension tests/browser/extension.spec.js; then
+              echo "run=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "run=true" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            if git diff --quiet "${GITHUB_EVENT_BEFORE}" "${GITHUB_SHA}" -- extension tests/browser/extension.spec.js; then
+              echo "run=false" >> "$GITHUB_OUTPUT"
+            else
+              echo "run=true" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+
   browser-e2e:
+    needs: changes
+    if: ${{ needs.changes.outputs.run == 'true' }}
     name: BROWSER E2E — FEATURES
     runs-on: ubuntu-latest
     timeout-minutes: 30
