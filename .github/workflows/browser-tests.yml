@@ -24,20 +24,32 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
       - name: Read manifest version
         id: version
         shell: bash
         run: |
           VERSION=$(node -p "require('./extension/manifest.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-
       - name: Run deterministic regression gate — ${{ matrix.group }}
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: node regression-suite/tests/run-regression.mjs extension --group=${{ matrix.group }}
+
+  regression-gate-summary:
+    name: regression-gate
+    needs: regression-gate
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all regression groups to pass
+        shell: bash
+        run: |
+          if [ "${{ needs.regression-gate.result }}" != "success" ]; then
+            echo "Regression matrix result: ${{ needs.regression-gate.result }}"
+            exit 1
+          fi
+          echo "All regression groups passed."
