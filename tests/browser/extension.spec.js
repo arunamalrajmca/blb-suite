@@ -359,7 +359,11 @@ test.describe('core user-visible E2E', () => {
       return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
     }, { selector, fragment });
 
-    await dblclickAt(page.locator(selector), rect);
+    // For isolated token elements, double-click the element itself. Computing a
+    // range point and then converting it back to locator-relative coordinates can
+    // land on the inter-token whitespace in Chromium CI, producing a selected " "
+    // instead of the token under test.
+    await page.locator(selector).dblclick();
     await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')});
     // The extension worker is authoritative for Chrome tab state. Do not
     // require Playwright context.pages() to observe the tab before validating
