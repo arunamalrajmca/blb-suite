@@ -1,0 +1,24 @@
+name: BLB Suite BROWSER E2E — GROUP C
+run-name: E2E-C Selection/Search — PR #${{ github.event.pull_request.number || 'main' }} — Run ${{ github.run_number }}
+
+on:
+  pull_request:
+    branches: [ main ]
+  push:
+    branches: [ e2e/group-c-selection-search ]
+  workflow_dispatch:
+
+jobs:
+  core-group-c:
+    name: BROWSER E2E — GROUP C — SELECTION/SEARCH
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npx playwright install --with-deps chromium
+      - name: Run Group C
+        run: npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep 'selection containing a reference and authored prose'
