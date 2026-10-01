@@ -727,42 +727,10 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click generic reference syntax — colon/dot/spaced/chapter/range forms', async ({ page, context, extensionStorage, extensionWorker }) => {
-    test.setTimeout(240000);
-    const cases = await extensionWorker.evaluate(() => BOOKS.map(book => ({
-      name: book.name, urlKey: book.urlKey, oneChapter: book.chapterCount === 1
-    })));
-
-    for (const book of cases) {
-      const variants = book.oneChapter
-        ? [`${book.name} 1:1`, `${book.name} 1.1`, `${book.name} 1 1`, `${book.name} 1:1-2`]
-        : [`${book.name} 1:1`, `${book.name} 1.1`, `${book.name} 1 1`, `${book.name} 1`];
-
-      for (const reference of variants) {
-        await setupDoubleClickReferencePage(page, extensionStorage, `<p id="ref">${reference}</p>`);
-        const isChapterOnly = /^.+\s+1$/.test(reference);
-        const isOneChapterRange = book.oneChapter && /1:1-2$/.test(reference);
-        const expectedPath = isChapterOnly
-          ? `/kjv/${book.urlKey}/1/`
-          : isOneChapterRange
-            ? `/kjv/${book.urlKey}/1/1-2/`
-            : `/kjv/${book.urlKey}/1/1/`;
-        // Locate each whitespace-delimited token independently. This
-        // deliberately exercises the same single-token contract as a real
-        // double-click rather than selecting the entire reference.
-        const tokenCount = reference.trim().split(/\s+/).length;
-        for (let i = 0; i < tokenCount; i++) {
-          const selector = `#ref-token-${i}`;
-          await page.evaluate(({reference}) => {
-            const p = document.querySelector('#ref');
-            const tokens = reference.trim().split(/\s+/);
-            p.innerHTML = tokens.map((token, i) => `<span id="ref-token-${i}">${token}</span>${i < tokens.length - 1 ? ' ' : ''}`).join('');
-          }, {reference});
-          await assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath);
-        }
-      }
-    }
-  });
+  // The release suite already runs the complete generic syntax matrix above
+  // (colon, dot, spaced, chapter, and range forms for OT/NT). Keeping a second
+  // 66-book × multi-variant copy here doubled the release runtime and could hit
+  // the 4-minute per-test timeout without adding coverage.
 
   test('All 66 canonical books resolve correctly through the shared reference resolver', async ({ extensionWorker }) => {
     const results = await extensionWorker.evaluate(() => BOOKS.map(book => {

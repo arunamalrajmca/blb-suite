@@ -73,7 +73,10 @@ jobs:
           BLB_PERF_SCENARIO: fresh
         run: |
           : > "$BLB_PERF_OUTPUT"
-          npx playwright test
+          # Release correctness covers extension behavior only. External-site smoke tests
+          # are intentionally excluded here because a third-party BLB outage can block a
+          # release even when the extension and all internal E2E checks are healthy.
+          npx playwright test tests/browser/extension.spec.js tests/browser/performance.spec.js tests/browser/known-host-extension.spec.js
       - name: Upload Playwright diagnostics and performance data
         if: always()
         uses: actions/upload-artifact@v4

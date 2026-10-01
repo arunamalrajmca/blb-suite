@@ -40,7 +40,6 @@ const maxParagraphRegression = Number(process.env.BLB_PERF_MAX_PARAGRAPH_REGRESS
 const maxParagraphFirstTabRegression = Number(process.env.BLB_PERF_MAX_PARAGRAPH_FIRST_TAB_REGRESSION || 0.10);
 const maxParagraphSecondTabRegression = Number(process.env.BLB_PERF_MAX_PARAGRAPH_SECOND_TAB_REGRESSION || 0.10);
 const requireImprovement = process.env.BLB_PERF_REQUIRE_IMPROVEMENT === '1';
-const enforceRegression = process.env.BLB_PERF_ENFORCE_REGRESSION !== '0';
 
 console.log('| Scenario | main baseline | candidate | Improvement |');
 console.log('|---|---:|---:|---:|');
@@ -68,7 +67,7 @@ const paragraphClassifyImprovement = pairedMedianImprovement('paragraph-classify
 console.log(`Samples: baseline selection/fresh/reuse ${baseline.selection.count}/${baseline.fresh.count}/${baseline.reuse.count}; PR #8 ${candidate.selection.count}/${candidate.fresh.count}/${candidate.reuse.count}`);
 console.log('Gate calculations use paired per-iteration improvement medians; scenario medians above are descriptive.');
 console.log(`Maximum allowed selection-path paired regression: ${(maxSelectionRegression * 100).toFixed(1)}%`);
-console.log(`Performance mode: ${requireImprovement ? 'improvement qualification' : (enforceRegression ? 'main regression protection' : 'diagnostic only')}`);
+console.log(`Performance mode: ${requireImprovement ? 'improvement qualification' : 'main regression protection'}`);
 console.log(`Required existing-tab handoff paired improvement: ${(requireImprovement ? minTargetedImprovement : 0) * 100}%`);
 console.log(`Required paragraph total handoff paired improvement: ${(Number(process.env.BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT || 0.50) * 100).toFixed(1)}%`);
 console.log(`Required paragraph first-tab creation paired improvement: ${(Number(process.env.BLB_PERF_MIN_PARAGRAPH_FIRST_TAB_IMPROVEMENT || 0.50) * 100).toFixed(1)}%`);
@@ -82,12 +81,12 @@ console.log(`Maximum allowed fresh-tab handoff paired regression: ${(maxFreshReg
 const minParagraphTwoTabImprovement = Number(process.env.BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT || 0.50);
 const minParagraphFirstTabImprovement = Number(process.env.BLB_PERF_MIN_PARAGRAPH_FIRST_TAB_IMPROVEMENT || 0.50);
 const minParagraphSecondTabImprovement = Number(process.env.BLB_PERF_MIN_PARAGRAPH_SECOND_TAB_IMPROVEMENT || 0.50);
-const passed = !enforceRegression || (selectionImprovement >= -maxSelectionRegression
+const passed = selectionImprovement >= -maxSelectionRegression
   && reuseImprovement >= (requireImprovement ? minTargetedImprovement : -maxSelectionRegression)
   && paragraphTwoTabImprovement >= (requireImprovement ? minParagraphTwoTabImprovement : -maxParagraphRegression)
   && paragraphFirstTabImprovement >= (requireImprovement ? minParagraphFirstTabImprovement : -maxParagraphFirstTabRegression)
   && paragraphSecondTabImprovement >= (requireImprovement ? minParagraphSecondTabImprovement : -maxParagraphSecondTabRegression)
-  && freshImprovement >= -maxFreshRegression);
+  && freshImprovement >= -maxFreshRegression;
 
 if (!passed) {
   console.error(requireImprovement
@@ -97,6 +96,4 @@ if (!passed) {
 }
 console.log(requireImprovement
   ? 'PERFORMANCE GATE PASSED: the Performance PR shows measured improvement on its targeted paths with no excessive regression.'
-  : (enforceRegression
-    ? 'PERFORMANCE GATE PASSED: main remains within the measured performance regression envelope.'
-    : 'PERFORMANCE DIAGNOSTIC PASSED: no production extension files changed; measurements are informational only.'));
+  : 'PERFORMANCE GATE PASSED: main remains within the measured performance regression envelope.');
