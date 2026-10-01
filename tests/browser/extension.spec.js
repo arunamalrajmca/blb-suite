@@ -49,7 +49,7 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
 });
 
 test.describe('core user-visible E2E', () => {
-  test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage }) => {
+  test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
@@ -72,7 +72,7 @@ test.describe('core user-visible E2E', () => {
     expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
   });
 
-  test('Show on BLB exact-reference handoff timing: fresh tab', async ({ page, context, extensionStorage }) => {
+  test('Show on BLB exact-reference handoff timing: fresh tab', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
@@ -104,12 +104,17 @@ test.describe('core user-visible E2E', () => {
     expect(handoffMs).toBeLessThan(1500);
   });
 
-  test('Show on BLB exact-reference handoff timing: existing tab reuse', async ({ page, context, extensionStorage }) => {
+  test('Show on BLB exact-reference handoff timing: existing tab reuse', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
 
-    const existing = await context.newPage();
-    await existing.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil: 'commit' });
-    await existing.waitForTimeout(250);
+    const existing = await extensionWorker.evaluate(async () => {
+      const tab = await chrome.tabs.create({ url: 'https://www.blueletterbible.org/kjv/jhn/3/16/', active: false });
+      return { id: tab.id, url: tab.url || tab.pendingUrl || '' };
+    });
+    expect(existing.id).toBeTruthy();
+    await expect.poll(() => extensionWorker.evaluate((id) => chrome.tabs.get(id).then(tab => ({
+      id: tab.id, url: tab.url || tab.pendingUrl || ''
+    })).catch(() => null)), existing.id, { timeout: 10000 }).toMatchObject({ id: existing.id });
 
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
@@ -133,7 +138,10 @@ test.describe('core user-visible E2E', () => {
     await button.click();
     const handoffMs = Date.now() - started;
 
-    expect(new URL(existing.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16\/(?:s_\d+)?$/);
+    await expect.poll(() => extensionWorker.evaluate((id) => chrome.tabs.get(id).then(tab => {
+      const url = tab.url || tab.pendingUrl || '';
+      return new URL(url).pathname;
+    }).catch(() => '')), existing.id, { timeout: 10000 }).toMatch(/^\/kjv\/jhn\/3\/16\/(?:s_\d+)?$/);
     expect(handoffMs).toBeLessThan(1500);
   });
 
