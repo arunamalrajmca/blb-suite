@@ -9,34 +9,32 @@ async function dblclickAt(locator, rect) {
 }
 
 async function activateBlbTabForPath(extensionWorker, expectedPath, debug = {}) {
-  try {
-    await expect.poll(async () => extensionWorker.evaluate((path) => {
-      return chrome.tabs.query({}).then(async tabs => {
-        const tab = tabs.find(candidate => {
-          const value = String(candidate.url || candidate.pendingUrl || '');
-          try {
-            const pathname = new URL(value).pathname;
-            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
-          } catch (_) {
-            return false;
-          }
-        });
-        return !!tab;
-      });
-    }, expectedPath), { timeout: 10000 }).toBe(true);
-  } catch (error) {
-    const tabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
-      items.map(tab => ({id: tab.id, url: tab.url || tab.pendingUrl || '', active: !!tab.active}))
+  const deadline = Date.now() + 10000;
+  let lastTabs = [];
+  while (Date.now() < deadline) {
+    lastTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
+      items.map(tab => ({ id: tab.id, url: tab.url || tab.pendingUrl || '', active: !!tab.active }))
     ));
-    console.error('Double-click activation failure', {
-      fragment: debug.fragment || '',
-      selector: debug.selector || '',
-      selectedText: debug.selectedText || '',
-      expectedPath,
-      tabs
+    const match = lastTabs.some(tab => {
+      try {
+        const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+        return pathname === expectedPath || pathname.startsWith(expectedPath.replace(/\/$/, '') + '/');
+      } catch (_) {
+        return false;
+      }
     });
-    throw error;
+    if (match) return;
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
+
+  console.error('Double-click activation failure', {
+    fragment: debug.fragment || '',
+    selector: debug.selector || '',
+    selectedText: debug.selectedText || '',
+    expectedPath,
+    tabs: lastTabs
+  });
+  throw new Error(`Timed out waiting for BLB tab: ${expectedPath}`);
 }
 
 test('MV3 service worker starts', async ({ context, extensionId }) => {
@@ -311,7 +309,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Standalone numeric tokens on separate lines do not inherit adjacent Bible-reference context', async ({ page, context, extensionStorage }) => {
+  test('Standalone numeric tokens on separate lines do not inherit adjacent Bible-reference context', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
@@ -330,20 +328,22 @@ test.describe('core user-visible E2E', () => {
     for (const [id, expectedPath] of cases) {
       const target = page.locator('#' + id);
       await target.dblclick();
-      await expect.poll(() => context.pages().some(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path === expectedPath.replace(/\/$/, '') + '/' || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
-      }), { timeout: 10000 }).toBe(true);
-      const blb = context.pages().find(candidate => {
-        try {
-          const path = new URL(candidate.url()).pathname;
-          return path === expectedPath || path === expectedPath.replace(/\/$/, '') + '/' || path.startsWith(expectedPath + 's_');
-        } catch (_) { return false; }
+      await activateBlbTabForPath(extensionWorker, expectedPath, {
+        fragment: id,
+        selector: '#' + id,
+        selectedText: id.replace('line-', '')
       });
-      expect(blb).toBeTruthy();
-      await blb.close();
+      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+        const matches = tabs.filter(tab => {
+          try {
+            const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+          } catch (_) { return false; }
+        });
+        for (const tab of matches) if (tab.id != null) {
+          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+        }
+      }), expectedPath);
     }
   });
 
@@ -360,8 +360,6 @@ test.describe('core user-visible E2E', () => {
     }, { selector, fragment });
 
     await dblclickAt(page.locator(selector), rect);
-    if (/^\d+$/.test(fragment)) {
-    }
     await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')});
     // The extension worker is authoritative for Chrome tab state. Do not
     // require Playwright context.pages() to observe the tab before validating
