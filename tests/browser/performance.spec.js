@@ -16,6 +16,25 @@ async function selectReference(page, id) {
   }, id);
 }
 
+async function getBlbTabs(extensionWorker) {
+  return extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
+    return tabs.map(tab => ({id:tab.id, url:tab.url || tab.pendingUrl || '', active:!!tab.active}));
+  });
+}
+
+async function waitForBlbTab(extensionWorker, predicate, timeout = 10000) {
+  let match = null;
+  await expect.poll(
+    async () => {
+      const tabs = await getBlbTabs(extensionWorker);
+      match = tabs.find(predicate) || null;
+      return !!match;
+    },
+    { timeout }
+  ).toBeTruthy();
+  return match;
+}
 async function writeSample(scenario, handoffMs, extra = {}) {
   const output = process.env.BLB_PERF_OUTPUT;
   if (!output) throw new Error('BLB_PERF_OUTPUT is required');
@@ -26,7 +45,7 @@ async function writeSample(scenario, handoffMs, extra = {}) {
   console.log(`BLB performance sample: ${scenario} ${handoffMs} ms${detail}`);
 }
 
-test('Show on BLB performance benchmark', async ({ page, context, extensionStorage, extensionId }) => {
+test('Show on BLB performance benchmark', async ({ page, context, extensionStorage, extensionId, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
 
   const scenario = process.env.BLB_PERF_SCENARIO || 'fresh';
@@ -37,18 +56,15 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     const button = page.locator('#blb-suite-page-selection-button');
     await expect(button).toBeVisible({ timeout: 10000 });
 
-    const pagesBefore = new Set(context.pages());
+    const tabsBefore = await getBlbTabs(extensionWorker);
     const started = Date.now();
     await button.click();
-    await expect.poll(
-      () => context.pages().filter(p => !pagesBefore.has(p)).length,
-      { timeout: 10000 }
-    ).toBeGreaterThanOrEqual(1);
-    const blb = context.pages().find(p => !pagesBefore.has(p) && /blueletterbible\.org\/kjv\/jhn\/3\/16\//i.test(p.url()));
+    const tabIdsBefore = new Set(tabsBefore.map(tab => tab.id));
+    const blb = await waitForBlbTab(extensionWorker, tab => !tabIdsBefore.has(tab.id) && /blueletterbible\.org\/kjv\/jhn\/3\/16\//i.test(tab.url));
     expect(blb).toBeTruthy();
     const handoffMs = Date.now() - started;
 
-    expect(new URL(blb.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16\//);
+    expect(new URL(blb.url).pathname).toMatch(/^\/kjv\/jhn\/3\/16\//);
     await writeSample(scenario, handoffMs);
     return;
   }
@@ -62,7 +78,8 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
       await existing.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil: 'commit', timeout: 15000 });
     }
 
-    const pagesBefore = new Set(context.pages());
+    const tabsBefore = await getBlbTabs(extensionWorker);
+    const targetTabBefore = tabsBefore.find(tab => /blueletterbible\.org\/kjv\/jhn\/3\/16\//i.test(tab.url));
     await page.goto(`chrome-extension://${extensionId}/popup.html`);
     const started = Date.now();
     const response = await page.evaluate(async () => chrome.runtime.sendMessage({
@@ -82,15 +99,20 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     expect(response?.ok).toBeTruthy();
 
     if (scenario === 'fresh') {
-      await expect.poll(
-        () => context.pages().filter(p => !pagesBefore.has(p)).length,
-        { timeout: 10000 }
-      ).toBeGreaterThanOrEqual(1);
-      const blb = context.pages().find(p => !pagesBefore.has(p) && /blueletterbible\.org\/kjv\/jhn\/3\/16\//i.test(p.url()));
+      const tabIdsBefore = new Set(tabsBefore.map(tab => tab.id));
+      const blb = await waitForBlbTab(
+        extensionWorker,
+        tab => !tabIdsBefore.has(tab.id) && /blueletterbible\.org\/kjv\/jhn\/3\/16\//i.test(tab.url)
+      );
       expect(blb).toBeTruthy();
-      expect(new URL(blb.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16\//);
+      expect(new URL(blb.url).pathname).toMatch(/^\/kjv\/jhn\/3\/16\//);
     } else {
-      expect(new URL(existing.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16\/(?:s_\d+)?$/);
+      const reused = await waitForBlbTab(
+        extensionWorker,
+        tab => targetTabBefore?.id === tab.id && /blueletterbible\.org\/kjv\/jhn\/3\/16\//i.test(tab.url)
+      );
+      expect(reused).toBeTruthy();
+      expect(new URL(reused.url).pathname).toMatch(/^\/kjv\/jhn\/3\/16\/(?:s_\d+)?$/);
     }
 
     await writeSample(scenario, handoffMs);
