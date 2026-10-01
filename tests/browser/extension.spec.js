@@ -425,18 +425,18 @@ test.describe('core user-visible E2E', () => {
     for (const book of books) {
       const forms = [...new Set([book.name, book.urlKey])];
       for (const form of forms) {
-        const reference = \`${form} 1:1\`;
+        const reference = `${form} 1:1`;
         const tokens = reference.trim().split(/\\s+/);
         await setupDoubleClickReferencePage(
           page,
           extensionStorage,
-          \`<p id="ref">${tokens.map((token, i) => \`<span class="reference-token" data-index="${i}">${token}</span>\`).join(' ')}<\\/p>\`
+          `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
         );
-        const expectedPath = \`/kjv/${book.urlKey}/1/1/\`;
+        const expectedPath = `/kjv/${book.urlKey}/1/1/`;
         for (let i = 0; i < tokens.length; i++) {
           await assertDoubleClickPath(
             page, context, extensionWorker,
-            \`#ref .reference-token[data-index="${i}"]\`,
+            `#ref .reference-token[data-index="${i}"]`,
             expectedPath
           );
         }
@@ -461,13 +461,13 @@ test.describe('core user-visible E2E', () => {
       await setupDoubleClickReferencePage(
         page,
         extensionStorage,
-        \`<p id="ref">${tokens.map((token, i) => \`<span class="reference-token" data-index="${i}">${token}</span>\`).join(' ')}<\\/p>\`
+        `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
       );
-      const expectedPath = \`/kjv/${book.urlKey}/1/1/\`;
+      const expectedPath = `/kjv/${book.urlKey}/1/1/`;
       for (let i = 0; i < tokens.length; i++) {
         await assertDoubleClickPath(
           page, context, extensionWorker,
-          \`#ref .reference-token[data-index="${i}"]\`,
+          `#ref .reference-token[data-index="${i}"]`,
           expectedPath
         );
       }
@@ -475,11 +475,11 @@ test.describe('core user-visible E2E', () => {
   }
 
   const syntaxVariants = {
-    colon: book => \`${book.name} 1:1\`,
-    dot: book => \`${book.name} 1.1\`,
-    spaced: book => \`${book.name} 1 1\`,
-    chapter: book => \`${book.name} 1\`,
-    range: book => \`${book.name} 1:1-2\`
+    colon: book => `${book.name} 1:1`,
+    dot: book => `${book.name} 1.1`,
+    spaced: book => `${book.name} 1 1`,
+    chapter: book => `${book.name} 1`,
+    range: book => `${book.name} 1:1-2`
   };
 
   test('Double-click generic reference syntax — colon forms — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
