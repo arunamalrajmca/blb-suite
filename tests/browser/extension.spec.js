@@ -8,6 +8,25 @@ async function dblclickAt(locator, rect) {
   });
 }
 
+async function waitForBlbTabPath(extensionWorker, expectedPath, timeout = 10000) {
+  let match = null;
+  await expect.poll(async () => {
+    const tabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
+      items.map(tab => ({ id: tab.id, url: tab.url || tab.pendingUrl || '', active: !!tab.active }))
+    ));
+    match = tabs.find(tab => {
+      try {
+        const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+        return pathname === expectedPath || pathname.startsWith(expectedPath.replace(/\/$/, '') + '/');
+      } catch (_) {
+        return false;
+      }
+    }) || null;
+    return !!match;
+  }, { timeout }).toBeTruthy();
+  return match;
+}
+
 async function activateBlbTabForPath(extensionWorker, expectedPath, debug = {}) {
   const deadline = Date.now() + 10000;
   let lastTabs = [];
