@@ -741,9 +741,12 @@ test.describe('core user-visible E2E', () => {
       for (const reference of variants) {
         await setupDoubleClickReferencePage(page, extensionStorage, `<p id="ref">${reference}</p>`);
         const isChapterOnly = /^.+\s+1$/.test(reference);
+        const isOneChapterRange = book.oneChapter && /1:1-2$/.test(reference);
         const expectedPath = isChapterOnly
           ? `/kjv/${book.urlKey}/1/`
-          : `/kjv/${book.urlKey}/1/1/`;
+          : isOneChapterRange
+            ? `/kjv/${book.urlKey}/1/1-2/`
+            : `/kjv/${book.urlKey}/1/1/`;
         // Locate each whitespace-delimited token independently. This
         // deliberately exercises the same single-token contract as a real
         // double-click rather than selecting the entire reference.
