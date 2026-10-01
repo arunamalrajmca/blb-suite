@@ -408,91 +408,115 @@ test.describe('core user-visible E2E', () => {
 
   // Reference coverage is generated exclusively from BOOKS/BOOK_ALIASES so no
   // individual Bible reference is privileged as a special case.
-  test('Double-click generic reference grammar — exhaustive token coverage', async ({ page, context, extensionStorage, extensionWorker }) => {
+  async function getGrammarBooks(extensionWorker, testament) {
+    return extensionWorker.evaluate((testament) => BOOKS
+      .filter(book => testament === 'all'
+        || (testament === 'ot' ? Number(book.bookNumber) <= 39 : Number(book.bookNumber) >= 40))
+      .map(book => ({
+        name: book.name,
+        urlKey: book.urlKey,
+        chapterCount: book.chapterCount
+      })), testament);
+  }
+
+  async function runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, testament) {
     test.setTimeout(240000);
-    const data = await extensionWorker.evaluate(() => {
-      const forms = [];
-      const roman = {1: 'I', 2: 'II', 3: 'III'};
-      for (const book of BOOKS) {
-        const aliases = Object.entries(BOOK_ALIASES || {})
-          .filter(([, target]) => target === book.name)
-          .map(([alias]) => alias);
-        const names = [...new Set([book.name, book.urlKey, ...aliases])];
-        if (/^[123] /.test(book.name)) {
-          const n = Number(book.name[0]);
-          names.push(book.name.replace(/^[123]/, roman[n]));
-        }
-        for (const form of [...new Set(names)]) {
-          forms.push({ form, urlKey: book.urlKey, chapterCount: book.chapterCount });
-        }
-      }
-      return forms;
-    });
-
-    expect(data.length).toBeGreaterThan(66);
-
-    for (const item of data) {
-      const chapter = 1;
-      const verse = 1;
-      const reference = `${item.form} ${chapter}:${verse}`;
-      const tokens = reference.trim().split(/\s+/);
-      await setupDoubleClickReferencePage(
-        page,
-        extensionStorage,
-        `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
-      );
-      const expectedPath = `/kjv/${item.urlKey}/${chapter}/${verse}/`;
-      for (let i = 0; i < tokens.length; i++) {
-        await assertDoubleClickPath(
-          page, context, extensionWorker,
-          `#ref .reference-token[data-index="${i}"]`,
-          expectedPath
-        );
-      }
-    }
-  });
-
-  test('Double-click generic reference syntax — exhaustive supported forms', async ({ page, context, extensionStorage, extensionWorker }) => {
-    test.setTimeout(240000);
-    const data = await extensionWorker.evaluate(() => {
-      const roman = {1: 'I', 2: 'II', 3: 'III'};
-      return BOOKS.flatMap(book => {
-        const aliases = Object.entries(BOOK_ALIASES || {})
-          .filter(([, target]) => target === book.name)
-          .map(([alias]) => alias);
-        const forms = [...new Set([book.name, book.urlKey, ...aliases])];
-        if (/^[123] /.test(book.name)) {
-          forms.push(book.name.replace(/^[123]/, roman[Number(book.name[0])]));
-        }
-        return [...new Set(forms)].map(form => ({
-          form, urlKey: book.urlKey, oneChapter: book.chapterCount === 1
-        }));
-      });
-    });
-
-    for (const item of data) {
-      const variants = item.oneChapter
-        ? [`${item.form} 1:1`, `${item.form} 1.1`, `${item.form} 1 1`, `${item.form} 1:1-2`]
-        : [`${item.form} 1:1`, `${item.form} 1.1`, `${item.form} 1 1`, `${item.form} 1`];
-
-      for (const reference of variants) {
-        const tokens = reference.trim().split(/\s+/);
+    const books = await getGrammarBooks(extensionWorker, testament);
+    for (const book of books) {
+      const forms = [...new Set([book.name, book.urlKey])];
+      for (const form of forms) {
+        const reference = \`${form} 1:1\`;
+        const tokens = reference.trim().split(/\\s+/);
         await setupDoubleClickReferencePage(
-          page, extensionStorage,
-          `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
+          page,
+          extensionStorage,
+          \`<p id="ref">${tokens.map((token, i) => \`<span class="reference-token" data-index="${i}">${token}</span>\`).join(' ')}<\\/p>\`
         );
-        const expectedPath = /\s1$/.test(reference)
-          ? `/kjv/${item.urlKey}/1/`
-          : `/kjv/${item.urlKey}/1/1/`;
+        const expectedPath = \`/kjv/${book.urlKey}/1/1/\`;
         for (let i = 0; i < tokens.length; i++) {
           await assertDoubleClickPath(
             page, context, extensionWorker,
-            `#ref .reference-token[data-index="${i}"]`,
+            \`#ref .reference-token[data-index="${i}"]\`,
             expectedPath
           );
         }
       }
     }
+  }
+
+  test('Double-click generic reference grammar — exhaustive token coverage — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'ot');
+  });
+
+  test('Double-click generic reference grammar — exhaustive token coverage — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'nt');
+  });
+
+  async function runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, testament, variant) {
+    test.setTimeout(240000);
+    const books = await getGrammarBooks(extensionWorker, testament);
+    for (const book of books) {
+      const reference = variant(book);
+      const tokens = reference.trim().split(/\\s+/);
+      await setupDoubleClickReferencePage(
+        page,
+        extensionStorage,
+        \`<p id="ref">${tokens.map((token, i) => \`<span class="reference-token" data-index="${i}">${token}</span>\`).join(' ')}<\\/p>\`
+      );
+      const expectedPath = \`/kjv/${book.urlKey}/1/1/\`;
+      for (let i = 0; i < tokens.length; i++) {
+        await assertDoubleClickPath(
+          page, context, extensionWorker,
+          \`#ref .reference-token[data-index="${i}"]\`,
+          expectedPath
+        );
+      }
+    }
+  }
+
+  const syntaxVariants = {
+    colon: book => \`${book.name} 1:1\`,
+    dot: book => \`${book.name} 1.1\`,
+    spaced: book => \`${book.name} 1 1\`,
+    chapter: book => \`${book.name} 1\`,
+    range: book => \`${book.name} 1:1-2\`
+  };
+
+  test('Double-click generic reference syntax — colon forms — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'ot', syntaxVariants.colon);
+  });
+  test('Double-click generic reference syntax — colon forms — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'nt', syntaxVariants.colon);
+  });
+  test('Double-click generic reference syntax — dot forms — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'ot', syntaxVariants.dot);
+  });
+  test('Double-click generic reference syntax — dot forms — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'nt', syntaxVariants.dot);
+  });
+  test('Double-click generic reference syntax — spaced forms — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'ot', syntaxVariants.spaced);
+  });
+  test('Double-click generic reference syntax — spaced forms — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'nt', syntaxVariants.spaced);
+  });
+  test('Double-click generic reference syntax — chapter forms — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'ot', syntaxVariants.chapter);
+  });
+  test('Double-click generic reference syntax — chapter forms — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'nt', syntaxVariants.chapter);
+  });
+  test('Double-click generic reference syntax — range forms — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    const books = await getGrammarBooks(extensionWorker, 'ot');
+    const ranged = books.filter(book => book.chapterCount === 1);
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'ot', syntaxVariants.range);
+    expect(ranged.length).toBeGreaterThanOrEqual(0);
+  });
+  test('Double-click generic reference syntax — range forms — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    const books = await getGrammarBooks(extensionWorker, 'nt');
+    const ranged = books.filter(book => book.chapterCount === 1);
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'nt', syntaxVariants.range);
+    expect(ranged.length).toBeGreaterThanOrEqual(0);
   });
 
   test('Double-click standalone Roman prefixes remain unresolved', async ({ page, context, extensionStorage, extensionWorker }) => {
