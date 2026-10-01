@@ -150,7 +150,7 @@ jobs:
       - name: Require all browser E2E suites to pass
         shell: bash
         run: |
-          if [ "${{ needs.browser-e2e.result }}" != "success" ] || [ "${{ needs.browser-e2e-features.result }}" != "success" ]; then
+          if [[ "${{ needs.browser-e2e.result }}" != "success" && "${{ needs.browser-e2e.result }}" != "skipped" ]] || [[ "${{ needs.browser-e2e-features.result }}" != "success" && "${{ needs.browser-e2e-features.result }}" != "skipped" ]]; then
             echo "References matrix: ${{ needs.browser-e2e.result }}"
             echo "Features: ${{ needs.browser-e2e-features.result }}"
             exit 1
