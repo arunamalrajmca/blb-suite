@@ -160,7 +160,7 @@ test.describe('core user-visible E2E', () => {
     await expect.poll(() => extensionWorker.evaluate((id) => chrome.tabs.get(id).then(tab => {
       const url = tab.url || tab.pendingUrl || '';
       return new URL(url).pathname;
-    }).catch(() => '')), existing.id, { timeout: 10000 }).toMatch(/^\/kjv\/jhn\/3\/16\/(?:s_\d+)?$/);
+    }).catch(() => '')), { timeout: 10000 }).toMatch(/^\/kjv\/jhn\/3\/16\/(?:s_\d+)?$/);
     expect(handoffMs).toBeLessThan(1500);
   });
 
