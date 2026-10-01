@@ -133,7 +133,7 @@ test.describe('core user-visible E2E', () => {
     expect(existing.id).toBeTruthy();
     await expect.poll(() => extensionWorker.evaluate((id) => chrome.tabs.get(id).then(tab => ({
       id: tab.id, url: tab.url || tab.pendingUrl || ''
-    })).catch(() => null)), existing.id, { timeout: 10000 }).toMatchObject({ id: existing.id });
+    })).catch(() => null)), { timeout: 10000 }).toMatchObject({ id: existing.id });
 
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
