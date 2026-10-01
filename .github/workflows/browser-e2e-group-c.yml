@@ -4,6 +4,8 @@ run-name: E2E-C Selection/Search — PR #${{ github.event.pull_request.number ||
 on:
   pull_request:
     branches: [ main ]
+  push:
+    branches: [ e2e/group-c-selection-search ]
   workflow_dispatch:
 
 jobs:
