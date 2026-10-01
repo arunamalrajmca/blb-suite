@@ -2916,7 +2916,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // verse number is supplied. Open the complete chapter on BLB.
   // Require an explicit book name/alias followed by a valid chapter number;
   // this keeps ordinary prose numbers from being interpreted as references.
-  const chapterOnlyRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)(?!\s*[:.]\s*\d)(?=$|[\s,.;:!?\)\]\}])/gi;
+  const chapterOnlyRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)(?!\s*[:.]\s*\d)(?!\s+-?\d)(?=$|[\s,.;:!?\)\]\}])/gi;
   while ((m = chapterOnlyRe.exec(source))) {
     if (isShadowedBookMatch(m.index)) continue;
     const book = resolveBook(m[1]);
