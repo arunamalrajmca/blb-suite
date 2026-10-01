@@ -806,7 +806,7 @@ function getStandaloneBookReference(selectionText) {
   }
 }
 
-function getDoubleClickBlockContextReference(selectionText, target) {
+function getDoubleClickBlockContextReference(selectionText, target, event = null) {
   try {
     const selected = normalizeSelectionText(selectionText);
     if (!selected) return null;
@@ -849,12 +849,39 @@ function getDoubleClickBlockContextReference(selectionText, target) {
     // a positional fallback inside the same block. This preserves the rule
     // that an orphan number cannot borrow a reference from elsewhere.
     if (selectionStart == null || selectionEnd == null) {
-      const targetElement = node instanceof Element ? node : (node?.parentElement || null);
-      if (targetElement && block.contains(targetElement)) {
-        const targetRange = document.createRange();
-        targetRange.selectNodeContents(targetElement);
-        selectionStart = getOffset(targetRange.startContainer, targetRange.startOffset);
-        selectionEnd = getOffset(targetRange.endContainer, targetRange.endOffset);
+      // When Chromium's native Selection is transiently whitespace-only, use
+      // the actual double-click coordinate to recover the text position. This
+      // is more authoritative than event.target when the event bubbles through
+      // a wrapper or Chromium has not committed the token Range yet.
+      try {
+        let pointRange = null;
+        if (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+          if (typeof document.caretRangeFromPoint === 'function') {
+            pointRange = document.caretRangeFromPoint(event.clientX, event.clientY);
+          } else if (typeof document.caretPositionFromPoint === 'function') {
+            const pos = document.caretPositionFromPoint(event.clientX, event.clientY);
+            if (pos?.offsetNode) {
+              pointRange = document.createRange();
+              pointRange.setStart(pos.offsetNode, pos.offset);
+              pointRange.collapse(true);
+            }
+          }
+        }
+        if (pointRange && block.contains(pointRange.startContainer)) {
+          const pointOffset = getOffset(pointRange.startContainer, pointRange.startOffset);
+          selectionStart = pointOffset;
+          selectionEnd = pointOffset + Math.max(1, selected.length);
+        }
+      } catch (_) {}
+
+      if (selectionStart == null || selectionEnd == null) {
+        const targetElement = node instanceof Element ? node : (node?.parentElement || null);
+        if (targetElement && block.contains(targetElement)) {
+          const targetRange = document.createRange();
+          targetRange.selectNodeContents(targetElement);
+          selectionStart = getOffset(targetRange.startContainer, targetRange.startOffset);
+          selectionEnd = getOffset(targetRange.endContainer, targetRange.endOffset);
+        }
       }
     }
     if (selectionStart == null || selectionEnd == null) return null;
@@ -941,7 +968,7 @@ function handleDoubleClickBlb(event, initialSelection = '', initialContext = nul
     // settings. The live Selection can change after the event dispatches.
     const capturedSelection = initialSelection || getDoubleClickSelection(event);
     const capturedContext = initialContext || (
-      capturedSelection ? getDoubleClickBlockContextReference(capturedSelection, event.target) : null
+      capturedSelection ? getDoubleClickBlockContextReference(capturedSelection, event.target, event) : null
     );
 
     // Site settings are loaded asynchronously. A real user gesture can arrive
@@ -976,7 +1003,7 @@ function handleDoubleClickBlb(event, initialSelection = '', initialContext = nul
         // Only the block containing the browser-selected token may establish
         // contextual Bible meaning. No document/body-wide resolver is used.
         const contextualTarget = getDoubleClickTargetElement(event) || event.target;
-        const blockContext = capturedContext || getDoubleClickBlockContextReference(selection, contextualTarget);
+        const blockContext = capturedContext || getDoubleClickBlockContextReference(selection, contextualTarget, event);
 
         // Numeric tokens are ambiguous: 3/17/etc. are valid standalone book
         // numbers, but inside "Jn 3:16" / "Acts 17:11" they belong to the
