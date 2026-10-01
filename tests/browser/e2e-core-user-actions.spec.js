@@ -45,9 +45,17 @@ test.describe('core user-action E2E coverage', () => {
     // chrome.commands accelerator. Invoke the exact existing Alt+B command
     // implementation through its public runtime message instead of weakening
     // the destination assertion or changing production code.
-    await extensionWorker.evaluate(() => new Promise(resolve => {
-      chrome.runtime.sendMessage({type:'blbSuiteOpenCurrentSelection'}, () => resolve());
-    }));
+    await extensionWorker.evaluate(async () => {
+      const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+      if (!tab?.id) throw new Error('No active tab for Alt+B command-path E2E');
+      await chrome.scripting.executeScript({
+        target: {tabId: tab.id},
+        world: 'ISOLATED',
+        func: () => new Promise(resolve => {
+          chrome.runtime.sendMessage({type:'blbSuiteOpenCurrentSelection'}, () => resolve());
+        })
+      });
+    });
 
     const blb = await waitForTab(extensionWorker, tab => {
       try {
