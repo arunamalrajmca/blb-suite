@@ -513,11 +513,43 @@ test.describe('core user-visible E2E', () => {
   test('Double-click generic reference syntax — chapter forms — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
     await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'nt', syntaxVariants.chapter, book => book.chapterCount > 1);
   });
+  async function runGrammarRangeCoverage(page, context, extensionStorage, extensionWorker, testament) {
+    test.setTimeout(240000);
+    const books = await getGrammarBooks(extensionWorker, testament);
+    // Cover both one-chapter and multi-chapter books. The expected destination
+    // must preserve the range instead of collapsing it to the first verse.
+    const selectedBooks = books.filter(book =>
+      (book.chapterCount === 1 && ['oba', 'phm'].includes(book.urlKey)) ||
+      (book.chapterCount > 1 && ['jhn'].includes(book.urlKey))
+    );
+    for (const book of selectedBooks) {
+      const reference = book.chapterCount === 1
+        ? `${book.name} 1:1-2`
+        : `${book.name} 3:16-18`;
+      const tokens = reference.trim().split(/\\s+/);
+      await setupDoubleClickReferencePage(
+        page,
+        extensionStorage,
+        `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
+      );
+      const expectedPath = book.chapterCount === 1
+        ? `/kjv/${book.urlKey}/1/1-2/`
+        : `/kjv/${book.urlKey}/3/16-18/`;
+      for (let i = 0; i < tokens.length; i++) {
+        await assertDoubleClickPath(
+          page, context, extensionWorker,
+          `#ref .reference-token[data-index="${i}"]`,
+          expectedPath
+        );
+      }
+    }
+  }
+
   test('Double-click generic reference syntax — range forms — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
-    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'ot', syntaxVariants.range, book => book.chapterCount === 1);
+    await runGrammarRangeCoverage(page, context, extensionStorage, extensionWorker, 'ot');
   });
   test('Double-click generic reference syntax — range forms — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
-    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'nt', syntaxVariants.range, book => book.chapterCount === 1);
+    await runGrammarRangeCoverage(page, context, extensionStorage, extensionWorker, 'nt');
   });
 
   test('Double-click standalone Roman prefixes remain unresolved', async ({ page, context, extensionStorage, extensionWorker }) => {
