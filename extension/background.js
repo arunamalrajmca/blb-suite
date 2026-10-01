@@ -1609,6 +1609,45 @@ async function seedStudyTestData() {
   return added;
 }
 
+function normalizeOmniboxSearchPhrase(value) {
+  return String(value || '')
+    .replace(/[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '')
+    .replace(/[\u00A0\u2007\u202F]/g, ' ')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[^A-Za-z0-9'\-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function findSingleKjvPhraseMatch(value) {
+  const needle = normalizeOmniboxSearchPhrase(value);
+  if (!needle || !Array.isArray(KJV_CORPUS_VERSES)) return null;
+  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\
+async function handleBCommand(text) {');
+  const pattern = new RegExp('(?:^| )' + escaped + '(?:$| )');
+  let match = null;
+  for (const entry of KJV_CORPUS_VERSES) {
+    if (!entry || !pattern.test(String(entry[3] || ''))) continue;
+    if (match) return null;
+    match = entry;
+  }
+  return match;
+}
+
+async function openSingleKjvVerse(entry, disposition = 'currentTab') {
+  if (!Array.isArray(entry) || entry.length < 3) return false;
+  const book = bookData.find(b => Number(b.bookNumber) === Number(entry[0]));
+  const chapter = Number(entry[1]);
+  const verse = Number(entry[2]);
+  if (!book || !Number.isInteger(chapter) || !Number.isInteger(verse)) return false;
+  const url = 'https://www.blueletterbible.org/kjv/' + book.urlKey + '/' + chapter + '/' + verse + '/';
+  if (disposition === 'newForegroundTab') await chrome.tabs.create({url, active:true});
+  else if (disposition === 'newBackgroundTab') await chrome.tabs.create({url, active:false});
+  else await chrome.tabs.update({url});
+  return true;
+}
+
 async function handleBCommand(text) {
   if (!(await isSuiteEnabled())) return;
   const t=normalizeBibleInput(text), low=t.toLowerCase();
@@ -1736,6 +1775,14 @@ async function handleBCommand(text) {
     }
   }
 
+  const singleKjvMatch = findSingleKjvPhraseMatch(t.replace(/^[\s]*([\"']).*\1[\s]*$/, '$1'));
+  if (singleKjvMatch) {
+    if (await openSingleKjvVerse(singleKjvMatch)) {
+      await recordStudySearchTerm(t);
+      return;
+    }
+  }
+
   if (/^\d/.test(t)) { redirectToHomepage(); return; }
 
   // If the input is not a Bible reference and is obviously scrambled/gibberish,
@@ -1834,6 +1881,10 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
     if (Number.isFinite(ref.bookNumber)&&Number.isFinite(ref.chapter)&&Number.isFinite(ref.verse)&&!refMap.has(key)) refMap.set(key,ref);
   }
   const refs=[...refMap.values()].sort((a,b)=>a.bookNumber-b.bookNumber||a.chapter-b.chapter||a.verse-b.verse);
+  if (refs.length === 1) {
+    await openSingleKjvVerse([refs[0].bookNumber, refs[0].chapter, refs[0].verse], disposition);
+    return true;
+  }
   const urls=buildCaseSensitiveMultiVerseUrls(refs,6000);
   if (!urls.length) {
     // A valid case-sensitive query must never fall through to BLB home simply
