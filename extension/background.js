@@ -561,12 +561,12 @@ async function openBlbMultiVerseRefs(refs, active = true) {
     return {ok:true, count:canonical.refs.length, reused:true, tabId:existing.id};
   }
 
-  const searchUrl = "https://www.blueletterbible.org/search/search.cfm?Criteria=Jesus&t=KJV&blbSuiteMultiVerse=1";
+  const multiVerseUrl = "https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1";
   // Create the actual MultiVerse destination immediately. The previous
   // about:blank -> storage -> tabs.update sequence added a second navigation
   // to the user's critical path. The tab id is still available from create()
   // for the same tracking/storage bookkeeping.
-  const tab = await chrome.tabs.create({url:searchUrl, active:!!active});
+  const tab = await chrome.tabs.create({url:multiVerseUrl, active:!!active});
   if (tab?.id == null) return {ok:false, reason:'tab-create-failed'};
   // Batch tracking and pending-handoff storage into one read/write pair.
   const pending = await chrome.storage.local.get({
