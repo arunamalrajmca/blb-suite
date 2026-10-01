@@ -58,27 +58,6 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
 
     const tabsBefore = await getBlbTabs(extensionWorker);
 
-    // Test-only semantic diagnostic: determine whether this exact fixture
-    // actually produces a Criteria query before measuring the tab handoff.
-    // This runs outside the timed interval and does not alter extension code.
-    const classification = await page.evaluate(async () => chrome.runtime.sendMessage({
-      type: 'blbSuiteClassifySelection',
-      text: 'Romans 6:23 and John 3:16 teach that the free gift is offered through Christ.'
-    }));
-    test.info().annotations.push({
-      type: 'criteria-classification',
-      description: JSON.stringify({
-        ok: classification?.ok,
-        valid: classification?.valid,
-        type: classification?.type,
-        refs: classification?.refs,
-        kjvPassageQuery: classification?.kjvPassageQuery || ''
-      })
-    });
-    expect(classification?.ok).toBeTruthy();
-    expect(classification?.valid).toBeTruthy();
-    expect(classification?.kjvPassageQuery).toBeTruthy();
-
     const started = Date.now();
     await button.click();
     const tabIdsBefore = new Set(tabsBefore.map(tab => tab.id));
@@ -177,6 +156,28 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     await expect(button).toBeVisible({ timeout: 10000 });
 
     const tabsBefore = await getBlbTabs(extensionWorker);
+
+    // Test-only semantic diagnostic: determine whether this exact fixture
+    // actually produces a Criteria query before measuring the tab handoff.
+    // This runs outside the timed interval and does not alter extension code.
+    const classification = await page.evaluate(async () => chrome.runtime.sendMessage({
+      type: 'blbSuiteClassifySelection',
+      text: 'Romans 6:23 and John 3:16 teach that the free gift is offered through Christ.'
+    }));
+    test.info().annotations.push({
+      type: 'criteria-classification',
+      description: JSON.stringify({
+        ok: classification?.ok,
+        valid: classification?.valid,
+        type: classification?.type,
+        refs: classification?.refs,
+        kjvPassageQuery: classification?.kjvPassageQuery || ''
+      })
+    });
+    expect(classification?.ok).toBeTruthy();
+    expect(classification?.valid).toBeTruthy();
+    expect(classification?.kjvPassageQuery).toBeTruthy();
+
     const started = Date.now();
     await button.click();
 
