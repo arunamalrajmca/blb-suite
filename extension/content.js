@@ -901,17 +901,36 @@ function isDoubleClickExcludedTarget(target) {
   return !!target?.closest?.('input,textarea,select,button,[contenteditable="true"],[contenteditable=""]');
 }
 
+function getDoubleClickTargetElement(event) {
+  // Prefer the element actually under the double-click coordinates. Chromium
+  // can report the surrounding paragraph as event.target when the native
+  // Selection is still settling, while elementFromPoint identifies the inline
+  // token that received the physical gesture.
+  try {
+    const pointTarget = Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)
+      ? document.elementFromPoint(event.clientX, event.clientY)
+      : null;
+    const candidates = [pointTarget, event?.target];
+    for (const candidate of candidates) {
+      if (!(candidate instanceof Element)) continue;
+      const token = candidate.closest?.('[data-index], .reference-token') || candidate;
+      const text = normalizeSelectionText(token.textContent || '');
+      if (text && !/\s/.test(text) && /^[A-Za-z0-9][A-Za-z0-9.'-]*$/.test(text)) return token;
+    }
+  } catch (_) {}
+  return null;
+}
+
 function getDoubleClickSelection(event) {
   const selection = normalizeSelectionText(window.getSelection ? window.getSelection().toString() : '');
   if (selection) return selection;
 
-  // Chromium can deliver dblclick before the native Range is populated. Only
-  // fall back to the event target when that target is itself a single token;
-  // never turn an entire paragraph/heading into the selected reference.
-  const targetText = normalizeSelectionText(event?.target?.textContent || '');
-  if (targetText && !/\s/.test(targetText) && /^[A-Za-z0-9][A-Za-z0-9.'-]*$/.test(targetText)) {
-    return targetText;
-  }
+  // Chromium can deliver dblclick before the native Range is populated. Use
+  // the exact token under the physical gesture rather than trusting a
+  // transient whitespace-only Selection.
+  const targetElement = getDoubleClickTargetElement(event);
+  const targetText = normalizeSelectionText(targetElement?.textContent || '');
+  if (targetText) return targetText;
   return '';
 }
 
@@ -956,7 +975,8 @@ function handleDoubleClickBlb(event, initialSelection = '', initialContext = nul
 
         // Only the block containing the browser-selected token may establish
         // contextual Bible meaning. No document/body-wide resolver is used.
-        const blockContext = capturedContext || getDoubleClickBlockContextReference(selection, event.target);
+        const contextualTarget = getDoubleClickTargetElement(event) || event.target;
+        const blockContext = capturedContext || getDoubleClickBlockContextReference(selection, contextualTarget);
 
         // Numeric tokens are ambiguous: 3/17/etc. are valid standalone book
         // numbers, but inside "Jn 3:16" / "Acts 17:11" they belong to the
