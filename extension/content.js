@@ -871,6 +871,25 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // the exact DOM occurrence that was clicked. Use that occurrence only as
     // a positional fallback inside the same block. This preserves the rule
     // that an orphan number cannot borrow a reference from elsewhere.
+    // Prefer the exact DOM token identified by the physical double-click
+    // whenever it is available. This matters when a numeric token is repeated
+    // in a spaced reference such as "Obadiah 1 1": the native Selection text
+    // is only "1", so its text alone cannot tell chapter 1 from verse 1.
+    try {
+      const contextualTarget = getDoubleClickTargetElement(event) || initialNode;
+      const targetText = normalizeSelectionText(contextualTarget?.textContent || '');
+      if (contextualTarget && block.contains(contextualTarget) && targetText === selected) {
+        const targetRange = document.createRange();
+        targetRange.selectNodeContents(contextualTarget);
+        const targetStart = getOffset(targetRange.startContainer, targetRange.startOffset);
+        const targetEnd = getOffset(targetRange.endContainer, targetRange.endOffset);
+        if (targetEnd > targetStart) {
+          selectionStart = targetStart;
+          selectionEnd = targetEnd;
+        }
+      }
+    } catch (_) {}
+
     if (selectionStart == null || selectionEnd == null) {
       // When Chromium's native Selection is transiently whitespace-only, use
       // the actual double-click coordinate to recover the text position. This
