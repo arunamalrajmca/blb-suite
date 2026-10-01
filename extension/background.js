@@ -1775,7 +1775,7 @@ async function handleBCommand(text) {
     }
   }
 
-  const singleKjvMatch = findSingleKjvPhraseMatch(t.replace(/^[\s]*([\"']).*\1[\s]*$/, '$1'));
+  const singleKjvMatch = findSingleKjvPhraseMatch(t);
   if (singleKjvMatch) {
     if (await openSingleKjvVerse(singleKjvMatch)) {
       await recordStudySearchTerm(t);
