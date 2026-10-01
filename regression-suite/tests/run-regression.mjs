@@ -269,6 +269,26 @@ test('direct reference resolver rejects prose and accepts exact refs', () => {
 section('features');
 // Case-sensitive core + corpus.
 const csCtx = loadPure(['case-sensitive-search-core.js','kjv-corpus-original-case.js','kjv-corpus-case-verse-index.js']);
+const omniboxCtx = loadPure(['books.js','kjv-corpus-verses.js']);
+const omniboxBgSource = read('background.js');
+const omniboxHelperStart = omniboxBgSource.indexOf('function normalizeOmniboxSearchPhrase');
+const omniboxHelperEnd = omniboxBgSource.indexOf('\nasync function handleBCommand', omniboxHelperStart);
+if (omniboxHelperStart >= 0 && omniboxHelperEnd > omniboxHelperStart) {
+  vm.runInContext(omniboxBgSource.slice(omniboxHelperStart, omniboxHelperEnd), omniboxCtx, {filename:'background.js:omnibox-search-helpers'});
+}
+test('normal b single-result phrase resolves directly to its verse', () => {
+  const match = omniboxCtx.findSingleKjvPhraseMatch('"adoption to wit"');
+  assert(match, 'expected unique KJV phrase result');
+  assert.deepEqual([Number(match[0]), Number(match[1]), Number(match[2])], [45, 8, 23]);
+  assert.equal(omniboxCtx.findSingleKjvPhraseMatch('Jesus'), null, 'multiple results must retain native search');
+});
+test('b cs single-result phrase resolves directly while multi-result remains MultiVerse', () => {
+  const one = csCtx.BLBCaseSensitiveCore.searchCaseSensitiveCorpus('adoption to wit', csCtx.KJV_CORPUS_ORIGINAL_CASE, csCtx.KJV_CORPUS_CASE_VERSE_INDEX);
+  assert.equal(one.length, 1);
+  assert(omniboxBgSource.includes('if (refs.length === 1)'), 'case-sensitive single-result direct-verse branch missing');
+  assert(omniboxBgSource.includes('openSingleKjvVerse([refs[0].bookNumber, refs[0].chapter, refs[0].verse], disposition)'), 'case-sensitive direct-verse opener missing');
+});
+
 test('case-sensitive parser preserves raw query', () => {
   const p=csCtx.BLBCaseSensitiveCore.parseCaseSensitiveQuery('b cs "JESUS"');
   // The parser intentionally expects the text after `cs` in this layer.
