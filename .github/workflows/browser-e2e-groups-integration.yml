@@ -1,0 +1,72 @@
+name: BLB Suite BROWSER E2E — GROUPS INTEGRATION
+run-name: E2E Integration — after grouped PR merge — Run ${{ github.run_number }}
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [ main ]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  verify-all-groups-merged:
+    name: Verify PRs #69 #70 #71 are merged
+    if: ${{ github.event.pull_request.merged == true && (github.event.pull_request.number == 69 || github.event.pull_request.number == 70 || github.event.pull_request.number == 71) }}
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - name: Check grouped PR merge state
+        id: check
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const required = [69, 70, 71];
+            const states = {};
+            for (const number of required) {
+              const { data } = await github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: number
+              });
+              states[number] = data.merged === true;
+            }
+            const ready = required.every(number => states[number]);
+            core.setOutput('ready', ready ? 'true' : 'false');
+            core.info(JSON.stringify(states));
+            if (!ready) core.info('Waiting for all three grouped PRs to be merged.');
+
+  final-browser-e2e:
+    name: BROWSER E2E — FINAL GROUP INTEGRATION
+    needs: verify-all-groups-merged
+    if: ${{ needs.verify-all-groups-merged.outputs.ready == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout final main
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run complete core user-action E2E
+        run: npx playwright test tests/browser/e2e-core-user-actions.spec.js
+      - name: Upload final integration diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blb-suite-browser-e2e-final-integration
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
