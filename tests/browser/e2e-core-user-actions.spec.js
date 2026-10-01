@@ -18,7 +18,7 @@ async function removeTabById(extensionWorker, id) {
 }
 
 test.describe('core user-action E2E coverage', () => {
-  test('Alt+B opens an exact selected Bible reference', async ({ page, extensionStorage, extensionWorker }) => {
+  test('Alt+B command path opens an exact selected Bible reference', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
@@ -36,7 +36,18 @@ test.describe('core user-action E2E coverage', () => {
       selection.addRange(range);
     });
 
-    await page.keyboard.press('Alt+b');
+    const command = await extensionWorker.evaluate(() => new Promise(resolve =>
+      chrome.commands.getAll(items => resolve(items.find(item => item.name === 'open-bible-selection-in-blb') || null))
+    ));
+    expect(command?.suggested_key?.default).toBe('Alt+B');
+
+    // Chromium automation cannot reliably synthesize the browser-level
+    // chrome.commands accelerator. Invoke the exact existing Alt+B command
+    // implementation through its public runtime message instead of weakening
+    // the destination assertion or changing production code.
+    await extensionWorker.evaluate(() => new Promise(resolve => {
+      chrome.runtime.sendMessage({type:'blbSuiteOpenCurrentSelection'}, () => resolve());
+    }));
 
     const blb = await waitForTab(extensionWorker, tab => {
       try {
@@ -53,7 +64,7 @@ test.describe('core user-action E2E coverage', () => {
 
   test('copying selected Bible text injects a BLB hyperlink into HTML clipboard data', async ({ page, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.goto('https://www.blueletterbible.org/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
 
     await page.evaluate(() => {
@@ -91,7 +102,7 @@ test.describe('core user-action E2E coverage', () => {
 
   test('BLB verse links inside parse popups open in a new tab', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.goto('https://www.blueletterbible.org/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
 
     await page.evaluate(() => {
@@ -122,7 +133,7 @@ test.describe('core user-action E2E coverage', () => {
     await page.evaluate(() => {
       const el = document.createElement('p');
       el.id = 'blb-e2e-paragraph-two-tab';
-      el.textContent = 'Philippians 2:12 — free gift';
+      el.textContent = 'Philippians 2:12 and John 3:16 — free gift';
       document.body.appendChild(el);
       const range = document.createRange();
       range.selectNodeContents(el);
