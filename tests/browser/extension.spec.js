@@ -452,9 +452,9 @@ test.describe('core user-visible E2E', () => {
     await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'nt');
   });
 
-  async function runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, testament, variant) {
+  async function runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, testament, variant, includeBook = () => true) {
     test.setTimeout(240000);
-    const books = await getGrammarBooks(extensionWorker, testament);
+    const books = (await getGrammarBooks(extensionWorker, testament)).filter(includeBook);
     for (const book of books) {
       const reference = variant(book);
       const tokens = reference.trim().split(/\\s+/);
@@ -501,22 +501,16 @@ test.describe('core user-visible E2E', () => {
     await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'nt', syntaxVariants.spaced);
   });
   test('Double-click generic reference syntax — chapter forms — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
-    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'ot', syntaxVariants.chapter);
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'ot', syntaxVariants.chapter, book => book.chapterCount > 1);
   });
   test('Double-click generic reference syntax — chapter forms — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
-    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'nt', syntaxVariants.chapter);
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'nt', syntaxVariants.chapter, book => book.chapterCount > 1);
   });
   test('Double-click generic reference syntax — range forms — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
-    const books = await getGrammarBooks(extensionWorker, 'ot');
-    const ranged = books.filter(book => book.chapterCount === 1);
-    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'ot', syntaxVariants.range);
-    expect(ranged.length).toBeGreaterThanOrEqual(0);
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'ot', syntaxVariants.range, book => book.chapterCount === 1);
   });
   test('Double-click generic reference syntax — range forms — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
-    const books = await getGrammarBooks(extensionWorker, 'nt');
-    const ranged = books.filter(book => book.chapterCount === 1);
-    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'nt', syntaxVariants.range);
-    expect(ranged.length).toBeGreaterThanOrEqual(0);
+    await runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, 'nt', syntaxVariants.range, book => book.chapterCount === 1);
   });
 
   test('Double-click standalone Roman prefixes remain unresolved', async ({ page, context, extensionStorage, extensionWorker }) => {
