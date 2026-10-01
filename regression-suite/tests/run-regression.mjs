@@ -282,6 +282,15 @@ test('normal b single-result phrase resolves directly to its verse', () => {
   assert.deepEqual([Number(match[0]), Number(match[1]), Number(match[2])], [45, 8, 23]);
   assert.equal(omniboxCtx.findSingleKjvPhraseMatch('Jesus'), null, 'multiple results must retain native search');
 });
+test('quoted normal b single-result path checks direct verse before native quoted search', () => {
+  const start = omniboxBgSource.indexOf('const quotedMatch = t.match');
+  const end = omniboxBgSource.indexOf('\n  if (low.endsWith("."))', start);
+  assert(start >= 0 && end > start, 'quoted b handler block missing');
+  const quotedBlock = omniboxBgSource.slice(start, end);
+  assert(quotedBlock.includes('const singleMatch = findSingleKjvPhraseMatch(phrase)'), 'quoted path must use single-result resolver');
+  assert(quotedBlock.includes("await openSingleKjvVerse(singleMatch, 'currentTab')"), 'quoted single-result path must open the verse directly');
+  assert(quotedBlock.includes('chrome.tabs.update({url:'), 'quoted fallback must retain native search');
+});
 test('b cs single-result phrase resolves directly while multi-result remains MultiVerse', () => {
   const one = csCtx.BLBCaseSensitiveCore.searchCaseSensitiveCorpus('adoption to wit', csCtx.KJV_CORPUS_ORIGINAL_CASE, csCtx.KJV_CORPUS_CASE_VERSE_INDEX);
   assert.equal(one.length, 1);
