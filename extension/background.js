@@ -561,12 +561,12 @@ async function openBlbMultiVerseRefs(refs, active = true) {
     return {ok:true, count:canonical.refs.length, reused:true, tabId:existing.id};
   }
 
-  const searchUrl = "https://www.blueletterbible.org/search/search.cfm?Criteria=Jesus&t=KJV&blbSuiteMultiVerse=1";
+  const multiVerseUrl = "https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1";
   // Create the actual MultiVerse destination immediately. The previous
   // about:blank -> storage -> tabs.update sequence added a second navigation
   // to the user's critical path. The tab id is still available from create()
   // for the same tracking/storage bookkeeping.
-  const tab = await chrome.tabs.create({url:searchUrl, active:!!active});
+  const tab = await chrome.tabs.create({url:multiVerseUrl, active:!!active});
   if (tab?.id == null) return {ok:false, reason:'tab-create-failed'};
   // Batch tracking and pending-handoff storage into one read/write pair.
   const pending = await chrome.storage.local.get({
@@ -1609,6 +1609,45 @@ async function seedStudyTestData() {
   return added;
 }
 
+function normalizeOmniboxSearchPhrase(value) {
+  return String(value || '')
+    .replace(/[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '')
+    .replace(/[\u00A0\u2007\u202F]/g, ' ')
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[^A-Za-z0-9'\-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function findSingleKjvPhraseMatch(value) {
+  const needle = normalizeOmniboxSearchPhrase(value);
+  if (!needle || !Array.isArray(KJV_CORPUS_VERSES)) return null;
+  const needleWithBounds = ' ' + needle + ' ';
+  let match = null;
+  for (const entry of KJV_CORPUS_VERSES) {
+    if (!entry) continue;
+    const verseText = normalizeOmniboxSearchPhrase(entry[3]);
+    if (!(' ' + verseText + ' ').includes(needleWithBounds)) continue;
+    if (match) return null;
+    match = entry;
+  }
+  return match;
+}
+
+async function openSingleKjvVerse(entry, disposition = 'currentTab') {
+  if (!Array.isArray(entry) || entry.length < 3) return false;
+  const book = bookData.find(b => Number(b.bookNumber) === Number(entry[0]));
+  const chapter = Number(entry[1]);
+  const verse = Number(entry[2]);
+  if (!book || !Number.isInteger(chapter) || !Number.isInteger(verse)) return false;
+  const url = 'https://www.blueletterbible.org/kjv/' + book.urlKey + '/' + chapter + '/' + verse + '/';
+  if (disposition === 'newForegroundTab') await chrome.tabs.create({url, active:true});
+  else if (disposition === 'newBackgroundTab') await chrome.tabs.create({url, active:false});
+  else await chrome.tabs.update({url});
+  return true;
+}
+
 async function handleBCommand(text) {
   if (!(await isSuiteEnabled())) return;
   const t=normalizeBibleInput(text), low=t.toLowerCase();
@@ -1680,7 +1719,16 @@ async function handleBCommand(text) {
   if (quotedMatch) {
     const phrase = t.replace(/^[\s]*([\"\'])|([\"\'])[\s]*$/g, "").trim();
     if (phrase) {
-      chrome.tabs.update({url:`https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(phrase).replace(/%20/g,"+")}`});
+      // Quoting means literal phrase semantics, but it must not bypass the
+      // exact single-result optimization. A quoted phrase with exactly one
+      // KJV verse match opens that verse directly; multiple/zero matches keep
+      // the established native BLB quoted-search behavior.
+      const singleMatch = findSingleKjvPhraseMatch(phrase);
+      if (singleMatch) {
+        await openSingleKjvVerse(singleMatch, 'currentTab');
+      } else {
+        chrome.tabs.update({url:`https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(phrase).replace(/%20/g,"+")}`});
+      }
       await recordStudySearchTerm(t);
       return;
     }
@@ -1732,6 +1780,14 @@ async function handleBCommand(text) {
         ? resolved.url
         : resolved.url.replace('/kjv/', `/${requestedVersion}/`);
       chrome.tabs.update({url:resolvedUrl});
+      return;
+    }
+  }
+
+  const singleKjvMatch = findSingleKjvPhraseMatch(t);
+  if (singleKjvMatch) {
+    if (await openSingleKjvVerse(singleKjvMatch)) {
+      await recordStudySearchTerm(t);
       return;
     }
   }
@@ -1834,6 +1890,10 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
     if (Number.isFinite(ref.bookNumber)&&Number.isFinite(ref.chapter)&&Number.isFinite(ref.verse)&&!refMap.has(key)) refMap.set(key,ref);
   }
   const refs=[...refMap.values()].sort((a,b)=>a.bookNumber-b.bookNumber||a.chapter-b.chapter||a.verse-b.verse);
+  if (refs.length === 1) {
+    await openSingleKjvVerse([refs[0].bookNumber, refs[0].chapter, refs[0].verse], disposition);
+    return true;
+  }
   const urls=buildCaseSensitiveMultiVerseUrls(refs,6000);
   if (!urls.length) {
     // A valid case-sensitive query must never fall through to BLB home simply

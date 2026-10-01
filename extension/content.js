@@ -479,7 +479,7 @@ if (location.hostname==="webstersdictionary1828.com") {
 }
 
 // ---------- BLB MultiVerse hand-off ----------
-if (location.hostname==="www.blueletterbible.org" && /\/search\/(?:search|preSearch)\.cfm/i.test(location.pathname)) {
+if (location.hostname==="www.blueletterbible.org" && /(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)/i.test(location.pathname)) {
   async function processPendingMultiVerseRefs() {
     if (!(await isSuiteEnabled())) return false;
     const response = await chrome.runtime.sendMessage({type:'blbSuiteGetPendingMultiVerseRefs'});
