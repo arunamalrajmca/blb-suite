@@ -188,7 +188,7 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
 
     // URL correctness is part of the populated-state check.
     expect(new URL(criteriaTab.url).searchParams.get('Criteria')).toBeTruthy();
-    expect(new URL(multiVerseTab.url).searchParams.toString()).toMatch(/(?:^|&)blbSuiteMultiVerse=1(?:&|$)/i);
+    expect(multiVerseTab.url).toMatch(/blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm)/i);
 
     const handoffMs = Date.now() - started;
     await writeSample(scenario, handoffMs, { firstTabMs, secondTabMs });
