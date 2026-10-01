@@ -1091,12 +1091,31 @@ function handleDoubleClickBlb(event, initialSelection = '', initialContext = nul
           ? standaloneBook
           : (blockContext || standaloneBook);
 
-        // Double-click is a Bible-reference gesture, not a generic search
-        // gesture. Once the token is isolated, it must either establish a
-        // standalone book (1-66) or belong to a real Bible reference in the
-        // same DOM block. Unrelated numbers such as 176 or 109565645022 are
-        // therefore a no-op and never enter classifier/corpus fallback logic.
+        // A resolved contextual reference remains authoritative. For an
+        // ordinary double-clicked word, however, preserve the legacy Criteria
+        // Search behavior by sending the isolated word through the shared
+        // selection resolver. Standalone numeric tokens remain reference-only:
+        // they must not fall through to generic search/corpus classification.
         if (!contextualReference) {
+          if (/^[A-Za-z][A-Za-z'’-]*$/.test(selection) && !/^(?:i|ii|iii)$/i.test(selection)) {
+            const now = Date.now();
+            const gestureTarget = event?.target && (typeof event.target === 'object' || typeof event.target === 'function')
+              ? event.target
+              : null;
+            if (gestureTarget) {
+              const previous = recentDoubleClickDestinations.get(gestureTarget) || 0;
+              if (now - previous < 1200) return true;
+              recentDoubleClickDestinations.set(gestureTarget, now);
+            }
+            safeRuntimeSendMessage({
+              type:'blbSuiteOpenSelectionText',
+              text:selection,
+              contextualReference:null,
+              requestId,
+              tabBehavior:{activeIfNew:false, activateExisting:true}
+            });
+            return true;
+          }
           if (Date.now() - started < 1500) requestAnimationFrame(dispatch);
           return true;
         }
