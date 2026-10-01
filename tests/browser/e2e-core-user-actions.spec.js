@@ -36,9 +36,10 @@ test.describe('core user-action E2E coverage', () => {
       selection.addRange(range);
     });
 
-    const command = await extensionWorker.evaluate(() => new Promise(resolve =>
-      chrome.commands.getAll(items => resolve(items.find(item => item.name === 'open-bible-selection-in-blb') || null))
-    ));
+    const command = await extensionWorker.evaluate(() => {
+      const manifest = chrome.runtime.getManifest();
+      return manifest.commands?.['open-bible-selection-in-blb'] || null;
+    });
     expect(command?.suggested_key?.default).toBe('Alt+B');
 
     // Chromium automation cannot reliably synthesize the browser-level
@@ -87,22 +88,18 @@ test.describe('core user-action E2E coverage', () => {
       selection.addRange(range);
     });
 
-    const captured = await page.evaluate(() => {
-      let html = null;
-      let plain = null;
-      const original = EventTarget.prototype.dispatchEvent;
-      const listener = event => {
-        if (event.type !== 'copy' || !event.clipboardData) return;
-        html = event.clipboardData.getData('text/html');
-        plain = event.clipboardData.getData('text/plain');
-      };
-      document.addEventListener('copy', listener, true);
-      document.execCommand('copy');
-      document.removeEventListener('copy', listener, true);
-      EventTarget.prototype.dispatchEvent = original;
-      return { html, plain };
+    await page.evaluate(() => {
+      window.__blbE2ECopy = { html: null, plain: null };
+      document.addEventListener('copy', event => {
+        if (!event.clipboardData) return;
+        window.__blbE2ECopy.html = event.clipboardData.getData('text/html');
+        window.__blbE2ECopy.plain = event.clipboardData.getData('text/plain');
+      }, true);
     });
 
+    await page.keyboard.press('Control+c');
+
+    const captured = await page.evaluate(() => window.__blbE2ECopy);
     expect(captured.plain).toBe('John 3:16');
     expect(captured.html).toContain('blueletterbible.org');
     expect(captured.html).toMatch(/kjv\/jhn\/3\/16/i);
@@ -121,7 +118,7 @@ test.describe('core user-action E2E coverage', () => {
     });
 
     const link = page.locator('#blb-e2e-popup-link');
-    await expect(link).toHaveAttribute('target', '_blank');
+    await expect(link).toHaveAttribute('data-blb-suite-popup', '1');
 
     const newPagePromise = context.waitForEvent('page', { timeout: 10000 });
     await link.click();
