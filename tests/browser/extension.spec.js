@@ -8,6 +8,25 @@ async function dblclickAt(locator, rect) {
   });
 }
 
+async function waitForBlbTabPath(extensionWorker, expectedPath, timeout = 10000) {
+  let match = null;
+  await expect.poll(async () => {
+    const tabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
+      items.map(tab => ({ id: tab.id, url: tab.url || tab.pendingUrl || '', active: !!tab.active }))
+    ));
+    match = tabs.find(tab => {
+      try {
+        const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+        return pathname === expectedPath || pathname.startsWith(expectedPath.replace(/\/$/, '') + '/');
+      } catch (_) {
+        return false;
+      }
+    }) || null;
+    return !!match;
+  }, { timeout }).toBeTruthy();
+  return match;
+}
+
 async function activateBlbTabForPath(extensionWorker, expectedPath, debug = {}) {
   const deadline = Date.now() + 10000;
   let lastTabs = [];
@@ -49,7 +68,7 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
 });
 
 test.describe('core user-visible E2E', () => {
-  test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage }) => {
+  test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
@@ -67,13 +86,12 @@ test.describe('core user-visible E2E', () => {
     });
     const button = page.locator('#blb-suite-page-selection-button');
     await expect(button).toBeVisible({ timeout: 10000 });
-    const popupPromise = context.waitForEvent('page');
     await button.click();
-    const blb = await popupPromise;
-    expect(new URL(blb.url()).pathname).toBe('/kjv/jhn/3/16/');
+    const blb = await waitForBlbTabPath(extensionWorker, '/kjv/jhn/3/16/');
+    expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
   });
 
-  test('Show on BLB exact-reference handoff timing: fresh tab', async ({ page, context, extensionStorage }) => {
+  test('Show on BLB exact-reference handoff timing: fresh tab', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
@@ -94,24 +112,28 @@ test.describe('core user-visible E2E', () => {
     await expect(button).toBeVisible({ timeout: 10000 });
 
     const started = Date.now();
-    const popupPromise = context.waitForEvent('page');
     await button.click();
-    const blb = await popupPromise;
+    const blb = await waitForBlbTabPath(extensionWorker, '/kjv/jhn/3/16/');
     const handoffMs = Date.now() - started;
 
-    expect(new URL(blb.url()).pathname).toBe('/kjv/jhn/3/16/');
+    expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
     // This measures extension handoff/tab creation, not BLB network load.
     // Keep a generous CI threshold to catch multi-second regressions without
     // making the test depend on external-site response time.
     expect(handoffMs).toBeLessThan(1500);
   });
 
-  test('Show on BLB exact-reference handoff timing: existing tab reuse', async ({ page, context, extensionStorage }) => {
+  test('Show on BLB exact-reference handoff timing: existing tab reuse', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
 
-    const existing = await context.newPage();
-    await existing.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil: 'commit' });
-    await existing.waitForTimeout(250);
+    const existing = await extensionWorker.evaluate(async () => {
+      const tab = await chrome.tabs.create({ url: 'https://www.blueletterbible.org/kjv/jhn/3/16/', active: false });
+      return { id: tab.id, url: tab.url || tab.pendingUrl || '' };
+    });
+    expect(existing.id).toBeTruthy();
+    await expect.poll(() => extensionWorker.evaluate((id) => chrome.tabs.get(id).then(tab => ({
+      id: tab.id, url: tab.url || tab.pendingUrl || ''
+    })).catch(() => null), existing.id), { timeout: 10000 }).toMatchObject({ id: existing.id });
 
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
@@ -135,7 +157,10 @@ test.describe('core user-visible E2E', () => {
     await button.click();
     const handoffMs = Date.now() - started;
 
-    expect(new URL(existing.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16\/(?:s_\d+)?$/);
+    await expect.poll(() => extensionWorker.evaluate((id) => chrome.tabs.get(id).then(tab => {
+      const url = tab.url || tab.pendingUrl || '';
+      return new URL(url).pathname;
+    }).catch(() => ''), existing.id), { timeout: 10000 }).toMatch(/^\/kjv\/jhn\/3\/16\/(?:s_\d+)?$/);
     expect(handoffMs).toBeLessThan(1500);
   });
 
@@ -470,7 +495,9 @@ test.describe('core user-visible E2E', () => {
         extensionStorage,
         `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
       );
-      const expectedPath = `/kjv/${book.urlKey}/1/1/`;
+      const expectedPath = variant === syntaxVariants.chapter
+      ? `/kjv/${book.urlKey}/1/`
+      : `/kjv/${book.urlKey}/1/1/`;
       for (let i = 0; i < tokens.length; i++) {
         await assertDoubleClickPath(
           page, context, extensionWorker,
@@ -713,7 +740,10 @@ test.describe('core user-visible E2E', () => {
 
       for (const reference of variants) {
         await setupDoubleClickReferencePage(page, extensionStorage, `<p id="ref">${reference}</p>`);
-        const expectedPath = `/kjv/${book.urlKey}/1/1/`;
+        const isChapterOnly = /^.+\s+1$/.test(reference);
+        const expectedPath = isChapterOnly
+          ? `/kjv/${book.urlKey}/1/`
+          : `/kjv/${book.urlKey}/1/1/`;
         // Locate each whitespace-delimited token independently. This
         // deliberately exercises the same single-token contract as a real
         // double-click rather than selecting the entire reference.
