@@ -1623,12 +1623,12 @@ function normalizeOmniboxSearchPhrase(value) {
 function findSingleKjvPhraseMatch(value) {
   const needle = normalizeOmniboxSearchPhrase(value);
   if (!needle || !Array.isArray(KJV_CORPUS_VERSES)) return null;
-  const escaped = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\
-async function handleBCommand(text) {');
-  const pattern = new RegExp('(?:^| )' + escaped + '(?:$| )');
+  const needleWithBounds = ' ' + needle + ' ';
   let match = null;
   for (const entry of KJV_CORPUS_VERSES) {
-    if (!entry || !pattern.test(String(entry[3] || ''))) continue;
+    if (!entry) continue;
+    const verseText = normalizeOmniboxSearchPhrase(entry[3]);
+    if (!(' ' + verseText + ' ').includes(needleWithBounds)) continue;
     if (match) return null;
     match = entry;
   }
