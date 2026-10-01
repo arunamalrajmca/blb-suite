@@ -363,7 +363,10 @@ test.describe('core user-visible E2E', () => {
     // range point and then converting it back to locator-relative coordinates can
     // land on the inter-token whitespace in Chromium CI, producing a selected " "
     // instead of the token under test.
-    await page.locator(selector).dblclick();
+    // Use the exact text-range center computed above. Clicking the broader
+    // inline element can place Chromium's dblclick coordinates on an adjacent
+    // inter-token whitespace gap even when the token itself is visually hit.
+    await page.mouse.dblclick(rect.x, rect.y);
     await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')});
     // The extension worker is authoritative for Chrome tab state. Do not
     // require Playwright context.pages() to observe the tab before validating
