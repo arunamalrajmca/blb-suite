@@ -277,6 +277,50 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  test('Double-clicking ordinary words opens Criteria Search', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-doubleclick-criteria-words';
+      el.innerHTML = '<span>Jesus</span> <span>faith</span> <span>Grace</span> <span>people</span>';
+      el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(el);
+    });
+
+    for (const word of ['Jesus', 'faith', 'Grace', 'people']) {
+      const target = page.locator('#blb-e2e-doubleclick-criteria-words span', { hasText: word });
+      await target.dblclick();
+      await expect.poll(() => extensionWorker.evaluate((expected) => chrome.tabs.query({}).then(tabs =>
+        tabs.some(tab => {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            return url.hostname === 'www.blueletterbible.org'
+              && url.pathname === '/search/search.cfm'
+              && (url.searchParams.get('Criteria') || '').toLowerCase() === expected.toLowerCase();
+          } catch (_) {
+            return false;
+          }
+        })
+      ), word), { timeout: 10000 }).toBe(true);
+
+      await extensionWorker.evaluate((expected) => chrome.tabs.query({}).then(async tabs => {
+        for (const tab of tabs) {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            if (url.hostname === 'www.blueletterbible.org'
+              && url.pathname === '/search/search.cfm'
+              && (url.searchParams.get('Criteria') || '').toLowerCase() === expected.toLowerCase()
+              && tab.id != null) {
+              await chrome.tabs.remove(tab.id);
+            }
+          } catch (_) {}
+        }
+      }), word);
+    }
+  });
+
   test('Double-clicking ordinary heading words does not open a Bible reference', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
