@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Blue Letter Bible Suite",
-  "version": "5.2.51.45",
+  "version": "5.2.51.46",
   "description": "Bible study tools for BLB search, Bible references, Show on BLB, Double-Click BLB, and KJV case-sensitive search.",
   "permissions": [
     "clipboardWrite",
