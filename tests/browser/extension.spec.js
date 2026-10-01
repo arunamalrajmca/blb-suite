@@ -133,7 +133,7 @@ test.describe('core user-visible E2E', () => {
     expect(existing.id).toBeTruthy();
     await expect.poll(() => extensionWorker.evaluate((id) => chrome.tabs.get(id).then(tab => ({
       id: tab.id, url: tab.url || tab.pendingUrl || ''
-    })).catch(() => null)), { timeout: 10000 }).toMatchObject({ id: existing.id });
+    })).catch(() => null), existing.id), { timeout: 10000 }).toMatchObject({ id: existing.id });
 
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
@@ -160,7 +160,7 @@ test.describe('core user-visible E2E', () => {
     await expect.poll(() => extensionWorker.evaluate((id) => chrome.tabs.get(id).then(tab => {
       const url = tab.url || tab.pendingUrl || '';
       return new URL(url).pathname;
-    }).catch(() => '')), { timeout: 10000 }).toMatch(/^\/kjv\/jhn\/3\/16\/(?:s_\d+)?$/);
+    }).catch(() => ''), existing.id), { timeout: 10000 }).toMatch(/^\/kjv\/jhn\/3\/16\/(?:s_\d+)?$/);
     expect(handoffMs).toBeLessThan(1500);
   });
 
