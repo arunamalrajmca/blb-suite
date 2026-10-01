@@ -67,10 +67,9 @@ test.describe('core user-visible E2E', () => {
     });
     const button = page.locator('#blb-suite-page-selection-button');
     await expect(button).toBeVisible({ timeout: 10000 });
-    const popupPromise = context.waitForEvent('page');
     await button.click();
-    const blb = await popupPromise;
-    expect(new URL(blb.url()).pathname).toBe('/kjv/jhn/3/16/');
+    const blb = await waitForBlbTabPath(extensionWorker, '/kjv/jhn/3/16/');
+    expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
   });
 
   test('Show on BLB exact-reference handoff timing: fresh tab', async ({ page, context, extensionStorage }) => {
@@ -94,12 +93,11 @@ test.describe('core user-visible E2E', () => {
     await expect(button).toBeVisible({ timeout: 10000 });
 
     const started = Date.now();
-    const popupPromise = context.waitForEvent('page');
     await button.click();
-    const blb = await popupPromise;
+    const blb = await waitForBlbTabPath(extensionWorker, '/kjv/jhn/3/16/');
     const handoffMs = Date.now() - started;
 
-    expect(new URL(blb.url()).pathname).toBe('/kjv/jhn/3/16/');
+    expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
     // This measures extension handoff/tab creation, not BLB network load.
     // Keep a generous CI threshold to catch multi-second regressions without
     // making the test depend on external-site response time.
@@ -470,7 +468,9 @@ test.describe('core user-visible E2E', () => {
         extensionStorage,
         `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
       );
-      const expectedPath = `/kjv/${book.urlKey}/1/1/`;
+      const expectedPath = variant === syntaxVariants.chapter
+      ? `/kjv/${book.urlKey}/1/`
+      : `/kjv/${book.urlKey}/1/1/`;
       for (let i = 0; i < tokens.length; i++) {
         await assertDoubleClickPath(
           page, context, extensionWorker,
@@ -713,7 +713,10 @@ test.describe('core user-visible E2E', () => {
 
       for (const reference of variants) {
         await setupDoubleClickReferencePage(page, extensionStorage, `<p id="ref">${reference}</p>`);
-        const expectedPath = `/kjv/${book.urlKey}/1/1/`;
+        const isChapterOnly = /^.+\s+1$/.test(reference);
+        const expectedPath = isChapterOnly
+          ? `/kjv/${book.urlKey}/1/`
+          : `/kjv/${book.urlKey}/1/1/`;
         // Locate each whitespace-delimited token independently. This
         // deliberately exercises the same single-token contract as a real
         // double-click rather than selecting the entire reference.
