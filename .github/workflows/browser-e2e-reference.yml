@@ -118,7 +118,7 @@ jobs:
         if: ${{ always() }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          STATUS_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          STATUS_SHA: ${{ github.sha }}
           STATUS_STATE: ${{ needs.browser-e2e.result == 'success' && 'success' || 'failure' }}
           STATUS_DESCRIPTION: ${{ needs.browser-e2e.result == 'success' && 'browser E2E passed' || 'browser E2E failed' }}
         shell: bash
