@@ -1623,6 +1623,41 @@ function normalizeOmniboxSearchPhrase(value) {
 function findSingleKjvPhraseMatch(value) {
   const needle = normalizeOmniboxSearchPhrase(value);
   if (!needle || !Array.isArray(KJV_CORPUS_VERSES)) return null;
+
+  // A single word can use the existing compact word→verse postings directly.
+  // This avoids scanning and normalizing all 31,102 KJV verses for the
+  // single-word direct-open optimization. Multi-word phrases retain the
+  // established exact corpus scan below.
+  if (!/\s/.test(needle) && KJV_CORPUS_WORD_VERSE_INDEX) {
+    const key = needle.toLowerCase();
+    const encoded = KJV_CORPUS_WORD_VERSE_INDEX[key];
+    if (!encoded) return null;
+
+    const bytes = atob(encoded);
+    let count = 0;
+    let value = 0;
+    let shift = 0;
+    let previous = 0;
+    let soleVerseIndex = -1;
+
+    for (let i = 0; i < bytes.length; i++) {
+      const b = bytes.charCodeAt(i);
+      value += (b & 127) << shift;
+      if (b & 128) {
+        shift += 7;
+        continue;
+      }
+      previous += value;
+      count++;
+      if (count === 1) soleVerseIndex = previous;
+      if (count > 1) return null;
+      value = 0;
+      shift = 0;
+    }
+
+    return count === 1 ? KJV_CORPUS_VERSES[soleVerseIndex] || null : null;
+  }
+
   const needleWithBounds = ' ' + needle + ' ';
   let match = null;
   for (const entry of KJV_CORPUS_VERSES) {
