@@ -142,13 +142,16 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     const samples = [];
     for (const item of cases) {
       const started = Date.now();
-      const result = await extensionWorker.evaluate(({text, book, bookNumber, chapter, verse}) => {
+      const result = await extensionWorker.evaluate(({text, book, bookNumber, chapter, verse, variant}) => {
+        if (variant === 'candidate') {
+          return {result: findKjvVerseRangeForSelection(text)};
+        }
         const words = normalizeKjvPassageWords(text);
         const corpus = getKjvRangeVerseCache();
         const corpusIndex = corpus.findIndex(v => v.bookNumber === bookNumber && v.chapter === chapter && v.verse === verse);
         const verseWords = corpusIndex >= 0 ? corpus[corpusIndex].words : [];
+        const seedLength = KJV_PASSAGE_MIN_WORDS;
         const seedPositions = new Map();
-        const seedLength = words.length >= 8 ? 4 : 3;
         for (let i = 0; i <= words.length - seedLength; i++) {
           const seed = words.slice(i, i + seedLength).join(' ');
           const positions = seedPositions.get(seed) || [];
@@ -156,16 +159,15 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
           seedPositions.set(seed, positions);
         }
         const match = corpusIndex >= 0 ? longestCommonKjvPassage(words, verseWords, seedPositions) : null;
-        const result = findKjvVerseRangeForSelection(text);
         return {
-          result,
+          result: findKjvVerseRangeForSelection(text),
           words: words.length,
           corpusIndex,
           verseWords: verseWords.length,
           match,
           meaningful: match ? isMeaningfulShortKjvPassage(match.text, match.length) : false
         };
-      }, {text:item.text, book:item.book, bookNumber:item.bookNumber, chapter:item.chapter, verse:item.from});
+      }, {text:item.text, book:item.book, bookNumber:item.bookNumber, chapter:item.chapter, verse:item.from, variant:process.env.BLB_PERF_VARIANT});
       samples.push(Date.now() - started);
       console.log('KJV range diagnostic', JSON.stringify(result));
       console.log('KJV range diagnostic case', JSON.stringify({
