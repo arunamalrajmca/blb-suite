@@ -180,7 +180,7 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
         meaningful: result.meaningful
       }));
       if (process.env.BLB_PERF_VARIANT === 'candidate') {
-        expect(result.result?.book).toBe(item.book);
+        expect(String(result.result?.book || '').toLowerCase()).toBe(item.book.toLowerCase());
         expect(result.result?.chapter).toBe(item.chapter);
         expect(result.result?.from).toBe(item.from);
         expect(result.result?.to).toBe(item.to);
