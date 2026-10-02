@@ -17,6 +17,12 @@ async function removeTabById(extensionWorker, id) {
   await extensionWorker.evaluate((tabId) => chrome.tabs.remove(tabId).catch(() => {}), id);
 }
 
+async function dismissBlbCookieOverlay(page) {
+  await page.evaluate(() => {
+    document.querySelector('#cookie-wrapper')?.remove();
+  });
+}
+
 test.describe('core user-action E2E coverage', () => {
   test('Alt+B command path opens an exact selected Bible reference', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true });
@@ -71,6 +77,7 @@ test.describe('core user-action E2E coverage', () => {
     await extensionStorage.set({ masterEnabled: true });
     await page.goto('https://www.blueletterbible.org/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
+    await dismissBlbCookieOverlay(page);
 
     await page.evaluate(() => {
       const el = document.createElement('p');
@@ -93,7 +100,7 @@ test.describe('core user-action E2E coverage', () => {
       }, true);
     });
 
-    await page.keyboard.press('Control+c');
+    await page.evaluate(() => document.execCommand('copy'));
 
     const captured = await page.evaluate(() => window.__blbE2ECopy);
     expect(captured.plain).toBe('John 3:16');
@@ -105,6 +112,7 @@ test.describe('core user-action E2E coverage', () => {
     await extensionStorage.set({ masterEnabled: true });
     await page.goto('https://www.blueletterbible.org/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
+    await dismissBlbCookieOverlay(page);
 
     await page.evaluate(() => {
       const popup = document.createElement('div');
