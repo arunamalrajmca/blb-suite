@@ -114,5 +114,7 @@ jobs:
             ${{ runner.temp }}/baseline-performance.jsonl
             ${{ runner.temp }}/candidate-performance.jsonl
             ${{ runner.temp }}/performance-report.md
+            ${{ runner.temp }}/blb-test-build/*.zip
+            ${{ runner.temp }}/blb-test-build/*.sha256
           if-no-files-found: ignore
           retention-days: 14
