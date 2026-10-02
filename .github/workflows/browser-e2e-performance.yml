@@ -47,10 +47,16 @@ jobs:
           BLB_BASELINE_OUTPUT: ${{ runner.temp }}/baseline-performance.jsonl
           BLB_CANDIDATE_OUTPUT: ${{ runner.temp }}/candidate-performance.jsonl
           BLB_PERF_SAMPLES: 11
+          BLB_PERF_TARGET: ${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver')) && 'kjv-range-resolver' || '' }}
         run: |
           : > "$BLB_BASELINE_OUTPUT"
           : > "$BLB_CANDIDATE_OUTPUT"
-          for scenario in paragraph-classify paragraph-two-tab selection fresh reuse; do
+          if [[ "$BLB_PERF_TARGET" == "kjv-range-resolver" ]]; then
+            SCENARIOS="range-resolver selection fresh reuse"
+          else
+            SCENARIOS="paragraph-classify paragraph-two-tab selection fresh reuse"
+          fi
+          for scenario in $SCENARIOS; do
             for iteration in $(seq 1 "$BLB_PERF_SAMPLES"); do
               BLB_EXTENSION_PATH="$BLB_BASELINE_EXTENSION_PATH" BLB_PERF_OUTPUT="$BLB_BASELINE_OUTPUT" BLB_PERF_SCENARIO="$scenario" npx playwright test tests/browser/performance.spec.js --workers=1 --repeat-each=1
               BLB_EXTENSION_PATH="$BLB_CANDIDATE_EXTENSION_PATH" BLB_PERF_OUTPUT="$BLB_CANDIDATE_OUTPUT" BLB_PERF_SCENARIO="$scenario" npx playwright test tests/browser/performance.spec.js --workers=1 --repeat-each=1
@@ -69,6 +75,8 @@ jobs:
           BLB_PERF_MAX_PARAGRAPH_FIRST_TAB_REGRESSION: 0.10
           BLB_PERF_MAX_PARAGRAPH_SECOND_TAB_REGRESSION: 0.10
           BLB_PERF_MAX_FRESH_REGRESSION: 0.10
+          BLB_PERF_MIN_RANGE_RESOLVER_IMPROVEMENT: 0.50
+          BLB_PERF_TARGET: ${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver')) && 'kjv-range-resolver' || '' }}
         run: |
           set -o pipefail
           node scripts/compare-performance.mjs "$RUNNER_TEMP/baseline-performance.jsonl" "$RUNNER_TEMP/candidate-performance.jsonl" | tee "$RUNNER_TEMP/performance-report.md"
