@@ -121,20 +121,42 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
 
   if (scenario === 'range-resolver') {
     await page.goto(`chrome-extension://${extensionId}/popup.html`);
-    const started = Date.now();
-    const response = await page.evaluate(async () => chrome.runtime.sendMessage({
-      type: 'blbSuiteClassifySelection',
-      text: 'For God so loved the world, that he gave his only begotten Son'
-    }));
-    const handoffMs = Date.now() - started;
-    expect(response?.ok).toBeTruthy();
-    expect(response?.valid).toBeTruthy();
-    expect(response?.type).toBe('KJV_REFERENCE_RANGE');
-    expect(response?.directRef?.book).toBe('John');
-    expect(response?.directRef?.chapter).toBe(3);
-    expect(response?.directRef?.from).toBe(16);
-    expect(response?.directRef?.to).toBe(16);
-    await writeSample(scenario, handoffMs);
+    const cases = [
+      {
+        text: 'For God so loved the world, that he gave his only begotten Son',
+        book: 'John', chapter: 3, from: 16, to: 16
+      },
+      {
+        text: 'For the wages of sin is death; but the gift of God is eternal life through Jesus Christ our Lord',
+        book: 'Romans', chapter: 6, from: 23, to: 23
+      },
+      {
+        text: 'Blessed are the poor in spirit: for theirs is the kingdom of heaven',
+        book: 'Matthew', chapter: 5, from: 3, to: 3
+      },
+      {
+        text: 'But as for you, ye thought evil against me; but God meant it unto good',
+        book: 'Genesis', chapter: 50, from: 20, to: 20
+      }
+    ];
+    const samples = [];
+    for (const item of cases) {
+      const started = Date.now();
+      const response = await page.evaluate(async text => chrome.runtime.sendMessage({
+        type: 'blbSuiteClassifySelection',
+        text
+      }), item.text);
+      samples.push(Date.now() - started);
+      expect(response?.ok).toBeTruthy();
+      expect(response?.valid).toBeTruthy();
+      expect(response?.type).toBe('KJV_REFERENCE_RANGE');
+      expect(response?.directRef?.book).toBe(item.book);
+      expect(response?.directRef?.chapter).toBe(item.chapter);
+      expect(response?.directRef?.from).toBe(item.from);
+      expect(response?.directRef?.to).toBe(item.to);
+    }
+    const handoffMs = Math.round(samples.reduce((sum, value) => sum + value, 0) / samples.length);
+    await writeSample(scenario, handoffMs, { caseCount: cases.length, caseMs: samples });
     return;
   }
 
