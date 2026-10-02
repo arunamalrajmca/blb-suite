@@ -145,7 +145,7 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
       const result = await extensionWorker.evaluate(({text, book, chapter, verse}) => {
         const words = normalizeKjvPassageWords(text);
         const corpus = getKjvRangeVerseCache();
-        const corpusIndex = corpus.findIndex(v => v.bookNumber === bookData.find(b => b.name === book)?.bookNumber && v.chapter === chapter && v.verse === verse);
+        const corpusIndex = corpus.findIndex(v => v.bookNumber === Number(bookData.find(b => b.name === book)?.bookNumber) && v.chapter === chapter && v.verse === verse);
         const verseWords = corpusIndex >= 0 ? corpus[corpusIndex].words : [];
         const seedPositions = new Map();
         const seedLength = words.length >= 8 ? 4 : 3;
