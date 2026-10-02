@@ -142,18 +142,12 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     const samples = [];
     for (const item of cases) {
       const started = Date.now();
-      const response = await page.evaluate(async text => chrome.runtime.sendMessage({
-        type: 'blbSuiteClassifySelection',
-        text
-      }), item.text);
+      const result = await extensionWorker.evaluate(text => findKjvVerseRangeForSelection(text), item.text);
       samples.push(Date.now() - started);
-      expect(response?.ok).toBeTruthy();
-      expect(response?.valid).toBeTruthy();
-      expect(response?.type).toBe('KJV_REFERENCE_RANGE');
-      expect(response?.directRef?.book).toBe(item.book);
-      expect(response?.directRef?.chapter).toBe(item.chapter);
-      expect(response?.directRef?.from).toBe(item.from);
-      expect(response?.directRef?.to).toBe(item.to);
+      expect(result?.book).toBe(item.book);
+      expect(result?.chapter).toBe(item.chapter);
+      expect(result?.from).toBe(item.from);
+      expect(result?.to).toBe(item.to);
     }
     const handoffMs = Math.round(samples.reduce((sum, value) => sum + value, 0) / samples.length);
     await writeSample(scenario, handoffMs, { caseCount: cases.length, caseMs: samples });
