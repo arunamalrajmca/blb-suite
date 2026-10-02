@@ -32,3 +32,5 @@ jobs:
             dist/*.zip
             dist/*.sha256
           retention-days: 7
+
+# Triggered temporary build for main + PR 76 test packaging.
