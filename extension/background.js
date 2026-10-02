@@ -3416,12 +3416,14 @@ function findKjvVerseRangeForSelection(selectionText) {
   if (words.length < 5) return null;
 
   const seedLength = words.length >= 8 ? 4 : 3;
-  // Search seeds across the whole selection. A paragraph may begin with
-  // commentary and place the Scripture quotation much later; the resolver
-  // therefore considers every seed rather than only the first few words.
+  // Candidate lookup uses longer 3/4-word anchors, but the exact matcher
+  // uses KJV_PASSAGE_MIN_WORDS (currently 2) as its lookup key. Keep these
+  // concerns separate: the longer seed narrows candidate verses, while the
+  // matcher positions must use the same key size it actually probes.
+  const matchSeedLength = KJV_PASSAGE_MIN_WORDS;
   const seedPositions = new Map();
-  for (let i = 0; i <= words.length - seedLength; i++) {
-    const seed = words.slice(i, i + seedLength).join(' ');
+  for (let i = 0; i <= words.length - matchSeedLength; i++) {
+    const seed = words.slice(i, i + matchSeedLength).join(' ');
     let positions = seedPositions.get(seed);
     if (!positions) { positions = []; seedPositions.set(seed, positions); }
     if (positions.length < 4) positions.push(i);
