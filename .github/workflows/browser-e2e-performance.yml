@@ -50,6 +50,17 @@ jobs:
             git worktree add "$RUNNER_TEMP/blb-baseline" v5.2.51.43
           fi
 
+      - name: Package main + 76 test ZIP
+        run: |
+          mkdir -p "$RUNNER_TEMP/blb-test-build"
+          VERSION="$(node -p "require('./extension/manifest.json').version")"
+          ZIP="$RUNNER_TEMP/blb-test-build/Blue-Letter-Bible-Suite-main-plus-76-${VERSION}.zip"
+          cd extension
+          zip -r "$ZIP" .
+          cd ..
+          unzip -t "$ZIP"
+          sha256sum "$ZIP" | tee "$ZIP.sha256"
+        
       - name: Benchmark baseline and candidate (interleaved)
         env:
           BLB_EXPECTED_VERSION: 5.2.51.46
