@@ -3378,16 +3378,10 @@ function getKjvRangeVerseEntry(index) {
 function getKjvRangeCandidateVerseIndexes(words, seedLength) {
   if (!KJV_CORPUS_WORD_VERSE_INDEX || typeof decodeKjvResidualWordVerseIndexes !== 'function') return [];
   const postingCache = new Map();
-  const postingSetCache = new Map();
   const getPostings = word => {
     const key = String(word || '').toLowerCase();
     if (!postingCache.has(key)) postingCache.set(key, decodeKjvResidualWordVerseIndexes(key));
     return postingCache.get(key);
-  };
-  const getPostingSet = word => {
-    const key = String(word || '').toLowerCase();
-    if (!postingSetCache.has(key)) postingSetCache.set(key, new Set(getPostings(key)));
-    return postingSetCache.get(key);
   };
 
   const candidates = new Set();
@@ -3398,34 +3392,23 @@ function getKjvRangeCandidateVerseIndexes(words, seedLength) {
     if (seenSeeds.has(seed)) continue;
     seenSeeds.add(seed);
 
-    const uniqueWords = [...new Set(seedWords)];
-    const postings = uniqueWords.map(word => getPostings(word));
-    if (postings.some(list => !list.length)) continue;
-
-    let anchor = 0;
-    for (let j = 1; j < postings.length; j++) {
-      if (postings[j].length < postings[anchor].length) anchor = j;
+    // The compact index is an acceleration aid, not a completeness contract:
+    // some common words may have no posting list. Use the rarest indexed word
+    // as the candidate anchor, then let the existing exact matcher verify the
+    // complete contiguous seed. This preserves correctness without scanning
+    // all 31,102 verses for every seed.
+    let anchorPostings = null;
+    for (const word of new Set(seedWords)) {
+      const postings = getPostings(word);
+      if (!postings.length) continue;
+      if (!anchorPostings || postings.length < anchorPostings.length) anchorPostings = postings;
     }
+    if (!anchorPostings) continue;
 
-    const anchorPostings = postings[anchor];
-    const otherSets = uniqueWords
-      .map((word, j) => j === anchor ? null : getPostingSet(word))
-      .filter(Boolean);
-
-    for (const verseIndex of anchorPostings) {
-      let present = true;
-      for (const allowed of otherSets) {
-        if (!allowed.has(verseIndex)) {
-          present = false;
-          break;
-        }
-      }
-      if (present) candidates.add(verseIndex);
-    }
+    for (const verseIndex of anchorPostings) candidates.add(verseIndex);
   }
   return [...candidates];
 }
-
 function findKjvVerseRangeForSelection(selectionText) {
   const words = normalizeKjvPassageWords(selectionText);
   // A range resolver needs enough text to distinguish Scripture from ordinary
