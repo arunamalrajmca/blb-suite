@@ -119,6 +119,25 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     return;
   }
 
+  if (scenario === 'range-resolver') {
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    const started = Date.now();
+    const response = await page.evaluate(async () => chrome.runtime.sendMessage({
+      type: 'blbSuiteClassifySelection',
+      text: 'For God so loved the world, that he gave his only begotten Son'
+    }));
+    const handoffMs = Date.now() - started;
+    expect(response?.ok).toBeTruthy();
+    expect(response?.valid).toBeTruthy();
+    expect(response?.type).toBe('KJV_REFERENCE_RANGE');
+    expect(response?.directRef?.book).toBe('John');
+    expect(response?.directRef?.chapter).toBe(3);
+    expect(response?.directRef?.from).toBe(16);
+    expect(response?.directRef?.to).toBe(16);
+    await writeSample(scenario, handoffMs);
+    return;
+  }
+
   if (scenario === 'paragraph-classify') {
     await page.goto(`chrome-extension://${extensionId}/popup.html`);
     const started = Date.now();
