@@ -269,7 +269,7 @@ test('direct reference resolver rejects prose and accepts exact refs', () => {
 section('features');
 // Case-sensitive core + corpus.
 const csCtx = loadPure(['case-sensitive-search-core.js','kjv-corpus-original-case.js','kjv-corpus-case-verse-index.js']);
-const omniboxCtx = loadPure(['books.js','kjv-corpus-verses.js']);
+const omniboxCtx = loadPure(['books.js','kjv-corpus-verses.js','kjv-corpus-word-verse-index.js']);
 const omniboxBgSource = read('background.js');
 const omniboxHelperStart = omniboxBgSource.indexOf('function normalizeOmniboxSearchPhrase');
 const omniboxHelperEnd = omniboxBgSource.indexOf('\nasync function handleBCommand', omniboxHelperStart);
