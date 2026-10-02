@@ -4623,6 +4623,27 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     return;
   }
 
+  // A single KJV vocabulary word that occurs in exactly one KJV verse is
+  // more precise as a direct verse destination than as a Criteria Search.
+  // Keep Criteria Search for words with multiple matches, preserving the
+  // established behavior for ambiguous vocabulary.
+  if (decision.type === 'KJV_WORD') {
+    const singleMatch = findSingleKjvPhraseMatch(cleanedText);
+    if (singleMatch) {
+      const book = bookData.find(b => Number(b.bookNumber) === Number(singleMatch[0]));
+      const chapter = Number(singleMatch[1]);
+      const verse = Number(singleMatch[2]);
+      if (book && Number.isInteger(chapter) && Number.isInteger(verse)) {
+        const url = `https://www.blueletterbible.org/kjv/${book.urlKey}/${chapter}/${verse}/`;
+        await openBlbDestination(url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
+        return;
+      }
+    }
+    const blb = `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(cleanedText).replace(/%20/g,'+')}`;
+    await openBlbDestination(blb, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
+    return;
+  }
+
   // Book-only selections use a dedicated book opener. Do not reduce them to
   // a URL comparison: BLB can normalize a book tab to a different chapter URL,
   // and that was the source of the historical duplicate-tab problem.

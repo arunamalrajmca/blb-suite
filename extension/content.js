@@ -834,7 +834,72 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     }
     if (!selected) return null;
     const node = initialNode || document.documentElement;
-    const block = node?.closest?.('p,li,td,th,blockquote,article,section,div') || node;
+
+    // Start with the smallest semantic block, but climb through its semantic
+    // ancestors when that block contains only the numeric token (or otherwise
+    // cannot establish the selected reference). This fixes cases such as
+    // "Matthew 18 ... Luke 17" where the clicked 18 lives in a nested span/div
+    // and the immediate block loses the nearby book name. The climb remains
+    // positional and stops at the nearest ancestor that contains the selected
+    // token inside an actual parsed reference, so unrelated paragraph-wide
+    // references cannot leak into the gesture.
+    const blockCandidates = [];
+    let candidateNode = node;
+    while (candidateNode && candidateNode !== document.documentElement?.parentElement) {
+      if (candidateNode instanceof Element && candidateNode.matches('p,li,td,th,blockquote,article,section,div')) {
+        blockCandidates.push(candidateNode);
+      }
+      candidateNode = candidateNode.parentElement;
+    }
+    if (!blockCandidates.length && node instanceof Element) blockCandidates.push(node);
+
+    let block = null;
+    for (const candidate of blockCandidates) {
+      const candidateRaw = String(candidate.textContent || '');
+      const candidateSource = normalizeSelectionText(candidateRaw);
+      if (!candidateSource) continue;
+      const candidateRefs = resolveBibleReferenceText(candidateSource);
+      if (!candidateRefs.length) continue;
+
+      let start = null;
+      let end = null;
+      try {
+        const contextualTarget = getDoubleClickTargetElement(event) || initialNode;
+        if (contextualTarget && candidate.contains(contextualTarget)) {
+          const targetRange = document.createRange();
+          targetRange.selectNodeContents(contextualTarget);
+          const scratch = document.createRange();
+          scratch.selectNodeContents(candidate);
+          scratch.setEnd(targetRange.startContainer, targetRange.startOffset);
+          start = normalizeSelectionText(scratch.toString()).length;
+          scratch.setEnd(targetRange.endContainer, targetRange.endOffset);
+          end = normalizeSelectionText(scratch.toString()).length;
+        }
+      } catch (_) {}
+
+      if (start == null || end == null || end <= start) {
+        const tokenIndex = candidateSource.indexOf(selected);
+        if (tokenIndex >= 0) { start = tokenIndex; end = tokenIndex + selected.length; }
+      }
+
+      if (start != null && end != null) {
+        const containsReference = candidateRefs.some(ref => {
+          const refText = normalizeSelectionText(ref.text || '');
+          if (!refText) return false;
+          let from = candidateSource.indexOf(refText);
+          while (from >= 0) {
+            const to = from + refText.length;
+            if (start < to && end > from) return true;
+            from = candidateSource.indexOf(refText, from + 1);
+          }
+          return false;
+        });
+        if (containsReference) { block = candidate; break; }
+      }
+    }
+
+    // Preserve the old nearest-block fallback for non-reference selections.
+    if (!block) block = node?.closest?.('p,li,td,th,blockquote,article,section,div') || node;
     if (!block) return null;
 
     const rawSource = String(block.textContent || '');

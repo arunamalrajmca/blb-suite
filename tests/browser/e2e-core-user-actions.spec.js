@@ -184,3 +184,56 @@ test.describe('core user-action E2E coverage', () => {
     await removeTabById(extensionWorker, criteria.id);
   });
 });
+
+
+test('Double-Click resolves contextual chapter numbers and unique KJV words directly', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const el = document.createElement('p');
+    el.id = 'blb-e2e-doubleclick-context';
+    el.innerHTML = 'The answer requires looking closely at <span>Matthew</span> <span id="mc18">18</span>, <span>Luke</span> <span id="lc17">17</span>, repentance, and the parable of the unforgiving servant.';
+    el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(el);
+  });
+
+  await page.locator('#mc18').dblclick();
+  const matthew = await waitForTab(extensionWorker, tab => {
+    try {
+      const url = new URL(tab.url);
+      return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/mat/18/';
+    } catch (_) { return false; }
+  });
+  expect(new URL(matthew.url).pathname).toBe('/kjv/mat/18/');
+  await removeTabById(extensionWorker, matthew.id);
+
+  await page.locator('#lc17').dblclick();
+  const luke = await waitForTab(extensionWorker, tab => {
+    try {
+      const url = new URL(tab.url);
+      return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/luk/17/';
+    } catch (_) { return false; }
+  });
+  expect(new URL(luke.url).pathname).toBe('/kjv/luk/17/');
+  await removeTabById(extensionWorker, luke.id);
+
+  await page.evaluate(() => {
+    const el = document.createElement('p');
+    el.id = 'blb-e2e-doubleclick-unique-word';
+    el.innerHTML = 'The word <span id="injurious">injurious</span> appears here.';
+    el.style.cssText = 'position:fixed;left:24px;top:100px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(el);
+  });
+
+  await page.locator('#injurious').dblclick();
+  const verse = await waitForTab(extensionWorker, tab => {
+    try {
+      const url = new URL(tab.url);
+      return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/1ti/1/13/';
+    } catch (_) { return false; }
+  });
+  expect(new URL(verse.url).pathname).toBe('/kjv/1ti/1/13/');
+  await removeTabById(extensionWorker, verse.id);
+});
