@@ -124,19 +124,19 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     const cases = [
       {
         text: 'For God so loved the world, that he gave his only begotten Son',
-        book: 'John', chapter: 3, from: 16, to: 16
+        book: 'John', bookNumber: 43, chapter: 3, from: 16, to: 16
       },
       {
         text: 'For the wages of sin is death; but the gift of God is eternal life through Jesus Christ our Lord',
-        book: 'Romans', chapter: 6, from: 23, to: 23
+        book: 'Romans', bookNumber: 45, chapter: 6, from: 23, to: 23
       },
       {
         text: 'Blessed are the poor in spirit: for theirs is the kingdom of heaven',
-        book: 'Matthew', chapter: 5, from: 3, to: 3
+        book: 'Matthew', bookNumber: 40, chapter: 5, from: 3, to: 3
       },
       {
         text: 'But as for you, ye thought evil against me; but God meant it unto good',
-        book: 'Genesis', chapter: 50, from: 20, to: 20
+        book: 'Genesis', bookNumber: 1, chapter: 50, from: 20, to: 20
       }
     ];
     const samples = [];
@@ -145,7 +145,7 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
       const result = await extensionWorker.evaluate(({text, book, chapter, verse}) => {
         const words = normalizeKjvPassageWords(text);
         const corpus = getKjvRangeVerseCache();
-        const corpusIndex = corpus.findIndex(v => v.bookNumber === Number(bookData.find(b => b.name === book)?.bookNumber) && v.chapter === chapter && v.verse === verse);
+        const corpusIndex = corpus.findIndex(v => v.bookNumber === bookNumber && v.chapter === chapter && v.verse === verse);
         const verseWords = corpusIndex >= 0 ? corpus[corpusIndex].words : [];
         const seedPositions = new Map();
         const seedLength = words.length >= 8 ? 4 : 3;
@@ -165,7 +165,7 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
           match,
           meaningful: match ? isMeaningfulShortKjvPassage(match.text, match.length) : false
         };
-      }, {text:item.text, book:item.book, chapter:item.chapter, verse:item.from});
+      }, {text:item.text, book:item.book, bookNumber:item.bookNumber, chapter:item.chapter, verse:item.from});
       samples.push(Date.now() - started);
       console.log('KJV range diagnostic', JSON.stringify(result));
       expect(result.result?.book).toBe(item.book);
