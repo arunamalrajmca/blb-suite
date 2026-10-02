@@ -169,6 +169,7 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
       samples.push(Date.now() - started);
       console.log('KJV range diagnostic', JSON.stringify(result));
       console.log('KJV range diagnostic case', JSON.stringify({
+        variant: process.env.BLB_PERF_VARIANT || 'unknown',
         expected: {book:item.book, chapter:item.chapter, from:item.from, to:item.to},
         actual: result.result || null,
         corpusIndex: result.corpusIndex,
@@ -176,6 +177,12 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
         match: result.match,
         meaningful: result.meaningful
       }));
+      if (process.env.BLB_PERF_VARIANT === 'candidate') {
+        expect(result.result?.book).toBe(item.book);
+        expect(result.result?.chapter).toBe(item.chapter);
+        expect(result.result?.from).toBe(item.from);
+        expect(result.result?.to).toBe(item.to);
+      }
     }
     const handoffMs = Math.round(samples.reduce((sum, value) => sum + value, 0) / samples.length);
     await writeSample(scenario, handoffMs, { caseCount: cases.length, caseMs: samples });
