@@ -3343,19 +3343,87 @@ function longestCommonKjvPassage(selectionWords, verseWords, seedPositions) {
 // the local corpus to identify the complete contiguous verse span. This is a
 // reference resolver, not a Criteria Search: once the span is known, BLB is
 // opened directly on that range.
-let kjvRangeVerseCache = null;
+// ---------- KJV contiguous verse-range resolver ----------
+// When a selection contains actual KJV verse text but no nearby citation, use
+// the local corpus to identify the complete contiguous verse span. This is a
+// reference resolver, not a Criteria Search: once the span is known, BLB is
+// opened directly on that range.
+//
+// Performance note: do not normalize all 31,102 verses up front. The existing
+// compact word→verse postings index is used to identify only verses that could
+// contain one of the selection's 3/4-word seeds. Candidate verse text is then
+// normalized lazily, preserving the existing exact matcher and range rules.
+const kjvRangeVerseEntryCache = new Map();
 
-function getKjvRangeVerseCache() {
-  if (kjvRangeVerseCache) return kjvRangeVerseCache;
-  if (!Array.isArray(KJV_CORPUS_VERSES)) return null;
-  kjvRangeVerseCache = KJV_CORPUS_VERSES.map(entry => ({
+function getKjvRangeVerseEntry(index) {
+  const n = Number(index);
+  if (!Number.isInteger(n) || !Array.isArray(KJV_CORPUS_VERSES) || !KJV_CORPUS_VERSES[n]) return null;
+  if (kjvRangeVerseEntryCache.has(n)) return kjvRangeVerseEntryCache.get(n);
+  const entry = KJV_CORPUS_VERSES[n];
+  const verse = {
     bookNumber: Number(entry[0]),
     chapter: Number(entry[1]),
     verse: Number(entry[2]),
     words: normalizeKjvPassageWords(entry[3]),
     text: String(entry[3] || '')
-  })).filter(v => Number.isInteger(v.bookNumber) && Number.isInteger(v.chapter) && Number.isInteger(v.verse) && v.words.length);
-  return kjvRangeVerseCache;
+  };
+  if (!Number.isInteger(verse.bookNumber) ||
+      !Number.isInteger(verse.chapter) ||
+      !Number.isInteger(verse.verse) ||
+      !verse.words.length) return null;
+  kjvRangeVerseEntryCache.set(n, verse);
+  return verse;
+}
+
+function getKjvRangeCandidateVerseIndexes(words, seedLength) {
+  if (!KJV_CORPUS_WORD_VERSE_INDEX || typeof decodeKjvResidualWordVerseIndexes !== 'function') return [];
+  const postingCache = new Map();
+  const postingSetCache = new Map();
+  const getPostings = word => {
+    const key = String(word || '').toLowerCase();
+    if (!postingCache.has(key)) postingCache.set(key, decodeKjvResidualWordVerseIndexes(key));
+    return postingCache.get(key);
+  };
+  const getPostingSet = word => {
+    const key = String(word || '').toLowerCase();
+    if (!postingSetCache.has(key)) postingSetCache.set(key, new Set(getPostings(key)));
+    return postingSetCache.get(key);
+  };
+
+  const candidates = new Set();
+  const seenSeeds = new Set();
+  for (let i = 0; i <= words.length - seedLength; i++) {
+    const seedWords = words.slice(i, i + seedLength);
+    const seed = seedWords.join(' ');
+    if (seenSeeds.has(seed)) continue;
+    seenSeeds.add(seed);
+
+    const uniqueWords = [...new Set(seedWords)];
+    const postings = uniqueWords.map(word => getPostings(word));
+    if (postings.some(list => !list.length)) continue;
+
+    let anchor = 0;
+    for (let j = 1; j < postings.length; j++) {
+      if (postings[j].length < postings[anchor].length) anchor = j;
+    }
+
+    const anchorPostings = postings[anchor];
+    const otherSets = uniqueWords
+      .map((word, j) => j === anchor ? null : getPostingSet(word))
+      .filter(Boolean);
+
+    for (const verseIndex of anchorPostings) {
+      let present = true;
+      for (const allowed of otherSets) {
+        if (!allowed.has(verseIndex)) {
+          present = false;
+          break;
+        }
+      }
+      if (present) candidates.add(verseIndex);
+    }
+  }
+  return [...candidates];
 }
 
 function findKjvVerseRangeForSelection(selectionText) {
@@ -3364,13 +3432,10 @@ function findKjvVerseRangeForSelection(selectionText) {
   // prose. Short exact phrases continue through the normal KJV search path.
   if (words.length < 5) return null;
 
-  const corpus = getKjvRangeVerseCache();
-  if (!corpus?.length) return null;
-
   const seedLength = words.length >= 8 ? 4 : 3;
   // Search seeds across the whole selection. A paragraph may begin with
-  // commentary and place the Scripture quotation much later; the old resolver
-  // only seeded from words 1-3/4 and therefore missed those passages entirely.
+  // commentary and place the Scripture quotation much later; the resolver
+  // therefore considers every seed rather than only the first few words.
   const seedPositions = new Map();
   for (let i = 0; i <= words.length - seedLength; i++) {
     const seed = words.slice(i, i + seedLength).join(' ');
@@ -3379,38 +3444,36 @@ function findKjvVerseRangeForSelection(selectionText) {
     if (positions.length < 4) positions.push(i);
   }
 
-  let best = null;
-  for (let i = 0; i < corpus.length; i++) {
-    const first = corpus[i];
-    const verseWords = first.words;
-    if (verseWords.length < seedLength) continue;
+  const candidateIndexes = getKjvRangeCandidateVerseIndexes(words, seedLength);
+  if (!candidateIndexes.length) return null;
 
-    // Use the existing exact contiguous matcher against every verse that has
-    // a seed anywhere in the full selection. This identifies the selected KJV
-    // run even when commentary precedes it.
-    const match = longestCommonKjvPassage(words, verseWords, seedPositions);
+  let best = null;
+  for (const verseIndex of candidateIndexes) {
+    const first = getKjvRangeVerseEntry(verseIndex);
+    if (!first || first.words.length < seedLength) continue;
+
+    // Use the existing exact contiguous matcher, but only against verses whose
+    // seed words are all present according to the existing corpus postings.
+    const match = longestCommonKjvPassage(words, first.words, seedPositions);
     if (!match || match.length < seedLength || !isMeaningfulShortKjvPassage(match.text, match.length)) continue;
 
     // The match may begin/end inside a verse. Extend it across adjacent corpus
-    // verses only when the selected words continue exactly from the verse
-    // boundary. This preserves the original contiguous-range behavior while
-    // allowing commentary before the Scripture quotation.
+    // verses only when the selected words continue exactly from the verse boundary.
     let startEntry = first;
-    let startVerseIndex = i;
     let selectionStart = match.selectionStart;
     let selectionEnd = match.selectionEnd;
     let matchedWords = match.length;
 
-    // Expand forward from the matched verse when the selected text continues
-    // with the next canonical verse.
-    let endCorpusIndex = i;
-    while (selectionEnd < words.length && endCorpusIndex + 1 < corpus.length) {
-      const next = corpus[endCorpusIndex + 1];
-      const nextWords = next.words;
+    let endCorpusIndex = verseIndex;
+    while (selectionEnd < words.length && endCorpusIndex + 1 < KJV_CORPUS_VERSES.length) {
+      const next = getKjvRangeVerseEntry(endCorpusIndex + 1);
+      if (!next) break;
       let take = 0;
-      while (take < nextWords.length && selectionEnd + take < words.length && words[selectionEnd + take] === nextWords[take]) take++;
+      while (take < next.words.length &&
+             selectionEnd + take < words.length &&
+             words[selectionEnd + take] === next.words[take]) take++;
       if (!take) break;
-      if (take < Math.min(nextWords.length, words.length - selectionEnd)) break;
+      if (take < Math.min(next.words.length, words.length - selectionEnd)) break;
       matchedWords += take;
       selectionEnd += take;
       endCorpusIndex++;
@@ -3418,22 +3481,25 @@ function findKjvVerseRangeForSelection(selectionText) {
 
     // Expand backward similarly when the selected quotation starts in the
     // middle of the preceding verse sequence.
-    let startCorpusIndex = i;
+    let startCorpusIndex = verseIndex;
     while (selectionStart > 0 && startCorpusIndex > 0) {
-      const prev = corpus[startCorpusIndex - 1];
-      const prevWords = prev.words;
+      const prev = getKjvRangeVerseEntry(startCorpusIndex - 1);
+      if (!prev) break;
       let take = 0;
-      while (take < prevWords.length && selectionStart - 1 - take >= 0 && words[selectionStart - 1 - take] === prevWords[prevWords.length - 1 - take]) take++;
+      while (take < prev.words.length &&
+             selectionStart - 1 - take >= 0 &&
+             words[selectionStart - 1 - take] === prev.words[prev.words.length - 1 - take]) take++;
       if (!take) break;
-      if (take < Math.min(prevWords.length, selectionStart)) break;
+      if (take < Math.min(prev.words.length, selectionStart)) break;
       matchedWords += take;
       selectionStart -= take;
       startCorpusIndex--;
       startEntry = prev;
-      startVerseIndex = startCorpusIndex;
     }
 
-    const endEntry = corpus[endCorpusIndex];
+    const endEntry = getKjvRangeVerseEntry(endCorpusIndex);
+    if (!startEntry || !endEntry) continue;
+
     // A direct BLB range must remain within one chapter. If commentary or
     // punctuation surrounds the match, use the matched verse span rather than
     // forcing unrelated text into the range.
