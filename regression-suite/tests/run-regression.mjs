@@ -23,7 +23,7 @@ function test(name, fn) {
 function read(name){ return fs.readFileSync(path.join(ROOT,name),'utf8'); }
 function sha256(file){ return crypto.createHash('sha256').update(fs.readFileSync(path.join(ROOT,file))).digest('hex'); }
 function loadPure(files){
-  const ctx = vm.createContext({console, Set, Map, Object, Number, String, Array, Math, RegExp, JSON, window:{}}); ctx.self = ctx;
+  const ctx = vm.createContext({console, Set, Map, Object, Number, String, Array, Math, RegExp, JSON, Buffer, atob: (value) => Buffer.from(value, 'base64').toString('binary'), window:{}}); ctx.self = ctx;
   for (const file of files) vm.runInContext(read(file), ctx, {filename:file});
   return ctx;
 }
