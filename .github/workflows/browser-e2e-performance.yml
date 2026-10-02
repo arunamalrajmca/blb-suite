@@ -32,7 +32,7 @@ jobs:
 
       - name: Read manifest version
         id: version
-        run: echo "version=$(node -p 'require(\"./extension/manifest.json\").version')" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(node -p "require('./extension/manifest.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Fetch performance baseline
         env:
