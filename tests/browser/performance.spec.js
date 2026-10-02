@@ -142,12 +142,36 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     const samples = [];
     for (const item of cases) {
       const started = Date.now();
-      const result = await extensionWorker.evaluate(text => findKjvVerseRangeForSelection(text), item.text);
+      const result = await extensionWorker.evaluate(({text, book, chapter, verse}) => {
+        const words = normalizeKjvPassageWords(text);
+        const corpus = getKjvRangeVerseCache();
+        const corpusIndex = corpus.findIndex(v => v.bookNumber === bookData.find(b => b.name === book)?.bookNumber && v.chapter === chapter && v.verse === verse);
+        const verseWords = corpusIndex >= 0 ? corpus[corpusIndex].words : [];
+        const seedPositions = new Map();
+        const seedLength = words.length >= 8 ? 4 : 3;
+        for (let i = 0; i <= words.length - seedLength; i++) {
+          const seed = words.slice(i, i + seedLength).join(' ');
+          const positions = seedPositions.get(seed) || [];
+          if (positions.length < 4) positions.push(i);
+          seedPositions.set(seed, positions);
+        }
+        const match = corpusIndex >= 0 ? longestCommonKjvPassage(words, verseWords, seedPositions) : null;
+        const result = findKjvVerseRangeForSelection(text);
+        return {
+          result,
+          words: words.length,
+          corpusIndex,
+          verseWords: verseWords.length,
+          match,
+          meaningful: match ? isMeaningfulShortKjvPassage(match.text, match.length) : false
+        };
+      }, {text:item.text, book:item.book, chapter:item.chapter, verse:item.from});
       samples.push(Date.now() - started);
-      expect(result?.book).toBe(item.book);
-      expect(result?.chapter).toBe(item.chapter);
-      expect(result?.from).toBe(item.from);
-      expect(result?.to).toBe(item.to);
+      console.log('KJV range diagnostic', JSON.stringify(result));
+      expect(result.result?.book).toBe(item.book);
+      expect(result.result?.chapter).toBe(item.chapter);
+      expect(result.result?.from).toBe(item.from);
+      expect(result.result?.to).toBe(item.to);
     }
     const handoffMs = Math.round(samples.reduce((sum, value) => sum + value, 0) / samples.length);
     await writeSample(scenario, handoffMs, { caseCount: cases.length, caseMs: samples });
