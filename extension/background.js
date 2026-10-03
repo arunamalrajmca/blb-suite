@@ -3516,8 +3516,6 @@ function findKjvVerseRangeForSelection(selectionText) {
   // Likewise, a contiguous match spanning multiple verses is not a single
   // verse result and therefore cannot use the direct-verse path.
   if (matchedVerseIndexes.size !== 1 || !best) return null;
-  const bestStartIndex = candidateIndexes.find(index => index === [...matchedVerseIndexes][0]);
-  if (bestStartIndex == null) return null;
   if (best.from !== best.to) return null;
   return best;
 }
