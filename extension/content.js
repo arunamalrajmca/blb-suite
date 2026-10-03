@@ -448,9 +448,8 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     if (!suiteEnabled) return;
     if (root.matches?.('div[id^="bVerse_"], .parse-popup')) modifyLinks(root);
     root.querySelectorAll?.('div[id^="bVerse_"], .parse-popup').forEach(modifyLinks);
-    if (location.href.includes("MultiVerse.cfm")) {
-      if (root.matches?.('a[href*="/kjv/"]')) root.target="_blank";
-      root.querySelectorAll?.('a[href*="/kjv/"]').forEach(a=>a.target="_blank");
+    if (isMultiVersePage()) {
+      modifyMultiVerseLinks();
     }
   };
   let processScheduled=false;
