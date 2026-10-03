@@ -345,12 +345,10 @@ test('case-sensitive MultiVerse destinations are rate-limited by tab load', () =
   const end=bg.indexOf('\nasync function handleCaseSensitiveBCommand', start);
   assert(start >= 0 && end > start, 'case-sensitive destination throttle block missing');
   const fn=bg.slice(start,end);
-  assert(fn.includes('chrome.tabs.onUpdated'), 'case-sensitive tab-load observer missing');
-  assert(fn.includes('await waitForCaseSensitiveTabLoad(first.id)'), 'first destination must wait for load');
-  assert(fn.includes('await waitForCaseSensitiveTabLoad(tab.id)'), 'subsequent destinations must wait for load');
-  assert(fn.includes('for (let i=1;i<targets.length;i++)'), 'destination loop missing');
   assert(fn.includes('CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS'), 'inter-tab cooldown missing');
   assert(fn.includes('setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS)'), 'inter-tab cooldown must precede subsequent navigation');
+  assert(fn.includes('for (let i=1;i<targets.length;i++)'), 'destination loop missing');
+  assert(!fn.includes('chrome.tabs.onUpdated'), 'case-sensitive throttle should not add a persistent tab-load observer');
 });
 
 test('case-sensitive URL-builder failure has native fallback', () => {
