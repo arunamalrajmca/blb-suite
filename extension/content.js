@@ -916,23 +916,20 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     if (!selected) return null;
     const node = initialNode || document.documentElement;
 
-    // Start with the smallest semantic block, but climb through its semantic
-    // ancestors when that block contains only the numeric token (or otherwise
-    // cannot establish the selected reference). This fixes cases such as
-    // "Matthew 18 ... Luke 17" where the clicked 18 lives in a nested span/div
-    // and the immediate block loses the nearby book name. The climb remains
-    // positional and stops at the nearest ancestor that contains the selected
-    // token inside an actual parsed reference, so unrelated paragraph-wide
-    // references cannot leak into the gesture.
+    // Walk every real ancestor rather than only a fixed list of HTML block
+    // tags. Modern sites frequently put article text inside custom elements,
+    // links, spans, role-based containers, or framework-generated wrappers.
+    // The candidate must still pass the positional reference-overlap test
+    // below, so broadening the ancestor set does not permit an unrelated
+    // reference elsewhere in the page to leak into the gesture.
     const blockCandidates = [];
     let candidateNode = node;
-    while (candidateNode && candidateNode !== document.documentElement?.parentElement) {
-      if (candidateNode instanceof Element && candidateNode.matches('p,li,td,th,blockquote,article,section,div')) {
-        blockCandidates.push(candidateNode);
-      }
+    let candidateDepth = 0;
+    while (candidateNode && candidateDepth < 32) {
+      if (candidateNode instanceof Element) blockCandidates.push(candidateNode);
       candidateNode = candidateNode.parentElement;
+      candidateDepth++;
     }
-    if (!blockCandidates.length && node instanceof Element) blockCandidates.push(node);
 
     let block = null;
     for (const candidate of blockCandidates) {
