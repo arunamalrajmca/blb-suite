@@ -1,0 +1,36 @@
+name: Temporary Main + 76 Test Build
+
+on:
+  push:
+    branches:
+      - 'perf/kjv-range-index'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact branch
+        uses: actions/checkout@v4
+      - name: Build test ZIP
+        run: |
+          mkdir -p dist
+          VERSION="$(node -p "require('./extension/manifest.json').version")"
+          ZIP="dist/Blue-Letter-Bible-Suite-main-plus-76-${VERSION}.zip"
+          cd extension
+          zip -r "../$ZIP" .
+          cd ..
+          unzip -t "$ZIP"
+          sha256sum "$ZIP" | tee "$ZIP.sha256"
+      - name: Upload test ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: blb-main-plus-76-test-build
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          retention-days: 7
+
+# Triggered temporary build for main + PR 76 test packaging.

@@ -32,28 +32,56 @@ jobs:
 
       - name: Read manifest version
         id: version
-        run: echo "version=$(node -p 'require(\"./extension/manifest.json\").version')" >> "$GITHUB_OUTPUT"
+        run: echo "version=$(node -p "require('./extension/manifest.json').version")" >> "$GITHUB_OUTPUT"
 
-      - name: Fetch approved performance baseline
-        run: |
-          git fetch origin tag v5.2.51.43 --depth=1
-          git worktree add "$RUNNER_TEMP/blb-baseline" v5.2.51.43
-
-      - name: Benchmark approved baseline and current main (interleaved)
+      - name: Fetch performance baseline
         env:
-          BLB_EXPECTED_VERSION: 5.2.51.43
+          BLB_PERF_TARGET: ${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver')) && 'kjv-range-resolver' || '' }}
+        run: |
+          if [[ "$BLB_PERF_TARGET" == "kjv-range-resolver" ]]; then
+            # The range-resolver PR is based directly on current main. Compare
+            # against that exact main commit so the measured improvement belongs
+            # to #76 rather than to earlier changes since the approved release
+            # performance baseline.
+            git fetch origin main --no-tags
+            git worktree add "$RUNNER_TEMP/blb-baseline" origin/main
+          else
+            git fetch origin tag v5.2.51.43 --depth=1
+            git worktree add "$RUNNER_TEMP/blb-baseline" v5.2.51.43
+          fi
+
+      - name: Package main + 76 test ZIP
+        run: |
+          mkdir -p "$RUNNER_TEMP/blb-test-build"
+          VERSION="$(node -p "require('./extension/manifest.json').version")"
+          ZIP="$RUNNER_TEMP/blb-test-build/Blue-Letter-Bible-Suite-main-plus-76-${VERSION}.zip"
+          cd extension
+          zip -r "$ZIP" .
+          cd ..
+          unzip -t "$ZIP"
+          sha256sum "$ZIP" | tee "$ZIP.sha256"
+        
+      - name: Benchmark baseline and candidate (interleaved)
+        env:
+          BLB_EXPECTED_VERSION: 5.2.51.46
           BLB_BASELINE_EXTENSION_PATH: ${{ runner.temp }}/blb-baseline/extension
           BLB_CANDIDATE_EXTENSION_PATH: ${{ github.workspace }}/extension
           BLB_BASELINE_OUTPUT: ${{ runner.temp }}/baseline-performance.jsonl
           BLB_CANDIDATE_OUTPUT: ${{ runner.temp }}/candidate-performance.jsonl
           BLB_PERF_SAMPLES: 11
+          BLB_PERF_TARGET: ${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver')) && 'kjv-range-resolver' || '' }}
         run: |
           : > "$BLB_BASELINE_OUTPUT"
           : > "$BLB_CANDIDATE_OUTPUT"
-          for scenario in paragraph-classify paragraph-two-tab selection fresh reuse; do
+          if [[ "$BLB_PERF_TARGET" == "kjv-range-resolver" ]]; then
+            SCENARIOS="range-resolver selection fresh reuse"
+          else
+            SCENARIOS="paragraph-classify paragraph-two-tab selection fresh reuse"
+          fi
+          for scenario in $SCENARIOS; do
             for iteration in $(seq 1 "$BLB_PERF_SAMPLES"); do
-              BLB_EXTENSION_PATH="$BLB_BASELINE_EXTENSION_PATH" BLB_PERF_OUTPUT="$BLB_BASELINE_OUTPUT" BLB_PERF_SCENARIO="$scenario" npx playwright test tests/browser/performance.spec.js --workers=1 --repeat-each=1
-              BLB_EXTENSION_PATH="$BLB_CANDIDATE_EXTENSION_PATH" BLB_PERF_OUTPUT="$BLB_CANDIDATE_OUTPUT" BLB_PERF_SCENARIO="$scenario" npx playwright test tests/browser/performance.spec.js --workers=1 --repeat-each=1
+              BLB_EXTENSION_PATH="$BLB_BASELINE_EXTENSION_PATH" BLB_PERF_OUTPUT="$BLB_BASELINE_OUTPUT" BLB_PERF_SCENARIO="$scenario" BLB_PERF_VARIANT=baseline npx playwright test tests/browser/performance.spec.js --workers=1 --repeat-each=1
+              BLB_EXTENSION_PATH="$BLB_CANDIDATE_EXTENSION_PATH" BLB_PERF_OUTPUT="$BLB_CANDIDATE_OUTPUT" BLB_PERF_SCENARIO="$scenario" BLB_PERF_VARIANT=candidate npx playwright test tests/browser/performance.spec.js --workers=1 --repeat-each=1
             done
           done
 
@@ -69,6 +97,8 @@ jobs:
           BLB_PERF_MAX_PARAGRAPH_FIRST_TAB_REGRESSION: 0.10
           BLB_PERF_MAX_PARAGRAPH_SECOND_TAB_REGRESSION: 0.10
           BLB_PERF_MAX_FRESH_REGRESSION: 0.10
+          BLB_PERF_MIN_RANGE_RESOLVER_IMPROVEMENT: 0.50
+          BLB_PERF_TARGET: ${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver')) && 'kjv-range-resolver' || '' }}
         run: |
           set -o pipefail
           node scripts/compare-performance.mjs "$RUNNER_TEMP/baseline-performance.jsonl" "$RUNNER_TEMP/candidate-performance.jsonl" | tee "$RUNNER_TEMP/performance-report.md"
@@ -84,5 +114,7 @@ jobs:
             ${{ runner.temp }}/baseline-performance.jsonl
             ${{ runner.temp }}/candidate-performance.jsonl
             ${{ runner.temp }}/performance-report.md
+            ${{ runner.temp }}/blb-test-build/*.zip
+            ${{ runner.temp }}/blb-test-build/*.sha256
           if-no-files-found: ignore
           retention-days: 14

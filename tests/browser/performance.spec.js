@@ -119,6 +119,78 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     return;
   }
 
+  if (scenario === 'range-resolver') {
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    const cases = [
+      {
+        text: 'For God so loved the world, that he gave his only begotten Son',
+        book: 'John', bookNumber: 43, chapter: 3, from: 16, to: 16
+      },
+      {
+        text: 'For the wages of sin is death; but the gift of God is eternal life through Jesus Christ our Lord',
+        book: 'Romans', bookNumber: 45, chapter: 6, from: 23, to: 23
+      },
+      {
+        text: 'Blessed are the poor in spirit: for theirs is the kingdom of heaven',
+        book: 'Matthew', bookNumber: 40, chapter: 5, from: 3, to: 3
+      },
+      {
+        text: 'But as for you, ye thought evil against me; but God meant it unto good',
+        book: 'Genesis', bookNumber: 1, chapter: 50, from: 20, to: 20
+      }
+    ];
+    const samples = [];
+    for (const item of cases) {
+      const started = Date.now();
+      const result = await extensionWorker.evaluate(({text, book, bookNumber, chapter, verse, variant}) => {
+        if (variant === 'candidate') {
+          return {result: findKjvVerseRangeForSelection(text)};
+        }
+        const words = normalizeKjvPassageWords(text);
+        const corpus = getKjvRangeVerseCache();
+        const corpusIndex = corpus.findIndex(v => v.bookNumber === bookNumber && v.chapter === chapter && v.verse === verse);
+        const verseWords = corpusIndex >= 0 ? corpus[corpusIndex].words : [];
+        const seedLength = KJV_PASSAGE_MIN_WORDS;
+        const seedPositions = new Map();
+        for (let i = 0; i <= words.length - seedLength; i++) {
+          const seed = words.slice(i, i + seedLength).join(' ');
+          const positions = seedPositions.get(seed) || [];
+          if (positions.length < 4) positions.push(i);
+          seedPositions.set(seed, positions);
+        }
+        const match = corpusIndex >= 0 ? longestCommonKjvPassage(words, verseWords, seedPositions) : null;
+        return {
+          result: findKjvVerseRangeForSelection(text),
+          words: words.length,
+          corpusIndex,
+          verseWords: verseWords.length,
+          match,
+          meaningful: match ? isMeaningfulShortKjvPassage(match.text, match.length) : false
+        };
+      }, {text:item.text, book:item.book, bookNumber:item.bookNumber, chapter:item.chapter, verse:item.from, variant:process.env.BLB_PERF_VARIANT});
+      samples.push(Date.now() - started);
+      console.log('KJV range diagnostic', JSON.stringify(result));
+      console.log('KJV range diagnostic case', JSON.stringify({
+        variant: process.env.BLB_PERF_VARIANT || 'unknown',
+        expected: {book:item.book, chapter:item.chapter, from:item.from, to:item.to},
+        actual: result.result || null,
+        corpusIndex: result.corpusIndex,
+        verseWords: result.verseWords,
+        match: result.match,
+        meaningful: result.meaningful
+      }));
+      if (process.env.BLB_PERF_VARIANT === 'candidate') {
+        expect(String(result.result?.book || '').toLowerCase()).toBe(item.book.toLowerCase());
+        expect(result.result?.chapter).toBe(item.chapter);
+        expect(result.result?.from).toBe(item.from);
+        expect(result.result?.to).toBe(item.to);
+      }
+    }
+    const handoffMs = Math.round(samples.reduce((sum, value) => sum + value, 0) / samples.length);
+    await writeSample(scenario, handoffMs, { caseCount: cases.length, caseMs: samples });
+    return;
+  }
+
   if (scenario === 'paragraph-classify') {
     await page.goto(`chrome-extension://${extensionId}/popup.html`);
     const started = Date.now();
