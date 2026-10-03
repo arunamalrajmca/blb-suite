@@ -5,7 +5,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   (async () => {
     try {
       const plain = String(message.plain || '');
-      const html = String(message.html || '');
+      const rawHtml = String(message.html || '');
+      const html = rawHtml.includes('StartFragment')
+        ? rawHtml
+        : `<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><!--StartFragment-->${rawHtml}<!--EndFragment--></body></html>`;
       if (!plain && !html) {
         sendResponse({ok:false, reason:'empty'});
         return;
