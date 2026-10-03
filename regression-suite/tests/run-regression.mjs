@@ -341,7 +341,7 @@ test('case-sensitive zero-result fallback cannot redirect to BLB home', () => {
   assert(!fn.includes("chrome.tabs.update({url:homeUrl})"), 'unsafe BLB-home fallback remains');
 });
 test('case-sensitive MultiVerse destinations are rate-limited by tab load', () => {
-  const start=bg.indexOf('function waitForCaseSensitiveTabLoad');
+  const start=bg.indexOf('const CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS');
   const end=bg.indexOf('\nasync function handleCaseSensitiveBCommand', start);
   assert(start >= 0 && end > start, 'case-sensitive destination throttle block missing');
   const fn=bg.slice(start,end);
