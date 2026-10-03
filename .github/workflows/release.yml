@@ -17,6 +17,10 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
     steps:
+      - name: ⏱ Workflow ETA — start
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: start
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -56,6 +60,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
     steps:
+      - name: ⏱ Workflow ETA — start
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: start
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Node
@@ -94,6 +102,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: [validate, browser-e2e]
     steps:
+      - name: ⏱ Workflow ETA — start
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: start
       - name: Checkout tagged source
         uses: actions/checkout@v4
       - name: Build reproducible extension package
@@ -127,3 +139,9 @@ jobs:
           $(cat "dist/Blue-Letter-Bible-Suite-$VERSION.zip.sha256")
           EOF
           gh release create "$TAG" "dist/Blue-Letter-Bible-Suite-$VERSION.zip" "dist/Blue-Letter-Bible-Suite-$VERSION.zip.sha256" "dist/RELEASE-CHECKSUMS.txt" --title "Blue Letter Bible Suite $VERSION" --generate-notes
+
+      - name: ⏱ Workflow ETA — finish
+        if: ${{ always() }}
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: finish
