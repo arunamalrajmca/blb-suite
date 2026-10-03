@@ -270,6 +270,46 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
   expect(new URL(luke.url).pathname).toBe('/kjv/luk/17/');
   await removeTabById(extensionWorker, luke.id);
 
+  // The contextual rule is generic: the clicked chapter number must inherit
+  // the book name from its exact nearby reference occurrence, regardless of
+  // which book is used or how the webpage nests the text.
+  await page.evaluate(() => {
+    const cases = [
+      ['Genesis', '50', 'gen50'],
+      ['Romans', '16', 'rom16'],
+      ['Acts', '17', 'acts17'],
+      ['John', '3', 'john3']
+    ];
+    const wrap = document.createElement('div');
+    wrap.id = 'blb-e2e-generic-contextual-refs';
+    wrap.style.cssText = 'position:fixed;left:24px;top:180px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    for (const [book, chapter, id] of cases) {
+      const row = document.createElement('p');
+      row.innerHTML = '<span>' + book + '</span> <span class="nested-ref"><span id="' + id + '">' + chapter + '</span></span>';
+      wrap.appendChild(row);
+    }
+    document.body.appendChild(wrap);
+  });
+
+  const genericCases = [
+    ['#gen50', '/kjv/gen/50/'],
+    ['#rom16', '/kjv/rom/16/'],
+    ['#acts17', '/kjv/act/17/'],
+    ['#john3', '/kjv/jhn/3/']
+  ];
+
+  for (const [selector, expectedPath] of genericCases) {
+    await page.locator(selector).dblclick();
+    const resolved = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.url);
+        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+      } catch (_) { return false; }
+    });
+    expect(new URL(resolved.url).pathname).toBe(expectedPath);
+    await removeTabById(extensionWorker, resolved.id);
+  }
+
   await page.evaluate(() => {
     const el = document.createElement('p');
     el.id = 'blb-e2e-doubleclick-unique-word';
