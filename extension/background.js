@@ -3433,6 +3433,7 @@ function findKjvVerseRangeForSelection(selectionText) {
   if (!candidateIndexes.length) return null;
 
   let best = null;
+  const matchedVerseIndexes = new Set();
   for (const verseIndex of candidateIndexes) {
     const first = getKjvRangeVerseEntry(verseIndex);
     if (!first || first.words.length < seedLength) continue;
@@ -3505,8 +3506,19 @@ function findKjvVerseRangeForSelection(selectionText) {
       selectionStart,
       selectionEnd
     };
+    matchedVerseIndexes.add(verseIndex);
     if (!best || candidate.matchedWords > best.matchedWords) best = candidate;
   }
+
+  // A direct verse is valid only when the exact matched term(s) identify
+  // exactly one verse in the full KJV corpus. Candidate frequency/rarity is
+  // never a semantic decision; it only narrows the exact-match candidates.
+  // Likewise, a contiguous match spanning multiple verses is not a single
+  // verse result and therefore cannot use the direct-verse path.
+  if (matchedVerseIndexes.size !== 1 || !best) return null;
+  const bestStartIndex = candidateIndexes.find(index => index === [...matchedVerseIndexes][0]);
+  if (bestStartIndex == null) return null;
+  if (best.from !== best.to) return null;
   return best;
 }
 
