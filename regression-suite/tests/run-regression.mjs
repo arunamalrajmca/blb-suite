@@ -340,6 +340,20 @@ test('case-sensitive zero-result fallback cannot redirect to BLB home', () => {
   assert(fn.includes('openCaseSensitiveNativeSearch(parsed.rawQuery, disposition)'), 'native fallback missing');
   assert(!fn.includes("chrome.tabs.update({url:homeUrl})"), 'unsafe BLB-home fallback remains');
 });
+test('case-sensitive MultiVerse destinations are rate-limited by tab load', () => {
+  const start=bg.indexOf('const CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS');
+  const end=bg.indexOf('\nasync function handleCaseSensitiveBCommand', start);
+  assert(start >= 0 && end > start, 'case-sensitive destination throttle block missing');
+  const fn=bg.slice(start,end);
+  assert(fn.includes('CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS'), 'inter-tab cooldown missing');
+  assert(fn.includes('setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS)'), 'inter-tab cooldown must precede subsequent navigation');
+  assert(fn.includes('for (let i=1;i<targets.length;i++)'), 'destination loop missing');
+  assert(fn.includes('function waitForTabTerminalLoad'), 'terminal tab-load wait helper missing');
+  assert(fn.includes('chrome.tabs.onUpdated.addListener'), 'terminal tab-load observer missing');
+  assert(fn.includes('chrome.tabs.onUpdated.removeListener(onUpdated)'), 'tab-load observer must be removed after each destination');
+  assert(fn.includes('await waitForTabTerminalLoad(tab.id)'), 'each created tab must wait for terminal load');
+});
+
 test('case-sensitive URL-builder failure has native fallback', () => {
   const start=bg.indexOf('const urls=buildCaseSensitiveMultiVerseUrls');
   const end=bg.indexOf('await openCaseSensitiveDestinations',start);

@@ -1879,17 +1879,54 @@ function buildCaseSensitiveMultiVerseUrls(refs, maxUrlLength = 6000) {
   return urls;
 }
 
+const CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS = 1000;
+const CASE_SENSITIVE_MULTI_VERSE_TAB_LOAD_TIMEOUT_MS = 15000;
+
+function waitForTabTerminalLoad(tabId, timeout = CASE_SENSITIVE_MULTI_VERSE_TAB_LOAD_TIMEOUT_MS) {
+  return new Promise(resolve => {
+    let settled = false;
+    let timer = 0;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (timer) clearTimeout(timer);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      resolve();
+    };
+    const onUpdated = (updatedTabId, changeInfo) => {
+      if (updatedTabId === tabId && changeInfo.status === 'complete') finish();
+    };
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    timer = setTimeout(finish, timeout);
+    chrome.tabs.get(tabId).then(tab => {
+      if (tab?.status === 'complete') finish();
+    }).catch(() => finish());
+  });
+}
+
+async function paceCaseSensitiveTab(tabPromise) {
+  const tab = await tabPromise;
+  if (tab?.id != null) await waitForTabTerminalLoad(tab.id);
+  await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
+  return tab;
+}
+
 async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
   const targets=(urls||[]).filter(Boolean);
   if (!targets.length) throw new Error('No BLB Multi-Verse destinations');
-  await (disposition === 'newForegroundTab'
-    ? chrome.tabs.create({url:targets[0], active:true})
-    : disposition === 'newBackgroundTab'
-      ? chrome.tabs.create({url:targets[0], active:false})
-      : chrome.tabs.update({url:targets[0]}));
-  for (let i=1;i<targets.length;i++) await chrome.tabs.create({url:targets[i], active:false});
-}
 
+  const openFirst = disposition === 'newForegroundTab'
+    ? () => chrome.tabs.create({url:targets[0], active:true})
+    : disposition === 'newBackgroundTab'
+      ? () => chrome.tabs.create({url:targets[0], active:false})
+      : () => chrome.tabs.update({url:targets[0]});
+
+  await paceCaseSensitiveTab(openFirst());
+
+  for (let i=1;i<targets.length;i++) {
+    await paceCaseSensitiveTab(chrome.tabs.create({url:targets[i], active:false}));
+  }
+}
 async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab') {
   const parsed = BLBCaseSensitiveCore.parseCaseSensitiveQuery(queryText);
   if (!parsed || !parsed.words.length) return false;
