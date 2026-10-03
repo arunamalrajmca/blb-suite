@@ -15,10 +15,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         'text/plain': new Blob([plain], {type:'text/plain'}),
         'text/html': new Blob([html], {type:'text/html'})
       });
+      console.log('[BLB Suite] Offscreen clipboard write starting', {
+        plainLength: plain.length,
+        htmlLength: html.length,
+        types: Object.keys(item)
+      });
 
       await navigator.clipboard.write([item]);
+      console.log('[BLB Suite] Offscreen clipboard write succeeded');
       sendResponse({ok:true});
     } catch (error) {
+      console.error('[BLB Suite] Offscreen clipboard write failed', error);
       sendResponse({
         ok:false,
         reason:String(error?.message || error || 'clipboard-write-failed')
