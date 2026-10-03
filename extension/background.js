@@ -1879,6 +1879,8 @@ function buildCaseSensitiveMultiVerseUrls(refs, maxUrlLength = 6000) {
   return urls;
 }
 
+const CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS = 750;
+
 function waitForCaseSensitiveTabLoad(tabId, timeoutMs = 20000) {
   if (tabId == null) return Promise.resolve();
   return new Promise(resolve => {
@@ -1919,6 +1921,7 @@ async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
   if (first?.id != null) await waitForCaseSensitiveTabLoad(first.id);
 
   for (let i=1;i<targets.length;i++) {
+    await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
     const tab = await chrome.tabs.create({url:targets[i], active:false});
     if (tab?.id != null) await waitForCaseSensitiveTabLoad(tab.id);
   }
