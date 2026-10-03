@@ -38,6 +38,10 @@ jobs:
           - group: resolver
             grep: 'All 66 canonical'
     steps:
+      - name: ⏱ Workflow ETA — start
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: start
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -74,6 +78,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: ⏱ Workflow ETA — start
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: start
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -106,6 +114,11 @@ jobs:
 
   browser-e2e-summary:
     name: browser-e2e
+      - name: ⏱ Workflow ETA — finish
+        if: ${{ always() }}
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: finish
     needs:
       - browser-e2e
       - browser-e2e-features
@@ -114,6 +127,10 @@ jobs:
     permissions:
       statuses: write
     steps:
+      - name: ⏱ Workflow ETA — start
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: start
       - name: Publish browser-e2e commit status
         if: ${{ always() }}
         env:
@@ -140,3 +157,9 @@ jobs:
             exit 1
           fi
           echo "All browser E2E suites passed."
+
+      - name: ⏱ Workflow ETA — finish
+        if: ${{ always() }}
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: finish
