@@ -383,6 +383,12 @@ test('BLB new-tab and Copy-as-link contracts remain wired', () => {
   assert(copyGuard >= 0, 'native MultiVerse copy must not be intercepted');
   const copyGuardEnd = content.indexOf('location.pathname))', copyGuard);
   assert(copyGuardEnd > copyGuard && content.slice(copyGuard, copyGuardEnd).includes('MultiVerse'), 'native MultiVerse copy exclusion must target MultiVerse.cfm');
+  const nowrapClick = content.indexOf('const a=e.target.closest?.("a.nowrap")');
+  assert(nowrapClick >= 0, 'BLB nowrap click override missing');
+  const nowrapBlockStart = content.lastIndexOf('document.addEventListener("click"', nowrapClick);
+  const nowrapBlockEnd = content.indexOf('},true);', nowrapClick);
+  assert(nowrapBlockStart >= 0 && nowrapBlockEnd > nowrapClick, 'nowrap click handler boundary missing');
+  assert(content.slice(nowrapBlockStart, nowrapBlockEnd).includes('MultiVerse\\\\.cfm'), 'MultiVerse native controls must bypass nowrap click interception');
 });
 test('context-menu Show on BLB wiring remains present', () => {
   const bg = read('background.js'), content = read('content.js');
