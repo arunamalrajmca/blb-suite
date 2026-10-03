@@ -340,6 +340,17 @@ test('case-sensitive zero-result fallback cannot redirect to BLB home', () => {
   assert(fn.includes('openCaseSensitiveNativeSearch(parsed.rawQuery, disposition)'), 'native fallback missing');
   assert(!fn.includes("chrome.tabs.update({url:homeUrl})"), 'unsafe BLB-home fallback remains');
 });
+test('case-sensitive MultiVerse destinations are rate-limited by tab load', () => {
+  const start=bg.indexOf('function waitForCaseSensitiveTabLoad');
+  const end=bg.indexOf('\nasync function handleCaseSensitiveBCommand', start);
+  assert(start >= 0 && end > start, 'case-sensitive destination throttle block missing');
+  const fn=bg.slice(start,end);
+  assert(fn.includes('chrome.tabs.onUpdated'), 'case-sensitive tab-load observer missing');
+  assert(fn.includes('await waitForCaseSensitiveTabLoad(first.id)'), 'first destination must wait for load');
+  assert(fn.includes('await waitForCaseSensitiveTabLoad(tab.id)'), 'subsequent destinations must wait for load');
+  assert(fn.includes('for (let i=1;i<targets.length;i++)'), 'destination loop missing');
+});
+
 test('case-sensitive URL-builder failure has native fallback', () => {
   const start=bg.indexOf('const urls=buildCaseSensitiveMultiVerseUrls');
   const end=bg.indexOf('await openCaseSensitiveDestinations',start);
