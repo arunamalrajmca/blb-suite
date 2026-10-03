@@ -235,8 +235,10 @@ if (location.hostname.endsWith("blueletterbible.org")) {
   // preventDefault() runs, which loses the HTML clipboard payload used by
   // Word/Google Docs "Paste as link" behavior. The content script already
   // maintains suiteEnabled through storage.onChanged, so use that cached value.
+  const isMultiVersePage=()=>/\/tools\/MultiVerse\.cfm$/i.test(location.pathname);
+
   document.addEventListener("copy",e=>{
-    if (!suiteEnabled) return;
+    if (!suiteEnabled || isMultiVersePage()) return;
     const text=window.getSelection()?.toString()||"";
     const html=formatBlbTextToHtml(text);
     if (!html || !e.clipboardData) return;
@@ -249,6 +251,7 @@ if (location.hostname.endsWith("blueletterbible.org")) {
   if (navigator.clipboard?.writeText) {
     const original=navigator.clipboard.writeText.bind(navigator.clipboard);
     navigator.clipboard.writeText=async text=>{
+      if (isMultiVersePage()) return original(text);
       if (!(await isSuiteEnabled())) return original(text);
       const html=formatBlbTextToHtml(text);
       if (!html) return original(text);
@@ -282,9 +285,163 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     });
   }
 
+  function escapeMultiVerseClipboardHtml(value) {
+    return String(value || "")
+      .replace(/&/g,"&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;")
+      .replace(/"/g,"&quot;")
+      .replace(/'/g,"&#39;");
+  }
+
+  function buildMultiVerseClipboardHtml(rawText) {
+    const text=String(rawText || "");
+    if (!text) return null;
+
+    const matches=[];
+    const pattern=/((?:[1-3]\s+)?[A-Za-z][A-Za-z.'’]*(?:\s+[A-Za-z][A-Za-z.'’]*){0,4})\s+(\d+):(\d+(?:-\d+)?)/g;
+    let match;
+
+    while ((match=pattern.exec(text))) {
+      const words=match[1].trim().split(/\s+/);
+      let resolved=null;
+      let bookStart=0;
+
+      for (let i=0;i<words.length;i++) {
+        const book=words.slice(i).join(" ");
+        const versePart=match[3];
+        const dash=versePart.indexOf("-");
+        const from=Number(dash<0 ? versePart : versePart.slice(0,dash));
+        const to=dash<0 ? null : Number(versePart.slice(dash+1));
+        const candidate=resolveBibleReference(book,Number(match[2]),from,to);
+        if (candidate?.url) {
+          resolved=candidate;
+          bookStart=i;
+          break;
+        }
+      }
+
+      if (!resolved?.url) continue;
+
+      const leadingWords=words.slice(0,bookStart);
+      const leadingText=leadingWords.length ? leadingWords.join(" ")+" " : "";
+      const fullGroupStart=match.index + match[0].indexOf(match[1]);
+      const actualStart=fullGroupStart + leadingText.length;
+      const actualEnd=match.index + match[0].length;
+
+      if (actualEnd<=actualStart) continue;
+      matches.push({
+        start:actualStart,
+        end:actualEnd,
+        text:text.slice(actualStart,actualEnd),
+        url:resolved.url
+      });
+    }
+
+    if (!matches.length) return null;
+
+    matches.sort((a,b)=>a.start-b.start || b.end-a.end);
+    const nonOverlapping=[];
+    let cursor=0;
+    for (const item of matches) {
+      if (item.start<cursor) continue;
+      nonOverlapping.push(item);
+      cursor=item.end;
+    }
+
+    let body="";
+    let cursorIndex=0;
+    for (const item of nonOverlapping) {
+      body += escapeMultiVerseClipboardHtml(text.slice(cursorIndex,item.start)).replace(/\n/g,"<br>");
+      body += '<a href="'+escapeMultiVerseClipboardHtml(item.url)+'" style="color:#1155cc;text-decoration:underline;">'+escapeMultiVerseClipboardHtml(item.text)+'</a>';
+      cursorIndex=item.end;
+    }
+    body += escapeMultiVerseClipboardHtml(text.slice(cursorIndex)).replace(/\n/g,"<br>");
+
+    return '<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">'+body+'</span><!--EndFragment--></body></html>';
+  }
+
+  function showMultiVerseCopyStatus(message,isError=false) {
+    let box=document.getElementById("blb-suite-multiverse-copy-status");
+    if (!box) {
+      box=document.createElement("span");
+      box.id="blb-suite-multiverse-copy-status";
+      box.style.cssText="margin-left:7px;font:12px Arial,sans-serif;";
+      const mount=document.getElementById("copyButton")?.parentElement;
+      if (mount) mount.appendChild(box);
+    }
+    if (!box) return;
+    box.textContent=message;
+    box.style.color=isError ? "#b00020" : "#555";
+    clearTimeout(box._blbSuiteTimer);
+    box._blbSuiteTimer=setTimeout(()=>box.remove(),2500);
+  }
+
+  function addMultiVerseSuiteCopyButton() {
+    if (!isMultiVersePage()) return;
+    if (document.getElementById("blb-suite-multiverse-copy-links")) return;
+
+    const nativeButton=document.getElementById("copyButton") || document.getElementById("copyByVerseButton");
+    if (!nativeButton || !nativeButton.parentElement) return;
+
+    const button=document.createElement("button");
+    button.id="blb-suite-multiverse-copy-links";
+    button.type="button";
+    button.textContent="Copy with Links";
+    button.title="Copy the native MultiVerse text with Bible-reference hyperlinks. BLB's native Copy button is unchanged.";
+    button.style.cssText="margin-left:6px;";
+
+    button.addEventListener("click",event=>{
+      event.preventDefault();
+      event.stopPropagation();
+
+      const source=document.getElementById("copyButton") || document.getElementById("copyByVerseButton");
+      const text=source?.getAttribute("data-clipboard-text") || "";
+      if (!text) {
+        showMultiVerseCopyStatus("No MultiVerse text available.",true);
+        return;
+      }
+
+      const html=buildMultiVerseClipboardHtml(text);
+      if (!html) {
+        showMultiVerseCopyStatus("No Bible references found.",true);
+        return;
+      }
+
+      if (!navigator.clipboard?.write || typeof ClipboardItem==="undefined") {
+        showMultiVerseCopyStatus("Rich clipboard is unavailable.",true);
+        return;
+      }
+
+      // Call clipboard.write() directly from this user click. Do not await
+      // storage or another promise first, because Chromium may require
+      // transient user activation for clipboard writes.
+      let pending;
+      try {
+        const item=new ClipboardItem({
+          "text/plain":new Blob([text],{type:"text/plain"}),
+          "text/html":new Blob([html],{type:"text/html"})
+        });
+        pending=navigator.clipboard.write([item]);
+      } catch (_) {
+        showMultiVerseCopyStatus("Copy failed.",true);
+        return;
+      }
+
+      Promise.resolve(pending).then(()=>{
+        showMultiVerseCopyStatus("Copied with links.");
+      }).catch(()=>{
+        showMultiVerseCopyStatus("Copy failed.",true);
+      });
+    });
+
+    nativeButton.insertAdjacentElement("afterend",button);
+  }
+
   function modifyMultiVerseLinks() {
-    if (!location.href.includes("MultiVerse.cfm")) return;
+    if (!isMultiVersePage()) return;
     document.querySelectorAll('a[href*="/kjv/"]').forEach(a=>a.target="_blank");
+    addMultiVerseSuiteCopyButton();
   }
 
   const process=(root=document)=>{
