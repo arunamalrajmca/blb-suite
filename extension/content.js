@@ -1173,111 +1173,81 @@ function getDoubleClickSelection(event) {
   return '';
 }
 
-function handleDoubleClickBlb(event, initialSelection = '', initialContext = null) {
+function handleDoubleClickBlb(event) {
   try {
     if (!suiteEnabled || isDoubleClickExcludedTarget(event.target)) return;
-    // Capture the browser's selection/range before waiting on asynchronous
-    // settings. The live Selection can change after the event dispatches.
-    const capturedSelection = initialSelection || getDoubleClickSelection(event);
-    const capturedContext = initialContext || (
-      capturedSelection ? getDoubleClickBlockContextReference(capturedSelection, event.target, event) : null
-    );
 
-    // Site settings are loaded asynchronously. A real user gesture can arrive
-    // before that refresh finishes, so defer this exact gesture until the
-    // shared double-click initialization is complete instead of dropping it.
+    // Chromium may dispatch dblclick before the new word selection has replaced
+    // the previous native selection. Never freeze that early selection/context:
+    // a stale selection can make a real chapter-number double-click inherit an
+    // unrelated reference from the preceding gesture.
     if (!doubleClickSettingsReady) {
       void ensureDoubleClickSettingsReady().then(() => {
-        if (doubleClickBlbEnabled) {
-          handleDoubleClickBlb(event, capturedSelection, capturedContext);
-        }
+        if (doubleClickBlbEnabled) handleDoubleClickBlb(event);
       });
       return;
     }
     if (!doubleClickBlbEnabled) return;
 
-    // The dblclick gesture has a different selection contract from Show on BLB,
-    // Alt+B, and right-click. Wait for Chromium's native token selection before
-    // resolving context. If selection is still empty, a single-token target is
-    // a safe fallback; a multiword block is never treated as the selection.
-    const started = Date.now();
-    const requestId = `dblclick-${Date.now()}-${++doubleClickRequestSequence}`;
-    const dispatch = () => {
+    const started=Date.now();
+    const requestId=`dblclick-${Date.now()}-${++doubleClickRequestSequence}`;
+    const dispatch=()=>{
       try {
-        const selection = capturedSelection || getDoubleClickSelection(event);
+        // Re-read the native selection on every frame until Chromium commits
+        // the current double-click. The physical event coordinates remain the
+        // authoritative target while the Selection is settling.
+        const selection=getDoubleClickSelection(event);
         if (!selection) {
-          if (Date.now() - started < 1500) {
-            requestAnimationFrame(dispatch);
-          }
+          if (Date.now()-started<1500) requestAnimationFrame(dispatch);
           return true;
         }
 
-        // Only the block containing the browser-selected token may establish
-        // contextual Bible meaning. No document/body-wide resolver is used.
-        const contextualTarget = getDoubleClickTargetElement(event) || event.target;
-        const blockContext = capturedContext || getDoubleClickBlockContextReference(selection, contextualTarget, event);
+        const contextualTarget=getDoubleClickTargetElement(event)||event.target;
+        const blockContext=getDoubleClickBlockContextReference(selection,contextualTarget,event);
 
         // Numeric tokens are ambiguous: 3/17/etc. are valid standalone book
-        // numbers, but inside "Jn 3:16" / "Acts 17:11" they belong to the
-        // positional reference. Do not let an early native-selection frame
-        // commit the standalone-book meaning before positional context settles.
-        if (!blockContext && /^\d+$/.test(selection) && Date.now() - started < 1500) {
+        // numbers, but inside a nearby Book + Chapter reference they belong to
+        // that positional reference. Keep waiting while context is unsettled.
+        if (!blockContext && /^\d+$/.test(selection) && Date.now()-started<1500) {
           requestAnimationFrame(dispatch);
           return true;
         }
 
-        const standaloneBook = getStandaloneBookReference(selection);
-        // A numeric token that occupies its entire DOM block is an explicit
-        // standalone book-number gesture. Give that shared numeric-book
-        // interpretation precedence over any incidental block-level parse.
-        const blockText = normalizeSelectionText(event?.target?.closest?.('p,li,td,th,blockquote,article,section,div')?.textContent || '');
-        const isStandaloneNumericBook = standaloneBook && /^\d+$/.test(selection)
-          && blockText === selection;
-        const contextualReference = isStandaloneNumericBook
-          ? standaloneBook
-          : (blockContext || standaloneBook);
+        const standaloneBook=getStandaloneBookReference(selection);
+        const blockText=normalizeSelectionText(
+          event?.target?.closest?.('p,li,td,th,blockquote,article,section,div')?.textContent||''
+        );
+        const isStandaloneNumericBook=standaloneBook && /^\d+$/.test(selection) && blockText===selection;
+        const contextualReference=isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook);
 
-        // A resolved contextual reference remains authoritative. For an
-        // ordinary double-clicked word, however, preserve the legacy Criteria
-        // Search behavior by sending the isolated word through the shared
-        // selection resolver. Standalone numeric tokens remain reference-only:
-        // they must not fall through to generic search/corpus classification.
         if (!contextualReference) {
           if (/^[A-Za-z][A-Za-z'’-]*$/.test(selection) && !/^(?:i|ii|iii)$/i.test(selection)) {
-            const now = Date.now();
-            const gestureTarget = event?.target && (typeof event.target === 'object' || typeof event.target === 'function')
-              ? event.target
-              : null;
+            const now=Date.now();
+            const gestureTarget=event?.target && (typeof event.target==='object'||typeof event.target==='function') ? event.target : null;
             if (gestureTarget) {
-              const previous = recentDoubleClickDestinations.get(gestureTarget) || 0;
-              if (now - previous < 1200) return true;
-              recentDoubleClickDestinations.set(gestureTarget, now);
+              const previous=recentDoubleClickDestinations.get(gestureTarget)||0;
+              if (now-previous<1200) return true;
+              recentDoubleClickDestinations.set(gestureTarget,now);
             }
             safeRuntimeSendMessage({
               type:'blbSuiteOpenSelectionText',
               text:selection,
               contextualReference:null,
               requestId,
-              tabBehavior:{activeIfNew:false, activateExisting:true}
+              tabBehavior:{activeIfNew:false,activateExisting:true}
             });
             return true;
           }
-          if (Date.now() - started < 1500) requestAnimationFrame(dispatch);
+          if (Date.now()-started<1500) requestAnimationFrame(dispatch);
           return true;
         }
 
-        const now = Date.now();
-        // Deduplicate repeated gestures on the same DOM target, not every
-        // occurrence of the same selected token. Separate tokens that both
-        // read "16" must remain independent gestures and must not suppress
-        // one another.
-        const gestureTarget = event?.target && (typeof event.target === 'object' || typeof event.target === 'function')
-          ? event.target
-          : null;
+        const now=Date.now();
+        const gestureTarget=event?.target && (typeof event.target==='object'||typeof event.target==='function') ? event.target : null;
         if (gestureTarget) {
-          const previous = recentDoubleClickDestinations.get(gestureTarget) || 0;
-          if (now - previous < 1200) return true;
-          recentDoubleClickDestinations.set(gestureTarget, now);
+          const previous=recentDoubleClickDestinations.get(gestureTarget)||0;
+          if (now-previous<1200) return true;
+          recentDoubleClickDestinations.set(gestureTarget,now);
         }
 
         safeRuntimeSendMessage({
@@ -1285,7 +1255,7 @@ function handleDoubleClickBlb(event, initialSelection = '', initialContext = nul
           text:selection,
           contextualReference,
           requestId,
-          tabBehavior:{activeIfNew:false, activateExisting:true}
+          tabBehavior:{activeIfNew:false,activateExisting:true}
         });
         return true;
       } catch (_) {
