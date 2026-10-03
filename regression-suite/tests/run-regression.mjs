@@ -379,6 +379,7 @@ test('BLB new-tab and Copy-as-link contracts remain wired', () => {
   assert(content.includes('formatBlbTextToHtml'), 'HTML clipboard formatter missing');
   assert(content.includes('setData("text/html"'), 'HTML clipboard write missing');
   assert(content.includes('setData("text/plain"'), 'plain-text clipboard fallback missing');
+  assert(content.includes('! /tools/MultiVerse') || content.includes('!/tools/MultiVerse') || content.includes('!\\/tools\\/MultiVerse'), 'native MultiVerse copy must not be intercepted');
 });
 test('context-menu Show on BLB wiring remains present', () => {
   const bg = read('background.js'), content = read('content.js');
