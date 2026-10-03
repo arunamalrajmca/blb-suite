@@ -48,6 +48,12 @@ test('content-script coverage includes web + local HTML/PDF', () => {
   const matches = m.content_scripts?.flatMap(x=>x.matches||[]) || [];
   for (const expected of ['http://*/*','https://*/*','file:///*.pdf','file:///*.html','file:///*.htm']) assert(matches.includes(expected), expected);
 });
+test('action popup is explicitly wired to the extension popup page', () => {
+  const m = JSON.parse(read('manifest.json'));
+  assert.equal(m.action?.default_popup, 'popup.html');
+  assert(fs.existsSync(path.join(ROOT, m.action.default_popup)), 'popup.html is missing');
+});
+
 test('manifest-referenced files exist', () => {
   const m = JSON.parse(read('manifest.json'));
   const refs = [m.background?.service_worker, m.options_page, ...(m.content_scripts||[]).flatMap(x=>x.js||[]), ...Object.values(m.icons||{}), m.action?.default_popup].filter(Boolean);
