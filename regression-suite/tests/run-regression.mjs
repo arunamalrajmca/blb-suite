@@ -33,7 +33,6 @@ console.log(`Package: ${ROOT}\n`);
 
 section('package');
 // Manifest/package invariants.
-// CI trigger: validate the updated case-sensitive tab-load throttle contract.
 test('manifest JSON + MV3 + version', () => {
   const m = JSON.parse(read('manifest.json'));
   assert.equal(m.manifest_version, 3);
