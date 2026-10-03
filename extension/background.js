@@ -1879,15 +1879,49 @@ function buildCaseSensitiveMultiVerseUrls(refs, maxUrlLength = 6000) {
   return urls;
 }
 
+function waitForCaseSensitiveTabLoad(tabId, timeoutMs = 20000) {
+  if (tabId == null) return Promise.resolve();
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      clearTimeout(timer);
+      resolve();
+    };
+    const onUpdated = (updatedTabId, changeInfo) => {
+      if (updatedTabId === tabId && changeInfo.status === 'complete') finish();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    chrome.tabs.get(tabId).then(tab => {
+      if (tab && tab.status === 'complete') finish();
+    }).catch(() => finish());
+  });
+}
+
 async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
   const targets=(urls||[]).filter(Boolean);
   if (!targets.length) throw new Error('No BLB Multi-Verse destinations');
-  await (disposition === 'newForegroundTab'
-    ? chrome.tabs.create({url:targets[0], active:true})
+
+  // Large exact-case searches such as b cs LORD can produce thousands of
+  // valid verse matches. Opening every MultiVerse destination simultaneously
+  // creates a burst of BLB requests and can trigger the site's Too many
+  // requests response. Keep all valid destinations, but serialize navigation
+  // so only one new BLB MultiVerse request is in flight at a time.
+  const openFirst = disposition === 'newForegroundTab'
+    ? () => chrome.tabs.create({url:targets[0], active:true})
     : disposition === 'newBackgroundTab'
-      ? chrome.tabs.create({url:targets[0], active:false})
-      : chrome.tabs.update({url:targets[0]}));
-  for (let i=1;i<targets.length;i++) await chrome.tabs.create({url:targets[i], active:false});
+      ? () => chrome.tabs.create({url:targets[0], active:false})
+      : () => chrome.tabs.update({url:targets[0]});
+  const first = await openFirst();
+  if (first?.id != null) await waitForCaseSensitiveTabLoad(first.id);
+
+  for (let i=1;i<targets.length;i++) {
+    const tab = await chrome.tabs.create({url:targets[i], active:false});
+    if (tab?.id != null) await waitForCaseSensitiveTabLoad(tab.id);
+  }
 }
 
 async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab') {
