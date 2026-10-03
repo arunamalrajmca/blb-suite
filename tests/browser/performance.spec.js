@@ -23,6 +23,16 @@ async function getBlbTabs(extensionWorker) {
   });
 }
 
+async function closeBlbTabs(extensionWorker) {
+  const tabs = await extensionWorker.evaluate(async () =>
+    chrome.tabs.query({url:'https://www.blueletterbible.org/*'})
+  );
+  const ids = tabs.map(tab => tab.id).filter(id => Number.isInteger(id));
+  if (ids.length) {
+    await extensionWorker.evaluate(idsToRemove => chrome.tabs.remove(idsToRemove), ids);
+  }
+}
+
 async function waitForBlbTab(extensionWorker, predicate, timeout = 10000) {
   let match = null;
   await expect.poll(
