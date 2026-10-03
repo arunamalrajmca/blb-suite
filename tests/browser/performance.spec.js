@@ -12,8 +12,19 @@ async function selectReference(page, id) {
     const sel = window.getSelection();
     sel.removeAllRanges();
     sel.addRange(range);
-    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
   }, id);
+
+  // The content script enables page-selection monitoring asynchronously after
+  // reading extension storage. If the synthetic mouseup fires before that
+  // initialization completes, the selection remains valid but the extension
+  // never receives the event and the button stays hidden. Wait for the control
+  // to be mounted, then replay the user-level selection event.
+  const button = page.locator('#blb-suite-page-selection-button');
+  await expect(button).toBeAttached({ timeout: 10000 });
+  await page.evaluate(() => {
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+  });
+  await expect(button).toBeVisible({ timeout: 10000 });
 }
 
 async function getBlbTabs(extensionWorker) {
@@ -168,10 +179,16 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
       const sel = window.getSelection();
       sel.removeAllRanges();
       sel.addRange(range);
-      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
 
+    // Wait for page-selection monitoring to mount before replaying mouseup.
+    // This prevents a storage-initialization race from leaving the button
+    // hidden even though the selection itself is already present.
     const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeAttached({ timeout: 10000 });
+    await page.evaluate(() => {
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+    });
     await expect(button).toBeVisible({ timeout: 10000 });
 
     // This scenario measures the two-tab selection handoff itself. Remove
