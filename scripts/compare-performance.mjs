@@ -8,9 +8,15 @@ function median(values) {
   const sorted = [...values].sort((a, b) => a - b);
   return sorted[Math.floor(sorted.length / 2)];
 }
+const target = process.env.BLB_PERF_TARGET || '';
+const isRangeTarget = target === 'kjv-range-resolver';
+
 function summarize(samples) {
   const byScenario = {};
-  for (const scenario of ['selection', 'fresh', 'reuse', 'paragraph-two-tab', 'paragraph-classify']) {
+  const requiredScenarios = isRangeTarget
+    ? ['range-resolver', 'selection', 'fresh', 'reuse']
+    : ['selection', 'fresh', 'reuse', 'paragraph-two-tab', 'paragraph-classify'];
+  for (const scenario of requiredScenarios) {
     const values = samples.filter(s => s.scenario === scenario).map(s => s.handoffMs);
     if (!values.length) throw new Error(`Missing ${scenario} samples`);
     byScenario[scenario] = { median: median(values), count: values.length };
@@ -40,16 +46,15 @@ const maxParagraphRegression = Number(process.env.BLB_PERF_MAX_PARAGRAPH_REGRESS
 const maxParagraphFirstTabRegression = Number(process.env.BLB_PERF_MAX_PARAGRAPH_FIRST_TAB_REGRESSION || 0.10);
 const maxParagraphSecondTabRegression = Number(process.env.BLB_PERF_MAX_PARAGRAPH_SECOND_TAB_REGRESSION || 0.10);
 const requireImprovement = process.env.BLB_PERF_REQUIRE_IMPROVEMENT === '1';
+const minRangeResolverImprovement = Number(process.env.BLB_PERF_MIN_RANGE_RESOLVER_IMPROVEMENT || 0.50);
 
+console.log(`Performance target: ${isRangeTarget ? 'KJV contiguous verse-range resolver' : 'general extension envelope'}`);
 console.log('| Scenario | main baseline | candidate | Improvement |');
 console.log('|---|---:|---:|---:|');
-for (const [name, key] of [
-  ['Selection → BLB handoff', 'selection'],
-  ['Fresh-tab handoff', 'fresh'],
-  ['Existing-tab reuse', 'reuse'],
-  ['Paragraph → MultiVerse + Criteria', 'paragraph-two-tab'],
-  ['Paragraph classification only', 'paragraph-classify']
-]) {
+const displayScenarios = isRangeTarget
+  ? [['KJV range resolver', 'range-resolver'], ['Selection → BLB handoff', 'selection'], ['Fresh-tab handoff', 'fresh'], ['Existing-tab reuse', 'reuse']]
+  : [['Selection → BLB handoff', 'selection'], ['Fresh-tab handoff', 'fresh'], ['Existing-tab reuse', 'reuse'], ['Paragraph → MultiVerse + Criteria', 'paragraph-two-tab'], ['Paragraph classification only', 'paragraph-classify']];
+for (const [name, key] of displayScenarios) {
   const before = baseline[key].median;
   const after = candidate[key].median;
   const improvement = before > 0 ? (before - after) / before : 0;
@@ -59,10 +64,11 @@ for (const [name, key] of [
 const selectionImprovement = pairedMedianImprovement('selection');
 const freshImprovement = pairedMedianImprovement('fresh');
 const reuseImprovement = pairedMedianImprovement('reuse');
-const paragraphTwoTabImprovement = pairedMedianImprovement('paragraph-two-tab');
-const paragraphFirstTabImprovement = pairedMedianImprovement('paragraph-two-tab', 'firstTabMs');
-const paragraphSecondTabImprovement = pairedMedianImprovement('paragraph-two-tab', 'secondTabMs');
-const paragraphClassifyImprovement = pairedMedianImprovement('paragraph-classify');
+const rangeResolverImprovement = isRangeTarget ? pairedMedianImprovement('range-resolver') : null;
+const paragraphTwoTabImprovement = isRangeTarget ? null : pairedMedianImprovement('paragraph-two-tab');
+const paragraphFirstTabImprovement = isRangeTarget ? null : pairedMedianImprovement('paragraph-two-tab', 'firstTabMs');
+const paragraphSecondTabImprovement = isRangeTarget ? null : pairedMedianImprovement('paragraph-two-tab', 'secondTabMs');
+const paragraphClassifyImprovement = isRangeTarget ? null : pairedMedianImprovement('paragraph-classify');
 
 console.log(`Samples: baseline selection/fresh/reuse ${baseline.selection.count}/${baseline.fresh.count}/${baseline.reuse.count}; PR #8 ${candidate.selection.count}/${candidate.fresh.count}/${candidate.reuse.count}`);
 console.log('Gate calculations use paired per-iteration improvement medians; scenario medians above are descriptive.');
@@ -81,12 +87,19 @@ console.log(`Maximum allowed fresh-tab handoff paired regression: ${(maxFreshReg
 const minParagraphTwoTabImprovement = Number(process.env.BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT || 0.50);
 const minParagraphFirstTabImprovement = Number(process.env.BLB_PERF_MIN_PARAGRAPH_FIRST_TAB_IMPROVEMENT || 0.50);
 const minParagraphSecondTabImprovement = Number(process.env.BLB_PERF_MIN_PARAGRAPH_SECOND_TAB_IMPROVEMENT || 0.50);
-const passed = selectionImprovement >= -maxSelectionRegression
+const passed = isRangeTarget
+  ? rangeResolverImprovement >= minRangeResolverImprovement
+  : selectionImprovement >= -maxSelectionRegression
   && reuseImprovement >= (requireImprovement ? minTargetedImprovement : -maxSelectionRegression)
   && paragraphTwoTabImprovement >= (requireImprovement ? minParagraphTwoTabImprovement : -maxParagraphRegression)
   && paragraphFirstTabImprovement >= (requireImprovement ? minParagraphFirstTabImprovement : -maxParagraphFirstTabRegression)
   && paragraphSecondTabImprovement >= (requireImprovement ? minParagraphSecondTabImprovement : -maxParagraphSecondTabRegression)
   && freshImprovement >= -maxFreshRegression;
+
+if (isRangeTarget) {
+  console.log(`Required KJV range resolver improvement: ${(minRangeResolverImprovement * 100).toFixed(1)}%`);
+  console.log(`Measured KJV range resolver improvement: ${(rangeResolverImprovement * 100).toFixed(1)}%`);
+}
 
 if (!passed) {
   console.error(requireImprovement

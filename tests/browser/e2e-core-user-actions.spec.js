@@ -186,6 +186,57 @@ test.describe('core user-action E2E coverage', () => {
 });
 
 
+test('KJV passage opens direct verse only for a unique single-verse corpus match', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const el = document.createElement('p');
+    el.id = 'blb-e2e-kjv-unique-single-verse';
+    el.textContent = 'The concept of spiritual bodybuilding centers on a profound truth: the church, the body of Christ, is designed to be self-edifying. Just as physical bodybuilding requires regular exercise and effort, spiritual growth demands intentional practice and cultivation of specific virtues.';
+    el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:18px Arial,sans-serif;max-width:900px;';
+    document.body.appendChild(el);
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+  });
+
+  const button = page.locator('#blb-suite-page-selection-button');
+  await expect(button).toBeVisible({ timeout: 10000 });
+  await button.click();
+
+  const directVerse = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+    tabs.find(tab => {
+      try {
+        const url = new URL(tab.url || tab.pendingUrl || '');
+        return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/1co/10/16/';
+      } catch (_) {
+        return false;
+      }
+    }) || null
+  ));
+  expect(directVerse).toBeNull();
+
+  const criteria = await waitForTab(extensionWorker, tab => {
+    try {
+      const url = new URL(tab.url);
+      return url.hostname === 'www.blueletterbible.org'
+        && url.pathname === '/search/search.cfm';
+    } catch (_) {
+      return false;
+    }
+  });
+  const criteriaValue = new URL(criteria.url).searchParams.get('Criteria') || '';
+  expect(criteriaValue.toLowerCase()).toContain('body of christ');
+  expect(criteriaValue.toLowerCase()).toContain('the church');
+
+  await removeTabById(extensionWorker, criteria.id);
+});
+
 test('Double-Click resolves contextual chapter numbers and unique KJV words directly', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
