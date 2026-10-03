@@ -331,7 +331,7 @@ if (location.hostname.endsWith("blueletterbible.org") && !/\/tools\/MultiVerse\.
     if (!suiteEnabled) return;
     // BLB MultiVerse owns its native controls, including Copy to Clipboard.
     // Do not capture/replace its nowrap links before BLB's own click handler.
-    if (/\/tools\/MultiVerse\\.cfm$/i.test(location.pathname)) return;
+    if (/\/tools\/MultiVerse\.cfm$/i.test(location.pathname)) return;
     const a=e.target.closest?.("a.nowrap");
     if (!a) return;
     e.preventDefault(); e.stopImmediatePropagation(); window.open(a.href,"_blank");
