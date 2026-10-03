@@ -14,6 +14,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: ⏱ Workflow ETA — start
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: start
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -43,3 +47,9 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: ⏱ Workflow ETA — finish
+        if: ${{ always() }}
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: finish

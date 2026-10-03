@@ -22,6 +22,10 @@ jobs:
           - selection
           - features
     steps:
+      - name: ⏱ Workflow ETA — start
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: start
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Node
@@ -44,9 +48,18 @@ jobs:
     needs: regression-gate
     if: ${{ always() }}
     runs-on: ubuntu-latest
+      - name: ⏱ Workflow ETA — finish
+        if: ${{ always() }}
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: finish
     permissions:
       statuses: write
     steps:
+      - name: ⏱ Workflow ETA — start
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: start
       - name: Publish regression-gate commit status
         if: ${{ always() }}
         env:
@@ -72,3 +85,9 @@ jobs:
             exit 1
           fi
           echo "All regression groups passed."
+
+      - name: ⏱ Workflow ETA — finish
+        if: ${{ always() }}
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: finish

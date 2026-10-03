@@ -12,6 +12,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: ⏱ Workflow ETA — start
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: start
       - name: Checkout exact branch
         uses: actions/checkout@v4
       - name: Build test ZIP
@@ -34,3 +38,9 @@ jobs:
           retention-days: 7
 
 # Triggered temporary build for main + PR 76 test packaging.
+
+      - name: ⏱ Workflow ETA — finish
+        if: ${{ always() }}
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: finish

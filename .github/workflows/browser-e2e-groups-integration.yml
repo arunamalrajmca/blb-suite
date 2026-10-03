@@ -18,6 +18,10 @@ jobs:
     outputs:
       ready: ${{ steps.check.outputs.ready }}
     steps:
+      - name: ⏱ Workflow ETA — start
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: start
       - name: Check grouped PR merge state
         id: check
         uses: actions/github-script@v7
@@ -45,6 +49,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
+      - name: ⏱ Workflow ETA — start
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: start
       - name: Checkout final main
         uses: actions/checkout@v4
         with:
@@ -70,3 +78,9 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 14
+
+      - name: ⏱ Workflow ETA — finish
+        if: ${{ always() }}
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: finish
