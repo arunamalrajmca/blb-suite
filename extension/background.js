@@ -3444,7 +3444,8 @@ function findKjvVerseRangeForSelection(selectionText) {
   if (!candidateIndexes.length) return null;
 
   let best = null;
-  const matchedVerseIndexes = new Set();
+  let bestMatchedWordCount = 0;
+  const bestMatchedVerseIndexes = new Set();
   for (const verseIndex of candidateIndexes) {
     const first = getKjvRangeVerseEntry(verseIndex);
     if (!first || first.words.length < seedLength) continue;
@@ -3517,7 +3518,13 @@ function findKjvVerseRangeForSelection(selectionText) {
       selectionStart,
       selectionEnd
     };
-    matchedVerseIndexes.add(verseIndex);
+    if (candidate.matchedWords > bestMatchedWordCount) {
+      bestMatchedWordCount = candidate.matchedWords;
+      bestMatchedVerseIndexes.clear();
+      bestMatchedVerseIndexes.add(verseIndex);
+    } else if (candidate.matchedWords === bestMatchedWordCount) {
+      bestMatchedVerseIndexes.add(verseIndex);
+    }
     if (!best || candidate.matchedWords > best.matchedWords) best = candidate;
   }
 
@@ -3526,7 +3533,7 @@ function findKjvVerseRangeForSelection(selectionText) {
   // never a semantic decision; it only narrows the exact-match candidates.
   // Likewise, a contiguous match spanning multiple verses is not a single
   // verse result and therefore cannot use the direct-verse path.
-  if (matchedVerseIndexes.size !== 1 || !best) return null;
+  if (bestMatchedVerseIndexes.size !== 1 || !best) return null;
   if (best.from !== best.to) return null;
   return best;
 }
