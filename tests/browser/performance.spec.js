@@ -56,6 +56,10 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     const button = page.locator('#blb-suite-page-selection-button');
     await expect(button).toBeVisible({ timeout: 10000 });
 
+    // The extension may intentionally reuse an existing BLB tab. Remove
+    // unrelated BLB tabs so this two-tab benchmark observes the actual
+    // MultiVerse + Criteria handoff rather than an update to an old tab.
+    await closeBlbTabs(extensionWorker);
     const tabsBefore = await getBlbTabs(extensionWorker);
     const started = Date.now();
     await button.click();
