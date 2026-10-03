@@ -131,7 +131,7 @@ function redirectBibleSite() {
       // The filename repeats the chapter, e.g. John-3-16.html or
       // John-3-16-18.html. Match the chapter explicitly so the first
       // captured number is the verse, not the chapter.
-      const vm=u.pathname.match(new RegExp("-"+p[1]+"-(\\d+)(?:-(\\d+))?\\.html$", "i"));
+      const vm=u.pathname.match(new RegExp("-"+p[1]+"-(\\d+)(?:-(\\d+))?\.html$", "i"));
       ref={book:p[0],chapter:+p[1],from:vm?+vm[1]:1,to:vm&&vm[2]?+vm[2]:null};
     }
   }
@@ -246,10 +246,10 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
     if (!text) return null;
 
     const matches=[];
-    const pattern=/((?:[1-3]\\s+)?[A-Za-z][A-Za-z.'’]*(?:\\s+[A-Za-z][A-Za-z.'’]*){0,4})\\s+(\\d+):(\\d+(?:-\\d+)?)/g;
+    const pattern=/((?:[1-3]\s+)?[A-Za-z][A-Za-z.'’]*(?:\s+[A-Za-z][A-Za-z.'’]*){0,4})\s+(\\d+):(\\d+(?:-\\d+)?)/g;
     let match;
     while ((match=pattern.exec(text))) {
-      const words=match[1].trim().split(/\\s+/);
+      const words=match[1].trim().split(/\s+/);
       let resolved=null;
       let bookStart=0;
       for (let i=0;i<words.length;i++) {
@@ -298,11 +298,11 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
     let body="";
     let cursorIndex=0;
     for (const item of nonOverlapping) {
-      body += escapeMultiVerseClipboardHtml(text.slice(cursorIndex,item.start)).replace(/\\n/g,"<br>");
+      body += escapeMultiVerseClipboardHtml(text.slice(cursorIndex,item.start)).replace(/\n/g,"<br>");
       body += `<a href="${escapeMultiVerseClipboardHtml(item.url)}" style="color:#1155cc;text-decoration:underline;">${escapeMultiVerseClipboardHtml(item.text)}</a>`;
       cursorIndex=item.end;
     }
-    body += escapeMultiVerseClipboardHtml(text.slice(cursorIndex)).replace(/\\n/g,"<br>");
+    body += escapeMultiVerseClipboardHtml(text.slice(cursorIndex)).replace(/\n/g,"<br>");
 
     return `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${body}</span><!--EndFragment--></body></html>`;
   }
@@ -324,7 +324,7 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
   }
 
   function addMultiVerseSuiteCopyButton() {
-    if (!/\\/tools\\/MultiVerse\\.cfm$/i.test(location.pathname)) return;
+    if (!/\/tools\/MultiVerse\.cfm$/i.test(location.pathname)) return;
     if (document.getElementById("blb-suite-multiverse-copy-links")) return;
 
     const nativeButton=document.getElementById("copyButton") || document.getElementById("copyByVerseButton");
@@ -385,7 +385,7 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
   }
 
   function modifyMultiVerseLinks(root=document) {
-    if (!/\\/tools\\/MultiVerse\\.cfm$/i.test(location.pathname)) return;
+    if (!/\/tools\/MultiVerse\.cfm$/i.test(location.pathname)) return;
 
     const scope = root && root.nodeType === 1 ? root : document;
 
@@ -1021,7 +1021,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       for (const candidate of candidates) {
         if (!(candidate instanceof Element)) continue;
         const candidateText = normalizeSelectionText(candidate.textContent || '');
-        if (candidateText && !/\\s/.test(candidateText)) {
+        if (candidateText && !/\s/.test(candidateText)) {
           selected = candidateText;
           break;
         }
@@ -1194,7 +1194,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const escapeRegex = part => part.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
       const parts = value.split(/\s+/).map(escapeRegex);
       if (!parts.length) return [];
-      const pattern = new RegExp(parts.join('\\s+'), 'gi');
+      const pattern = new RegExp(parts.join('\s+'), 'gi');
       const occurrences = [];
       let match;
       while ((match = pattern.exec(rawSource))) {
@@ -1509,8 +1509,8 @@ function hasLocalValidBibleReference(text) {
 
   entries.sort((a,b) => b.name.length - a.name.length);
   for (const entry of entries) {
-    const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-    const re = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}\\.?\\s+(-?\\d+)(?:(?::|\\.)\\s*(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?|\\s+(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?)?(?=$|[^A-Za-z0-9])`, 'i');
+    const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\s+');
+    const re = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}\.?\s+(-?\\d+)(?:(?::|\.)\s*(-?\\d+)(?:\s*[-–]\s*(-?\\d+))?|\s+(-?\\d+)(?:\s*[-–]\s*(-?\\d+))?)?(?=$|[^A-Za-z0-9])`, 'i');
     const match = re.exec(source);
     if (!match) continue;
 
