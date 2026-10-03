@@ -13,7 +13,8 @@
     "declarativeNetRequest",
     "contextMenus",
     "scripting",
-    "alarms"
+    "alarms",
+    "offscreen"
   ],
   "host_permissions": [
     "http://*/*",
