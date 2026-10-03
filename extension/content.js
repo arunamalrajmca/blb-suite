@@ -246,10 +246,10 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
     if (!text) return null;
 
     const matches=[];
-    const pattern=/((?:[1-3]\\s+)?[A-Za-z][A-Za-z.'’]*(?:\\s+[A-Za-z][A-Za-z.'’]*){0,4})\\s+(\\d+):(\\d+(?:-\\d+)?)/g;
+    const pattern=/((?:[1-3]\s+)?[A-Za-z][A-Za-z.'’]*(?:\s+[A-Za-z][A-Za-z.'’]*){0,4})\s+(\\d+):(\\d+(?:-\\d+)?)/g;
     let match;
     while ((match=pattern.exec(text))) {
-      const words=match[1].trim().split(/\\s+/);
+      const words=match[1].trim().split(/\s+/);
       let resolved=null;
       let bookStart=0;
       for (let i=0;i<words.length;i++) {
@@ -298,11 +298,11 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
     let body="";
     let cursorIndex=0;
     for (const item of nonOverlapping) {
-      body += escapeMultiVerseClipboardHtml(text.slice(cursorIndex,item.start)).replace(/\\n/g,"<br>");
+      body += escapeMultiVerseClipboardHtml(text.slice(cursorIndex,item.start)).replace(/\n/g,"<br>");
       body += `<a href="${escapeMultiVerseClipboardHtml(item.url)}" style="color:#1155cc;text-decoration:underline;">${escapeMultiVerseClipboardHtml(item.text)}</a>`;
       cursorIndex=item.end;
     }
-    body += escapeMultiVerseClipboardHtml(text.slice(cursorIndex)).replace(/\\n/g,"<br>");
+    body += escapeMultiVerseClipboardHtml(text.slice(cursorIndex)).replace(/\n/g,"<br>");
 
     return `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${body}</span><!--EndFragment--></body></html>`;
   }
@@ -324,7 +324,7 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
   }
 
   function addMultiVerseSuiteCopyButton() {
-    if (!/\\/tools\\/MultiVerse\\.cfm$/i.test(location.pathname)) return;
+    if (!/\/tools\/MultiVerse\.cfm$/i.test(location.pathname)) return;
     if (document.getElementById("blb-suite-multiverse-copy-links")) return;
 
     const nativeButton=document.getElementById("copyButton") || document.getElementById("copyByVerseButton");
@@ -385,7 +385,7 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
   }
 
   function modifyMultiVerseLinks(root=document) {
-    if (!/\\/tools\\/MultiVerse\\.cfm$/i.test(location.pathname)) return;
+    if (!/\/tools\/MultiVerse\.cfm$/i.test(location.pathname)) return;
 
     const scope = root && root.nodeType === 1 ? root : document;
 
