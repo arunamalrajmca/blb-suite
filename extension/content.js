@@ -213,60 +213,6 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
   });
 }
 
-// ---------- BLB Auto Hyperlinker ----------
-function formatBlbTextToHtml(rawText) {
-  const refs=rawText.match(/\b(?:[1-3]\s*|i{1,3}\s*)?[A-Za-z0-9.]+\s+\d+:\d+(?:-\d+)?\b/gi);
-  if (!refs) return null;
-  let html=rawText;
-  refs.forEach(ref=>{
-    const x=ref.trim(), i=x.lastIndexOf(" ");
-    if (i<0) return;
-    const book=x.slice(0,i).replace(/\./g,"").replace(/\s+/g,"");
-    const cv=x.slice(i+1).replace(":","/");
-    html=html.replace(ref,`<a href="https://www.blueletterbible.org/kjv/${book}/${cv}/" style="color:#1155cc;text-decoration:underline;">${ref}</a>`);
-  });
-  html=html.replace(/\n/g,"<br>");
-  return `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`;
-}
-
-if (location.hostname.endsWith("blueletterbible.org") && !/\/tools\/MultiVerse\.cfm$/i.test(location.pathname)) {
-  // BLB's MultiVerse page has its own native copy implementation. Do not
-  // intercept its copy event or replace its clipboard path: doing so can stop
-  // BLB's native Copy to Clipboard control from reaching its own handler.
-  // Suite's hyperlink-copy enhancement remains active on ordinary BLB pages.
-  // The copy event must be handled synchronously. Awaiting storage state inside
-  // the event handler lets the browser finish its normal copy operation before
-  // preventDefault() runs, which loses the HTML clipboard payload used by
-  // Word/Google Docs "Paste as link" behavior. The content script already
-  // maintains suiteEnabled through storage.onChanged, so use that cached value.
-  document.addEventListener("copy",e=>{
-    if (!suiteEnabled) return;
-    const text=window.getSelection()?.toString()||"";
-    const html=formatBlbTextToHtml(text);
-    if (!html || !e.clipboardData) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    e.clipboardData.setData("text/html",html);
-    e.clipboardData.setData("text/plain",text);
-  },true);
-
-  if (navigator.clipboard?.writeText) {
-    const original=navigator.clipboard.writeText.bind(navigator.clipboard);
-    navigator.clipboard.writeText=async text=>{
-      if (!(await isSuiteEnabled())) return original(text);
-      const html=formatBlbTextToHtml(text);
-      if (!html) return original(text);
-      const handler=e=>{
-        e.clipboardData.setData("text/html",html);
-        e.clipboardData.setData("text/plain",text);
-        e.preventDefault();
-      };
-      document.addEventListener("copy",handler,true);
-      document.execCommand("copy");
-      document.removeEventListener("copy",handler,true);
-    };
-  }
-
   // ---------- BLB New Tab ----------
   function modifyLinks(container) {
     container.querySelectorAll("a").forEach(link=>{
