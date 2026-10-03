@@ -340,6 +340,41 @@ if (location.hostname.endsWith("blueletterbible.org") && !/\/tools\/MultiVerse\.
   else process();
 }
 
+
+// ---------- TEMP MultiVerse Copy hyperlink test ----------
+if (/\/tools\/MultiVerse\.cfm$/i.test(location.pathname)) {
+  document.addEventListener('copy', e => {
+    try {
+      if (!e.clipboardData) return;
+      const text = e.clipboardData.getData('text/plain') || '';
+      if (!text) return;
+      const refs = [];
+      const re = /\[((?:[1-3]\s*)?[A-Za-z][A-Za-z0-9.]*\s+\d+(?::\d+(?:-\d+)?(?:,\s*\d+(?:-\d+)?)*)?)\s+[A-Za-z0-9]+\]/g;
+      let match;
+      while ((match = re.exec(text))) {
+        const refText = match[1];
+        const parsed = parseRef(refText);
+        if (!parsed) continue;
+        const url = blbUrl(parsed.book, parsed.chapter, parsed.from, parsed.to);
+        if (!url) continue;
+        refs.push({refText, url});
+      }
+      if (!refs.length) return;
+      let html = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      for (const item of refs) {
+        const escaped = item.refText.replace(/[.*+?^${}()|[\]\\]/g, '\\
+// ---------- Webster's 1828 ----------');
+        const safeUrl = item.url.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+        const safeText = item.refText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        html = html.replace(new RegExp(escaped), '<a href="' + safeUrl + '" style="color:#1155cc;text-decoration:underline;">' + safeText + '</a>');
+      }
+      html = html.replace(/\n/g, '<br>');
+      const payload = '<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">' + html + '</span><!--EndFragment--></body></html>';
+      e.clipboardData.setData('text/html', payload);
+    } catch (_) {}
+  }, false);
+}
+
 // ---------- Webster's 1828 ----------
 if (location.hostname==="webstersdictionary1828.com") {
   async function captureWebsterWord() {
