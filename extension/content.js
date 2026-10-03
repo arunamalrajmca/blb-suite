@@ -229,7 +229,7 @@ function formatBlbTextToHtml(rawText) {
   return `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`;
 }
 
-if (location.hostname.endsWith("blueletterbible.org") && !/\\/tools\\/MultiVerse\\.cfm$/i.test(location.pathname)) {
+if (location.hostname.endsWith("blueletterbible.org") && !/\/tools\/MultiVerse\.cfm$/i.test(location.pathname)) {
   // BLB's MultiVerse page has its own native copy implementation. Do not
   // intercept its copy event or replace its clipboard path: doing so can stop
   // BLB's native Copy to Clipboard control from reaching its own handler.
