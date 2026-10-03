@@ -232,18 +232,85 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
     });
   }
 
-  function modifyMultiVerseLinks() {
-    if (!location.href.includes("MultiVerse.cfm")) return;
-    document.querySelectorAll('a[href*="/kjv/"]').forEach(a=>a.target="_blank");
+  function modifyMultiVerseLinks(root=document) {
+    if (!/\/tools\/MultiVerse\.cfm$/i.test(location.pathname)) return;
+
+    const scope = root && root.nodeType === 1 ? root : document;
+
+    // Keep BLB's existing MultiVerse links intact, but make them open in a
+    // separate tab. This does not touch BLB's Copy handler.
+    scope.querySelectorAll?.('a[href*="/kjv/"]').forEach(a=>a.target="_blank");
+
+    // BLB's MultiVerse Copy button copies the rendered result DOM. Add the
+    // Suite hyperlink directly to the rendered reference label so BLB's own
+    // native Copy operation can carry that link into the HTML clipboard.
+    //
+    // Example:
+    //   [Jhn 17:20-21 NIV]  ->  <a ...>[Jhn 17:20-21 NIV]</a>
+    //
+    // No copy event, clipboard API, preventDefault(), or execCommand() is
+    // involved here.
+    const walker=document.createTreeWalker(
+      scope,
+      NodeFilter.SHOW_TEXT,
+      {
+        acceptNode(node) {
+          const parent=node.parentElement;
+          if (!parent || parent.closest("a,script,style,noscript,textarea")) {
+            return NodeFilter.FILTER_REJECT;
+          }
+          return /^\s*\[[^\]]+\]\s*/.test(node.nodeValue || "")
+            ? NodeFilter.FILTER_ACCEPT
+            : NodeFilter.FILTER_SKIP;
+        }
+      }
+    );
+
+    const nodes=[];
+    let node;
+    while ((node=walker.nextNode())) nodes.push(node);
+
+    const refPattern=/^([\\s]*)\\[([^\\]]+)\\](?=\\s|$)/;
+    for (const textNode of nodes) {
+      if (!textNode.isConnected) continue;
+      const value=textNode.nodeValue || "";
+      const match=refPattern.exec(value);
+      if (!match) continue;
+
+      const label=match[2].trim();
+      const parts=label.match(/^(.+?)\\s+(\\d+)(?::(\\d+)(?:-(\\d+))?)?\\s+[^\\s]+$/);
+      if (!parts) continue;
+
+      const resolved=resolveBibleReference(
+        parts[1].trim(),
+        Number(parts[2]),
+        parts[3] ? Number(parts[3]) : 1,
+        parts[4] ? Number(parts[4]) : null
+      );
+      if (!resolved?.url) continue;
+
+      const fragment=document.createDocumentFragment();
+      if (match[1]) fragment.appendChild(document.createTextNode(match[1]));
+
+      const link=document.createElement("a");
+      link.href=resolved.url;
+      link.target="_blank";
+      link.rel="noopener noreferrer";
+      link.dataset.blbSuiteMultiVerseRef="1";
+      link.textContent=`[${label}]`;
+      fragment.appendChild(link);
+
+      fragment.appendChild(document.createTextNode(value.slice(match[0].length)));
+      textNode.parentNode.replaceChild(fragment,textNode);
+    }
   }
 
   const process=(root=document)=>{
     if (!suiteEnabled) return;
     if (root.matches?.('div[id^="bVerse_"], .parse-popup')) modifyLinks(root);
     root.querySelectorAll?.('div[id^="bVerse_"], .parse-popup').forEach(modifyLinks);
-    if (location.href.includes("MultiVerse.cfm")) {
-      if (root.matches?.('a[href*="/kjv/"]')) root.target="_blank";
-      root.querySelectorAll?.('a[href*="/kjv/"]').forEach(a=>a.target="_blank");
+    if (/\/tools\/MultiVerse\.cfm$/i.test(location.pathname)) {
+      modifyMultiVerseLinks(root);
     }
   };
   let processScheduled=false;
