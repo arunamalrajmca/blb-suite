@@ -5202,3 +5202,55 @@ installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,curre
   .then(tabs => syncPdfSelectionContextMenuVisibility(tabs[0]))
   .catch(() => {}));
 refreshStudyAutoStopAlarm().catch(()=>{});
+
+
+// BLB Suite offscreen clipboard bridge
+let blbSuiteOffscreenCreating = null;
+
+async function ensureBlbSuiteOffscreenClipboard() {
+  const offscreenUrl = chrome.runtime.getURL('offscreen-clipboard.html');
+  if (chrome.runtime.getContexts) {
+    const contexts = await chrome.runtime.getContexts({
+      contextTypes: ['OFFSCREEN_DOCUMENT'],
+      documentUrls: [offscreenUrl]
+    });
+    if (contexts.length) return;
+  } else if (typeof clients !== 'undefined') {
+    const existing = await clients.matchAll();
+    if (existing.some(client => client.url === offscreenUrl)) return;
+  }
+
+  if (!blbSuiteOffscreenCreating) {
+    blbSuiteOffscreenCreating = chrome.offscreen.createDocument({
+      url: 'offscreen-clipboard.html',
+      reasons: ['CLIPBOARD'],
+      justification: 'Write rich HTML and plain text to the clipboard for BLB MultiVerse copy.'
+    }).finally(() => {
+      blbSuiteOffscreenCreating = null;
+    });
+  }
+  await blbSuiteOffscreenCreating;
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type !== 'blbSuiteWriteClipboardHtml') return;
+
+  (async () => {
+    try {
+      await ensureBlbSuiteOffscreenClipboard();
+      const result = await chrome.runtime.sendMessage({
+        target: 'blbSuiteOffscreenClipboard',
+        plain: String(message.plain || ''),
+        html: String(message.html || '')
+      });
+      sendResponse(result || {ok:false, reason:'no-result'});
+    } catch (error) {
+      sendResponse({
+        ok:false,
+        reason:String(error?.message || error || 'offscreen-clipboard-failed')
+      });
+    }
+  })();
+
+  return true;
+});
