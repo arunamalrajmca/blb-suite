@@ -212,6 +212,153 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
     if (!redirectBlbNet()) redirectBibleSite();
   });
 }
+// ---------- BLB MultiVerse native-copy hyperlink enhancement ----------
+// Augment BLB's native MultiVerse clipboard operation with text/html.
+// IMPORTANT: preserve BLB's native Copy button/payload while enriching the clipboard with HTML.
+if (
+  location.hostname === "www.blueletterbible.org" &&
+  /\/tools\/MultiVerse\.cfm$/i.test(location.pathname)
+) {
+  document.addEventListener("copy", e => {
+	if (!e.clipboardData) return;
+
+    try {
+      const buttons = Array.from(
+        document.querySelectorAll("#copyButton, #copyByVerseButton")
+      );
+
+      const nativeButton = buttons.find(button => {
+        const text = button.getAttribute("data-clipboard-text") || "";
+        if (!text) return false;
+
+        const style = window.getComputedStyle(button);
+        return style.display !== "none" &&
+          style.visibility !== "hidden";
+      }) || buttons.find(button =>
+        !!(button.getAttribute("data-clipboard-text") || "")
+      );
+
+      
+	  const plain = nativeButton?.getAttribute("data-clipboard-text") || "";
+
+console.log("[BLB Suite] MultiVerse hyperlink diagnostic:", {
+  suiteEnabled,
+  nativeButton: nativeButton?.id || null,
+  plainLength: plain.length,
+  plain
+});
+
+if (!plain) return;
+
+     console.log("[BLB Suite] MultiVerse hyperlink stage 1: starting");
+
+const allLinks = Array.from(document.querySelectorAll("a[href]"));
+
+console.log("[BLB Suite] MultiVerse hyperlink stage 2: links found", {
+  total: allLinks.length
+});
+
+const verseLinks = allLinks
+  .map(a => {
+    const href = a.href || "";
+    const match = href.match(
+      /^https:\/\/www\.blueletterbible\.org\/kjv\/([^/]+)\/(\d+)\/(\d+)(?:\/|$)/i
+    );
+
+    if (!match) return null;
+
+    return {
+      urlKey: String(match[1]).toLowerCase(),
+      chapter: Number(match[2]),
+      verse: Number(match[3]),
+      href
+    };
+  })
+  .filter(Boolean);
+
+console.log("[BLB Suite] MultiVerse hyperlink stage 3: verse links", {
+  count: verseLinks.length,
+  verseLinks
+});
+
+let html = plain
+  .replace(/&/g, "&amp;")
+  .replace(/</g, "&lt;")
+  .replace(/>/g, "&gt;")
+  .replace(/\r?\n/g, "<br>");
+
+console.log("[BLB Suite] MultiVerse hyperlink stage 4: HTML created");
+
+const referencePattern =
+  /\(([1-3]\s+)?([A-Za-z]+(?:\s+[A-Za-z]+)*?)\s+(\d+):(\d+)(?:-\d+)?(?:\s+[^)]*)?\)/g;
+
+let hyperlinkCount = 0;
+
+html = html.replace(
+  referencePattern,
+  (whole, number, book, chapter, verse) => {
+    console.log("[BLB Suite] MultiVerse hyperlink stage 5: reference", {
+      whole,
+      number,
+      book,
+      chapter,
+      verse
+    });
+
+    const bookName = `${number || ""}${book}`.trim();
+
+    const resolved = resolveBibleBook(bookName);
+
+    console.log("[BLB Suite] MultiVerse hyperlink stage 6: resolved", {
+      bookName,
+      resolved
+    });
+
+    const urlKey = String(resolved?.urlKey || "").toLowerCase();
+
+    const match = verseLinks.find(link =>
+      link.urlKey === urlKey &&
+      link.chapter === Number(chapter) &&
+      link.verse === Number(verse)
+    );
+
+    console.log("[BLB Suite] MultiVerse hyperlink stage 7: match", {
+      urlKey,
+      match
+    });
+
+    if (!match) return whole;
+
+    hyperlinkCount++;
+
+    return `<a href="${match.href}" style="color:#1155cc;text-decoration:underline;">${whole}</a>`;
+  }
+);
+
+console.log("[BLB Suite] MultiVerse hyperlink stage 8: complete", {
+  hyperlinkCount,
+  html
+});
+e.clipboardData.setData("text/plain", plain);
+e.clipboardData.setData(
+  "text/html",
+  `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`
+);
+e.preventDefault();
+console.log("[BLB Suite] MultiVerse clipboard AFTER setData:", {
+  types: Array.from(e.clipboardData.types),
+  html: e.clipboardData.getData("text/html"),
+  htmlLength: e.clipboardData.getData("text/html").length
+});
+
+console.log("[BLB Suite] MultiVerse hyperlink stage 9: HTML written");
+    } catch (_) {
+      // Leave the native MultiVerse copy operation untouched if enhancement fails.
+    }
+  }, true);
+
+
+}
 
 // ---------- BLB Auto Hyperlinker ----------
 function formatBlbTextToHtml(rawText) {
@@ -229,7 +376,8 @@ function formatBlbTextToHtml(rawText) {
   return `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`;
 }
 
-if (location.hostname.endsWith("blueletterbible.org")) {
+if (location.hostname.endsWith("blueletterbible.org") &&
+    !/(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)$/i.test(location.pathname)) {
   // The copy event must be handled synchronously. Awaiting storage state inside
   // the event handler lets the browser finish its normal copy operation before
   // preventDefault() runs, which loses the HTML clipboard payload used by
@@ -482,7 +630,9 @@ if (location.hostname==="webstersdictionary1828.com") {
 // Suite-generated MultiVerse tabs must never expose BLB's bootstrap/default
 // result set. Keep the document hidden until the requested reference set is
 // actually visible after Retrieve has completed.
-if (location.hostname==="www.blueletterbible.org" && /(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)/i.test(location.pathname)) {
+if (location.hostname==="www.blueletterbible.org" &&
+    /(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)/i.test(location.pathname) &&
+    /[?&]blbSuiteMultiVerse=1(?:&|$)/i.test(location.search)) {
   let multiverseHandoffHidden=false;
   let multiverseRevealTimer=0;
 
@@ -830,8 +980,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
   };
 }
 
-function getContextualBibleReference(selectionText) {
-  const selected = normalizeSelectionText(selectionText);
+function getContextualBibleReference(selectionText) {  const selected = normalizeSelectionText(selectionText);
   if (!selected) return null;
 
   // There is one contextual-reference parser. It receives text reconstructed
