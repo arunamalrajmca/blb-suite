@@ -1,0 +1,30 @@
+name: Temporary Main Build Artifact
+
+on:
+  push:
+    branches:
+      - 'temp/build-main-90c72'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact main-derived source
+        uses: actions/checkout@v4
+      - name: Build extension ZIP
+        run: |
+          mkdir -p dist
+          VERSION="$(node -p "require('./extension/manifest.json').version")"
+          bash scripts/package-release.sh "$VERSION" dist
+          unzip -t "dist/Blue-Letter-Bible-Suite-$VERSION.zip"
+      - name: Upload main build
+        uses: actions/upload-artifact@v4
+        with:
+          name: blb-main-build-90c72
+          path: |
+            dist/Blue-Letter-Bible-Suite-*.zip
+            dist/Blue-Letter-Bible-Suite-*.zip.sha256
+          retention-days: 7
