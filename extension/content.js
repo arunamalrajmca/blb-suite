@@ -246,7 +246,7 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
     if (!text) return null;
 
     const matches=[];
-    const pattern=/((?:[1-3]\s+)?[A-Za-z][A-Za-z.'’]*(?:\s+[A-Za-z][A-Za-z.'’]*){0,4})\s+(\\d+):(\\d+(?:-\\d+)?)/g;
+    const pattern=/((?:[1-3]\s+)?[A-Za-z][A-Za-z.'’]*(?:\s+[A-Za-z][A-Za-z.'’]*){0,4})\s+(\d+):(\d+(?:-\d+)?)/g;
     let match;
     while ((match=pattern.exec(text))) {
       const words=match[1].trim().split(/\s+/);
