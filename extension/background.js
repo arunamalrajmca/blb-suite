@@ -3386,6 +3386,7 @@ function getKjvRangeCandidateVerseIndexes(words, seedLength) {
 
   const candidates = new Set();
   const seenSeeds = new Set();
+  let hasUnindexedSeed = false;
   for (let i = 0; i <= words.length - seedLength; i++) {
     const seedWords = words.slice(i, i + seedLength);
     const seed = seedWords.join(' ');
@@ -3403,9 +3404,19 @@ function getKjvRangeCandidateVerseIndexes(words, seedLength) {
       if (!postings.length) continue;
       if (!anchorPostings || postings.length < anchorPostings.length) anchorPostings = postings;
     }
-    if (!anchorPostings) continue;
+    if (!anchorPostings) {
+      // Without an indexed word in this seed, the compact index cannot prove
+      // that all matching verses are represented. Preserve correctness by
+      // falling back to the complete 31,102-verse corpus for this selection.
+      hasUnindexedSeed = true;
+      continue;
+    }
 
     for (const verseIndex of anchorPostings) candidates.add(verseIndex);
+  }
+
+  if (hasUnindexedSeed && Array.isArray(KJV_CORPUS_VERSES)) {
+    return KJV_CORPUS_VERSES.map((_, index) => index);
   }
   return [...candidates];
 }
