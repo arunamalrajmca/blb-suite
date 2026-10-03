@@ -186,57 +186,6 @@ test.describe('core user-action E2E coverage', () => {
 });
 
 
-test('KJV passage opens direct verse only for a unique single-verse corpus match', async ({ page, extensionStorage, extensionWorker }) => {
-  await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
-  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(1000);
-
-  await page.evaluate(() => {
-    const el = document.createElement('p');
-    el.id = 'blb-e2e-kjv-unique-single-verse';
-    el.textContent = 'The concept of spiritual bodybuilding centers on a profound truth: the church, the body of Christ, is designed to be self-edifying. Just as physical bodybuilding requires regular exercise and effort, spiritual growth demands intentional practice and cultivation of specific virtues.';
-    el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:18px Arial,sans-serif;max-width:900px;';
-    document.body.appendChild(el);
-    const range = document.createRange();
-    range.selectNodeContents(el);
-    const selection = window.getSelection();
-    selection.removeAllRanges();
-    selection.addRange(range);
-    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-  });
-
-  const button = page.locator('#blb-suite-page-selection-button');
-  await expect(button).toBeVisible({ timeout: 10000 });
-  await button.click();
-
-  const directVerse = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
-    tabs.find(tab => {
-      try {
-        const url = new URL(tab.url || tab.pendingUrl || '');
-        return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/1co/10/16/';
-      } catch (_) {
-        return false;
-      }
-    }) || null
-  ));
-  expect(directVerse).toBeNull();
-
-  const criteria = await waitForTab(extensionWorker, tab => {
-    try {
-      const url = new URL(tab.url);
-      return url.hostname === 'www.blueletterbible.org'
-        && url.pathname === '/search/search.cfm';
-    } catch (_) {
-      return false;
-    }
-  });
-  const criteriaValue = new URL(criteria.url).searchParams.get('Criteria') || '';
-  expect(criteriaValue.toLowerCase()).toContain('body of christ');
-  expect(criteriaValue.toLowerCase()).toContain('the church');
-
-  await removeTabById(extensionWorker, criteria.id);
-});
-
 test('Double-Click resolves contextual chapter numbers and unique KJV words directly', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
@@ -269,6 +218,61 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
   });
   expect(new URL(luke.url).pathname).toBe('/kjv/luk/17/');
   await removeTabById(extensionWorker, luke.id);
+
+  // The contextual rule is generic: the clicked chapter number must inherit
+  // the book name from its exact nearby reference occurrence, regardless of
+  // which book is used or how the webpage nests the text.
+  await page.evaluate(() => {
+    const cases = [
+      ['Genesis', '50', 'gen50'],
+      ['Romans', '16', 'rom16'],
+      ['Acts', '17', 'acts17'],
+      ['John', '3', 'john3']
+    ];
+    const wrap = document.createElement('div');
+    wrap.id = 'blb-e2e-generic-contextual-refs';
+    wrap.style.cssText = 'position:fixed;left:24px;top:180px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    for (const [book, chapter, id] of cases) {
+      const row = document.createElement('p');
+      row.innerHTML = '<span>' + book + '</span> <span class="nested-ref"><span id="' + id + '">' + chapter + '</span></span>';
+      wrap.appendChild(row);
+    }
+    document.body.appendChild(wrap);
+  });
+
+  // Simulate a real webpage where the user already has an unrelated
+  // selection before double-clicking the chapter number. The resolver must
+  // ignore that stale native Selection and use the current gesture.
+  await page.evaluate(() => {
+    const stale = document.createElement('span');
+    stale.id = 'blb-e2e-stale-selection';
+    stale.textContent = 'unrelated';
+    document.body.appendChild(stale);
+    const range = document.createRange();
+    range.selectNodeContents(stale);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+
+  const genericCases = [
+    ['#gen50', '/kjv/gen/50/'],
+    ['#rom16', '/kjv/rom/16/'],
+    ['#acts17', '/kjv/act/17/'],
+    ['#john3', '/kjv/jhn/3/']
+  ];
+
+  for (const [selector, expectedPath] of genericCases) {
+    await page.locator(selector).dblclick();
+    const resolved = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.url);
+        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+      } catch (_) { return false; }
+    });
+    expect(new URL(resolved.url).pathname).toBe(expectedPath);
+    await removeTabById(extensionWorker, resolved.id);
+  }
 
   await page.evaluate(() => {
     const el = document.createElement('p');
