@@ -267,7 +267,53 @@ if (location.hostname.endsWith("blueletterbible.org") && !/\/tools\/MultiVerse\.
     };
   }
 
-  // ---------- BLB New Tab ----------
+  
+// ---------- BLB MultiVerse hyperlink-copy enhancement ----------
+// MultiVerse owns the native copy operation. We only augment the HTML
+// clipboard payload after BLB has supplied the plain-text payload.
+// This listener never calls preventDefault() and never stops propagation.
+if (/\/tools\/MultiVerse\.cfm$/i.test(location.pathname)) {
+  document.addEventListener('copy', e => {
+    try {
+      if (!e.clipboardData) return;
+
+      const text = e.clipboardData.getData('text/plain') || '';
+      if (!text) return;
+
+      const refPattern = /\[((?:[1-3]\s*)?[A-Za-z][A-Za-z0-9.]*\s+\d+(?::\d+(?:-\d+)?)?)\s+[A-Za-z0-9]+\]/g;
+      let html = text;
+      let match;
+
+      while ((match = refPattern.exec(text))) {
+        const refText = match[1];
+        const parsed = parseRef(refText);
+        if (!parsed) continue;
+
+        const url = blbUrl(parsed.book, parsed.chapter, parsed.from, parsed.to);
+        if (!url) continue;
+
+        const link = '<a href="' + url +
+          '" style="color:#1155cc;text-decoration:underline;">' +
+          refText + '</a>';
+
+        // Literal replacement avoids dynamically constructed RegExp syntax.
+        html = html.split(refText).join(link);
+      }
+
+      if (html === text) return;
+
+      html = html.replace(/\n/g, '<br>');
+      const payload =
+        '<!DOCTYPE html><html><body><!--StartFragment-->' +
+        '<span style="font-family:Arial,sans-serif;">' +
+        html +
+        '</span><!--EndFragment--></body></html>';
+
+      e.clipboardData.setData('text/html', payload);
+    } catch (_) {}
+  }, false);
+}
+\n// ---------- BLB New Tab ----------
   function modifyLinks(container) {
     container.querySelectorAll("a").forEach(link=>{
       if (!link.href) return;
