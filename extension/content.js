@@ -377,71 +377,94 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     box._blbSuiteTimer=setTimeout(()=>box.remove(),2500);
   }
 
-  function addMultiVerseSuiteCopyButton() {
-    if (!isMultiVersePage()) return;
-    if (document.getElementById("blb-suite-multiverse-copy-links")) return;
+  function installMultiVerseRichNativeCopy() {
+    if (!/\/tools\/MultiVerse\.cfm$/i.test(location.pathname)) return;
 
-    const nativeButton=document.getElementById("copyButton") || document.getElementById("copyByVerseButton");
-    if (!nativeButton || !nativeButton.parentElement) return;
+    const buttons=[
+      document.getElementById("copyButton"),
+      document.getElementById("copyByVerseButton")
+    ].filter(Boolean);
 
-    const button=document.createElement("button");
-    button.id="blb-suite-multiverse-copy-links";
-    button.type="button";
-    button.textContent="Copy with Links";
-    button.title="Copy the native MultiVerse text with Bible-reference hyperlinks. BLB's native Copy button is unchanged.";
-    button.style.cssText="margin-left:6px;";
+    for (const button of buttons) {
+      if (button.dataset.blbSuiteRichDomCopyInstalled==="1") continue;
+      button.dataset.blbSuiteRichDomCopyInstalled="1";
 
-    button.addEventListener("click",event=>{
-      event.preventDefault();
-      event.stopPropagation();
+      button.addEventListener("click",event=>{
+        if (!suiteEnabled) return;
 
-      const source=document.getElementById("copyButton") || document.getElementById("copyByVerseButton");
-      const text=source?.getAttribute("data-clipboard-text") || "";
-      if (!text) {
-        showMultiVerseCopyStatus("No MultiVerse text available.",true);
-        return;
-      }
+        const plain=String(button.getAttribute("data-clipboard-text")||"");
+        if (!plain) return;
 
-      const html=buildMultiVerseClipboardHtml(text);
-      if (!html) {
-        showMultiVerseCopyStatus("No Bible references found.",true);
-        return;
-      }
+        const html=buildMultiVerseClipboardHtml(plain);
+        if (!html) return;
 
-      if (!navigator.clipboard?.write || typeof ClipboardItem==="undefined") {
-        showMultiVerseCopyStatus("Rich clipboard is unavailable.",true);
-        return;
-      }
+        event.preventDefault();
+        event.stopImmediatePropagation();
 
-      // Call clipboard.write() directly from this user click. Do not await
-      // storage or another promise first, because Chromium may require
-      // transient user activation for clipboard writes.
-      let pending;
-      try {
-        const item=new ClipboardItem({
-          "text/plain":new Blob([text],{type:"text/plain"}),
-          "text/html":new Blob([html],{type:"text/html"})
-        });
-        pending=navigator.clipboard.write([item]);
-      } catch (_) {
-        showMultiVerseCopyStatus("Copy failed.",true);
-        return;
-      }
+        const temp=document.createElement("div");
+        temp.contentEditable="true";
+        temp.style.position="fixed";
+        temp.style.left="-10000px";
+        temp.style.top="0";
+        temp.style.width="1px";
+        temp.style.height="1px";
+        temp.style.opacity="0";
+        temp.style.pointerEvents="none";
 
-      Promise.resolve(pending).then(()=>{
-        showMultiVerseCopyStatus("Copied with links.");
-      }).catch(()=>{
-        showMultiVerseCopyStatus("Copy failed.",true);
-      });
-    });
+        let copied=false;
+        const selection=window.getSelection();
+        const previousRanges=[];
 
-    nativeButton.insertAdjacentElement("afterend",button);
+        try {
+          const parsed=new DOMParser().parseFromString(html,"text/html");
+
+          while (parsed.body.firstChild) {
+            temp.appendChild(parsed.body.firstChild);
+          }
+
+          document.body.appendChild(temp);
+
+          if (selection) {
+            for (let i=0;i<selection.rangeCount;i++) {
+              previousRanges.push(selection.getRangeAt(i).cloneRange());
+            }
+
+            selection.removeAllRanges();
+            const range=document.createRange();
+            range.selectNodeContents(temp);
+            selection.addRange(range);
+          }
+
+          temp.focus();
+          copied=document.execCommand("copy");
+
+          console.log("[BLB Suite] MultiVerse rich DOM copy:",{
+            copied,
+            plainLength:plain.length,
+            htmlLength:html.length,
+            links:temp.querySelectorAll("a").length
+          });
+        } catch (error) {
+          console.error("[BLB Suite] MultiVerse rich DOM copy failed:",error);
+        } finally {
+          if (selection) {
+            selection.removeAllRanges();
+            for (const range of previousRanges) {
+              try {
+                selection.addRange(range);
+              } catch (_) {}
+            }
+          }
+          temp.remove();
+        }
+      },true);
+    }
   }
 
   function modifyMultiVerseLinks() {
     if (!isMultiVersePage()) return;
     document.querySelectorAll('a[href*="/kjv/"]').forEach(a=>a.target="_blank");
-    addMultiVerseSuiteCopyButton();
+    installMultiVerseRichNativeCopy();
   }
 
   const process=(root=document)=>{
@@ -638,7 +661,7 @@ if (location.hostname==="webstersdictionary1828.com") {
 // Suite-generated MultiVerse tabs must never expose BLB's bootstrap/default
 // result set. Keep the document hidden until the requested reference set is
 // actually visible after Retrieve has completed.
-if (location.hostname==="www.blueletterbible.org" && /(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)/i.test(location.pathname)) {
+if (location.hostname==="www.blueletterbible.org" && /(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)/i.test(location.pathname) && /[?&]blbSuiteMultiVerse=1(?:&|$)/i.test(location.search)) {
   let multiverseHandoffHidden=false;
   let multiverseRevealTimer=0;
 
