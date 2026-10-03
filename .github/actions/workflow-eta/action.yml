@@ -95,7 +95,7 @@ runs:
           run_started="$(curl -fsSL "${headers[@]}" "$api/runs/$GITHUB_RUN_ID" 2>/dev/null | jq -r '.run_started_at // empty' 2>/dev/null)"
           if [[ -n "$run_started" ]]; then
             start_epoch="$(date -d "$run_started" +%s 2>/dev/null)"
-            now_epoch="$(date +%s)
+            now_epoch="$(date +%s)"
             elapsed=$((now_epoch - start_epoch))
             {
               echo ""
