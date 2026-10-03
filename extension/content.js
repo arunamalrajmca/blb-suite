@@ -479,73 +479,143 @@ if (location.hostname==="webstersdictionary1828.com") {
 }
 
 // ---------- BLB MultiVerse hand-off ----------
+// Suite-generated MultiVerse tabs initially load BLB's normal bootstrap view.
+// Keep that transient/default view invisible until the pending reference set has
+// been handed to BLB. This removes the visible "wrong verses first" flash without
+// changing BLB's own retrieval behavior.
 if (location.hostname==="www.blueletterbible.org" && /(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)/i.test(location.pathname)) {
+  let multiverseHandoffHidden = false;
+  let multiverseHandoffRevealTimer = 0;
+
+  const hidePendingMultiVerseView = () => {
+    if (multiverseHandoffHidden) return;
+    try {
+      document.documentElement.dataset.blbSuiteMultiVersePending = '1';
+      document.documentElement.style.visibility = 'hidden';
+      multiverseHandoffHidden = true;
+      multiverseHandoffRevealTimer = window.setTimeout(() => {
+        revealPendingMultiVerseView();
+      }, 6000);
+    } catch (_) {}
+  };
+
+  const revealPendingMultiVerseView = () => {
+    if (!multiverseHandoffHidden) return;
+    try {
+      document.documentElement.style.visibility = '';
+      delete document.documentElement.dataset.blbSuiteMultiVersePending;
+    } catch (_) {}
+    multiverseHandoffHidden = false;
+    if (multiverseHandoffRevealTimer) {
+      clearTimeout(multiverseHandoffRevealTimer);
+      multiverseHandoffRevealTimer = 0;
+    }
+  };
+
+  hidePendingMultiVerseView();
+
   async function processPendingMultiVerseRefs() {
-    if (!(await isSuiteEnabled())) return false;
+    if (!(await isSuiteEnabled())) {
+      revealPendingMultiVerseView();
+      return false;
+    }
+
     const response = await chrome.runtime.sendMessage({type:'blbSuiteGetPendingMultiVerseRefs'});
     const refs = response?.refs;
-    if (!Array.isArray(refs) || refs.length < 2) return false;
+    if (!Array.isArray(refs) || refs.length < 2) {
+      revealPendingMultiVerseView();
+      return false;
+    }
 
-    const heading=Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
-      .find(el=>/^\s*multiverse retrieval\s*$/i.test((el.innerText||el.textContent||"").trim()));
-    if (!heading) return false;
+    const values=refs.map(r=>`${r.book} ${r.chapter}:${r.from}${r.to && r.to!==r.from ? "-"+r.to : ""}`);
+    const combined=values.join("; ");
 
-    // Do not scope the inputs to the heading's nearest ancestor: on BLB the
-    // ten MultiVerse boxes can be split across nested containers, and that
-    // approach can find only the final box. Instead, collect text controls
-    // in document order between the MultiVerse heading and the next
-    // "Advanced Multiverse Search Options" heading.
-    const advancedHeading=Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
-      .find(el=>/^\s*advanced multiverse search options\s*$/i.test((el.innerText||el.textContent||"").trim()));
-    const allControls=Array.from(document.querySelectorAll("input[type=text], textarea, input:not([type])"));
-    const beforeAdvanced=el=>!advancedHeading || !!(advancedHeading.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING);
-    const afterHeading=el=>!!(heading.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
-    const verseControls=allControls.filter(el=>afterHeading(el) && beforeAdvanced(el)).slice(0,10);
-    if (!verseControls.length) return false;
+    // BLB renders the controls asynchronously. Poll briefly for the actual
+    // controls instead of imposing a fixed 700 ms delay on every hand-off.
+    const started=Date.now();
+    let heading=null;
+    let advancedHeading=null;
+    let verseControls=[];
+    let retrieve=null;
 
-    const retrieve=Array.from(document.querySelectorAll("button, input[type=submit], input[type=button], a"))
-      .find(x=>/^\s*retrieve\s*$/i.test((x.innerText||x.value||"").trim()) &&
-        (!advancedHeading || !!(advancedHeading.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_PRECEDING)));
-    if (!retrieve) return false;
+    while (Date.now()-started < 4000) {
+      heading=Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
+        .find(el=>/^\s*multiverse retrieval\s*$/i.test((el.innerText||el.textContent||"").trim()));
+
+      if (heading) {
+        advancedHeading=Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
+          .find(el=>/^\s*advanced multiverse search options\s*$/i.test((el.innerText||el.textContent||"").trim()));
+
+        const allControls=Array.from(document.querySelectorAll("input[type=text], textarea, input:not([type])"));
+        const beforeAdvanced=el=>!advancedHeading || !!(advancedHeading.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING);
+        const afterHeading=el=>!!(heading.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+        verseControls=allControls.filter(el=>afterHeading(el) && beforeAdvanced(el)).slice(0,10);
+
+        retrieve=Array.from(document.querySelectorAll("button, input[type=submit], input[type=button], a"))
+          .find(x=>/^\s*retrieve\s*$/i.test((x.innerText||x.value||"").trim()) &&
+            (!advancedHeading || !!(advancedHeading.compareDocumentPosition(x) & Node.DOCUMENT_POSITION_PRECEDING)));
+
+        if (verseControls.length && retrieve) break;
+      }
+
+      await new Promise(resolve=>setTimeout(resolve,50));
+    }
+
+    if (!verseControls.length || !retrieve) {
+      revealPendingMultiVerseView();
+      return false;
+    }
 
     const setNativeValue=(el,value)=>{
       const proto=el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
       const setter=Object.getOwnPropertyDescriptor(proto,"value")?.set;
       if (setter) setter.call(el,value); else el.value=value;
-      // BLB's MultiVerse controls can have listeners that react to keyboard/input
-      // events. Fire the same family of events a real user entry would generate.
       for (const type of ["input","change","keyup","blur"]) {
         el.dispatchEvent(new Event(type,{bubbles:true}));
       }
     };
 
-    // BLB's Retrieve handler reads the primary MultiVerse control. The clean
-    // 5.2.31 hand-off used a semicolon-delimited list there; the later slot
-    // experiment could populate visible boxes but BLB still submitted only
-    // the first parsed reference. Revert the hand-off itself to the known
-    // 5.2.31 contract and verify that the complete list survives before the
-    // Retrieve click.
+    // BLB's Retrieve handler reads the primary MultiVerse control. Keep the
+    // established semicolon-delimited hand-off contract.
     verseControls.forEach(c=>setNativeValue(c,""));
-    const values=refs.map(r=>`${r.book} ${r.chapter}:${r.from}${r.to && r.to!==r.from ? "-"+r.to : ""}`);
-    const combined=values.join("; ");
     const primary=verseControls[0];
-    if (!combined || !primary) return false;
+    if (!combined || !primary) {
+      revealPendingMultiVerseView();
+      return false;
+    }
+
     setNativeValue(primary,combined);
     primary.setAttribute("value",combined);
 
-    await new Promise(resolve=>setTimeout(resolve,750));
-    const actual=String(primary.value||primary.getAttribute("value")||"").trim();
-    if (actual!==combined) return false;
+    // Confirm the value has actually reached BLB's control. Poll for the
+    // state change rather than waiting a fixed 750 ms.
+    const valueStarted=Date.now();
+    let actual='';
+    while (Date.now()-valueStarted < 1000) {
+      actual=String(primary.value||primary.getAttribute("value")||"").trim();
+      if (actual===combined) break;
+      await new Promise(resolve=>setTimeout(resolve,25));
+    }
+    if (actual!==combined) {
+      revealPendingMultiVerseView();
+      return false;
+    }
 
     await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
     retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
     retrieve.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true,view:window}));
     retrieve.click();
+
+    // Let BLB begin replacing the bootstrap content before making the result
+    // visible. The short delay is only after the real Retrieve action, not
+    // before the hand-off.
+    setTimeout(revealPendingMultiVerseView,100);
     return true;
   }
-  const tryProcess=()=>processPendingMultiVerseRefs().catch(()=>{});
-  if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",()=>setTimeout(tryProcess,700));
-  else setTimeout(tryProcess,700);
+
+  const tryProcess=()=>processPendingMultiVerseRefs().catch(()=>revealPendingMultiVerseView());
+  if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",tryProcess,{once:true});
+  else void tryProcess();
 }
 
 
