@@ -1,0 +1,117 @@
+name: BLB Suite Workflow ETA
+description: Show a historical workflow-duration ETA at job start and actual elapsed time at job completion.
+inputs:
+  phase:
+    description: "start or finish"
+    required: true
+    default: start
+  samples:
+    description: "Number of completed workflow runs used for the median estimate"
+    required: false
+    default: "12"
+runs:
+  using: composite
+  steps:
+    - name: Calculate workflow ETA
+      shell: bash
+      env:
+        ETA_PHASE: ${{ inputs.phase }}
+        ETA_SAMPLES: ${{ inputs.samples }}
+        ETA_TOKEN: ${{ github.token }}
+      run: |
+        set +e
+
+        api="https://api.github.com/repos/${GITHUB_REPOSITORY}/actions"
+        headers=(-H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2026-03-10")
+        if [[ -n "$ETA_TOKEN" ]]; then
+          headers+=(-H "Authorization: Bearer $ETA_TOKEN")
+        fi
+
+        workflow_file="${GITHUB_WORKFLOW_REF#*/.github/workflows/}"
+        workflow_file="${workflow_file%%@*}"
+
+        format_duration() {
+          local seconds="${1%.*}"
+          if (( seconds < 60 )); then
+            printf '%ds' "$seconds"
+          elif (( seconds < 3600 )); then
+            printf '%dm %02ds' "$((seconds / 60))" "$((seconds % 60))"
+          else
+            printf '%dh %02dm' "$((seconds / 3600))" "$(((seconds % 3600) / 60))"
+          fi
+        }
+
+        if [[ "$ETA_PHASE" == "start" ]]; then
+          response="$(curl -fsSL "${headers[@]}" "$api/workflows/$workflow_file/runs?status=completed&per_page=$ETA_SAMPLES" 2>/dev/null)"
+          if [[ -z "$response" ]]; then
+            response="$(curl -fsSL -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2026-03-10" "$api/workflows/$workflow_file/runs?status=completed&per_page=$ETA_SAMPLES" 2>/dev/null)"
+          fi
+          if [[ -n "$response" ]]; then
+            durations="$(printf '%s' "$response" | jq -r --argjson current "$GITHUB_RUN_ID" '
+              [.workflow_runs[]
+               | select(.id != $current)
+               | select(.run_started_at != null and .updated_at != null)
+               | ((.updated_at | fromdateiso8601) - (.run_started_at | fromdateiso8601))
+               | select(. > 0)] | sort | .[]
+            ' 2>/dev/null)"
+          fi
+
+          median="$(printf '%s\n' "$durations" | awk '
+            NF { a[++n]=$1 }
+            END {
+              if (!n) exit 1
+              if (n % 2) print a[(n+1)/2]
+              else print (a[n/2]+a[n/2+1])/2
+            }
+          ' 2>/dev/null)"
+
+          run_started="$(date +%s)"
+          if [[ -n "$median" ]]; then
+            eta_epoch="$(awk -v now="$run_started" -v med="$median" 'BEGIN { printf "%.0f", now + med }')"
+            eta_utc="$(date -u -d "@$eta_epoch" '+%Y-%m-%d %H:%M:%S UTC')"
+            estimate="$(format_duration "$median")"
+            count="$(printf '%s\n' "$durations" | awk 'NF{n++} END{print n+0}')"
+            {
+              echo "## ⏱ Workflow ETA"
+              echo ""
+              echo "**Workflow:** $GITHUB_WORKFLOW  "
+              echo "**Run:** #$GITHUB_RUN_NUMBER (attempt $GITHUB_RUN_ATTEMPT)  "
+              echo "**Historical median:** $estimate, based on $count completed runs  "
+              echo "**Estimated completion:** $eta_utc  "
+              echo ""
+              echo "_This is an estimate from recent completed runs; it is not a workflow timeout or guarantee._"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "⏱ Workflow ETA: historical median $estimate; estimated completion $eta_utc"
+          else
+            {
+              echo "## ⏱ Workflow ETA"
+              echo ""
+              echo "**Workflow:** $GITHUB_WORKFLOW  "
+              echo "**Run:** #$GITHUB_RUN_NUMBER (attempt $GITHUB_RUN_ATTEMPT)  "
+              echo "**Historical median:** unavailable (not enough completed runs yet)  "
+              echo ""
+              echo "_ETA will become available after this workflow has completed enough runs to establish a baseline._"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "⏱ Workflow ETA: historical baseline unavailable"
+          fi
+        else
+          run_started="$(curl -fsSL "${headers[@]}" "$api/runs/$GITHUB_RUN_ID" 2>/dev/null | jq -r '.run_started_at // empty' 2>/dev/null)"
+          if [[ -z "$run_started" ]]; then
+            run_started="$(curl -fsSL -H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2026-03-10" "$api/runs/$GITHUB_RUN_ID" 2>/dev/null | jq -r '.run_started_at // empty' 2>/dev/null)"
+          fi
+          if [[ -n "$run_started" ]]; then
+            start_epoch="$(date -d "$run_started" +%s 2>/dev/null)"
+            now_epoch="$(date +%s)"
+            elapsed=$((now_epoch - start_epoch))
+            {
+              echo ""
+              echo "### ⏱ Workflow timing at job completion"
+              echo ""
+              echo "**Workflow elapsed time at this job:** $(format_duration "$elapsed")  "
+              echo "**Completed:** $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "⏱ Workflow elapsed time: $(format_duration "$elapsed")"
+          else
+            echo "⏱ Workflow elapsed time unavailable." >> "$GITHUB_STEP_SUMMARY"
+          fi
+        fi
