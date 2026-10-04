@@ -488,6 +488,23 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     if (!a) return;
     e.preventDefault(); e.stopImmediatePropagation(); window.open(a.href,"_blank");
   },true);
+  // BLB result pages and MultiVerse use their own click handlers on verse
+  // anchors. Setting target="_blank" alone is not reliable because BLB can
+  // subsequently handle the click itself. Capture the click and explicitly
+  // open the verse in a new tab for the same links the New Tab feature marks.
+  document.addEventListener("click", e => {
+    if (!suiteEnabled) return;
+    const a = e.target.closest?.('a[href*="/kjv/"]');
+    if (!a || !a.href) return;
+
+    const inMultiVerse = /\/tools\/MultiVerse\.cfm/i.test(location.pathname);
+    const inVerseContainer = !!a.closest('div[id^="bVerse_"]');
+    if (!inMultiVerse && !inVerseContainer) return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    window.open(a.href, "_blank");
+  }, true);
   if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",process);
   else process();
   }
