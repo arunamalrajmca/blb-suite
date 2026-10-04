@@ -292,3 +292,39 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
   expect(new URL(verse.url).pathname).toBe('/kjv/1ti/1/13/');
   await removeTabById(extensionWorker, verse.id);
 });
+
+test('Double-Click resolves references through custom and framework-generated DOM containers', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const host = document.createElement('div');
+    host.id = 'blb-e2e-custom-dom-context';
+    host.style.cssText = 'position:fixed;left:24px;top:320px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    host.innerHTML = [
+      '<article-card><span>Genesis</span> <ref-token><strong id="custom-gen50">50</strong></ref-token></article-card>',
+      '<framework-line><span>Romans</span> <inline-ref><em id="custom-rom16">16</em></inline-ref></framework-line>',
+      '<x-text-row><span>Acts</span> <x-reference><b id="custom-acts17">17</b></x-reference></x-text-row>'
+    ].join('');
+    document.body.appendChild(host);
+  });
+
+  const cases = [
+    ['#custom-gen50', '/kjv/gen/50/'],
+    ['#custom-rom16', '/kjv/rom/16/'],
+    ['#custom-acts17', '/kjv/act/17/']
+  ];
+
+  for (const [selector, expectedPath] of cases) {
+    await page.locator(selector).dblclick();
+    const resolved = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.url);
+        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+      } catch (_) { return false; }
+    });
+    expect(new URL(resolved.url).pathname).toBe(expectedPath);
+    await removeTabById(extensionWorker, resolved.id);
+  }
+});
