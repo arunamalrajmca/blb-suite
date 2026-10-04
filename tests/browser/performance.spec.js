@@ -29,15 +29,24 @@ async function selectReference(page, id) {
 
 async function getBlbTabs(extensionWorker) {
   return extensionWorker.evaluate(async () => {
-    const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
-    return tabs.map(tab => ({id:tab.id, url:tab.url || tab.pendingUrl || '', active:!!tab.active}));
+    // chrome.tabs.query({url}) matches the committed URL only. A newly
+    // created BLB tab can temporarily have only pendingUrl, so query all
+    // tabs and filter against both URL fields.
+    const tabs = await chrome.tabs.query({});
+    return tabs
+      .map(tab => ({
+        id: tab.id,
+        url: tab.url || '',
+        pendingUrl: tab.pendingUrl || '',
+        effectiveUrl: tab.url || tab.pendingUrl || '',
+        active: !!tab.active
+      }))
+      .filter(tab => /^(?:https?:\/\/)?(?:www\.)?blueletterbible\.org\//i.test(tab.effectiveUrl));
   });
 }
 
 async function closeBlbTabs(extensionWorker) {
-  const tabs = await extensionWorker.evaluate(async () =>
-    chrome.tabs.query({url:'https://www.blueletterbible.org/*'})
-  );
+  const tabs = await getBlbTabs(extensionWorker);
   const ids = tabs.map(tab => tab.id).filter(id => Number.isInteger(id));
   if (ids.length) await extensionWorker.evaluate(idsToRemove => chrome.tabs.remove(idsToRemove), ids);
   return ids.length;
@@ -206,8 +215,8 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     const getOpened = () => getBlbTabs(extensionWorker).then(tabs =>
       tabs.filter(tab => !tabIdsBefore.has(tab.id))
     );
-    const isCriteria = tab => /blueletterbible\.org\/search\/search\.cfm\?Criteria=/i.test(tab.url);
-    const isMultiVerse = tab => /blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm\?.*blbSuiteMultiVerse=1)/i.test(tab.url);
+    const isCriteria = tab => /blueletterbible\.org\/search\/search\.cfm\?Criteria=/i.test(tab.effectiveUrl);
+    const isMultiVerse = tab => /blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm\?.*blbSuiteMultiVerse=1)/i.test(tab.effectiveUrl);
 
     await expect.poll(
       async () => (await getOpened()).some(isMultiVerse),
@@ -228,8 +237,8 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     expect(criteriaTab).toBeTruthy();
 
     // URL correctness is part of the populated-state check.
-    expect(new URL(criteriaTab.url).searchParams.get('Criteria')).toBeTruthy();
-    expect(multiVerseTab.url).toMatch(/blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm)/i);
+    expect(new URL(criteriaTab.effectiveUrl).searchParams.get('Criteria')).toBeTruthy();
+    expect(multiVerseTab.effectiveUrl).toMatch(/blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm)/i);
 
     const handoffMs = Date.now() - started;
     await writeSample(scenario, handoffMs, { firstTabMs, secondTabMs });
