@@ -42,17 +42,17 @@ jobs:
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: node regression-suite/tests/run-regression.mjs extension --group=${{ matrix.group }}
+      - name: ⏱ Workflow ETA — finish
+        if: ${{ always() }}
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: finish
 
   regression-gate-summary:
     name: regression-gate
     needs: regression-gate
     if: ${{ always() }}
     runs-on: ubuntu-latest
-      - name: ⏱ Workflow ETA — finish
-        if: ${{ always() }}
-        uses: $/.github/actions/workflow-eta
-        with:
-          phase: finish
     permissions:
       statuses: write
     steps:
