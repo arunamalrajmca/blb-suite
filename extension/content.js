@@ -222,6 +222,7 @@ if (
   /\/tools\/MultiVerse\.cfm$/i.test(location.pathname)
 ) {
   document.addEventListener("copy", e => {
+    if (!suiteEnabled) return;
 	if (!e.clipboardData) return;
 
     try {
