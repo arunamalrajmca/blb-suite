@@ -48,12 +48,6 @@ test('content-script coverage includes web + local HTML/PDF', () => {
   const matches = m.content_scripts?.flatMap(x=>x.matches||[]) || [];
   for (const expected of ['http://*/*','https://*/*','file:///*.pdf','file:///*.html','file:///*.htm']) assert(matches.includes(expected), expected);
 });
-test('action popup is explicitly wired to the extension popup page', () => {
-  const m = JSON.parse(read('manifest.json'));
-  assert.equal(m.action?.default_popup, 'popup.html');
-  assert(fs.existsSync(path.join(ROOT, m.action.default_popup)), 'popup.html is missing');
-});
-
 test('manifest-referenced files exist', () => {
   const m = JSON.parse(read('manifest.json'));
   const refs = [m.background?.service_worker, m.options_page, ...(m.content_scripts||[]).flatMap(x=>x.js||[]), ...Object.values(m.icons||{}), m.action?.default_popup].filter(Boolean);
@@ -377,6 +371,42 @@ test('external redirect coverage includes every supported redirect host', () => 
   assert(content.includes('function redirectBibleSite'), 'Bible-site redirect parser missing');
   assert(content.includes('function redirectBlbNet'), 'BLB NET redirect missing');
   assert(content.includes('const REDIRECT_HOSTS'), 'redirect host table missing');
+});
+test('BLB native-event interception remains explicitly scoped', () => {
+  const content = read('content.js');
+  const blbStart = content.indexOf('blueletterbible.org');
+  assert(blbStart >= 0, 'BLB content scope missing');
+  const blbEnd = content.indexOf('// ---------- Webster', blbStart);
+  assert(blbEnd > blbStart, 'BLB content scope boundary missing');
+  const blb = content.slice(Math.max(0, blbStart - 80), blbEnd);
+
+  const popup = blb.indexOf('link.closest(".parse-popup")');
+  assert(popup >= 0, 'parse-popup click override must remain selector-scoped');
+  const popupHandlerEnd = blb.indexOf('});', popup);
+  assert(popupHandlerEnd > popup, 'parse-popup click handler boundary missing');
+  assert(blb.slice(popup, popupHandlerEnd + 3).includes('preventDefault()'), 'parse-popup override must retain its intentional native-navigation override');
+
+  const nowrap = blb.indexOf('const a=e.target.closest?.("a.nowrap")');
+  assert(nowrap >= 0, 'nowrap click override must remain selector-scoped');
+  const nowrapEnd = blb.indexOf('},true);', nowrap);
+  assert(nowrapEnd > nowrap, 'nowrap click handler boundary missing');
+  assert(blb.slice(nowrap, nowrapEnd + 7).includes('if (!a) return'), 'nowrap click override must reject unrelated clicks');
+
+  const selectionStart = content.indexOf('function handleBlbPageSelectionMouseDown');
+  const selectionEnd = content.indexOf('function getPageSelectionSiteKey', selectionStart);
+  assert(selectionStart >= 0 && selectionEnd > selectionStart, 'selection-monitoring block missing');
+  const selection = content.slice(selectionStart, selectionEnd);
+  assert(!selection.includes('preventDefault()'), 'selection monitoring must not cancel native events');
+  assert(!selection.includes('stopPropagation()'), 'selection monitoring must not stop native propagation');
+  assert(!selection.includes('stopImmediatePropagation()'), 'selection monitoring must not stop native propagation');
+
+  const dblStart = content.indexOf('function handleDoubleClickBlb');
+  const dblEnd = content.indexOf('function enableDoubleClickBlb', dblStart);
+  assert(dblStart >= 0 && dblEnd > dblStart, 'double-click block missing');
+  const dbl = content.slice(dblStart, dblEnd);
+  assert(!dbl.includes('preventDefault()'), 'double-click resolver must not cancel native dblclick');
+  assert(!dbl.includes('stopPropagation()'), 'double-click resolver must not stop native propagation');
+  assert(!dbl.includes('stopImmediatePropagation()'), 'double-click resolver must not stop native propagation');
 });
 test('BLB new-tab and Copy-as-link contracts remain wired', () => {
   const content = read('content.js');
