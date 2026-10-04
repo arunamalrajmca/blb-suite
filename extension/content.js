@@ -437,8 +437,19 @@ if (location.hostname.endsWith("blueletterbible.org") &&
 
   const process=(root=document)=>{
     if (!suiteEnabled) return;
+
+    // MutationObserver can receive the newly-created <a> itself rather than
+    // its containing popup/verse block. Process that anchor through its
+    // relevant ancestor so dynamically inserted BLB links get the same
+    // New Tab treatment as links present during the initial scan.
+    if (root.matches?.("a[href]")) {
+      const container = root.closest?.('div[id^="bVerse_"], .parse-popup');
+      if (container) modifyLinks(container);
+    }
+
     if (root.matches?.('div[id^="bVerse_"], .parse-popup')) modifyLinks(root);
     root.querySelectorAll?.('div[id^="bVerse_"], .parse-popup').forEach(modifyLinks);
+
     if (location.href.includes("MultiVerse.cfm")) {
       if (root.matches?.('a[href*="/kjv/"]')) root.target="_blank";
       root.querySelectorAll?.('a[href*="/kjv/"]').forEach(a=>a.target="_blank");
