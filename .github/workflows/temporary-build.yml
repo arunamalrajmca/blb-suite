@@ -1,0 +1,36 @@
+name: Temporary Build 99
+
+on:
+  push:
+    branches:
+      - 'tmp/build-pr99-test-20261004'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Build extension ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          VERSION="$(node -p "require('./extension/manifest.json').version")"
+          ZIP="dist/Blue-Letter-Bible-Suite-99-${VERSION}.zip"
+          cd extension
+          zip -r "../$ZIP" .
+          cd ..
+          unzip -t "$ZIP"
+          sha256sum "$ZIP" | tee "$ZIP.sha256"
+      - name: Upload ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: blb-test-build-99
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          retention-days: 7
