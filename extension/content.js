@@ -37,7 +37,10 @@ async function blbSuiteAccessAllowed() {
 // a later popup toggle unable to activate an already-open page reliably.
 // Local-file support remains restricted to PDF/HTML/HTM by the manifest.
 
-let suiteEnabled = true;
+// Fail closed until the master setting has been loaded. This prevents Suite
+// event handlers from affecting native page behavior during the brief startup
+// window before chrome.storage.local resolves.
+let suiteEnabled = false;
 let doubleClickBlbEnabled = false;
 let suiteSettingsReady = false;
 
@@ -49,7 +52,9 @@ const suiteSettingsReadyPromise = chrome.storage.local.get({masterEnabled:true, 
   suiteSettingsReady = true;
   return suiteEnabled;
 }).catch(() => {
-  suiteEnabled = true;
+  // If the setting cannot be read, fail closed so Suite never alters native
+  // page behavior without confirmed permission from the master setting.
+  suiteEnabled = false;
   suiteSettingsReady = true;
   return suiteEnabled;
 });
@@ -220,7 +225,10 @@ if (
   /\/tools\/MultiVerse\.cfm$/i.test(location.pathname)
 ) {
   document.addEventListener("copy", e => {
-	if (!e.clipboardData) return;
+    // MultiVerse Copy-as-link is a Suite enhancement. When Suite is OFF,
+    // leave BLB's native clipboard operation completely untouched.
+    if (!suiteSettingsReady || !suiteEnabled) return;
+    if (!e.clipboardData) return;
 
     try {
       const buttons = Array.from(
