@@ -59,6 +59,21 @@ jobs:
             git worktree add "$RUNNER_TEMP/blb-baseline" v5.2.51.43
           fi
 
+      - name: Detect runtime changes
+        id: runtime
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch origin "$PR_BASE_SHA" --depth=1
+          changed="$(git diff --name-only "$PR_BASE_SHA"...HEAD)"
+          if printf '%s\n' "$changed" | grep -Eq '^(extension/|tests/browser/|tests/e2e/|scripts/compare-performance\.mjs$|package(-lock)?\.json$|playwright\.config\.)'; then
+            echo "runtime_changed=true" >> "$GITHUB_OUTPUT"
+            echo "Runtime/performance-relevant files changed; run measured performance qualification."
+          else
+            echo "runtime_changed=false" >> "$GITHUB_OUTPUT"
+            echo "CI-only change; measured performance qualification is not applicable."
+          fi
       - name: Package main + 76 test ZIP
         run: |
           mkdir -p "$RUNNER_TEMP/blb-test-build"
@@ -71,6 +86,7 @@ jobs:
           sha256sum "$ZIP" | tee "$ZIP.sha256"
         
       - name: Benchmark baseline and candidate (interleaved)
+        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
         env:
           BLB_EXPECTED_VERSION: 5.2.51.46
           BLB_BASELINE_EXTENSION_PATH: ${{ runner.temp }}/blb-baseline/extension
@@ -95,6 +111,7 @@ jobs:
           done
 
       - name: Require measured performance qualification
+        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
         env:
           BLB_PERF_MIN_TARGETED_IMPROVEMENT: 0.03
           BLB_PERF_MAX_SELECTION_REGRESSION: 0.10
