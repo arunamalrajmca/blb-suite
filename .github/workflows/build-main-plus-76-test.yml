@@ -1,9 +1,10 @@
-name: Temporary Main + 76 Test Build
+name: Build Main
 
 on:
   push:
     branches:
-      - 'perf/kjv-range-index'
+      - 'main'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -16,29 +17,26 @@ jobs:
         uses: $/.github/actions/workflow-eta
         with:
           phase: start
-      - name: Checkout exact branch
+      - name: Checkout Main
         uses: actions/checkout@v4
-      - name: Build test ZIP
+      - name: Build Main ZIP
         run: |
           mkdir -p dist
           VERSION="$(node -p "require('./extension/manifest.json').version")"
-          ZIP="dist/Blue-Letter-Bible-Suite-main-plus-76-${VERSION}.zip"
+          ZIP="dist/Blue-Letter-Bible-Suite-main-${VERSION}.zip"
           cd extension
           zip -r "../$ZIP" .
           cd ..
           unzip -t "$ZIP"
           sha256sum "$ZIP" | tee "$ZIP.sha256"
-      - name: Upload test ZIP
+      - name: Upload Main ZIP
         uses: actions/upload-artifact@v4
         with:
-          name: blb-main-plus-76-test-build
+          name: blb-main-build
           path: |
             dist/*.zip
             dist/*.sha256
           retention-days: 7
-
-# Triggered temporary build for main + PR 76 test packaging.
-
       - name: ⏱ Workflow ETA — finish
         if: ${{ always() }}
         uses: $/.github/actions/workflow-eta
