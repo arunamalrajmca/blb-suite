@@ -250,7 +250,7 @@ async function saveStudySessions(sessions, extra = {}) {
 }
 
 async function getStudySessions() {
-  const data = await chrome.storage.local.get({studySessions:[], currentStudySessionId:null});
+  const data = await chrome.storage.local.get({studySessions:[], currentStudySessionId:null, studyTopics:[]});
   const cleaned = sanitizeStudySessions(Array.isArray(data.studySessions) ? data.studySessions : []);
   if (cleaned.changed) await chrome.storage.local.set({studySessions:cleaned.sessions});
   return {
