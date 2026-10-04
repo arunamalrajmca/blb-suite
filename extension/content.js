@@ -37,7 +37,7 @@ async function blbSuiteAccessAllowed() {
 // a later popup toggle unable to activate an already-open page reliably.
 // Local-file support remains restricted to PDF/HTML/HTM by the manifest.
 
-let suiteEnabled = true;
+let suiteEnabled = false;
 let doubleClickBlbEnabled = false;
 let suiteSettingsReady = false;
 
@@ -49,7 +49,9 @@ const suiteSettingsReadyPromise = chrome.storage.local.get({masterEnabled:true, 
   suiteSettingsReady = true;
   return suiteEnabled;
 }).catch(() => {
-  suiteEnabled = true;
+  // Fail closed if the master setting cannot be read. A storage failure must
+  // never temporarily activate Suite features while the extension is meant to be OFF.
+  suiteEnabled = false;
   suiteSettingsReady = true;
   return suiteEnabled;
 });
