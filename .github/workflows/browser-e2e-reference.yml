@@ -71,6 +71,11 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 14
+      - name: ⏱ Workflow ETA — finish
+        if: ${{ always() }}
+        uses: $/.github/actions/workflow-eta
+        with:
+          phase: finish
 
 
   browser-e2e-features:
@@ -111,14 +116,14 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 14
-
-  browser-e2e-summary:
-    name: browser-e2e
       - name: ⏱ Workflow ETA — finish
         if: ${{ always() }}
         uses: $/.github/actions/workflow-eta
         with:
           phase: finish
+
+  browser-e2e-summary:
+    name: browser-e2e
     needs:
       - browser-e2e
       - browser-e2e-features
