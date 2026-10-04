@@ -42,7 +42,7 @@ async function getBlbTabs(extensionWorker) {
         // pendingUrl already contains the BLB destination. Prefer a BLB URL
         // from either field so the benchmark does not mistake an in-flight
         // tab for a missing handoff.
-        effectiveUrl: /blueletterbible\\.org\\//i.test(tab.url || '')
+        effectiveUrl: /blueletterbible\.org\//i.test(tab.url || '')
           ? (tab.url || '')
           : (tab.pendingUrl || tab.url || ''),
         active: !!tab.active
