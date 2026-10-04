@@ -29,6 +29,18 @@ const candidateSamples = readSamples(process.argv[3]);
 const baseline = summarize(baselineSamples);
 const candidate = summarize(candidateSamples);
 
+function scenarioMedianImprovement(scenario, field = 'handoffMs') {
+  const before = baselineSamples.filter(s => s.scenario === scenario).map(s => s[field]);
+  const after = candidateSamples.filter(s => s.scenario === scenario).map(s => s[field]);
+  if (!before.length || before.length !== after.length) throw new Error(`Mismatched ${scenario} sample counts for ${field}`);
+  if (before.some(value => typeof value !== 'number') || after.some(value => typeof value !== 'number')) {
+    throw new Error(`Missing numeric ${field} samples for ${scenario}`);
+  }
+  const beforeMedian = median(before);
+  const afterMedian = median(after);
+  return beforeMedian > 0 ? (beforeMedian - afterMedian) / beforeMedian : 0;
+}
+
 function pairedMedianImprovement(scenario, field = 'handoffMs') {
   const before = baselineSamples.filter(s => s.scenario === scenario).map(s => s[field]);
   const after = candidateSamples.filter(s => s.scenario === scenario).map(s => s[field]);
@@ -71,13 +83,19 @@ const paragraphSecondTabImprovement = isRangeTarget ? null : pairedMedianImprove
 const paragraphClassifyImprovement = isRangeTarget ? null : pairedMedianImprovement('paragraph-classify');
 
 console.log(`Samples: baseline selection/fresh/reuse ${baseline.selection.count}/${baseline.fresh.count}/${baseline.reuse.count}; PR #8 ${candidate.selection.count}/${candidate.fresh.count}/${candidate.reuse.count}`);
-console.log('Gate calculations use paired per-iteration improvement medians; scenario medians above are descriptive.');
+console.log(requireImprovement
+  ? 'Gate calculations use paired per-iteration improvement medians.'
+  : 'General regression protection uses scenario median comparison; paired medians are reserved for targeted Performance PR qualification.');
 console.log(`Maximum allowed selection-path paired regression: ${(maxSelectionRegression * 100).toFixed(1)}%`);
 console.log(`Performance mode: ${requireImprovement ? 'improvement qualification' : 'main regression protection'}`);
 console.log(`Required existing-tab handoff paired improvement: ${(requireImprovement ? minTargetedImprovement : 0) * 100}%`);
-console.log(`Required paragraph total handoff paired improvement: ${(Number(process.env.BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT || 0.50) * 100).toFixed(1)}%`);
-console.log(`Required paragraph first-tab creation paired improvement: ${(Number(process.env.BLB_PERF_MIN_PARAGRAPH_FIRST_TAB_IMPROVEMENT || 0.50) * 100).toFixed(1)}%`);
-console.log(`Required paragraph second-tab creation paired improvement: ${(Number(process.env.BLB_PERF_MIN_PARAGRAPH_SECOND_TAB_IMPROVEMENT || 0.50) * 100).toFixed(1)}%`);
+if (requireImprovement) {
+  console.log(`Required paragraph total handoff paired improvement: ${(Number(process.env.BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT || 0.50) * 100).toFixed(1)}%`);
+  console.log(`Required paragraph first-tab creation paired improvement: ${(Number(process.env.BLB_PERF_MIN_PARAGRAPH_FIRST_TAB_IMPROVEMENT || 0.50) * 100).toFixed(1)}%`);
+  console.log(`Required paragraph second-tab creation paired improvement: ${(Number(process.env.BLB_PERF_MIN_PARAGRAPH_SECOND_TAB_IMPROVEMENT || 0.50) * 100).toFixed(1)}%`);
+} else {
+  console.log('No paragraph improvement target applies to this PR; only the regression envelope is enforced.');
+}
 console.log('Paragraph classification is diagnostic only; it is no longer a release gate because it intentionally runs after the user-visible tabs are created.');
 console.log(`Maximum allowed paragraph total regression: ${(maxParagraphRegression * 100).toFixed(1)}%`);
 console.log(`Maximum allowed paragraph first-tab regression: ${(maxParagraphFirstTabRegression * 100).toFixed(1)}%`);
@@ -87,14 +105,28 @@ console.log(`Maximum allowed fresh-tab handoff paired regression: ${(maxFreshReg
 const minParagraphTwoTabImprovement = Number(process.env.BLB_PERF_MIN_PARAGRAPH_TWO_TAB_IMPROVEMENT || 0.50);
 const minParagraphFirstTabImprovement = Number(process.env.BLB_PERF_MIN_PARAGRAPH_FIRST_TAB_IMPROVEMENT || 0.50);
 const minParagraphSecondTabImprovement = Number(process.env.BLB_PERF_MIN_PARAGRAPH_SECOND_TAB_IMPROVEMENT || 0.50);
+const generalSelectionImprovement = scenarioMedianImprovement('selection');
+const generalFreshImprovement = scenarioMedianImprovement('fresh');
+const generalReuseImprovement = scenarioMedianImprovement('reuse');
+const generalParagraphTwoTabImprovement = isRangeTarget ? null : scenarioMedianImprovement('paragraph-two-tab');
+const generalParagraphFirstTabImprovement = isRangeTarget ? null : scenarioMedianImprovement('paragraph-two-tab', 'firstTabMs');
+const generalParagraphSecondTabImprovement = isRangeTarget ? null : scenarioMedianImprovement('paragraph-two-tab', 'secondTabMs');
+
 const passed = isRangeTarget
   ? rangeResolverImprovement >= minRangeResolverImprovement
-  : selectionImprovement >= -maxSelectionRegression
-  && reuseImprovement >= (requireImprovement ? minTargetedImprovement : -maxSelectionRegression)
-  && paragraphTwoTabImprovement >= (requireImprovement ? minParagraphTwoTabImprovement : -maxParagraphRegression)
-  && paragraphFirstTabImprovement >= (requireImprovement ? minParagraphFirstTabImprovement : -maxParagraphFirstTabRegression)
-  && paragraphSecondTabImprovement >= (requireImprovement ? minParagraphSecondTabImprovement : -maxParagraphSecondTabRegression)
-  && freshImprovement >= -maxFreshRegression;
+  : requireImprovement
+    ? selectionImprovement >= -maxSelectionRegression
+      && reuseImprovement >= minTargetedImprovement
+      && paragraphTwoTabImprovement >= minParagraphTwoTabImprovement
+      && paragraphFirstTabImprovement >= minParagraphFirstTabImprovement
+      && paragraphSecondTabImprovement >= minParagraphSecondTabImprovement
+      && freshImprovement >= -maxFreshRegression
+    : generalSelectionImprovement >= -maxSelectionRegression
+      && generalReuseImprovement >= -maxSelectionRegression
+      && generalParagraphTwoTabImprovement >= -maxParagraphRegression
+      && generalParagraphFirstTabImprovement >= -maxParagraphFirstTabRegression
+      && generalParagraphSecondTabImprovement >= -maxParagraphSecondTabRegression
+      && generalFreshImprovement >= -maxFreshRegression;
 
 if (isRangeTarget) {
   console.log(`Required KJV range resolver improvement: ${(minRangeResolverImprovement * 100).toFixed(1)}%`);
