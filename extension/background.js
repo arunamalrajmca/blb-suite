@@ -270,13 +270,19 @@ async function getStudyAutoStopMinutes() {
   return STUDY_AUTOSTOP_OPTIONS.includes(value) ? value : STUDY_AUTOSTOP_DEFAULT_MINUTES;
 }
 async function refreshStudyAutoStopAlarm() {
+  const master = await isSuiteEnabled();
   await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM);
+  if (!master) return;
   const minutes = await getStudyAutoStopMinutes();
   const data = await chrome.storage.local.get({currentStudySessionId:null});
   if (!data.currentStudySessionId || minutes <= 0) return;
   chrome.alarms.create(STUDY_AUTOSTOP_ALARM, {delayInMinutes:1, periodInMinutes:1});
 }
 async function checkStudyAutoStop() {
+  if (!(await isSuiteEnabled())) {
+    await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM);
+    return;
+  }
   const minutes = await getStudyAutoStopMinutes();
   if (minutes <= 0) return;
   const data = await chrome.storage.local.get({currentStudySessionId:null, studyLastActivityAt:0});
