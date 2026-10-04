@@ -376,8 +376,7 @@ function formatBlbTextToHtml(rawText) {
   return `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`;
 }
 
-if (location.hostname.endsWith("blueletterbible.org") &&
-    !/(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)$/i.test(location.pathname)) {
+if (location.hostname.endsWith("blueletterbible.org")) {
   // The copy event must be handled synchronously. Awaiting storage state inside
   // the event handler lets the browser finish its normal copy operation before
   // preventDefault() runs, which loses the HTML clipboard payload used by
@@ -411,6 +410,7 @@ if (location.hostname.endsWith("blueletterbible.org") &&
     };
   }
 
+  if (!/(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)$/i.test(location.pathname)) {
   // ---------- BLB New Tab ----------
   function modifyLinks(container) {
     container.querySelectorAll("a").forEach(link=>{
@@ -490,6 +490,7 @@ if (location.hostname.endsWith("blueletterbible.org") &&
   },true);
   if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",process);
   else process();
+  }
 }
 
 // ---------- Webster's 1828 ----------
