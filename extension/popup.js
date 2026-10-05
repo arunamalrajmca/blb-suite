@@ -794,7 +794,7 @@ topicInput.addEventListener('input', async () => {
   updateStudyButtons();
   if (topicMenu.classList.contains('open')) populateTopics(topicInput.value);
 });
-async function saveTopicOnBlur() {
+async function saveTopicOnChange() {
   const topic = titleCase(topicInput.value);
   if (!topic) return;
   topicInput.value = topic;
@@ -806,13 +806,7 @@ async function saveTopicOnBlur() {
   if (response?.ok) await refreshStudyState();
 }
 
-topicInput.addEventListener('change', async () => {
-  topicInput.value = titleCase(topicInput.value);
-  await syncSelectedTopic(topicInput.value);
-  updateStudyButtons();
-});
-
-topicInput.addEventListener('blur', saveTopicOnBlur);
+topicInput.addEventListener('change', saveTopicOnChange);
 topicArrow.addEventListener('click', toggleTopicMenu);
 clearSelectedTopicInputButton.addEventListener('click', clearTopicSelectionInput);
 importTestDataButton.addEventListener('click', async () => {
