@@ -352,8 +352,8 @@ function populateTopics(filter = "") {
     }
   };
 
-  addGroup('TOPICS WITH STUDY DATA', started, true);
-  addGroup('TOPICS WITH NO STUDY DATA', notStarted);
+  addGroup('WITH STUDY DATA', started, true);
+  addGroup('NO STUDY DATA', notStarted);
 
   const optionCount = started.length + notStarted.length;
   if (topicHighlightIndex >= optionCount) topicHighlightIndex = optionCount - 1;
