@@ -799,19 +799,27 @@ function queueTopicPersistence() {
   }, 250);
 }
 
-function persistTopicValue(topic) {
+async function persistTopicValue(topic) {
   const value = titleCase(topic);
   if (!value) return;
-  const existing = findTopicKey(value);
-  if (!existing) {
-    studyState.topics = [...(studyState.topics || []), value];
+  try {
+    // Merge with the current stored list instead of writing the popup's
+    // possibly stale studyState.topics array. This preserves earlier topics
+    // when a second/new topic is created.
+    const data = await chrome.storage.local.get({studyTopics:[]});
+    const storedTopics = Array.isArray(data.studyTopics) ? data.studyTopics : [];
+    const mergedTopics = [...storedTopics];
+    if (!mergedTopics.some(t => String(t || '').trim().toLowerCase() === value.toLowerCase())) {
+      mergedTopics.push(value);
+    }
+    studyState.topics = mergedTopics;
     populateTopics(topicMenu.classList.contains('open') ? topicInput.value : '');
     updateStudyButtons();
-  }
-  void chrome.storage.local.set({
-    [SELECTED_TOPIC_STORAGE_KEY]: value,
-    studyTopics: studyState.topics || []
-  }).catch(() => {});
+    await chrome.storage.local.set({
+      [SELECTED_TOPIC_STORAGE_KEY]: value,
+      studyTopics: mergedTopics
+    });
+  } catch (_) {}
 }
 
 topicInput.addEventListener('input', async () => {
@@ -831,7 +839,7 @@ topicInput.addEventListener('blur', () => {
     clearTimeout(topicPersistTimer);
     topicPersistTimer = null;
   }
-  persistTopicValue(topic);
+  void persistTopicValue(topic);
 });
 
 
