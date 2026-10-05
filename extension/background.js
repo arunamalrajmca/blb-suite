@@ -1330,7 +1330,13 @@ async function clearStudyTopic(topic) {
   if (!target) return {ok:false, reason:'no-topic'};
   const data = await getStudySessions();
   const kept = data.sessions.filter(session => String(session?.title || '').trim().toLowerCase() !== target);
-  if (kept.length === data.sessions.length) return {ok:false, reason:'topic-not-found'};
+  const savedTopicExists = data.savedTopics.some(t => String(t || '').trim().toLowerCase() === target);
+  // A newly created topic can be saved before its first study session starts.
+  // Deleting that topic must remove the saved-topic entry even though there
+  // is no session record yet.
+  if (kept.length === data.sessions.length && !savedTopicExists) {
+    return {ok:false, reason:'topic-not-found'};
+  }
   const remainingTopics = studySessionTopics(kept);
   const savedTopics = data.savedTopics.filter(t => String(t || '').trim().toLowerCase() !== target);
   for (const t of remainingTopics) {
