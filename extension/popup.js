@@ -314,18 +314,47 @@ function populateTopics(filter = "") {
     topicMenu.appendChild(empty);
     return;
   }
+
+  // Keep saved topics visually separated by whether they have an actual
+  // Study Session. The storage model remains unchanged: a topic can exist
+  // before its first session, and it moves into the first group automatically
+  // as soon as a session is created.
+  const topicStats = studyState.topicStats && typeof studyState.topicStats === 'object'
+    ? studyState.topicStats : {};
+  const withSessions = [];
+  const notStarted = [];
   for (const topic of topics) {
-    const option = document.createElement('button');
-    option.type = 'button';
-    option.className = 'topic-option';
-    option.textContent = topic;
-    option.setAttribute('role', 'option');
-    option.setAttribute('aria-selected', 'false');
-    option.addEventListener('mousedown', e => e.preventDefault());
-    option.addEventListener('click', async () => { await selectTopicValue(topic); });
-    topicMenu.appendChild(option);
+    const key = findTopicKey(topic);
+    if (key && Object.prototype.hasOwnProperty.call(topicStats, key)) withSessions.push(topic);
+    else notStarted.push(topic);
   }
-  if (topicHighlightIndex >= topics.length) topicHighlightIndex = topics.length - 1;
+
+  const addGroup = (label, groupTopics) => {
+    if (!groupTopics.length) return;
+    const heading = document.createElement('div');
+    heading.className = 'topic-empty';
+    heading.textContent = label;
+    heading.setAttribute('aria-hidden', 'true');
+    topicMenu.appendChild(heading);
+
+    for (const topic of groupTopics) {
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.className = 'topic-option';
+      option.textContent = topic;
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', 'false');
+      option.addEventListener('mousedown', e => e.preventDefault());
+      option.addEventListener('click', async () => { await selectTopicValue(topic); });
+      topicMenu.appendChild(option);
+    }
+  };
+
+  addGroup('Topics with sessions', withSessions);
+  addGroup('Saved topics — not started', notStarted);
+
+  const optionCount = withSessions.length + notStarted.length;
+  if (topicHighlightIndex >= optionCount) topicHighlightIndex = optionCount - 1;
   if (topicHighlightIndex < 0) topicHighlightIndex = 0;
   setTopicHighlight(topicHighlightIndex);
 }
