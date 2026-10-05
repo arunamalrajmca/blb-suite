@@ -5,7 +5,6 @@
   "description": "Bible study tools for BLB search, Bible references, Show on BLB, Double-Click BLB, and KJV case-sensitive search.",
   "permissions": [
     "clipboardWrite",
-    "activeTab",
     "tabs",
     "omnibox",
     "storage",
