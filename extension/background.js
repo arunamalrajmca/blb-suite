@@ -386,17 +386,24 @@ async function saveStudyTopicFromPopup(title) {
   if (!topic || topic.toLowerCase() === "uncategorized") return {ok:false, reason:"empty-or-uncategorized"};
 
   const data = await getStudySessions();
-  const savedTopics = [...data.savedTopics];
-  const topicExists = savedTopics.some(t => String(t).trim().toLowerCase() === topic.toLowerCase());
-  if (!topicExists) savedTopics.push(topic);
+  const topicKey = topic.toLowerCase();
+  let session = data.sessions.find(s => String(s.title || "").trim().toLowerCase() === topicKey);
+  if (!session) {
+    // Every saved topic is represented by a Study Session immediately. This
+    // makes typed-topic persistence durable and gives Delete one authoritative
+    // storage model. An empty session is displayed under "Not Started".
+    session = createStudySession(topic);
+    data.sessions.push(session);
+  }
 
-  // The popup may close immediately after the user leaves the topic field.
-  // Make the background the single durable persistence authority: save both
-  // the topic list and the selected topic in one storage operation.
-  const changes = {studySelectedTopic:topic};
-  if (!topicExists) changes.studyTopics = savedTopics;
-  await chrome.storage.local.set(changes);
-  if (!topicExists) void notifyStudyUiChanged();
+  const savedTopics = [...data.savedTopics];
+  if (!savedTopics.some(t => String(t).trim().toLowerCase() === topicKey)) savedTopics.push(topic);
+
+  // Keep selection and the session-backed topic list in one durable write.
+  await saveStudySessions(data.sessions, {
+    studyTopics:savedTopics,
+    studySelectedTopic:topic
+  });
 
   return {ok:true, topic};
 }
