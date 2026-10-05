@@ -109,7 +109,7 @@ test.describe('core user-action E2E coverage', () => {
       console.log('[E2E copy] selection before copy:', selection);
       const result = document.execCommand('copy');
       console.log('[E2E copy] execCommand result:', result);
-      if (!result) throw new Error('document.execCommand(\\'copy\\') returned false');
+    if (!result) throw new Error("document.execCommand('copy') returned false");
     });
 
     const captured = await page.evaluate(async () => {
