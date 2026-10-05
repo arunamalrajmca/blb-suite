@@ -786,6 +786,34 @@ async function clearTopicSelectionInput() {
   topicInput.focus();
 }
 
+let topicPersistTimer = null;
+
+function queueTopicPersistence() {
+  const topic = titleCase(topicInput.value);
+  if (!topic) return;
+  topicInput.value = topic;
+  if (topicPersistTimer) clearTimeout(topicPersistTimer);
+  topicPersistTimer = setTimeout(() => {
+    topicPersistTimer = null;
+    persistTopicValue(topic);
+  }, 250);
+}
+
+function persistTopicValue(topic) {
+  const value = titleCase(topic);
+  if (!value) return;
+  const existing = findTopicKey(value);
+  if (!existing) {
+    studyState.topics = [...(studyState.topics || []), value];
+    populateTopics(topicMenu.classList.contains('open') ? topicInput.value : '');
+    updateStudyButtons();
+  }
+  void chrome.storage.local.set({
+    [SELECTED_TOPIC_STORAGE_KEY]: value,
+    studyTopics: studyState.topics || []
+  }).catch(() => {});
+}
+
 topicInput.addEventListener('input', async () => {
   if (!topicInput.value.trim() && studyState.recording) {
     await clearTopicSelectionInput();
@@ -793,26 +821,20 @@ topicInput.addEventListener('input', async () => {
   }
   updateStudyButtons();
   if (topicMenu.classList.contains('open')) populateTopics(topicInput.value);
+  queueTopicPersistence();
 });
-async function saveTopicOnBlur() {
+
+topicInput.addEventListener('blur', () => {
   const topic = titleCase(topicInput.value);
   if (!topic) return;
-  topicInput.value = topic;
-  await syncSelectedTopic(topic);
-  const response = await chrome.runtime.sendMessage({
-    type:'blbSuiteSaveStudyTopic',
-    title:topic
-  });
-  if (response?.ok) await refreshStudyState();
-}
-
-topicInput.addEventListener('change', async () => {
-  topicInput.value = titleCase(topicInput.value);
-  await syncSelectedTopic(topicInput.value);
-  updateStudyButtons();
+  if (topicPersistTimer) {
+    clearTimeout(topicPersistTimer);
+    topicPersistTimer = null;
+  }
+  persistTopicValue(topic);
 });
 
-topicInput.addEventListener('blur', saveTopicOnBlur);
+
 topicArrow.addEventListener('click', toggleTopicMenu);
 clearSelectedTopicInputButton.addEventListener('click', clearTopicSelectionInput);
 importTestDataButton.addEventListener('click', async () => {
