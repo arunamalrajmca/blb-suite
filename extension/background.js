@@ -381,6 +381,20 @@ async function getStudyUiState() {
   };
 }
 
+async function saveStudyTopicFromPopup(title) {
+  const topic = normalizeStudyTopic(title);
+  if (!topic || topic.toLowerCase() === "uncategorized") return {ok:false, reason:"empty-or-uncategorized"};
+
+  const data = await getStudySessions();
+  const savedTopics = [...data.savedTopics];
+  if (!savedTopics.some(t => String(t).trim().toLowerCase() === topic.toLowerCase())) {
+    savedTopics.push(topic);
+    await chrome.storage.local.set({studyTopics:savedTopics});
+    void notifyStudyUiChanged();
+  }
+  return {ok:true, topic};
+}
+
 async function startStudyTopicFromPopup(title, note = "") {
   const topic = normalizeStudyTopic(title);
   if (!topic) return {ok:false, reason:"empty"};
@@ -2380,6 +2394,11 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
 
   if (message.type === 'blbSuiteGetStudyUiState') {
     try { sendResponse({ok:true, ...(await getStudyUiState())}); } catch (error) { sendResponse({ok:false, error:String(error)}); }
+    return true;
+  }
+
+  if (message.type === 'blbSuiteSaveStudyTopic') {
+    try { sendResponse(await saveStudyTopicFromPopup(message.title)); } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
 
