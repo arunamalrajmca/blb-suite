@@ -518,6 +518,11 @@ async function updateStudyNoteToTopic(topic, originalNote, note) {
 async function downloadStudyTopicFromPopup(topic) {
   const value = normalizeStudyTopic(topic);
   if (!value) return false;
+  const history = await getStudyTopicHistory(value);
+  if (!history?.ok) return false;
+  const hasStudyData = history.refs.length > 0 || history.strongs.length > 0 ||
+    history.searchTerms.length > 0 || history.notes.length > 0;
+  if (!hasStudyData) return false;
   return exportStudySessions(`topic: ${value}`);
 }
 
