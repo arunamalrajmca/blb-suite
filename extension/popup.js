@@ -873,7 +873,29 @@ topicInput.addEventListener('input', async () => {
     return;
   }
   updateStudyButtons();
-  if (topicMenu.classList.contains('open')) populateTopics(topicInput.value);
+  if (topicMenu.classList.contains('open')) {
+    populateTopics(topicInput.value);
+    const current = String(topicInput.value || '').trim().toLowerCase();
+    if (current) {
+      const options = getVisibleTopicOptions();
+      const index = options.findIndex(
+        option => String(option.textContent || '').trim().toLowerCase() === current
+      );
+      if (index >= 0) setTopicHighlight(index);
+    }
+  }
+});
+
+topicInput.addEventListener('focus', () => {
+  if (!studyState.topics?.length) return;
+  openTopicMenu();
+  const current = String(topicInput.value || '').trim().toLowerCase();
+  if (!current) return;
+  const options = getVisibleTopicOptions();
+  const index = options.findIndex(
+    option => String(option.textContent || '').trim().toLowerCase() === current
+  );
+  if (index >= 0) setTopicHighlight(index);
 });
 
 topicInput.addEventListener('blur', () => {
