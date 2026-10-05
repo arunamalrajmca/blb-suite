@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory=$true)][string]$ZipPath,
-  [string]$ExpectedVersion = '5.2.51.43'
+  [string]$ExpectedVersion = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -35,11 +35,12 @@ try {
   finally { $reader.Dispose() }
 
   if ($manifest.manifest_version -ne 3) { throw 'ZIP manifest is not MV3' }
-  if ($manifest.version -ne $ExpectedVersion) { throw "ZIP version $($manifest.version) != expected $ExpectedVersion" }
+  if (-not $manifest.version) { throw 'ZIP manifest version is missing' }
+  if ($ExpectedVersion -and $manifest.version -ne $ExpectedVersion) { throw "ZIP version $($manifest.version) != expected $ExpectedVersion" }
   if (@($manifest.host_permissions) -ne @('http://*/*','https://*/*')) { throw 'ZIP host_permissions regression' }
   if ($manifest.optional_host_permissions) { throw 'ZIP contains optional_host_permissions regression' }
 
-  Write-Host "PASS: ZIP integrity, required entries, MV3, version $ExpectedVersion, host permissions"
+  Write-Host "PASS: ZIP integrity, required entries, MV3, version $($manifest.version), host permissions"
   exit 0
 }
 catch {

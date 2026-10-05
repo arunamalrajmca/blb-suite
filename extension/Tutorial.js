@@ -1,3 +1,14 @@
+(function () {
+    try {
+        const version = chrome.runtime.getManifest().version;
+        const badge = document.getElementById('extensionVersion');
+        const footer = document.getElementById('footerVersion');
+        if (badge) badge.textContent = version;
+        if (footer) footer.textContent = version;
+        document.title = 'Blue Letter Bible Suite ' + version + ' — User Guide';
+    } catch (_) {}
+})();
+
 
 (function () {
     const example = document.getElementById('multiVerseExample');

@@ -1,6 +1,0 @@
-Blue Letter Bible Suite 5.2.51.32 — exact source archive identity
-
-Archive: Blue-Letter-Bible-Suite-5.2.51.32-GRANT-PATH-FIX-EXPERIMENTAL.zip
-SHA-256: d92f96efa4ef8ef167867a4132829550deeb72eb15db4d9a3658b2d598096249
-
-This repository's extension/ directory is extracted from that archive without source modification.

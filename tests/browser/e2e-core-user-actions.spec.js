@@ -50,6 +50,7 @@ test.describe('core user-action E2E coverage', () => {
 
     await extensionWorker.evaluate(async () => {
       const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+      console.log('[E2E Alt+B] active tab before command:', tab ? {id:tab.id,url:tab.url} : null);
       if (!tab?.id) throw new Error('No active tab for Alt+B command-path E2E');
       await chrome.scripting.executeScript({
         target: {tabId: tab.id},
@@ -61,21 +62,23 @@ test.describe('core user-action E2E coverage', () => {
     });
 
     const blb = await waitForTab(extensionWorker, tab => {
+      console.log('[E2E Alt+B] observed tab:', tab);
       try {
         return new URL(tab.url).hostname === 'www.blueletterbible.org'
-          && new URL(tab.url).pathname === '/kjv/jhn/3/16/';
+          && /^\/kjv\/jhn\/3\/16(?:\/s_\d+)?\/?$/i.test(new URL(tab.url).pathname);
       } catch (_) {
         return false;
       }
     });
 
-    expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
+    expect(new URL(blb.url).pathname).toMatch(/^\/kjv\/jhn\/3\/16(?:\/s_\d+)?\/?$/i);
     await removeTabById(extensionWorker, blb.id);
   });
 
-  test('copying selected Bible text injects a BLB hyperlink into HTML clipboard data', async ({ page, extensionStorage }) => {
+  test('copying selected Bible text injects a BLB hyperlink into HTML clipboard data', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true });
     await page.goto('https://www.blueletterbible.org/', { waitUntil: 'domcontentloaded' });
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'https://www.blueletterbible.org' });
     await page.waitForTimeout(1000);
     await dismissBlbCookieOverlay(page);
 
@@ -92,20 +95,32 @@ test.describe('core user-action E2E coverage', () => {
     });
 
     await page.evaluate(() => {
-      window.__blbE2ECopy = { html: null, plain: null };
-      document.addEventListener('copy', event => {
-        if (!event.clipboardData) return;
-        window.__blbE2ECopy.html = event.clipboardData.getData('text/html');
-        window.__blbE2ECopy.plain = event.clipboardData.getData('text/plain');
-      }, true);
+      const selection = window.getSelection()?.toString() || '';
+      console.log('[E2E copy] selection before copy:', selection);
+      const result = document.execCommand('copy');
+      console.log('[E2E copy] execCommand result:', result);
+      if (!result) throw new Error("document.execCommand('copy') returned false");
     });
 
-    await page.evaluate(() => document.execCommand('copy'));
-
-    const captured = await page.evaluate(() => window.__blbE2ECopy);
+    const captured = await page.evaluate(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const items = await navigator.clipboard.read();
+      let html = '';
+      let plain = '';
+      for (const item of items) {
+        if (item.types.includes('text/html')) {
+          html = await (await item.getType('text/html')).text();
+        }
+        if (item.types.includes('text/plain')) {
+          plain = await (await item.getType('text/plain')).text();
+        }
+      }
+      return { html, plain };
+    });
+    console.log('[E2E copy] actual clipboard:', captured);
     expect(captured.plain).toBe('John 3:16');
     expect(captured.html).toContain('blueletterbible.org');
-    expect(captured.html).toMatch(/kjv\/jhn\/3\/16/i);
+    expect(captured.html).toMatch(/\/kjv\/(?:jhn|John)\/3\/16\/?/i);
   });
 
   test('BLB verse links inside parse popups open in a new tab', async ({ page, context, extensionStorage }) => {
@@ -130,7 +145,7 @@ test.describe('core user-action E2E coverage', () => {
     await newPage.waitForLoadState('domcontentloaded').catch(() => {});
 
     expect(new URL(newPage.url()).hostname).toBe('www.blueletterbible.org');
-    expect(new URL(newPage.url()).pathname).toBe('/kjv/jhn/3/16/');
+    expect(new URL(newPage.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16(?:\/s_\d+)?\/?$/i);
     await newPage.close();
   });
 

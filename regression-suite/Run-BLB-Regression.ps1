@@ -2,7 +2,7 @@
 param(
   [string]$ExtensionPath = "$PSScriptRoot\extension",
   [string]$ZipPath = '',
-  [string]$ExpectedVersion = '5.2.51.43'
+  [string]$ExpectedVersion = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -25,6 +25,8 @@ try {
   if (-not (Test-Path -LiteralPath $testScript -PathType Leaf)) {
     Fail "Regression test runner missing: $testScript"
   }
+
+  if (-not $ExpectedVersion) { $manifestPath = Join-Path $ExtensionPath 'manifest.json'; if (-not (Test-Path -LiteralPath $manifestPath -PathType Leaf)) { Fail "manifest.json not found: $manifestPath" }; $ExpectedVersion = ((Get-Content -Raw -LiteralPath $manifestPath) | ConvertFrom-Json).version }
 
   $env:BLB_EXPECTED_VERSION = $ExpectedVersion
 

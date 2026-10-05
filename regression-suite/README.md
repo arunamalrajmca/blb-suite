@@ -1,6 +1,6 @@
 # BLB Suite — Pre-Merge Regression Checklist
 
-Baseline: **5.2.51.43**
+Baseline: **current extension/manifest.json version**
 
 Use this checklist for every build/PR. It deliberately separates what CI proves automatically from browser behaviors that still require a real browser test.
 
@@ -119,7 +119,7 @@ These require browser capabilities that ordinary Playwright page automation cann
 - [ ] accepted protected PDF limitation remains unchanged
 
 ### Final release check
-- [ ] No unexplained difference from **5.2.51.43**
+- [ ] No unexplained difference from the current manifest version
 - [ ] Tested package is exactly the package being promoted
 - [ ] No source/package changes after validation
 
