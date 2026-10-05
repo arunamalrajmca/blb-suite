@@ -460,9 +460,12 @@ function updateStudyButtons() {
   });
   for (const button of historyButtons) historyMenu.appendChild(button);
   const hasSavedTopics = Array.isArray(studyState.topics) && studyState.topics.length > 0;
-  const selectedTopic = findTopicKey(studyState.currentTopic || topicInput.value);
-  const selectedTopicStats = selectedTopic
-    ? (studyState.topicStats?.[selectedTopic] || {})
+  // Selected Topic actions must always follow the topic currently shown in
+  // the popup input. Do not use studyState.currentTopic here: that value is
+  // the recording/session state and may still point to a different topic.
+  const selectedTopicKey = findTopicKey(topic);
+  const selectedTopicStats = selectedTopicKey
+    ? (studyState.topicStats?.[selectedTopicKey] || {})
     : {};
   const selectedTopicHasStudyData =
     Number(selectedTopicStats.refs || 0) > 0 ||
@@ -489,7 +492,7 @@ function updateStudyButtons() {
   topicArrow.setAttribute('aria-disabled', String(!hasSavedTopics));
 
   // Selected Topic requires an actual selected topic and data in THAT topic.
-  downloadButton.disabled = !selectedTopic || !selectedTopicHasStudyData;
+  downloadButton.disabled = !hasTopic || !selectedTopicHasStudyData;
 
   // Whole Study and By Date operate on the study collection.
   downloadWholeButton.disabled = !hasAnyTopicWithStudyData;
