@@ -2379,6 +2379,10 @@ async function ensureContentScriptInTab(tabId) {
   }
 }
 
+function isTrustedExtensionSender(sender) {
+  return !!sender && sender.id === chrome.runtime.id;
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'blbSuiteReopenPopup') {
     const windowId = Number(message.windowId);
