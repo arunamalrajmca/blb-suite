@@ -2784,6 +2784,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ok:false});
   });
   return true;
+  })();
+  return true;
 });
 
 // Keep the original BLB /net fallback as a fast main-frame redirect.
@@ -5211,5 +5213,4 @@ installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,curre
 installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
   .then(tabs => syncPdfSelectionContextMenuVisibility(tabs[0]))
   .catch(() => {}));
-refreshStudyAutoStopAlarm().catch(()=>{});  })();
-  return true;
+refreshStudyAutoStopAlarm().catch(()=>{});
