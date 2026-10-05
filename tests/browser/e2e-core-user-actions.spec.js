@@ -93,27 +93,28 @@ test.describe('core user-action E2E coverage', () => {
       selection.addRange(range);
     });
 
-    await page.evaluate(async () => {
+    await page.evaluate(() => {
+      window.__blbE2ECopy = { html: '', plain: '' };
+      window.addEventListener('copy', event => {
+        if (!event.clipboardData) return;
+        queueMicrotask(() => {
+          window.__blbE2ECopy.html = event.clipboardData.getData('text/html');
+          window.__blbE2ECopy.plain = event.clipboardData.getData('text/plain');
+        });
+      }, true);
+    });
+
+    await page.evaluate(() => {
       const selection = window.getSelection()?.toString() || '';
       console.log('[E2E copy] selection before copy:', selection);
       const result = document.execCommand('copy');
       console.log('[E2E copy] execCommand result:', result);
-      if (!result) throw new Error('document.execCommand(\'copy\') returned false');
+      if (!result) throw new Error('document.execCommand(\\'copy\\') returned false');
     });
 
     const captured = await page.evaluate(async () => {
-      const items = await navigator.clipboard.read();
-      let html = '';
-      let plain = '';
-      for (const item of items) {
-        if (item.types.includes('text/html')) {
-          html = await (await item.getType('text/html')).text();
-        }
-        if (item.types.includes('text/plain')) {
-          plain = await (await item.getType('text/plain')).text();
-        }
-      }
-      return { html, plain };
+      await new Promise(resolve => setTimeout(resolve, 50));
+      return window.__blbE2ECopy || { html: '', plain: '' };
     });
     console.log('[E2E copy] actual clipboard:', captured);
     expect(captured.plain).toBe('John 3:16');
