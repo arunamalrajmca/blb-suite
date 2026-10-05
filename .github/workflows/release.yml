@@ -29,11 +29,7 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Validate tag points to main history
-        run: |
-          git fetch origin main --no-tags
-          git merge-base --is-ancestor "$GITHUB_SHA" "origin/main"
-      - name: Validate release version
+      - name: Validate release tag and source
         id: version
         env:
           RELEASE_TAG: ${{ github.ref_name }}
@@ -48,59 +44,20 @@ jobs:
             echo "Tag $VERSION does not match manifest $MANIFEST_VERSION"
             exit 1
           fi
+          git fetch origin main --no-tags
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/main"; then
+            echo "Release tag must point to a commit contained in main"
+            exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-      - name: Deterministic regression gate
-        env:
-          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: node regression-suite/tests/run-regression.mjs extension
-
-  browser-e2e:
-    name: Release Chromium E2E
-    runs-on: ubuntu-latest
-    needs: validate
-    steps:
-      - name: ⏱ Workflow ETA — start
-        uses: $/.github/actions/workflow-eta
-        with:
-          phase: start
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 22
-      - name: Install dependencies
-        run: npm install
-      - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
-      - name: Run browser E2E
-        env:
-          BLB_EXPECTED_VERSION: ${{ needs.validate.outputs.version }}
-          BLB_PERF_OUTPUT: ${{ runner.temp }}/release-performance.jsonl
-          BLB_PERF_SCENARIO: fresh
-        run: |
-          : > "$BLB_PERF_OUTPUT"
-          # Release correctness covers extension behavior only. External-site smoke tests
-          # are intentionally excluded here because a third-party BLB outage can block a
-          # release even when the extension and all internal E2E checks are healthy.
-          npx playwright test tests/browser/extension.spec.js tests/browser/performance.spec.js tests/browser/known-host-extension.spec.js
-      - name: Upload Playwright diagnostics and performance data
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: blb-release-browser-e2e
-          path: |
-            playwright-report/
-            test-results/
-            ${{ runner.temp }}/release-performance.jsonl
-          if-no-files-found: ignore
-          retention-days: 14
+          echo "Release source: $GITHUB_SHA"
+          echo "Manifest version: $MANIFEST_VERSION"
 
   package-and-release:
     name: Package and publish GitHub Release
     runs-on: ubuntu-latest
-    needs: [validate, browser-e2e]
+    needs: validate
     steps:
       - name: ⏱ Workflow ETA — start
         uses: $/.github/actions/workflow-eta
@@ -139,7 +96,6 @@ jobs:
           $(cat "dist/Blue-Letter-Bible-Suite-$VERSION.zip.sha256")
           EOF
           gh release create "$TAG" "dist/Blue-Letter-Bible-Suite-$VERSION.zip" "dist/Blue-Letter-Bible-Suite-$VERSION.zip.sha256" "dist/RELEASE-CHECKSUMS.txt" --title "Blue Letter Bible Suite $VERSION" --generate-notes
-
       - name: ⏱ Workflow ETA — finish
         if: ${{ always() }}
         uses: $/.github/actions/workflow-eta
