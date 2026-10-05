@@ -9,7 +9,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const defaultRoot = path.resolve(HERE, '..', 'extension');
 const ROOT = path.resolve(process.argv[2] || defaultRoot);
 const fixture = JSON.parse(fs.readFileSync(path.join(HERE, 'fixtures.json'), 'utf8'));
-const expectedVersion = process.env.BLB_EXPECTED_VERSION || JSON.parse(fs.readFileSync(path.join(extensionPath, 'manifest.json'), 'utf8')).version;
+const expectedVersion = process.env.BLB_EXPECTED_VERSION || JSON.parse(fs.readFileSync(path.join(ROOT, 'manifest.json'), 'utf8')).version;
 const failures = [];
 let passed = 0;
 const requestedGroup = process.argv.find(arg => arg.startsWith('--group='))?.slice('--group='.length) || 'all';
@@ -28,7 +28,7 @@ function loadPure(files){
   return ctx;
 }
 
-console.log(`BLB Suite Regression Suite — baseline ${fixture.baselineVersion} | expected package ${expectedVersion}`);
+console.log(`BLB Suite Regression Suite — manifest ${expectedVersion}`);
 console.log(`Package: ${ROOT}\n`);
 
 section('package');
