@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
   [Parameter(Mandatory=$true)][string]$ZipPath,
-  [string]$ExpectedVersion = '5.2.51.43'
+  [string]$ExpectedVersion = '5.2.51.48'
 )
 
 $ErrorActionPreference = 'Stop'
