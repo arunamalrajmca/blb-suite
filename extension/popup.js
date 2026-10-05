@@ -460,27 +460,30 @@ function updateStudyButtons() {
   });
   for (const button of historyButtons) historyMenu.appendChild(button);
   const hasSavedTopics = Array.isArray(studyState.topics) && studyState.topics.length > 0;
+  // Download is available only when the topic dropdown contains at least one
+  // topic with actual study data. A list containing only NOT STARTED topics
+  // must disable the entire Download menu and all of its sub-actions.
+  const hasAnyTopicWithStudyData = (studyState.topics || []).some(savedTopic => {
+    const key = findTopicKey(savedTopic);
+    const stats = key ? (studyState.topicStats?.[key] || {}) : {};
+    return Number(stats.refs || 0) > 0 ||
+      Number(stats.strongs || 0) > 0 ||
+      Number(stats.searchTerms || 0) > 0 ||
+      Number(stats.notes || 0);
+  });
   // Study actions are driven only by the Study/master state, not by the
-  // Show on BLB / Double-Click / Redirect toggles. General history actions
-  // require saved topics; Selected Topic actions additionally require an
-  // explicit existing topic selection.
-  downloadMenuButton.disabled = !hasSavedTopics;
+  // Show on BLB / Double-Click / Redirect toggles.
+  downloadMenuButton.disabled = !hasAnyTopicWithStudyData;
   clearStudyButton.disabled = !hasSavedTopics;
   topicArrow.disabled = !hasSavedTopics;
   topicArrow.setAttribute('aria-disabled', String(!hasSavedTopics));
 
-  // Download PDF menu: Selected Topic needs an explicit existing selection;
-  // All Topics and By Date only need saved study history.
-  const topicStatsForDownload = existing ? (studyState.topicStats?.[findTopicKey(topic)] || {}) : {};
-  const topicHasStudyData = Number(topicStatsForDownload.refs || 0) > 0 ||
-    Number(topicStatsForDownload.strongs || 0) > 0 ||
-    Number(topicStatsForDownload.searchTerms || 0) > 0 ||
-    Number(topicStatsForDownload.notes || 0);
-  // An empty session is a persisted "Not Started" topic: it can be deleted
-  // or started, but there is nothing meaningful to download yet.
-  downloadButton.disabled = !existing || !topicHasStudyData;
-  downloadWholeButton.disabled = !hasSavedTopics;
-  downloadDateButton.disabled = !hasSavedTopics;
+  // Once the Download menu itself is valid, its three actions are enabled
+  // from the presence of study data anywhere in the topic list. The actual
+  // Selected Topic download remains protected by the background handler.
+  downloadButton.disabled = !hasAnyTopicWithStudyData;
+  downloadWholeButton.disabled = !hasAnyTopicWithStudyData;
+  downloadDateButton.disabled = !hasAnyTopicWithStudyData;
 
   // Clear menu follows the same rule: Selected Topic needs an explicit
   // existing selection; All Topics only needs saved study history.
