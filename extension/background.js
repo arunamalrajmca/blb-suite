@@ -387,11 +387,17 @@ async function saveStudyTopicFromPopup(title) {
 
   const data = await getStudySessions();
   const savedTopics = [...data.savedTopics];
-  if (!savedTopics.some(t => String(t).trim().toLowerCase() === topic.toLowerCase())) {
-    savedTopics.push(topic);
-    await chrome.storage.local.set({studyTopics:savedTopics});
-    void notifyStudyUiChanged();
-  }
+  const topicExists = savedTopics.some(t => String(t).trim().toLowerCase() === topic.toLowerCase());
+  if (!topicExists) savedTopics.push(topic);
+
+  // The popup may close immediately after the user leaves the topic field.
+  // Make the background the single durable persistence authority: save both
+  // the topic list and the selected topic in one storage operation.
+  const changes = {studySelectedTopic:topic};
+  if (!topicExists) changes.studyTopics = savedTopics;
+  await chrome.storage.local.set(changes);
+  if (!topicExists) void notifyStudyUiChanged();
+
   return {ok:true, topic};
 }
 
