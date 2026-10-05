@@ -5214,19 +5214,24 @@ chrome.storage.onChanged.addListener((changes, area) => {
     // Keep the existing web-selection menu item in place. Only its visibility
     // changes with the site preference; removing/recreating it here causes a
     // first-right-click race.
-    chrome.tabs.query({active:true,currentWindow:true})
-      .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
-      .catch(() => {});
-    installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
-      .then(async tabs => {
-        const tab = tabs[0];
-        if (tab?.id && changes.pageSelectionButtonSites) {
-          const key = pageSelectionSettingKeyFromTab(tab);
-          const sites = changes.pageSelectionButtonSites.newValue && typeof changes.pageSelectionButtonSites.newValue === 'object'
-            ? changes.pageSelectionButtonSites.newValue : {};
-          if (key && sites[key] === true) await ensureContentScriptInTab(tab.id);
+    chrome.tabs.query({active:true})
+      .then(tabs => {
+        for (const tab of tabs) {
+          syncWebSelectionContextMenuVisibility(tab).catch(() => {});
         }
-        return syncPdfSelectionContextMenuVisibility(tab);
+      })
+      .catch(() => {});
+    installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true})
+      .then(async tabs => {
+        for (const tab of tabs) {
+          if (tab?.id && changes.pageSelectionButtonSites) {
+            const key = pageSelectionSettingKeyFromTab(tab);
+            const sites = changes.pageSelectionButtonSites.newValue && typeof changes.pageSelectionButtonSites.newValue === 'object'
+              ? changes.pageSelectionButtonSites.newValue : {};
+            if (key && sites[key] === true) await ensureContentScriptInTab(tab.id);
+          }
+          await syncPdfSelectionContextMenuVisibility(tab);
+        }
       })
       .catch(() => {}));
   }
