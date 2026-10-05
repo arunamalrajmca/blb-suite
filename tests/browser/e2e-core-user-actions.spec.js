@@ -120,7 +120,7 @@ test.describe('core user-action E2E coverage', () => {
     console.log('[E2E copy] actual clipboard:', captured);
     expect(captured.plain).toBe('John 3:16');
     expect(captured.html).toContain('blueletterbible.org');
-    expect(captured.html).toMatch(/kjv\/jhn\/3\/16/i);
+    expect(captured.html).toMatch(/\/kjv\/(?:jhn|John)\/3\/16\/?/i);
   });
 
   test('BLB verse links inside parse popups open in a new tab', async ({ page, context, extensionStorage }) => {
