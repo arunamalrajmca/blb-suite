@@ -93,26 +93,29 @@ test.describe('core user-action E2E coverage', () => {
       selection.addRange(range);
     });
 
-    await page.evaluate(() => {
-      window.__blbE2ECopy = { html: null, plain: null };
-      window.addEventListener('copy', event => {
-        if (!event.clipboardData) return;
-        queueMicrotask(() => {
-          window.__blbE2ECopy.html = event.clipboardData.getData('text/html');
-          window.__blbE2ECopy.plain = event.clipboardData.getData('text/plain');
-        });
-      }, true);
-    });
-
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       const selection = window.getSelection()?.toString() || '';
       console.log('[E2E copy] selection before copy:', selection);
       const result = document.execCommand('copy');
       console.log('[E2E copy] execCommand result:', result);
+      if (!result) throw new Error('document.execCommand(\'copy\') returned false');
     });
 
-    const captured = await page.evaluate(() => window.__blbE2ECopy);
-    console.log('[E2E copy] captured clipboard event:', captured);
+    const captured = await page.evaluate(async () => {
+      const items = await navigator.clipboard.read();
+      let html = '';
+      let plain = '';
+      for (const item of items) {
+        if (item.types.includes('text/html')) {
+          html = await (await item.getType('text/html')).text();
+        }
+        if (item.types.includes('text/plain')) {
+          plain = await (await item.getType('text/plain')).text();
+        }
+      }
+      return { html, plain };
+    });
+    console.log('[E2E copy] actual clipboard:', captured);
     expect(captured.plain).toBe('John 3:16');
     expect(captured.html).toContain('blueletterbible.org');
     expect(captured.html).toMatch(/kjv\/jhn\/3\/16/i);
