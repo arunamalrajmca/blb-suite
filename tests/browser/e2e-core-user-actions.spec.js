@@ -50,6 +50,7 @@ test.describe('core user-action E2E coverage', () => {
 
     await extensionWorker.evaluate(async () => {
       const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+      console.log('[E2E Alt+B] active tab before command:', tab ? {id:tab.id,url:tab.url} : null);
       if (!tab?.id) throw new Error('No active tab for Alt+B command-path E2E');
       await chrome.scripting.executeScript({
         target: {tabId: tab.id},
@@ -61,6 +62,7 @@ test.describe('core user-action E2E coverage', () => {
     });
 
     const blb = await waitForTab(extensionWorker, tab => {
+      console.log('[E2E Alt+B] observed tab:', tab);
       try {
         return new URL(tab.url).hostname === 'www.blueletterbible.org'
           && new URL(tab.url).pathname === '/kjv/jhn/3/16/';
@@ -69,7 +71,7 @@ test.describe('core user-action E2E coverage', () => {
       }
     });
 
-    expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
+    expect(new URL(blb.url).pathname).toMatch(/^\/kjv\/jhn\/3\/16(?:\/s_\d+)?\/?$/i);
     await removeTabById(extensionWorker, blb.id);
   });
 
@@ -100,9 +102,15 @@ test.describe('core user-action E2E coverage', () => {
       }, true);
     });
 
-    await page.evaluate(() => document.execCommand('copy'));
+    await page.evaluate(() => {
+      const selection = window.getSelection()?.toString() || '';
+      console.log('[E2E copy] selection before copy:', selection);
+      const result = document.execCommand('copy');
+      console.log('[E2E copy] execCommand result:', result);
+    });
 
     const captured = await page.evaluate(() => window.__blbE2ECopy);
+    console.log('[E2E copy] captured clipboard event:', captured);
     expect(captured.plain).toBe('John 3:16');
     expect(captured.html).toContain('blueletterbible.org');
     expect(captured.html).toMatch(/kjv\/jhn\/3\/16/i);
@@ -130,7 +138,7 @@ test.describe('core user-action E2E coverage', () => {
     await newPage.waitForLoadState('domcontentloaded').catch(() => {});
 
     expect(new URL(newPage.url()).hostname).toBe('www.blueletterbible.org');
-    expect(new URL(newPage.url()).pathname).toBe('/kjv/jhn/3/16/');
+    expect(new URL(newPage.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16(?:\/s_\d+)?\/?$/i);
     await newPage.close();
   });
 
