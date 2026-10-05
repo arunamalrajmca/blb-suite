@@ -65,7 +65,7 @@ test.describe('core user-action E2E coverage', () => {
       console.log('[E2E Alt+B] observed tab:', tab);
       try {
         return new URL(tab.url).hostname === 'www.blueletterbible.org'
-          && new URL(tab.url).pathname === '/kjv/jhn/3/16/';
+          && /^\/kjv\/jhn\/3\/16(?:\/s_\\d+)?\/?$/i.test(new URL(tab.url).pathname);
       } catch (_) {
         return false;
       }
@@ -95,7 +95,7 @@ test.describe('core user-action E2E coverage', () => {
 
     await page.evaluate(() => {
       window.__blbE2ECopy = { html: null, plain: null };
-      document.addEventListener('copy', event => {
+      window.addEventListener('copy', event => {
         if (!event.clipboardData) return;
         window.__blbE2ECopy.html = event.clipboardData.getData('text/html');
         window.__blbE2ECopy.plain = event.clipboardData.getData('text/plain');
