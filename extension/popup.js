@@ -794,11 +794,25 @@ topicInput.addEventListener('input', async () => {
   updateStudyButtons();
   if (topicMenu.classList.contains('open')) populateTopics(topicInput.value);
 });
+async function saveTopicOnBlur() {
+  const topic = titleCase(topicInput.value);
+  if (!topic) return;
+  topicInput.value = topic;
+  await syncSelectedTopic(topic);
+  const response = await chrome.runtime.sendMessage({
+    type:'blbSuiteSaveStudyTopic',
+    title:topic
+  });
+  if (response?.ok) await refreshStudyState();
+}
+
 topicInput.addEventListener('change', async () => {
   topicInput.value = titleCase(topicInput.value);
   await syncSelectedTopic(topicInput.value);
   updateStudyButtons();
 });
+
+topicInput.addEventListener('blur', saveTopicOnBlur);
 topicArrow.addEventListener('click', toggleTopicMenu);
 clearSelectedTopicInputButton.addEventListener('click', clearTopicSelectionInput);
 importTestDataButton.addEventListener('click', async () => {
