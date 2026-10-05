@@ -2375,7 +2375,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteGetStudyUiState","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBrowserUrl"]);
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;
+  (async () => {
   if (!message) return;
 
   if (message.type === 'blbSuiteGetStudyUiState') {
@@ -2779,6 +2783,8 @@ chrome.runtime.onMessage.addListener(async (message, sender, sendResponse) => {
     console.error('BLB Suite tutorial command:', error);
     sendResponse({ok:false});
   });
+  return true;
+  })();
   return true;
 });
 
