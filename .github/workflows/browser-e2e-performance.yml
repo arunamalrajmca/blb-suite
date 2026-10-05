@@ -112,7 +112,7 @@ jobs:
       - name: Benchmark baseline and candidate (interleaved)
         if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
         env:
-          BLB_EXPECTED_VERSION: 5.2.51.46
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
           BLB_BASELINE_EXTENSION_PATH: ${{ runner.temp }}/blb-baseline/extension
           BLB_CANDIDATE_EXTENSION_PATH: ${{ github.workspace }}/extension
           BLB_BASELINE_OUTPUT: ${{ runner.temp }}/baseline-performance.jsonl
