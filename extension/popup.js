@@ -794,19 +794,20 @@ topicInput.addEventListener('input', async () => {
   updateStudyButtons();
   if (topicMenu.classList.contains('open')) populateTopics(topicInput.value);
 });
-function saveTopicOnChange() {
+function persistTopicOnFocusLoss() {
   const topic = titleCase(topicInput.value);
   if (!topic) return;
   topicInput.value = topic;
-  // Start persistence before the popup can be destroyed by focus leaving it.
-  // The background owns the durable save and also updates the selected-topic key.
+  // Send the durable save first. The popup may be destroyed immediately after
+  // focus leaves it, so do not await any popup-side storage work beforehand.
   void chrome.runtime.sendMessage({
     type:'blbSuiteSaveStudyTopic',
     title:topic
   }).catch(() => {});
 }
 
-topicInput.addEventListener('change', saveTopicOnChange);
+topicInput.addEventListener('change', persistTopicOnFocusLoss);
+topicInput.addEventListener('blur', persistTopicOnFocusLoss);
 topicArrow.addEventListener('click', toggleTopicMenu);
 clearSelectedTopicInputButton.addEventListener('click', clearTopicSelectionInput);
 importTestDataButton.addEventListener('click', async () => {
