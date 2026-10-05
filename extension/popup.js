@@ -314,18 +314,46 @@ function populateTopics(filter = "") {
     topicMenu.appendChild(empty);
     return;
   }
+
+  const started = [];
+  const notStarted = [];
   for (const topic of topics) {
-    const option = document.createElement('button');
-    option.type = 'button';
-    option.className = 'topic-option';
-    option.textContent = topic;
-    option.setAttribute('role', 'option');
-    option.setAttribute('aria-selected', 'false');
-    option.addEventListener('mousedown', e => e.preventDefault());
-    option.addEventListener('click', async () => { await selectTopicValue(topic); });
-    topicMenu.appendChild(option);
+    const key = findTopicKey(topic);
+    const stats = key ? (studyState.topicStats?.[key] || {}) : {};
+    const hasStudyData = Number(stats.refs || 0) > 0 ||
+      Number(stats.strongs || 0) > 0 ||
+      Number(stats.searchTerms || 0) > 0 ||
+      Number(stats.notes || 0);
+    (hasStudyData ? started : notStarted).push(topic);
   }
-  if (topicHighlightIndex >= topics.length) topicHighlightIndex = topics.length - 1;
+
+  const addGroup = (label, groupTopics, firstGroup = false) => {
+    if (!groupTopics.length) return;
+    const heading = document.createElement('div');
+    heading.className = 'topic-group-label';
+    heading.textContent = label;
+    heading.setAttribute('aria-hidden', 'true');
+    if (!firstGroup) heading.classList.add('with-divider');
+    topicMenu.appendChild(heading);
+
+    for (const topic of groupTopics) {
+      const option = document.createElement('button');
+      option.type = 'button';
+      option.className = 'topic-option';
+      option.textContent = topic;
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', 'false');
+      option.addEventListener('mousedown', e => e.preventDefault());
+      option.addEventListener('click', async () => { await selectTopicValue(topic); });
+      topicMenu.appendChild(option);
+    }
+  };
+
+  addGroup('TOPICS WITH STUDY DATA', started, true);
+  addGroup('NOT STARTED', notStarted);
+
+  const optionCount = started.length + notStarted.length;
+  if (topicHighlightIndex >= optionCount) topicHighlightIndex = optionCount - 1;
   if (topicHighlightIndex < 0) topicHighlightIndex = 0;
   setTopicHighlight(topicHighlightIndex);
 }
@@ -432,20 +460,40 @@ function updateStudyButtons() {
   });
   for (const button of historyButtons) historyMenu.appendChild(button);
   const hasSavedTopics = Array.isArray(studyState.topics) && studyState.topics.length > 0;
+  const selectedTopic = findTopicKey(studyState.currentTopic || topicInput.value);
+  const selectedTopicStats = selectedTopic
+    ? (studyState.topicStats?.[selectedTopic] || {})
+    : {};
+  const selectedTopicHasStudyData =
+    Number(selectedTopicStats.refs || 0) > 0 ||
+    Number(selectedTopicStats.strongs || 0) > 0 ||
+    Number(selectedTopicStats.searchTerms || 0) > 0 ||
+    Number(selectedTopicStats.notes || 0);
+
+  // Download is available only when the topic dropdown contains at least one
+  // topic with actual study data. A list containing only NOT STARTED topics
+  // must disable the entire Download menu and all of its sub-actions.
+  const hasAnyTopicWithStudyData = (studyState.topics || []).some(savedTopic => {
+    const key = findTopicKey(savedTopic);
+    const stats = key ? (studyState.topicStats?.[key] || {}) : {};
+    return Number(stats.refs || 0) > 0 ||
+      Number(stats.strongs || 0) > 0 ||
+      Number(stats.searchTerms || 0) > 0 ||
+      Number(stats.notes || 0);
+  });
   // Study actions are driven only by the Study/master state, not by the
-  // Show on BLB / Double-Click / Redirect toggles. General history actions
-  // require saved topics; Selected Topic actions additionally require an
-  // explicit existing topic selection.
-  downloadMenuButton.disabled = !hasSavedTopics;
+  // Show on BLB / Double-Click / Redirect toggles.
+  downloadMenuButton.disabled = !hasAnyTopicWithStudyData;
   clearStudyButton.disabled = !hasSavedTopics;
   topicArrow.disabled = !hasSavedTopics;
   topicArrow.setAttribute('aria-disabled', String(!hasSavedTopics));
 
-  // Download PDF menu: Selected Topic needs an explicit existing selection;
-  // All Topics and By Date only need saved study history.
-  downloadButton.disabled = !existing;
-  downloadWholeButton.disabled = !hasSavedTopics;
-  downloadDateButton.disabled = !hasSavedTopics;
+  // Selected Topic requires an actual selected topic and data in THAT topic.
+  downloadButton.disabled = !selectedTopic || !selectedTopicHasStudyData;
+
+  // Whole Study and By Date operate on the study collection.
+  downloadWholeButton.disabled = !hasAnyTopicWithStudyData;
+  downloadDateButton.disabled = !hasAnyTopicWithStudyData;
 
   // Clear menu follows the same rule: Selected Topic needs an explicit
   // existing selection; All Topics only needs saved study history.
@@ -795,23 +843,22 @@ function queueTopicPersistence() {
   if (topicPersistTimer) clearTimeout(topicPersistTimer);
   topicPersistTimer = setTimeout(() => {
     topicPersistTimer = null;
-    persistTopicValue(topic);
+    void persistTopicValue(topic);
   }, 250);
 }
 
-function persistTopicValue(topic) {
+async function persistTopicValue(topic) {
   const value = titleCase(topic);
   if (!value) return;
-  const existing = findTopicKey(value);
-  if (!existing) {
-    studyState.topics = [...(studyState.topics || []), value];
-    populateTopics(topicMenu.classList.contains('open') ? topicInput.value : '');
-    updateStudyButtons();
-  }
-  void chrome.storage.local.set({
-    [SELECTED_TOPIC_STORAGE_KEY]: value,
-    studyTopics: studyState.topics || []
-  }).catch(() => {});
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type:'blbSuiteSaveStudyTopic',
+      title:value
+    });
+    if (!response?.ok) return;
+    await chrome.storage.local.set({[SELECTED_TOPIC_STORAGE_KEY]:value});
+    await refreshStudyState();
+  } catch (_) {}
 }
 
 topicInput.addEventListener('input', async () => {
@@ -821,7 +868,6 @@ topicInput.addEventListener('input', async () => {
   }
   updateStudyButtons();
   if (topicMenu.classList.contains('open')) populateTopics(topicInput.value);
-  queueTopicPersistence();
 });
 
 topicInput.addEventListener('blur', () => {
@@ -831,7 +877,7 @@ topicInput.addEventListener('blur', () => {
     clearTimeout(topicPersistTimer);
     topicPersistTimer = null;
   }
-  persistTopicValue(topic);
+  void persistTopicValue(topic);
 });
 
 
