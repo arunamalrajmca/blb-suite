@@ -794,16 +794,16 @@ topicInput.addEventListener('input', async () => {
   updateStudyButtons();
   if (topicMenu.classList.contains('open')) populateTopics(topicInput.value);
 });
-async function saveTopicOnChange() {
+function saveTopicOnChange() {
   const topic = titleCase(topicInput.value);
   if (!topic) return;
   topicInput.value = topic;
-  await syncSelectedTopic(topic);
-  const response = await chrome.runtime.sendMessage({
+  // Start persistence before the popup can be destroyed by focus leaving it.
+  // The background owns the durable save and also updates the selected-topic key.
+  void chrome.runtime.sendMessage({
     type:'blbSuiteSaveStudyTopic',
     title:topic
-  });
-  if (response?.ok) await refreshStudyState();
+  }).catch(() => {});
 }
 
 topicInput.addEventListener('change', saveTopicOnChange);
