@@ -855,7 +855,6 @@ topicInput.addEventListener('input', async () => {
   }
   updateStudyButtons();
   if (topicMenu.classList.contains('open')) populateTopics(topicInput.value);
-  queueTopicPersistence();
 });
 
 topicInput.addEventListener('blur', () => {
