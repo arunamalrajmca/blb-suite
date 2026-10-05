@@ -381,7 +381,16 @@ async function getStudyUiState() {
   };
 }
 
-async function saveStudyTopicFromPopup(title) {
+let studyTopicSaveQueue = Promise.resolve();
+
+function saveStudyTopicFromPopup(title) {
+  const run = () => saveStudyTopicFromPopupNow(title);
+  const result = studyTopicSaveQueue.then(run, run);
+  studyTopicSaveQueue = result.catch(() => {});
+  return result;
+}
+
+async function saveStudyTopicFromPopupNow(title) {
   const topic = normalizeStudyTopic(title);
   if (!topic || topic.toLowerCase() === "uncategorized") return {ok:false, reason:"empty-or-uncategorized"};
 
