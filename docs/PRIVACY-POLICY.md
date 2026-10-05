@@ -1,6 +1,6 @@
 # Blue Letter Bible Suite — Privacy Policy
 
-**Effective version:** 5.2.51.48
+This policy applies to the current published version of the extension.
 
 Blue Letter Bible Suite is an independent, unofficial Chrome extension that provides Bible-study tools around supported Bible websites, including Blue Letter Bible (BLB), reference handling, Show on BLB, Double-Click BLB, study sessions, and KJV case-sensitive search.
 
