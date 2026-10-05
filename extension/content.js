@@ -1914,14 +1914,7 @@ async function refreshBlbPageSelectionButton() {
   // controls the floating Show on BLB button. Do this proactively rather than
   // waiting for contextMenus.onShown, because an asynchronous visibility
   // update from onShown can take effect only on the second right-click.
-  if (suiteEnabled && shouldEnable) {
-    // Do not expose the floating button until the native right-click item has
-    // finished being synchronized. This removes the small first-click race
-    // where the floating button was visible but the context-menu item was not.
-    await safeRuntimeSendMessage({type:'blbSuiteSyncSelectionContextMenu'});
-  } else {
-    await safeRuntimeSendMessage({type:'blbSuiteSyncSelectionContextMenu'});
-  }
+  await safeRuntimeSendMessage({type:'blbSuiteSyncSelectionContextMenu'});
   if (!suiteEnabled || !shouldEnable) {
     disableBlbPageButtonMonitoring();
     return;
