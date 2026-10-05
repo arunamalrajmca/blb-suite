@@ -27,8 +27,8 @@
   "content_scripts": [
     {
       "matches": [
-        "http://*.blueletterbible.org/*",
-        "https://*.blueletterbible.org/*",
+        "http://*/*",
+        "https://*/*",
         "file:///*.pdf",
         "file:///*.html",
         "file:///*.htm"
