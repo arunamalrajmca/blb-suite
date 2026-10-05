@@ -299,7 +299,10 @@ async function selectTopicValue(topic) {
     setStatus('Select Start to record this topic.');
   }
   await syncSelectedTopic(topic);
-  updateStudyButtons();
+  // Refresh the authoritative Study state after an explicit dropdown
+  // selection so Play/Stop and Download states immediately follow the topic
+  // the user just selected, rather than waiting for a later storage event.
+  await refreshStudyState();
 }
 
 function populateTopics(filter = "") {
