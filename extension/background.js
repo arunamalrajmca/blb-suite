@@ -1717,6 +1717,82 @@ function findSingleKjvPhraseMatch(value) {
   return match;
 }
 
+function findSingleKjvWordIntersectionMatch(value) {
+  const needle = normalizeOmniboxSearchPhrase(value);
+  if (!needle || !Array.isArray(KJV_CORPUS_VERSES) || !KJV_CORPUS_WORD_VERSE_INDEX) return null;
+
+  // A trailing Bible reference is routing context, not a Criteria-search word.
+  // Tokenize it instead of building a dynamic regex from book aliases.
+  const tokens = needle.split(/\s+/).filter(Boolean);
+  let searchTokens = tokens;
+
+  let bestBookTokenCount = 0;
+  for (const book of bookData) {
+    const forms = [
+      String(book.name || ''),
+      String(book.urlKey || ''),
+      ...(book.aliases || []).map(a => String(a || ''))
+    ];
+    for (const form of forms) {
+      const formTokens = normalizeOmniboxSearchPhrase(form).split(/\s+/).filter(Boolean);
+      if (!formTokens.length || formTokens.length >= tokens.length) continue;
+      const suffixStart = tokens.length - formTokens.length - 2;
+      if (suffixStart < 0) continue;
+      const suffixBook = tokens.slice(suffixStart, suffixStart + formTokens.length);
+      if (suffixBook.join(' ') !== formTokens.join(' ')) continue;
+      if (!/^\d+$/.test(tokens[suffixStart + formTokens.length]) ||
+          !/^\d+$/.test(tokens[suffixStart + formTokens.length + 1])) continue;
+      if (formTokens.length > bestBookTokenCount) {
+        bestBookTokenCount = formTokens.length;
+        searchTokens = tokens.slice(0, suffixStart);
+      }
+    }
+  }
+
+  const words = [...new Set(searchTokens)].filter(Boolean);
+  if (!words.length) return null;
+
+  // Start with the smallest posting list, then intersect the remaining lists.
+  // This keeps the direct-verse check proportional to the candidate words,
+  // rather than scanning all 31,102 verses.
+  const postings = [];
+  for (const word of words) {
+    const encoded = KJV_CORPUS_WORD_VERSE_INDEX[word];
+    if (!encoded) return null;
+    const bytes = atob(encoded);
+    const verses = [];
+    let valuePart = 0;
+    let shift = 0;
+    let previous = 0;
+    for (let i = 0; i < bytes.length; i++) {
+      const b = bytes.charCodeAt(i);
+      valuePart += (b & 127) << shift;
+      if (b & 128) {
+        shift += 7;
+        continue;
+      }
+      previous += valuePart;
+      verses.push(previous);
+      valuePart = 0;
+      shift = 0;
+    }
+    postings.push(verses);
+  }
+
+  postings.sort((a, b) => a.length - b.length);
+  let candidate = new Set(postings[0]);
+  for (let i = 1; i < postings.length && candidate.size; i++) {
+    const allowed = new Set(postings[i]);
+    for (const index of candidate) {
+      if (!allowed.has(index)) candidate.delete(index);
+    }
+  }
+
+  if (candidate.size !== 1) return null;
+  const index = candidate.values().next().value;
+  return KJV_CORPUS_VERSES[index] || null;
+}
+
 async function openSingleKjvVerse(entry, disposition = 'currentTab') {
   if (!Array.isArray(entry) || entry.length < 3) return false;
   const book = bookData.find(b => Number(b.bookNumber) === Number(entry[0]));
@@ -1869,6 +1945,14 @@ async function handleBCommand(text) {
   const singleKjvMatch = findSingleKjvPhraseMatch(t);
   if (singleKjvMatch) {
     if (await openSingleKjvVerse(singleKjvMatch)) {
+      await recordStudySearchTerm(t);
+      return;
+    }
+  }
+
+  const singleKjvWordMatch = findSingleKjvWordIntersectionMatch(t);
+  if (singleKjvWordMatch) {
+    if (await openSingleKjvVerse(singleKjvWordMatch)) {
       await recordStudySearchTerm(t);
       return;
     }
