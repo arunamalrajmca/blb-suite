@@ -23,22 +23,60 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Detect runtime changes
+        id: runtime
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch origin "$PR_BASE_SHA" --depth=1
+          changed="$(git diff --name-only "$PR_BASE_SHA"...HEAD)"
+          runtime_changed=false
+
+          if printf '%s\n' "$changed" | grep -Eq '^(tests/browser/|tests/e2e/|scripts/compare-performance\.mjs$|package(-lock)?\.json$|playwright\.config\.)'; then
+            runtime_changed=true
+          elif printf '%s\n' "$changed" | grep -Eq '^extension/' ; then
+            # A manifest version bump alone does not alter extension runtime behavior.
+            # Any other extension change remains performance-relevant.
+            if [ "$(printf '%s\n' "$changed" | grep -c '^extension/')" -eq 1 ] && \
+               printf '%s\n' "$changed" | grep -qx 'extension/manifest.json'; then
+              non_version_manifest_diff="$(git diff --unified=0 "$PR_BASE_SHA"...HEAD -- extension/manifest.json | grep -E '^[+-]' | grep -Ev '^---|^\+\+\+' | grep -Ev '^[+-][[:space:]]*"version"[[:space:]]*:')"
+              if [ -n "$non_version_manifest_diff" ]; then
+                runtime_changed=true
+              fi
+            else
+              runtime_changed=true
+            fi
+          fi
+
+          if [ "$runtime_changed" = true ]; then
+            echo "runtime_changed=true" >> "$GITHUB_OUTPUT"
+            echo "Runtime/performance-relevant files changed; run measured performance qualification."
+          else
+            echo "runtime_changed=false" >> "$GITHUB_OUTPUT"
+            echo "No runtime/performance behavior changed; measured performance qualification is not applicable."
+          fi
       - name: Setup Node
+        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
       - name: Install dependencies
+        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
         run: npm install
 
       - name: Install Playwright Chromium
+        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
         run: npx playwright install --with-deps chromium
 
       - name: Read manifest version
+        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
         id: version
         run: echo "version=$(node -p "require('./extension/manifest.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Fetch performance baseline
+        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
         env:
           BLB_PERF_TARGET: ${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver')) && 'kjv-range-resolver' || '' }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -59,22 +97,8 @@ jobs:
             git worktree add "$RUNNER_TEMP/blb-baseline" v5.2.51.43
           fi
 
-      - name: Detect runtime changes
-        id: runtime
-        if: ${{ github.event_name == 'pull_request' }}
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          git fetch origin "$PR_BASE_SHA" --depth=1
-          changed="$(git diff --name-only "$PR_BASE_SHA"...HEAD)"
-          if printf '%s\n' "$changed" | grep -Eq '^(extension/|tests/browser/|tests/e2e/|scripts/compare-performance\.mjs$|package(-lock)?\.json$|playwright\.config\.)'; then
-            echo "runtime_changed=true" >> "$GITHUB_OUTPUT"
-            echo "Runtime/performance-relevant files changed; run measured performance qualification."
-          else
-            echo "runtime_changed=false" >> "$GITHUB_OUTPUT"
-            echo "CI-only change; measured performance qualification is not applicable."
-          fi
       - name: Package main + 76 test ZIP
+        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
         run: |
           mkdir -p "$RUNNER_TEMP/blb-test-build"
           VERSION="$(node -p "require('./extension/manifest.json').version")"
