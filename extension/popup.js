@@ -839,7 +839,7 @@ async function persistTopicValue(topic) {
   if (!value) return;
   try {
     const response = await chrome.runtime.sendMessage({
-      type:'blbSuiteSaveStudyTopicFromPopup',
+      type:'blbSuiteSaveStudyTopic',
       title:value
     });
     if (!response?.ok) return;
