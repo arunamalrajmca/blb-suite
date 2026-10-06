@@ -158,6 +158,7 @@ jobs:
   browser-e2e-summary:
     name: browser-e2e
     needs:
+      - change-detection
       - browser-e2e
       - browser-e2e-features
     if: ${{ always() }}
@@ -174,8 +175,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATUS_SHA: ${{ github.sha }}
-          STATUS_STATE: ${{ (needs.browser-e2e.result == 'success' || needs.browser-e2e.result == 'skipped') && (needs.browser-e2e-features.result == 'success' || needs.browser-e2e-features.result == 'skipped') && 'success' || 'failure' }}
-          STATUS_DESCRIPTION: ${{ (needs.browser-e2e.result == 'success' || needs.browser-e2e.result == 'skipped') && (needs.browser-e2e-features.result == 'success' || needs.browser-e2e-features.result == 'skipped') && 'browser E2E passed or not applicable' || 'browser E2E failed' }}
+          STATUS_STATE: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || needs.browser-e2e.result == 'skipped') && (needs.browser-e2e-features.result == 'success' || needs.browser-e2e-features.result == 'skipped') && 'success' || 'failure' }}
+          STATUS_DESCRIPTION: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || needs.browser-e2e.result == 'skipped') && (needs.browser-e2e-features.result == 'success' || needs.browser-e2e-features.result == 'skipped') && 'browser E2E passed or not applicable' || 'browser E2E failed' }}
         shell: bash
         run: |
           curl --fail-with-body --silent --show-error \
@@ -189,7 +190,7 @@ jobs:
       - name: Require all browser E2E suites to pass
         shell: bash
         run: |
-          if [ "${{ needs.browser-e2e.result }}" = "failure" ] || [ "${{ needs.browser-e2e.result }}" = "cancelled" ] || [ "${{ needs.browser-e2e-features.result }}" = "failure" ] || [ "${{ needs.browser-e2e-features.result }}" = "cancelled" ]; then
+          if [ "${{ needs.change-detection.result }}" != "success" ] || [ "${{ needs.browser-e2e.result }}" = "failure" ] || [ "${{ needs.browser-e2e.result }}" = "cancelled" ] || [ "${{ needs.browser-e2e-features.result }}" = "failure" ] || [ "${{ needs.browser-e2e-features.result }}" = "cancelled" ]; then
             echo "References matrix: ${{ needs.browser-e2e.result }}"
             echo "Features: ${{ needs.browser-e2e-features.result }}"
             exit 1
