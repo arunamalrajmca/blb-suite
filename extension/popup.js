@@ -34,7 +34,7 @@ async function getDefaultSiteEnabled(siteKey, pageTitle = '') {
 async function getState() {
   const [tabs, data] = await Promise.all([
     chrome.tabs.query({active:true, currentWindow:true}),
-    chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:true})
+    chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false})
   ]);
   const pageTitle = tabs[0]?.title || '';
   const pageTitleForDefaultCheck = pageTitle;
