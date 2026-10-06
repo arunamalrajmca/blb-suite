@@ -174,8 +174,43 @@ async function setDoubleClick(on) {
 async function setRedirect(on) {
   const state = await getState();
   if (!state.master) return;
+
+  if (on) {
+    const redirectOrigins = [
+      'http://www.bible.com/*', 'https://www.bible.com/*',
+      'http://www.biblegateway.com/*', 'https://www.biblegateway.com/*',
+      'http://www.bibleref.com/*', 'https://www.bibleref.com/*',
+      'http://biblehub.com/*', 'https://biblehub.com/*',
+      'http://www.biblehub.com/*', 'https://www.biblehub.com/*',
+      'http://bibleportal.com/*', 'https://bibleportal.com/*',
+      'http://www.bibleportal.com/*', 'https://www.bibleportal.com/*',
+      'http://www.kingjamesbibleonline.org/*', 'https://www.kingjamesbibleonline.org/*',
+      'http://kjbo.org/*', 'https://kjbo.org/*',
+      'http://www.kjbo.org/*', 'https://www.kjbo.org/*',
+      'http://www.kjv.site/*', 'https://www.kjv.site/*',
+      'http://kjv.site/*', 'https://kjv.site/*',
+      'http://m.kjv.site/*', 'https://m.kjv.site/*',
+      'http://officialkingjamesbible.com/*', 'https://officialkingjamesbible.com/*',
+      'http://www.officialkingjamesbible.com/*', 'https://www.officialkingjamesbible.com/*',
+      'http://webstersdictionary1828.com/*', 'https://webstersdictionary1828.com/*'
+    ];
+    const granted = await chrome.permissions.request({origins: redirectOrigins}).catch(() => false);
+    if (!granted) {
+      await chrome.storage.local.set({redirectEnabled:false});
+      render(await getState());
+      return;
+    }
+  }
+
   await chrome.storage.local.set({redirectEnabled: !!on});
   try { await chrome.runtime.sendMessage({type:'blbSuiteRefreshRedirectRules'}); } catch (_) {}
+  if (on) {
+    try {
+      const tabs = await chrome.tabs.query({active:true,currentWindow:true});
+      const tabId = tabs[0]?.id;
+      if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
+    } catch (_) {}
+  }
   render(await getState());
 }
 
