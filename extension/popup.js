@@ -34,7 +34,7 @@ async function getDefaultSiteEnabled(siteKey, pageTitle = '') {
 async function getState() {
   const [tabs, data] = await Promise.all([
     chrome.tabs.query({active:true, currentWindow:true}),
-    chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:true})
+    chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false})
   ]);
   const pageTitle = tabs[0]?.title || '';
   const pageTitleForDefaultCheck = pageTitle;
@@ -174,8 +174,50 @@ async function setDoubleClick(on) {
 async function setRedirect(on) {
   const state = await getState();
   if (!state.master) return;
-  await chrome.storage.local.set({redirectEnabled: !!on});
+
+  if (on) {
+    const redirectOrigins = [
+      'http://www.bible.com/*', 'https://www.bible.com/*',
+      'http://www.biblegateway.com/*', 'https://www.biblegateway.com/*',
+      'http://www.bibleref.com/*', 'https://www.bibleref.com/*',
+      'http://biblehub.com/*', 'https://biblehub.com/*',
+      'http://www.biblehub.com/*', 'https://www.biblehub.com/*',
+      'http://bibleportal.com/*', 'https://bibleportal.com/*',
+      'http://www.bibleportal.com/*', 'https://www.bibleportal.com/*',
+      'http://www.kingjamesbibleonline.org/*', 'https://www.kingjamesbibleonline.org/*',
+      'http://kjbo.org/*', 'https://kjbo.org/*',
+      'http://www.kjbo.org/*', 'https://www.kjbo.org/*',
+      'http://www.kjv.site/*', 'https://www.kjv.site/*',
+      'http://kjv.site/*', 'https://kjv.site/*',
+      'http://m.kjv.site/*', 'https://m.kjv.site/*',
+      'http://officialkingjamesbible.com/*', 'https://officialkingjamesbible.com/*',
+      'http://www.officialkingjamesbible.com/*', 'https://www.officialkingjamesbible.com/*',
+      'http://webstersdictionary1828.com/*', 'https://webstersdictionary1828.com/*'
+    ];
+
+    // Persist the user's intent before the permission prompt. Chrome may
+    // interrupt/recreate the action popup while showing a permission prompt,
+    // so waiting until after permissions.request() can lose the toggle state.
+    await chrome.storage.local.set({redirectEnabled:true});
+
+    const granted = await chrome.permissions.request({origins: redirectOrigins}).catch(() => false);
+    const hasRedirectAccess = granted && await chrome.permissions.contains({origins: redirectOrigins}).catch(() => false);
+    if (!hasRedirectAccess) {
+      await chrome.storage.local.set({redirectEnabled:false});
+      render(await getState());
+      return;
+    }
+  } else {
+    await chrome.storage.local.set({redirectEnabled:false});
+  }
   try { await chrome.runtime.sendMessage({type:'blbSuiteRefreshRedirectRules'}); } catch (_) {}
+  if (on) {
+    try {
+      const tabs = await chrome.tabs.query({active:true,currentWindow:true});
+      const tabId = tabs[0]?.id;
+      if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
+    } catch (_) {}
+  }
   render(await getState());
 }
 
@@ -1056,9 +1098,14 @@ async function handleDoubleClickToggle(on) {
     await setDoubleClick(false);
     return;
   }
+  // Enabling Double-Click also initializes Show on BLB for this site.
+  // Both features share the same site access, so enabling either feature
+  // should establish the site's Show on BLB capability.
+  await setPageButton(true, {deferActivation:true});
   await setDoubleClick(true, {deferActivation:true});
   if (!(await requestCurrentSiteAccess())) {
     await setDoubleClick(false);
+    await setPageButton(false);
     return;
   }
   try {

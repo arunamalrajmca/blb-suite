@@ -15,8 +15,7 @@
     "alarms"
   ],
   "host_permissions": [
-    "http://*/*",
-    "https://*/*"
+    "https://www.blueletterbible.org/*"
   ],
   "omnibox": {
     "keyword": "b"
@@ -24,26 +23,6 @@
   "background": {
     "service_worker": "background.js"
   },
-  "content_scripts": [
-    {
-      "matches": [
-        "http://*/*",
-        "https://*/*",
-        "file:///*.pdf",
-        "file:///*.html",
-        "file:///*.htm"
-      ],
-      "js": [
-        "multiverse-bootstrap-guard.js",
-        "kjv-corpus-word-index.js",
-        "books.js",
-        "book-aliases.js",
-        "reference-core.js",
-        "content.js"
-      ],
-      "run_at": "document_start"
-    }
-  ],
   "options_page": "options.html",
   "icons": {
     "16": "icons/icon16.png",
@@ -66,5 +45,26 @@
       "128": "icons/icon128.png"
     },
     "default_popup": "popup.html"
-  }
+  },
+  "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "file:///*.pdf",
+        "file:///*.html",
+        "file:///*.htm"
+      ],
+      "js": [
+        "kjv-corpus-word-index.js",
+        "books.js",
+        "book-aliases.js",
+        "reference-core.js",
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
+  ]
 }

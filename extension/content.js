@@ -209,10 +209,13 @@ const REDIRECT_HOSTS = new Set([
 ]);
 
 if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
-  chrome.storage.local.get({redirectEnabled:true}).then(({redirectEnabled})=>{
-    if (!suiteEnabled || !redirectEnabled) return;
-    if (!redirectBlbNet()) redirectBibleSite();
-  });
+  isSuiteEnabled().then(enabled => {
+    if (!enabled) return;
+    return chrome.storage.local.get({redirectEnabled:false}).then(({redirectEnabled})=>{
+      if (!redirectEnabled) return;
+      if (!redirectBlbNet()) redirectBibleSite();
+    });
+  }).catch(() => {});
 }
 // ---------- BLB MultiVerse native-copy hyperlink enhancement ----------
 // Augment BLB's native MultiVerse clipboard operation with text/html.

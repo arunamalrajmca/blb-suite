@@ -2377,6 +2377,20 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'content.js'
 ];
 
+const REDIRECT_HOSTNAMES = new Set([
+  'www.bible.com', 'www.biblegateway.com', 'www.bibleref.com',
+  'biblehub.com', 'www.biblehub.com',
+  'bibleportal.com', 'www.bibleportal.com',
+  'www.kingjamesbibleonline.org', 'kjbo.org', 'www.kjbo.org',
+  'www.kjv.site', 'kjv.site', 'm.kjv.site',
+  'officialkingjamesbible.com', 'www.officialkingjamesbible.com',
+  'webstersdictionary1828.com', 'www.blueletterbible.org'
+]);
+
+function isRedirectHostname(hostname) {
+  return REDIRECT_HOSTNAMES.has(String(hostname || '').toLowerCase());
+}
+
 function isHttpPageUrl(url) {
   return /^https?:\/\//i.test(String(url || ''));
 }
@@ -2953,7 +2967,7 @@ dynamicRules[1].condition={regexFilter:"^https://www\\.blueletterbible\\.org/net
 
 async function installRules() {
   try {
-    const data = await chrome.storage.local.get({redirectEnabled:true, masterEnabled:true});
+    const data = await chrome.storage.local.get({redirectEnabled:false, masterEnabled:true});
     await chrome.declarativeNetRequest.updateDynamicRules({
       removeRuleIds: dynamicRules.map(x=>x.id),
       addRules: data.masterEnabled !== false && data.redirectEnabled ? dynamicRules : []
@@ -5252,11 +5266,12 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
   if (changeInfo.status === 'complete' && tab?.url && isHttpPageUrl(tab.url)) {
     const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
-    chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}}).then(data => {
+    chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false}).then(data => {
       const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
       const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
       const explicitEnabled = pageSites[key] === true || doubleSites[key] === true;
-      if (explicitEnabled) return ensureContentScriptInTab(tabId);
+      const redirectEnabled = data.redirectEnabled === true && isRedirectHostname(new URL(tab.url).hostname);
+      if (explicitEnabled || redirectEnabled) return ensureContentScriptInTab(tabId);
       return null;
     }).catch(() => {});
   }
@@ -5288,7 +5303,7 @@ chrome.commands.onCommand.addListener(async command => {
 async function injectEnabledTabsForGrantedOrigins(origins) {
   const granted = Array.isArray(origins) ? origins.map(String) : [];
   if (!granted.length) return;
-  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}});
+  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false});
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
   const tabs = await chrome.tabs.query({});
@@ -5297,7 +5312,8 @@ async function injectEnabledTabsForGrantedOrigins(origins) {
     const pattern = originPatternForUrl(tab.url);
     if (!pattern || !granted.includes(pattern)) continue;
     const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
-    if (pageSites[key] === true || doubleSites[key] === true) {
+    const redirectEnabled = data.redirectEnabled === true && isRedirectHostname(new URL(tab.url).hostname);
+    if (pageSites[key] === true || doubleSites[key] === true || redirectEnabled) {
       await ensureContentScriptInTab(tab.id);
     }
   }
@@ -5311,7 +5327,7 @@ chrome.runtime.onInstalled.addListener(async details => {
   if (details.reason === "install") {
     const data = await chrome.storage.local.get({redirectEnabled:null, masterEnabled:null});
     const defaults = {};
-    if (data.redirectEnabled === null) defaults.redirectEnabled = true;
+    if (data.redirectEnabled === null) defaults.redirectEnabled = false;
     if (data.masterEnabled === null) defaults.masterEnabled = true;
     if (Object.keys(defaults).length) await chrome.storage.local.set(defaults);
   }
