@@ -2967,7 +2967,7 @@ dynamicRules[1].condition={regexFilter:"^https://www\\.blueletterbible\\.org/net
 
 async function installRules() {
   try {
-    const data = await chrome.storage.local.get({redirectEnabled:true, masterEnabled:true});
+    const data = await chrome.storage.local.get({redirectEnabled:false, masterEnabled:true});
     await chrome.declarativeNetRequest.updateDynamicRules({
       removeRuleIds: dynamicRules.map(x=>x.id),
       addRules: data.masterEnabled !== false && data.redirectEnabled ? dynamicRules : []
