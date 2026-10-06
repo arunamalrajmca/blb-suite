@@ -1,7 +1,7 @@
 {
   "name": "blb-suite",
   "private": true,
-  "version": "5.2.51.48",
+  "version": "5.2.51.49",
   "description": "Blue Letter Bible Suite source and reproducible browser test harness",
   "scripts": {
     "test": "playwright test",
