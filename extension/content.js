@@ -209,7 +209,7 @@ const REDIRECT_HOSTS = new Set([
 ]);
 
 if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
-  chrome.storage.local.get({redirectEnabled:true}).then(({redirectEnabled})=>{
+  chrome.storage.local.get({redirectEnabled:false}).then(({redirectEnabled})=>{
     if (!suiteEnabled || !redirectEnabled) return;
     if (!redirectBlbNet()) redirectBibleSite();
   });
