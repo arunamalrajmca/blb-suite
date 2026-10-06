@@ -41,12 +41,13 @@ test('manifest JSON + MV3 + version', () => {
 });
 test('required HTTP/HTTPS host permissions', () => {
   const m = JSON.parse(read('manifest.json'));
-  assert.deepEqual(m.host_permissions, ['http://*/*','https://*/*']);
+  assert.deepEqual(m.host_permissions, ['https://www.blueletterbible.org/*']);
 });
 test('content-script coverage includes web + local HTML/PDF', () => {
   const m = JSON.parse(read('manifest.json'));
   const matches = m.content_scripts?.flatMap(x=>x.matches||[]) || [];
-  for (const expected of ['http://*/*','https://*/*','file:///*.pdf','file:///*.html','file:///*.htm']) assert(matches.includes(expected), expected);
+  for (const expected of ['file:///*.pdf','file:///*.html','file:///*.htm']) assert(matches.includes(expected), expected);
+  assert(!matches.includes('http://*/*') && !matches.includes('https://*/*'), 'arbitrary HTTP/HTTPS hosts must not be permanent content-script matches');
 });
 test('manifest-referenced files exist', () => {
   const m = JSON.parse(read('manifest.json'));
@@ -55,7 +56,7 @@ test('manifest-referenced files exist', () => {
 });
 test('no optional host-permission regression', () => {
   const m = JSON.parse(read('manifest.json'));
-  assert(!('optional_host_permissions' in m), 'optional_host_permissions must not replace required host access');
+  assert.deepEqual(m.optional_host_permissions, ['http://*/*','https://*/*']);
 });
 
 // Syntax checks for all JS source files.
