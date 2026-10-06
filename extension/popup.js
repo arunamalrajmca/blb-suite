@@ -1098,9 +1098,14 @@ async function handleDoubleClickToggle(on) {
     await setDoubleClick(false);
     return;
   }
+  // Enabling Double-Click also initializes Show on BLB for this site.
+  // Both features share the same site access, so enabling either feature
+  // should establish the site's Show on BLB capability.
+  await setPageButton(true, {deferActivation:true});
   await setDoubleClick(true, {deferActivation:true});
   if (!(await requestCurrentSiteAccess())) {
     await setDoubleClick(false);
+    await setPageButton(false);
     return;
   }
   try {
