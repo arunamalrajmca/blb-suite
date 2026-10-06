@@ -5311,7 +5311,7 @@ chrome.runtime.onInstalled.addListener(async details => {
   if (details.reason === "install") {
     const data = await chrome.storage.local.get({redirectEnabled:null, masterEnabled:null});
     const defaults = {};
-    if (data.redirectEnabled === null) defaults.redirectEnabled = true;
+    if (data.redirectEnabled === null) defaults.redirectEnabled = false;
     if (data.masterEnabled === null) defaults.masterEnabled = true;
     if (Object.keys(defaults).length) await chrome.storage.local.set(defaults);
   }
