@@ -49,5 +49,22 @@
   "optional_host_permissions": [
     "http://*/*",
     "https://*/*"
+  ],
+  "content_scripts": [
+    {
+      "matches": [
+        "file:///*.pdf",
+        "file:///*.html",
+        "file:///*.htm"
+      ],
+      "js": [
+        "kjv-corpus-word-index.js",
+        "books.js",
+        "book-aliases.js",
+        "reference-core.js",
+        "content.js"
+      ],
+      "run_at": "document_start"
+    }
   ]
 }
