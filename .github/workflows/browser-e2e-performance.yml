@@ -33,8 +33,15 @@ jobs:
           changed="$(git diff --name-only "$PR_BASE_SHA"...HEAD)"
           runtime_changed=false
 
-          if printf '%s\n' "$changed" | grep -Eq '^(tests/browser/|tests/e2e/|scripts/compare-performance\.mjs$|package(-lock)?\.json$|playwright\.config\.)'; then
+          if printf '%s\n' "$changed" | grep -Eq '^(tests/browser/|tests/e2e/|scripts/compare-performance\.mjs$|playwright\.config\.)'; then
             runtime_changed=true
+          elif printf '%s\n' "$changed" | grep -qx 'package-lock.json'; then
+            runtime_changed=true
+          elif printf '%s\n' "$changed" | grep -qx 'package.json'; then
+            non_version_package_diff="$(git diff --unified=0 "$PR_BASE_SHA"...HEAD -- package.json | grep -E '^[+-]' | grep -Ev '^---|^\+\+\+' | grep -Ev '^[+-][[:space:]]*"version"[[:space:]]*:' || true)"
+            if [ -n "$non_version_package_diff" ]; then
+              runtime_changed=true
+            fi
           elif printf '%s\n' "$changed" | grep -Eq '^extension/' ; then
             # A manifest version bump alone does not alter extension runtime behavior.
             # Any other extension change remains performance-relevant.
