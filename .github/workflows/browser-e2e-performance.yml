@@ -25,44 +25,10 @@ jobs:
 
       - name: Detect runtime changes
         id: runtime
-        if: ${{ github.event_name == 'pull_request' }}
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          git fetch origin "$PR_BASE_SHA" --depth=1
-          changed="$(git diff --name-only "$PR_BASE_SHA"...HEAD)"
-          runtime_changed=false
-
-          if printf '%s\n' "$changed" | grep -Eq '^(tests/browser/|tests/e2e/|scripts/compare-performance\.mjs$|playwright\.config\.)'; then
-            runtime_changed=true
-          elif printf '%s\n' "$changed" | grep -qx 'package-lock.json'; then
-            runtime_changed=true
-          elif printf '%s\n' "$changed" | grep -qx 'package.json'; then
-            non_version_package_diff="$(git diff --unified=0 "$PR_BASE_SHA"...HEAD -- package.json | grep -E '^[+-]' | grep -Ev '^---|^\+\+\+' | grep -Ev '^[+-][[:space:]]*"version"[[:space:]]*:' || true)"
-            if [ -n "$non_version_package_diff" ]; then
-              runtime_changed=true
-            fi
-          elif printf '%s\n' "$changed" | grep -Eq '^extension/' ; then
-            # A manifest version bump alone does not alter extension runtime behavior.
-            # Any other extension change remains performance-relevant.
-            if [ "$(printf '%s\n' "$changed" | grep -c '^extension/')" -eq 1 ] && \
-               printf '%s\n' "$changed" | grep -qx 'extension/manifest.json'; then
-              non_version_manifest_diff="$(git diff --unified=0 "$PR_BASE_SHA"...HEAD -- extension/manifest.json | grep -E '^[+-]' | grep -Ev '^---|^\+\+\+' | grep -Ev '^[+-][[:space:]]*"version"[[:space:]]*:' || true)"
-              if [ -n "$non_version_manifest_diff" ]; then
-                runtime_changed=true
-              fi
-            else
-              runtime_changed=true
-            fi
-          fi
-
-          if [ "$runtime_changed" = true ]; then
-            echo "runtime_changed=true" >> "$GITHUB_OUTPUT"
-            echo "Runtime/performance-relevant files changed; run measured performance qualification."
-          else
-            echo "runtime_changed=false" >> "$GITHUB_OUTPUT"
-            echo "No runtime/performance behavior changed; measured performance qualification is not applicable."
-          fi
+          PR_HEAD_SHA: ${{ github.sha }}
+        run: bash scripts/ci/is-runtime-change.sh
       - name: Setup Node
         if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
         uses: actions/setup-node@v4
