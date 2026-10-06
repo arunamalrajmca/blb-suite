@@ -9,8 +9,25 @@ on:
   workflow_dispatch:
 
 jobs:
+  change-detection:
+    name: Detect runtime changes
+    runs-on: ubuntu-latest
+    outputs:
+      runtime_changed: ${{ steps.runtime.outputs.runtime_changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect runtime changes
+        id: runtime
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash scripts/ci/is-runtime-change.sh
+
   regression-gate:
     name: Regression — ${{ matrix.group }}
+    needs: change-detection
+    if: ${{ matrix.group == 'package' || needs.change-detection.outputs.runtime_changed == 'true' || github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -80,11 +97,11 @@ jobs:
       - name: Require all regression groups to pass
         shell: bash
         run: |
-          if [ "${{ needs.regression-gate.result }}" != "success" ]; then
+          if [ "${{ needs.regression-gate.result }}" = "failure" ] || [ "${{ needs.regression-gate.result }}" = "cancelled" ]; then
             echo "Regression matrix result: ${{ needs.regression-gate.result }}"
             exit 1
           fi
-          echo "All regression groups passed."
+          echo "All applicable regression groups passed."
 
       - name: ⏱ Workflow ETA — finish
         if: ${{ always() }}
