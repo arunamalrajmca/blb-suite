@@ -194,15 +194,22 @@ async function setRedirect(on) {
       'http://www.officialkingjamesbible.com/*', 'https://www.officialkingjamesbible.com/*',
       'http://webstersdictionary1828.com/*', 'https://webstersdictionary1828.com/*'
     ];
+
+    // Persist the user's intent before the permission prompt. Chrome may
+    // interrupt/recreate the action popup while showing a permission prompt,
+    // so waiting until after permissions.request() can lose the toggle state.
+    await chrome.storage.local.set({redirectEnabled:true});
+
     const granted = await chrome.permissions.request({origins: redirectOrigins}).catch(() => false);
-    if (!granted) {
+    const hasRedirectAccess = granted && await chrome.permissions.contains({origins: redirectOrigins}).catch(() => false);
+    if (!hasRedirectAccess) {
       await chrome.storage.local.set({redirectEnabled:false});
       render(await getState());
       return;
     }
+  } else {
+    await chrome.storage.local.set({redirectEnabled:false});
   }
-
-  await chrome.storage.local.set({redirectEnabled: !!on});
   try { await chrome.runtime.sendMessage({type:'blbSuiteRefreshRedirectRules'}); } catch (_) {}
   if (on) {
     try {
