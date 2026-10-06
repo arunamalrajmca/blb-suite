@@ -9,8 +9,25 @@ on:
   workflow_dispatch:
 
 jobs:
+  change-detection:
+    name: Detect runtime changes
+    runs-on: ubuntu-latest
+    outputs:
+      runtime_changed: ${{ steps.runtime.outputs.runtime_changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Detect runtime changes
+        id: runtime
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: bash scripts/ci/is-runtime-change.sh
+
   browser-e2e:
     name: BROWSER E2E — References — ${{ matrix.group }}
+    needs: change-detection
+    if: ${{ needs.change-detection.outputs.runtime_changed == 'true' || github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -87,6 +104,8 @@ jobs:
 
   browser-e2e-features:
     name: BROWSER E2E — FEATURES
+    needs: change-detection
+    if: ${{ needs.change-detection.outputs.runtime_changed == 'true' || github.event_name != 'pull_request' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -155,8 +174,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATUS_SHA: ${{ github.sha }}
-          STATUS_STATE: ${{ needs.browser-e2e.result == 'success' && 'success' || 'failure' }}
-          STATUS_DESCRIPTION: ${{ needs.browser-e2e.result == 'success' && 'browser E2E passed' || 'browser E2E failed' }}
+          STATUS_STATE: ${{ (needs.browser-e2e.result == 'success' || needs.browser-e2e.result == 'skipped') && (needs.browser-e2e-features.result == 'success' || needs.browser-e2e-features.result == 'skipped') && 'success' || 'failure' }}
+          STATUS_DESCRIPTION: ${{ (needs.browser-e2e.result == 'success' || needs.browser-e2e.result == 'skipped') && (needs.browser-e2e-features.result == 'success' || needs.browser-e2e-features.result == 'skipped') && 'browser E2E passed or not applicable' || 'browser E2E failed' }}
         shell: bash
         run: |
           curl --fail-with-body --silent --show-error \
@@ -170,12 +189,12 @@ jobs:
       - name: Require all browser E2E suites to pass
         shell: bash
         run: |
-          if [ "${{ needs.browser-e2e.result }}" != "success" ] || [ "${{ needs.browser-e2e-features.result }}" != "success" ]; then
+          if [ "${{ needs.browser-e2e.result }}" = "failure" ] || [ "${{ needs.browser-e2e.result }}" = "cancelled" ] || [ "${{ needs.browser-e2e-features.result }}" = "failure" ] || [ "${{ needs.browser-e2e-features.result }}" = "cancelled" ]; then
             echo "References matrix: ${{ needs.browser-e2e.result }}"
             echo "Features: ${{ needs.browser-e2e-features.result }}"
             exit 1
           fi
-          echo "All browser E2E suites passed."
+          echo "All applicable browser E2E suites passed."
 
       - name: ⏱ Workflow ETA — finish
         if: ${{ always() }}
