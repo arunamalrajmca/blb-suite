@@ -469,6 +469,10 @@ if (location.hostname.endsWith("blueletterbible.org") &&
       }
     });
   };
+  // The initial BLB new-tab pass can run before the asynchronous master
+  // setting has finished loading. Re-run the existing processor once settings
+  // are ready so a fresh page does not require an unrelated setting toggle.
+  suiteSettingsReadyPromise.then(()=>scheduleProcess()).catch(()=>{});
   const observer=new MutationObserver(mutations=>{
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
@@ -528,6 +532,10 @@ if (location.hostname.endsWith("blueletterbible.org")) {
       });
     };
   })();
+
+  // Initialize passive BLB verse targets after the master setting is known.
+  // This remains strictly within the blueletterbible.org path.
+  suiteSettingsReadyPromise.then(()=>schedulePassiveNewTabTargets()).catch(()=>{});
 
   const passiveNewTabObserver=new MutationObserver(mutations => {
     for (const mutation of mutations) {
