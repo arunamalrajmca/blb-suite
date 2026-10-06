@@ -32,7 +32,8 @@
   "commands": {
     "open-bible-selection-in-blb": {
       "suggested_key": {
-        "default": "Alt+B"
+        "default": "Alt+B",
+        "windows": "Alt+B"
       },
       "description": "Open selected Bible text or references in BLB"
     }
