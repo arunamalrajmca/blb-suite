@@ -81,6 +81,12 @@ async function getState() {
   };
 }
 
+const extensionVersion = document.getElementById('extensionVersion');
+if (extensionVersion) {
+  const manifest = chrome.runtime.getManifest();
+  extensionVersion.textContent = `v${manifest.version}`;
+}
+
 function render(state) {
   const pageGroupLabel = document.getElementById('pageGroupLabel');
   if (pageGroupLabel) {
