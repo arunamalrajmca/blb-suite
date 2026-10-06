@@ -67,7 +67,9 @@ jobs:
 
   regression-gate-summary:
     name: regression-gate
-    needs: regression-gate
+    needs:
+      - change-detection
+      - regression-gate
     if: ${{ always() }}
     runs-on: ubuntu-latest
     permissions:
@@ -97,7 +99,7 @@ jobs:
       - name: Require all regression groups to pass
         shell: bash
         run: |
-          if [ "${{ needs.regression-gate.result }}" = "failure" ] || [ "${{ needs.regression-gate.result }}" = "cancelled" ]; then
+          if [ "${{ needs.change-detection.result }}" != "success" ] || [ "${{ needs.regression-gate.result }}" = "failure" ] || [ "${{ needs.regression-gate.result }}" = "cancelled" ]; then
             echo "Regression matrix result: ${{ needs.regression-gate.result }}"
             exit 1
           fi
