@@ -492,8 +492,8 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     if (root.matches?.('div[id^="bVerse_"], .parse-popup')) modifyLinks(root);
     root.querySelectorAll?.('div[id^="bVerse_"], .parse-popup').forEach(modifyLinks);
     if (location.href.includes("MultiVerse.cfm")) {
-      if (root.matches?.('a[href*="/kjv/"]')) root.target="_blank";
-      root.querySelectorAll?.('a[href*="/kjv/"]').forEach(a=>a.target="_blank");
+      // MultiVerse verse clicks are handled by the dedicated click bridge below.
+      // Do not also assign target="_blank", which would create a second navigation path.
     }
   };
   let processScheduled=false;
@@ -526,8 +526,29 @@ if (location.hostname.endsWith("blueletterbible.org")) {
   document.addEventListener("click",e=>{
     if (!suiteEnabled) return;
     const a=e.target.closest?.("a.nowrap");
-    if (!a) return;
-    e.preventDefault(); e.stopImmediatePropagation(); window.open(a.href,"_blank");
+    if (!a || !a.href) return;
+
+    const isMultiVerse =
+      location.pathname.toLowerCase().endsWith("/tools/multiverse.cfm");
+    const isKjvLink = /\/kjv\//i.test(a.href);
+    const isChapterHeaderLink =
+      isKjvLink && !a.closest('div[id^="bVerse_"]');
+
+    // MultiVerse verse links and chapter-page header/above-verse references
+    // must have exactly one extension-controlled navigation path.
+    if (!(isMultiVerse && isKjvLink) && !isChapterHeaderLink) return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+
+    let hash=0;
+    for (let i=0;i<a.href.length;i++) {
+      hash=((hash<<5)-hash+a.href.charCodeAt(i))|0;
+    }
+    const windowName = isMultiVerse
+      ? `blbSuiteMultiVerse_${Math.abs(hash)}`
+      : `blbSuiteVerse_${Math.abs(hash)}`;
+    window.open(a.href, windowName);
   },true);
   if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",process);
   else process();
