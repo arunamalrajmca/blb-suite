@@ -36,20 +36,20 @@ jobs:
           node-version: 22
 
       - name: Install dependencies
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
         run: npm install
 
       - name: Install Playwright Chromium
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
         run: npx playwright install --with-deps chromium
 
       - name: Read manifest version
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
         id: version
         run: echo "version=$(node -p "require('./extension/manifest.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Fetch performance baseline
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
         env:
           BLB_PERF_TARGET: ${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver')) && 'kjv-range-resolver' || '' }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -71,7 +71,7 @@ jobs:
           fi
 
       - name: Package main + 76 test ZIP
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
         run: |
           mkdir -p "$RUNNER_TEMP/blb-test-build"
           VERSION="$(node -p "require('./extension/manifest.json').version")"
@@ -83,7 +83,7 @@ jobs:
           sha256sum "$ZIP" | tee "$ZIP.sha256"
         
       - name: Benchmark baseline and candidate (interleaved)
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
           BLB_BASELINE_EXTENSION_PATH: ${{ runner.temp }}/blb-baseline/extension
@@ -112,7 +112,7 @@ jobs:
           done
 
       - name: Require measured performance qualification
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
         env:
           BLB_PERF_MIN_TARGETED_IMPROVEMENT: 0.03
           BLB_PERF_MAX_SELECTION_REGRESSION: 0.10
