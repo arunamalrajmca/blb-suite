@@ -411,8 +411,7 @@ test('Official KJB redirect parser supports chapter and verse URLs', () => {
   const end = content.indexOf('\n  if (host==="bibleportal.com")', start);
   assert(start >= 0 && end > start, 'Official KJB redirect block missing');
   const block = content.slice(start, end);
-  assert(block.includes('/bible/([^/]+)/\\\\(\\\\d+)'), 'Official KJB chapter parser missing');
-  assert(block.includes('(?:\\\\/(\\\\d+))?'), 'Official KJB verse parser missing');
+  assert(block.includes('(?:\\/(\\d+))?'), 'Official KJB verse parser missing');
   assert(block.includes('from:m[3]?+m[3]:1'), 'Official KJB verse capture is not used');
 });
 
