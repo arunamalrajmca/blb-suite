@@ -176,7 +176,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATUS_SHA: ${{ github.sha }}
           STATUS_STATE: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || (needs.browser-e2e.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && (needs.browser-e2e-features.result == 'success' || (needs.browser-e2e-features.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && 'success' || 'failure' }}
-          STATUS_DESCRIPTION: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || needs.browser-e2e.result == 'skipped') && (needs.browser-e2e-features.result == 'success' || needs.browser-e2e-features.result == 'skipped') && 'browser E2E passed or not applicable' || 'browser E2E failed' }}
+          STATUS_DESCRIPTION: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || (needs.browser-e2e.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && (needs.browser-e2e-features.result == 'success' || (needs.browser-e2e-features.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && 'browser E2E passed or not applicable' || 'browser E2E failed' }}
         shell: bash
         run: |
           curl --fail-with-body --silent --show-error \
