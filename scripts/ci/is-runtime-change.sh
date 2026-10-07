@@ -2,12 +2,17 @@
 set -euo pipefail
 
 # Detect changes that can affect extension/runtime behavior.
-# Version-only changes in extension/manifest.json or package.json do not
-# justify browser regression or performance runs.
+# Version-only metadata changes and CI-only changes do not justify browser
+# regression or performance runs. Any other changed path is runtime-relevant.
+
+set_runtime_changed() {
+  local value="$1"
+  echo "runtime_changed=$value"
+  echo "runtime_changed=$value" >> "$GITHUB_OUTPUT"
+}
 
 if [[ "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" ]]; then
-  echo "runtime_changed=true"
-  echo "runtime_changed=true" >> "$GITHUB_OUTPUT"
+  set_runtime_changed true
   exit 0
 fi
 
@@ -20,21 +25,26 @@ else
 fi
 
 if [[ -z "$BASE_SHA" ]]; then
-  echo "runtime_changed=true"
+  set_runtime_changed true
   exit 0
 fi
 
 changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
 if [[ -z "$changed" ]]; then
-  echo "runtime_changed=false"
-  echo "runtime_changed=false" >> "$GITHUB_OUTPUT"
+  set_runtime_changed false
   exit 0
 fi
 
 while IFS= read -r path; do
   case "$path" in
-    extension/manifest.json|package.json) ;;
-    *) echo "runtime_changed=true"; echo "runtime_changed=true" >> "$GITHUB_OUTPUT"; exit 0 ;;
+    extension/manifest.json|package.json)
+      ;;
+    .github/*|scripts/ci/*)
+      ;;
+    *)
+      set_runtime_changed true
+      exit 0
+      ;;
   esac
 done <<< "$changed"
 
@@ -42,7 +52,7 @@ manifest_diff="$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" -- extension/manif
 package_diff="$(git diff --unified=0 "$BASE_SHA" "$HEAD_SHA" -- package.json | grep -E '^[+-]' | grep -Ev '^---|^\+\+\+' | grep -Ev '^[+-][[:space:]]*"version"[[:space:]]*:' || true)"
 
 if [[ -n "$manifest_diff" || -n "$package_diff" ]]; then
-  echo "runtime_changed=true"
+  set_runtime_changed true
 else
-  echo "runtime_changed=false"
+  set_runtime_changed false
 fi
