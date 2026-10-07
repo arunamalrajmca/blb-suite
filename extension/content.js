@@ -382,42 +382,7 @@ function formatBlbTextToHtml(rawText) {
   return `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`;
 }
 
-if (location.hostname.endsWith("blueletterbible.org") &&
-    !/(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)$/i.test(location.pathname)) {
-  // The copy event must be handled synchronously. Awaiting storage state inside
-  // the event handler lets the browser finish its normal copy operation before
-  // preventDefault() runs, which loses the HTML clipboard payload used by
-  // Word/Google Docs "Paste as link" behavior. The content script already
-  // maintains suiteEnabled through storage.onChanged, so use that cached value.
-  document.addEventListener("copy",e=>{
-    if (!suiteEnabled) return;
-    const text=window.getSelection()?.toString()||"";
-    const html=formatBlbTextToHtml(text);
-    if (!html || !e.clipboardData) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    e.clipboardData.setData("text/html",html);
-    e.clipboardData.setData("text/plain",text);
-  },true);
-
-  if (navigator.clipboard?.writeText) {
-    const original=navigator.clipboard.writeText.bind(navigator.clipboard);
-    navigator.clipboard.writeText=async text=>{
-      if (!(await isSuiteEnabled())) return original(text);
-      const html=formatBlbTextToHtml(text);
-      if (!html) return original(text);
-      const handler=e=>{
-        e.clipboardData.setData("text/html",html);
-        e.clipboardData.setData("text/plain",text);
-        e.preventDefault();
-      };
-      document.addEventListener("copy",handler,true);
-      document.execCommand("copy");
-      document.removeEventListener("copy",handler,true);
-    };
-  }
-
-  // ---------- BLB Parsing Popup: shared handler ----------
+// ---------- BLB Parsing Popup: shared handler ----------
 // One parser implementation is used on normal BLB pages and Criteria Search.
 // A stable window name prevents duplicate parser tabs on repeated clicks.
 if (location.hostname.endsWith("blueletterbible.org")) {
@@ -473,7 +438,42 @@ if (location.hostname.endsWith("blueletterbible.org")) {
   processParsePopups();
 }
 
-// ---------- BLB New Tab ----------
+if (location.hostname.endsWith("blueletterbible.org") &&
+    !/(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)$/i.test(location.pathname)) {
+  // The copy event must be handled synchronously. Awaiting storage state inside
+  // the event handler lets the browser finish its normal copy operation before
+  // preventDefault() runs, which loses the HTML clipboard payload used by
+  // Word/Google Docs "Paste as link" behavior. The content script already
+  // maintains suiteEnabled through storage.onChanged, so use that cached value.
+  document.addEventListener("copy",e=>{
+    if (!suiteEnabled) return;
+    const text=window.getSelection()?.toString()||"";
+    const html=formatBlbTextToHtml(text);
+    if (!html || !e.clipboardData) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    e.clipboardData.setData("text/html",html);
+    e.clipboardData.setData("text/plain",text);
+  },true);
+
+  if (navigator.clipboard?.writeText) {
+    const original=navigator.clipboard.writeText.bind(navigator.clipboard);
+    navigator.clipboard.writeText=async text=>{
+      if (!(await isSuiteEnabled())) return original(text);
+      const html=formatBlbTextToHtml(text);
+      if (!html) return original(text);
+      const handler=e=>{
+        e.clipboardData.setData("text/html",html);
+        e.clipboardData.setData("text/plain",text);
+        e.preventDefault();
+      };
+      document.addEventListener("copy",handler,true);
+      document.execCommand("copy");
+      document.removeEventListener("copy",handler,true);
+    };
+  }
+
+  // ---------- BLB New Tab ----------
   function modifyLinks(container) {
     container.querySelectorAll("a").forEach(link=>{
       if (!link.href) return;
