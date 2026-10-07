@@ -7,6 +7,7 @@ set -euo pipefail
 
 if [[ "${GITHUB_EVENT_NAME:-}" == "workflow_dispatch" ]]; then
   echo "runtime_changed=true"
+  echo "runtime_changed=true" >> "$GITHUB_OUTPUT"
   exit 0
 fi
 
@@ -26,13 +27,14 @@ fi
 changed="$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")"
 if [[ -z "$changed" ]]; then
   echo "runtime_changed=false"
+  echo "runtime_changed=false" >> "$GITHUB_OUTPUT"
   exit 0
 fi
 
 while IFS= read -r path; do
   case "$path" in
     extension/manifest.json|package.json) ;;
-    *) echo "runtime_changed=true"; exit 0 ;;
+    *) echo "runtime_changed=true"; echo "runtime_changed=true" >> "$GITHUB_OUTPUT"; exit 0 ;;
   esac
 done <<< "$changed"
 
