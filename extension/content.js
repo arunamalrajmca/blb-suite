@@ -453,8 +453,12 @@ if (location.hostname.endsWith("blueletterbible.org")) {
 
   const processParsePopups = (root = document) => {
     if (!suiteEnabled) return;
-    if (root.matches?.(".parse-popup")) handleParsePopupLink(root);
-    root.querySelectorAll?.(".parse-popup a[href]").forEach(handleParsePopupLink);
+    if (root.matches?.("a[href]")) handleParsePopupLink(root);
+    if (root.matches?.(".parse-popup")) {
+      root.querySelectorAll?.("a[href]").forEach(handleParsePopupLink);
+    } else {
+      root.querySelectorAll?.(".parse-popup a[href]").forEach(handleParsePopupLink);
+    }
   };
 
   const parsePopupObserver = new MutationObserver(mutations => {
