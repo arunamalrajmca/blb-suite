@@ -417,19 +417,65 @@ if (location.hostname.endsWith("blueletterbible.org") &&
     };
   }
 
-  // ---------- BLB New Tab ----------
+  // ---------- BLB Parsing Popup New Tab ----------
+// Keep parsing-popup links working on both normal BLB verse pages and
+// Criteria Search pages. A stable window name prevents repeated clicks from
+// opening duplicate tabs; the same tab is reused for the same destination.
+if (location.hostname.endsWith("blueletterbible.org")) {
+  const parsePopupWindowName = href => {
+    let hash = 0;
+    for (let i = 0; i < href.length; i++) {
+      hash = ((hash << 5) - hash + href.charCodeAt(i)) | 0;
+    }
+    return `blbSuiteParsePopup_${Math.abs(hash)}`;
+  };
+
+  const handleParsePopupLink = link => {
+    if (!link || !link.href || !link.closest?.(".parse-popup")) return;
+    if (link.dataset.blbSuitePopup) return;
+    link.dataset.blbSuitePopup = "1";
+    link.addEventListener("click", e => {
+      if (!suiteEnabled) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      const popupName = parsePopupWindowName(link.href);
+      window.open(link.href, popupName);
+
+      const m = link.href.match(/lexicon\/(g|h)\d+/i);
+      if (m) {
+        const criteriaUrl =
+          `https://www.blueletterbible.org/search/search.cfm?Criteria=${m[0].split("/").pop()}`;
+        window.open(criteriaUrl, `${popupName}_criteria`);
+      }
+    }, true);
+  };
+
+  const processParsePopups = (root = document) => {
+    if (!suiteEnabled) return;
+    if (root.matches?.(".parse-popup")) handleParsePopupLink(root);
+    root.querySelectorAll?.(".parse-popup a[href]").forEach(handleParsePopupLink);
+  };
+
+  const parsePopupObserver = new MutationObserver(mutations => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType === 1) processParsePopups(node);
+      }
+    }
+  });
+  parsePopupObserver.observe(document.documentElement, {childList:true, subtree:true});
+  processParsePopups();
+}
+
+// ---------- BLB New Tab ----------
   function modifyLinks(container) {
     container.querySelectorAll("a").forEach(link=>{
       if (!link.href) return;
       if (link.closest(".parse-popup")) {
-        if (link.dataset.blbSuitePopup) return;
-        link.dataset.blbSuitePopup="1";
-        link.addEventListener("click",e=>{
-          e.preventDefault(); e.stopPropagation();
-          window.open(link.href,"_blank");
-          const m=link.href.match(/lexicon\/(g|h)\d+/i);
-          if (m) window.open(`https://www.blueletterbible.org/search/search.cfm?Criteria=${m[0].split("/").pop()}`,"_blank");
-        });
+        // Parsing-popup links are handled by the shared BLB parse-popup handler
+        // below so Criteria Search pages and normal verse pages use the same
+        // single-tab/reuse behavior.
       } else if (link.closest('div[id^="bVerse_"]')) {
         link.target="_blank";
       }
