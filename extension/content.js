@@ -75,6 +75,20 @@ function safeRuntimeSendMessage(message) {
   }
 }
 
+// Route Suite-owned BLB new-tab actions through the background single-owner
+// destination manager. This prevents native/window.open tab creation from
+// bypassing canonical reuse when the source page is reopened later.
+function openBlbDestinationFromContent(url) {
+  const target = String(url || '').trim();
+  if (!/^https:\/\/www\.blueletterbible\.org\//i.test(target)) return;
+  void safeRuntimeSendMessage({
+    type: 'blbSuiteOpenBackgroundUrl',
+    url: target,
+    activeIfNew: true,
+    activateExisting: true
+  });
+}
+
 function normalizeSelectionText(s) {
   return String(s || '')
     // Facebook and some rich-text sites can insert invisible bidirectional
@@ -417,19 +431,56 @@ if (location.hostname.endsWith("blueletterbible.org") &&
     };
   }
 
-  // ---------- BLB New Tab ----------
+  // ---------- BLB Parsing Popup New Tab ----------
+// Keep parsing-popup links working on both normal BLB verse pages and
+// Criteria Search pages. A stable window name prevents repeated clicks from
+// opening duplicate tabs; the same tab is reused for the same destination.
+if (location.hostname.endsWith("blueletterbible.org")) {
+  const handleParsePopupLink = link => {
+    if (!link || !link.href || !link.closest?.(".parse-popup")) return;
+    if (link.dataset.blbSuitePopup) return;
+    link.dataset.blbSuitePopup = "1";
+    link.addEventListener("click", e => {
+      if (!suiteEnabled) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      openBlbDestinationFromContent(link.href);
+
+      const m = link.href.match(/lexicon\/(g|h)\d+/i);
+      if (m) {
+        const criteriaUrl =
+          `https://www.blueletterbible.org/search/search.cfm?Criteria=${m[0].split("/").pop()}`;
+        openBlbDestinationFromContent(criteriaUrl);
+      }
+    }, true);
+  };
+
+  const processParsePopups = (root = document) => {
+    if (!suiteEnabled) return;
+    if (root.matches?.(".parse-popup")) handleParsePopupLink(root);
+    root.querySelectorAll?.(".parse-popup a[href]").forEach(handleParsePopupLink);
+  };
+
+  const parsePopupObserver = new MutationObserver(mutations => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType === 1) processParsePopups(node);
+      }
+    }
+  });
+  parsePopupObserver.observe(document.documentElement, {childList:true, subtree:true});
+  processParsePopups();
+}
+
+// ---------- BLB New Tab ----------
   function modifyLinks(container) {
     container.querySelectorAll("a").forEach(link=>{
       if (!link.href) return;
       if (link.closest(".parse-popup")) {
-        if (link.dataset.blbSuitePopup) return;
-        link.dataset.blbSuitePopup="1";
-        link.addEventListener("click",e=>{
-          e.preventDefault(); e.stopPropagation();
-          window.open(link.href,"_blank");
-          const m=link.href.match(/lexicon\/(g|h)\d+/i);
-          if (m) window.open(`https://www.blueletterbible.org/search/search.cfm?Criteria=${m[0].split("/").pop()}`,"_blank");
-        });
+        // Parsing-popup links are handled by the shared BLB parse-popup handler
+        // below so Criteria Search pages and normal verse pages use the same
+        // single-tab/reuse behavior.
       } else if (link.closest('div[id^="bVerse_"]')) {
         link.target="_blank";
       }
@@ -481,10 +532,94 @@ if (location.hostname.endsWith("blueletterbible.org") &&
     if (!suiteEnabled) return;
     const a=e.target.closest?.("a.nowrap");
     if (!a) return;
-    e.preventDefault(); e.stopImmediatePropagation(); window.open(a.href,"_blank");
+
+    // Criteria Search owns ordinary KJV verse links below. Let its dedicated
+    // handler below be the sole Suite owner for those links.
+    if (
+      location.pathname.toLowerCase() === "/search/search.cfm" &&
+      /\/kjv\/[^/]+\/\d+\/\d+(?:\/|$)/i.test(a.href)
+    ) return;
+
+    e.preventDefault(); e.stopImmediatePropagation(); openBlbDestinationFromContent(a.href);
   },true);
   if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",process);
   else process();
+}
+
+// ---------- BLB MultiVerse Tool View ----------
+// MultiVerse is intentionally outside the normal BLB New Tab exclusion block.
+// Own KJV verse navigation here so native _blank handling cannot create duplicates.
+if (
+  location.hostname.endsWith("blueletterbible.org") &&
+  /\/tools\/MultiVerse\.cfm$/i.test(location.pathname)
+) {
+  document.addEventListener("click", e => {
+    if (!suiteEnabled) return;
+    const link = e.target.closest?.('a[href*="/kjv/"]');
+    if (!link || !link.href) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    void safeRuntimeSendMessage({
+      type: 'blbSuiteOpenMultiVerseVerse',
+      url: link.href
+    });
+  }, true);
+}
+
+// ---------- BLB Criteria Search parsing-popup bridge ----------
+// Criteria Search is excluded from the normal BLB New Tab block above because
+// its page has its own navigation handlers. Handle only its parsing-popup
+// links here, using the same stable popup naming as normal BLB verse pages.
+// Do not intercept ordinary Criteria Search links.
+if (
+  location.hostname.endsWith("blueletterbible.org") &&
+  location.pathname.toLowerCase() === "/search/search.cfm"
+) {
+  document.addEventListener("click", e => {
+    if (!suiteEnabled) return;
+
+    const link = e.target.closest?.(".parse-popup a[href], a.parse-popup[href]");
+    if (!link) return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+
+    openBlbDestinationFromContent(link.href);
+
+    const lowerHref = link.href.toLowerCase();
+    const lexiconIndex = lowerHref.indexOf("/lexicon/");
+    if (lexiconIndex < 0) return;
+
+    const tail = link.href.slice(lexiconIndex + "/lexicon/".length);
+    const strong = tail.split(/[?#/]/)[0];
+    if (!/^[gh]\d+$/i.test(strong)) return;
+
+    const criteriaUrl =
+      "https://www.blueletterbible.org/search/search.cfm?Criteria=" +
+      encodeURIComponent(strong);
+
+    openBlbDestinationFromContent(criteriaUrl);
+  }, true);
+}
+
+// ---------- BLB Criteria Search ordinary verse links ----------
+// Criteria Search result verses are Suite-owned new-tab actions. Keep them
+// separate from the broad nowrap handler so each click has exactly one owner.
+if (
+  location.hostname.endsWith("blueletterbible.org") &&
+  location.pathname.toLowerCase() === "/search/search.cfm"
+) {
+  document.addEventListener("click", e => {
+    if (!suiteEnabled) return;
+
+    const link = e.target.closest?.('a[href]');
+    if (!link || link.closest?.(".parse-popup")) return;
+    if (!/\/kjv\/[^/]+\/\d+\/\d+(?:\/|$)/i.test(link.href)) return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    openBlbDestinationFromContent(link.href);
+  }, true);
 }
 
 // ---------- BLB passive New Tab targets for dynamic/native verse links ----------

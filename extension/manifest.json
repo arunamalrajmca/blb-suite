@@ -54,6 +54,7 @@
   "content_scripts": [
     {
       "matches": [
+        "https://www.blueletterbible.org/*",
         "file:///*.pdf",
         "file:///*.html",
         "file:///*.htm"
