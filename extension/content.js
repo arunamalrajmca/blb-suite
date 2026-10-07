@@ -533,6 +533,51 @@ if (location.hostname.endsWith("blueletterbible.org")) {
   else process();
 }
 
+// ---------- BLB Criteria Search parsing-popup bridge ----------
+// Criteria Search is excluded from the normal BLB New Tab block above because
+// its page has its own navigation handlers. Handle only its parsing-popup
+// links here, using the same stable popup naming as normal BLB verse pages.
+// Do not intercept ordinary Criteria Search links.
+if (
+  location.hostname.endsWith("blueletterbible.org") &&
+  location.pathname.toLowerCase() === "/search/search.cfm"
+) {
+  const criteriaParsePopupWindowName = href => {
+    let hash = 0;
+    for (let i = 0; i < href.length; i++) {
+      hash = ((hash << 5) - hash + href.charCodeAt(i)) | 0;
+    }
+    return `blbSuiteParsePopup_${Math.abs(hash)}`;
+  };
+
+  document.addEventListener("click", e => {
+    if (!suiteEnabled) return;
+
+    const link = e.target.closest?.(".parse-popup a[href], a.parse-popup[href]");
+    if (!link) return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+
+    const popupName = criteriaParsePopupWindowName(link.href);
+    window.open(link.href, popupName);
+
+    const lowerHref = link.href.toLowerCase();
+    const lexiconIndex = lowerHref.indexOf("/lexicon/");
+    if (lexiconIndex < 0) return;
+
+    const tail = link.href.slice(lexiconIndex + "/lexicon/".length);
+    const strong = tail.split(/[?#/]/)[0];
+    if (!/^[gh]\d+$/i.test(strong)) return;
+
+    const criteriaUrl =
+      "https://www.blueletterbible.org/search/search.cfm?Criteria=" +
+      encodeURIComponent(strong);
+
+    window.open(criteriaUrl, popupName + "_criteria");
+  }, true);
+}
+
 // ---------- BLB passive New Tab targets for dynamic/native verse links ----------
 // Keep this separate from the existing copy/hyperlink handler.  Do not cancel
 // native BLB clicks; only supply target="_blank" to verse links that BLB adds
