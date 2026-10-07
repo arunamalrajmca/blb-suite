@@ -472,6 +472,35 @@ if (location.hostname.endsWith("blueletterbible.org")) {
   processParsePopups();
 }
 
+// ---------- BLB Criteria Search Parsing Popup ----------
+// Criteria Search is outside the normal BLB new-tab block. Handle only its
+// parser-popup links so the current search page remains open.
+if (location.hostname.endsWith("blueletterbible.org") &&
+    location.pathname.toLowerCase() === "/search/search.cfm") {
+  const criteriaParseWindowName = href => {
+    let hash=0;
+    for (let i=0;i<href.length;i++) hash=((hash<<5)-hash+href.charCodeAt(i))|0;
+    return `blbSuiteParsePopup_${Math.abs(hash)}`;
+  };
+  document.addEventListener("click",e=>{
+    if (!suiteEnabled) return;
+    const link=e.target.closest?.(".parse-popup a[href], a.parse-popup[href]");
+    if (!link) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    const popupName=criteriaParseWindowName(link.href);
+    window.open(link.href,popupName);
+    const lowerHref=link.href.toLowerCase();
+    const lexiconIndex=lowerHref.indexOf("/lexicon/");
+    if (lexiconIndex<0) return;
+    const tail=link.href.slice(lexiconIndex+"/lexicon/".length);
+    const strong=tail.split(/[?#/]/)[0];
+    if (!/^[gh]\d+$/i.test(strong)) return;
+    const criteriaUrl="https://www.blueletterbible.org/search/search.cfm?Criteria="+encodeURIComponent(strong);
+    window.open(criteriaUrl,popupName+"_criteria");
+  },true);
+}
+
 // ---------- BLB New Tab ----------
   function modifyLinks(container) {
     container.querySelectorAll("a").forEach(link=>{
@@ -531,7 +560,19 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     if (!suiteEnabled) return;
     const a=e.target.closest?.("a.nowrap");
     if (!a) return;
-    e.preventDefault(); e.stopImmediatePropagation(); window.open(a.href,"_blank");
+    const isMultiVerse = location.pathname.toLowerCase().endsWith("/tools/multiverse.cfm");
+    const isVerse = a.href.toLowerCase().includes("/kjv/");
+    if (!isMultiVerse || !isVerse) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      window.open(a.href,"_blank");
+      return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    let hash=0;
+    for (let i=0;i<a.href.length;i++) hash=((hash<<5)-hash+a.href.charCodeAt(i))|0;
+    window.open(a.href, `blbSuiteMultiVerse_${Math.abs(hash)}`);
   },true);
   if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",process);
   else process();
