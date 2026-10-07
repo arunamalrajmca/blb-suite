@@ -179,10 +179,11 @@ function redirectBibleSite() {
   }
 
   if (host==="officialkingjamesbible.com") {
-    // OfficialKingJamesBible.com uses /bible/<book>/<chapter>.
+    // OfficialKingJamesBible.com uses /bible/<book>/<chapter> for a
+    // chapter and /bible/<book>/<chapter>/<verse> for a single verse.
     // It is a KJV site, so send the same passage to BLB KJV.
-    const m=u.pathname.match(/^\/bible\/([^/]+)\/(\d+)\/?$/i);
-    if (m) ref={book:m[1],chapter:+m[2],from:1,to:null};
+    const m=u.pathname.match(/^\/bible\/([^/]+)\/(\d+)(?:\/(\d+))?\/?$/i);
+    if (m) ref={book:m[1],chapter:+m[2],from:m[3]?+m[3]:1,to:null};
   }
 
   if (host==="bibleportal.com") {
