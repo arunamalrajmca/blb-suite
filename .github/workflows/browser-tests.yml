@@ -59,7 +59,10 @@ jobs:
   regression-behavioral:
     name: Regression — ${{ matrix.group }}
     needs: change-detection
-    if: ${{ needs.change-detection.outputs.runtime_changed == 'true' || github.event_name != 'pull_request' }}
+    # The hard gate always runs behavioral groups on PRs/main. Runtime-change
+    # detection remains useful to other workflows, but a hard gate must never
+    # report green while behavioral coverage was silently skipped.
+    if: ${{ always() && needs.change-detection.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -116,8 +119,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATUS_SHA: ${{ github.sha }}
-          STATUS_STATE: ${{ needs.change-detection.result == 'success' && needs.regression-package.result == 'success' && (needs.regression-behavioral.result == 'success' || needs.regression-behavioral.result == 'skipped') && 'success' || 'failure' }}
-          STATUS_DESCRIPTION: ${{ needs.change-detection.result == 'success' && needs.regression-package.result == 'success' && (needs.regression-behavioral.result == 'success' || needs.regression-behavioral.result == 'skipped') && 'regression passed or not applicable' || 'regression failed' }}
+          STATUS_STATE: ${{ needs.change-detection.result == 'success' && needs.regression-package.result == 'success' && needs.regression-behavioral.result == 'success' && 'success' || 'failure' }}
+          STATUS_DESCRIPTION: ${{ needs.change-detection.result == 'success' && needs.regression-package.result == 'success' && needs.regression-behavioral.result == 'success' && 'regression passed' || 'regression failed' }}
         shell: bash
         run: |
           curl --fail-with-body --silent --show-error \
