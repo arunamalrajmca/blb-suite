@@ -482,19 +482,29 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     });
   }
 
-  function modifyMultiVerseLinks() {
-    if (!location.href.includes("MultiVerse.cfm")) return;
-    document.querySelectorAll('a[href*="/kjv/"]').forEach(a=>a.target="_blank");
+  function multiVerseWindowName(href) {
+    let hash=0;
+    for (let i=0;i<href.length;i++) {
+      hash=((hash<<5)-hash+href.charCodeAt(i))|0;
+    }
+    return `blbSuiteMultiVerse_${Math.abs(hash)}`;
+  }
+
+  function modifyMultiVerseLinks(container=document) {
+    if (!/\/tools\/MultiVerse\.cfm$/i.test(location.pathname)) return;
+    const apply=link=>{
+      if (!link || !link.href || !/\/kjv\//i.test(link.href)) return;
+      link.target=multiVerseWindowName(link.href);
+    };
+    if (container.matches?.('a[href]')) apply(container);
+    container.querySelectorAll?.('a[href*="/kjv/"]').forEach(apply);
   }
 
   const process=(root=document)=>{
     if (!suiteEnabled) return;
     if (root.matches?.('div[id^="bVerse_"], .parse-popup')) modifyLinks(root);
     root.querySelectorAll?.('div[id^="bVerse_"], .parse-popup').forEach(modifyLinks);
-    if (location.href.includes("MultiVerse.cfm")) {
-      if (root.matches?.('a[href*="/kjv/"]')) root.target="_blank";
-      root.querySelectorAll?.('a[href*="/kjv/"]').forEach(a=>a.target="_blank");
-    }
+    if (/\/tools\/MultiVerse\.cfm$/i.test(location.pathname)) modifyMultiVerseLinks(root);
   };
   let processScheduled=false;
   const pendingRoots=[];
@@ -527,6 +537,8 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     if (!suiteEnabled) return;
     const a=e.target.closest?.("a.nowrap");
     if (!a) return;
+    if (/\/tools\/MultiVerse\.cfm$/i.test(location.pathname) &&
+        /\/kjv\//i.test(a.href)) return;
     e.preventDefault(); e.stopImmediatePropagation(); window.open(a.href,"_blank");
   },true);
   if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",process);
