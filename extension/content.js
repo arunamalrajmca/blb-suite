@@ -532,6 +532,14 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     if (!suiteEnabled) return;
     const a=e.target.closest?.("a.nowrap");
     if (!a) return;
+
+    // Criteria Search owns ordinary KJV verse links below. Let its dedicated
+    // handler below be the sole Suite owner for those links.
+    if (
+      location.pathname.toLowerCase() === "/search/search.cfm" &&
+      /\/kjv\/[^/]+\/\d+\/\d+(?:\/|$)/i.test(a.href)
+    ) return;
+
     e.preventDefault(); e.stopImmediatePropagation(); openBlbDestinationFromContent(a.href);
   },true);
   if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",process);
@@ -591,6 +599,26 @@ if (
       encodeURIComponent(strong);
 
     openBlbDestinationFromContent(criteriaUrl);
+  }, true);
+}
+
+// ---------- BLB Criteria Search ordinary verse links ----------
+// Criteria Search result verses are Suite-owned new-tab actions. Keep them
+// separate from the broad nowrap handler so each click has exactly one owner.
+if (
+  location.hostname.endsWith("blueletterbible.org") &&
+  location.pathname.toLowerCase() === "/search/search.cfm"
+) {
+  document.addEventListener("click", e => {
+    if (!suiteEnabled) return;
+
+    const link = e.target.closest?.('a[href]');
+    if (!link || link.closest?.(".parse-popup")) return;
+    if (!/\/kjv\/[^/]+\/\d+\/\d+(?:\/|$)/i.test(link.href)) return;
+
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    openBlbDestinationFromContent(link.href);
   }, true);
 }
 
