@@ -1800,9 +1800,13 @@ async function openSingleKjvVerse(entry, disposition = 'currentTab') {
   const verse = Number(entry[2]);
   if (!book || !Number.isInteger(chapter) || !Number.isInteger(verse)) return false;
   const url = 'https://www.blueletterbible.org/kjv/' + book.urlKey + '/' + chapter + '/' + verse + '/';
-  if (disposition === 'newForegroundTab') await chrome.tabs.create({url, active:true});
-  else if (disposition === 'newBackgroundTab') await chrome.tabs.create({url, active:false});
-  else await chrome.tabs.update({url});
+  if (disposition === 'newForegroundTab') {
+    await openBlbDestination(url, true, true);
+  } else if (disposition === 'newBackgroundTab') {
+    await openBlbDestination(url, false, false);
+  } else {
+    await chrome.tabs.update({url});
+  }
   return true;
 }
 
@@ -1987,8 +1991,8 @@ function caseSensitiveNativeSearchUrl(query) {
 
 function openCaseSensitiveNativeSearch(query, disposition = 'currentTab') {
   const url = caseSensitiveNativeSearchUrl(query);
-  if (disposition === 'newForegroundTab') return chrome.tabs.create({url, active:true});
-  if (disposition === 'newBackgroundTab') return chrome.tabs.create({url, active:false});
+  if (disposition === 'newForegroundTab') return openBlbDestination(url, true, true);
+  if (disposition === 'newBackgroundTab') return openBlbDestination(url, false, false);
   return chrome.tabs.update({url});
 }
 
