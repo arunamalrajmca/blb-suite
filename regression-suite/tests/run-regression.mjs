@@ -405,6 +405,17 @@ test('expected PDF limitation remains documented by test policy', () => {
   assert.equal(fixture.pdfPolicy,'expected-limitation');
 });
 
+test('Official KJB redirect parser supports chapter and verse URLs', () => {
+  const content = read('content.js');
+  const start = content.indexOf('if (host==="officialkingjamesbible.com")');
+  const end = content.indexOf('\n  if (host==="bibleportal.com")', start);
+  assert(start >= 0 && end > start, 'Official KJB redirect block missing');
+  const block = content.slice(start, end);
+  assert(block.includes('/bible/([^/]+)/\\\\(\\\\d+)'), 'Official KJB chapter parser missing');
+  assert(block.includes('(?:\\\\/(\\\\d+))?'), 'Official KJB verse parser missing');
+  assert(block.includes('from:m[3]?+m[3]:1'), 'Official KJB verse capture is not used');
+});
+
 test('external redirect coverage includes every supported redirect host', () => {
   const content = read('content.js');
   for (const host of ['bible.com','biblegateway.com','bibleref.com','biblehub.com','kingjamesbibleonline.org','kjbo.org','kjv.site','officialkingjamesbible.com','bibleportal.com','webstersdictionary1828.com','blueletterbible.org']) assert(content.includes(host), `redirect host missing: ${host}`);
