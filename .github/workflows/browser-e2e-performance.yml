@@ -30,7 +30,7 @@ jobs:
           PR_HEAD_SHA: ${{ github.sha }}
         run: bash scripts/ci/is-runtime-change.sh
       - name: Setup Node
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
