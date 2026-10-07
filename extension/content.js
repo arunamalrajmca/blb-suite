@@ -461,6 +461,29 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     }
   };
 
+  // Criteria Search uses a different BLB page lifecycle. Keep a dedicated
+  // capture-phase click guard there so BLB's own parser navigation cannot
+  // win the race and replace the current Criteria Search tab.
+  if (/^\\/search\\/search\\.cfm$/i.test(location.pathname)) {
+    document.addEventListener("click", e => {
+      if (!suiteEnabled) return;
+      const link = e.target.closest?.(".parse-popup a[href], a.parse-popup[href]");
+      if (!link) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      const popupName = parsePopupWindowName(link.href);
+      window.open(link.href, popupName);
+
+      const m = link.href.match(/lexicon\\/(g|h)\\d+/i);
+      if (m) {
+        const criteriaUrl =
+          `https://www.blueletterbible.org/search/search.cfm?Criteria=${m[0].split("/").pop()}`;
+        window.open(criteriaUrl, `${popupName}_criteria`);
+      }
+    }, true);
+  }
+
   const parsePopupObserver = new MutationObserver(mutations => {
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
