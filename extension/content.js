@@ -461,6 +461,29 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     }
   };
 
+  // Criteria Search has a separate page lifecycle and is intentionally
+  // outside the normal BLB new-tab block above. Handle only parser links on
+  // this exact BLB search page, without touching normal chapter/verse pages.
+  if (location.pathname.toLowerCase() === "/search/search.cfm") {
+    document.addEventListener("click", e => {
+      if (!suiteEnabled) return;
+      const link = e.target.closest?.(".parse-popup a[href], a.parse-popup[href]");
+      if (!link) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      const popupName = parsePopupWindowName(link.href);
+      window.open(link.href, popupName);
+
+      const m = link.href.match(/lexicon\\/(g|h)\\d+/i);
+      if (m) {
+        const criteriaUrl =
+          "https://www.blueletterbible.org/search/search.cfm?Criteria=" + m[0].split("/").pop();
+        window.open(criteriaUrl, popupName + "_criteria");
+      }
+    }, true);
+  }
+
   const parsePopupObserver = new MutationObserver(mutations => {
     for (const mutation of mutations) {
       for (const node of mutation.addedNodes) {
@@ -527,11 +550,19 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     }
   });
   observer.observe(document.documentElement,{childList:true,subtree:true});
+  const multiVerseWindowName = href => {
+    let hash = 0;
+    for (let i = 0; i < href.length; i++) {
+      hash = ((hash << 5) - hash + href.charCodeAt(i)) | 0;
+    }
+    return "blbSuiteMultiVerseVerse_" + Math.abs(hash);
+  };
   document.addEventListener("click",e=>{
     if (!suiteEnabled) return;
     const a=e.target.closest?.("a.nowrap");
     if (!a) return;
-    e.preventDefault(); e.stopImmediatePropagation(); window.open(a.href,"_blank");
+    e.preventDefault(); e.stopImmediatePropagation();
+    window.open(a.href, multiVerseWindowName(a.href));
   },true);
   if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",process);
   else process();
