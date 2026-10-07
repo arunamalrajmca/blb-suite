@@ -75,6 +75,20 @@ function safeRuntimeSendMessage(message) {
   }
 }
 
+// Route Suite-owned BLB new-tab actions through the background single-owner
+// destination manager. This prevents native/window.open tab creation from
+// bypassing canonical reuse when the source page is reopened later.
+function openBlbDestinationFromContent(url) {
+  const target = String(url || '').trim();
+  if (!/^https:\/\/www\\.blueletterbible\\.org\//i.test(target)) return;
+  void safeRuntimeSendMessage({
+    type: 'blbSuiteOpenBackgroundUrl',
+    url: target,
+    activeIfNew: true,
+    activateExisting: true
+  });
+}
+
 function normalizeSelectionText(s) {
   return String(s || '')
     // Facebook and some rich-text sites can insert invisible bidirectional
@@ -440,13 +454,13 @@ if (location.hostname.endsWith("blueletterbible.org")) {
       e.stopImmediatePropagation();
 
       const popupName = parsePopupWindowName(link.href);
-      window.open(link.href, popupName);
+      openBlbDestinationFromContent(link.href);
 
       const m = link.href.match(/lexicon\/(g|h)\d+/i);
       if (m) {
         const criteriaUrl =
           `https://www.blueletterbible.org/search/search.cfm?Criteria=${m[0].split("/").pop()}`;
-        window.open(criteriaUrl, `${popupName}_criteria`);
+        openBlbDestinationFromContent(criteriaUrl);
       }
     }, true);
   };
@@ -527,7 +541,7 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     if (!suiteEnabled) return;
     const a=e.target.closest?.("a.nowrap");
     if (!a) return;
-    e.preventDefault(); e.stopImmediatePropagation(); window.open(a.href,"_blank");
+    e.preventDefault(); e.stopImmediatePropagation(); openBlbDestinationFromContent(a.href);
   },true);
   if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",process);
   else process();
@@ -580,7 +594,7 @@ if (
     e.stopImmediatePropagation();
 
     const popupName = criteriaParsePopupWindowName(link.href);
-    window.open(link.href, popupName);
+    openBlbDestinationFromContent(link.href);
 
     const lowerHref = link.href.toLowerCase();
     const lexiconIndex = lowerHref.indexOf("/lexicon/");
@@ -594,7 +608,7 @@ if (
       "https://www.blueletterbible.org/search/search.cfm?Criteria=" +
       encodeURIComponent(strong);
 
-    window.open(criteriaUrl, popupName + "_criteria");
+    openBlbDestinationFromContent(criteriaUrl);
   }, true);
 }
 
