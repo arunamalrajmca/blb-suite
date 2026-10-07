@@ -533,6 +533,26 @@ if (location.hostname.endsWith("blueletterbible.org")) {
   else process();
 }
 
+// ---------- BLB MultiVerse Tool View ----------
+// MultiVerse is intentionally outside the normal BLB New Tab exclusion block.
+// Own KJV verse navigation here so native _blank handling cannot create duplicates.
+if (
+  location.hostname.endsWith("blueletterbible.org") &&
+  /\/tools\/MultiVerse\.cfm$/i.test(location.pathname)
+) {
+  document.addEventListener("click", e => {
+    if (!suiteEnabled) return;
+    const link = e.target.closest?.('a[href*="/kjv/"]');
+    if (!link || !link.href) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    void safeRuntimeSendMessage({
+      type: 'blbSuiteOpenMultiVerseVerse',
+      url: link.href
+    });
+  }, true);
+}
+
 // ---------- BLB Criteria Search parsing-popup bridge ----------
 // Criteria Search is excluded from the normal BLB New Tab block above because
 // its page has its own navigation handlers. Handle only its parsing-popup
