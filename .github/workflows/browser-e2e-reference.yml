@@ -190,7 +190,7 @@ jobs:
       - name: Require all browser E2E suites to pass
         shell: bash
         run: |
-          if [ "${{ needs.change-detection.result }}" != "success" ] || [ "${{ needs.browser-e2e.result }}" = "failure" ] || [ "${{ needs.browser-e2e.result }}" = "cancelled" ] || [ "${{ needs.browser-e2e-features.result }}" = "failure" ] || [ "${{ needs.browser-e2e-features.result }}" = "cancelled" ]; then
+          if [ "${{ needs.change-detection.result }}" != "success" ] || [ "${{ needs.browser-e2e.result }}" = "failure" ] || [ "${{ needs.browser-e2e.result }}" = "cancelled" ] || ( [ "${{ needs.browser-e2e.result }}" = "skipped" ] && [ "${{ needs.change-detection.outputs.runtime_changed }}" != "false" ] ) || [ "${{ needs.browser-e2e-features.result }}" = "failure" ] || [ "${{ needs.browser-e2e-features.result }}" = "cancelled" ] || ( [ "${{ needs.browser-e2e-features.result }}" = "skipped" ] && [ "${{ needs.change-detection.outputs.runtime_changed }}" != "false" ] ); then
             echo "References matrix: ${{ needs.browser-e2e.result }}"
             echo "Features: ${{ needs.browser-e2e-features.result }}"
             exit 1
