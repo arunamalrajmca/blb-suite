@@ -19,10 +19,19 @@ function compactBibleReferenceText(value) {
     .replace(/\s+/g, '');
 }
 
+function normalizeBibleBookKey(value) {
+  return normalizeBibleReferenceText(value)
+    .toLowerCase()
+    .replace(/[._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function resolveBibleBook(value) {
   const raw = normalizeBibleReferenceText(value).replace(/[.]$/, '').trim();
   if (!raw) return null;
   const lower = raw.toLowerCase();
+  const normalizedBook = normalizeBibleBookKey(raw);
   const compact = compactBibleReferenceText(raw);
 
   // Support Roman-numeral prefixes for every numbered Bible-book family.
@@ -40,8 +49,8 @@ function resolveBibleBook(value) {
   const numericPrefixMatch = lower.match(/^([1-3])\s+(.+)$/);
   if (numericPrefixMatch) {
     const numberedBook = BOOKS.find(book =>
-      normalizeBibleReferenceText(book.name).toLowerCase() === lower ||
-      normalizeBibleReferenceText(book.urlKey).toLowerCase() === lower
+      normalizeBibleBookKey(book.name) === normalizedBook ||
+      normalizeBibleBookKey(book.urlKey) === normalizedBook
     );
     if (numberedBook) return numberedBook;
     const aliasTarget = BOOK_ALIASES && (BOOK_ALIASES[lower] || BOOK_ALIASES[compact]);
@@ -51,8 +60,8 @@ function resolveBibleBook(value) {
   for (const book of BOOKS) {
     const forms = [book.name, book.urlKey, book.bookNumber];
     if (forms.some(form => {
-      const f = normalizeBibleReferenceText(form).toLowerCase();
-      return f === lower || compactBibleReferenceText(form) === compact;
+      const f = normalizeBibleBookKey(form);
+      return f === normalizedBook || compactBibleReferenceText(form) === compact;
     })) return book;
   }
 
@@ -64,7 +73,7 @@ function resolveBibleBook(value) {
   // Aliases are the source of truth, but tolerate punctuation/spacing
   // normalization without treating canonical names as aliases.
   for (const [alias, target] of Object.entries(BOOK_ALIASES || {})) {
-    if (compactBibleReferenceText(alias) === compact) {
+    if (normalizeBibleBookKey(alias) === normalizedBook || compactBibleReferenceText(alias) === compact) {
       return BOOKS.find(book => book.name === target) || null;
     }
   }
