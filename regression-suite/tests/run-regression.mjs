@@ -455,7 +455,7 @@ test('BLB native-event interception remains explicitly scoped', () => {
   const popupEnd = content.indexOf('\n  }', popupStart);
   assert(popupStart >= 0 && popupEnd > popupStart, 'parse-popup handler block missing');
   const popup = content.slice(popupStart, popupEnd);
-  assert(popup.includes('link.closest(".parse-popup")'), 'parse-popup click override must remain selector-scoped');
+  assert(popup.includes('link.closest(".parse-popup")') || popup.includes('link.closest?.(".parse-popup")'), 'parse-popup click override must remain selector-scoped');
   assert(popup.includes('preventDefault()'), 'parse-popup override must retain its intentional native-navigation override');
   assert(popup.includes('stopImmediatePropagation()'), 'parse-popup override must retain event isolation');
 
