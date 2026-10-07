@@ -80,7 +80,7 @@ function safeRuntimeSendMessage(message) {
 // bypassing canonical reuse when the source page is reopened later.
 function openBlbDestinationFromContent(url) {
   const target = String(url || '').trim();
-  if (!/^https:\/\/www\\.blueletterbible\\.org\//i.test(target)) return;
+  if (!/^https:\/\/www\.blueletterbible\.org\//i.test(target)) return;
   void safeRuntimeSendMessage({
     type: 'blbSuiteOpenBackgroundUrl',
     url: target,
