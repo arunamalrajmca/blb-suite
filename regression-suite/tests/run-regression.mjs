@@ -115,6 +115,45 @@ test('shared core resolves every numbered Bible-book family', () => {
     assert.equal(refs[0].to, 1, book.name);
   }
 });
+test('shared core normalizes URL-style book separators generically', () => {
+  const forms = [
+    ['1-John', '1 john'],
+    ['1_john', '1 john'],
+    ['1-John', '1 john'],
+    ['2-Samuel', '2 samuel'],
+    ['1_Corinthians', '1 corinthians'],
+    ['Song-of-Solomon', 'song of solomon'],
+    ['Song_of_Solomon', 'song of solomon']
+  ];
+  for (const [form, expected] of forms) {
+    const book = refCtx.resolveBibleBook(form);
+    assert.equal(book?.name, expected, form);
+  }
+  for (const book of refCtx.BOOKS) {
+    const hyphenated = book.name.replace(/ /g, '-');
+    const underscored = book.name.replace(/ /g, '_');
+    assert.equal(refCtx.resolveBibleBook(hyphenated)?.name, book.name, hyphenated);
+    assert.equal(refCtx.resolveBibleBook(underscored)?.name, book.name, underscored);
+  }
+});
+
+test('reference grammar preserves chapter, verse, and range after URL-style book normalization', () => {
+  const cases = [
+    ['1-John 5:1-3', '1 john', 5, 1, 3],
+    ['1_john 5:1', '1 john', 5, 1, 1],
+    ['2-Samuel 12:7-9', '2 samuel', 12, 7, 9],
+    ['Song-of-Solomon 2:1-3', 'song of solomon', 2, 1, 3]
+  ];
+  for (const [input, book, chapter, from, to] of cases) {
+    const refs = refCtx.resolveBibleReferenceText(input);
+    assert.equal(refs.length, 1, input);
+    assert.deepEqual(
+      [refs[0].book, refs[0].chapter, refs[0].from, refs[0].to],
+      [book, chapter, from, to],
+      input
+    );
+  }
+});
 test('production selection extractor resolves every Roman-numeral numbered book family', () => {
   const roman = {1: 'I', 2: 'II', 3: 'III'};
   const numbered = refCtx.BOOKS.filter(book => /^[123] /.test(book.name));
