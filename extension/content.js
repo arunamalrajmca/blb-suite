@@ -417,10 +417,9 @@ if (location.hostname.endsWith("blueletterbible.org") &&
     };
   }
 
-  // ---------- BLB Parsing Popup New Tab ----------
-// Keep parsing-popup links working on both normal BLB verse pages and
-// Criteria Search pages. A stable window name prevents repeated clicks from
-// opening duplicate tabs; the same tab is reused for the same destination.
+  // ---------- BLB Parsing Popup: shared handler ----------
+// One parser implementation is used on normal BLB pages and Criteria Search.
+// A stable window name prevents duplicate parser tabs on repeated clicks.
 if (location.hostname.endsWith("blueletterbible.org")) {
   const parsePopupWindowName = href => {
     let hash = 0;
@@ -438,16 +437,18 @@ if (location.hostname.endsWith("blueletterbible.org")) {
       if (!suiteEnabled) return;
       e.preventDefault();
       e.stopImmediatePropagation();
-
       const popupName = parsePopupWindowName(link.href);
       window.open(link.href, popupName);
-
-      const m = link.href.match(/lexicon\/(g|h)\d+/i);
-      if (m) {
-        const criteriaUrl =
-          `https://www.blueletterbible.org/search/search.cfm?Criteria=${m[0].split("/").pop()}`;
-        window.open(criteriaUrl, `${popupName}_criteria`);
-      }
+      const lowerHref = link.href.toLowerCase();
+      const lexiconIndex = lowerHref.indexOf("/lexicon/");
+      if (lexiconIndex < 0) return;
+      const tail = link.href.slice(lexiconIndex + "/lexicon/".length);
+      const strong = tail.split(/[?#/]/)[0];
+      if (!/^[gh]\\d+$/i.test(strong)) return;
+      const criteriaUrl =
+        "https://www.blueletterbible.org/search/search.cfm?Criteria=" +
+        encodeURIComponent(strong);
+      window.open(criteriaUrl, popupName + "_criteria");
     }, true);
   };
 
@@ -470,35 +471,6 @@ if (location.hostname.endsWith("blueletterbible.org")) {
   });
   parsePopupObserver.observe(document.documentElement, {childList:true, subtree:true});
   processParsePopups();
-}
-
-// ---------- BLB Criteria Search Parsing Popup ----------
-// Criteria Search is outside the normal BLB new-tab block. Handle only its
-// parser-popup links so the current search page remains open.
-if (location.hostname.endsWith("blueletterbible.org") &&
-    location.pathname.toLowerCase() === "/search/search.cfm") {
-  const criteriaParseWindowName = href => {
-    let hash=0;
-    for (let i=0;i<href.length;i++) hash=((hash<<5)-hash+href.charCodeAt(i))|0;
-    return `blbSuiteParsePopup_${Math.abs(hash)}`;
-  };
-  document.addEventListener("click",e=>{
-    if (!suiteEnabled) return;
-    const link=e.target.closest?.(".parse-popup a[href], a.parse-popup[href]");
-    if (!link) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    const popupName=criteriaParseWindowName(link.href);
-    window.open(link.href,popupName);
-    const lowerHref=link.href.toLowerCase();
-    const lexiconIndex=lowerHref.indexOf("/lexicon/");
-    if (lexiconIndex<0) return;
-    const tail=link.href.slice(lexiconIndex+"/lexicon/".length);
-    const strong=tail.split(/[?#/]/)[0];
-    if (!/^[gh]\d+$/i.test(strong)) return;
-    const criteriaUrl="https://www.blueletterbible.org/search/search.cfm?Criteria="+encodeURIComponent(strong);
-    window.open(criteriaUrl,popupName+"_criteria");
-  },true);
 }
 
 // ---------- BLB New Tab ----------
@@ -576,6 +548,27 @@ if (location.hostname.endsWith("blueletterbible.org") &&
   },true);
   if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",process);
   else process();
+}
+
+// ---------- BLB verse click: stable single-tab reuse ----------
+// BLB may already assign target="_blank" to these links. Intercept the click
+// once, cancel native navigation, and open a stable named tab.
+if (location.hostname.endsWith("blueletterbible.org")) {
+  document.addEventListener("click", e => {
+    if (!suiteEnabled) return;
+    const a = e.target.closest?.('a[href*="/kjv/"]');
+    if (!a) return;
+    if (location.pathname.toLowerCase().endsWith("/tools/multiverse.cfm")) return;
+    if (!/\\/kjv\\/[^/]+\\/\\d+\\/\\d+(?:\\/|$)/i.test(a.href)) return;
+    if (a.closest?.(".parse-popup")) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    let hash = 0;
+    for (let i = 0; i < a.href.length; i++) {
+      hash = ((hash << 5) - hash + a.href.charCodeAt(i)) | 0;
+    }
+    window.open(a.href, `blbSuiteVerse_${Math.abs(hash)}`);
+  }, true);
 }
 
 // ---------- BLB passive New Tab targets for dynamic/native verse links ----------
