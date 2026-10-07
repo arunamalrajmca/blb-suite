@@ -142,6 +142,7 @@ test('reference grammar preserves chapter, verse, and range after URL-style book
     ['1-John 5:1-3', '1 john', 5, 1, 3],
     ['1_john 5:1', '1 john', 5, 1, 1],
     ['2-Samuel 12:7-9', '2 samuel', 12, 7, 9],
+    ['2_Timothy 3:16-17', '2 timothy', 3, 16, 17],
     ['Song-of-Solomon 2:1-3', 'song of solomon', 2, 1, 3]
   ];
   for (const [input, book, chapter, from, to] of cases) {
@@ -415,7 +416,32 @@ test('Official KJB redirect parser supports chapter and verse URLs', () => {
   assert(block.includes('from:m[3]?+m[3]:1'), 'Official KJB verse capture is not used');
 });
 
-test('external redirect coverage includes every supported redirect host', () => {
+test('Bible redirect parser contracts cover every supported Bible redirect grammar', () => {
+  const content = read('content.js');
+  const start = content.indexOf('function redirectBibleSite');
+  const end = content.indexOf('\nfunction ', start + 10);
+  assert(start >= 0 && end > start, 'Bible redirect parser block missing');
+  const parser = content.slice(start, end);
+
+  const contracts = [
+    ['bible.com', 'u.pathname.match', 'path parser'],
+    ['biblegateway.com', 'u.searchParams.get("search")', 'passage search parameter'],
+    ['bibleref.com', 'new RegExp("-"+p[1]+"-', 'chapter/verse filename parser'],
+    ['biblehub.com', 'u.pathname.match', 'path parser'],
+    ['kingjamesbibleonline.org', 'Chapter-', 'chapter-page parser'],
+    ['kjbo.org', 'host==="kingjamesbibleonline.org" || host==="kjbo.org"', 'shared KJBO parser'],
+    ['kjv.site', '-kjv', 'KJV.site URL parser'],
+    ['officialkingjamesbible.com', '/bible/', 'Official KJB URL parser'],
+    ['bibleportal.com', 'u.searchParams.get("v")', 'query-string verse parser']
+  ];
+
+  for (const [host, token, description] of contracts) {
+    assert(content.includes(host), host);
+    assert(parser.includes(token), host + ': ' + description + ' missing');
+  }
+  assert(content.includes('function redirectBlbNet'), 'BLB NET redirect parser missing');
+  assert(content.includes('const REDIRECT_HOSTS'), 'redirect host table missing');
+});test('external redirect coverage includes every supported redirect host', () => {
   const content = read('content.js');
   for (const host of ['bible.com','biblegateway.com','bibleref.com','biblehub.com','kingjamesbibleonline.org','kjbo.org','kjv.site','officialkingjamesbible.com','bibleportal.com','webstersdictionary1828.com','blueletterbible.org']) assert(content.includes(host), `redirect host missing: ${host}`);
   assert(content.includes('function redirectBibleSite'), 'Bible-site redirect parser missing');
@@ -424,23 +450,20 @@ test('external redirect coverage includes every supported redirect host', () => 
 });
 test('BLB native-event interception remains explicitly scoped', () => {
   const content = read('content.js');
-  const blbStart = content.indexOf('blueletterbible.org');
-  assert(blbStart >= 0, 'BLB content scope missing');
-  const blbEnd = content.indexOf('// ---------- Webster', blbStart);
-  assert(blbEnd > blbStart, 'BLB content scope boundary missing');
-  const blb = content.slice(Math.max(0, blbStart - 80), blbEnd);
 
-  const popup = blb.indexOf('link.closest(".parse-popup")');
-  assert(popup >= 0, 'parse-popup click override must remain selector-scoped');
-  const popupHandlerEnd = blb.indexOf('});', popup);
-  assert(popupHandlerEnd > popup, 'parse-popup click handler boundary missing');
-  assert(blb.slice(popup, popupHandlerEnd + 3).includes('preventDefault()'), 'parse-popup override must retain its intentional native-navigation override');
+  const popupStart = content.indexOf('const handleParsePopupLink');
+  const popupEnd = content.indexOf('\n  }', popupStart);
+  assert(popupStart >= 0 && popupEnd > popupStart, 'parse-popup handler block missing');
+  const popup = content.slice(popupStart, popupEnd);
+  assert(popup.includes('link.closest(".parse-popup")'), 'parse-popup click override must remain selector-scoped');
+  assert(popup.includes('preventDefault()'), 'parse-popup override must retain its intentional native-navigation override');
+  assert(popup.includes('stopImmediatePropagation()'), 'parse-popup override must retain event isolation');
 
-  const nowrap = blb.indexOf('const a=e.target.closest?.("a.nowrap")');
-  assert(nowrap >= 0, 'nowrap click override must remain selector-scoped');
-  const nowrapEnd = blb.indexOf('},true);', nowrap);
-  assert(nowrapEnd > nowrap, 'nowrap click handler boundary missing');
-  assert(blb.slice(nowrap, nowrapEnd + 7).includes('if (!a) return'), 'nowrap click override must reject unrelated clicks');
+  const nowrapStart = content.indexOf('const a=e.target.closest?.("a.nowrap")');
+  const nowrapEnd = content.indexOf('},true);', nowrapStart);
+  assert(nowrapStart >= 0 && nowrapEnd > nowrapStart, 'nowrap click handler missing');
+  const nowrap = content.slice(nowrapStart, nowrapEnd + 7);
+  assert(nowrap.includes('if (!a) return'), 'nowrap click override must reject unrelated clicks');
 
   const selectionStart = content.indexOf('function handleBlbPageSelectionMouseDown');
   const selectionEnd = content.indexOf('function getPageSelectionSiteKey', selectionStart);
