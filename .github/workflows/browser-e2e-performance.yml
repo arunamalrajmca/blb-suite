@@ -26,7 +26,7 @@ jobs:
       - name: Detect runtime changes
         id: runtime
         env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           PR_HEAD_SHA: ${{ github.sha }}
         run: bash scripts/ci/is-runtime-change.sh
       - name: Setup Node
