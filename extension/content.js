@@ -525,7 +525,7 @@ if (location.hostname.endsWith("blueletterbible.org")) {
   observer.observe(document.documentElement,{childList:true,subtree:true});
   document.addEventListener("click",e=>{
     if (!suiteEnabled) return;
-    const a=e.target.closest?.("a.nowrap");
+    const a=e.target.closest?.("a[href]");
     if (!a || !a.href) return;
 
     const isMultiVerse =
@@ -534,8 +534,9 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     const isChapterHeaderLink =
       isKjvLink && !a.closest('div[id^="bVerse_"]');
 
-    // MultiVerse verse links and chapter-page header/above-verse references
-    // must have exactly one extension-controlled navigation path.
+    // MultiVerse owns all KJV verse-link navigation here. Do not require
+    // BLB's current class names, which vary between MultiVerse renderings.
+    // Chapter-page header/above-verse references keep their confirmed path.
     if (!(isMultiVerse && isKjvLink) && !isChapterHeaderLink) return;
 
     e.preventDefault();
@@ -608,6 +609,9 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     if (!suiteEnabled) return;
     const apply = link => {
       if (!link || !link.href) return;
+      // MultiVerse has its own single-owner named-window bridge above.
+      // A passive target here would create a second browser navigation path.
+      if (location.pathname.toLowerCase().endsWith("/tools/multiverse.cfm")) return;
       if (/\/kjv\/[^/]+\/\d+\/\d+(?:\/|$)/i.test(link.href)) {
         link.target="_blank";
       }
