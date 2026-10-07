@@ -436,14 +436,6 @@ if (location.hostname.endsWith("blueletterbible.org") &&
 // Criteria Search pages. A stable window name prevents repeated clicks from
 // opening duplicate tabs; the same tab is reused for the same destination.
 if (location.hostname.endsWith("blueletterbible.org")) {
-  const parsePopupWindowName = href => {
-    let hash = 0;
-    for (let i = 0; i < href.length; i++) {
-      hash = ((hash << 5) - hash + href.charCodeAt(i)) | 0;
-    }
-    return `blbSuiteParsePopup_${Math.abs(hash)}`;
-  };
-
   const handleParsePopupLink = link => {
     if (!link || !link.href || !link.closest?.(".parse-popup")) return;
     if (link.dataset.blbSuitePopup) return;
@@ -453,7 +445,6 @@ if (location.hostname.endsWith("blueletterbible.org")) {
       e.preventDefault();
       e.stopImmediatePropagation();
 
-      const popupName = parsePopupWindowName(link.href);
       openBlbDestinationFromContent(link.href);
 
       const m = link.href.match(/lexicon\/(g|h)\d+/i);
@@ -576,14 +567,6 @@ if (
   location.hostname.endsWith("blueletterbible.org") &&
   location.pathname.toLowerCase() === "/search/search.cfm"
 ) {
-  const criteriaParsePopupWindowName = href => {
-    let hash = 0;
-    for (let i = 0; i < href.length; i++) {
-      hash = ((hash << 5) - hash + href.charCodeAt(i)) | 0;
-    }
-    return `blbSuiteParsePopup_${Math.abs(hash)}`;
-  };
-
   document.addEventListener("click", e => {
     if (!suiteEnabled) return;
 
@@ -593,7 +576,6 @@ if (
     e.preventDefault();
     e.stopImmediatePropagation();
 
-    const popupName = criteriaParsePopupWindowName(link.href);
     openBlbDestinationFromContent(link.href);
 
     const lowerHref = link.href.toLowerCase();
