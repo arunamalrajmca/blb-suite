@@ -241,7 +241,7 @@ const clearSelectedTopicInputButton = document.getElementById('clearSelectedTopi
 const downloadMenuButton = document.getElementById('downloadMenuButton');
 const downloadMenu = document.getElementById('downloadMenu');
 const dateQuickMenu = document.getElementById('dateQuickMenu');
-const startButton = document.getElementById('startTopic');
+const startButton = document.getElementById('startTopic');\nconst guidePdfButton = document.getElementById('guidePdf');\n\nasync function openAndDownloadGuide(path, filename) {\n  const url = chrome.runtime.getURL(path);\n  try { await chrome.downloads.download({url, filename, saveAs:false}); } catch (_) {}\n  try {\n    const tab = await chrome.tabs.create({url, active:true});\n    if (tab?.windowId != null) {\n      try { await chrome.runtime.sendMessage({type:'blbSuiteReopenPopup', windowId:tab.windowId}); } catch (_) {}\n    }\n  } catch (_) {}\n}
 
 const multiViewButton = document.getElementById('multiView');
 const historyMenu = document.getElementById('historyMenu');
@@ -1064,7 +1064,7 @@ document.addEventListener('click', e => {
 });
 
 
-document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
+guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));\ndocument.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
 async function handlePageButtonToggle(on) {
   if (!on) {
     await setPageButton(false);
