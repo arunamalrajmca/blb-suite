@@ -117,7 +117,17 @@ jobs:
               -d "{\"labels\":[\"$selected\"]}"
           fi
 
-          PR_REF="${{ github.event.issue.pull_request.head.ref }}"
+          PR_JSON="$(curl --fail-with-body --silent --show-error \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/pulls/$PR_NUMBER")"
+          PR_REF="$(jq -r '.head.ref' <<< "$PR_JSON")"
+          PR_MERGED_AT="$(jq -r '.merged_at // empty' <<< "$PR_JSON")"
+          BUILD_REF="$PR_REF"
+
+          if [[ -n "$PR_MERGED_AT" ]]; then
+            BUILD_REF="main"
+          fi
 
           if [[ "$build" == "true" ]]; then
             curl --fail-with-body --silent --show-error \
@@ -126,7 +136,7 @@ jobs:
               -H "Accept: application/vnd.github+json" \
               -H "Content-Type: application/json" \
               "https://api.github.com/repos/$REPO/actions/workflows/build-main.yml/dispatches" \
-              -d "{\"ref\":\"$PR_REF\"}"
+              -d "{\"ref\":\"$BUILD_REF\"}"
           fi
 
           if [[ -n "$release_tag" ]]; then
