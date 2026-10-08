@@ -108,6 +108,9 @@ test.describe('research-derived DOM/reference regression coverage', () => {
       const selection = window.getSelection();
       selection.removeAllRanges();
       selection.addRange(range);
+      if (selection.toString() !== 'John 3:16') {
+        throw new Error('Unexpected dynamic selection: ' + selection.toString());
+      }
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
 
@@ -178,6 +181,9 @@ test.describe('research-derived DOM/reference regression coverage', () => {
       const selection = window.getSelection();
       selection.removeAllRanges();
       selection.addRange(range);
+      if (selection.toString() !== '1 John 5:3') {
+        throw new Error('Unexpected first adjacent selection: ' + selection.toString());
+      }
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
 
