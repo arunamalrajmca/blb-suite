@@ -183,6 +183,8 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
   if (scenario === 'paragraph-two-tab') {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    // Wait for asynchronous page-selection monitoring initialization before creating the first selection.
+    await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const el = document.createElement('p');
       el.id = 'blb-perf-paragraph';
