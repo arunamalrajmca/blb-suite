@@ -107,7 +107,7 @@ test.describe('research-derived DOM/reference regression coverage', () => {
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
 
-    const tab = await openSelectedReferenceViaPageButton(page, extensionWorker);
+    const tab = await openSelectedReferenceViaPageButton(page, extensionWorker, '/kjv/jhn/3/16/');
     expect(new URL(tab.url).pathname).toBe('/kjv/jhn/3/16/');
     await removeTabById(extensionWorker, tab.id);
   });
@@ -153,8 +153,7 @@ test.describe('research-derived DOM/reference regression coverage', () => {
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
 
-    await openSelectedTextInBlb(extensionWorker);
-    const tab = await expectSingleVerseTab(extensionWorker, '/kjv/jhn/3/16/');
+    const tab = await openSelectedReferenceViaPageButton(page, extensionWorker, '/kjv/jhn/3/16/');
     await removeTabById(extensionWorker, tab.id);
   });
 
