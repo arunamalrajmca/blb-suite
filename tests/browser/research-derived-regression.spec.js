@@ -57,11 +57,11 @@ async function selectNodeAndNotify(page, id) {
   }, id);
 }
 
-async function openSelectedReferenceViaPageButton(page, extensionWorker) {
+async function openSelectedReferenceViaPageButton(page, extensionWorker, expectedPath) {
   const button = page.locator('#blb-suite-page-selection-button');
   await expect(button).toBeVisible({ timeout: 10000 });
   await button.click();
-  return expectSingleVerseTab(extensionWorker);
+  return expectSingleVerseTab(extensionWorker, expectedPath);
 }
 
 async function expectSingleVerseTab(extensionWorker, expectedPath) {
@@ -84,7 +84,7 @@ test.describe('research-derived DOM/reference regression coverage', () => {
   }) => {
     await loadGenericExtensionPage(page, extensionStorage);
     await selectNodeAndNotify(page, 'case-split');
-    const tab = await openSelectedReferenceViaPageButton(page, extensionWorker);
+    const tab = await openSelectedReferenceViaPageButton(page, extensionWorker, '/kjv/jhn/3/16/');
     expect(new URL(tab.url).pathname).toBe('/kjv/jhn/3/16/');
     await removeTabById(extensionWorker, tab.id);
   });
@@ -178,7 +178,7 @@ test.describe('research-derived DOM/reference regression coverage', () => {
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
 
-    const firstTab = await openSelectedReferenceViaPageButton(page, extensionWorker);
+    const firstTab = await openSelectedReferenceViaPageButton(page, extensionWorker, '/kjv/1jo/5/3/');
     expect(new URL(firstTab.url).pathname).toBe('/kjv/1jo/5/3/');
     await removeTabById(extensionWorker, firstTab.id);
 
@@ -194,7 +194,7 @@ test.describe('research-derived DOM/reference regression coverage', () => {
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
 
-    const secondTab = await openSelectedReferenceViaPageButton(page, extensionWorker);
+    const secondTab = await openSelectedReferenceViaPageButton(page, extensionWorker, '/kjv/2jo/4/');
     expect(new URL(secondTab.url).pathname).toBe('/kjv/2jo/4/');
     await removeTabById(extensionWorker, secondTab.id);
   });
