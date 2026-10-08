@@ -208,7 +208,7 @@ test.describe('research-derived DOM/reference regression coverage', () => {
     });
 
     const secondTab = await openSelectedReferenceViaPageButton(page, extensionWorker, '/kjv/2jo/1/4/');
-    expect(new URL(secondTab.url).pathname).toBe('/kjv/2jo/4/');
+    expect(new URL(secondTab.url).pathname).toBe('/kjv/2jo/1/4/');
     await removeTabById(extensionWorker, secondTab.id);
   });
 });
