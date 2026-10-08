@@ -242,7 +242,6 @@ const downloadMenuButton = document.getElementById('downloadMenuButton');
 const downloadMenu = document.getElementById('downloadMenu');
 const dateQuickMenu = document.getElementById('dateQuickMenu');
 const startButton = document.getElementById('startTopic');
-const guideHtmlButton = document.getElementById('guideHtml');
 const guidePdfButton = document.getElementById('guidePdf');
 
 async function openAndDownloadGuide(path, filename) {
@@ -1078,7 +1077,6 @@ document.addEventListener('click', e => {
 });
 
 
-guideHtmlButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.html', 'Blue-Letter-Bible-Suite-Tutorial.html'));
 guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
 async function handlePageButtonToggle(on) {
