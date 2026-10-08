@@ -72,7 +72,7 @@ async function openSelectedTextInBlb(extensionWorker, selectedText = null, reque
         );
       })
     });
-  }, selectedText);
+  }, { forcedText: selectedText, requestId });
 }
 
 async function expectSingleVerseTab(extensionWorker, expectedPath) {
