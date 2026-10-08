@@ -57,22 +57,11 @@ async function selectNodeAndNotify(page, id) {
   }, id);
 }
 
-async function openSelectedTextInBlb(extensionWorker, selectedText = null, requestId = 'research-derived') {
-  await extensionWorker.evaluate(async ({ forcedText, requestId }) => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) throw new Error('No active tab for selection-text regression');
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      world: 'ISOLATED',
-      func: ({ forcedTextFromArgs, requestIdFromArgs }) => new Promise(resolve => {
-        const text = forcedTextFromArgs ?? (window.getSelection()?.toString() || '');
-        chrome.runtime.sendMessage(
-          { type: 'blbSuiteOpenSelectionText', text, requestId: requestIdFromArgs },
-          () => resolve()
-        );
-      })
-    });
-  }, { forcedText: selectedText, requestId });
+async function openSelectedReferenceViaPageButton(page, extensionWorker) {
+  const button = page.locator('#blb-suite-page-selection-button');
+  await expect(button).toBeVisible({ timeout: 10000 });
+  await button.click();
+  return expectSingleVerseTab(extensionWorker);
 }
 
 async function expectSingleVerseTab(extensionWorker, expectedPath) {
@@ -95,8 +84,8 @@ test.describe('research-derived DOM/reference regression coverage', () => {
   }) => {
     await loadGenericExtensionPage(page, extensionStorage);
     await selectNodeAndNotify(page, 'case-split');
-    await openSelectedTextInBlb(extensionWorker, 'John 3:16', 'D19');
-    const tab = await expectSingleVerseTab(extensionWorker, '/kjv/jhn/3/16/');
+    const tab = await openSelectedReferenceViaPageButton(page, extensionWorker);
+    expect(new URL(tab.url).pathname).toBe('/kjv/jhn/3/16/');
     await removeTabById(extensionWorker, tab.id);
   });
 
@@ -118,8 +107,8 @@ test.describe('research-derived DOM/reference regression coverage', () => {
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
 
-    await openSelectedTextInBlb(extensionWorker, 'John 3:16', 'D20');
-    const tab = await expectSingleVerseTab(extensionWorker, '/kjv/jhn/3/16/');
+    const tab = await openSelectedReferenceViaPageButton(page, extensionWorker);
+    expect(new URL(tab.url).pathname).toBe('/kjv/jhn/3/16/');
     await removeTabById(extensionWorker, tab.id);
   });
 
@@ -140,8 +129,8 @@ test.describe('research-derived DOM/reference regression coverage', () => {
     });
 
     await selectNodeAndNotify(page, 'overlay-reference');
-    await openSelectedTextInBlb(extensionWorker);
-    const tab = await expectSingleVerseTab(extensionWorker, '/kjv/jhn/3/16/');
+    const tab = await openSelectedReferenceViaPageButton(page, extensionWorker);
+    expect(new URL(tab.url).pathname).toBe('/kjv/jhn/3/16/');
     await removeTabById(extensionWorker, tab.id);
   });
 
@@ -189,8 +178,8 @@ test.describe('research-derived DOM/reference regression coverage', () => {
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
 
-    await openSelectedTextInBlb(extensionWorker, '1 John 5:3', 'D23-first');
-    const firstTab = await expectSingleVerseTab(extensionWorker, '/kjv/1jo/5/3/');
+    const firstTab = await openSelectedReferenceViaPageButton(page, extensionWorker);
+    expect(new URL(firstTab.url).pathname).toBe('/kjv/1jo/5/3/');
     await removeTabById(extensionWorker, firstTab.id);
 
     await page.evaluate(() => {
@@ -205,8 +194,8 @@ test.describe('research-derived DOM/reference regression coverage', () => {
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
 
-    await openSelectedTextInBlb(extensionWorker, '2 John 4', 'D23-second');
-    const secondTab = await expectSingleVerseTab(extensionWorker, '/kjv/2jo/4/');
+    const secondTab = await openSelectedReferenceViaPageButton(page, extensionWorker);
+    expect(new URL(secondTab.url).pathname).toBe('/kjv/2jo/4/');
     await removeTabById(extensionWorker, secondTab.id);
   });
 });
