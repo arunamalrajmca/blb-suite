@@ -123,8 +123,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATUS_SHA: ${{ github.sha }}
-          STATUS_STATE: ${{ needs.change-detection.result == 'success' && needs.regression-package.result == 'success' && (needs.regression-behavioral.result == 'success' || (needs.regression-behavioral.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && 'success' || 'failure' }}
-          STATUS_DESCRIPTION: ${{ needs.change-detection.result == 'success' && needs.regression-package.result == 'success' && (needs.regression-behavioral.result == 'success' || (needs.regression-behavioral.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && 'regression passed or not applicable' || 'regression failed' }}
+          STATUS_STATE: ${{ needs.change-detection.result == 'success' && (needs.regression-package.result == 'success' || (needs.regression-package.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && (needs.regression-behavioral.result == 'success' || (needs.regression-behavioral.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && 'success' || 'failure' }}
+          STATUS_DESCRIPTION: ${{ needs.change-detection.result == 'success' && (needs.regression-package.result == 'success' || (needs.regression-package.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && (needs.regression-behavioral.result == 'success' || (needs.regression-behavioral.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && 'success' || 'failure' }}
         shell: bash
         run: |
           curl --fail-with-body --silent --show-error \
@@ -138,7 +138,7 @@ jobs:
       - name: Require all regression groups to pass
         shell: bash
         run: |
-          if [ "${{ needs.change-detection.result }}" != "success" ] || [ "${{ needs.regression-package.result }}" != "success" ] || [ "${{ needs.regression-behavioral.result }}" = "failure" ] || ( [ "${{ needs.regression-behavioral.result }}" = "skipped" ] && [ "${{ needs.change-detection.outputs.runtime_changed }}" != "false" ] ) || [ "${{ needs.regression-behavioral.result }}" = "cancelled" ]; then
+          if [ "${{ needs.change-detection.result }}" != "success" ] || ( [ "${{ needs.regression-package.result }}" != "success" ] && ! ( [ "${{ needs.regression-package.result }}" = "skipped" ] && [ "${{ needs.change-detection.outputs.runtime_changed }}" = "false" ] ) ) || [ "${{ needs.regression-behavioral.result }}" = "failure" ] || ( [ "${{ needs.regression-behavioral.result }}" = "skipped" ] && [ "${{ needs.change-detection.outputs.runtime_changed }}" != "false" ] ) || [ "${{ needs.regression-behavioral.result }}" = "cancelled" ]; then
             echo "Package: ${{ needs.regression-package.result }}"
             echo "Behavioral: ${{ needs.regression-behavioral.result }}"
             exit 1
