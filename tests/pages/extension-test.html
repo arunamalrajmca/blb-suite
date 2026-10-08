@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>BLB Suite Extension Test Page</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font: 18px/1.6 system-ui, sans-serif; margin: 32px; max-width: 1000px; }
+    section { border: 1px solid #bbb; border-radius: 8px; padding: 16px; margin: 16px 0; }
+    h1, h2 { line-height: 1.2; }
+    .case { margin: 12px 0; padding: 12px; background: #f7f7f7; }
+    button { margin: 4px 8px 4px 0; padding: 6px 10px; }
+    .target { user-select: text; }
+    .small { font-size: 14px; color: #555; }
+  </style>
+</head>
+<body>
+  <h1 id="extension-test-title">BLB Suite Extension Test Page</h1>
+  <p class="small">Generic test fixture for BLB Suite reference detection, selection handling, DOM traversal, actions, and future regression cases.</p>
+
+  <section id="reference-cases">
+    <h2>1. Bible references</h2>
+    <div class="case target" id="case-simple">John 3:16</div>
+    <div class="case target" id="case-chapter">Genesis 50</div>
+    <div class="case target" id="case-numbered">1 John 5:3 and 2 John 4</div>
+    <div class="case target" id="case-aliases">Jn 3:16; 1 Jn 5:3; 1 Thess 4:13</div>
+    <div class="case target" id="case-multiword">Song of Solomon 2:1</div>
+    <div class="case target" id="case-multiple">Matthew 18, Luke 17</div>
+    <div class="case target" id="case-range">Acts 17:11-12</div>
+    <div class="case target" id="case-prose">The answer is found in John 3:16 and the surrounding prose should remain prose.</div>
+  </section>
+
+  <section id="dom-cases">
+    <h2>2. DOM and whitespace cases</h2>
+    <div class="case target" id="case-split"><span>John</span> <strong>3:16</strong></div>
+    <div class="case target" id="case-nested"><span>Acts <em>17</em>:<strong>11</strong></span></div>
+    <div class="case target" id="case-br">John 3:<br>16</div>
+    <div class="case target" id="case-nbsp">John&nbsp;3:16</div>
+    <div class="case target" id="case-invisible">John 3:16</div>
+  </section>
+
+  <section id="selection-cases">
+    <h2>3. Selection / gesture cases</h2>
+    <p class="case target" id="case-context">Matthew <span>18</span>, Luke <span>17</span>, repentance, and surrounding authored prose.</p>
+    <p class="case target" id="case-number-heading"><strong>1.</strong> Install the extension, then read John 3:16.</p>
+    <p class="case target" id="case-adjacent">1 John 5:3; 2 John 4</p>
+    <p class="case target" id="case-inverted">John 3:16 — select this text in either direction.</p>
+  </section>
+
+  <section id="dynamic-cases">
+    <h2>4. Dynamic DOM</h2>
+    <div class="case" id="dynamic-target">Dynamic content has not been inserted yet.</div>
+    <button id="insert-dynamic" type="button">Insert dynamic reference</button>
+    <button id="replace-dynamic" type="button">Replace dynamic reference</button>
+  </section>
+
+  <section id="future-cases">
+    <h2>5. Extension-wide feature targets</h2>
+    <p class="case target" id="case-single-word">adoption</p>
+    <p class="case target" id="case-case-sensitive">LORD</p>
+    <p class="case target" id="case-kjv-term">injurious</p>
+    <p class="case target" id="case-long-selection">John 3:16 — this deliberately includes authored prose so the complete selection path can be tested.</p>
+    <p class="small">Use this section for future Strong's, KJV search, MultiVerse, Criteria, popup, omnibox, copy/link, and native-BLB compatibility fixtures without creating another test page.</p>
+  </section>
+
+  <section id="controls">
+    <h2>6. Test controls</h2>
+    <button id="clear-selection" type="button">Clear selection</button>
+    <button id="select-john-316" type="button">Select John 3:16</button>
+    <button id="select-context" type="button">Select contextual case</button>
+  </section>
+
+  <script>
+    function selectNodeContents(id) {
+      const node = document.getElementById(id);
+      if (!node) return;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+
+    document.getElementById('clear-selection').addEventListener('click', () => {
+      window.getSelection()?.removeAllRanges();
+    });
+
+    document.getElementById('select-john-316').addEventListener('click', () => {
+      selectNodeContents('case-simple');
+    });
+
+    document.getElementById('select-context').addEventListener('click', () => {
+      selectNodeContents('case-context');
+    });
+
+    document.getElementById('insert-dynamic').addEventListener('click', () => {
+      const target = document.getElementById('dynamic-target');
+      target.innerHTML = 'Dynamically inserted <span>John</span> <strong>3:16</strong> and <span>Romans 16:1</span>.';
+    });
+
+    document.getElementById('replace-dynamic').addEventListener('click', () => {
+      const target = document.getElementById('dynamic-target');
+      target.innerHTML = '<span>Ruth</span> <span>1:1</span> — dynamically replaced content.';
+    });
+  </script>
+</body>
+</html>
