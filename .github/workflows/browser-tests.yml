@@ -2,31 +2,34 @@ name: BLB Suite HARD-GATE
 run-name: HARD-GATE — PR #${{ github.event.pull_request.number || 'main' }} — Run ${{ github.run_number }} — Attempt ${{ github.run_attempt }}
 
 on:
-  push:
-    branches: [ main ]
   pull_request:
     branches: [ main ]
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 jobs:
   change-detection:
-    name: Detect runtime changes
+    name: Select requested CI suite
     runs-on: ubuntu-latest
     outputs:
-      runtime_changed: ${{ steps.runtime.outputs.runtime_changed }}
+      runtime_changed: ${{ steps.select.outputs.runtime_changed }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Detect runtime changes
-        id: runtime
+      - name: Read explicit CI selection
+        id: select
         env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          PR_HEAD_SHA: ${{ github.sha }}
-        run: bash scripts/ci/is-runtime-change.sh
+          LABELS: ${{ toJSON(github.event.pull_request.labels) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || jq -e 'any(.[]; .name == "ci-run-all" or .name == "ci-run-hard-gate")' <<< "$LABELS" >/dev/null; then
+            echo "runtime_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "runtime_changed=false" >> "$GITHUB_OUTPUT"
+          fi
 
   regression-package:
     name: Regression — package
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-hard-gate') }}
     needs: change-detection
     runs-on: ubuntu-latest
     timeout-minutes: 20
