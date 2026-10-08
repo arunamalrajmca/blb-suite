@@ -44,7 +44,7 @@ while IFS= read -r path; do
   case "$path" in
     .github/*|scripts/ci/*|tests/*|docs/*|*.md)
       ;;
-    extension/popup.html|extension/popup.css|extension/popup.js|extension/Tutorial.html|extension/Tutorial.js|extension/*.css)
+    extension/popup.html|extension/popup.css|extension/popup.js|extension/Tutorial.html|extension/Tutorial.js|extension/options.html)
       ;;
     extension/manifest.json|package.json)
       ;;
