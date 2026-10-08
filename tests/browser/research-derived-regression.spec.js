@@ -58,21 +58,21 @@ async function selectNodeAndNotify(page, id) {
 }
 
 async function openSelectedTextInBlb(extensionWorker, selectedText = null) {
-  await extensionWorker.evaluate(async () => {
+  await extensionWorker.evaluate(async (forcedText) => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) throw new Error('No active tab for selection-text regression');
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       world: 'ISOLATED',
       func: () => new Promise(resolve => {
-        const text = selectedText ?? (window.getSelection()?.toString() || '');
+        const text = forcedText ?? (window.getSelection()?.toString() || '');
         chrome.runtime.sendMessage(
           { type: 'blbSuiteOpenSelectionText', text },
           () => resolve()
         );
       })
     });
-  });
+  }, selectedText);
 }
 
 async function expectSingleVerseTab(extensionWorker, expectedPath) {
