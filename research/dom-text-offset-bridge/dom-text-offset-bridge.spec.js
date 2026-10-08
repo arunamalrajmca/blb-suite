@@ -13,4 +13,18 @@ test.describe('research: generic DOM text/offset bridge',()=>{
   test('isolates caller-selected scope',async({page})=>{expect(await map(page,'<div>Matthew 18</div><div id="scope">Luke 17</div>')).toEqual({text:'Luke 17',full:'Luke 17'});});
   test('keeps numbered books as ordinary text',async({page})=>{expect(await map(page,'<div id="scope"><span>1 </span><strong>Thessalonians 5:21</strong></div>')).toEqual({text:'1 Thessalonians 5:21',full:'1 Thessalonians 5:21'});});
   test('reconstructs only requested logical subrange',async({page})=>{await page.setContent('<div id="scope"><strong>John</strong><span> 3:</span><em>16</em></div>');await page.addScriptTag({content:MAPPER});const selected=await page.evaluate(()=>{const m=buildDomTextOffsetMap(document.querySelector('#scope')),start=m.text.indexOf('3:16');return m.makeRange(start,start+4).toString();});expect(selected).toBe('3:16');});
+  test('existing reference-core resolves mapper text unchanged',async({page})=>{
+    await page.setContent('<div id="scope"><strong>John</strong><span> 3:</span><em>16</em></div>');
+    await page.addScriptTag({path:require('path').resolve(__dirname,'../../extension/reference-core.js')});
+    await page.addScriptTag({content:MAPPER});
+    const result=await page.evaluate(()=>{
+      const m=buildDomTextOffsetMap(document.querySelector('#scope'));
+      const refs=resolveBibleReferenceText(m.text);
+      const i=m.text.indexOf(refs[0].text);
+      return {text:m.text,refs:refs.map(r=>({book:r.book,chapter:r.chapter,from:r.from,to:r.to,text:r.text})),selected:m.makeRange(i,i+refs[0].text.length).toString()};
+    });
+    expect(result.text).toBe('John 3:16');
+    expect(result.refs).toEqual([{book:'John',chapter:3,from:16,to:16,text:'John 3:16'}]);
+    expect(result.selected).toBe('John 3:16');
+  });
 });
