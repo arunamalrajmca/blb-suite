@@ -242,20 +242,6 @@ const downloadMenuButton = document.getElementById('downloadMenuButton');
 const downloadMenu = document.getElementById('downloadMenu');
 const dateQuickMenu = document.getElementById('dateQuickMenu');
 const startButton = document.getElementById('startTopic');
-const guideHtmlButton = document.getElementById('guideHtml');
-const guidePdfButton = document.getElementById('guidePdf');
-
-async function openAndDownloadGuide(path, filename) {
-  const url = chrome.runtime.getURL(path);
-  // Download first because activating the guide tab closes the transient action popup.
-  try { await chrome.downloads.download({url, filename, saveAs:false}); } catch (_) {}
-  try {
-    const tab = await chrome.tabs.create({url, active:true});
-    if (tab?.windowId != null) {
-      try { await chrome.runtime.sendMessage({type:'blbSuiteReopenPopup', windowId:tab.windowId}); } catch (_) {}
-    }
-  } catch (_) {}
-}
 
 const multiViewButton = document.getElementById('multiView');
 const historyMenu = document.getElementById('historyMenu');
