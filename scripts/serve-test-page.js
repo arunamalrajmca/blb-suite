@@ -4,7 +4,7 @@ const path = require('path');
 
 const HOST = process.env.TEST_PAGE_HOST || '127.0.0.1';
 const PORT = Number(process.env.TEST_PAGE_PORT || 8000);
-const TEST_PAGE_PATH = '/dom-offset-test/dom-offset-test.html';
+const TEST_PAGE_PATH = '/extension-test/extension-test.html';
 const TEST_PAGE_FILE = path.resolve(__dirname, '../tests/pages/extension-test.html');
 
 const server = http.createServer((req, res) => {
