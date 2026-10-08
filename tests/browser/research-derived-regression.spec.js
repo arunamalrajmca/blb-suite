@@ -97,10 +97,14 @@ test.describe('research-derived DOM/reference regression coverage', () => {
     await expect(page.locator('#dynamic-target')).toContainText('John 3:16');
 
     await page.evaluate(() => {
-      const node = document.querySelector('#dynamic-target span');
+      const node = document.querySelector('#dynamic-target');
       if (!node) throw new Error('Missing dynamically inserted reference');
+      const start = node.querySelector('span');
+      const end = node.querySelector('strong');
+      if (!start || !end) throw new Error('Missing dynamically inserted reference parts');
       const range = document.createRange();
-      range.selectNodeContents(node);
+      range.setStart(start.firstChild, 0);
+      range.setEnd(end.firstChild, end.firstChild.textContent.length);
       const selection = window.getSelection();
       selection.removeAllRanges();
       selection.addRange(range);
@@ -181,6 +185,7 @@ test.describe('research-derived DOM/reference regression coverage', () => {
     expect(new URL(firstTab.url).pathname).toBe('/kjv/1jo/5/3/');
     await removeTabById(extensionWorker, firstTab.id);
 
+    await page.bringToFront();
     await page.evaluate(() => {
       const node = document.getElementById('case-adjacent');
       const text = node.firstChild;
@@ -190,6 +195,9 @@ test.describe('research-derived DOM/reference regression coverage', () => {
       range.setEnd(text, 20);
       selection.removeAllRanges();
       selection.addRange(range);
+      if (selection.toString() !== '2 John 4') {
+        throw new Error('Unexpected second adjacent selection: ' + selection.toString());
+      }
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
 
