@@ -79,6 +79,8 @@ jobs:
         run: npm install --prefer-offline
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
+      - name: Grant test-only generic host access
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
       - name: Read manifest version
         id: version
         run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
@@ -133,6 +135,8 @@ jobs:
         run: npm install --prefer-offline
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
+      - name: Grant test-only generic host access
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
       - name: Read manifest version
         id: version
         run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"

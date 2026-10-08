@@ -70,6 +70,12 @@ jobs:
             git worktree add "$RUNNER_TEMP/blb-baseline" v5.2.51.43
           fi
 
+      - name: Grant test-only generic host access
+        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+        run: |
+          node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
+          node -e "const fs=require('fs'); const p='$RUNNER_TEMP/blb-baseline/extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
+
       - name: Package main + 76 test ZIP
         if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
         run: |

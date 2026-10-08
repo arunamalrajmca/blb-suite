@@ -167,6 +167,8 @@ test.describe('core user-visible E2E', () => {
   test('Double-click resolves any part of an adjacent Bible reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    // Wait for asynchronous double-click settings initialization before the first gesture.
+    await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const el = document.createElement('p');
       el.id = 'blb-e2e-doubleclick-context-reference';
@@ -243,6 +245,8 @@ test.describe('core user-visible E2E', () => {
   test('Double-click uses the browser token, not the whole surrounding line', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    // Wait for asynchronous double-click settings initialization before the first gesture.
+    await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const el = document.createElement('p');
       el.id = 'blb-e2e-doubleclick-token-isolation';
@@ -324,6 +328,8 @@ test.describe('core user-visible E2E', () => {
   test('Double-clicking ordinary heading words does not open a Bible reference', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    // Wait for asynchronous double-click settings initialization before the first gesture.
+    await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const heading = document.createElement('h2');
       heading.id = 'blb-e2e-doubleclick-heading';
