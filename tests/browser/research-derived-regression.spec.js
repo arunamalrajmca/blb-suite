@@ -57,10 +57,18 @@ async function selectNodeAndNotify(page, id) {
   }, id);
 }
 
-async function clickShowOnBlb(page) {
-  const button = page.locator('#blb-suite-page-selection-button');
-  await expect(button).toBeVisible({ timeout: 10000 });
-  await button.click();
+async function openCurrentSelectionInBlb(extensionWorker) {
+  await extensionWorker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) throw new Error('No active tab for selection-action regression');
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      world: 'ISOLATED',
+      func: () => new Promise(resolve => {
+        chrome.runtime.sendMessage({ type: 'blbSuiteOpenCurrentSelection' }, () => resolve());
+      })
+    });
+  });
 }
 
 async function expectSingleVerseTab(extensionWorker, expectedPath) {
@@ -83,7 +91,7 @@ test.describe('research-derived DOM/reference regression coverage', () => {
   }) => {
     await loadGenericExtensionPage(page, extensionStorage);
     await selectNodeAndNotify(page, 'case-split');
-    await clickShowOnBlb(page);
+    await openCurrentSelectionInBlb(extensionWorker);
     const tab = await expectSingleVerseTab(extensionWorker, '/kjv/jhn/3/16/');
     await removeTabById(extensionWorker, tab.id);
   });
