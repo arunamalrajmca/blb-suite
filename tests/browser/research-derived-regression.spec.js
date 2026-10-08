@@ -129,7 +129,7 @@ test.describe('research-derived DOM/reference regression coverage', () => {
     });
 
     await selectNodeAndNotify(page, 'overlay-reference');
-    const tab = await openSelectedReferenceViaPageButton(page, extensionWorker);
+    const tab = await openSelectedReferenceViaPageButton(page, extensionWorker, '/kjv/jhn/3/16/');
     expect(new URL(tab.url).pathname).toBe('/kjv/jhn/3/16/');
     await removeTabById(extensionWorker, tab.id);
   });
