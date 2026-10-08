@@ -81,12 +81,14 @@ async function writeSample(scenario, handoffMs, extra = {}) {
 }
 
 test('Show on BLB performance benchmark', async ({ page, context, extensionStorage, extensionId, extensionWorker }) => {
-  await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.org': true } });
+  await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
 
   const scenario = process.env.BLB_PERF_SCENARIO || 'fresh';
 
   if (scenario === 'selection') {
-    await page.goto('https://example.org/', { waitUntil: 'domcontentloaded' });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    // Allow asynchronous page-selection monitoring to finish initializing before the first selection.
+    await page.waitForTimeout(1000);
     await selectReference(page, 'blb-perf-selection');
     const button = page.locator('#blb-suite-page-selection-button');
     await expect(button).toBeVisible({ timeout: 10000 });
