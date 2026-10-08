@@ -14,7 +14,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       runtime_changed: ${{ steps.runtime.outputs.runtime_changed }}
-      browser_e2e_required: ${{ steps.runtime.outputs.browser_e2e_required }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,7 +28,7 @@ jobs:
   browser-e2e:
     name: BROWSER E2E — References — ${{ matrix.group }}
     needs: change-detection
-    if: ${{ needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -109,7 +108,7 @@ jobs:
   browser-e2e-features:
     name: BROWSER E2E — FEATURES
     needs: change-detection
-    if: ${{ needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -181,8 +180,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATUS_SHA: ${{ github.sha }}
-          STATUS_STATE: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || (needs.browser-e2e.result == 'skipped' && needs.change-detection.outputs.browser_e2e_required == 'false')) && (needs.browser-e2e-features.result == 'success' || (needs.browser-e2e-features.result == 'skipped' && needs.change-detection.outputs.browser_e2e_required == 'false')) && 'success' || 'failure' }}
-          STATUS_DESCRIPTION: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || (needs.browser-e2e.result == 'skipped' && needs.change-detection.outputs.browser_e2e_required == 'false')) && (needs.browser-e2e-features.result == 'success' || (needs.browser-e2e-features.result == 'skipped' && needs.change-detection.outputs.browser_e2e_required == 'false')) && 'browser E2E passed or not applicable' || 'browser E2E failed' }}
+          STATUS_STATE: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || (needs.browser-e2e.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && (needs.browser-e2e-features.result == 'success' || (needs.browser-e2e-features.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && 'success' || 'failure' }}
+          STATUS_DESCRIPTION: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || (needs.browser-e2e.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && (needs.browser-e2e-features.result == 'success' || (needs.browser-e2e-features.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && 'browser E2E passed or not applicable' || 'browser E2E failed' }}
         shell: bash
         run: |
           curl --fail-with-body --silent --show-error \
