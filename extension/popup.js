@@ -1077,7 +1077,7 @@ document.addEventListener('click', e => {
 });
 
 
-guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
+guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
 async function handlePageButtonToggle(on) {
   if (!on) {
