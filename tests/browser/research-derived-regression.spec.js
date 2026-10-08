@@ -30,10 +30,10 @@ async function removeTabById(extensionWorker, id) {
 async function loadGenericExtensionPage(page, extensionStorage) {
   await extensionStorage.set({
     masterEnabled: true,
-    pageSelectionButtonSites: { 'example.com': true },
-    doubleClickBlbSites: { 'example.com': true }
+    pageSelectionButtonSites: { 'www.blueletterbible.org': true },
+    doubleClickBlbSites: { 'www.blueletterbible.org': true }
   });
-  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil: 'domcontentloaded' });
   await page.setContent(genericPageHtml, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(500);
 }
