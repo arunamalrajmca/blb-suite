@@ -57,7 +57,7 @@ async function selectNodeAndNotify(page, id) {
   }, id);
 }
 
-async function openSelectedTextInBlb(extensionWorker, selectedText = null) {
+async function openSelectedTextInBlb(extensionWorker, selectedText = null, requestId = 'research-derived') {
   await extensionWorker.evaluate(async (forcedText) => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) throw new Error('No active tab for selection-text regression');
@@ -67,7 +67,7 @@ async function openSelectedTextInBlb(extensionWorker, selectedText = null) {
       func: (forcedTextFromArgs) => new Promise(resolve => {
         const text = forcedTextFromArgs ?? (window.getSelection()?.toString() || '');
         chrome.runtime.sendMessage(
-          { type: 'blbSuiteOpenSelectionText', text },
+          { type: 'blbSuiteOpenSelectionText', text, requestId },
           () => resolve()
         );
       })
@@ -95,7 +95,7 @@ test.describe('research-derived DOM/reference regression coverage', () => {
   }) => {
     await loadGenericExtensionPage(page, extensionStorage);
     await selectNodeAndNotify(page, 'case-split');
-    await openSelectedTextInBlb(extensionWorker, 'John 3:16');
+    await openSelectedTextInBlb(extensionWorker, 'John 3:16', 'D19');
     const tab = await expectSingleVerseTab(extensionWorker, '/kjv/jhn/3/16/');
     await removeTabById(extensionWorker, tab.id);
   });
@@ -118,7 +118,7 @@ test.describe('research-derived DOM/reference regression coverage', () => {
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
 
-    await openSelectedTextInBlb(extensionWorker, 'John 3:16');
+    await openSelectedTextInBlb(extensionWorker, 'John 3:16', 'D20');
     const tab = await expectSingleVerseTab(extensionWorker, '/kjv/jhn/3/16/');
     await removeTabById(extensionWorker, tab.id);
   });
@@ -189,7 +189,7 @@ test.describe('research-derived DOM/reference regression coverage', () => {
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
 
-    await openSelectedTextInBlb(extensionWorker, '1 John 5:3');
+    await openSelectedTextInBlb(extensionWorker, '1 John 5:3', 'D23-first');
     const firstTab = await expectSingleVerseTab(extensionWorker, '/kjv/1jo/5/3/');
     await removeTabById(extensionWorker, firstTab.id);
 
@@ -205,7 +205,7 @@ test.describe('research-derived DOM/reference regression coverage', () => {
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
 
-    await openSelectedTextInBlb(extensionWorker, '2 John 4');
+    await openSelectedTextInBlb(extensionWorker, '2 John 4', 'D23-second');
     const secondTab = await expectSingleVerseTab(extensionWorker, '/kjv/2jo/4/');
     await removeTabById(extensionWorker, secondTab.id);
   });
