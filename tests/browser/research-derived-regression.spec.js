@@ -33,7 +33,7 @@ async function loadGenericExtensionPage(page, extensionStorage) {
     pageSelectionButtonSites: { 'www.blueletterbible.org': true },
     doubleClickBlbSites: { 'www.blueletterbible.org': true }
   });
-  await page.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil: 'domcontentloaded' });
+  await page.goto('https://www.blueletterbible.org/', { waitUntil: 'commit' });
   await page.setContent(genericPageHtml, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(500);
 }
