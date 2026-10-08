@@ -33,8 +33,14 @@ async function loadGenericExtensionPage(page, extensionStorage) {
     pageSelectionButtonSites: { 'example.com': true },
     doubleClickBlbSites: { 'example.com': true }
   });
+  await page.route('https://example.com/**', async route => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: genericPageHtml
+    });
+  });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-  await page.setContent(genericPageHtml, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(500);
 }
 
@@ -52,16 +58,16 @@ async function selectNodeAndNotify(page, id) {
 }
 
 async function openSelectedTextInBlb(extensionWorker, selectedText = null, requestId = 'research-derived') {
-  await extensionWorker.evaluate(async (forcedText) => {
+  await extensionWorker.evaluate(async ({ forcedText, requestId }) => {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab?.id) throw new Error('No active tab for selection-text regression');
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       world: 'ISOLATED',
-      func: (forcedTextFromArgs) => new Promise(resolve => {
+      func: ({ forcedTextFromArgs, requestIdFromArgs }) => new Promise(resolve => {
         const text = forcedTextFromArgs ?? (window.getSelection()?.toString() || '');
         chrome.runtime.sendMessage(
-          { type: 'blbSuiteOpenSelectionText', text, requestId },
+          { type: 'blbSuiteOpenSelectionText', text, requestId: requestIdFromArgs },
           () => resolve()
         );
       })
