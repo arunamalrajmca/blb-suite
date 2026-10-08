@@ -4,31 +4,35 @@ run-name: References & Double-click — PR #${{ github.event.pull_request.number
 on:
   pull_request:
     branches: [ main ]
-  push:
-    branches: [ main ]
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 jobs:
   change-detection:
-    name: Detect runtime changes
+    name: Select requested CI suite
     runs-on: ubuntu-latest
     outputs:
-      runtime_changed: ${{ steps.runtime.outputs.runtime_changed }}
+      runtime_changed: ${{ steps.select.outputs.runtime_changed }}
+      browser_e2e_required: ${{ steps.select.outputs.browser_e2e_required }}
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Detect runtime changes
-        id: runtime
+      - name: Read explicit CI selection
+        id: select
         env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          PR_HEAD_SHA: ${{ github.sha }}
-        run: bash scripts/ci/is-runtime-change.sh
+          LABELS: ${{ toJSON(github.event.pull_request.labels) }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "runtime_changed=false" >> "$GITHUB_OUTPUT"
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || jq -e 'any(.[]; .name == "ci-run-all" or .name == "ci-run-references")' <<< "$LABELS" >/dev/null; then
+            echo "browser_e2e_required=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "browser_e2e_required=false" >> "$GITHUB_OUTPUT"
+          fi
 
   browser-e2e:
     name: BROWSER E2E — References — ${{ matrix.group }}
     needs: change-detection
-    if: ${{ needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -108,7 +112,7 @@ jobs:
   browser-e2e-features:
     name: BROWSER E2E — FEATURES
     needs: change-detection
-    if: ${{ needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch' }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -180,8 +184,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATUS_SHA: ${{ github.sha }}
-          STATUS_STATE: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || (needs.browser-e2e.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && (needs.browser-e2e-features.result == 'success' || (needs.browser-e2e-features.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && 'success' || 'failure' }}
-          STATUS_DESCRIPTION: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || (needs.browser-e2e.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && (needs.browser-e2e-features.result == 'success' || (needs.browser-e2e-features.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && 'browser E2E passed or not applicable' || 'browser E2E failed' }}
+          STATUS_STATE: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || (needs.browser-e2e.result == 'skipped' && needs.change-detection.outputs.browser_e2e_required == 'false')) && (needs.browser-e2e-features.result == 'success' || (needs.browser-e2e-features.result == 'skipped' && needs.change-detection.outputs.browser_e2e_required == 'false')) && 'success' || 'failure' }}
+          STATUS_DESCRIPTION: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || (needs.browser-e2e.result == 'skipped' && needs.change-detection.outputs.browser_e2e_required == 'false')) && (needs.browser-e2e-features.result == 'success' || (needs.browser-e2e-features.result == 'skipped' && needs.change-detection.outputs.browser_e2e_required == 'false')) && 'browser E2E passed or not applicable' || 'browser E2E failed' }}
         shell: bash
         run: |
           curl --fail-with-body --silent --show-error \

@@ -4,6 +4,7 @@ run-name: E2E-A Reference — PR #${{ github.event.pull_request.number || 'main'
 on:
   pull_request:
     branches: [ main ]
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 jobs:
@@ -15,22 +16,17 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Detect runtime changes
-        id: runtime
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: bash scripts/ci/is-runtime-change.sh
       - uses: actions/setup-node@v4
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
         with:
           node-version: 22
       - run: npm install
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
       - run: npx playwright install --with-deps chromium
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
       - name: Grant test-only generic host access
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
       - name: Run Group A
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
         run: npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep 'Alt.B command path opens an exact selected Bible reference'

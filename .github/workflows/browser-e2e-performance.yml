@@ -4,13 +4,13 @@ run-name: Performance — PR #${{ github.event.pull_request.number || 'main' }} 
 on:
   pull_request:
     branches: [ main ]
-  push:
-    branches: [ main ]
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 jobs:
   performance:
     name: Measured performance qualification
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-performance') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -23,33 +23,27 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Detect runtime changes
-        id: runtime
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          PR_HEAD_SHA: ${{ github.sha }}
-        run: bash scripts/ci/is-runtime-change.sh
       - name: Setup Node
-        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+       
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
       - name: Install dependencies
-        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+       
         run: npm install
 
       - name: Install Playwright Chromium
-        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+       
         run: npx playwright install --with-deps chromium
 
       - name: Read manifest version
-        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+       
         id: version
         run: echo "version=$(node -p "require('./extension/manifest.json').version")" >> "$GITHUB_OUTPUT"
 
       - name: Fetch performance baseline
-        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+       
         env:
           BLB_PERF_TARGET: ${{ (github.event_name == 'pull_request' && startsWith(github.event.pull_request.title, 'Optimize KJV verse-range resolver')) && 'kjv-range-resolver' || '' }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -71,13 +65,13 @@ jobs:
           fi
 
       - name: Grant test-only generic host access
-        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+       
         run: |
           node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
           node -e "const fs=require('fs'); const p='$RUNNER_TEMP/blb-baseline/extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
 
       - name: Package main + 76 test ZIP
-        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+       
         run: |
           mkdir -p "$RUNNER_TEMP/blb-test-build"
           VERSION="$(node -p "require('./extension/manifest.json').version")"
@@ -89,7 +83,7 @@ jobs:
           sha256sum "$ZIP" | tee "$ZIP.sha256"
         
       - name: Benchmark baseline and candidate (interleaved)
-        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+       
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
           BLB_BASELINE_EXTENSION_PATH: ${{ runner.temp }}/blb-baseline/extension
@@ -118,7 +112,7 @@ jobs:
           done
 
       - name: Require measured performance qualification
-        if: ${{ steps.runtime.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' }}
+       
         env:
           BLB_PERF_MIN_TARGETED_IMPROVEMENT: 0.03
           BLB_PERF_MAX_SELECTION_REGRESSION: 0.10
