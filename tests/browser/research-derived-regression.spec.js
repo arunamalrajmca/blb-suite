@@ -64,8 +64,8 @@ async function openSelectedTextInBlb(extensionWorker, selectedText = null) {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id },
       world: 'ISOLATED',
-      func: () => new Promise(resolve => {
-        const text = forcedText ?? (window.getSelection()?.toString() || '');
+      func: (forcedTextFromArgs) => new Promise(resolve => {
+        const text = forcedTextFromArgs ?? (window.getSelection()?.toString() || '');
         chrome.runtime.sendMessage(
           { type: 'blbSuiteOpenSelectionText', text },
           () => resolve()
