@@ -4,6 +4,7 @@ set -euo pipefail
 # Classify whether a change can affect extension runtime behavior and whether
 # the expensive reference/performance browser suites are applicable.
 # Required status publishers still run for skipped suites.
+# CI routing changes are intentionally isolated from extension runtime behavior.
 
 set_outputs() {
   local runtime="$1" browser="$2" performance="$3"
