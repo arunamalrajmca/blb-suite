@@ -59,6 +59,9 @@ jobs:
             grep: 'generic aliases|numbered aliases and Roman prefixes|standalone Roman prefixes'
           - group: resolver
             grep: 'All 66 canonical'
+          - group: research-derived
+            file: tests/browser/research-derived-regression.spec.js
+            grep: 'D19|D20|D21|D22|D23'
     steps:
       - name: ⏱ Workflow ETA — start
         uses: $/.github/actions/workflow-eta
@@ -91,7 +94,7 @@ jobs:
       - name: Run Browser E2E — ${{ matrix.group }}
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: npx playwright test tests/browser/extension.spec.js --grep "${{ matrix.grep }}"
+        run: npx playwright test "${{ matrix.file || 'tests/browser/extension.spec.js' }}" --grep "${{ matrix.grep }}"
       - name: Upload Playwright diagnostics — ${{ matrix.group }}
         if: always()
         uses: actions/upload-artifact@v4
