@@ -26,7 +26,7 @@ async function dismissBlbCookieOverlay(page) {
 test.describe('core user-action E2E coverage', () => {
   test('Alt+B command path opens an exact selected Bible reference', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.goto('https://www.blueletterbible.org/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
 
     await page.evaluate(() => {
