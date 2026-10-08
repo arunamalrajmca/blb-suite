@@ -30,17 +30,11 @@ async function removeTabById(extensionWorker, id) {
 async function loadGenericExtensionPage(page, extensionStorage) {
   await extensionStorage.set({
     masterEnabled: true,
-    pageSelectionButtonSites: { 'www.blueletterbible.org': true },
-    doubleClickBlbSites: { 'www.blueletterbible.org': true }
+    pageSelectionButtonSites: { 'example.com': true },
+    doubleClickBlbSites: { 'example.com': true }
   });
-  await page.route('https://www.blueletterbible.org/**', async route => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'text/html',
-      body: genericPageHtml
-    });
-  });
-  await page.goto('https://www.blueletterbible.org/', { waitUntil: 'domcontentloaded' });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.setContent(genericPageHtml, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(500);
 }
 
