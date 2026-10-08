@@ -4,6 +4,7 @@ run-name: E2E-B Clipboard/Links — PR #${{ github.event.pull_request.number || 
 on:
   pull_request:
     branches: [ main ]
+    types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
 jobs:
@@ -15,19 +16,14 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Detect runtime changes
-        id: runtime
-        env:
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: bash scripts/ci/is-runtime-change.sh
       - uses: actions/setup-node@v4
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
         with:
           node-version: 22
       - run: npm install
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
       - run: npx playwright install --with-deps chromium
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
       - name: Run Group B
-        if: ${{ github.event_name != 'pull_request' || steps.runtime.outputs.runtime_changed == 'true' }}
+        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
         run: npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep 'copying selected Bible text|BLB verse links inside parse popups'
