@@ -32,7 +32,7 @@ test.describe('independent site feature permissions and global redirects', () =>
   });
   test('Double-click toggle does not modify Show on BLB preference', () => {
     const start = popup.indexOf('async function handleDoubleClickToggle(on) {');
-    const end = popup.indexOf("\\ndocument.getElementById('pageButton').addEventListener", start);
+    const end = popup.indexOf("\ndocument.getElementById('pageButton').addEventListener", start);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     expect(popup.slice(start, end)).not.toContain('setPageButton(');
@@ -40,7 +40,7 @@ test.describe('independent site feature permissions and global redirects', () =>
 
   test('global redirect handler does not write either site-feature preference', () => {
     const start = popup.indexOf('async function setRedirect(on) {');
-    const end = popup.indexOf('\\nfunction titleCase(', start);
+    const end = popup.indexOf('\nfunction titleCase(', start);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const handler = popup.slice(start, end);
