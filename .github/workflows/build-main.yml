@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: ⏱ Workflow ETA — start
-        uses: $/.github/actions/workflow-eta
+        uses: ./.github/actions/workflow-eta
         with:
           phase: start
       - name: Checkout Main
@@ -37,6 +37,6 @@ jobs:
           retention-days: 7
       - name: ⏱ Workflow ETA — finish
         if: ${{ always() }}
-        uses: $/.github/actions/workflow-eta
+        uses: ./.github/actions/workflow-eta
         with:
           phase: finish

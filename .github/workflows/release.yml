@@ -16,7 +16,7 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
     steps:
       - name: ⏱ Workflow ETA — start
-        uses: $/.github/actions/workflow-eta
+        uses: ./.github/actions/workflow-eta
         with:
           phase: start
       - name: Checkout
@@ -58,7 +58,7 @@ jobs:
     needs: validate
     steps:
       - name: ⏱ Workflow ETA — start
-        uses: $/.github/actions/workflow-eta
+        uses: ./.github/actions/workflow-eta
         with:
           phase: start
       - name: Checkout tagged source
@@ -96,6 +96,6 @@ jobs:
           gh release create "$TAG" "dist/Blue-Letter-Bible-Suite-$VERSION.zip" "dist/Blue-Letter-Bible-Suite-$VERSION.zip.sha256" "dist/RELEASE-CHECKSUMS.txt" --title "Blue Letter Bible Suite $VERSION" --generate-notes
       - name: ⏱ Workflow ETA — finish
         if: ${{ always() }}
-        uses: $/.github/actions/workflow-eta
+        uses: ./.github/actions/workflow-eta
         with:
           phase: finish
