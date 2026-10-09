@@ -297,7 +297,7 @@ if (
         ) continue;
 
         html += escapeHtml(plain.slice(cursor, match.index));
-        html += \`<a href="\${escapeHtml(parsedUrl.href)}" style="color:#1155cc;text-decoration:underline;">\${escapeHtml(label)}</a>\`;
+        html += `<a href="${escapeHtml(parsedUrl.href)}" style="color:#1155cc;text-decoration:underline;">${escapeHtml(label)}</a>`;
         cursor = match.index + match[0].length;
         linkCount++;
       }
@@ -322,7 +322,7 @@ if (
 
           const referenceOffset = match.index + match[1].length;
           html += escapeHtml(plain.slice(plainCursor, referenceOffset));
-          html += \`<a href="\${escapeHtml(href)}" style="color:#1155cc;text-decoration:underline;">\${escapeHtml(referenceText)}</a>\`;
+          html += `<a href="${escapeHtml(href)}" style="color:#1155cc;text-decoration:underline;">${escapeHtml(referenceText)}</a>`;
           plainCursor = referenceOffset + match[2].length;
           linkCount++;
         }
@@ -331,7 +331,7 @@ if (
       }
 
       html = html.replace(/\r?\n/g, "<br>");
-      const htmlPayload = \`<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">\${html}</span><!--EndFragment--></body></html>\`;
+      const htmlPayload = `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`;
 
       // Clipboard writes must be synchronous and preventDefault must happen
       // in this same copy event; otherwise the browser/native handler can win.
