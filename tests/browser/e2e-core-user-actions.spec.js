@@ -167,6 +167,21 @@ test.describe('core user-action E2E coverage', () => {
 
     expect(captured.plain).toBe(candidate.payload);
     expect(captured.html).toMatch(/<a\s+href="https:\/\/www\.blueletterbible\.org\/kjv\//i);
+
+    // Check an actual rich-text paste round-trip, not just clipboard MIME data.
+    await page.evaluate(() => {
+      const target = document.createElement('div');
+      target.id = 'blb-e2e-multiverse-rich-paste-target';
+      target.contentEditable = 'true';
+      target.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;';
+      document.body.appendChild(target);
+      target.focus();
+    });
+    await page.keyboard.press('Control+V');
+    const pastedLink = page.locator('#blb-e2e-multiverse-rich-paste-target a[href*="/kjv/"]');
+    await expect(pastedLink).toBeVisible();
+    await expect(pastedLink).toHaveAttribute('href', /^https:\/\/www\.blueletterbible\.org\/kjv\//i);
+    await expect(page.locator('#blb-e2e-multiverse-rich-paste-target')).toContainText(candidate.payload.slice(0, 20));
   });
 
   test('BLB verse links inside parse popups open in a new tab', async ({ page, context, extensionStorage }) => {
