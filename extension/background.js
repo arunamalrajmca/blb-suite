@@ -5321,7 +5321,6 @@ chrome.commands.onCommand.addListener(async command => {
 
 async function injectEnabledTabsForGrantedOrigins(origins) {
   const granted = Array.isArray(origins) ? origins.map(String) : [];
-  if (!granted.length) return;
   const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false});
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
@@ -5329,12 +5328,41 @@ async function injectEnabledTabsForGrantedOrigins(origins) {
   for (const tab of tabs) {
     if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
     const pattern = originPatternForUrl(tab.url);
-    if (!pattern || !granted.includes(pattern)) continue;
+    if (!pattern) continue;
     const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
-    const redirectEnabled = data.redirectEnabled === true && isRedirectHostname(new URL(tab.url).hostname);
-    if (pageSites[key] === true || doubleSites[key] === true || redirectEnabled) {
+
+    // Redirect External Bible Links is a global feature. Broad optional host
+    // grants (http://*/* and https://*/*) cover each tab's origin even though
+    // their strings do not equal the tab-specific pattern. Check effective
+    // host access rather than the redirect matcher allowlist so ScriptTagger
+    // links work on arbitrary sites where the user has granted access.
+    const redirectEnabled = data.redirectEnabled === true && await hasHostAccessForTab(tab);
+
+    // Per-site features still only inject for a site whose origin was part of
+    // the permission event. A wildcard grant covers every origin of its scheme.
+    const grantCoversTab = granted.some(origin =>
+      origin === pattern ||
+      (origin === 'http://*/*' && String(tab.url).startsWith('http://')) ||
+      (origin === 'https://*/*' && String(tab.url).startsWith('https://')) ||
+      origin === '*://*/*'
+    );
+    const siteFeatureEnabled = grantCoversTab && (pageSites[key] === true || doubleSites[key] === true);
+    if (redirectEnabled || siteFeatureEnabled) {
       await ensureContentScriptInTab(tab.id);
     }
+  }
+}
+
+async function injectRedirectEnabledTabs() {
+  // The global toggle may be enabled after permissions were already granted;
+  // in that case permissions.onAdded will not fire, so activate existing tabs
+  // directly when redirectEnabled changes to true.
+  const data = await chrome.storage.local.get({redirectEnabled:false});
+  if (data.redirectEnabled !== true) return;
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
+    if (await hasHostAccessForTab(tab)) await ensureContentScriptInTab(tab.id);
   }
 }
 
@@ -5359,6 +5387,9 @@ chrome.runtime.onInstalled.addListener(async details => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
+  if (changes.redirectEnabled?.newValue === true) {
+    injectRedirectEnabledTabs().catch(() => {});
+  }
   if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites) {
     installRules();
     // Keep the existing web-selection menu item in place. Only its visibility
