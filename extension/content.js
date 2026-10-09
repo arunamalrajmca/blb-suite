@@ -239,70 +239,44 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
   }).catch(() => {});
 }
 // ---------- BLB MultiVerse native-copy hyperlink enhancement ----------
-// BLB's native payload already contains Markdown links with canonical verse URLs.
-// Preserve the native plain-text payload and convert only validated BLB KJV links to HTML.
+// Enrich the exact native MultiVerse Copy button payload with HTML links.
+// Track the button that was actually clicked; the two native copy buttons can
+// carry different payload formats, so choosing the first visible button is unsafe.
 if (
   location.hostname === "www.blueletterbible.org" &&
   /\/tools\/MultiVerse\.cfm$/i.test(location.pathname)
 ) {
-  document.addEventListener("copy", e => {
-    console.warn("[BLB MultiVerse clipboard diagnostic] copy handler entered", {
-      suiteEnabled,
-      hasClipboardData: !!e.clipboardData,
-      eventPhase: e.eventPhase,
-      defaultPreventedAtEntry: e.defaultPrevented
-    });
-    if (!suiteEnabled || !e.clipboardData) {
-      console.warn("[BLB MultiVerse clipboard diagnostic] handler exited at guard", {
-        suiteEnabled,
-        hasClipboardData: !!e.clipboardData
-      });
-      return;
-    }
+  let lastNativeMultiVerseCopyButton = null;
+
+  document.addEventListener("click", event => {
+    const target = event.target instanceof Element ? event.target : null;
+    const button = target?.closest("#copyButton, #copyByVerseButton");
+    if (button) lastNativeMultiVerseCopyButton = button;
+  }, true);
+
+  document.addEventListener("copy", event => {
+    if (!suiteEnabled || !event.clipboardData) return;
 
     try {
+      const clickedButton = lastNativeMultiVerseCopyButton;
+      lastNativeMultiVerseCopyButton = null;
+
       const buttons = Array.from(
         document.querySelectorAll("#copyButton, #copyByVerseButton")
       );
-      const nativeButton = buttons.find(button => {
-        const text = button.getAttribute("data-clipboard-text") || "";
-        if (!text) return false;
-        const style = window.getComputedStyle(button);
-        return style.display !== "none" && style.visibility !== "hidden";
-      }) || buttons.find(button =>
-        !!(button.getAttribute("data-clipboard-text") || "")
-      );
+      const nativeButton = clickedButton?.isConnected
+        ? clickedButton
+        : buttons.find(button => {
+            const text = button.getAttribute("data-clipboard-text") || "";
+            if (!text) return false;
+            const style = window.getComputedStyle(button);
+            return style.display !== "none" && style.visibility !== "hidden";
+          }) || buttons.find(button =>
+            !!(button.getAttribute("data-clipboard-text") || "")
+          );
 
       const plain = nativeButton?.getAttribute("data-clipboard-text") || "";
-      const blbKjvUrlMatches = plain.match(/https?:\/\/(?:www\.)?blueletterbible\.org\/kjv\//gi) || [];
-      const payloadHasMarkdownLinkSyntax = /\[[^\]\r\n]+\]\(https?:\/\/(?:www\.)?blueletterbible\.org\/kjv\//i.test(plain);
-      const payloadHasHtmlAnchorSyntax = /<a\b[^>]*href\s*=/i.test(plain);
-      const payloadHasAnyBlbKjvUrl = blbKjvUrlMatches.length > 0;
-      const payloadHasHtmlMarkup = /<\/?[a-z][^>]*>/i.test(plain);
-      const payloadFormat = payloadHasMarkdownLinkSyntax
-        ? "markdown-links"
-        : payloadHasHtmlAnchorSyntax
-          ? "html-anchors"
-          : payloadHasAnyBlbKjvUrl
-            ? "urls-without-markdown-links"
-            : payloadHasHtmlMarkup
-              ? "other-html-or-markup"
-              : "plain-text-or-unrecognized";
-      console.warn("[BLB MultiVerse clipboard diagnostic] native payload structure", {
-        foundNativeButton: !!nativeButton,
-        nativePayloadLength: plain.length,
-        lineCount: plain ? plain.split(/\r?\n/).length : 0,
-        payloadFormat,
-        payloadHasMarkdownLinkSyntax,
-        payloadHasHtmlAnchorSyntax,
-        payloadHasAnyBlbKjvUrl,
-        blbKjvUrlCount: blbKjvUrlMatches.length,
-        payloadHasHtmlMarkup
-      });
-      if (!plain) {
-        console.warn("[BLB MultiVerse clipboard diagnostic] handler exited: empty native payload");
-        return;
-      }
+      if (!plain) return;
 
       const escapeHtml = value => String(value)
         .replace(/&/g, "&amp;")
@@ -311,11 +285,10 @@ if (
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
 
-      // BLB's observed payload format:
-      // [(Philippians 2:12 KJV)](https://www.blueletterbible.org/kjv/phl/2/12/s_1105012) – verse text
-      // Accept only same-origin canonical KJV verse paths; never trust arbitrary Markdown URLs.
+      // Only convert native Markdown links whose destinations are canonical
+      // HTTPS BLB KJV verse URLs. Unknown payload formats remain native.
       const markdownVerseLink =
-        /\[([^\]\r\n]+)\]\((https:\/\/www\.blueletterbible\.org\/kjv\/([a-z0-9]+)\/(\d+)\/(\d+)(?:\/[a-z0-9_-]+)?\/?(?:#[^\s)]*)?)\)/gi;
+        /\[([^\]\r\n]+)\]\((https:\/\/www\.blueletterbible\.org\/kjv\/[a-z0-9]+\/\d+\/\d+(?:\/[a-z0-9_-]+)?\/?(?:#[^\s)]*)?)\)/gi;
 
       let linkCount = 0;
       let cursor = 0;
@@ -323,7 +296,7 @@ if (
       let match;
 
       while ((match = markdownVerseLink.exec(plain)) !== null) {
-        const [, label, href, bookKey, chapterText, verseText] = match;
+        const [, label, href] = match;
         const parsedUrl = new URL(href);
         if (
           parsedUrl.origin !== "https://www.blueletterbible.org" ||
@@ -338,48 +311,19 @@ if (
         linkCount++;
       }
 
-      console.warn("[BLB MultiVerse clipboard diagnostic] Markdown parsing complete", {
-        recognizedLinkCount: linkCount,
-        htmlLengthBeforeLineBreakConversion: html.length,
-        defaultPreventedBeforeOverride: e.defaultPrevented
-      });
-      // If the native payload doesn't contain recognized links, do not take over native copying.
-      if (linkCount === 0) {
-        console.warn("[BLB MultiVerse clipboard diagnostic] handler exited: no recognized BLB KJV links");
-        return;
-      }
+      // Do not override native clipboard behavior for other copy formats.
+      if (linkCount === 0) return;
 
       html += escapeHtml(plain.slice(cursor));
       html = html.replace(/\r?\n/g, "<br>");
-
       const htmlPayload = `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`;
-      try {
-        e.clipboardData.setData("text/plain", plain);
-        console.warn("[BLB MultiVerse clipboard diagnostic] text/plain setData returned");
-      } catch (error) {
-        console.warn("[BLB MultiVerse clipboard diagnostic] text/plain setData threw", String(error));
-        throw error;
-      }
-      try {
-        e.clipboardData.setData("text/html", htmlPayload);
-        console.warn("[BLB MultiVerse clipboard diagnostic] text/html setData returned", {
-          htmlPayloadLength: htmlPayload.length,
-          containsAnchor: /<a\s/i.test(htmlPayload)
-        });
-      } catch (error) {
-        console.warn("[BLB MultiVerse clipboard diagnostic] text/html setData threw", String(error));
-        throw error;
-      }
-      e.preventDefault();
-      // Prevent BLB's later copy listener from replacing the HTML payload we just supplied.
-      e.stopImmediatePropagation();
-      console.warn("[BLB MultiVerse clipboard diagnostic] handler completed", {
-        defaultPrevented: e.defaultPrevented,
-        propagationStopped: e.cancelBubble,
-        recognizedLinkCount: linkCount
-      });
+
+      event.clipboardData.setData("text/plain", plain);
+      event.clipboardData.setData("text/html", htmlPayload);
+      event.preventDefault();
+      event.stopImmediatePropagation();
     } catch (_) {
-      // Leave the native MultiVerse copy operation untouched if enhancement fails.
+      // Leave native MultiVerse copy untouched if enhancement fails.
     }
   }, true);
 }
