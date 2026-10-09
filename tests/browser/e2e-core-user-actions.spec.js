@@ -179,8 +179,10 @@ test.describe('core user-action E2E coverage', () => {
     });
     await page.keyboard.press('Control+V');
     const pastedLink = page.locator('#blb-e2e-multiverse-rich-paste-target a[href*="/kjv/"]');
-    await expect(pastedLink).toBeVisible();
-    await expect(pastedLink).toHaveAttribute('href', /^https:\/\/www\.blueletterbible\.org\/kjv\//i);
+    await expect(pastedLink).toHaveCount(4);
+    const genesisLink = page.locator('#blb-e2e-multiverse-rich-paste-target a[href="https://www.blueletterbible.org/kjv/gen/1/1-15/"]');
+    await expect(genesisLink).toBeVisible();
+    await expect(genesisLink).toHaveAttribute('href', 'https://www.blueletterbible.org/kjv/gen/1/1-15/');
     await expect(page.locator('#blb-e2e-multiverse-rich-paste-target')).toContainText(candidate.payload.slice(0, 20));
   });
 
