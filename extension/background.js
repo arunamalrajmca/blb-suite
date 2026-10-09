@@ -5289,7 +5289,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
       const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
       const explicitEnabled = pageSites[key] === true || doubleSites[key] === true;
-      const redirectEnabled = data.redirectEnabled === true && isRedirectHostname(new URL(tab.url).hostname);
+      const redirectEnabled = data.redirectEnabled === true;
       if (explicitEnabled || redirectEnabled) return ensureContentScriptInTab(tabId);
       return null;
     }).catch(() => {});
