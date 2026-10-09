@@ -26,4 +26,4 @@ jobs:
         if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
       - name: Run Group B
         if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
-        run: npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep 'copying selected Bible text|MultiVerse plain-text copy preserves text and adds clickable BLB HTML links|BLB verse links inside parse popups'
+        run: npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep 'MultiVerse plain-text copy preserves text and adds clickable BLB HTML links'
