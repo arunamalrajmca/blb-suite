@@ -158,7 +158,7 @@ test.describe('core user-action E2E coverage', () => {
     expect(captured.plain).toBe(payload);
     expect(captured.html).toContain('<a href="https://www.blueletterbible.org/kjv/phl/2/12/');
     expect(captured.html).toContain('<a href="https://www.blueletterbible.org/kjv/1ti/4/7/');
-    expect(captured.html.match(/<a\\s+href=/g) || []).toHaveLength(2);
+    expect(captured.html.match(/<a\s+href=/g) || []).toHaveLength(2);
   });
 
   test('BLB verse links inside parse popups open in a new tab', async ({ page, context, extensionStorage }) => {
