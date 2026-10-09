@@ -310,6 +310,8 @@ if (
         `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`
       );
       e.preventDefault();
+      // Prevent BLB's later copy listener from replacing the HTML payload we just supplied.
+      e.stopImmediatePropagation();
     } catch (_) {
       // Leave the native MultiVerse copy operation untouched if enhancement fails.
     }
