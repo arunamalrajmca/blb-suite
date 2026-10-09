@@ -277,7 +277,7 @@ if (
       console.debug("[BLB MultiVerse clipboard diagnostic] native payload located", {
         foundNativeButton: !!nativeButton,
         nativePayloadLength: plain.length,
-        payloadHasMarkdownLinkSyntax: /\\[[^\\]\\r\\n]+\\]\\(https:\\/\\/www\\.blueletterbible\\.org\\/kjv\\//i.test(plain)
+        payloadHasMarkdownLinkSyntax: /\[[^\]\r\n]+\]\(https:\/\/www\.blueletterbible\.org\/kjv\//i.test(plain)
       });
       if (!plain) {
         console.debug("[BLB MultiVerse clipboard diagnostic] handler exited: empty native payload");
@@ -344,7 +344,7 @@ if (
         e.clipboardData.setData("text/html", htmlPayload);
         console.debug("[BLB MultiVerse clipboard diagnostic] text/html setData returned", {
           htmlPayloadLength: htmlPayload.length,
-          containsAnchor: /<a\\s/i.test(htmlPayload)
+          containsAnchor: /<a\s/i.test(htmlPayload)
         });
       } catch (error) {
         console.debug("[BLB MultiVerse clipboard diagnostic] text/html setData threw", String(error));
