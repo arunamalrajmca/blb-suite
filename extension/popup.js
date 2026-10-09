@@ -182,24 +182,10 @@ async function setRedirect(on) {
   if (!state.master) return;
 
   if (on) {
-    const redirectOrigins = [
-      'http://www.bible.com/*', 'https://www.bible.com/*',
-      'http://www.biblegateway.com/*', 'https://www.biblegateway.com/*',
-      'http://www.bibleref.com/*', 'https://www.bibleref.com/*',
-      'http://biblehub.com/*', 'https://biblehub.com/*',
-      'http://www.biblehub.com/*', 'https://www.biblehub.com/*',
-      'http://bibleportal.com/*', 'https://bibleportal.com/*',
-      'http://www.bibleportal.com/*', 'https://www.bibleportal.com/*',
-      'http://www.kingjamesbibleonline.org/*', 'https://www.kingjamesbibleonline.org/*',
-      'http://kjbo.org/*', 'https://kjbo.org/*',
-      'http://www.kjbo.org/*', 'https://www.kjbo.org/*',
-      'http://www.kjv.site/*', 'https://www.kjv.site/*',
-      'http://kjv.site/*', 'https://kjv.site/*',
-      'http://m.kjv.site/*', 'https://m.kjv.site/*',
-      'http://officialkingjamesbible.com/*', 'https://officialkingjamesbible.com/*',
-      'http://www.officialkingjamesbible.com/*', 'https://www.officialkingjamesbible.com/*',
-      'http://webstersdictionary1828.com/*', 'https://webstersdictionary1828.com/*'
-    ];
+    // Redirect matching remains limited to the rules below, but ScriptTagger
+    // links can appear on any website. Request optional HTTP(S) host access so
+    // this single toggle can enable generic link handling without a site list.
+    const redirectOrigins = ['http://*/*', 'https://*/*'];
 
     // Persist the user's intent before the permission prompt. Chrome may
     // interrupt/recreate the action popup while showing a permission prompt,
