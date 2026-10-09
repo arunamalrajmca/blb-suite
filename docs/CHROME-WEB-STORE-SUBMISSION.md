@@ -1,7 +1,5 @@
 # Chrome Web Store Submission Notes
 
-**Baseline:** Blue Letter Bible Suite v5.2.51.57  
-**Baseline commit:** `6c8956da6b752ebc07dc292d5b9946d4c23ec4f6`  
 **Purpose:** Prepare accurate listing and Privacy practices information. This document does not claim that the Chrome Web Store Developer Dashboard has been completed or inspected.
 
 ## Single purpose
@@ -77,14 +75,14 @@ Raw Markdown alternative:
 
 https://raw.githubusercontent.com/arunamalrajmca/blb-suite/main/docs/PRIVACY-POLICY.md
 
-The policy is present in the public repository at the v5.2.51.57 baseline. The Dashboard's saved URL field itself cannot be verified from this repository.
+The policy is present in the public repository. The Dashboard's saved URL field itself cannot be verified from this repository.
 
 ## Listing assets and package
 
-Verified in the v5.2.51.57 source:
+Verified in the repository source:
 - Manifest declares extension icons at 16×16, 48×48, and 128×128.
 - The release workflow builds the upload ZIP from the **contents** of `extension/`, so `manifest.json` is at the ZIP root.
-- The published release ZIP is `Blue-Letter-Bible-Suite-5.2.51.57.zip`; SHA-256: `4f7f792131e8ecccfdd1ff238ebc272bc011be7ee472aa91ca1c98f97781e29d`.
+- Before upload, verify that the selected package's manifest version matches the intended release and is higher than the version currently published in the Chrome Web Store.
 
 Still requires a Developer Dashboard check:
 - Confirm the 128×128 icon and current listing screenshots/promotional images are uploaded and legible at the Dashboard's requested sizes.
