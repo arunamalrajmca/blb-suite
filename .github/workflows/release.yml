@@ -15,14 +15,14 @@ jobs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
     steps:
-      - name: ⏱ Workflow ETA — start
-        uses: ./.github/actions/workflow-eta
-        with:
-          phase: start
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: ⏱ Workflow ETA — start
+        uses: ./.github/actions/workflow-eta
+        with:
+          phase: start
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
@@ -57,12 +57,12 @@ jobs:
     runs-on: ubuntu-latest
     needs: validate
     steps:
+      - name: Checkout tagged source
+        uses: actions/checkout@v4
       - name: ⏱ Workflow ETA — start
         uses: ./.github/actions/workflow-eta
         with:
           phase: start
-      - name: Checkout tagged source
-        uses: actions/checkout@v4
       - name: Build reproducible extension package
         run: |
           mkdir -p dist
