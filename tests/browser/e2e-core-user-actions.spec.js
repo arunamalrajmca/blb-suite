@@ -123,38 +123,39 @@ test.describe('core user-action E2E coverage', () => {
     expect(captured.html).toMatch(/\/kjv\/(?:jhn|John)\/3\/16\/?/i);
   });
 
-  test('MultiVerse plain-text copy preserves text and adds clickable BLB HTML links', async ({ page, extensionStorage }) => {
+  test('MultiVerse native copy preserves text and puts clickable BLB links on the actual clipboard', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true });
     await page.goto('https://www.blueletterbible.org/tools/MultiVerse.cfm', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(1000);
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'https://www.blueletterbible.org' });
+    await page.waitForTimeout(1500);
 
     const button = page.locator('#copyButton, #copyByVerseButton').first();
     await expect(button).toBeAttached({ timeout: 15000 });
 
     const payload = 'Philippians 2:12 KJV - Wherefore, my beloved, as ye have always obeyed, work out your own salvation.\n\n1 Timothy 4:7 KJV - But refuse profane and old wives’ fables, and exercise thyself unto godliness.';
-    const captured = await button.evaluate((el, text) => {
+    await button.evaluate((el, text) => {
       el.setAttribute('data-clipboard-text', text);
       el.style.display = 'inline-block';
       el.style.visibility = 'visible';
-      // Record the exact native button first, then dispatch a cancellable copy
-      // event so this test inspects the content script's clipboard override
-      // deterministically rather than depending on BLB's own copy library.
-      el.click();
-      const transfer = new DataTransfer();
-      const event = new ClipboardEvent('copy', {
-        clipboardData: transfer,
-        bubbles: true,
-        cancelable: true
-      });
-      document.dispatchEvent(event);
-      return {
-        html: transfer.getData('text/html'),
-        plain: transfer.getData('text/plain'),
-        defaultPrevented: event.defaultPrevented
-      };
     }, payload);
 
-    expect(captured.defaultPrevented).toBe(true);
+    // Use the page's actual native button click and clipboard library. Do not
+    // manufacture a ClipboardEvent: the purpose is to test the browser's real
+    // clipboard result after the extension's copy listener runs.
+    await button.click();
+
+    const captured = await page.evaluate(async () => {
+      const items = await navigator.clipboard.read();
+      let html = '';
+      let plain = '';
+      for (const item of items) {
+        if (item.types.includes('text/html')) html = await (await item.getType('text/html')).text();
+        if (item.types.includes('text/plain')) plain = await (await item.getType('text/plain')).text();
+      }
+      return { html, plain, types: items.flatMap(item => item.types) };
+    });
+    console.log('[E2E MultiVerse real clipboard]', captured);
+
     expect(captured.plain).toBe(payload);
     expect(captured.html).toContain('<a href="https://www.blueletterbible.org/kjv/phl/2/12/');
     expect(captured.html).toContain('<a href="https://www.blueletterbible.org/kjv/1ti/4/7/');
