@@ -213,10 +213,11 @@ function redirectBibleSite() {
 function redirectBlbNet() {
   if (location.hostname.toLowerCase() !== "www.blueletterbible.org") return false;
 
-  // BLB translation URLs share the /<version>/<book>/<chapter>/<verse>/s_<id>
-  // shape. Keep KJV native; send any other translation to the equivalent KJV
-  // passage, regardless of whether the source version is NET, NASB, ESV, etc.
-  const m = location.pathname.match(/^\/([^/]+)\/([^/]+)\/(\d+)\/(\d+)(?:-(\d+))?\/s_\d+\/?$/i);
+  // BLB passage URLs may appear as /<version>/<book>/<chapter>/<verse>/
+  // or include the optional /s_<id> suffix. This is BLB URL syntax, separate
+  // from ScriptTagger/reference text syntax. Keep KJV native; redirect other
+  // translation passage URLs to the equivalent KJV passage.
+  const m = location.pathname.match(/^\/([^/]+)\/([^/]+)\/(\d+)\/(\d+)(?:-(\d+))?(?:\/s_\d+)?\/?$/i);
   if (!m || m[1].toLowerCase() === "kjv") return false;
 
   const book = m[2].toLowerCase();
