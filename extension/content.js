@@ -310,7 +310,7 @@ if (
         // its canonical destination through the Suite's shared Bible resolver.
         // This avoids scanning page anchors or trying to link verse prose.
         const referenceAtLineStart =
-          /^(\s*)((?:[1-3]\s+)?[A-Za-z][A-Za-z. ]*?\s+\d+(?::\d+(?:[-–]\d+)?)?)(?:\s+(?:KJV|King James Version))?(?=\s*(?:[-–—:]\s*|$))/gim;
+          /^([ \t]*)((?:[1-3][ \t]+)?[A-Za-z][A-Za-z. ]*?[ \t]+\d+(?::\d+(?:[-–]\d+)?)?)(?:[ \t]+(?:KJV|King James Version))?(?=[ \t]*(?:[-–—:][ \t]*|$))/gim;
         let plainCursor = 0;
         while ((match = referenceAtLineStart.exec(plain)) !== null) {
           const referenceText = match[2].trim();
