@@ -2381,18 +2381,22 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'content.js'
 ];
 
-const REDIRECT_HOSTNAMES = new Set([
-  'www.bible.com', 'www.biblegateway.com', 'www.bibleref.com',
-  'biblehub.com', 'www.biblehub.com',
-  'bibleportal.com', 'www.bibleportal.com',
-  'www.kingjamesbibleonline.org', 'kjbo.org', 'www.kjbo.org',
-  'www.kjv.site', 'kjv.site', 'm.kjv.site',
-  'officialkingjamesbible.com', 'www.officialkingjamesbible.com',
-  'webstersdictionary1828.com', 'www.blueletterbible.org'
-]);
-
-function isRedirectHostname(hostname) {
-  return REDIRECT_HOSTNAMES.has(String(hostname || '').toLowerCase());
+function grantedOriginsCoverUrl(origins, url) {
+  let target;
+  try { target = new URL(String(url || '')); } catch (_) { return false; }
+  if (target.protocol !== 'http:' && target.protocol !== 'https:') return false;
+  const hostname = target.hostname.toLowerCase();
+  return origins.some(value => {
+    const match = String(value || '').match(/^(https?):\/\/([^/]+)\/\*$/i);
+    if (!match || (match[1].toLowerCase() + ':') !== target.protocol) return false;
+    const hostPattern = match[2].toLowerCase();
+    if (hostPattern === '*') return true;
+    if (hostPattern.startsWith('*.')) {
+      const suffix = hostPattern.slice(2);
+      return hostname === suffix || hostname.endsWith('.' + suffix);
+    }
+    return hostname === hostPattern;
+  });
 }
 
 function isHttpPageUrl(url) {
@@ -5329,9 +5333,9 @@ async function injectEnabledTabsForGrantedOrigins(origins) {
   for (const tab of tabs) {
     if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
     const pattern = originPatternForUrl(tab.url);
-    if (!pattern || !granted.includes(pattern)) continue;
+    if (!pattern || !grantedOriginsCoverUrl(granted, tab.url)) continue;
     const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
-    const redirectEnabled = data.redirectEnabled === true && isRedirectHostname(new URL(tab.url).hostname);
+    const redirectEnabled = data.redirectEnabled === true;
     if (pageSites[key] === true || doubleSites[key] === true || redirectEnabled) {
       await ensureContentScriptInTab(tab.id);
     }
@@ -5359,6 +5363,15 @@ chrome.runtime.onInstalled.addListener(async details => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
+  if (changes.redirectEnabled?.newValue === true) {
+    // The global redirect toggle applies to every permitted HTTP(S) page,
+    // including tabs that were already open when the permission was granted.
+    chrome.tabs.query({}).then(async tabs => {
+      for (const tab of tabs) {
+        if (tab?.id && isHttpPageUrl(tab.url)) await ensureContentScriptInTab(tab.id);
+      }
+    }).catch(() => {});
+  }
   if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites) {
     installRules();
     // Keep the existing web-selection menu item in place. Only its visibility
