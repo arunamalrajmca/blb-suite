@@ -40,12 +40,12 @@ function runInjectionHelper(functionNames, { settings, tabs }) {
   const snippets = [];
   for (const name of functionNames) {
     if (name === 'injectEnabledTabsForGrantedOrigins') {
-      snippets.push(extractFunction(name, '\\nasync function injectRedirectEnabledTabs'));
+      snippets.push(extractFunction(name, '\nasync function injectRedirectEnabledTabs'));
     } else {
-      snippets.push(extractFunction(name, '\\nchrome.permissions?.onAdded'));
+      snippets.push(extractFunction(name, '\nchrome.permissions?.onAdded'));
     }
   }
-  vm.runInNewContext(snippets.join('\\n\\n'), context);
+  vm.runInNewContext(snippets.join('\n\n'), context);
   return { context, injected };
 }
 
