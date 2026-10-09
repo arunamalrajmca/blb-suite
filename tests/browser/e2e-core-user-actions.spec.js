@@ -123,6 +123,41 @@ test.describe('core user-action E2E coverage', () => {
     expect(captured.html).toMatch(/\/kjv\/(?:jhn|John)\/3\/16\/?/i);
   });
 
+  test('MultiVerse plain-text copy preserves text and adds clickable BLB HTML links', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true });
+    await page.goto('https://www.blueletterbible.org/tools/MultiVerse.cfm', { waitUntil: 'domcontentloaded' });
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'https://www.blueletterbible.org' });
+
+    const button = page.locator('#copyButton, #copyByVerseButton').first();
+    await expect(button).toBeAttached({ timeout: 15000 });
+
+    const payload = 'Philippians 2:12 KJV - Wherefore, my beloved, as ye have always obeyed, work out your own salvation.\\n\\n1 Timothy 4:7 KJV - But refuse profane and old wives’ fables, and exercise thyself unto godliness.';
+    await button.evaluate((el, text) => {
+      el.setAttribute('data-clipboard-text', text);
+      el.style.display = 'inline-block';
+      el.style.visibility = 'visible';
+    }, payload);
+
+    await button.click();
+
+    const captured = await page.evaluate(async () => {
+      await new Promise(resolve => setTimeout(resolve, 100));
+      const items = await navigator.clipboard.read();
+      let html = '';
+      let plain = '';
+      for (const item of items) {
+        if (item.types.includes('text/html')) html = await (await item.getType('text/html')).text();
+        if (item.types.includes('text/plain')) plain = await (await item.getType('text/plain')).text();
+      }
+      return { html, plain };
+    });
+
+    expect(captured.plain).toBe(payload);
+    expect(captured.html).toContain('<a href="https://www.blueletterbible.org/kjv/phl/2/12/');
+    expect(captured.html).toContain('<a href="https://www.blueletterbible.org/kjv/1ti/4/7/');
+    expect(captured.html.match(/<a\\s+href=/g) || []).toHaveLength(2);
+  });
+
   test('BLB verse links inside parse popups open in a new tab', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true });
     await page.goto('https://www.blueletterbible.org/', { waitUntil: 'domcontentloaded' });
