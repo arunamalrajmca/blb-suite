@@ -131,7 +131,7 @@ test.describe('core user-action E2E coverage', () => {
     const button = page.locator('#copyButton, #copyByVerseButton').first();
     await expect(button).toBeAttached({ timeout: 15000 });
 
-    const payload = 'Philippians 2:12 KJV - Wherefore, my beloved, as ye have always obeyed, work out your own salvation.\\n\\n1 Timothy 4:7 KJV - But refuse profane and old wives’ fables, and exercise thyself unto godliness.';
+    const payload = 'Philippians 2:12 KJV - Wherefore, my beloved, as ye have always obeyed, work out your own salvation.\n\n1 Timothy 4:7 KJV - But refuse profane and old wives’ fables, and exercise thyself unto godliness.';
     const captured = await button.evaluate((el, text) => {
       el.setAttribute('data-clipboard-text', text);
       el.style.display = 'inline-block';
