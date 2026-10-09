@@ -123,26 +123,31 @@ test.describe('core user-action E2E coverage', () => {
     expect(captured.html).toMatch(/\/kjv\/(?:jhn|John)\/3\/16\/?/i);
   });
 
-  test('MultiVerse native copy preserves text and puts clickable BLB links on the actual clipboard', async ({ page, context, extensionStorage }) => {
+  test('MultiVerse native copy enriches BLB’s original payload with clickable links', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true });
     await page.goto('https://www.blueletterbible.org/tools/MultiVerse.cfm', { waitUntil: 'domcontentloaded' });
     await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'https://www.blueletterbible.org' });
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(2000);
 
-    const button = page.locator('#copyButton, #copyByVerseButton').first();
-    await expect(button).toBeAttached({ timeout: 15000 });
+    // Never replace the site's data-clipboard-text: exercise the exact
+    // payload supplied by BLB's native controls.
+    const nativeButtons = await page.locator('#copyButton, #copyByVerseButton').evaluateAll(buttons =>
+      buttons.map(el => {
+        const style = getComputedStyle(el);
+        return {
+          id: el.id,
+          text: el.innerText,
+          payload: el.getAttribute('data-clipboard-text') || '',
+          visible: style.display !== 'none' && style.visibility !== 'hidden' && el.getClientRects().length > 0
+        };
+      })
+    );
+    console.log('[E2E MultiVerse native button payloads]', nativeButtons);
+    const candidate = nativeButtons.find(button => button.visible && button.payload.trim())
+      || nativeButtons.find(button => button.payload.trim());
+    expect(candidate, 'BLB should provide a non-empty native clipboard payload').toBeTruthy();
 
-    const payload = 'Philippians 2:12 KJV - Wherefore, my beloved, as ye have always obeyed, work out your own salvation.\n\n1 Timothy 4:7 KJV - But refuse profane and old wives’ fables, and exercise thyself unto godliness.';
-    await button.evaluate((el, text) => {
-      el.setAttribute('data-clipboard-text', text);
-      el.style.display = 'inline-block';
-      el.style.visibility = 'visible';
-    }, payload);
-
-    // Use the page's actual native button click and clipboard library. Do not
-    // manufacture a ClipboardEvent: the purpose is to test the browser's real
-    // clipboard result after the extension's copy listener runs.
-    await button.click();
+    await page.locator(candidate.id === 'copyButton' ? '#copyButton' : '#copyByVerseButton').click();
 
     const captured = await page.evaluate(async () => {
       const items = await navigator.clipboard.read();
@@ -154,12 +159,14 @@ test.describe('core user-action E2E coverage', () => {
       }
       return { html, plain, types: items.flatMap(item => item.types) };
     });
-    console.log('[E2E MultiVerse real clipboard]', captured);
+    console.log('[E2E MultiVerse clipboard from original payload]', {
+      button: candidate.id,
+      sourcePayload: candidate.payload,
+      ...captured
+    });
 
-    expect(captured.plain).toBe(payload);
-    expect(captured.html).toContain('<a href="https://www.blueletterbible.org/kjv/phl/2/12/');
-    expect(captured.html).toContain('<a href="https://www.blueletterbible.org/kjv/1ti/4/7/');
-    expect(captured.html.match(/<a\s+href=/g) || []).toHaveLength(2);
+    expect(captured.plain).toBe(candidate.payload);
+    expect(captured.html).toMatch(/<a\s+href="https:\/\/www\.blueletterbible\.org\/kjv\//i);
   });
 
   test('BLB verse links inside parse popups open in a new tab', async ({ page, context, extensionStorage }) => {
