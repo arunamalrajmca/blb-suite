@@ -82,17 +82,25 @@ try {
     Assert-ZipEntry -Path ([string]$iconSize.Value) -Entries $names
   }
   foreach ($contentScript in @($manifest.content_scripts)) {
-    foreach ($path in @($contentScript.js)) {
-      Assert-ZipEntry -Path ([string]$path) -Entries $names
+    if ($contentScript.js) {
+      foreach ($path in @($contentScript.js)) {
+        Assert-ZipEntry -Path ([string]$path) -Entries $names
+      }
     }
-    foreach ($path in @($contentScript.css)) {
-      Assert-ZipEntry -Path ([string]$path) -Entries $names
+    if ($contentScript.css) {
+      foreach ($path in @($contentScript.css)) {
+        Assert-ZipEntry -Path ([string]$path) -Entries $names
+      }
     }
   }
-  foreach ($resourceGroup in @($manifest.web_accessible_resources)) {
-    foreach ($path in @($resourceGroup.resources)) {
-      # Chrome permits glob patterns in web_accessible_resources.
-      if ($path -notmatch '[*?]') { Assert-ZipEntry -Path ([string]$path) -Entries $names }
+  if ($manifest.web_accessible_resources) {
+    foreach ($resourceGroup in @($manifest.web_accessible_resources)) {
+      if ($resourceGroup.resources) {
+        foreach ($path in @($resourceGroup.resources)) {
+          # Chrome permits glob patterns in web_accessible_resources.
+          if ($path -notmatch '[*?]') { Assert-ZipEntry -Path ([string]$path) -Entries $names }
+        }
+      }
     }
   }
 
