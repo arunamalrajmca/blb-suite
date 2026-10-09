@@ -331,7 +331,12 @@ if (
       }
 
       html = html.replace(/\r?\n/g, "<br>");
-      const htmlPayload = `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`;
+      // ClipboardEvent.setData("text/html") expects an HTML fragment. Chromium
+      // creates the platform clipboard envelope (including Windows CF_HTML offsets)
+      // itself. Supplying a complete document and hand-written fragment markers here
+      // nests one document inside that envelope; browser paste can recover from it,
+      // while native applications may reject the malformed clipboard HTML.
+      const htmlPayload = html;
 
       // Clipboard writes must be synchronous and preventDefault must happen
       // in this same copy event; otherwise the browser/native handler can win.
