@@ -211,13 +211,21 @@ function redirectBibleSite() {
 }
 
 function redirectBlbNet() {
-  if (location.hostname!=="www.blueletterbible.org") return false;
-  const m=location.pathname.match(/^\/net\/([^/]+)\/([^/]+)\/([^/]+)(?:-([^/]+))?\/s_\d+\/?$/i);
-  if (!m) return false;
-  const target=m[4]
-    ? `https://www.blueletterbible.org/kjv/${m[1].toLowerCase()}/${m[2]}/${m[3].toLowerCase()}-${m[4].toLowerCase()}/`
-    : `https://www.blueletterbible.org/kjv/${m[1].toLowerCase()}/${m[2]}/${m[3].toLowerCase()}/`;
-  location.replace(target); return true;
+  if (location.hostname.toLowerCase() !== "www.blueletterbible.org") return false;
+
+  // BLB translation URLs share the /<version>/<book>/<chapter>/<verse>/s_<id>
+  // shape. Keep KJV native; send any other translation to the equivalent KJV
+  // passage, regardless of whether the source version is NET, NASB, ESV, etc.
+  const m = location.pathname.match(/^\/([^/]+)\/([^/]+)\/(\d+)\/(\d+)(?:-(\d+))?\/s_\d+\/?$/i);
+  if (!m || m[1].toLowerCase() === "kjv") return false;
+
+  const book = m[2].toLowerCase();
+  const chapter = m[3];
+  const verse = m[4];
+  const endVerse = m[5] ? "-" + m[5] : "";
+  const target = `https://www.blueletterbible.org/kjv/${book}/${chapter}/${verse}${endVerse}/`;
+  location.replace(target);
+  return true;
 }
 
 const REDIRECT_HOSTS = new Set([
