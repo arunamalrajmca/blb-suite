@@ -1,0 +1,46 @@
+name: ZIP Integrity
+run-name: ZIP Integrity — PR #${{ github.event.pull_request.number || 'manual' }} — Run ${{ github.run_number }}
+
+on:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'extension/**'
+      - 'scripts/package-release.sh'
+      - 'regression-suite/Verify-BLB-Zip.ps1'
+      - '.github/workflows/zip-integrity.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-package:
+    name: ZIP integrity gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Read manifest version
+        id: version
+        shell: bash
+        run: echo "version=$(node -p "require('./extension/manifest.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Build extension ZIP
+        shell: bash
+        run: |
+          mkdir -p dist
+          bash scripts/package-release.sh "${{ steps.version.outputs.version }}" dist
+          unzip -t "dist/Blue-Letter-Bible-Suite-${{ steps.version.outputs.version }}.zip"
+
+      - name: Verify extension ZIP integrity
+        shell: pwsh
+        run: |
+          ./regression-suite/Verify-BLB-Zip.ps1 -ZipPath "dist/Blue-Letter-Bible-Suite-${{ steps.version.outputs.version }}.zip" -ExpectedVersion "${{ steps.version.outputs.version }}"
