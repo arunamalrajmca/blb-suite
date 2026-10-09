@@ -2,7 +2,11 @@ name: BLB Suite RELEASE
 
 on:
   workflow_dispatch:
-
+    inputs:
+      release_tag:
+        description: "Existing version tag to package and publish (for example v5.2.51.58)"
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -14,10 +18,12 @@ jobs:
     outputs:
       version: ${{ steps.version.outputs.version }}
       tag: ${{ steps.version.outputs.tag }}
+      source_sha: ${{ steps.version.outputs.source_sha }}
     steps:
-      - name: Checkout
+      - name: Checkout requested release tag
         uses: actions/checkout@v4
         with:
+          ref: ${{ inputs.release_tag }}
           fetch-depth: 0
       - name: ⏱ Workflow ETA — start
         uses: ./.github/actions/workflow-eta
@@ -30,9 +36,9 @@ jobs:
       - name: Validate release tag and source
         id: version
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
         run: |
-          if ! printf '%s\n' "$RELEASE_TAG" | grep -Eq '^v[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$'; then
+          if ! printf '%s\\n' "$RELEASE_TAG" | grep -Eq '^v[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$'; then
             echo "Release tags must use vMAJOR.MINOR.PATCH.BUILD"
             exit 1
           fi
@@ -43,13 +49,15 @@ jobs:
             exit 1
           fi
           git fetch origin main --no-tags
-          if ! git merge-base --is-ancestor "$GITHUB_SHA" "origin/main"; then
+          SOURCE_SHA="$(git rev-parse "$RELEASE_TAG^{commit}")"
+          if ! git merge-base --is-ancestor "$SOURCE_SHA" origin/main; then
             echo "Release tag must point to a commit contained in main"
             exit 1
           fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-          echo "Release source: $GITHUB_SHA"
+          echo "source_sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo "Release source: $SOURCE_SHA"
           echo "Manifest version: $MANIFEST_VERSION"
 
   package-and-release:
@@ -59,6 +67,8 @@ jobs:
     steps:
       - name: Checkout tagged source
         uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.tag }}
       - name: ⏱ Workflow ETA — start
         uses: ./.github/actions/workflow-eta
         with:
@@ -72,6 +82,17 @@ jobs:
         shell: pwsh
         run: |
           ./regression-suite/Verify-BLB-Zip.ps1 -ZipPath "dist/Blue-Letter-Bible-Suite-${{ needs.validate.outputs.version }}.zip" -ExpectedVersion "${{ needs.validate.outputs.version }}"
+      - name: Create release checksum manifest
+        env:
+          VERSION: ${{ needs.validate.outputs.version }}
+          SOURCE_SHA: ${{ needs.validate.outputs.source_sha }}
+        run: |
+          cat > dist/RELEASE-CHECKSUMS.txt <<EOF
+          Blue Letter Bible Suite $VERSION
+          Git commit: $SOURCE_SHA
+          SHA-256:
+          $(cat "dist/Blue-Letter-Bible-Suite-$VERSION.zip.sha256")
+          EOF
       - name: Upload release package artifact
         uses: actions/upload-artifact@v4
         with:
@@ -79,25 +100,23 @@ jobs:
           path: |
             dist/Blue-Letter-Bible-Suite-${{ needs.validate.outputs.version }}.zip
             dist/Blue-Letter-Bible-Suite-${{ needs.validate.outputs.version }}.zip.sha256
+            dist/RELEASE-CHECKSUMS.txt
           if-no-files-found: error
           retention-days: 30
-      - name: Publish GitHub Release
+      - name: Publish or repair GitHub Release assets
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.validate.outputs.tag }}
           VERSION: ${{ needs.validate.outputs.version }}
         run: |
+          ZIP="dist/Blue-Letter-Bible-Suite-$VERSION.zip"
+          CHECKSUM="$ZIP.sha256"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; refusing to overwrite it."
-            exit 1
+            echo "Release $TAG already exists; uploading validated assets to it."
+            gh release upload "$TAG" "$ZIP" "$CHECKSUM" dist/RELEASE-CHECKSUMS.txt --clobber
+          else
+            gh release create "$TAG" "$ZIP" "$CHECKSUM" dist/RELEASE-CHECKSUMS.txt --title "Blue Letter Bible Suite $VERSION" --generate-notes
           fi
-          cat > dist/RELEASE-CHECKSUMS.txt <<EOF
-          Blue Letter Bible Suite $VERSION
-          Git commit: $GITHUB_SHA
-          SHA-256:
-          $(cat "dist/Blue-Letter-Bible-Suite-$VERSION.zip.sha256")
-          EOF
-          gh release create "$TAG" "dist/Blue-Letter-Bible-Suite-$VERSION.zip" "dist/Blue-Letter-Bible-Suite-$VERSION.zip.sha256" "dist/RELEASE-CHECKSUMS.txt" --title "Blue Letter Bible Suite $VERSION" --generate-notes
       - name: ⏱ Workflow ETA — finish
         if: ${{ always() }}
         uses: ./.github/actions/workflow-eta
