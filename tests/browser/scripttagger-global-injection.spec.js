@@ -4,6 +4,16 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const background = fs.readFileSync(path.resolve(__dirname, '../../extension/background.js'), 'utf8');
+const contentScript = fs.readFileSync(path.resolve(__dirname, '../../extension/content.js'), 'utf8');
+
+function runBlbUrlNormalizer() {
+  const start = contentScript.indexOf('function normalizeBlbDestinationUrl(');
+  const end = contentScript.indexOf('\nfunction openBlbDestinationFromContent(', start);
+  if (start < 0 || end < 0) throw new Error('Could not extract normalizeBlbDestinationUrl from extension/content.js');
+  const context = { URL };
+  vm.runInNewContext(contentScript.slice(start, end), context);
+  return context.normalizeBlbDestinationUrl;
+}
 
 function extractFunction(name, nextMarker) {
   const start = background.indexOf(`async function ${name}(`);
@@ -51,6 +61,16 @@ function runInjectionHelper(functionNames, { settings, tabs }) {
   vm.runInNewContext(snippets.join('\n\n'), context);
   return { context, injected };
 }
+
+test.describe('ScriptTagger legacy BLB destination URLs', () => {
+  test('accepts legacy .com links and canonicalizes them to HTTPS .org', () => {
+    const normalize = runBlbUrlNormalizer();
+    expect(normalize('https://www.blueletterbible.com/romans/3/23')).toBe('https://www.blueletterbible.org/romans/3/23');
+    expect(normalize('http://www.blueletterbible.com/romans/3/23?x=1')).toBe('https://www.blueletterbible.org/romans/3/23?x=1');
+    expect(normalize('https://www.blueletterbible.org/romans/3/23')).toBe('https://www.blueletterbible.org/romans/3/23');
+    expect(normalize('https://example.com/romans/3/23')).toBe('');
+  });
+});
 
 test.describe('global ScriptTagger content-script injection', () => {
   test('wildcard host grant activates an already-open unlisted website', async () => {
