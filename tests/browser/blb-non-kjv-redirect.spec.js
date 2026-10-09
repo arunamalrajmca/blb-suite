@@ -30,6 +30,23 @@ test.describe('BLB non-KJV passage redirects', () => {
     });
   });
 
+
+  test('converts normal BLB translation URLs without an s_id suffix', () => {
+    expect(runRedirect('www.blueletterbible.org', '/nkjv/jhn/3/16/')).toEqual({
+      result: true,
+      redirectedTo: 'https://www.blueletterbible.org/kjv/jhn/3/16/'
+    });
+    expect(runRedirect('www.blueletterbible.org', '/niv/jhn/3/16')).toEqual({
+      result: true,
+      redirectedTo: 'https://www.blueletterbible.org/kjv/jhn/3/16/'
+    });
+  });
+
+  test('supports a normal BLB verse range URL without an s_id suffix', () => {
+    expect(runRedirect('www.blueletterbible.org', '/esv/rom/8/28-30/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/rom/8/28-30/');
+  });
+
   test('converts other translation prefixes such as NASB20 and ESV', () => {
     expect(runRedirect('www.blueletterbible.org', '/nasb20/rom/8/28/s_105028').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/rom/8/28/');
