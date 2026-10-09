@@ -81,7 +81,7 @@ function safeRuntimeSendMessage(message) {
 // Let the browser handle modified link activations (new-tab/window, download, etc.).
 // Suite only owns an unmodified primary-button click.
 function isModifiedLinkActivation(event) {
-  return event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+  return Boolean(event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey);
 }
 
 function openBlbDestinationFromContent(url) {
