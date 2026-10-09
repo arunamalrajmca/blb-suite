@@ -15,7 +15,7 @@ Reviewed:
 ### 1. Native clipboard — high risk / concrete regression
 The content script installs a capture-phase copy listener on BLB pages and calls preventDefault() and stopImmediatePropagation(). It also wraps navigator.clipboard.writeText.
 
-This is intentionally used for Suite's Copy-as-link enhancement, but it can suppress BLB's own clipboard implementation when both features operate on the same page. The known MultiVerse regression is being handled separately in PR #89.
+This is intentionally used for Suite's Copy-as-link enhancement, but it can suppress BLB's own clipboard implementation when both features operate on the same page. PR #89 was closed without merging. The current main branch has a dedicated MultiVerse clipboard handler; it must return to BLB's native copy operation when no verse hyperlinks can be resolved.
 
 ### 2. Native click handling — intentional but high-risk
 Capture-phase click handlers cancel propagation for narrowly targeted feature selectors: BLB parse-popup links, BLB a.nowrap links, and Webster Bible links.
@@ -45,7 +45,7 @@ The main compatibility-sensitive monkey patch found is navigator.clipboard.write
 5. Native BLB controls, clipboard actions, navigation, selection, keyboard input, and dynamically rendered content require regression coverage when touched.
 
 ## Next hardening work
-- Keep PR #89 as the concrete MultiVerse clipboard fix.
+- Preserve BLB's native MultiVerse clipboard operation when the Suite cannot resolve any links; cover this fallback with a regression contract.
 - Add compatibility regression contracts for the high-risk interception points.
 - Add focused native-behavior E2E coverage where the harness can observe the real BLB control.
 - Avoid site-specific exceptions; scope behavior by feature and native control semantics instead.
