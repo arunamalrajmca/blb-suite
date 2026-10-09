@@ -86,9 +86,27 @@ function isModifiedLinkActivation(event) {
   return Boolean(event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey);
 }
 
-function openBlbDestinationFromContent(url) {
+function normalizeBlbDestinationUrl(url) {
   const target = String(url || '').trim();
-  if (!/^https:\/\/www\.blueletterbible\.org\//i.test(target)) return;
+  try {
+    const parsed = new URL(target);
+    if (!/^https?:$/.test(parsed.protocol)) return '';
+    const hostname = parsed.hostname.toLowerCase();
+    if (!['blueletterbible.org', 'www.blueletterbible.org', 'blueletterbible.com', 'www.blueletterbible.com'].includes(hostname)) return '';
+    // ScriptTagger links on some legacy sites still use the .com domain.
+    // Route both legacy and canonical BLB links to the canonical HTTPS .org URL.
+    parsed.protocol = 'https:';
+    parsed.hostname = 'www.blueletterbible.org';
+    parsed.port = '';
+    return parsed.href;
+  } catch (_) {
+    return '';
+  }
+}
+
+function openBlbDestinationFromContent(url) {
+  const target = normalizeBlbDestinationUrl(url);
+  if (!target) return;
   void safeRuntimeSendMessage({
     type: 'blbSuiteOpenBackgroundUrl',
     url: target,
@@ -105,7 +123,7 @@ function openBlbDestinationFromContent(url) {
 document.addEventListener("click", e => {
   if (!suiteEnabled || !redirectScriptTaggerLinksEnabled || isModifiedLinkActivation(e)) return;
   const link = e.target.closest?.("a.BLBST_a[href]");
-  if (!link || !/^https:\/\/www\.blueletterbible\.org\//i.test(link.href)) return;
+  if (!link || !normalizeBlbDestinationUrl(link.href)) return;
   e.preventDefault();
   e.stopImmediatePropagation();
   openBlbDestinationFromContent(link.href);
