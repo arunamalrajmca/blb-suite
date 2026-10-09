@@ -68,6 +68,10 @@ jobs:
           mkdir -p dist
           bash scripts/package-release.sh "${{ needs.validate.outputs.version }}" dist
           unzip -t "dist/Blue-Letter-Bible-Suite-${{ needs.validate.outputs.version }}.zip"
+      - name: Verify extension ZIP integrity
+        shell: pwsh
+        run: |
+          ./regression-suite/Verify-BLB-Zip.ps1 -ZipPath "dist/Blue-Letter-Bible-Suite-${{ needs.validate.outputs.version }}.zip" -ExpectedVersion "${{ needs.validate.outputs.version }}"
       - name: Upload release package artifact
         uses: actions/upload-artifact@v4
         with:
