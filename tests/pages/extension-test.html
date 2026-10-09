@@ -12,6 +12,7 @@
     button { margin: 4px 8px 4px 0; padding: 6px 10px; }
     .target { user-select: text; }
     .small { font-size: 14px; color: #555; }
+    .result-pass { font-weight: 600; }
   </style>
 </head>
 <body>
@@ -63,8 +64,33 @@
     <p class="small">Use this section for future Strong's, KJV search, MultiVerse, Criteria, popup, omnibox, copy/link, and native-BLB compatibility fixtures without creating another test page.</p>
   </section>
 
+  <section id="manual-compatibility-results">
+    <h2>6. Native feature compatibility — manual results</h2>
+    <p class="small">Recorded from user testing of the PR #159 candidate on the installed extension. These are manual results, not automated browser-test claims.</p>
+    <div class="case" id="compat-copy-links">
+      <strong>6.1 MultiVerse Copy and Suite hyperlinks — <span class="result-pass">PASS</span></strong>
+      <p>Copy as clickable hyperlinks works. Native MultiVerse copy and the Suite hyperlink enhancement are both functioning in the user's test.</p>
+    </div>
+    <div class="case" id="compat-multiverse-loading">
+      <strong>6.2 MultiVerse loading — <span class="result-pass">PASS</span></strong>
+      <p>MultiVerse loads as before; no new loading problem was observed.</p>
+    </div>
+    <div class="case" id="compat-modified-clicks">
+      <strong>6.3 Modified clicks on verse links — <span class="result-pass">PASS</span></strong>
+      <p>Ctrl-click, Command-click where available, middle-click, Shift-click, Alt-click, and right-click were reported to behave as expected. Specifically, Shift-click opened a new window and Alt-click downloaded an HTM file, consistent with native browser behavior in this setup.</p>
+    </div>
+    <div class="case" id="compat-clipboard-logging">
+      <strong>6.4 Clipboard diagnostic logging removal — <span class="result-pass">PASS</span></strong>
+      <p>Covered together with 6.1: copying as clickable hyperlinks works after the diagnostic logging removal.</p>
+    </div>
+    <div class="case" id="compat-popup">
+      <strong>6.5 Popup compatibility — <span class="result-pass">PASS</span></strong>
+      <p>The extension popup opens and works in the user's test. Popup implementation was not changed because no defect was reproduced.</p>
+    </div>
+  </section>
+
   <section id="controls">
-    <h2>6. Test controls</h2>
+    <h2>7. Test controls</h2>
     <button id="clear-selection" type="button">Clear selection</button>
     <button id="select-john-316" type="button">Select John 3:16</button>
     <button id="select-context" type="button">Select contextual case</button>
