@@ -42,6 +42,8 @@ function runInjectionHelper(functionNames, { settings, tabs }) {
   for (const name of functionNames) {
     if (name === 'injectEnabledTabsForGrantedOrigins') {
       snippets.push(extractFunction(name, '\nasync function injectRedirectEnabledTabs'));
+    } else if (name === 'shouldInjectContentScriptForTab') {
+      snippets.push(extractFunction(name, '\nchrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {'));
     } else {
       snippets.push(extractFunction(name, '\nchrome.permissions?.onAdded'));
     }
@@ -59,6 +61,35 @@ test.describe('global ScriptTagger content-script injection', () => {
 
     await context.injectEnabledTabsForGrantedOrigins(['http://*/*', 'https://*/*']);
     expect(injected).toEqual([42]);
+  });
+
+
+  test('newly loaded unlisted website receives redirect handler when global redirect and host access are enabled', async () => {
+    const { context } = runInjectionHelper(['shouldInjectContentScriptForTab'], {
+      settings: { redirectEnabled: true, pageSelectionButtonSites: {}, doubleClickBlbSites: {} },
+      tabs: []
+    });
+
+    const tab = {
+      id: 51,
+      url: 'https://sagacityweb.com/bible-reftagger-activated-for-sagacityweb/',
+      hostAccess: true
+    };
+    const settings = {
+      redirectEnabled: true,
+      pageSelectionButtonSites: {},
+      doubleClickBlbSites: {}
+    };
+
+    expect(await context.shouldInjectContentScriptForTab(tab, settings)).toBe(true);
+    expect(await context.shouldInjectContentScriptForTab(
+      { ...tab, hostAccess: false },
+      settings
+    )).toBe(false);
+    expect(await context.shouldInjectContentScriptForTab(
+      tab,
+      { ...settings, redirectEnabled: false }
+    )).toBe(false);
   });
 
   test('turning the global toggle on injects all already-open tabs with granted host access', async () => {
