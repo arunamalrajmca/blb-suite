@@ -64,15 +64,21 @@ async function getState() {
   const isBlbSite = siteKey === 'blueletterbible.org';
   const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
   let hasCurrentSiteAccess = true;
+  let hasSiteSpecificAccess = true;
   if (!isBlbSite && currentSiteOrigin) {
-    try { hasCurrentSiteAccess = await hasSiteFeatureHostAccess(currentSiteOrigin); }
-    catch (_) { hasCurrentSiteAccess = false; }
+    try {
+      hasCurrentSiteAccess = await chrome.permissions.contains({origins:[currentSiteOrigin]});
+      hasSiteSpecificAccess = await hasSiteFeatureHostAccess(currentSiteOrigin);
+    } catch (_) {
+      hasCurrentSiteAccess = false;
+      hasSiteSpecificAccess = false;
+    }
   }
-  // A site toggle is only ON when its stored/default setting is enabled AND
-  // the extension actually has host access. This is important after upgrading
-  // from the old all-sites build: stale/default ON state must never imply that
-  // runtime content-script injection is authorized.
-  const effectiveDefaultEnabled = defaultEnabled && hasCurrentSiteAccess;
+  // An explicit per-site preference remains independent of global redirects.
+  // Wildcard HTTP(S) access can authorize an explicitly enabled feature, but
+  // must not make the host-based defaults (for example, bible.com) appear ON.
+  // Defaults become active only when this site has its own specific grant.
+  const effectiveDefaultEnabled = defaultEnabled && hasCurrentSiteAccess && hasSiteSpecificAccess;
   const effectivePageEnabled = Object.prototype.hasOwnProperty.call(pageSites, siteKey)
     ? pageSites[siteKey] === true && hasCurrentSiteAccess
     : effectiveDefaultEnabled;
@@ -1100,21 +1106,13 @@ async function handleDoubleClickToggle(on) {
     await setDoubleClick(false);
     return;
   }
-  // Enabling Double-Click also initializes Show on BLB for this site.
-  // Both features share the same site access, so enabling either feature
-  // should establish the site's Show on BLB capability.
-  await setPageButton(true, {deferActivation:true});
-  await setDoubleClick(true, {deferActivation:true});
+  // Double-click BLB is independent of Show on BLB. Request access for this
+  // site, then persist only the Double-click preference.
   if (!(await requestCurrentSiteAccess())) {
     await setDoubleClick(false);
-    await setPageButton(false);
     return;
   }
-  try {
-    const tabs = await chrome.tabs.query({active:true,currentWindow:true});
-    const tabId = tabs[0]?.id;
-    if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
-  } catch (_) {}
+  await setDoubleClick(true);
   render(await getState());
 }
 
