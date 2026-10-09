@@ -5,8 +5,6 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-Set-StrictMode -Version Latest
-
 if (-not (Test-Path -LiteralPath $ZipPath -PathType Leaf)) {
   throw "ZIP not found: $ZipPath"
 }
