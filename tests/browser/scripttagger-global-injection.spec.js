@@ -21,7 +21,7 @@ function runInjectionHelper(functionNames, { settings, tabs }) {
   const context = {
     chrome,
     injected,
-    isHttpPageUrl: url => /^https?:\\/\\//i.test(String(url || '')),
+    isHttpPageUrl: url => /^https?:\/\//i.test(String(url || '')),
     originPatternForUrl: url => {
       try {
         const parsed = new URL(String(url || ''));
