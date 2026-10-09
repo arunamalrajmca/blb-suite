@@ -11,12 +11,12 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Main
+        uses: actions/checkout@v4
       - name: ⏱ Workflow ETA — start
         uses: ./.github/actions/workflow-eta
         with:
           phase: start
-      - name: Checkout Main
-        uses: actions/checkout@v4
       - name: Build Main ZIP
         run: |
           mkdir -p dist
