@@ -78,6 +78,12 @@ function safeRuntimeSendMessage(message) {
 // Route Suite-owned BLB new-tab actions through the background single-owner
 // destination manager. This prevents native/window.open tab creation from
 // bypassing canonical reuse when the source page is reopened later.
+// Let the browser handle modified link activations (new-tab/window, download, etc.).
+// Suite only owns an unmodified primary-button click.
+function isModifiedLinkActivation(event) {
+  return event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey;
+}
+
 function openBlbDestinationFromContent(url) {
   const target = String(url || '').trim();
   if (!/^https:\/\/www\.blueletterbible\.org\//i.test(target)) return;
@@ -262,22 +268,9 @@ if (
       
 	  const plain = nativeButton?.getAttribute("data-clipboard-text") || "";
 
-console.log("[BLB Suite] MultiVerse hyperlink diagnostic:", {
-  suiteEnabled,
-  nativeButton: nativeButton?.id || null,
-  plainLength: plain.length,
-  plain
-});
-
 if (!plain) return;
 
-     console.log("[BLB Suite] MultiVerse hyperlink stage 1: starting");
-
-const allLinks = Array.from(document.querySelectorAll("a[href]"));
-
-console.log("[BLB Suite] MultiVerse hyperlink stage 2: links found", {
-  total: allLinks.length
-});
+     const allLinks = Array.from(document.querySelectorAll("a[href]"));
 
 const verseLinks = allLinks
   .map(a => {
@@ -297,18 +290,11 @@ const verseLinks = allLinks
   })
   .filter(Boolean);
 
-console.log("[BLB Suite] MultiVerse hyperlink stage 3: verse links", {
-  count: verseLinks.length,
-  verseLinks
-});
-
 let html = plain
   .replace(/&/g, "&amp;")
   .replace(/</g, "&lt;")
   .replace(/>/g, "&gt;")
   .replace(/\r?\n/g, "<br>");
-
-console.log("[BLB Suite] MultiVerse hyperlink stage 4: HTML created");
 
 const referencePattern =
   /\(([1-3]\s+)?([A-Za-z]+(?:\s+[A-Za-z]+)*?)\s+(\d+):(\d+)(?:-\d+)?(?:\s+[^)]*)?\)/g;
@@ -318,22 +304,9 @@ let hyperlinkCount = 0;
 html = html.replace(
   referencePattern,
   (whole, number, book, chapter, verse) => {
-    console.log("[BLB Suite] MultiVerse hyperlink stage 5: reference", {
-      whole,
-      number,
-      book,
-      chapter,
-      verse
-    });
-
     const bookName = `${number || ""}${book}`.trim();
 
     const resolved = resolveBibleBook(bookName);
-
-    console.log("[BLB Suite] MultiVerse hyperlink stage 6: resolved", {
-      bookName,
-      resolved
-    });
 
     const urlKey = String(resolved?.urlKey || "").toLowerCase();
 
@@ -343,11 +316,6 @@ html = html.replace(
       link.verse === Number(verse)
     );
 
-    console.log("[BLB Suite] MultiVerse hyperlink stage 7: match", {
-      urlKey,
-      match
-    });
-
     if (!match) return whole;
 
     hyperlinkCount++;
@@ -356,24 +324,13 @@ html = html.replace(
   }
 );
 
-console.log("[BLB Suite] MultiVerse hyperlink stage 8: complete", {
-  hyperlinkCount,
-  html
-});
 e.clipboardData.setData("text/plain", plain);
 e.clipboardData.setData(
   "text/html",
   `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`
 );
 e.preventDefault();
-console.log("[BLB Suite] MultiVerse clipboard AFTER setData:", {
-  types: Array.from(e.clipboardData.types),
-  html: e.clipboardData.getData("text/html"),
-  htmlLength: e.clipboardData.getData("text/html").length
-});
-
-console.log("[BLB Suite] MultiVerse hyperlink stage 9: HTML written");
-    } catch (_) {
+} catch (_) {
       // Leave the native MultiVerse copy operation untouched if enhancement fails.
     }
   }, true);
@@ -439,6 +396,7 @@ if (location.hostname.endsWith("blueletterbible.org") &&
 if (location.hostname.endsWith("blueletterbible.org")) {
   const handleParsePopupLink = link => {
     if (!link || !link.href || !link.closest?.(".parse-popup")) return;
+    if (isModifiedLinkActivation(e)) return;
     if (link.dataset.blbSuitePopup) return;
     link.dataset.blbSuitePopup = "1";
     link.addEventListener("click", e => {
@@ -530,7 +488,7 @@ if (location.hostname.endsWith("blueletterbible.org")) {
   });
   observer.observe(document.documentElement,{childList:true,subtree:true});
   document.addEventListener("click",e=>{
-    if (!suiteEnabled) return;
+    if (!suiteEnabled || isModifiedLinkActivation(e)) return;
     const a=e.target.closest?.("a.nowrap");
     if (!a) return;
 
@@ -555,7 +513,7 @@ if (
   /\/tools\/MultiVerse\.cfm$/i.test(location.pathname)
 ) {
   document.addEventListener("click", e => {
-    if (!suiteEnabled) return;
+    if (!suiteEnabled || isModifiedLinkActivation(e)) return;
     const link = e.target.closest?.('a[href*="/kjv/"]');
     if (!link || !link.href) return;
     e.preventDefault();
@@ -577,7 +535,7 @@ if (
   location.pathname.toLowerCase() === "/search/search.cfm"
 ) {
   document.addEventListener("click", e => {
-    if (!suiteEnabled) return;
+    if (!suiteEnabled || isModifiedLinkActivation(e)) return;
 
     const link = e.target.closest?.(".parse-popup a[href], a.parse-popup[href]");
     if (!link) return;
@@ -611,7 +569,7 @@ if (
   location.pathname.toLowerCase() === "/search/search.cfm"
 ) {
   document.addEventListener("click", e => {
-    if (!suiteEnabled) return;
+    if (!suiteEnabled || isModifiedLinkActivation(e)) return;
 
     const link = e.target.closest?.('a[href]');
     if (!link || link.closest?.(".parse-popup")) return;
@@ -774,7 +732,7 @@ if (location.hostname==="webstersdictionary1828.com") {
   }).catch(()=>{});
 
   document.addEventListener("click",e=>{
-    if (!suiteEnabled || !websterRedirectEnabled) return;
+    if (!suiteEnabled || !websterRedirectEnabled || isModifiedLinkActivation(e)) return;
     const a=e.target.closest?.("a.bible");
     if (!a) return;
     const ref=parseRef(normalizeSelectionText(a.innerText||a.textContent||""));
@@ -894,11 +852,11 @@ if (location.hostname==="www.blueletterbible.org" &&
   }
 
   async function processPendingMultiVerseRefs() {
-    hidePendingMultiVerseView();
     if (!(await isSuiteEnabled())) {
       revealPendingMultiVerseView();
       return false;
     }
+    hidePendingMultiVerseView();
     const response=await chrome.runtime.sendMessage({type:'blbSuiteGetPendingMultiVerseRefs'});
     const refs=response?.refs;
     if (!Array.isArray(refs) || refs.length<2) {
