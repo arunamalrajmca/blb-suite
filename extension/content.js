@@ -95,6 +95,23 @@ function openBlbDestinationFromContent(url) {
   });
 }
 
+/*
+ * ScriptTagger emits BLBST_a anchors for Scripture references. Own only
+ * unmodified clicks on those generated BLB links, regardless of the source
+ * website, and route them through the background destination manager so the
+ * article stays open and existing BLB tabs can be reused. Host access and
+ * content-script injection remain governed by the existing site permissions.
+ */
+document.addEventListener("click", e => {
+  if (!suiteEnabled || isModifiedLinkActivation(e)) return;
+  const link = e.target.closest?.("a.BLBST_a[href]");
+  if (!link || !/^https:\/\/www\.blueletterbible\.org\//i.test(link.href)) return;
+
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  openBlbDestinationFromContent(link.href);
+}, true);
+
 function normalizeSelectionText(s) {
   return String(s || '')
     // Facebook and some rich-text sites can insert invisible bidirectional
