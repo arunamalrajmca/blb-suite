@@ -490,15 +490,18 @@ test('MultiVerse copy enhances the clicked native button payload without page-li
   assert(handler.includes('lastNativeMultiVerseCopyButton'), 'clicked native copy button must be tracked');
   assert(handler.includes('target?.closest("#copyButton, #copyByVerseButton")'), 'both native copy buttons must be recognized');
   assert(handler.includes('markdownVerseLink'), 'native Markdown verse-link parser missing');
-  assert(handler.includes('new URL(href)'), 'native verse URL validation missing');
+  assert(handler.includes('referenceAtLineStart'), 'plain-text verse-reference parser missing');
+  assert(handler.includes('parseRef(referenceText)'), 'plain-text references must use the shared reference parser');
+  assert(handler.includes('blbUrl(parsedRef.book, parsedRef.chapter, parsedRef.from, parsedRef.to)'), 'plain-text references must derive canonical BLB KJV URLs');
+  assert(handler.includes('new URL(href)'), 'native Markdown verse URL validation missing');
   assert(handler.includes('parsedUrl.origin !== "https://www.blueletterbible.org"'), 'foreign URL rejection missing');
   assert(handler.includes('event.clipboardData.setData("text/plain", plain)'), 'native plain-text payload must be preserved');
   assert(handler.includes('event.clipboardData.setData("text/html", htmlPayload)'), 'rich HTML payload must be supplied');
+  assert(handler.includes('event.preventDefault()'), 'native copy must be prevented when the replacement clipboard payload is ready');
   assert(handler.includes('event.stopImmediatePropagation()'), 'later copy listeners must not overwrite the enhanced clipboard payload');
   assert(handler.includes('if (linkCount === 0) return'), 'native copy fallback for unrecognized payload missing');
   assert(!handler.includes('console.warn'), 'temporary diagnostics must not remain in the working copy');
   assert(!handler.includes('querySelectorAll("a[href]")'), 'MultiVerse handler must not scan page links');
-  assert(!handler.includes('resolveBibleBook('), 'MultiVerse handler must use native canonical URLs, not resolve references again');
 });
 test('BLB new-tab and Copy-as-link contracts remain wired', () => {
   const content = read('content.js');
