@@ -296,8 +296,12 @@ let html = plain
   .replace(/>/g, "&gt;")
   .replace(/\r?\n/g, "<br>");
 
+// BLB emits compact numbered-book abbreviations in native copy text
+// (e.g. "1Sa", "2Ki", "1Ch"). Allow digits inside the book token and
+// allow the number prefix to touch the abbreviation, while retaining
+// support for spaced forms such as "1 Samuel".
 const referencePattern =
-  /\(([1-3]\s+)?([A-Za-z]+(?:\s+[A-Za-z]+)*?)\s+(\d+):(\d+)(?:-\d+)?(?:\s+[^)]*)?\)/g;
+  /\(([1-3]\s*)?([A-Za-z][A-Za-z0-9]*(?:\s+[A-Za-z]+)*?)\s+(\d+):(\d+)(?:-\d+)?(?:\s+[^)]*)?\)/g;
 
 let hyperlinkCount = 0;
 
