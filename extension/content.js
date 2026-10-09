@@ -324,6 +324,8 @@ html = html.replace(
   }
 );
 
+if (hyperlinkCount === 0) return;
+
 e.clipboardData.setData("text/plain", plain);
 e.clipboardData.setData(
   "text/html",
