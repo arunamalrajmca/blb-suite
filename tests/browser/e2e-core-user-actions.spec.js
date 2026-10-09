@@ -167,6 +167,9 @@ test.describe('core user-action E2E coverage', () => {
 
     expect(captured.plain).toBe(candidate.payload);
     expect(captured.html).toMatch(/<a\s+href="https:\/\/www\.blueletterbible\.org\/kjv\//i);
+    // ClipboardEvent.setData receives a fragment; Chromium builds the native
+    // platform clipboard representation, including Windows CF_HTML offsets.
+    expect(captured.html).not.toMatch(/<!doctype|<html\\b|<!--StartFragment-->|<!--EndFragment-->/i);
 
     // Check an actual rich-text paste round-trip, not just clipboard MIME data.
     await page.evaluate(() => {
