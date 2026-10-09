@@ -481,6 +481,20 @@ test('BLB native-event interception remains explicitly scoped', () => {
   assert(!dbl.includes('stopPropagation()'), 'double-click resolver must not stop native propagation');
   assert(!dbl.includes('stopImmediatePropagation()'), 'double-click resolver must not stop native propagation');
 });
+test('MultiVerse copy converts native Markdown verse URLs without page-link matching', () => {
+  const content = read('content.js');
+  const start = content.indexOf('// ---------- BLB MultiVerse native-copy hyperlink enhancement ----------');
+  const end = content.indexOf('// ---------- BLB Auto Hyperlinker ----------', start);
+  assert(start >= 0 && end > start, 'MultiVerse native-copy handler missing');
+  const handler = content.slice(start, end);
+  assert(handler.includes('markdownVerseLink'), 'native Markdown verse-link parser missing');
+  assert(handler.includes('new URL(href)'), 'native verse URL validation missing');
+  assert(handler.includes('parsedUrl.origin !== "https://www.blueletterbible.org"'), 'foreign URL rejection missing');
+  assert(handler.includes('setData("text/plain", plain)'), 'native plain-text payload must be preserved');
+  assert(handler.includes('if (linkCount === 0) return'), 'native copy fallback for unrecognized payload missing');
+  assert(!handler.includes('querySelectorAll("a[href]")'), 'MultiVerse handler must not scan page links');
+  assert(!handler.includes('resolveBibleBook('), 'MultiVerse handler must use native canonical URLs, not resolve references again');
+});
 test('BLB new-tab and Copy-as-link contracts remain wired', () => {
   const content = read('content.js');
   assert(content.includes('modifyLinks'), 'BLB link modifier missing');
