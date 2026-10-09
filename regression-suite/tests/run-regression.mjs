@@ -488,6 +488,16 @@ test('BLB new-tab and Copy-as-link contracts remain wired', () => {
   assert(content.includes('formatBlbTextToHtml'), 'HTML clipboard formatter missing');
   assert(content.includes('setData("text/html"'), 'HTML clipboard write missing');
   assert(content.includes('setData("text/plain"'), 'plain-text clipboard fallback missing');
+
+  const multiVerseStart = content.indexOf('// ---------- BLB MultiVerse native-copy hyperlink enhancement ----------');
+  const multiVerseEnd = content.indexOf('// ---------- BLB Auto Hyperlinker ----------', multiVerseStart);
+  assert(multiVerseStart >= 0 && multiVerseEnd > multiVerseStart, 'dedicated MultiVerse clipboard handler missing');
+  const multiVerseCopy = content.slice(multiVerseStart, multiVerseEnd);
+  const noLinksGuard = multiVerseCopy.indexOf('if (hyperlinkCount === 0) return;');
+  const clipboardWrite = multiVerseCopy.indexOf('e.clipboardData.setData("text/plain", plain)');
+  const preventDefault = multiVerseCopy.indexOf('e.preventDefault()');
+  assert(noLinksGuard >= 0 && clipboardWrite > noLinksGuard && preventDefault > noLinksGuard,
+    'MultiVerse must leave native copy untouched when no hyperlinks resolve');
 });
 test('context-menu Show on BLB wiring remains present', () => {
   const bg = read('background.js'), content = read('content.js');
