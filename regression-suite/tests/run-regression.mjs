@@ -491,6 +491,7 @@ test('MultiVerse copy converts native Markdown verse URLs without page-link matc
   assert(handler.includes('new URL(href)'), 'native verse URL validation missing');
   assert(handler.includes('parsedUrl.origin !== "https://www.blueletterbible.org"'), 'foreign URL rejection missing');
   assert(handler.includes('setData("text/plain", plain)'), 'native plain-text payload must be preserved');
+  assert(handler.includes("e.stopImmediatePropagation()"), "later BLB copy listeners must not overwrite the enhanced clipboard payload");
   assert(handler.includes('if (linkCount === 0) return'), 'native copy fallback for unrecognized payload missing');
   assert(!handler.includes('querySelectorAll("a[href]")'), 'MultiVerse handler must not scan page links');
   assert(!handler.includes('resolveBibleBook('), 'MultiVerse handler must use native canonical URLs, not resolve references again');
