@@ -240,8 +240,7 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
 }
 // ---------- BLB MultiVerse native-copy hyperlink enhancement ----------
 // Enrich the exact native MultiVerse Copy button payload with HTML links.
-// Track the button that was actually clicked; the two native copy buttons can
-// carry different payload formats, so choosing the first visible button is unsafe.
+// Track the button actually clicked; the native buttons can carry different formats.
 if (
   location.hostname === "www.blueletterbible.org" &&
   /\/tools\/MultiVerse\.cfm$/i.test(location.pathname)
@@ -250,8 +249,7 @@ if (
 
   document.addEventListener("click", event => {
     const target = event.target instanceof Element ? event.target : null;
-    const button = target?.closest("#copyButton, #copyByVerseButton");
-    lastNativeMultiVerseCopyButton = button || null;
+    lastNativeMultiVerseCopyButton = target?.closest("#copyButton, #copyByVerseButton") || null;
   }, true);
 
   document.addEventListener("copy", event => {
@@ -261,9 +259,7 @@ if (
       const clickedButton = lastNativeMultiVerseCopyButton;
       lastNativeMultiVerseCopyButton = null;
 
-      const buttons = Array.from(
-        document.querySelectorAll("#copyButton, #copyByVerseButton")
-      );
+      const buttons = Array.from(document.querySelectorAll("#copyButton, #copyByVerseButton"));
       const nativeButton = clickedButton?.isConnected
         ? clickedButton
         : buttons.find(button => {
@@ -271,9 +267,7 @@ if (
             if (!text) return false;
             const style = window.getComputedStyle(button);
             return style.display !== "none" && style.visibility !== "hidden";
-          }) || buttons.find(button =>
-            !!(button.getAttribute("data-clipboard-text") || "")
-          );
+          }) || buttons.find(button => !!(button.getAttribute("data-clipboard-text") || ""));
 
       const plain = nativeButton?.getAttribute("data-clipboard-text") || "";
       if (!plain) return;
@@ -285,8 +279,7 @@ if (
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#39;");
 
-      // Only convert native Markdown links whose destinations are canonical
-      // HTTPS BLB KJV verse URLs. Unknown payload formats remain native.
+      // First handle Markdown links if this button's native format supplies them.
       const markdownVerseLink =
         /\[([^\]\r\n]+)\]\((https:\/\/www\.blueletterbible\.org\/kjv\/[a-z0-9]+\/\d+\/\d+(?:\/[a-z0-9_-]+)?\/?(?:#[^\s)]*)?)\)/gi;
 
@@ -301,29 +294,53 @@ if (
         if (
           parsedUrl.origin !== "https://www.blueletterbible.org" ||
           !/^\/kjv\/[a-z0-9]+\/\d+\/\d+(?:\/[a-z0-9_-]+)?\/?$/i.test(parsedUrl.pathname)
-        ) {
-          continue;
-        }
+        ) continue;
 
         html += escapeHtml(plain.slice(cursor, match.index));
-        html += `<a href="${escapeHtml(parsedUrl.href)}" style="color:#1155cc;text-decoration:underline;">${escapeHtml(label)}</a>`;
+        html += \`<a href="\${escapeHtml(parsedUrl.href)}" style="color:#1155cc;text-decoration:underline;">\${escapeHtml(label)}</a>\`;
         cursor = match.index + match[0].length;
         linkCount++;
       }
 
-      // Do not override native clipboard behavior for other copy formats.
-      if (linkCount === 0) return;
+      if (linkCount > 0) {
+        html += escapeHtml(plain.slice(cursor));
+      } else {
+        // Some MultiVerse copy buttons provide plain text rather than Markdown.
+        // Link only a reference at the beginning of a line/paragraph, and derive
+        // its canonical destination through the Suite's shared Bible resolver.
+        // This avoids scanning page anchors or trying to link verse prose.
+        const referenceAtLineStart =
+          /^(\s*)((?:[1-3]\s+)?[A-Za-z][A-Za-z. ]*?\s+\d+(?::\d+(?:[-–]\d+)?)?)(?:\s+(?:KJV|King James Version))?(?=\s*(?:[-–—:]\s*|$))/gim;
+        let plainCursor = 0;
+        while ((match = referenceAtLineStart.exec(plain)) !== null) {
+          const referenceText = match[2].trim();
+          const parsedRef = parseRef(referenceText);
+          const href = parsedRef
+            ? blbUrl(parsedRef.book, parsedRef.chapter, parsedRef.from, parsedRef.to)
+            : null;
+          if (!href || !/^https:\/\/www\.blueletterbible\.org\/kjv\//i.test(href)) continue;
 
-      html += escapeHtml(plain.slice(cursor));
+          const referenceOffset = match.index + match[1].length;
+          html += escapeHtml(plain.slice(plainCursor, referenceOffset));
+          html += \`<a href="\${escapeHtml(href)}" style="color:#1155cc;text-decoration:underline;">\${escapeHtml(referenceText)}</a>\`;
+          plainCursor = referenceOffset + match[2].length;
+          linkCount++;
+        }
+        if (linkCount === 0) return;
+        html += escapeHtml(plain.slice(plainCursor));
+      }
+
       html = html.replace(/\r?\n/g, "<br>");
-      const htmlPayload = `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`;
+      const htmlPayload = \`<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">\${html}</span><!--EndFragment--></body></html>\`;
 
+      // Clipboard writes must be synchronous and preventDefault must happen
+      // in this same copy event; otherwise the browser/native handler can win.
       event.clipboardData.setData("text/plain", plain);
       event.clipboardData.setData("text/html", htmlPayload);
       event.preventDefault();
       event.stopImmediatePropagation();
     } catch (_) {
-      // Leave native MultiVerse copy untouched if enhancement fails.
+      // If enrichment fails, leave native MultiVerse copy untouched.
     }
   }, true);
 }
