@@ -5329,12 +5329,28 @@ async function injectEnabledTabsForGrantedOrigins(origins) {
   for (const tab of tabs) {
     if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
     const pattern = originPatternForUrl(tab.url);
-    if (!pattern || !granted.includes(pattern)) continue;
+    if (!pattern) continue;
     const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
-    const redirectEnabled = data.redirectEnabled === true && isRedirectHostname(new URL(tab.url).hostname);
-    if (pageSites[key] === true || doubleSites[key] === true || redirectEnabled) {
-      await ensureContentScriptInTab(tab.id);
-    }
+    const grantCoversTab = granted.some(origin =>
+      origin === pattern ||
+      (origin === 'http://*/*' && String(tab.url).startsWith('http://')) ||
+      (origin === 'https://*/*' && String(tab.url).startsWith('https://')) ||
+      origin === '*://*/*'
+    );
+    const redirectEnabled = data.redirectEnabled === true && await hasHostAccessForTab(tab);
+    const siteFeatureEnabled = grantCoversTab && (pageSites[key] === true || doubleSites[key] === true);
+    if (redirectEnabled || siteFeatureEnabled) await ensureContentScriptInTab(tab.id);
+  }
+}
+
+async function injectRedirectEnabledTabs() {
+  // Enabling redirects after a permission was granted does not trigger onAdded.
+  const data = await chrome.storage.local.get({redirectEnabled:false});
+  if (data.redirectEnabled !== true) return;
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
+    if (await hasHostAccessForTab(tab)) await ensureContentScriptInTab(tab.id);
   }
 }
 
@@ -5359,6 +5375,9 @@ chrome.runtime.onInstalled.addListener(async details => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
+  if (changes.redirectEnabled?.newValue === true) {
+    injectRedirectEnabledTabs().catch(() => {});
+  }
   if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites) {
     installRules();
     // Keep the existing web-selection menu item in place. Only its visibility
