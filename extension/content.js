@@ -396,11 +396,10 @@ if (location.hostname.endsWith("blueletterbible.org") &&
 if (location.hostname.endsWith("blueletterbible.org")) {
   const handleParsePopupLink = link => {
     if (!link || !link.href || !link.closest?.(".parse-popup")) return;
-    if (isModifiedLinkActivation(e)) return;
     if (link.dataset.blbSuitePopup) return;
     link.dataset.blbSuitePopup = "1";
     link.addEventListener("click", e => {
-      if (!suiteEnabled) return;
+      if (!suiteEnabled || isModifiedLinkActivation(e)) return;
       e.preventDefault();
       e.stopImmediatePropagation();
 
