@@ -239,103 +239,81 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
   }).catch(() => {});
 }
 // ---------- BLB MultiVerse native-copy hyperlink enhancement ----------
-// Augment BLB's native MultiVerse clipboard operation with text/html.
-// IMPORTANT: preserve BLB's native Copy button/payload while enriching the clipboard with HTML.
+// BLB's native payload already contains Markdown links with canonical verse URLs.
+// Preserve the native plain-text payload and convert only validated BLB KJV links to HTML.
 if (
   location.hostname === "www.blueletterbible.org" &&
   /\/tools\/MultiVerse\.cfm$/i.test(location.pathname)
 ) {
   document.addEventListener("copy", e => {
-    if (!suiteEnabled) return;
-	if (!e.clipboardData) return;
+    if (!suiteEnabled || !e.clipboardData) return;
 
     try {
       const buttons = Array.from(
         document.querySelectorAll("#copyButton, #copyByVerseButton")
       );
-
       const nativeButton = buttons.find(button => {
         const text = button.getAttribute("data-clipboard-text") || "";
         if (!text) return false;
-
         const style = window.getComputedStyle(button);
-        return style.display !== "none" &&
-          style.visibility !== "hidden";
+        return style.display !== "none" && style.visibility !== "hidden";
       }) || buttons.find(button =>
         !!(button.getAttribute("data-clipboard-text") || "")
       );
 
-      
-	  const plain = nativeButton?.getAttribute("data-clipboard-text") || "";
+      const plain = nativeButton?.getAttribute("data-clipboard-text") || "";
+      if (!plain) return;
 
-if (!plain) return;
+      const escapeHtml = value => String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
 
-     const allLinks = Array.from(document.querySelectorAll("a[href]"));
+      // BLB's observed payload format:
+      // [(Philippians 2:12 KJV)](https://www.blueletterbible.org/kjv/phl/2/12/s_1105012) – verse text
+      // Accept only same-origin canonical KJV verse paths; never trust arbitrary Markdown URLs.
+      const markdownVerseLink =
+        /\[([^\]\r\n]+)\]\((https:\/\/www\.blueletterbible\.org\/kjv\/([a-z0-9]+)\/(\d+)\/(\d+)(?:\/[a-z0-9_-]+)?\/?(?:#[^\s)]*)?)\)/gi;
 
-const verseLinks = allLinks
-  .map(a => {
-    const href = a.href || "";
-    const match = href.match(
-      /^https:\/\/www\.blueletterbible\.org\/kjv\/([^/]+)\/(\d+)\/(\d+)(?:\/|$)/i
-    );
+      let linkCount = 0;
+      let cursor = 0;
+      let html = "";
+      let match;
 
-    if (!match) return null;
+      while ((match = markdownVerseLink.exec(plain)) !== null) {
+        const [, label, href, bookKey, chapterText, verseText] = match;
+        const parsedUrl = new URL(href);
+        if (
+          parsedUrl.origin !== "https://www.blueletterbible.org" ||
+          !/^\/kjv\/[a-z0-9]+\/\d+\/\d+(?:\/[a-z0-9_-]+)?\/?$/i.test(parsedUrl.pathname)
+        ) {
+          continue;
+        }
 
-    return {
-      urlKey: String(match[1]).toLowerCase(),
-      chapter: Number(match[2]),
-      verse: Number(match[3]),
-      href
-    };
-  })
-  .filter(Boolean);
+        html += escapeHtml(plain.slice(cursor, match.index));
+        html += `<a href="${escapeHtml(parsedUrl.href)}" style="color:#1155cc;text-decoration:underline;">${escapeHtml(label)}</a>`;
+        cursor = match.index + match[0].length;
+        linkCount++;
+      }
 
-let html = plain
-  .replace(/&/g, "&amp;")
-  .replace(/</g, "&lt;")
-  .replace(/>/g, "&gt;")
-  .replace(/\r?\n/g, "<br>");
+      // If the native payload doesn't contain recognized links, do not take over native copying.
+      if (linkCount === 0) return;
 
-const referencePattern =
-  /\(([1-3]\s+)?([A-Za-z]+(?:\s+[A-Za-z]+)*?)\s+(\d+):(\d+)(?:-\d+)?(?:\s+[^)]*)?\)/g;
+      html += escapeHtml(plain.slice(cursor));
+      html = html.replace(/\r?\n/g, "<br>");
 
-let hyperlinkCount = 0;
-
-html = html.replace(
-  referencePattern,
-  (whole, number, book, chapter, verse) => {
-    const bookName = `${number || ""}${book}`.trim();
-
-    const resolved = resolveBibleBook(bookName);
-
-    const urlKey = String(resolved?.urlKey || "").toLowerCase();
-
-    const match = verseLinks.find(link =>
-      link.urlKey === urlKey &&
-      link.chapter === Number(chapter) &&
-      link.verse === Number(verse)
-    );
-
-    if (!match) return whole;
-
-    hyperlinkCount++;
-
-    return `<a href="${match.href}" style="color:#1155cc;text-decoration:underline;">${whole}</a>`;
-  }
-);
-
-e.clipboardData.setData("text/plain", plain);
-e.clipboardData.setData(
-  "text/html",
-  `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`
-);
-e.preventDefault();
-} catch (_) {
+      e.clipboardData.setData("text/plain", plain);
+      e.clipboardData.setData(
+        "text/html",
+        `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`
+      );
+      e.preventDefault();
+    } catch (_) {
       // Leave the native MultiVerse copy operation untouched if enhancement fails.
     }
   }, true);
-
-
 }
 
 // ---------- BLB Auto Hyperlinker ----------
