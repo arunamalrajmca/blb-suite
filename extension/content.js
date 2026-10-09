@@ -246,7 +246,19 @@ if (
   /\/tools\/MultiVerse\.cfm$/i.test(location.pathname)
 ) {
   document.addEventListener("copy", e => {
-    if (!suiteEnabled || !e.clipboardData) return;
+    console.debug("[BLB MultiVerse clipboard diagnostic] copy handler entered", {
+      suiteEnabled,
+      hasClipboardData: !!e.clipboardData,
+      eventPhase: e.eventPhase,
+      defaultPreventedAtEntry: e.defaultPrevented
+    });
+    if (!suiteEnabled || !e.clipboardData) {
+      console.debug("[BLB MultiVerse clipboard diagnostic] handler exited at guard", {
+        suiteEnabled,
+        hasClipboardData: !!e.clipboardData
+      });
+      return;
+    }
 
     try {
       const buttons = Array.from(
@@ -262,7 +274,15 @@ if (
       );
 
       const plain = nativeButton?.getAttribute("data-clipboard-text") || "";
-      if (!plain) return;
+      console.debug("[BLB MultiVerse clipboard diagnostic] native payload located", {
+        foundNativeButton: !!nativeButton,
+        nativePayloadLength: plain.length,
+        payloadHasMarkdownLinkSyntax: /\\[[^\\]\\r\\n]+\\]\\(https:\\/\\/www\\.blueletterbible\\.org\\/kjv\\//i.test(plain)
+      });
+      if (!plain) {
+        console.debug("[BLB MultiVerse clipboard diagnostic] handler exited: empty native payload");
+        return;
+      }
 
       const escapeHtml = value => String(value)
         .replace(/&/g, "&amp;")
@@ -298,20 +318,46 @@ if (
         linkCount++;
       }
 
+      console.debug("[BLB MultiVerse clipboard diagnostic] Markdown parsing complete", {
+        recognizedLinkCount: linkCount,
+        htmlLengthBeforeLineBreakConversion: html.length,
+        defaultPreventedBeforeOverride: e.defaultPrevented
+      });
       // If the native payload doesn't contain recognized links, do not take over native copying.
-      if (linkCount === 0) return;
+      if (linkCount === 0) {
+        console.debug("[BLB MultiVerse clipboard diagnostic] handler exited: no recognized BLB KJV links");
+        return;
+      }
 
       html += escapeHtml(plain.slice(cursor));
       html = html.replace(/\r?\n/g, "<br>");
 
-      e.clipboardData.setData("text/plain", plain);
-      e.clipboardData.setData(
-        "text/html",
-        `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`
-      );
+      const htmlPayload = `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`;
+      try {
+        e.clipboardData.setData("text/plain", plain);
+        console.debug("[BLB MultiVerse clipboard diagnostic] text/plain setData returned");
+      } catch (error) {
+        console.debug("[BLB MultiVerse clipboard diagnostic] text/plain setData threw", String(error));
+        throw error;
+      }
+      try {
+        e.clipboardData.setData("text/html", htmlPayload);
+        console.debug("[BLB MultiVerse clipboard diagnostic] text/html setData returned", {
+          htmlPayloadLength: htmlPayload.length,
+          containsAnchor: /<a\\s/i.test(htmlPayload)
+        });
+      } catch (error) {
+        console.debug("[BLB MultiVerse clipboard diagnostic] text/html setData threw", String(error));
+        throw error;
+      }
       e.preventDefault();
       // Prevent BLB's later copy listener from replacing the HTML payload we just supplied.
       e.stopImmediatePropagation();
+      console.debug("[BLB MultiVerse clipboard diagnostic] handler completed", {
+        defaultPrevented: e.defaultPrevented,
+        propagationStopped: e.cancelBubble,
+        recognizedLinkCount: linkCount
+      });
     } catch (_) {
       // Leave the native MultiVerse copy operation untouched if enhancement fails.
     }
