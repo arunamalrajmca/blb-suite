@@ -251,7 +251,7 @@ if (
   document.addEventListener("click", event => {
     const target = event.target instanceof Element ? event.target : null;
     const button = target?.closest("#copyButton, #copyByVerseButton");
-    if (button) lastNativeMultiVerseCopyButton = button;
+    lastNativeMultiVerseCopyButton = button || null;
   }, true);
 
   document.addEventListener("copy", event => {
