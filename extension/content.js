@@ -274,10 +274,30 @@ if (
       );
 
       const plain = nativeButton?.getAttribute("data-clipboard-text") || "";
-      console.warn("[BLB MultiVerse clipboard diagnostic] native payload located", {
+      const blbKjvUrlMatches = plain.match(/https?:\/\/(?:www\.)?blueletterbible\.org\/kjv\//gi) || [];
+      const payloadHasMarkdownLinkSyntax = /\[[^\]\r\n]+\]\(https?:\/\/(?:www\.)?blueletterbible\.org\/kjv\//i.test(plain);
+      const payloadHasHtmlAnchorSyntax = /<a\b[^>]*href\s*=/i.test(plain);
+      const payloadHasAnyBlbKjvUrl = blbKjvUrlMatches.length > 0;
+      const payloadHasHtmlMarkup = /<\/?[a-z][^>]*>/i.test(plain);
+      const payloadFormat = payloadHasMarkdownLinkSyntax
+        ? "markdown-links"
+        : payloadHasHtmlAnchorSyntax
+          ? "html-anchors"
+          : payloadHasAnyBlbKjvUrl
+            ? "urls-without-markdown-links"
+            : payloadHasHtmlMarkup
+              ? "other-html-or-markup"
+              : "plain-text-or-unrecognized";
+      console.warn("[BLB MultiVerse clipboard diagnostic] native payload structure", {
         foundNativeButton: !!nativeButton,
         nativePayloadLength: plain.length,
-        payloadHasMarkdownLinkSyntax: /\[[^\]\r\n]+\]\(https:\/\/www\.blueletterbible\.org\/kjv\//i.test(plain)
+        lineCount: plain ? plain.split(/\r?\n/).length : 0,
+        payloadFormat,
+        payloadHasMarkdownLinkSyntax,
+        payloadHasHtmlAnchorSyntax,
+        payloadHasAnyBlbKjvUrl,
+        blbKjvUrlCount: blbKjvUrlMatches.length,
+        payloadHasHtmlMarkup
       });
       if (!plain) {
         console.warn("[BLB MultiVerse clipboard diagnostic] handler exited: empty native payload");
