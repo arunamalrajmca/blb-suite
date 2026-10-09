@@ -126,6 +126,7 @@ test.describe('core user-action E2E coverage', () => {
   test('MultiVerse plain-text copy preserves text and adds clickable BLB HTML links', async ({ page, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true });
     await page.goto('https://www.blueletterbible.org/tools/MultiVerse.cfm', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
 
     const button = page.locator('#copyButton, #copyByVerseButton').first();
     await expect(button).toBeAttached({ timeout: 15000 });
