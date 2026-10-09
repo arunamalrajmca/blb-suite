@@ -39,13 +39,15 @@ async function blbSuiteAccessAllowed() {
 
 let suiteEnabled = false;
 let doubleClickBlbEnabled = false;
+let redirectScriptTaggerLinksEnabled = false;
 let suiteSettingsReady = false;
 
 // Cache the master setting in each content-script instance. This avoids a
 // storage read on every copy/click/selection event while still reacting
 // immediately to later setting changes through chrome.storage.onChanged.
-const suiteSettingsReadyPromise = chrome.storage.local.get({masterEnabled:true, doubleClickBlbSites:{}}).then(data => {
+const suiteSettingsReadyPromise = chrome.storage.local.get({masterEnabled:true, doubleClickBlbSites:{}, redirectEnabled:false}).then(data => {
   suiteEnabled = data.masterEnabled !== false;
+  redirectScriptTaggerLinksEnabled = data.redirectEnabled === true;
   suiteSettingsReady = true;
   return suiteEnabled;
 }).catch(() => {
@@ -94,6 +96,21 @@ function openBlbDestinationFromContent(url) {
     activateExisting: true
   });
 }
+
+/*
+ * ScriptTagger emits BLBST_a anchors for Scripture references. Own only
+ * unmodified clicks on generated BLB links and route them through the
+ * background destination manager, leaving the source article open.
+ */
+document.addEventListener("click", e => {
+  if (!suiteEnabled || !redirectScriptTaggerLinksEnabled || isModifiedLinkActivation(e)) return;
+  const link = e.target.closest?.("a.BLBST_a[href]");
+  if (!link || !/^https:\/\/www\.blueletterbible\.org\//i.test(link.href)) return;
+
+  e.preventDefault();
+  e.stopImmediatePropagation();
+  openBlbDestinationFromContent(link.href);
+}, true);
 
 function normalizeSelectionText(s) {
   return String(s || '')
@@ -2043,6 +2060,10 @@ if (!isBlbPageButtonExcludedSite()) {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
+
+  if (changes.redirectEnabled) {
+    redirectScriptTaggerLinksEnabled = changes.redirectEnabled.newValue === true;
+  }
 
   if (changes.masterEnabled) {
     suiteEnabled = changes.masterEnabled.newValue !== false;
