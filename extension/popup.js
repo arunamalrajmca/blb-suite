@@ -1062,6 +1062,14 @@ async function handlePageButtonToggle(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
   if (on) {
+    // Save this feature's intent before requesting access. Chrome may close
+    // the action popup during the permission prompt; the granted permission
+    // should not leave the selected toggle OFF when the popup is reopened.
+    const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
+    const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
+      ? {...data.pageSelectionButtonSites} : {};
+    sites[state.siteKey] = true;
+    await chrome.storage.local.set({pageSelectionButtonSites:sites});
     if (!(await requestCurrentSiteAccess())) {
       await setPageButton(false);
       return;
@@ -1075,6 +1083,14 @@ async function handleDoubleClickToggle(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
   if (on) {
+    // Save this feature's intent before requesting access. Chrome may close
+    // the action popup during the permission prompt; the granted permission
+    // should not leave the selected toggle OFF when the popup is reopened.
+    const data = await chrome.storage.local.get({doubleClickBlbSites:{}});
+    const sites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
+      ? {...data.doubleClickBlbSites} : {};
+    sites[state.siteKey] = true;
+    await chrome.storage.local.set({doubleClickBlbSites:sites});
     if (!(await requestCurrentSiteAccess())) {
       await setDoubleClick(false);
       return;
