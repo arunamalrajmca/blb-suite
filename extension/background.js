@@ -2485,14 +2485,18 @@ async function ensureContentScriptInTab(tabId) {
         if (response?.ok === true) return true;
       } catch (_) {}
 
-      // The current document may have loaded before registration. Reload once
-      // so Chrome injects the complete bundle at document_start.
+      // The current document may have loaded before registration. Inject the
+      // bundle into this document instead of reloading the tab, which can
+      // interrupt forms and appear as page jumping.
       try {
-        await chrome.tabs.reload(tabId);
+        await chrome.scripting.executeScript({
+          target:{tabId},
+          files:BLB_CONTENT_SCRIPT_FILES
+        });
+        return true;
       } catch (_) {
         return false;
       }
-      return true;
     } catch (_) {
       return false;
     }
