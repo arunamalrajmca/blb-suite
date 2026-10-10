@@ -14,6 +14,7 @@ function exerciseToggleHandler(name, nextMarker, { access = true, state = {} } =
     getState: async () => ({
       siteKey: 'example.com', master: true, isBlbSite: false, isPdfContext: false, ...state
     }),
+    pinSiteFeatureChoice: async feature => { calls.push(['pinChoice', feature]); },
     requestCurrentSiteAccess: async () => { calls.push('requestAccess'); return access; },
     setPageButton: async value => { calls.push(['pageButton', value]); },
     setDoubleClick: async value => { calls.push(['doubleClick', value]); }
@@ -113,7 +114,7 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
 test('Show on BLB and Double-click toggles remain independent', async () => {
   const pageOn = exerciseToggleHandler('handlePageButtonToggle', '\nasync function handleDoubleClickToggle');
   await pageOn.handler(true);
-  expect(pageOn.calls).toEqual(['requestAccess', ['pageButton', true]]);
+  expect(pageOn.calls).toEqual([['pinChoice', 'pageButton'], 'requestAccess', ['pageButton', true]]);
 
   const pageOff = exerciseToggleHandler('handlePageButtonToggle', '\nasync function handleDoubleClickToggle');
   await pageOff.handler(false);
@@ -121,7 +122,7 @@ test('Show on BLB and Double-click toggles remain independent', async () => {
 
   const doubleOn = exerciseToggleHandler('handleDoubleClickToggle', "\ndocument.getElementById('pageButton').addEventListener");
   await doubleOn.handler(true);
-  expect(doubleOn.calls).toEqual(['requestAccess', ['doubleClick', true]]);
+  expect(doubleOn.calls).toEqual([['pinChoice', 'doubleClick'], 'requestAccess', ['doubleClick', true]]);
 
   const doubleOff = exerciseToggleHandler('handleDoubleClickToggle', "\ndocument.getElementById('pageButton').addEventListener");
   await doubleOff.handler(false);
@@ -129,11 +130,21 @@ test('Show on BLB and Double-click toggles remain independent', async () => {
 
   const deniedPage = exerciseToggleHandler('handlePageButtonToggle', '\nasync function handleDoubleClickToggle', { access: false });
   await deniedPage.handler(true);
-  expect(deniedPage.calls).toEqual(['requestAccess', ['pageButton', false]]);
+  expect(deniedPage.calls).toEqual([['pinChoice', 'pageButton'], 'requestAccess', ['pageButton', false]]);
 
   const deniedDouble = exerciseToggleHandler('handleDoubleClickToggle', "\ndocument.getElementById('pageButton').addEventListener", { access: false });
   await deniedDouble.handler(true);
-  expect(deniedDouble.calls).toEqual(['requestAccess', ['doubleClick', false]]);
+  expect(deniedDouble.calls).toEqual([['pinChoice', 'doubleClick'], 'requestAccess', ['doubleClick', false]]);
+});
+
+test('Permission request follows persisted independent feature choice', async () => {
+  const page = exerciseToggleHandler('handlePageButtonToggle', '\\nasync function handleDoubleClickToggle');
+  await page.handler(true);
+  expect(page.calls.indexOf('requestAccess')).toBeGreaterThan(page.calls.findIndex(call => Array.isArray(call) && call[0] === 'pinChoice'));
+
+  const double = exerciseToggleHandler('handleDoubleClickToggle', "\\ndocument.getElementById('pageButton').addEventListener");
+  await double.handler(true);
+  expect(double.calls.indexOf('requestAccess')).toBeGreaterThan(double.calls.findIndex(call => Array.isArray(call) && call[0] === 'pinChoice'));
 });
 
 test('First site-feature enable pins the other feature OFF without overwriting an existing choice', async () => {
