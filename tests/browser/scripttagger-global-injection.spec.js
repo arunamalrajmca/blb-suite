@@ -75,14 +75,25 @@ test.describe('ScriptTagger legacy BLB destination URLs', () => {
 
 
 test('ordinary global-redirect hosts use only the minimal ScriptTagger bundle', () => {
-  expect(background).toContain("const SCRIPT_TAGGER_CONTENT_SCRIPT_FILES = ['redirect-scripttagger.js'];");
-  const start = background.indexOf('function contentScriptFilesForTab(');
+  const start = background.indexOf('const BLB_CONTENT_SCRIPT_FILES = [');
   const end = background.indexOf('\nfunction isHttpPageUrl(', start);
   expect(start).toBeGreaterThanOrEqual(0);
   expect(end).toBeGreaterThan(start);
-  const helper = background.slice(start, end);
-  expect(helper).toContain('return BLB_CONTENT_SCRIPT_FILES;');
-  expect(helper).toContain('return SCRIPT_TAGGER_CONTENT_SCRIPT_FILES;');
+  const context = {
+    normalizeSiteHostname: value => String(value || '').trim().toLowerCase().replace(/^www\./, ''),
+    hostnameFromTabUrl: value => { try { return new URL(String(value || '')).hostname; } catch (_) { return ''; } }
+  };
+  vm.runInNewContext(background.slice(start, end), context);
+  const choose = context.contentScriptFilesForTab;
+  const fullBundle = ['kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','content.js'];
+  expect(choose({url:'https://sagacityweb.com/article'}, {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}))
+    .toEqual(['redirect-scripttagger.js']);
+  expect(choose({url:'https://sagacityweb.com/article'}, {redirectEnabled:false,pageSelectionButtonSites:{'sagacityweb.com':true},doubleClickBlbSites:{}}))
+    .toEqual(fullBundle);
+  expect(choose({url:'https://www.biblegateway.com/passage/?search=John+3:16'}, {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}))
+    .toEqual(fullBundle);
+  expect(choose({url:'https://sagacityweb.com/article'}, {redirectEnabled:false,pageSelectionButtonSites:{},doubleClickBlbSites:{}}))
+    .toEqual([]);
   expect(scriptTaggerContentScript).toContain('a.BLBST_a[href]');
   expect(contentScript).not.toContain('a.BLBST_a[href]');
   expect(contentScript).not.toContain('function normalizeBlbDestinationUrl(');
