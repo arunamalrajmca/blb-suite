@@ -5427,7 +5427,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.redirectEnabled?.newValue === true) {
     injectRedirectEnabledTabs().catch(() => {});
   }
-  if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites) {
+  if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites || changes.doubleClickBlbSites) {
     installRules();
     // Keep the existing web-selection menu item in place. Only its visibility
     // changes with the site preference; removing/recreating it here causes a
@@ -5442,11 +5442,15 @@ chrome.storage.onChanged.addListener((changes, area) => {
     installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true})
       .then(async tabs => {
         for (const tab of tabs) {
-          if (tab?.id && changes.pageSelectionButtonSites) {
+          if (tab?.id && (changes.pageSelectionButtonSites || changes.doubleClickBlbSites)) {
             const key = pageSelectionSettingKeyFromTab(tab);
-            const sites = changes.pageSelectionButtonSites.newValue && typeof changes.pageSelectionButtonSites.newValue === 'object'
-              ? changes.pageSelectionButtonSites.newValue : {};
-            if (key && sites[key] === true) await ensureContentScriptInTab(tab.id);
+            const pageSites = changes.pageSelectionButtonSites?.newValue && typeof changes.pageSelectionButtonSites.newValue === 'object'
+              ? changes.pageSelectionButtonSites.newValue : null;
+            const doubleSites = changes.doubleClickBlbSites?.newValue && typeof changes.doubleClickBlbSites.newValue === 'object'
+              ? changes.doubleClickBlbSites.newValue : null;
+            if (key && (pageSites?.[key] === true || doubleSites?.[key] === true)) {
+              await ensureContentScriptInTab(tab.id);
+            }
           }
           await syncPdfSelectionContextMenuVisibility(tab);
         }
