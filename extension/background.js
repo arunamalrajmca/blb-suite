@@ -2520,14 +2520,29 @@ async function ensureContentScriptInTab(tabId) {
         if (response?.ok === true) return true;
       } catch (_) {}
 
-      // The current document may have loaded before registration. Reload once
-      // so Chrome injects the complete bundle at document_start.
+      // The current document may have loaded before registration. Inject the
+      // bundle into this document instead of reloading the tab: a reload can
+      // interrupt forms, reset checkbox state, and look like page jumping.
+      const latestTab = await chrome.tabs.get(tabId).catch(() => null);
+      const latestSettings = await chrome.storage.local.get({
+        masterEnabled:true,
+        pageSelectionButtonSites:{},
+        doubleClickBlbSites:{},
+        redirectEnabled:false
+      });
+      if (!(await shouldInjectContentScriptForTab(latestTab, latestSettings))) {
+        await unregisterRuntimeContentScriptForPattern(originPatternForUrl(latestTab?.url || tab.url));
+        return false;
+      }
       try {
-        await chrome.tabs.reload(tabId);
+        await chrome.scripting.executeScript({
+          target:{tabId},
+          files:BLB_CONTENT_SCRIPT_FILES
+        });
+        return true;
       } catch (_) {
         return false;
       }
-      return true;
     } catch (_) {
       return false;
     }
