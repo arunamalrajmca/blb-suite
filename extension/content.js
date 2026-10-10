@@ -1,12 +1,11 @@
 (async function () {
 // Blue Letter Bible Suite 5.2.25 - unified content script
 
-// Access policy:
+// Content-script access policy:
 //   * Local files: only PDF, HTML, and HTM files are supported.
-//   * Webpages: hostnames containing "bible" are enabled by default.
-//     Other sites become active when the user has explicitly enabled either
-//     Show on BLB or Double-Click BLB for that hostname. Those preferences
-//     live in chrome.storage.local and survive extension updates.
+//   * Bible-host pages may load the shared content runtime, but this does not
+//     enable either site feature. Show on BLB and Double-click KJV each require
+//     their own explicit saved preference.
 async function blbSuiteAccessAllowed() {
   const protocol = String(location.protocol || '').toLowerCase();
   const href = String(location.href || '');
@@ -41,6 +40,34 @@ let suiteEnabled = false;
 let doubleClickBlbEnabled = false;
 let redirectScriptTaggerLinksEnabled = false;
 let suiteSettingsReady = false;
+
+// Track link-target changes so OFF can restore the page's original behavior.
+const suiteModifiedLinkTargets = new Map();
+function setSuiteLinkTargetBlank(link) {
+  if (!link) return;
+  if (!suiteModifiedLinkTargets.has(link)) {
+    suiteModifiedLinkTargets.set(link, {
+      hadTarget: link.hasAttribute('target'),
+      value: link.getAttribute('target')
+    });
+  }
+  link.setAttribute('target', '_blank');
+}
+function restoreSuiteLinkTargets() {
+  for (const [link, original] of suiteModifiedLinkTargets) {
+    // Do not overwrite a page's later change if it no longer matches our value.
+    if (!link || link.getAttribute('target') !== '_blank') continue;
+    if (original.hadTarget) link.setAttribute('target', original.value ?? '');
+    else link.removeAttribute('target');
+  }
+  suiteModifiedLinkTargets.clear();
+}
+function applySuiteLinkTargets() {
+  if (!suiteEnabled || !location.hostname.endsWith('blueletterbible.org')) return;
+  document.querySelectorAll('a[href*="/kjv/"]').forEach(link => {
+    if (/\/kjv\/[^/]+\/\d+\/\d+(?:\/|$)/i.test(link.href)) setSuiteLinkTargetBlank(link);
+  });
+}
 
 // Cache the master setting in each content-script instance. This avoids a
 // storage read on every copy/click/selection event while still reacting
@@ -120,14 +147,31 @@ function openBlbDestinationFromContent(url) {
  * unmodified clicks on generated BLB links and route them through the
  * background destination manager, leaving the source article open.
  */
-document.addEventListener("click", e => {
+let scriptTaggerClickBound = false;
+
+function handleScriptTaggerClick(e) {
   if (!suiteEnabled || !redirectScriptTaggerLinksEnabled || isModifiedLinkActivation(e)) return;
   const link = e.target.closest?.("a.BLBST_a[href]");
   if (!link || !normalizeBlbDestinationUrl(link.href)) return;
   e.preventDefault();
   e.stopImmediatePropagation();
   openBlbDestinationFromContent(link.href);
-}, true);
+}
+
+function syncScriptTaggerClickHandler() {
+  const shouldBind = suiteEnabled && redirectScriptTaggerLinksEnabled;
+  if (shouldBind && !scriptTaggerClickBound) {
+    document.addEventListener("click", handleScriptTaggerClick, true);
+    scriptTaggerClickBound = true;
+  } else if (!shouldBind && scriptTaggerClickBound) {
+    document.removeEventListener("click", handleScriptTaggerClick, true);
+    scriptTaggerClickBound = false;
+  }
+}
+
+// Bind only while both the master switch and global redirect feature are ON.
+suiteSettingsReadyPromise.then(syncScriptTaggerClickHandler).catch(() => {});
+
 
 function normalizeSelectionText(s) {
   return String(s || '')
@@ -487,14 +531,14 @@ if (location.hostname.endsWith("blueletterbible.org")) {
         // below so Criteria Search pages and normal verse pages use the same
         // single-tab/reuse behavior.
       } else if (link.closest('div[id^="bVerse_"]')) {
-        link.target="_blank";
+        setSuiteLinkTargetBlank(link);
       }
     });
   }
 
   function modifyMultiVerseLinks() {
     if (!location.href.includes("MultiVerse.cfm")) return;
-    document.querySelectorAll('a[href*="/kjv/"]').forEach(a=>a.target="_blank");
+    document.querySelectorAll('a[href*="/kjv/"]').forEach(a=>setSuiteLinkTargetBlank(a));
   }
 
   const process=(root=document)=>{
@@ -502,8 +546,8 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     if (root.matches?.('div[id^="bVerse_"], .parse-popup')) modifyLinks(root);
     root.querySelectorAll?.('div[id^="bVerse_"], .parse-popup').forEach(modifyLinks);
     if (location.href.includes("MultiVerse.cfm")) {
-      if (root.matches?.('a[href*="/kjv/"]')) root.target="_blank";
-      root.querySelectorAll?.('a[href*="/kjv/"]').forEach(a=>a.target="_blank");
+      if (root.matches?.('a[href*="/kjv/"]')) setSuiteLinkTargetBlank(root);
+      root.querySelectorAll?.('a[href*="/kjv/"]').forEach(a=>setSuiteLinkTargetBlank(a));
     }
   };
   let processScheduled=false;
@@ -637,7 +681,7 @@ if (location.hostname.endsWith("blueletterbible.org")) {
     const apply = link => {
       if (!link || !link.href) return;
       if (/\/kjv\/[^/]+\/\d+\/\d+(?:\/|$)/i.test(link.href)) {
-        link.target="_blank";
+        setSuiteLinkTargetBlank(link);
       }
     };
     if (root.matches?.("a[href]")) apply(root);
@@ -772,9 +816,9 @@ if (location.hostname==="webstersdictionary1828.com") {
     mount.appendChild(button);
   }
 
-  let websterRedirectEnabled = true;
-  chrome.storage.local.get({redirectEnabled:true}).then(data=>{
-    websterRedirectEnabled = data.redirectEnabled !== false;
+  let websterRedirectEnabled = false;
+  chrome.storage.local.get({redirectEnabled:false}).then(data=>{
+    websterRedirectEnabled = data.redirectEnabled === true;
   }).catch(()=>{});
 
   document.addEventListener("click",e=>{
@@ -1639,17 +1683,8 @@ function disableDoubleClickBlb() {
 }
 
 async function getSiteDefaultEnabled() {
-  try {
-    const response = await safeRuntimeSendMessage({
-      type:'blbSuiteGetDefaultSiteStatus',
-      hostname:location.hostname,
-      title:document.title || ''
-    });
-    return response?.enabled === true;
-  } catch (_) {
-    const host = String(location.hostname || '').toLowerCase();
-    return host.includes('bible');
-  }
+  // Per-site features default OFF; only their own explicit preference enables them.
+  return false;
 }
 
 async function refreshDoubleClickBlb() {
@@ -2080,18 +2115,24 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
   if (changes.redirectEnabled) {
     redirectScriptTaggerLinksEnabled = changes.redirectEnabled.newValue === true;
+    syncScriptTaggerClickHandler();
   }
 
   if (changes.masterEnabled) {
     suiteEnabled = changes.masterEnabled.newValue !== false;
+    syncScriptTaggerClickHandler();
     if (!suiteEnabled) {
       document.getElementById('blb-suite-webster-multiverse')?.remove();
       document.getElementById('blb-suite-webster-status')?.remove();
       disableBlbPageButtonMonitoring();
+      disableDoubleClickBlb();
+      restoreSuiteLinkTargets();
     } else {
+      applySuiteLinkTargets();
       if (location.hostname === 'webstersdictionary1828.com') ensureWebsterButton?.();
       if (location.hostname !== 'blueletterbible.org' && !location.hostname.endsWith('.blueletterbible.org')) {
-        refreshBlbPageSelectionButton();
+        refreshBlbPageSelectionButton().catch(()=>{});
+        refreshDoubleClickBlb().catch(()=>{});
       }
     }
   }

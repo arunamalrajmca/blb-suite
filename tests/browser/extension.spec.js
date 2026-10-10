@@ -67,6 +67,170 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
   await expect(page.locator('body')).toBeVisible();
 });
 
+test('unrelated page checkbox stability and injection cleanup', async ({ page, context, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    redirectEnabled: false,
+    pageSelectionButtonSites: { 'example.com': true },
+    doubleClickBlbSites: { 'example.com': false }
+  });
+  await context.route('https://example.com/', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Registration form fixture</title></head><body><main id="devconsole-fixture"><h1>Register</h1></main></body></html>'
+  }));
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  const button = page.locator('#blb-suite-page-selection-button');
+  await expect(button).toBeAttached({ timeout: 15000 });
+
+  await page.evaluate(() => {
+    const form = document.createElement('form');
+    form.id = 'blb-unrelated-checkbox-form';
+    form.style.cssText = 'position:fixed;left:32px;top:140px;z-index:1000;background:white;padding:16px';
+    form.innerHTML = '<label><input id="blb-unrelated-checkbox" type="checkbox"> Confirm registration</label>';
+    document.body.appendChild(form);
+    window.scrollTo(0, 0);
+  });
+
+  const checkbox = page.locator('#blb-unrelated-checkbox');
+  const beforeOn = await page.evaluate(() => ({
+    top: document.querySelector('#blb-unrelated-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  await checkbox.click();
+  await expect(checkbox).toBeChecked();
+  const afterOn = await page.evaluate(() => ({
+    top: document.querySelector('#blb-unrelated-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  expect(afterOn).toEqual(beforeOn);
+
+  const registrationCount = () => extensionWorker.evaluate(async () =>
+    (await chrome.scripting.getRegisteredContentScripts()).filter(script =>
+      String(script.id || '').startsWith('blb-suite-runtime-') &&
+      (script.matches || []).includes('https://example.com/*')
+    ).length
+  );
+
+  await extensionStorage.set({ pageSelectionButtonSites: { 'example.com': false } });
+  await expect(button).toHaveCount(0);
+  await expect.poll(registrationCount).toBe(0);
+  const beforeFeatureOff = await page.evaluate(() => ({
+    top: document.querySelector('#blb-unrelated-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  await checkbox.click();
+  await expect(checkbox).not.toBeChecked();
+  const afterFeatureOff = await page.evaluate(() => ({
+    top: document.querySelector('#blb-unrelated-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  expect(afterFeatureOff).toEqual(beforeFeatureOff);
+
+  await extensionStorage.set({ pageSelectionButtonSites: { 'example.com': true } });
+  await expect(button).toBeAttached({ timeout: 15000 });
+  await expect.poll(registrationCount).toBe(1);
+
+  await extensionStorage.set({ masterEnabled: false });
+  await expect(button).toHaveCount(0);
+  await expect.poll(registrationCount).toBe(0);
+  const beforeMasterOff = await page.evaluate(() => ({
+    top: document.querySelector('#blb-unrelated-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  await checkbox.click();
+  await expect(checkbox).toBeChecked();
+  const afterMasterOff = await page.evaluate(() => ({
+    top: document.querySelector('#blb-unrelated-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  expect(afterMasterOff).toEqual(beforeMasterOff);
+});
+
+test('unrelated checkbox remains stable with global redirects but site features OFF', async ({ page, context, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    redirectEnabled: true,
+    pageSelectionButtonSites: { 'example.com': false },
+    doubleClickBlbSites: { 'example.com': false }
+  });
+  const redirectSetup = await extensionWorker.evaluate(async () => ({
+    settings: await chrome.storage.local.get(['masterEnabled', 'redirectEnabled', 'pageSelectionButtonSites', 'doubleClickBlbSites']),
+    hostAccess: await chrome.permissions.contains({origins:['https://example.com/*']})
+  }));
+  console.log('Global redirect fixture setup:', JSON.stringify(redirectSetup));
+  expect(redirectSetup.settings.masterEnabled).toBe(true);
+  expect(redirectSetup.settings.redirectEnabled).toBe(true);
+  expect(redirectSetup.hostAccess).toBe(true);
+  await context.route('https://example.com/', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Registration form fixture</title></head><body><main><h1>Register</h1></main></body></html>'
+  }));
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    const form = document.createElement('form');
+    form.id = 'blb-global-redirect-checkbox-form';
+    form.style.cssText = 'position:fixed;left:32px;top:140px;z-index:1000;background:white;padding:16px';
+    form.innerHTML = '<label><input id="blb-global-redirect-checkbox" type="checkbox"> Confirm registration</label>';
+    document.body.appendChild(form);
+    window.scrollTo(0, 0);
+  });
+
+  const registrationCount = () => extensionWorker.evaluate(async () =>
+    (await chrome.scripting.getRegisteredContentScripts()).filter(script =>
+      String(script.id || '').startsWith('blb-suite-runtime-') &&
+      (script.matches || []).includes('https://example.com/*')
+    ).length
+  );
+  await expect.poll(registrationCount).toBe(1);
+  const checkbox = page.locator('#blb-global-redirect-checkbox');
+  const before = await page.evaluate(() => ({
+    top: document.querySelector('#blb-global-redirect-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  await checkbox.click();
+  await expect(checkbox).toBeChecked();
+  const after = await page.evaluate(() => ({
+    top: document.querySelector('#blb-global-redirect-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  expect(after).toEqual(before);
+
+  await extensionStorage.set({ masterEnabled: false });
+  await expect.poll(registrationCount).toBe(0);
+
+  // Master OFF must remove the page-level ScriptTagger click interceptor,
+  // not merely leave it installed behind a boolean guard.
+  await page.evaluate(() => {
+    const link = document.createElement('a');
+    link.className = 'BLBST_a';
+    link.href = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+    link.id = 'blb-scripttagger-off-check';
+    link.textContent = 'John 3:16';
+    link.addEventListener('click', event => {
+      event.preventDefault();
+      window.__pageOwnClickObserved = true;
+    });
+    document.body.appendChild(link);
+    window.__pageOwnClickObserved = false;
+  });
+  await page.locator('#blb-scripttagger-off-check').click();
+  await expect.poll(() => page.evaluate(() => window.__pageOwnClickObserved)).toBe(true);
+
+  const beforeOff = await page.evaluate(() => ({
+    top: document.querySelector('#blb-global-redirect-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  await checkbox.click();
+  await expect(checkbox).not.toBeChecked();
+  const afterOff = await page.evaluate(() => ({
+    top: document.querySelector('#blb-global-redirect-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  expect(afterOff).toEqual(beforeOff);
+});
+
 test.describe('core user-visible E2E', () => {
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
