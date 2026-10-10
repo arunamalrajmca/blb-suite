@@ -3034,12 +3034,17 @@ const dynamicRules = [
 dynamicRules[0].condition={regexFilter:"^https://www\\.blueletterbible\\.org/net/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)-([a-zA-Z0-9]+)/s_\\d+$",resourceTypes:["main_frame"]};
 dynamicRules[1].condition={regexFilter:"^https://www\\.blueletterbible\\.org/net/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)/s_\\d+$",resourceTypes:["main_frame"]};
 
+let dynamicRulesRevision = 0;
 async function installRules() {
+  const revision = ++dynamicRulesRevision;
   try {
     const data = await chrome.storage.local.get({redirectEnabled:false, masterEnabled:true});
+    // If a newer toggle arrived while storage was being read, never let this
+    // stale call restore redirect rules after master OFF.
+    if (revision !== dynamicRulesRevision) return;
     await chrome.declarativeNetRequest.updateDynamicRules({
       removeRuleIds: dynamicRules.map(x=>x.id),
-      addRules: data.masterEnabled !== false && data.redirectEnabled ? dynamicRules : []
+      addRules: data.masterEnabled !== false && data.redirectEnabled === true ? dynamicRules : []
     });
   } catch(e) { console.error("BLB Suite DNR setup:",e); }
 }
