@@ -5278,19 +5278,29 @@ chrome.tabs.onActivated.addListener(({tabId}) => {
     syncPdfSelectionContextMenuVisibility(tab).catch(() => {});
   }).catch(() => {});
 });
+async function shouldInjectContentScriptForTab(tab, data) {
+  if (!tab?.url || !isHttpPageUrl(tab.url)) return false;
+  const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
+  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
+  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
+  const explicitEnabled = pageSites[key] === true || doubleSites[key] === true;
+
+  // Global Redirect External Bible Links is intentionally available on any
+  // HTTP(S) host for which the user granted host access. Do not limit runtime
+  // injection to REDIRECT_HOSTNAMES: ScriptTagger links are generated on the
+  // source website, which may be any site (for example sagacityweb.com).
+  const redirectEnabled = data.redirectEnabled === true && await hasHostAccessForTab(tab);
+  return explicitEnabled || redirectEnabled;
+}
+
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.url || changeInfo.status === 'complete') {
     syncWebSelectionContextMenuVisibility(tab).catch(() => {});
     syncPdfSelectionContextMenuVisibility(tab).catch(() => {});
   }
   if (changeInfo.status === 'complete' && tab?.url && isHttpPageUrl(tab.url)) {
-    const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
-    chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false}).then(data => {
-      const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
-      const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
-      const explicitEnabled = pageSites[key] === true || doubleSites[key] === true;
-      const redirectEnabled = data.redirectEnabled === true && isRedirectHostname(new URL(tab.url).hostname);
-      if (explicitEnabled || redirectEnabled) return ensureContentScriptInTab(tabId);
+    chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false}).then(async data => {
+      if (await shouldInjectContentScriptForTab(tab, data)) return ensureContentScriptInTab(tabId);
       return null;
     }).catch(() => {});
   }
@@ -5329,12 +5339,28 @@ async function injectEnabledTabsForGrantedOrigins(origins) {
   for (const tab of tabs) {
     if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
     const pattern = originPatternForUrl(tab.url);
-    if (!pattern || !granted.includes(pattern)) continue;
+    if (!pattern) continue;
     const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
-    const redirectEnabled = data.redirectEnabled === true && isRedirectHostname(new URL(tab.url).hostname);
-    if (pageSites[key] === true || doubleSites[key] === true || redirectEnabled) {
-      await ensureContentScriptInTab(tab.id);
-    }
+    const grantCoversTab = granted.some(origin =>
+      origin === pattern ||
+      (origin === 'http://*/*' && String(tab.url).startsWith('http://')) ||
+      (origin === 'https://*/*' && String(tab.url).startsWith('https://')) ||
+      origin === '*://*/*'
+    );
+    const redirectEnabled = data.redirectEnabled === true && await hasHostAccessForTab(tab);
+    const siteFeatureEnabled = grantCoversTab && (pageSites[key] === true || doubleSites[key] === true);
+    if (redirectEnabled || siteFeatureEnabled) await ensureContentScriptInTab(tab.id);
+  }
+}
+
+async function injectRedirectEnabledTabs() {
+  // Enabling redirects after a permission was granted does not trigger onAdded.
+  const data = await chrome.storage.local.get({redirectEnabled:false});
+  if (data.redirectEnabled !== true) return;
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
+    if (await hasHostAccessForTab(tab)) await ensureContentScriptInTab(tab.id);
   }
 }
 
@@ -5359,6 +5385,9 @@ chrome.runtime.onInstalled.addListener(async details => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
+  if (changes.redirectEnabled?.newValue === true) {
+    injectRedirectEnabledTabs().catch(() => {});
+  }
   if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites) {
     installRules();
     // Keep the existing web-selection menu item in place. Only its visibility

@@ -31,6 +31,19 @@ async function getDefaultSiteEnabled(siteKey, pageTitle = '') {
   } catch (_) { return siteKey.includes('bible'); }
 }
 
+async function hasSiteFeatureHostAccess(origin) {
+  if (!origin) return false;
+  try {
+    // Wildcard redirect permission must not implicitly activate the
+    // independent per-site Show on BLB and Double-click features.
+    const permissions = await chrome.permissions.getAll();
+    const origins = Array.isArray(permissions?.origins) ? permissions.origins : [];
+    return origins.includes(origin);
+  } catch (_) {
+    return false;
+  }
+}
+
 async function getState() {
   const [tabs, data] = await Promise.all([
     chrome.tabs.query({active:true, currentWindow:true}),
@@ -51,15 +64,21 @@ async function getState() {
   const isBlbSite = siteKey === 'blueletterbible.org';
   const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
   let hasCurrentSiteAccess = true;
+  let hasSiteSpecificAccess = true;
   if (!isBlbSite && currentSiteOrigin) {
-    try { hasCurrentSiteAccess = await chrome.permissions.contains({origins:[currentSiteOrigin]}); }
-    catch (_) { hasCurrentSiteAccess = false; }
+    try {
+      hasCurrentSiteAccess = await chrome.permissions.contains({origins:[currentSiteOrigin]});
+      hasSiteSpecificAccess = await hasSiteFeatureHostAccess(currentSiteOrigin);
+    } catch (_) {
+      hasCurrentSiteAccess = false;
+      hasSiteSpecificAccess = false;
+    }
   }
-  // A site toggle is only ON when its stored/default setting is enabled AND
-  // the extension actually has host access. This is important after upgrading
-  // from the old all-sites build: stale/default ON state must never imply that
-  // runtime content-script injection is authorized.
-  const effectiveDefaultEnabled = defaultEnabled && hasCurrentSiteAccess;
+  // An explicit per-site preference remains independent of global redirects.
+  // Wildcard HTTP(S) access can authorize an explicitly enabled feature, but
+  // must not make the host-based defaults (for example, bible.com) appear ON.
+  // Defaults become active only when this site has its own specific grant.
+  const effectiveDefaultEnabled = defaultEnabled && hasCurrentSiteAccess && hasSiteSpecificAccess;
   const effectivePageEnabled = Object.prototype.hasOwnProperty.call(pageSites, siteKey)
     ? pageSites[siteKey] === true && hasCurrentSiteAccess
     : effectiveDefaultEnabled;
@@ -143,6 +162,9 @@ async function setMaster(on) {
 async function requestCurrentSiteAccess(origin = currentSiteOrigin) {
   if (!origin) return false;
   try {
+    // A previously granted broad HTTP(S) redirect permission already covers
+    // this site. Reuse it instead of prompting for a redundant site grant.
+    if (await chrome.permissions.contains({origins:[origin]})) return true;
     return await chrome.permissions.request({origins:[origin]});
   } catch (_) {
     return false;
@@ -182,24 +204,9 @@ async function setRedirect(on) {
   if (!state.master) return;
 
   if (on) {
-    const redirectOrigins = [
-      'http://www.bible.com/*', 'https://www.bible.com/*',
-      'http://www.biblegateway.com/*', 'https://www.biblegateway.com/*',
-      'http://www.bibleref.com/*', 'https://www.bibleref.com/*',
-      'http://biblehub.com/*', 'https://biblehub.com/*',
-      'http://www.biblehub.com/*', 'https://www.biblehub.com/*',
-      'http://bibleportal.com/*', 'https://bibleportal.com/*',
-      'http://www.bibleportal.com/*', 'https://www.bibleportal.com/*',
-      'http://www.kingjamesbibleonline.org/*', 'https://www.kingjamesbibleonline.org/*',
-      'http://kjbo.org/*', 'https://kjbo.org/*',
-      'http://www.kjbo.org/*', 'https://www.kjbo.org/*',
-      'http://www.kjv.site/*', 'https://www.kjv.site/*',
-      'http://kjv.site/*', 'https://kjv.site/*',
-      'http://m.kjv.site/*', 'https://m.kjv.site/*',
-      'http://officialkingjamesbible.com/*', 'https://officialkingjamesbible.com/*',
-      'http://www.officialkingjamesbible.com/*', 'https://www.officialkingjamesbible.com/*',
-      'http://webstersdictionary1828.com/*', 'https://webstersdictionary1828.com/*'
-    ];
+    // ScriptTagger references can appear on any website. Global redirects
+    // request optional HTTP(S) access, without enabling the per-site features.
+    const redirectOrigins = ['http://*/*', 'https://*/*'];
 
     // Persist the user's intent before the permission prompt. Chrome may
     // interrupt/recreate the action popup while showing a permission prompt,
@@ -1079,45 +1086,34 @@ document.addEventListener('click', e => {
 
 guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
-async function handlePageButtonToggle(on) {
-  if (!on) {
+async function setSiteFeaturesEnabled(on) {
+  const state = await getState();
+  if (!state.siteKey || !state.master || state.isBlbSite) return;
+  if (on && !(await requestCurrentSiteAccess())) {
     await setPageButton(false);
+    await setDoubleClick(false);
     return;
   }
-  await setPageButton(true, {deferActivation:true});
-  if (!(await requestCurrentSiteAccess())) {
-    await setPageButton(false);
-    return;
+  // Show on BLB and Double-click KJV are paired controls: either ON action
+  // enables both, and either OFF action disables both.
+  await setPageButton(!!on);
+  await setDoubleClick(!!on);
+  if (on) {
+    try {
+      const tabs = await chrome.tabs.query({active:true,currentWindow:true});
+      const tabId = tabs[0]?.id;
+      if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
+    } catch (_) {}
   }
-  try {
-    const tabs = await chrome.tabs.query({active:true,currentWindow:true});
-    const tabId = tabs[0]?.id;
-    if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
-  } catch (_) {}
   render(await getState());
 }
 
+async function handlePageButtonToggle(on) {
+  await setSiteFeaturesEnabled(on);
+}
+
 async function handleDoubleClickToggle(on) {
-  if (!on) {
-    await setDoubleClick(false);
-    return;
-  }
-  // Enabling Double-Click also initializes Show on BLB for this site.
-  // Both features share the same site access, so enabling either feature
-  // should establish the site's Show on BLB capability.
-  await setPageButton(true, {deferActivation:true});
-  await setDoubleClick(true, {deferActivation:true});
-  if (!(await requestCurrentSiteAccess())) {
-    await setDoubleClick(false);
-    await setPageButton(false);
-    return;
-  }
-  try {
-    const tabs = await chrome.tabs.query({active:true,currentWindow:true});
-    const tabId = tabs[0]?.id;
-    if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
-  } catch (_) {}
-  render(await getState());
+  await setSiteFeaturesEnabled(on);
 }
 
 document.getElementById('pageButton').addEventListener('change', e => handlePageButtonToggle(e.target.checked));
