@@ -137,17 +137,17 @@ test('Show on BLB and Double-click toggles remain independent', async () => {
 });
 
 test('First site-feature enable pins the other feature OFF without overwriting an existing choice', async () => {
-  const pageFirst = exerciseSiteSetter('setPageButton', '\\nasync function setDoubleClick');
+  const pageFirst = exerciseSiteSetter('setPageButton', '\nasync function setDoubleClick');
   await pageFirst.setter(true);
   expect(pageFirst.storage.pageSelectionButtonSites['example.com']).toBe(true);
   expect(pageFirst.storage.doubleClickBlbSites['example.com']).toBe(false);
 
-  const doubleFirst = exerciseSiteSetter('setDoubleClick', '\\n\\nasync function setRedirect');
+  const doubleFirst = exerciseSiteSetter('setDoubleClick', '\n\nasync function setRedirect');
   await doubleFirst.setter(true);
   expect(doubleFirst.storage.doubleClickBlbSites['example.com']).toBe(true);
   expect(doubleFirst.storage.pageSelectionButtonSites['example.com']).toBe(false);
 
-  const preserveChoice = exerciseSiteSetter('setPageButton', '\\nasync function setDoubleClick', {
+  const preserveChoice = exerciseSiteSetter('setPageButton', '\nasync function setDoubleClick', {
     doubleClickBlbSites: { 'example.com': true }
   });
   await preserveChoice.setter(true);
