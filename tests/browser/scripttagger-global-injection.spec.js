@@ -155,3 +155,57 @@ test('global redirect uses only the minimal ScriptTagger handler on ordinary sit
     {redirectEnabled:false,pageSelectionButtonSites:{'sagacityweb.com':true},doubleClickBlbSites:{}}
   ))).toEqual(['kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','content.js']);
 });
+
+async function runMinimalScriptTaggerClick(settings, eventOverrides = {}) {
+  const listeners = {};
+  const messages = [];
+  const context = {
+    URL,
+    chrome: {
+      storage: {
+        local: { get: async defaults => ({ ...defaults, ...settings }) },
+        onChanged: { addListener: listener => { context.storageChanged = listener; } }
+      },
+      runtime: { sendMessage: async message => { messages.push(message); return {ok:true}; } }
+    },
+    document: { addEventListener: (type, listener) => { listeners[type] = listener; } }
+  };
+  context.globalThis = context;
+  vm.runInNewContext(scriptTaggerScript, context);
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const link = {
+    href:'https://www.blueletterbible.com/kjv/jhn/3/16/',
+    closest: selector => selector === 'a.BLBST_a[href]' ? link : null
+  };
+  const event = {
+    button:0, metaKey:false, ctrlKey:false, shiftKey:false, altKey:false,
+    target:{closest: selector => selector === 'a.BLBST_a[href]' ? link : null},
+    prevented:false, stopped:false,
+    preventDefault(){ this.prevented = true; },
+    stopImmediatePropagation(){ this.stopped = true; },
+    ...eventOverrides
+  };
+  listeners.click(event);
+  await Promise.resolve();
+  return { event, messages };
+}
+
+test('minimal ScriptTagger handler redirects only when master and global redirect are enabled', async () => {
+  const enabled = await runMinimalScriptTaggerClick({masterEnabled:true,redirectEnabled:true});
+  expect(enabled.event.prevented).toBe(true);
+  expect(enabled.event.stopped).toBe(true);
+  expect(enabled.messages).toEqual([{
+    type:'blbSuiteOpenBackgroundUrl',
+    url:'https://www.blueletterbible.org/kjv/jhn/3/16/',
+    activeIfNew:true,
+    activateExisting:true
+  }]);
+
+  const disabled = await runMinimalScriptTaggerClick({masterEnabled:true,redirectEnabled:false});
+  expect(disabled.event.prevented).toBe(false);
+  expect(disabled.messages).toEqual([]);
+
+  const masterOff = await runMinimalScriptTaggerClick({masterEnabled:false,redirectEnabled:true});
+  expect(masterOff.event.prevented).toBe(false);
+  expect(masterOff.messages).toEqual([]);
+});
