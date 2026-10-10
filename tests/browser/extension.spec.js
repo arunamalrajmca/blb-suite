@@ -154,6 +154,14 @@ test('unrelated checkbox remains stable with global redirects but site features 
     pageSelectionButtonSites: { 'example.com': false },
     doubleClickBlbSites: { 'example.com': false }
   });
+  const redirectSetup = await extensionWorker.evaluate(async () => ({
+    settings: await chrome.storage.local.get(['masterEnabled', 'redirectEnabled', 'pageSelectionButtonSites', 'doubleClickBlbSites']),
+    hostAccess: await chrome.permissions.contains({origins:['https://example.com/*']})
+  }));
+  console.log('Global redirect fixture setup:', JSON.stringify(redirectSetup));
+  expect(redirectSetup.settings.masterEnabled).toBe(true);
+  expect(redirectSetup.settings.redirectEnabled).toBe(true);
+  expect(redirectSetup.hostAccess).toBe(true);
   await context.route('https://example.com/', route => route.fulfill({
     status: 200,
     contentType: 'text/html',
