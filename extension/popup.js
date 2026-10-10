@@ -31,19 +31,6 @@ async function getDefaultSiteEnabled(siteKey, pageTitle = '') {
   } catch (_) { return siteKey.includes('bible'); }
 }
 
-async function hasSiteFeatureHostAccess(origin) {
-  if (!origin) return false;
-  try {
-    // Wildcard redirect permission must not implicitly activate the
-    // independent per-site Show on BLB and Double-click features.
-    const permissions = await chrome.permissions.getAll();
-    const origins = Array.isArray(permissions?.origins) ? permissions.origins : [];
-    return origins.includes(origin);
-  } catch (_) {
-    return false;
-  }
-}
-
 async function getState() {
   const [tabs, data] = await Promise.all([
     chrome.tabs.query({active:true, currentWindow:true}),
@@ -68,7 +55,8 @@ async function getState() {
   if (!isBlbSite && currentSiteOrigin) {
     try {
       hasCurrentSiteAccess = await chrome.permissions.contains({origins:[currentSiteOrigin]});
-      hasSiteSpecificAccess = await hasSiteFeatureHostAccess(currentSiteOrigin);
+      // TEST B: bypass only the separate exact-origin permission check.
+      hasSiteSpecificAccess = true;
     } catch (_) {
       hasCurrentSiteAccess = false;
       hasSiteSpecificAccess = false;
