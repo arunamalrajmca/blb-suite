@@ -67,6 +67,61 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
   await expect(page.locator('body')).toBeVisible();
 });
 
+test('unrelated page checkbox stability and injection cleanup', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    redirectEnabled: false,
+    pageSelectionButtonSites: { 'example.com': true },
+    doubleClickBlbSites: { 'example.com': false }
+  });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  const button = page.locator('#blb-suite-page-selection-button');
+  await expect(button).toBeAttached({ timeout: 15000 });
+
+  await page.evaluate(() => {
+    const form = document.createElement('form');
+    form.id = 'blb-unrelated-checkbox-form';
+    form.style.cssText = 'position:fixed;left:32px;top:140px;z-index:1000;background:white;padding:16px';
+    form.innerHTML = '<label><input id="blb-unrelated-checkbox" type="checkbox"> Confirm registration</label>';
+    document.body.appendChild(form);
+    window.scrollTo(0, 0);
+  });
+
+  const checkbox = page.locator('#blb-unrelated-checkbox');
+  const beforeOn = await page.evaluate(() => ({
+    top: document.querySelector('#blb-unrelated-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  await checkbox.click();
+  await expect(checkbox).toBeChecked();
+  const afterOn = await page.evaluate(() => ({
+    top: document.querySelector('#blb-unrelated-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  expect(afterOn).toEqual(beforeOn);
+
+  await extensionStorage.set({ masterEnabled: false });
+  await expect(button).toHaveCount(0);
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.scripting.getRegisteredContentScripts()).filter(script =>
+      String(script.id || '').startsWith('blb-suite-runtime-') &&
+      (script.matches || []).includes('https://example.com/*')
+    ).length
+  )).toBe(0);
+
+  const beforeOff = await page.evaluate(() => ({
+    top: document.querySelector('#blb-unrelated-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  await checkbox.click();
+  await expect(checkbox).not.toBeChecked();
+  const afterOff = await page.evaluate(() => ({
+    top: document.querySelector('#blb-unrelated-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  expect(afterOff).toEqual(beforeOff);
+});
+
 test.describe('core user-visible E2E', () => {
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
