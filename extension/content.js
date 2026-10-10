@@ -479,6 +479,7 @@ if (location.hostname.endsWith("blueletterbible.org")) {
 }
 
 // ---------- BLB New Tab ----------
+if (location.hostname.endsWith("blueletterbible.org")) {
   function modifyLinks(container) {
     container.querySelectorAll("a").forEach(link=>{
       if (!link.href) return;
@@ -549,6 +550,8 @@ if (location.hostname.endsWith("blueletterbible.org")) {
   },true);
   if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",process);
   else process();
+}
+
 }
 
 // ---------- BLB MultiVerse Tool View ----------
