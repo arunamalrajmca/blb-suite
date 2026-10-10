@@ -147,23 +147,30 @@ test('Permission request follows persisted independent feature choice', async ()
   expect(double.calls.indexOf('requestAccess')).toBeGreaterThan(double.calls.findIndex(call => Array.isArray(call) && call[0] === 'pinChoice'));
 });
 
-test('First site-feature enable pins the other feature OFF without overwriting an existing choice', async () => {
-  const pageFirst = exerciseSiteSetter('setPageButton', '\nasync function setDoubleClick');
-  await pageFirst.setter(true);
-  expect(pageFirst.storage.pageSelectionButtonSites['example.com']).toBe(true);
-  expect(pageFirst.storage.doubleClickBlbSites['example.com']).toBe(false);
-
-  const doubleFirst = exerciseSiteSetter('setDoubleClick', '\n\nasync function setRedirect');
-  await doubleFirst.setter(true);
-  expect(doubleFirst.storage.doubleClickBlbSites['example.com']).toBe(true);
-  expect(doubleFirst.storage.pageSelectionButtonSites['example.com']).toBe(false);
-
-  const preserveChoice = exerciseSiteSetter('setPageButton', '\nasync function setDoubleClick', {
+test('Each site-feature setter changes only its own preference', async () => {
+  const pageFirst = exerciseSiteSetter('setPageButton', '\nasync function setDoubleClick', {
     doubleClickBlbSites: { 'example.com': true }
   });
-  await preserveChoice.setter(true);
-  expect(preserveChoice.storage.pageSelectionButtonSites['example.com']).toBe(true);
-  expect(preserveChoice.storage.doubleClickBlbSites['example.com']).toBe(true);
+  await pageFirst.setter(false);
+  expect(pageFirst.storage.pageSelectionButtonSites['example.com']).toBe(false);
+  expect(pageFirst.storage.doubleClickBlbSites['example.com']).toBe(true);
+
+  const doubleFirst = exerciseSiteSetter('setDoubleClick', '\n\nasync function setRedirect', {
+    pageSelectionButtonSites: { 'example.com': true }
+  });
+  await doubleFirst.setter(false);
+  expect(doubleFirst.storage.doubleClickBlbSites['example.com']).toBe(false);
+  expect(doubleFirst.storage.pageSelectionButtonSites['example.com']).toBe(true);
+
+  const pageOn = exerciseSiteSetter('setPageButton', '\nasync function setDoubleClick');
+  await pageOn.setter(true);
+  expect(pageOn.storage.pageSelectionButtonSites['example.com']).toBe(true);
+  expect(Object.prototype.hasOwnProperty.call(pageOn.storage.doubleClickBlbSites, 'example.com')).toBe(false);
+
+  const doubleOn = exerciseSiteSetter('setDoubleClick', '\n\nasync function setRedirect');
+  await doubleOn.setter(true);
+  expect(doubleOn.storage.doubleClickBlbSites['example.com']).toBe(true);
+  expect(Object.prototype.hasOwnProperty.call(doubleOn.storage.pageSelectionButtonSites, 'example.com')).toBe(false);
 });
 
 test.describe('core user-visible E2E', () => {
