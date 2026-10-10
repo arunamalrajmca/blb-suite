@@ -162,6 +162,9 @@ async function setMaster(on) {
 async function requestCurrentSiteAccess(origin = currentSiteOrigin) {
   if (!origin) return false;
   try {
+    // A previously granted broad HTTP(S) redirect permission already covers
+    // this site. Reuse it instead of prompting for a redundant site grant.
+    if (await chrome.permissions.contains({origins:[origin]})) return true;
     return await chrome.permissions.request({origins:[origin]});
   } catch (_) {
     return false;
@@ -1083,37 +1086,34 @@ document.addEventListener('click', e => {
 
 guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
-async function handlePageButtonToggle(on) {
-  if (!on) {
+async function setSiteFeaturesEnabled(on) {
+  const state = await getState();
+  if (!state.siteKey || !state.master || state.isBlbSite) return;
+  if (on && !(await requestCurrentSiteAccess())) {
     await setPageButton(false);
+    await setDoubleClick(false);
     return;
   }
-  await setPageButton(true, {deferActivation:true});
-  if (!(await requestCurrentSiteAccess())) {
-    await setPageButton(false);
-    return;
+  // Show on BLB and Double-click KJV are paired controls: either ON action
+  // enables both, and either OFF action disables both.
+  await setPageButton(!!on);
+  await setDoubleClick(!!on);
+  if (on) {
+    try {
+      const tabs = await chrome.tabs.query({active:true,currentWindow:true});
+      const tabId = tabs[0]?.id;
+      if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
+    } catch (_) {}
   }
-  try {
-    const tabs = await chrome.tabs.query({active:true,currentWindow:true});
-    const tabId = tabs[0]?.id;
-    if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
-  } catch (_) {}
   render(await getState());
 }
 
+async function handlePageButtonToggle(on) {
+  await setSiteFeaturesEnabled(on);
+}
+
 async function handleDoubleClickToggle(on) {
-  if (!on) {
-    await setDoubleClick(false);
-    return;
-  }
-  // Double-click BLB is independent of Show on BLB. Request access for this
-  // site, then persist only the Double-click preference.
-  if (!(await requestCurrentSiteAccess())) {
-    await setDoubleClick(false);
-    return;
-  }
-  await setDoubleClick(true);
-  render(await getState());
+  await setSiteFeaturesEnabled(on);
 }
 
 document.getElementById('pageButton').addEventListener('change', e => handlePageButtonToggle(e.target.checked));
