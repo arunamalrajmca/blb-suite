@@ -5,13 +5,14 @@ const vm = require('node:vm');
 
 const background = fs.readFileSync(path.resolve(__dirname, '../../extension/background.js'), 'utf8');
 const contentScript = fs.readFileSync(path.resolve(__dirname, '../../extension/content.js'), 'utf8');
+const scriptTaggerContentScript = fs.readFileSync(path.resolve(__dirname, '../../extension/redirect-scripttagger.js'), 'utf8');
 
 function runBlbUrlNormalizer() {
-  const start = contentScript.indexOf('function normalizeBlbDestinationUrl(');
-  const end = contentScript.indexOf('\nfunction openBlbDestinationFromContent(', start);
-  if (start < 0 || end < 0) throw new Error('Could not extract normalizeBlbDestinationUrl from extension/content.js');
+  const start = scriptTaggerContentScript.indexOf('function normalizeBlbDestinationUrl(');
+  const end = scriptTaggerContentScript.indexOf('\n  function isModifiedLinkActivation(', start);
+  if (start < 0 || end < 0) throw new Error('Could not extract normalizeBlbDestinationUrl from extension/redirect-scripttagger.js');
   const context = { URL };
-  vm.runInNewContext(contentScript.slice(start, end), context);
+  vm.runInNewContext(scriptTaggerContentScript.slice(start, end), context);
   return context.normalizeBlbDestinationUrl;
 }
 
@@ -70,6 +71,21 @@ test.describe('ScriptTagger legacy BLB destination URLs', () => {
     expect(normalize('https://www.blueletterbible.org/romans/3/23')).toBe('https://www.blueletterbible.org/romans/3/23');
     expect(normalize('https://example.com/romans/3/23')).toBe('');
   });
+});
+
+
+test('ordinary global-redirect hosts use only the minimal ScriptTagger bundle', () => {
+  expect(background).toContain("const SCRIPT_TAGGER_CONTENT_SCRIPT_FILES = ['redirect-scripttagger.js'];");
+  const start = background.indexOf('function contentScriptFilesForTab(');
+  const end = background.indexOf('\nfunction isHttpPageUrl(', start);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  const helper = background.slice(start, end);
+  expect(helper).toContain('return BLB_CONTENT_SCRIPT_FILES;');
+  expect(helper).toContain('return SCRIPT_TAGGER_CONTENT_SCRIPT_FILES;');
+  expect(scriptTaggerContentScript).toContain('a.BLBST_a[href]');
+  expect(contentScript).not.toContain('a.BLBST_a[href]');
+  expect(contentScript).not.toContain('function normalizeBlbDestinationUrl(');
 });
 
 test.describe('global ScriptTagger content-script injection', () => {
