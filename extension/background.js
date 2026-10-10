@@ -27,8 +27,9 @@ function hostnameMatchesBundledPattern(hostname, pattern) {
 }
 
 async function isSiteEnabledByDefault(hostname, title = '') {
-  const host = normalizeSiteHostname(hostname);
-  return !!host && host.includes('bible');
+  // Per-site features default OFF. Each feature's own saved preference is
+  // authoritative; a hostname or permission grant must not enable both.
+  return false;
 }
 
 function redirectToHomepage() {
