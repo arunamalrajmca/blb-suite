@@ -32,7 +32,7 @@ test.describe('independent Show on BLB and Double-click toggles', () => {
   test('turning Show on BLB ON changes only Show on BLB', async () => {
     const { handler, calls } = loadToggleHandler(
       'handlePageButtonToggle',
-      '\\nasync function handleDoubleClickToggle'
+      '\nasync function handleDoubleClickToggle'
     );
     await handler(true);
     expect(calls).toEqual(['requestAccess', ['pageButton', true]]);
@@ -41,7 +41,7 @@ test.describe('independent Show on BLB and Double-click toggles', () => {
   test('turning Show on BLB OFF changes only Show on BLB and does not request permission', async () => {
     const { handler, calls } = loadToggleHandler(
       'handlePageButtonToggle',
-      '\\nasync function handleDoubleClickToggle'
+      '\nasync function handleDoubleClickToggle'
     );
     await handler(false);
     expect(calls).toEqual([['pageButton', false]]);
@@ -50,7 +50,7 @@ test.describe('independent Show on BLB and Double-click toggles', () => {
   test('turning Double-click KJV Words ON changes only Double-click', async () => {
     const { handler, calls } = loadToggleHandler(
       'handleDoubleClickToggle',
-      "\\ndocument.getElementById('pageButton').addEventListener"
+      "\ndocument.getElementById('pageButton').addEventListener"
     );
     await handler(true);
     expect(calls).toEqual(['requestAccess', ['doubleClick', true]]);
@@ -59,7 +59,7 @@ test.describe('independent Show on BLB and Double-click toggles', () => {
   test('turning Double-click KJV Words OFF changes only Double-click and does not request permission', async () => {
     const { handler, calls } = loadToggleHandler(
       'handleDoubleClickToggle',
-      "\\ndocument.getElementById('pageButton').addEventListener"
+      "\ndocument.getElementById('pageButton').addEventListener"
     );
     await handler(false);
     expect(calls).toEqual([['doubleClick', false]]);
@@ -68,7 +68,7 @@ test.describe('independent Show on BLB and Double-click toggles', () => {
   test('denying Show on BLB permission disables only Show on BLB', async () => {
     const { handler, calls } = loadToggleHandler(
       'handlePageButtonToggle',
-      '\\nasync function handleDoubleClickToggle',
+      '\nasync function handleDoubleClickToggle',
       { access: false }
     );
     await handler(true);
@@ -78,7 +78,7 @@ test.describe('independent Show on BLB and Double-click toggles', () => {
   test('denying Double-click permission disables only Double-click', async () => {
     const { handler, calls } = loadToggleHandler(
       'handleDoubleClickToggle',
-      "\\ndocument.getElementById('pageButton').addEventListener",
+      "\ndocument.getElementById('pageButton').addEventListener",
       { access: false }
     );
     await handler(true);
