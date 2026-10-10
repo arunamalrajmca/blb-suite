@@ -120,14 +120,31 @@ function openBlbDestinationFromContent(url) {
  * unmodified clicks on generated BLB links and route them through the
  * background destination manager, leaving the source article open.
  */
-document.addEventListener("click", e => {
+let scriptTaggerClickBound = false;
+
+function handleScriptTaggerClick(e) {
   if (!suiteEnabled || !redirectScriptTaggerLinksEnabled || isModifiedLinkActivation(e)) return;
   const link = e.target.closest?.("a.BLBST_a[href]");
   if (!link || !normalizeBlbDestinationUrl(link.href)) return;
   e.preventDefault();
   e.stopImmediatePropagation();
   openBlbDestinationFromContent(link.href);
-}, true);
+}
+
+function syncScriptTaggerClickHandler() {
+  const shouldBind = suiteEnabled && redirectScriptTaggerLinksEnabled;
+  if (shouldBind && !scriptTaggerClickBound) {
+    document.addEventListener("click", handleScriptTaggerClick, true);
+    scriptTaggerClickBound = true;
+  } else if (!shouldBind && scriptTaggerClickBound) {
+    document.removeEventListener("click", handleScriptTaggerClick, true);
+    scriptTaggerClickBound = false;
+  }
+}
+
+// Bind only while both the master switch and global redirect feature are ON.
+suiteSettingsReadyPromise.then(syncScriptTaggerClickHandler).catch(() => {});
+
 
 function normalizeSelectionText(s) {
   return String(s || '')
@@ -2080,10 +2097,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
   if (changes.redirectEnabled) {
     redirectScriptTaggerLinksEnabled = changes.redirectEnabled.newValue === true;
+    syncScriptTaggerClickHandler();
   }
 
   if (changes.masterEnabled) {
     suiteEnabled = changes.masterEnabled.newValue !== false;
+    syncScriptTaggerClickHandler();
     if (!suiteEnabled) {
       document.getElementById('blb-suite-webster-multiverse')?.remove();
       document.getElementById('blb-suite-webster-status')?.remove();
