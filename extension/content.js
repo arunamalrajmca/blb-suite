@@ -39,15 +39,13 @@ async function blbSuiteAccessAllowed() {
 
 let suiteEnabled = false;
 let doubleClickBlbEnabled = false;
-let redirectScriptTaggerLinksEnabled = false;
 let suiteSettingsReady = false;
 
 // Cache the master setting in each content-script instance. This avoids a
 // storage read on every copy/click/selection event while still reacting
 // immediately to later setting changes through chrome.storage.onChanged.
-const suiteSettingsReadyPromise = chrome.storage.local.get({masterEnabled:true, doubleClickBlbSites:{}, redirectEnabled:false}).then(data => {
+const suiteSettingsReadyPromise = chrome.storage.local.get({masterEnabled:true, doubleClickBlbSites:{}}.then(data => {
   suiteEnabled = data.masterEnabled !== false;
-  redirectScriptTaggerLinksEnabled = data.redirectEnabled === true;
   suiteSettingsReady = true;
   return suiteEnabled;
 }).catch(() => {
@@ -2063,10 +2061,6 @@ if (!isBlbPageButtonExcludedSite()) {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-
-  if (changes.redirectEnabled) {
-    redirectScriptTaggerLinksEnabled = changes.redirectEnabled.newValue === true;
-  }
 
   if (changes.masterEnabled) {
     suiteEnabled = changes.masterEnabled.newValue !== false;
