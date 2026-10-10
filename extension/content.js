@@ -1684,17 +1684,8 @@ function disableDoubleClickBlb() {
 }
 
 async function getSiteDefaultEnabled() {
-  try {
-    const response = await safeRuntimeSendMessage({
-      type:'blbSuiteGetDefaultSiteStatus',
-      hostname:location.hostname,
-      title:document.title || ''
-    });
-    return response?.enabled === true;
-  } catch (_) {
-    // Per-site features default OFF; only their own explicit preference enables them.
-    return false;
-  }
+  // Per-site features default OFF; only their own explicit preference enables them.
+  return false;
 }
 
 async function refreshDoubleClickBlb() {
