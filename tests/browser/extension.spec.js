@@ -191,6 +191,25 @@ test('unrelated checkbox remains stable with global redirects but site features 
 
   await extensionStorage.set({ masterEnabled: false });
   await expect.poll(registrationCount).toBe(0);
+
+  // Master OFF must remove the page-level ScriptTagger click interceptor,
+  // not merely leave it installed behind a boolean guard.
+  await page.evaluate(() => {
+    const link = document.createElement('a');
+    link.className = 'BLBST_a';
+    link.href = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+    link.id = 'blb-scripttagger-off-check';
+    link.textContent = 'John 3:16';
+    link.addEventListener('click', event => {
+      event.preventDefault();
+      window.__pageOwnClickObserved = true;
+    });
+    document.body.appendChild(link);
+    window.__pageOwnClickObserved = false;
+  });
+  await page.locator('#blb-scripttagger-off-check').click();
+  await expect.poll(() => page.evaluate(() => window.__pageOwnClickObserved)).toBe(true);
+
   const beforeOff = await page.evaluate(() => ({
     top: document.querySelector('#blb-global-redirect-checkbox-form').getBoundingClientRect().top,
     scrollY: window.scrollY
