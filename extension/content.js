@@ -39,15 +39,13 @@ async function blbSuiteAccessAllowed() {
 
 let suiteEnabled = false;
 let doubleClickBlbEnabled = false;
-let redirectScriptTaggerLinksEnabled = false;
 let suiteSettingsReady = false;
 
 // Cache the master setting in each content-script instance. This avoids a
 // storage read on every copy/click/selection event while still reacting
 // immediately to later setting changes through chrome.storage.onChanged.
-const suiteSettingsReadyPromise = chrome.storage.local.get({masterEnabled:true, doubleClickBlbSites:{}, redirectEnabled:false}).then(data => {
+const suiteSettingsReadyPromise = chrome.storage.local.get({masterEnabled:true, doubleClickBlbSites:{}}).then(data => {
   suiteEnabled = data.masterEnabled !== false;
-  redirectScriptTaggerLinksEnabled = data.redirectEnabled === true;
   suiteSettingsReady = true;
   return suiteEnabled;
 }).catch(() => {
@@ -86,6 +84,8 @@ function isModifiedLinkActivation(event) {
   return Boolean(event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey);
 }
 
+// Keep the URL normalizer and opener for BLB's own parsing-popup links.
+// Ordinary-site ScriptTagger clicks are handled by redirect-scripttagger.js.
 function normalizeBlbDestinationUrl(url) {
   const target = String(url || '').trim();
   try {
@@ -93,8 +93,6 @@ function normalizeBlbDestinationUrl(url) {
     if (!/^https?:$/.test(parsed.protocol)) return '';
     const hostname = parsed.hostname.toLowerCase();
     if (!['blueletterbible.org', 'www.blueletterbible.org', 'blueletterbible.com', 'www.blueletterbible.com'].includes(hostname)) return '';
-    // ScriptTagger links on some legacy sites still use the .com domain.
-    // Route both legacy and canonical BLB links to the canonical HTTPS .org URL.
     parsed.protocol = 'https:';
     parsed.hostname = 'www.blueletterbible.org';
     parsed.port = '';
@@ -114,20 +112,6 @@ function openBlbDestinationFromContent(url) {
     activateExisting: true
   });
 }
-
-/*
- * ScriptTagger emits BLBST_a anchors for Scripture references. Own only
- * unmodified clicks on generated BLB links and route them through the
- * background destination manager, leaving the source article open.
- */
-document.addEventListener("click", e => {
-  if (!suiteEnabled || !redirectScriptTaggerLinksEnabled || isModifiedLinkActivation(e)) return;
-  const link = e.target.closest?.("a.BLBST_a[href]");
-  if (!link || !normalizeBlbDestinationUrl(link.href)) return;
-  e.preventDefault();
-  e.stopImmediatePropagation();
-  openBlbDestinationFromContent(link.href);
-}, true);
 
 function normalizeSelectionText(s) {
   return String(s || '')
@@ -2077,10 +2061,6 @@ if (!isBlbPageButtonExcludedSite()) {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-
-  if (changes.redirectEnabled) {
-    redirectScriptTaggerLinksEnabled = changes.redirectEnabled.newValue === true;
-  }
 
   if (changes.masterEnabled) {
     suiteEnabled = changes.masterEnabled.newValue !== false;
