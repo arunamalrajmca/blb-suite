@@ -92,7 +92,7 @@ async function getState() {
     // until Chrome has granted the site's host permission.
     pageButton: !isBlbSite && !!siteKey && effectivePageEnabled,
     doubleClick: !isBlbSite && !isPdfContext && !!siteKey && effectiveDoubleEnabled,
-    redirect: data.redirectEnabled !== false,
+    redirect: data.redirectEnabled === true,
     siteKey,
     pageCaption: deriveSiteCaption(siteKey),
     isBlbSite,
