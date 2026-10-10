@@ -91,7 +91,7 @@ test('ordinary global-redirect hosts use only the minimal ScriptTagger bundle', 
   expect(choose({url:'https://sagacityweb.com/article'}, {redirectEnabled:false,pageSelectionButtonSites:{'sagacityweb.com':true},doubleClickBlbSites:{}}))
     .toEqual(fullBundle);
   expect(choose({url:'https://www.biblegateway.com/passage/?search=John+3:16'}, {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}))
-    .toEqual(fullBundle);
+    .toEqual([...fullBundle, 'redirect-scripttagger.js']);
   expect(choose({url:'https://sagacityweb.com/article'}, {redirectEnabled:false,pageSelectionButtonSites:{},doubleClickBlbSites:{}}))
     .toEqual([]);
   expect(scriptTaggerContentScript).toContain('a.BLBST_a[href]');
