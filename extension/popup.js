@@ -23,14 +23,6 @@ function deriveSiteCaption(siteKey) {
   return host;
 }
 
-async function getDefaultSiteEnabled(siteKey, pageTitle = '') {
-  if (!siteKey) return false;
-  try {
-    const response = await chrome.runtime.sendMessage({type:'blbSuiteGetDefaultSiteStatus', hostname:siteKey, title:pageTitle});
-    return response?.enabled === true;
-  } catch (_) { return siteKey.includes('bible'); }
-}
-
 async function hasSiteFeatureHostAccess(origin) {
   if (!origin) return false;
   try {
@@ -50,7 +42,6 @@ async function getState() {
     chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false})
   ]);
   const pageTitle = tabs[0]?.title || '';
-  const pageTitleForDefaultCheck = pageTitle;
   const activeUrl = String(tabs[0]?.url || '');
   try {
     const active = new URL(activeUrl);
@@ -60,7 +51,7 @@ async function getState() {
   const siteKey = getSiteKey(activeUrl, pageTitle);
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
-  const defaultEnabled = await getDefaultSiteEnabled(siteKey, pageTitleForDefaultCheck);
+  const defaultEnabled = false; // Experiment A: disable hostname-based default feature activation.
   const isBlbSite = siteKey === 'blueletterbible.org';
   const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
   let hasCurrentSiteAccess = true;
