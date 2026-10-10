@@ -5207,8 +5207,7 @@ async function isPageButtonEnabledForHostname(hostname, title = '') {
   if (data.masterEnabled === false) return false;
   const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   // Right-click follows exactly the effective Show on BLB setting for this
-  // site. An explicit site setting wins; otherwise use the same hostname /
-  // default-sites rule that supplies Show on BLB's default.
+  // site. Only an explicit per-site preference can enable it; otherwise OFF.
   if (Object.prototype.hasOwnProperty.call(sites, siteKey)) return sites[siteKey] === true;
   return isSiteEnabledByDefault(siteKey, title);
 }
