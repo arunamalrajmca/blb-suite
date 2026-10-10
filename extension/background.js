@@ -5462,13 +5462,10 @@ chrome.permissions?.onRemoved?.addListener(() => {
 });
 
 chrome.runtime.onInstalled.addListener(async details => {
-  if (details.reason === "install") {
-    const data = await chrome.storage.local.get({redirectEnabled:null, masterEnabled:null});
-    const defaults = {};
-    if (data.redirectEnabled === null) defaults.redirectEnabled = false;
-    if (data.masterEnabled === null) defaults.masterEnabled = true;
-    if (Object.keys(defaults).length) await chrome.storage.local.set(defaults);
-  }
+  // Settings reads already provide safe defaults (master ON, redirects OFF).
+  // Do not persist defaults asynchronously here: a fast popup toggle can write
+  // a user's choice after this listener reads missing keys but before its
+  // default write completes, allowing the stale default to overwrite intent.
   installRules();
   reconcileRuntimeContentScriptRegistrations().catch(() => {});
   installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
