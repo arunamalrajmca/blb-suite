@@ -115,7 +115,7 @@ test.describe('core user-action E2E coverage', () => {
     });
     expect(captured.plain).toBe('(John 3:16)');
     expect(captured.html).toContain('blueletterbible.org/kjv/jhn/3/16/');
-    expect(captured.html).toMatch(/\\/kjv\\/(?:jhn|John)\\/3\\/16\\/?/i);
+    expect(captured.html).toMatch(/\/kjv\/(?:jhn|John)\/3\/16\/?/i);
   });
 
   test('BLB verse links inside parse popups open in a new tab', async ({ page, context, extensionStorage }) => {
@@ -146,7 +146,7 @@ test.describe('core user-action E2E coverage', () => {
     await newPage.waitForLoadState('domcontentloaded').catch(() => {});
 
     expect(new URL(newPage.url()).hostname).toBe('www.blueletterbible.org');
-    expect(new URL(newPage.url()).pathname).toMatch(/^\\/kjv\\/jhn\\/3\\/16(?:\\/s_\\d+)?\\/?$/i);
+    expect(new URL(newPage.url()).pathname).toBe('/kjv/jhn/3/16/');
     await newPage.close();
   });
   test('selection containing a reference and authored prose opens MultiVerse and Criteria Search', async ({ page, extensionStorage, extensionWorker }) => {
