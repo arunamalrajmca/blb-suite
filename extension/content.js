@@ -2088,10 +2088,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
       document.getElementById('blb-suite-webster-multiverse')?.remove();
       document.getElementById('blb-suite-webster-status')?.remove();
       disableBlbPageButtonMonitoring();
+      disableDoubleClickBlb();
     } else {
       if (location.hostname === 'webstersdictionary1828.com') ensureWebsterButton?.();
       if (location.hostname !== 'blueletterbible.org' && !location.hostname.endsWith('.blueletterbible.org')) {
-        refreshBlbPageSelectionButton();
+        refreshBlbPageSelectionButton().catch(()=>{});
+        refreshDoubleClickBlb().catch(()=>{});
       }
     }
   }
