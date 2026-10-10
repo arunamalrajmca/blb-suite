@@ -1086,12 +1086,37 @@ document.addEventListener('click', e => {
 
 guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
+async function preserveIndependentFeatureDefaults(siteKey, feature) {
+  // A first-time host permission can make both legacy "bible" host defaults
+  // appear ON when neither feature has an explicit saved preference. As soon
+  // as the user chooses one feature, make the untouched feature's default OFF
+  // explicit so granting permission cannot silently enable it.
+  const data = await chrome.storage.local.get({
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
+    ? {...data.pageSelectionButtonSites} : {};
+  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
+    ? {...data.doubleClickBlbSites} : {};
+  if (feature === 'pageButton' && !Object.prototype.hasOwnProperty.call(doubleSites, siteKey)) {
+    doubleSites[siteKey] = false;
+    await chrome.storage.local.set({doubleClickBlbSites:doubleSites});
+  } else if (feature === 'doubleClick' && !Object.prototype.hasOwnProperty.call(pageSites, siteKey)) {
+    pageSites[siteKey] = false;
+    await chrome.storage.local.set({pageSelectionButtonSites:pageSites});
+  }
+}
+
 async function handlePageButtonToggle(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
-  if (on && !(await requestCurrentSiteAccess())) {
-    await setPageButton(false);
-    return;
+  if (on) {
+    await preserveIndependentFeatureDefaults(state.siteKey, 'pageButton');
+    if (!(await requestCurrentSiteAccess())) {
+      await setPageButton(false);
+      return;
+    }
   }
   // This setting owns only Show on BLB. Never change Double-click KJV here.
   await setPageButton(!!on);
@@ -1100,9 +1125,12 @@ async function handlePageButtonToggle(on) {
 async function handleDoubleClickToggle(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
-  if (on && !(await requestCurrentSiteAccess())) {
-    await setDoubleClick(false);
-    return;
+  if (on) {
+    await preserveIndependentFeatureDefaults(state.siteKey, 'doubleClick');
+    if (!(await requestCurrentSiteAccess())) {
+      await setDoubleClick(false);
+      return;
+    }
   }
   // This setting owns only Double-click KJV. Never change Show on BLB here.
   await setDoubleClick(!!on);
