@@ -5325,7 +5325,7 @@ async function reconcileRuntimeContentScriptRegistrations() {
     let needed = false;
     if (data.masterEnabled !== false && pattern) {
       try {
-        const url = new URL(pattern.replace(/\\*$/, ''));
+        const url = new URL(pattern.replace(/\/\*$/, ''));
         const key = normalizeSiteHostname(url.hostname);
         const hostAccess = await chrome.permissions.contains({origins:[pattern]});
         const siteFeatureEnabled = pageSites[key] === true || doubleSites[key] === true;
