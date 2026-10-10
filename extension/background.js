@@ -2485,14 +2485,9 @@ async function ensureContentScriptInTab(tabId) {
         if (response?.ok === true) return true;
       } catch (_) {}
 
-      // The current document may have loaded before registration. Reload once
-      // so Chrome injects the complete bundle at document_start.
-      try {
-        await chrome.tabs.reload(tabId);
-      } catch (_) {
-        return false;
-      }
-      return true;
+      // TEST C: do not reload the current tab when the content script
+      // does not respond. This isolates the navigation-triggering fallback.
+      return false;
     } catch (_) {
       return false;
     }
