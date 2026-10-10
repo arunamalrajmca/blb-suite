@@ -2408,10 +2408,13 @@ function contentScriptFilesForTab(tab, data) {
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
     ? data.doubleClickBlbSites : {};
   const explicitSiteFeature = pageSites[key] === true || doubleSites[key] === true;
-  if (explicitSiteFeature || (data.redirectEnabled === true && isRedirectHostname(hostname))) {
-    return BLB_CONTENT_SCRIPT_FILES;
+  const redirectEnabled = data.redirectEnabled === true;
+  const needsFullBundle = explicitSiteFeature || (redirectEnabled && isRedirectHostname(hostname));
+  if (needsFullBundle && redirectEnabled) {
+    return [...BLB_CONTENT_SCRIPT_FILES, ...SCRIPT_TAGGER_CONTENT_SCRIPT_FILES];
   }
-  if (data.redirectEnabled === true) return SCRIPT_TAGGER_CONTENT_SCRIPT_FILES;
+  if (needsFullBundle) return BLB_CONTENT_SCRIPT_FILES;
+  if (redirectEnabled) return SCRIPT_TAGGER_CONTENT_SCRIPT_FILES;
   return [];
 }
 
@@ -2509,10 +2512,15 @@ async function ensureContentScriptInTab(tabId) {
       // using global ScriptTagger redirection receive one isolated script.
       if (!(await ensureRuntimeContentScriptRegistered(tab, files))) return false;
 
-      if (files === BLB_CONTENT_SCRIPT_FILES) {
+      if (files.includes('content.js')) {
         try {
           const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
-          if (response?.ok === true) return true;
+          if (response?.ok === true) {
+            if (files.includes('redirect-scripttagger.js')) {
+              await chrome.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
+            }
+            return true;
+          }
         } catch (_) {}
       }
 
