@@ -22,6 +22,27 @@ function exerciseToggleHandler(name, nextMarker, { access = true, state = {} } =
   return { handler: context[name], calls };
 }
 
+function exerciseSiteSetter(name, nextMarker, initial = {}) {
+  const start = popupSource.indexOf(`async function ${name}(on) {`);
+  const end = popupSource.indexOf(nextMarker, start);
+  if (start < 0 || end < 0) throw new Error(`Could not extract ${name} from extension/popup.js`);
+  const storage = { masterEnabled: true, pageSelectionButtonSites: {}, doubleClickBlbSites: {}, ...initial };
+  const context = {
+    getState: async () => ({ siteKey: 'example.com', master: true, isBlbSite: false, isPdfContext: false }),
+    chrome: {
+      storage: { local: {
+        get: async defaults => ({ ...defaults, ...storage }),
+        set: async values => Object.assign(storage, values)
+      }},
+      tabs: { query: async () => [] },
+      runtime: { sendMessage: async () => ({}) }
+    },
+    render: () => {}
+  };
+  vm.runInNewContext(popupSource.slice(start, end), context);
+  return { setter: context[name], storage };
+}
+
 async function dblclickAt(locator, rect) {
   const box = await locator.boundingBox();
   expect(box).toBeTruthy();
@@ -113,6 +134,25 @@ test('Show on BLB and Double-click toggles remain independent', async () => {
   const deniedDouble = exerciseToggleHandler('handleDoubleClickToggle', "\ndocument.getElementById('pageButton').addEventListener", { access: false });
   await deniedDouble.handler(true);
   expect(deniedDouble.calls).toEqual(['requestAccess', ['doubleClick', false]]);
+});
+
+test('First site-feature enable pins the other feature OFF without overwriting an existing choice', async () => {
+  const pageFirst = exerciseSiteSetter('setPageButton', '\\nasync function setDoubleClick');
+  await pageFirst.setter(true);
+  expect(pageFirst.storage.pageSelectionButtonSites['example.com']).toBe(true);
+  expect(pageFirst.storage.doubleClickBlbSites['example.com']).toBe(false);
+
+  const doubleFirst = exerciseSiteSetter('setDoubleClick', '\\n\\nasync function setRedirect');
+  await doubleFirst.setter(true);
+  expect(doubleFirst.storage.doubleClickBlbSites['example.com']).toBe(true);
+  expect(doubleFirst.storage.pageSelectionButtonSites['example.com']).toBe(false);
+
+  const preserveChoice = exerciseSiteSetter('setPageButton', '\\nasync function setDoubleClick', {
+    doubleClickBlbSites: { 'example.com': true }
+  });
+  await preserveChoice.setter(true);
+  expect(preserveChoice.storage.pageSelectionButtonSites['example.com']).toBe(true);
+  expect(preserveChoice.storage.doubleClickBlbSites['example.com']).toBe(true);
 });
 
 test.describe('core user-visible E2E', () => {
