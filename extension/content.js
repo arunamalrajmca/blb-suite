@@ -1,12 +1,11 @@
 (async function () {
 // Blue Letter Bible Suite 5.2.25 - unified content script
 
-// Access policy:
+// Content-script access policy:
 //   * Local files: only PDF, HTML, and HTM files are supported.
-//   * Webpages: hostnames containing "bible" are enabled by default.
-//     Other sites become active when the user has explicitly enabled either
-//     Show on BLB or Double-Click BLB for that hostname. Those preferences
-//     live in chrome.storage.local and survive extension updates.
+//   * Bible-host pages may load the shared content runtime, but this does not
+//     enable either site feature. Show on BLB and Double-click KJV each require
+//     their own explicit saved preference.
 async function blbSuiteAccessAllowed() {
   const protocol = String(location.protocol || '').toLowerCase();
   const href = String(location.href || '');
