@@ -817,9 +817,9 @@ if (location.hostname==="webstersdictionary1828.com") {
     mount.appendChild(button);
   }
 
-  let websterRedirectEnabled = true;
-  chrome.storage.local.get({redirectEnabled:true}).then(data=>{
-    websterRedirectEnabled = data.redirectEnabled !== false;
+  let websterRedirectEnabled = false;
+  chrome.storage.local.get({redirectEnabled:false}).then(data=>{
+    websterRedirectEnabled = data.redirectEnabled === true;
   }).catch(()=>{});
 
   document.addEventListener("click",e=>{
