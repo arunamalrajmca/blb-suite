@@ -25,26 +25,12 @@ function deriveSiteCaption(siteKey) {
 
 
 
-async function hasSiteFeatureHostAccess(origin) {
-  if (!origin) return false;
-  try {
-    // Wildcard redirect permission must not implicitly activate the
-    // independent per-site Show on BLB and Double-click features.
-    const permissions = await chrome.permissions.getAll();
-    const origins = Array.isArray(permissions?.origins) ? permissions.origins : [];
-    return origins.includes(origin);
-  } catch (_) {
-    return false;
-  }
-}
-
 async function getState() {
   const [tabs, data] = await Promise.all([
     chrome.tabs.query({active:true, currentWindow:true}),
     chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false})
   ]);
   const pageTitle = tabs[0]?.title || '';
-  const pageTitleForDefaultCheck = pageTitle;
   const activeUrl = String(tabs[0]?.url || '');
   try {
     const active = new URL(activeUrl);
@@ -57,14 +43,11 @@ async function getState() {
   const isBlbSite = siteKey === 'blueletterbible.org';
   const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
   let hasCurrentSiteAccess = true;
-  let hasSiteSpecificAccess = true;
   if (!isBlbSite && currentSiteOrigin) {
     try {
       hasCurrentSiteAccess = await chrome.permissions.contains({origins:[currentSiteOrigin]});
-      hasSiteSpecificAccess = await hasSiteFeatureHostAccess(currentSiteOrigin);
     } catch (_) {
       hasCurrentSiteAccess = false;
-      hasSiteSpecificAccess = false;
     }
   }
   // Per-site features default OFF. Only each feature's own explicit saved
@@ -74,7 +57,7 @@ async function getState() {
     : false;
   const effectiveDoubleEnabled = Object.prototype.hasOwnProperty.call(doubleSites, siteKey)
     ? doubleSites[siteKey] === true && hasCurrentSiteAccess
-    : effectiveDefaultEnabled;
+    : false;
   return {
     master: data.masterEnabled !== false,
     // Both site-based toggles are OFF by default. Only an explicit saved
