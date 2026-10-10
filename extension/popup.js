@@ -184,10 +184,16 @@ async function pinSiteFeatureChoice(feature) {
   // Explicitly pin the requested feature ON and the unchosen feature OFF.
   if (feature === 'pageButton') {
     pageSites[state.siteKey] = true;
-    if (!Object.prototype.hasOwnProperty.call(doubleSites, state.siteKey)) doubleSites[state.siteKey] = false;
+    // If permission approval changes the default state, preserve the other
+    // toggle's effective state from immediately before the permission prompt.
+    if (!Object.prototype.hasOwnProperty.call(doubleSites, state.siteKey)) {
+      doubleSites[state.siteKey] = state.doubleClick === true;
+    }
   } else {
     doubleSites[state.siteKey] = true;
-    if (!Object.prototype.hasOwnProperty.call(pageSites, state.siteKey)) pageSites[state.siteKey] = false;
+    if (!Object.prototype.hasOwnProperty.call(pageSites, state.siteKey)) {
+      pageSites[state.siteKey] = state.pageButton === true;
+    }
   }
   await chrome.storage.local.set({pageSelectionButtonSites:pageSites, doubleClickBlbSites:doubleSites});
 }
@@ -195,15 +201,12 @@ async function pinSiteFeatureChoice(feature) {
 async function setPageButton(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
-  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}});
+  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
   const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
-  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
   sites[state.siteKey] = !!on;
-  // A site grant can activate the bundled "hostname contains bible" default.
-  // Materialize the other feature as OFF on first explicit use so permission
-  // approval does not silently enable both independent features.
-  if (!Object.prototype.hasOwnProperty.call(doubleSites, state.siteKey)) doubleSites[state.siteKey] = false;
-  await chrome.storage.local.set({pageSelectionButtonSites:sites, doubleClickBlbSites:doubleSites});
+  // A toggle setter may update only its own preference. The handler preserves
+  // the other toggle's pre-permission state before any newly granted access.
+  await chrome.storage.local.set({pageSelectionButtonSites:sites});
   if (on) {
     try { const tabs = await chrome.tabs.query({active:true,currentWindow:true}); const tabId = tabs[0]?.id; if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId}); } catch (_) {}
   }
@@ -213,14 +216,12 @@ async function setPageButton(on) {
 async function setDoubleClick(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
-  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}});
+  const data = await chrome.storage.local.get({doubleClickBlbSites:{}});
   const sites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
-  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
   sites[state.siteKey] = !!on;
-  // See setPageButton(): the first explicit feature choice must pin the other
-  // feature OFF unless the user has already chosen its state.
-  if (!Object.prototype.hasOwnProperty.call(pageSites, state.siteKey)) pageSites[state.siteKey] = false;
-  await chrome.storage.local.set({doubleClickBlbSites:sites, pageSelectionButtonSites:pageSites});
+  // This setter changes only Double-click's preference; Show on BLB is
+  // preserved independently by its own preference and the pre-prompt snapshot.
+  await chrome.storage.local.set({doubleClickBlbSites:sites});
   if (on) {
     try { const tabs = await chrome.tabs.query({active:true,currentWindow:true}); const tabId = tabs[0]?.id; if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId}); } catch (_) {}
   }
