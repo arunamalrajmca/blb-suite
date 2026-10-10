@@ -138,11 +138,11 @@ test('Show on BLB and Double-click toggles remain independent', async () => {
 });
 
 test('Permission request follows persisted independent feature choice', async () => {
-  const page = exerciseToggleHandler('handlePageButtonToggle', '\\nasync function handleDoubleClickToggle');
+  const page = exerciseToggleHandler('handlePageButtonToggle', '\nasync function handleDoubleClickToggle');
   await page.handler(true);
   expect(page.calls.indexOf('requestAccess')).toBeGreaterThan(page.calls.findIndex(call => Array.isArray(call) && call[0] === 'pinChoice'));
 
-  const double = exerciseToggleHandler('handleDoubleClickToggle', "\\ndocument.getElementById('pageButton').addEventListener");
+  const double = exerciseToggleHandler('handleDoubleClickToggle', "\ndocument.getElementById('pageButton').addEventListener");
   await double.handler(true);
   expect(double.calls.indexOf('requestAccess')).toBeGreaterThan(double.calls.findIndex(call => Array.isArray(call) && call[0] === 'pinChoice'));
 });
