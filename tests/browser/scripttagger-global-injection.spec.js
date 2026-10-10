@@ -143,3 +143,33 @@ test.describe('global ScriptTagger content-script injection', () => {
     expect(injected).toEqual([11, 12]);
   });
 });
+
+
+test('site feature toggles have independent OFF defaults and handlers', async () => {
+  const popup = fs.readFileSync(path.resolve(__dirname, '../../extension/popup.js'), 'utf8');
+
+  // Legacy Bible-host defaults and the permission workaround caused one
+  // feature's first ON action to initialize the sibling feature's setting.
+  expect(background).toContain('async function isSiteEnabledByDefault(hostname, title = \'\') {');
+  const defaultStart = background.indexOf('async function isSiteEnabledByDefault(');
+  const defaultEnd = background.indexOf('\n}', defaultStart);
+  expect(background.slice(defaultStart, defaultEnd)).toContain('return false;');
+
+  expect(popup).not.toContain('preserveIndependentFeatureDefaults');
+  expect(popup).not.toContain('setPageButton(!!on);\n  await setDoubleClick');
+  expect(popup).not.toContain('setDoubleClick(!!on);\n  await setPageButton');
+
+  const pageHandlerStart = popup.indexOf('async function handlePageButtonToggle(on)');
+  const doubleHandlerStart = popup.indexOf('async function handleDoubleClickToggle(on)');
+  const listenerStart = popup.indexOf("document.getElementById('pageButton').addEventListener('change'");
+  expect(pageHandlerStart).toBeGreaterThanOrEqual(0);
+  expect(doubleHandlerStart).toBeGreaterThan(pageHandlerStart);
+  expect(listenerStart).toBeGreaterThan(doubleHandlerStart);
+
+  const pageHandler = popup.slice(pageHandlerStart, doubleHandlerStart);
+  const doubleHandler = popup.slice(doubleHandlerStart, listenerStart);
+  expect(pageHandler).toContain('await setPageButton(!!on);');
+  expect(pageHandler).not.toContain('setDoubleClick(');
+  expect(doubleHandler).toContain('await setDoubleClick(!!on);');
+  expect(doubleHandler).not.toContain('setPageButton(');
+});
