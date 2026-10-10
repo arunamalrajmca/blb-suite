@@ -90,27 +90,27 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
 });
 
 test('Show on BLB and Double-click toggles remain independent', async () => {
-  const pageOn = exerciseToggleHandler('handlePageButtonToggle', '\\nasync function handleDoubleClickToggle');
+  const pageOn = exerciseToggleHandler('handlePageButtonToggle', '\nasync function handleDoubleClickToggle');
   await pageOn.handler(true);
   expect(pageOn.calls).toEqual(['requestAccess', ['pageButton', true]]);
 
-  const pageOff = exerciseToggleHandler('handlePageButtonToggle', '\\nasync function handleDoubleClickToggle');
+  const pageOff = exerciseToggleHandler('handlePageButtonToggle', '\nasync function handleDoubleClickToggle');
   await pageOff.handler(false);
   expect(pageOff.calls).toEqual([['pageButton', false]]);
 
-  const doubleOn = exerciseToggleHandler('handleDoubleClickToggle', "\\ndocument.getElementById('pageButton').addEventListener");
+  const doubleOn = exerciseToggleHandler('handleDoubleClickToggle', "\ndocument.getElementById('pageButton').addEventListener");
   await doubleOn.handler(true);
   expect(doubleOn.calls).toEqual(['requestAccess', ['doubleClick', true]]);
 
-  const doubleOff = exerciseToggleHandler('handleDoubleClickToggle', "\\ndocument.getElementById('pageButton').addEventListener");
+  const doubleOff = exerciseToggleHandler('handleDoubleClickToggle', "\ndocument.getElementById('pageButton').addEventListener");
   await doubleOff.handler(false);
   expect(doubleOff.calls).toEqual([['doubleClick', false]]);
 
-  const deniedPage = exerciseToggleHandler('handlePageButtonToggle', '\\nasync function handleDoubleClickToggle', { access: false });
+  const deniedPage = exerciseToggleHandler('handlePageButtonToggle', '\nasync function handleDoubleClickToggle', { access: false });
   await deniedPage.handler(true);
   expect(deniedPage.calls).toEqual(['requestAccess', ['pageButton', false]]);
 
-  const deniedDouble = exerciseToggleHandler('handleDoubleClickToggle', "\\ndocument.getElementById('pageButton').addEventListener", { access: false });
+  const deniedDouble = exerciseToggleHandler('handleDoubleClickToggle', "\ndocument.getElementById('pageButton').addEventListener", { access: false });
   await deniedDouble.handler(true);
   expect(deniedDouble.calls).toEqual(['requestAccess', ['doubleClick', false]]);
 });
