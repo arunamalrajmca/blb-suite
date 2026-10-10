@@ -1,4 +1,26 @@
 const { test, expect } = require('./fixtures');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+
+const popupSource = fs.readFileSync(path.resolve(__dirname, '../../extension/popup.js'), 'utf8');
+
+function exerciseToggleHandler(name, nextMarker, { access = true, state = {} } = {}) {
+  const start = popupSource.indexOf(`async function ${name}(on) {`);
+  const end = popupSource.indexOf(nextMarker, start);
+  if (start < 0 || end < 0) throw new Error(`Could not extract ${name} from extension/popup.js`);
+  const calls = [];
+  const context = {
+    getState: async () => ({
+      siteKey: 'example.com', master: true, isBlbSite: false, isPdfContext: false, ...state
+    }),
+    requestCurrentSiteAccess: async () => { calls.push('requestAccess'); return access; },
+    setPageButton: async value => { calls.push(['pageButton', value]); },
+    setDoubleClick: async value => { calls.push(['doubleClick', value]); }
+  };
+  vm.runInNewContext(popupSource.slice(start, end), context);
+  return { handler: context[name], calls };
+}
 
 async function dblclickAt(locator, rect) {
   const box = await locator.boundingBox();
@@ -65,6 +87,32 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await expect(page).toHaveTitle(/BLB|Blue Letter Bible/i);
   await expect(page.locator('body')).toBeVisible();
+});
+
+test('Show on BLB and Double-click toggles remain independent', async () => {
+  const pageOn = exerciseToggleHandler('handlePageButtonToggle', '\\nasync function handleDoubleClickToggle');
+  await pageOn.handler(true);
+  expect(pageOn.calls).toEqual(['requestAccess', ['pageButton', true]]);
+
+  const pageOff = exerciseToggleHandler('handlePageButtonToggle', '\\nasync function handleDoubleClickToggle');
+  await pageOff.handler(false);
+  expect(pageOff.calls).toEqual([['pageButton', false]]);
+
+  const doubleOn = exerciseToggleHandler('handleDoubleClickToggle', "\\ndocument.getElementById('pageButton').addEventListener");
+  await doubleOn.handler(true);
+  expect(doubleOn.calls).toEqual(['requestAccess', ['doubleClick', true]]);
+
+  const doubleOff = exerciseToggleHandler('handleDoubleClickToggle', "\\ndocument.getElementById('pageButton').addEventListener");
+  await doubleOff.handler(false);
+  expect(doubleOff.calls).toEqual([['doubleClick', false]]);
+
+  const deniedPage = exerciseToggleHandler('handlePageButtonToggle', '\\nasync function handleDoubleClickToggle', { access: false });
+  await deniedPage.handler(true);
+  expect(deniedPage.calls).toEqual(['requestAccess', ['pageButton', false]]);
+
+  const deniedDouble = exerciseToggleHandler('handleDoubleClickToggle', "\\ndocument.getElementById('pageButton').addEventListener", { access: false });
+  await deniedDouble.handler(true);
+  expect(deniedDouble.calls).toEqual(['requestAccess', ['doubleClick', false]]);
 });
 
 test.describe('core user-visible E2E', () => {
