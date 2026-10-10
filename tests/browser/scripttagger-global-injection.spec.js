@@ -4,14 +4,14 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const background = fs.readFileSync(path.resolve(__dirname, '../../extension/background.js'), 'utf8');
-const contentScript = fs.readFileSync(path.resolve(__dirname, '../../extension/content.js'), 'utf8');
+const scriptTaggerScript = fs.readFileSync(path.resolve(__dirname, '../../extension/redirect-scripttagger.js'), 'utf8');
 
 function runBlbUrlNormalizer() {
-  const start = contentScript.indexOf('function normalizeBlbDestinationUrl(');
-  const end = contentScript.indexOf('\nfunction openBlbDestinationFromContent(', start);
-  if (start < 0 || end < 0) throw new Error('Could not extract normalizeBlbDestinationUrl from extension/content.js');
+  const start = scriptTaggerScript.indexOf('function normalizeBlbDestinationUrl(');
+  const end = scriptTaggerScript.indexOf('\nfunction isModifiedLinkActivation(', start);
+  if (start < 0 || end < 0) throw new Error('Could not extract normalizeBlbDestinationUrl from extension/redirect-scripttagger.js');
   const context = { URL };
-  vm.runInNewContext(contentScript.slice(start, end), context);
+  vm.runInNewContext(scriptTaggerScript.slice(start, end), context);
   return context.normalizeBlbDestinationUrl;
 }
 
@@ -126,4 +126,32 @@ test.describe('global ScriptTagger content-script injection', () => {
     await context.injectRedirectEnabledTabs();
     expect(injected).toEqual([11, 12]);
   });
+});
+
+test('global redirect uses only the minimal ScriptTagger handler on ordinary sites', () => {
+  const start = background.indexOf('const BLB_CONTENT_SCRIPT_FILES = [');
+  const end = background.indexOf('\nfunction isHttpPageUrl(', start);
+  if (start < 0 || end < 0) throw new Error('Could not extract content script selection helpers');
+  const context = {
+    URL,
+    hostnameFromTabUrl: value => { try { return new URL(String(value || '')).hostname; } catch (_) { return ''; } },
+    normalizeSiteHostname: value => String(value || '').toLowerCase().replace(/^www\\./, '')
+  };
+  vm.runInNewContext(background.slice(start, end), context);
+  expect(Array.from(context.contentScriptFilesForTab(
+    {url:'https://sagacityweb.com/article'},
+    {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}
+  ))).toEqual(['redirect-scripttagger.js']);
+
+  expect(Array.from(context.contentScriptFilesForTab(
+    {url:'https://www.biblegateway.com/passage/?search=John+3%3A16'},
+    {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}
+  ))).toEqual([
+    'kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','content.js','redirect-scripttagger.js'
+  ]);
+
+  expect(Array.from(context.contentScriptFilesForTab(
+    {url:'https://sagacityweb.com/article'},
+    {redirectEnabled:false,pageSelectionButtonSites:{'sagacityweb.com':true},doubleClickBlbSites:{}}
+  ))).toEqual(['kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','content.js']);
 });
