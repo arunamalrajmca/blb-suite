@@ -135,7 +135,7 @@ test('global redirect uses only the minimal ScriptTagger handler on ordinary sit
   const context = {
     URL,
     hostnameFromTabUrl: value => { try { return new URL(String(value || '')).hostname; } catch (_) { return ''; } },
-    normalizeSiteHostname: value => String(value || '').toLowerCase().replace(/^www\\./, '')
+    normalizeSiteHostname: value => String(value || '').toLowerCase().replace(/^www\./, '')
   };
   vm.runInNewContext(background.slice(start, end), context);
   expect(Array.from(context.contentScriptFilesForTab(
