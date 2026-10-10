@@ -23,13 +23,7 @@ function deriveSiteCaption(siteKey) {
   return host;
 }
 
-async function getDefaultSiteEnabled(siteKey, pageTitle = '') {
-  if (!siteKey) return false;
-  try {
-    const response = await chrome.runtime.sendMessage({type:'blbSuiteGetDefaultSiteStatus', hostname:siteKey, title:pageTitle});
-    return response?.enabled === true;
-  } catch (_) { return siteKey.includes('bible'); }
-}
+
 
 async function hasSiteFeatureHostAccess(origin) {
   if (!origin) return false;
@@ -60,7 +54,6 @@ async function getState() {
   const siteKey = getSiteKey(activeUrl, pageTitle);
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
-  const defaultEnabled = await getDefaultSiteEnabled(siteKey, pageTitleForDefaultCheck);
   const isBlbSite = siteKey === 'blueletterbible.org';
   const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
   let hasCurrentSiteAccess = true;
@@ -74,22 +67,18 @@ async function getState() {
       hasSiteSpecificAccess = false;
     }
   }
-  // An explicit per-site preference remains independent of global redirects.
-  // Wildcard HTTP(S) access can authorize an explicitly enabled feature, but
-  // must not make the host-based defaults (for example, bible.com) appear ON.
-  // Defaults become active only when this site has its own specific grant.
-  const effectiveDefaultEnabled = defaultEnabled && hasCurrentSiteAccess && hasSiteSpecificAccess;
+  // Per-site features default OFF. Only each feature's own explicit saved
+  // preference can turn it ON; permission grants must not activate both.
   const effectivePageEnabled = Object.prototype.hasOwnProperty.call(pageSites, siteKey)
     ? pageSites[siteKey] === true && hasCurrentSiteAccess
-    : effectiveDefaultEnabled;
+    : false;
   const effectiveDoubleEnabled = Object.prototype.hasOwnProperty.call(doubleSites, siteKey)
     ? doubleSites[siteKey] === true && hasCurrentSiteAccess
     : effectiveDefaultEnabled;
   return {
     master: data.masterEnabled !== false,
-    // Both site-based toggles are OFF by default except on hostnames containing
-    // "bible". An explicit per-site setting wins, but neither can appear ON
-    // until Chrome has granted the site's host permission.
+    // Both site-based toggles are OFF by default. Only an explicit saved
+    // preference for that specific feature can turn it ON.
     pageButton: !isBlbSite && !!siteKey && effectivePageEnabled,
     doubleClick: !isBlbSite && !isPdfContext && !!siteKey && effectiveDoubleEnabled,
     redirect: data.redirectEnabled === true,
@@ -1086,33 +1075,10 @@ document.addEventListener('click', e => {
 
 guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
-async function preserveIndependentFeatureDefaults(siteKey, feature) {
-  // A first-time host permission can make both legacy "bible" host defaults
-  // appear ON when neither feature has an explicit saved preference. As soon
-  // as the user chooses one feature, make the untouched feature's default OFF
-  // explicit so granting permission cannot silently enable it.
-  const data = await chrome.storage.local.get({
-    pageSelectionButtonSites:{},
-    doubleClickBlbSites:{}
-  });
-  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
-    ? {...data.pageSelectionButtonSites} : {};
-  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
-    ? {...data.doubleClickBlbSites} : {};
-  if (feature === 'pageButton' && !Object.prototype.hasOwnProperty.call(doubleSites, siteKey)) {
-    doubleSites[siteKey] = false;
-    await chrome.storage.local.set({doubleClickBlbSites:doubleSites});
-  } else if (feature === 'doubleClick' && !Object.prototype.hasOwnProperty.call(pageSites, siteKey)) {
-    pageSites[siteKey] = false;
-    await chrome.storage.local.set({pageSelectionButtonSites:pageSites});
-  }
-}
-
 async function handlePageButtonToggle(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
   if (on) {
-    await preserveIndependentFeatureDefaults(state.siteKey, 'pageButton');
     if (!(await requestCurrentSiteAccess())) {
       await setPageButton(false);
       return;
@@ -1126,7 +1092,6 @@ async function handleDoubleClickToggle(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
   if (on) {
-    await preserveIndependentFeatureDefaults(state.siteKey, 'doubleClick');
     if (!(await requestCurrentSiteAccess())) {
       await setDoubleClick(false);
       return;
