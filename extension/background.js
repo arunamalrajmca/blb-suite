@@ -2472,7 +2472,7 @@ async function unregisterRuntimeContentScriptForPattern(pattern) {
     try {
       hostAccess = await chrome.permissions.contains({origins:[pattern]});
     } catch (_) {}
-    const hostname = normalizeSiteHostname(new URL(pattern.replace(/\\/\\*$/, '')).hostname);
+    const hostname = normalizeSiteHostname(new URL(pattern.endsWith('/*') ? pattern.slice(0, -2) : pattern).hostname);
     const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
     const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
     const stillNeeded = data.masterEnabled !== false && hostAccess &&
