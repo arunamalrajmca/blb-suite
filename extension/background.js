@@ -2473,7 +2473,16 @@ async function ensureContentScriptInTab(tabId) {
     try {
       const tab = await chrome.tabs.get(tabId);
       if (!isHttpPageUrl(tab?.url)) return false;
-      if (!(await hasHostAccessForTab(tab))) return false;
+      const settings = await chrome.storage.local.get({
+        masterEnabled:true,
+        pageSelectionButtonSites:{},
+        doubleClickBlbSites:{},
+        redirectEnabled:false
+      });
+      if (!(await shouldInjectContentScriptForTab(tab, settings))) {
+        await unregisterRuntimeContentScriptForPattern(originPatternForUrl(tab.url));
+        return false;
+      }
 
       // Register the complete dependency bundle before checking the current
       // document. This avoids the old race where an existing content-script
@@ -5279,18 +5288,69 @@ chrome.tabs.onActivated.addListener(({tabId}) => {
   }).catch(() => {});
 });
 async function shouldInjectContentScriptForTab(tab, data) {
-  if (!tab?.url || !isHttpPageUrl(tab.url)) return false;
+  if (!tab?.url || !isHttpPageUrl(tab.url) || data.masterEnabled === false) return false;
   const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
   const explicitEnabled = pageSites[key] === true || doubleSites[key] === true;
+  const hostAccess = await hasHostAccessForTab(tab);
 
   // Global Redirect External Bible Links is intentionally available on any
   // HTTP(S) host for which the user granted host access. Do not limit runtime
   // injection to REDIRECT_HOSTNAMES: ScriptTagger links are generated on the
   // source website, which may be any site (for example sagacityweb.com).
-  const redirectEnabled = data.redirectEnabled === true && await hasHostAccessForTab(tab);
-  return explicitEnabled || redirectEnabled;
+  const redirectEnabled = data.redirectEnabled === true && hostAccess;
+  return hostAccess && (explicitEnabled || redirectEnabled);
+}
+
+async function reconcileRuntimeContentScriptRegistrations() {
+  const data = await chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    redirectEnabled:false
+  });
+  let registered = [];
+  try {
+    registered = await chrome.scripting.getRegisteredContentScripts();
+  } catch (_) {
+    return;
+  }
+
+  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
+  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
+  for (const script of registered) {
+    if (!String(script.id || '').startsWith('blb-suite-runtime-')) continue;
+    const pattern = script.matches?.[0] || '';
+    let needed = false;
+    if (data.masterEnabled !== false && pattern) {
+      try {
+        const url = new URL(pattern.replace(/\\*$/, ''));
+        const key = normalizeSiteHostname(url.hostname);
+        const hostAccess = await chrome.permissions.contains({origins:[pattern]});
+        const siteFeatureEnabled = pageSites[key] === true || doubleSites[key] === true;
+        const redirectEnabled = data.redirectEnabled === true && hostAccess;
+        needed = hostAccess && (siteFeatureEnabled || redirectEnabled);
+      } catch (_) {}
+    }
+    if (!needed) await unregisterRuntimeContentScriptForPattern(pattern);
+  }
+}
+
+async function injectEligibleTabs() {
+  const data = await chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    redirectEnabled:false
+  });
+  if (data.masterEnabled === false) return;
+  const tabs = await chrome.tabs.query({});
+  for (const tab of tabs) {
+    if (tab?.id && await shouldInjectContentScriptForTab(tab, data)) {
+      await ensureContentScriptInTab(tab.id);
+    }
+  }
 }
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -5299,8 +5359,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     syncPdfSelectionContextMenuVisibility(tab).catch(() => {});
   }
   if (changeInfo.status === 'complete' && tab?.url && isHttpPageUrl(tab.url)) {
-    chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false}).then(async data => {
+    chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false}).then(async data => {
       if (await shouldInjectContentScriptForTab(tab, data)) return ensureContentScriptInTab(tabId);
+      await unregisterRuntimeContentScriptForPattern(originPatternForUrl(tab.url));
       return null;
     }).catch(() => {});
   }
@@ -5332,7 +5393,8 @@ chrome.commands.onCommand.addListener(async command => {
 async function injectEnabledTabsForGrantedOrigins(origins) {
   const granted = Array.isArray(origins) ? origins.map(String) : [];
   if (!granted.length) return;
-  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false});
+  const data = await chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false});
+  if (data.masterEnabled === false) return;
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
   const tabs = await chrome.tabs.query({});
@@ -5355,8 +5417,8 @@ async function injectEnabledTabsForGrantedOrigins(origins) {
 
 async function injectRedirectEnabledTabs() {
   // Enabling redirects after a permission was granted does not trigger onAdded.
-  const data = await chrome.storage.local.get({redirectEnabled:false});
-  if (data.redirectEnabled !== true) return;
+  const data = await chrome.storage.local.get({masterEnabled:true, redirectEnabled:false});
+  if (data.masterEnabled === false || data.redirectEnabled !== true) return;
   const tabs = await chrome.tabs.query({});
   for (const tab of tabs) {
     if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
@@ -5366,6 +5428,9 @@ async function injectRedirectEnabledTabs() {
 
 chrome.permissions?.onAdded?.addListener(details => {
   injectEnabledTabsForGrantedOrigins(details?.origins || []).catch(() => {});
+});
+chrome.permissions?.onRemoved?.addListener(() => {
+  reconcileRuntimeContentScriptRegistrations().catch(() => {});
 });
 
 chrome.runtime.onInstalled.addListener(async details => {
@@ -5377,6 +5442,7 @@ chrome.runtime.onInstalled.addListener(async details => {
     if (Object.keys(defaults).length) await chrome.storage.local.set(defaults);
   }
   installRules();
+  reconcileRuntimeContentScriptRegistrations().catch(() => {});
   installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
     .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
     .catch(() => {}));
@@ -5385,8 +5451,14 @@ chrome.runtime.onInstalled.addListener(async details => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
-  if (changes.redirectEnabled?.newValue === true) {
-    injectRedirectEnabledTabs().catch(() => {});
+  if (changes.masterEnabled?.newValue === false) {
+    reconcileRuntimeContentScriptRegistrations().catch(() => {});
+  } else if (changes.masterEnabled?.newValue === true) {
+    injectEligibleTabs().catch(() => {});
+  } else if (changes.redirectEnabled?.newValue === true) {
+    injectRedirectEnabledTabs().then(() => reconcileRuntimeContentScriptRegistrations()).catch(() => {});
+  } else if (changes.redirectEnabled || changes.pageSelectionButtonSites || changes.doubleClickBlbSites) {
+    reconcileRuntimeContentScriptRegistrations().catch(() => {});
   }
   if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites) {
     installRules();
@@ -5422,6 +5494,7 @@ chrome.alarms.onAlarm.addListener(alarm => {
 });
 
 chrome.runtime.onStartup.addListener(installRules);
+chrome.runtime.onStartup.addListener(() => reconcileRuntimeContentScriptRegistrations().catch(() => {}));
 chrome.runtime.onStartup.addListener(() => installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
   .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
   .catch(() => {})));
