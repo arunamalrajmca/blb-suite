@@ -100,26 +100,46 @@ test('unrelated page checkbox stability and injection cleanup', async ({ page, e
   }));
   expect(afterOn).toEqual(beforeOn);
 
-  await extensionStorage.set({ masterEnabled: false });
-  await expect(button).toHaveCount(0);
-  await expect.poll(async () => extensionWorker.evaluate(async () =>
+  const registrationCount = () => extensionWorker.evaluate(async () =>
     (await chrome.scripting.getRegisteredContentScripts()).filter(script =>
       String(script.id || '').startsWith('blb-suite-runtime-') &&
       (script.matches || []).includes('https://example.com/*')
     ).length
-  )).toBe(0);
+  );
 
-  const beforeOff = await page.evaluate(() => ({
+  await extensionStorage.set({ pageSelectionButtonSites: { 'example.com': false } });
+  await expect(button).toHaveCount(0);
+  await expect.poll(registrationCount).toBe(0);
+  const beforeFeatureOff = await page.evaluate(() => ({
     top: document.querySelector('#blb-unrelated-checkbox-form').getBoundingClientRect().top,
     scrollY: window.scrollY
   }));
   await checkbox.click();
   await expect(checkbox).not.toBeChecked();
-  const afterOff = await page.evaluate(() => ({
+  const afterFeatureOff = await page.evaluate(() => ({
     top: document.querySelector('#blb-unrelated-checkbox-form').getBoundingClientRect().top,
     scrollY: window.scrollY
   }));
-  expect(afterOff).toEqual(beforeOff);
+  expect(afterFeatureOff).toEqual(beforeFeatureOff);
+
+  await extensionStorage.set({ pageSelectionButtonSites: { 'example.com': true } });
+  await expect(button).toBeAttached({ timeout: 15000 });
+  await expect.poll(registrationCount).toBe(1);
+
+  await extensionStorage.set({ masterEnabled: false });
+  await expect(button).toHaveCount(0);
+  await expect.poll(registrationCount).toBe(0);
+  const beforeMasterOff = await page.evaluate(() => ({
+    top: document.querySelector('#blb-unrelated-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  await checkbox.click();
+  await expect(checkbox).toBeChecked();
+  const afterMasterOff = await page.evaluate(() => ({
+    top: document.querySelector('#blb-unrelated-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  expect(afterMasterOff).toEqual(beforeMasterOff);
 });
 
 test.describe('core user-visible E2E', () => {
