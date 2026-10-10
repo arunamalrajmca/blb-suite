@@ -123,6 +123,15 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
       // Exercise the filtered BLB-tab lookup against unrelated browser tabs.
       for (let i = 0; i < 30; i++) await context.newPage();
       existing = await context.newPage();
+      // This benchmark measures extension tab lookup/reuse, not BLB uptime.
+      // Keep the real destination URL in Chrome's tab state while serving a
+      // tiny local response so external navigation failures cannot invalidate
+      // an otherwise valid performance sample.
+      await context.route('https://www.blueletterbible.org/kjv/jhn/3/16/', route => route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<!doctype html><title>BLB tab-reuse benchmark fixture</title>'
+      }));
       await existing.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil: 'commit', timeout: 15000 });
     }
 
