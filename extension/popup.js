@@ -172,6 +172,26 @@ async function requestCurrentSiteAccess(origin = currentSiteOrigin) {
 }
 
 
+async function pinSiteFeatureChoice(feature) {
+  const state = await getState();
+  if (!state.siteKey || !state.master || state.isBlbSite) return;
+  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}});
+  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
+  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
+
+  // Persist intent before requesting permission: Brave may close the popup
+  // while its permission prompt is open, interrupting code after the await.
+  // Explicitly pin the requested feature ON and the unchosen feature OFF.
+  if (feature === 'pageButton') {
+    pageSites[state.siteKey] = true;
+    if (!Object.prototype.hasOwnProperty.call(doubleSites, state.siteKey)) doubleSites[state.siteKey] = false;
+  } else {
+    doubleSites[state.siteKey] = true;
+    if (!Object.prototype.hasOwnProperty.call(pageSites, state.siteKey)) pageSites[state.siteKey] = false;
+  }
+  await chrome.storage.local.set({pageSelectionButtonSites:pageSites, doubleClickBlbSites:doubleSites});
+}
+
 async function setPageButton(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
@@ -1098,9 +1118,12 @@ document.getElementById('master').addEventListener('change', e => setMaster(e.ta
 async function handlePageButtonToggle(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
-  if (on && !(await requestCurrentSiteAccess())) {
-    await setPageButton(false);
-    return;
+  if (on) {
+    await pinSiteFeatureChoice('pageButton');
+    if (!(await requestCurrentSiteAccess())) {
+      await setPageButton(false);
+      return;
+    }
   }
   await setPageButton(!!on);
 }
@@ -1108,9 +1131,12 @@ async function handlePageButtonToggle(on) {
 async function handleDoubleClickToggle(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite || state.isPdfContext) return;
-  if (on && !(await requestCurrentSiteAccess())) {
-    await setDoubleClick(false);
-    return;
+  if (on) {
+    await pinSiteFeatureChoice('doubleClick');
+    if (!(await requestCurrentSiteAccess())) {
+      await setDoubleClick(false);
+      return;
+    }
   }
   await setDoubleClick(!!on);
 }
