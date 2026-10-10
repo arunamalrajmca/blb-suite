@@ -2381,6 +2381,11 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'content.js'
 ];
 
+// Global ScriptTagger redirection needs only this isolated click handler on
+// ordinary websites. Keep the full Suite bundle for BLB and explicit per-site
+// features, but do not run unrelated Suite listeners on every permitted host.
+const SCRIPT_TAGGER_CONTENT_SCRIPT_FILES = ['redirect-scripttagger.js'];
+
 const REDIRECT_HOSTNAMES = new Set([
   'www.bible.com', 'www.biblegateway.com', 'www.bibleref.com',
   'biblehub.com', 'www.biblehub.com',
@@ -2393,6 +2398,24 @@ const REDIRECT_HOSTNAMES = new Set([
 
 function isRedirectHostname(hostname) {
   return REDIRECT_HOSTNAMES.has(String(hostname || '').toLowerCase());
+}
+
+function contentScriptFilesForTab(tab, data) {
+  const hostname = hostnameFromTabUrl(tab?.url);
+  const key = normalizeSiteHostname(hostname);
+  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
+    ? data.pageSelectionButtonSites : {};
+  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
+    ? data.doubleClickBlbSites : {};
+  const explicitSiteFeature = pageSites[key] === true || doubleSites[key] === true;
+  const redirectEnabled = data.redirectEnabled === true;
+  const needsFullBundle = explicitSiteFeature || (redirectEnabled && isRedirectHostname(hostname));
+  if (needsFullBundle && redirectEnabled) {
+    return [...BLB_CONTENT_SCRIPT_FILES, ...SCRIPT_TAGGER_CONTENT_SCRIPT_FILES];
+  }
+  if (needsFullBundle) return BLB_CONTENT_SCRIPT_FILES;
+  if (redirectEnabled) return SCRIPT_TAGGER_CONTENT_SCRIPT_FILES;
+  return [];
 }
 
 function isHttpPageUrl(url) {
@@ -2428,9 +2451,9 @@ function runtimeContentScriptIdForPattern(pattern) {
   return `blb-suite-runtime-${(hash >>> 0).toString(36)}`;
 }
 
-async function ensureRuntimeContentScriptRegistered(tab) {
+async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCRIPT_FILES) {
   const pattern = originPatternForUrl(tab?.url);
-  if (!pattern || !chrome.scripting?.registerContentScripts) return false;
+  if (!pattern || !Array.isArray(files) || !files.length || !chrome.scripting?.registerContentScripts) return false;
   const id = runtimeContentScriptIdForPattern(pattern);
   try {
     const existing = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
@@ -2438,14 +2461,14 @@ async function ensureRuntimeContentScriptRegistered(tab) {
       await chrome.scripting.registerContentScripts([{
         id,
         matches:[pattern],
-        js:BLB_CONTENT_SCRIPT_FILES,
+        js:files,
         runAt:'document_start',
         persistAcrossSessions:true
       }]);
-    } else if (JSON.stringify(existing[0].js || []) !== JSON.stringify(BLB_CONTENT_SCRIPT_FILES)) {
+    } else if (JSON.stringify(existing[0].js || []) !== JSON.stringify(files)) {
       await chrome.scripting.updateContentScripts({
         ids:[id],
-        js:BLB_CONTENT_SCRIPT_FILES,
+        js:files,
         runAt:'document_start'
       });
     }
@@ -2474,25 +2497,41 @@ async function ensureContentScriptInTab(tabId) {
       const tab = await chrome.tabs.get(tabId);
       if (!isHttpPageUrl(tab?.url)) return false;
       if (!(await hasHostAccessForTab(tab))) return false;
+      const settings = await chrome.storage.local.get({
+        masterEnabled:true,
+        pageSelectionButtonSites:{},
+        doubleClickBlbSites:{},
+        redirectEnabled:false
+      });
+      if (settings.masterEnabled === false) return false;
+      if (!(await shouldInjectContentScriptForTab(tab, settings))) return false;
+      const files = contentScriptFilesForTab(tab, settings);
+      if (!files.length) return false;
 
-      // Register the complete dependency bundle before checking the current
-      // document. This avoids the old race where an existing content-script
-      // instance could answer first and prevent registration for future loads.
-      if (!(await ensureRuntimeContentScriptRegistered(tab))) return false;
+      // Register only the feature bundle needed for this host. Ordinary sites
+      // using global ScriptTagger redirection receive one isolated script.
+      if (!(await ensureRuntimeContentScriptRegistered(tab, files))) return false;
 
+      if (files.includes('content.js')) {
+        try {
+          const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
+          if (response?.ok === true) {
+            if (files.includes('redirect-scripttagger.js')) {
+              await chrome.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
+            }
+            return true;
+          }
+        } catch (_) {}
+      }
+
+      // Inject into the current document without reloading it. The minimal
+      // ScriptTagger handler guards against duplicate execution.
       try {
-        const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
-        if (response?.ok === true) return true;
-      } catch (_) {}
-
-      // The current document may have loaded before registration. Reload once
-      // so Chrome injects the complete bundle at document_start.
-      try {
-        await chrome.tabs.reload(tabId);
+        await chrome.scripting.executeScript({target:{tabId}, files});
+        return true;
       } catch (_) {
         return false;
       }
-      return true;
     } catch (_) {
       return false;
     }
@@ -5388,7 +5427,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.redirectEnabled?.newValue === true) {
     injectRedirectEnabledTabs().catch(() => {});
   }
-  if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites) {
+  if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites || changes.doubleClickBlbSites) {
     installRules();
     // Keep the existing web-selection menu item in place. Only its visibility
     // changes with the site preference; removing/recreating it here causes a
@@ -5403,11 +5442,15 @@ chrome.storage.onChanged.addListener((changes, area) => {
     installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true})
       .then(async tabs => {
         for (const tab of tabs) {
-          if (tab?.id && changes.pageSelectionButtonSites) {
+          if (tab?.id && (changes.pageSelectionButtonSites || changes.doubleClickBlbSites)) {
             const key = pageSelectionSettingKeyFromTab(tab);
-            const sites = changes.pageSelectionButtonSites.newValue && typeof changes.pageSelectionButtonSites.newValue === 'object'
-              ? changes.pageSelectionButtonSites.newValue : {};
-            if (key && sites[key] === true) await ensureContentScriptInTab(tab.id);
+            const pageSites = changes.pageSelectionButtonSites?.newValue && typeof changes.pageSelectionButtonSites.newValue === 'object'
+              ? changes.pageSelectionButtonSites.newValue : null;
+            const doubleSites = changes.doubleClickBlbSites?.newValue && typeof changes.doubleClickBlbSites.newValue === 'object'
+              ? changes.doubleClickBlbSites.newValue : null;
+            if (key && (pageSites?.[key] === true || doubleSites?.[key] === true)) {
+              await ensureContentScriptInTab(tab.id);
+            }
           }
           await syncPdfSelectionContextMenuVisibility(tab);
         }

@@ -5,13 +5,14 @@ const vm = require('node:vm');
 
 const background = fs.readFileSync(path.resolve(__dirname, '../../extension/background.js'), 'utf8');
 const contentScript = fs.readFileSync(path.resolve(__dirname, '../../extension/content.js'), 'utf8');
+const scriptTaggerContentScript = fs.readFileSync(path.resolve(__dirname, '../../extension/redirect-scripttagger.js'), 'utf8');
 
 function runBlbUrlNormalizer() {
-  const start = contentScript.indexOf('function normalizeBlbDestinationUrl(');
-  const end = contentScript.indexOf('\nfunction openBlbDestinationFromContent(', start);
-  if (start < 0 || end < 0) throw new Error('Could not extract normalizeBlbDestinationUrl from extension/content.js');
+  const start = scriptTaggerContentScript.indexOf('function normalizeBlbDestinationUrl(');
+  const end = scriptTaggerContentScript.indexOf('\n  function isModifiedLinkActivation(', start);
+  if (start < 0 || end < 0) throw new Error('Could not extract normalizeBlbDestinationUrl from extension/redirect-scripttagger.js');
   const context = { URL };
-  vm.runInNewContext(contentScript.slice(start, end), context);
+  vm.runInNewContext(scriptTaggerContentScript.slice(start, end), context);
   return context.normalizeBlbDestinationUrl;
 }
 
@@ -70,6 +71,34 @@ test.describe('ScriptTagger legacy BLB destination URLs', () => {
     expect(normalize('https://www.blueletterbible.org/romans/3/23')).toBe('https://www.blueletterbible.org/romans/3/23');
     expect(normalize('https://example.com/romans/3/23')).toBe('');
   });
+});
+
+
+test('ordinary global-redirect hosts use only the minimal ScriptTagger bundle', () => {
+  const start = background.indexOf('const BLB_CONTENT_SCRIPT_FILES = [');
+  const end = background.indexOf('\nfunction isHttpPageUrl(', start);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+  const context = {
+    normalizeSiteHostname: value => String(value || '').trim().toLowerCase().replace(/^www\./, ''),
+    hostnameFromTabUrl: value => { try { return new URL(String(value || '')).hostname; } catch (_) { return ''; } }
+  };
+  vm.runInNewContext(background.slice(start, end), context);
+  const choose = context.contentScriptFilesForTab;
+  const fullBundle = ['kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','content.js'];
+  expect(choose({url:'https://sagacityweb.com/article'}, {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}))
+    .toEqual(['redirect-scripttagger.js']);
+  expect(choose({url:'https://sagacityweb.com/article'}, {redirectEnabled:false,pageSelectionButtonSites:{'sagacityweb.com':true},doubleClickBlbSites:{}}))
+    .toEqual(fullBundle);
+  expect(choose({url:'https://sagacityweb.com/article'}, {redirectEnabled:true,pageSelectionButtonSites:{'sagacityweb.com':true},doubleClickBlbSites:{}}))
+    .toEqual([...fullBundle, 'redirect-scripttagger.js']);
+  expect(choose({url:'https://www.biblegateway.com/passage/?search=John+3:16'}, {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}))
+    .toEqual([...fullBundle, 'redirect-scripttagger.js']);
+  expect(choose({url:'https://sagacityweb.com/article'}, {redirectEnabled:false,pageSelectionButtonSites:{},doubleClickBlbSites:{}}))
+    .toEqual([]);
+  expect(scriptTaggerContentScript).toContain('a.BLBST_a[href]');
+  expect(contentScript).not.toContain('a.BLBST_a[href]');
+  expect(contentScript).not.toContain('function normalizeBlbDestinationUrl(');
 });
 
 test.describe('global ScriptTagger content-script injection', () => {
