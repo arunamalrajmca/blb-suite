@@ -23,6 +23,25 @@ function exerciseToggleHandler(name, nextMarker, { access = true, state = {} } =
   return { handler: context[name], calls };
 }
 
+function exercisePinChoice(feature, state = {}, initial = {}) {
+  const start = popupSource.indexOf('async function pinSiteFeatureChoice(feature) {');
+  const end = popupSource.indexOf('\nasync function setPageButton', start);
+  if (start < 0 || end < 0) throw new Error('Could not extract pinSiteFeatureChoice from extension/popup.js');
+  const storage = { pageSelectionButtonSites: {}, doubleClickBlbSites: {}, ...initial };
+  const context = {
+    getState: async () => ({
+      siteKey: 'example.com', master: true, isBlbSite: false,
+      pageButton: false, doubleClick: false, ...state
+    }),
+    chrome: { storage: { local: {
+      get: async defaults => ({ ...defaults, ...storage }),
+      set: async values => Object.assign(storage, values)
+    }}}
+  };
+  vm.runInNewContext(popupSource.slice(start, end), context);
+  return { run: () => context.pinSiteFeatureChoice(feature), storage };
+}
+
 function exerciseSiteSetter(name, nextMarker, initial = {}) {
   const start = popupSource.indexOf(`async function ${name}(on) {`);
   const end = popupSource.indexOf(nextMarker, start);
@@ -145,6 +164,29 @@ test('Permission request follows persisted independent feature choice', async ()
   const double = exerciseToggleHandler('handleDoubleClickToggle', "\ndocument.getElementById('pageButton').addEventListener");
   await double.handler(true);
   expect(double.calls.indexOf('requestAccess')).toBeGreaterThan(double.calls.findIndex(call => Array.isArray(call) && call[0] === 'pinChoice'));
+});
+
+test('Permission preflight preserves the other toggle effective state', async () => {
+  const pageWithOtherOn = exercisePinChoice('pageButton', { doubleClick: true });
+  await pageWithOtherOn.run();
+  expect(pageWithOtherOn.storage.pageSelectionButtonSites['example.com']).toBe(true);
+  expect(pageWithOtherOn.storage.doubleClickBlbSites['example.com']).toBe(true);
+
+  const pageWithOtherOff = exercisePinChoice('pageButton', { doubleClick: false });
+  await pageWithOtherOff.run();
+  expect(pageWithOtherOff.storage.pageSelectionButtonSites['example.com']).toBe(true);
+  expect(pageWithOtherOff.storage.doubleClickBlbSites['example.com']).toBe(false);
+
+  const doubleWithOtherOn = exercisePinChoice('doubleClick', { pageButton: true });
+  await doubleWithOtherOn.run();
+  expect(doubleWithOtherOn.storage.doubleClickBlbSites['example.com']).toBe(true);
+  expect(doubleWithOtherOn.storage.pageSelectionButtonSites['example.com']).toBe(true);
+
+  const preserveExplicitChoice = exercisePinChoice('pageButton', { doubleClick: false }, {
+    doubleClickBlbSites: { 'example.com': true }
+  });
+  await preserveExplicitChoice.run();
+  expect(preserveExplicitChoice.storage.doubleClickBlbSites['example.com']).toBe(true);
 });
 
 test('Each site-feature setter changes only its own preference', async () => {
