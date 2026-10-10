@@ -77,16 +77,19 @@ test.describe('core user-action E2E coverage', () => {
 
   test('copying selected Bible text injects a BLB hyperlink into HTML clipboard data', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true });
-    await page.goto('https://www.blueletterbible.org/', { waitUntil: 'domcontentloaded' });
+    // Exercise the real MultiVerse copy handler against a deterministic fixture.
+    // Keep the required BLB host/path but never depend on the live site.
+    await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><body><button id="copyButton" data-clipboard-text="(John 3:16)">Copy</button><a href="https://www.blueletterbible.org/kjv/jhn/3/16/">John 3:16</a><p id="blb-e2e-copy">John 3:16</p></body></html>'
+    }));
     await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'https://www.blueletterbible.org' });
+    await page.goto('https://www.blueletterbible.org/tools/MultiVerse.cfm', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
-    await dismissBlbCookieOverlay(page);
 
     await page.evaluate(() => {
-      const el = document.createElement('p');
-      el.id = 'blb-e2e-copy';
-      el.textContent = 'John 3:16';
-      document.body.appendChild(el);
+      const el = document.querySelector('#blb-e2e-copy');
       const range = document.createRange();
       range.selectNodeContents(el);
       const selection = window.getSelection();
@@ -95,10 +98,7 @@ test.describe('core user-action E2E coverage', () => {
     });
 
     await page.evaluate(() => {
-      const selection = window.getSelection()?.toString() || '';
-      console.log('[E2E copy] selection before copy:', selection);
       const result = document.execCommand('copy');
-      console.log('[E2E copy] execCommand result:', result);
       if (!result) throw new Error("document.execCommand('copy') returned false");
     });
 
@@ -108,26 +108,27 @@ test.describe('core user-action E2E coverage', () => {
       let html = '';
       let plain = '';
       for (const item of items) {
-        if (item.types.includes('text/html')) {
-          html = await (await item.getType('text/html')).text();
-        }
-        if (item.types.includes('text/plain')) {
-          plain = await (await item.getType('text/plain')).text();
-        }
+        if (item.types.includes('text/html')) html = await (await item.getType('text/html')).text();
+        if (item.types.includes('text/plain')) plain = await (await item.getType('text/plain')).text();
       }
       return { html, plain };
     });
-    console.log('[E2E copy] actual clipboard:', captured);
-    expect(captured.plain).toBe('John 3:16');
-    expect(captured.html).toContain('blueletterbible.org');
-    expect(captured.html).toMatch(/\/kjv\/(?:jhn|John)\/3\/16\/?/i);
+    expect(captured.plain).toBe('(John 3:16)');
+    expect(captured.html).toContain('blueletterbible.org/kjv/jhn/3/16/');
+    expect(captured.html).toMatch(/\\/kjv\\/(?:jhn|John)\\/3\\/16\\/?/i);
   });
 
   test('BLB verse links inside parse popups open in a new tab', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true });
+    // Parse-popup interception is BLB-host-specific, so serve a deterministic
+    // fixture at the BLB origin instead of depending on the live website.
+    await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><body></body></html>'
+    }));
     await page.goto('https://www.blueletterbible.org/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
-    await dismissBlbCookieOverlay(page);
 
     await page.evaluate(() => {
       const popup = document.createElement('div');
@@ -145,10 +146,9 @@ test.describe('core user-action E2E coverage', () => {
     await newPage.waitForLoadState('domcontentloaded').catch(() => {});
 
     expect(new URL(newPage.url()).hostname).toBe('www.blueletterbible.org');
-    expect(new URL(newPage.url()).pathname).toMatch(/^\/kjv\/jhn\/3\/16(?:\/s_\d+)?\/?$/i);
+    expect(new URL(newPage.url()).pathname).toMatch(/^\\/kjv\\/jhn\\/3\\/16(?:\\/s_\\d+)?\\/?$/i);
     await newPage.close();
   });
-
   test('selection containing a reference and authored prose opens MultiVerse and Criteria Search', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
