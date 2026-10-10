@@ -312,6 +312,27 @@ test.describe('core user-visible E2E', () => {
     expect(handoffMs).toBeLessThan(1500);
   });
 
+  test('Enabling Double-click injects its listener into an already-open page', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: {} });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-toggle-on-doubleclick';
+      el.textContent = 'John 3:16';
+      document.body.appendChild(el);
+    });
+
+    // The page was loaded before this site's Double-click preference was enabled.
+    await extensionStorage.set({ doubleClickBlbSites: { 'example.com': true } });
+    await page.waitForTimeout(1000);
+    await page.locator('#blb-e2e-toggle-on-doubleclick').dblclick();
+    await activateBlbTabForPath(extensionWorker, '/kjv/jhn/3/16/', {
+      fragment: 'John 3:16',
+      selector: '#blb-e2e-toggle-on-doubleclick',
+      selectedText: 'John 3:16'
+    });
+  });
+
   test('Double-click resolves any part of an adjacent Bible reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
