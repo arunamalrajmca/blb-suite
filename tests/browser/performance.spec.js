@@ -112,7 +112,7 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
     expect(blb).toBeTruthy();
     const handoffMs = Date.now() - started;
 
-    expect(new URL(blb.url).pathname).toMatch(/^\/kjv\/jhn\/3\/16\//);
+    expect(new URL(blb.effectiveUrl).pathname).toMatch(/^\/kjv\/jhn\/3\/16\//);
     await writeSample(scenario, handoffMs);
     return;
   }
@@ -160,7 +160,7 @@ test('Show on BLB performance benchmark', async ({ page, context, extensionStora
         tab => targetTabBefore?.id === tab.id && /blueletterbible\.org\/kjv\/jhn\/3\/16\//i.test(tab.url)
       );
       expect(reused).toBeTruthy();
-      expect(new URL(reused.url).pathname).toMatch(/^\/kjv\/jhn\/3\/16\/(?:s_\d+)?$/);
+      expect(new URL(reused.effectiveUrl).pathname).toMatch(/^\/kjv\/jhn\/3\/16\/(?:s_\d+)?$/);
     }
 
     await writeSample(scenario, handoffMs);
