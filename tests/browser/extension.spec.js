@@ -67,6 +67,22 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
   await expect(page.locator('body')).toBeVisible();
 });
 
+test('unrelated pages do not run the BLB New Tab DOM observer', async ({ page, extensionStorage }) => {
+  await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: {}, doubleClickBlbSites: {}, redirectEnabled: false });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    const container = document.createElement('div');
+    container.id = 'bVerse_unrelated_page_regression';
+    const link = document.createElement('a');
+    link.href = 'https://example.com/checkbox-form';
+    link.textContent = 'unrelated page link';
+    container.appendChild(link);
+    document.body.appendChild(container);
+  });
+  await page.waitForTimeout(300);
+  await expect(page.locator('#bVerse_unrelated_page_regression a')).not.toHaveAttribute('target', '_blank');
+});
+
 test.describe('core user-visible E2E', () => {
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
