@@ -71,15 +71,15 @@ test('unrelated page checkbox stability and injection cleanup', async ({ page, c
   await extensionStorage.set({
     masterEnabled: true,
     redirectEnabled: false,
-    pageSelectionButtonSites: { 'chrome.google.com': true },
-    doubleClickBlbSites: { 'chrome.google.com': false }
+    pageSelectionButtonSites: { 'example.com': true },
+    doubleClickBlbSites: { 'example.com': false }
   });
-  await context.route('https://chrome.google.com/webstore/devconsole/register', route => route.fulfill({
+  await context.route('https://example.com/', route => route.fulfill({
     status: 200,
     contentType: 'text/html',
     body: '<!doctype html><html><head><title>Registration form fixture</title></head><body><main id="devconsole-fixture"><h1>Register</h1></main></body></html>'
   }));
-  await page.goto('https://chrome.google.com/webstore/devconsole/register', { waitUntil: 'domcontentloaded' });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   const button = page.locator('#blb-suite-page-selection-button');
   await expect(button).toBeAttached({ timeout: 15000 });
 
@@ -108,11 +108,11 @@ test('unrelated page checkbox stability and injection cleanup', async ({ page, c
   const registrationCount = () => extensionWorker.evaluate(async () =>
     (await chrome.scripting.getRegisteredContentScripts()).filter(script =>
       String(script.id || '').startsWith('blb-suite-runtime-') &&
-      (script.matches || []).includes('https://chrome.google.com/*')
+      (script.matches || []).includes('https://example.com/*')
     ).length
   );
 
-  await extensionStorage.set({ pageSelectionButtonSites: { 'chrome.google.com': false } });
+  await extensionStorage.set({ pageSelectionButtonSites: { 'example.com': false } });
   await expect(button).toHaveCount(0);
   await expect.poll(registrationCount).toBe(0);
   const beforeFeatureOff = await page.evaluate(() => ({
@@ -127,7 +127,7 @@ test('unrelated page checkbox stability and injection cleanup', async ({ page, c
   }));
   expect(afterFeatureOff).toEqual(beforeFeatureOff);
 
-  await extensionStorage.set({ pageSelectionButtonSites: { 'chrome.google.com': true } });
+  await extensionStorage.set({ pageSelectionButtonSites: { 'example.com': true } });
   await expect(button).toBeAttached({ timeout: 15000 });
   await expect.poll(registrationCount).toBe(1);
 
@@ -151,15 +151,15 @@ test('unrelated checkbox remains stable with global redirects but site features 
   await extensionStorage.set({
     masterEnabled: true,
     redirectEnabled: true,
-    pageSelectionButtonSites: { 'chrome.google.com': false },
-    doubleClickBlbSites: { 'chrome.google.com': false }
+    pageSelectionButtonSites: { 'example.com': false },
+    doubleClickBlbSites: { 'example.com': false }
   });
-  await context.route('https://chrome.google.com/webstore/devconsole/register', route => route.fulfill({
+  await context.route('https://example.com/', route => route.fulfill({
     status: 200,
     contentType: 'text/html',
     body: '<!doctype html><html><head><title>Registration form fixture</title></head><body><main><h1>Register</h1></main></body></html>'
   }));
-  await page.goto('https://chrome.google.com/webstore/devconsole/register', { waitUntil: 'domcontentloaded' });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await page.evaluate(() => {
     const form = document.createElement('form');
     form.id = 'blb-global-redirect-checkbox-form';
@@ -172,7 +172,7 @@ test('unrelated checkbox remains stable with global redirects but site features 
   const registrationCount = () => extensionWorker.evaluate(async () =>
     (await chrome.scripting.getRegisteredContentScripts()).filter(script =>
       String(script.id || '').startsWith('blb-suite-runtime-') &&
-      (script.matches || []).includes('https://chrome.google.com/*')
+      (script.matches || []).includes('https://example.com/*')
     ).length
   );
   await expect.poll(registrationCount).toBe(1);
