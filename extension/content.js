@@ -86,48 +86,8 @@ function isModifiedLinkActivation(event) {
   return Boolean(event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey);
 }
 
-function normalizeBlbDestinationUrl(url) {
-  const target = String(url || '').trim();
-  try {
-    const parsed = new URL(target);
-    if (!/^https?:$/.test(parsed.protocol)) return '';
-    const hostname = parsed.hostname.toLowerCase();
-    if (!['blueletterbible.org', 'www.blueletterbible.org', 'blueletterbible.com', 'www.blueletterbible.com'].includes(hostname)) return '';
-    // ScriptTagger links on some legacy sites still use the .com domain.
-    // Route both legacy and canonical BLB links to the canonical HTTPS .org URL.
-    parsed.protocol = 'https:';
-    parsed.hostname = 'www.blueletterbible.org';
-    parsed.port = '';
-    return parsed.href;
-  } catch (_) {
-    return '';
-  }
-}
-
-function openBlbDestinationFromContent(url) {
-  const target = normalizeBlbDestinationUrl(url);
-  if (!target) return;
-  void safeRuntimeSendMessage({
-    type: 'blbSuiteOpenBackgroundUrl',
-    url: target,
-    activeIfNew: true,
-    activateExisting: true
-  });
-}
-
-/*
- * ScriptTagger emits BLBST_a anchors for Scripture references. Own only
- * unmodified clicks on generated BLB links and route them through the
- * background destination manager, leaving the source article open.
- */
-document.addEventListener("click", e => {
-  if (!suiteEnabled || !redirectScriptTaggerLinksEnabled || isModifiedLinkActivation(e)) return;
-  const link = e.target.closest?.("a.BLBST_a[href]");
-  if (!link || !normalizeBlbDestinationUrl(link.href)) return;
-  e.preventDefault();
-  e.stopImmediatePropagation();
-  openBlbDestinationFromContent(link.href);
-}, true);
+// ScriptTagger click handling is isolated in redirect-scripttagger.js so
+// arbitrary websites do not load unrelated Suite content features.
 
 function normalizeSelectionText(s) {
   return String(s || '')
