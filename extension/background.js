@@ -2417,6 +2417,9 @@ async function hasHostAccessForTab(tab) {
 }
 
 const contentScriptInjectionLocks = new Map();
+// Incremented whenever eligibility settings or host permissions change. A stale
+// asynchronous cleanup must not unregister a script needed by newer settings.
+let runtimeContentScriptSettingsRevision = 0;
 
 function runtimeContentScriptIdForPattern(pattern) {
   const raw = String(pattern || '');
@@ -2456,12 +2459,35 @@ async function ensureRuntimeContentScriptRegistered(tab) {
 }
 
 async function unregisterRuntimeContentScriptForPattern(pattern) {
-  const id = runtimeContentScriptIdForPattern(pattern);
+  if (!pattern) return false;
+  const revision = runtimeContentScriptSettingsRevision;
   try {
+    const data = await chrome.storage.local.get({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      redirectEnabled:false
+    });
+    let hostAccess = false;
+    try {
+      hostAccess = await chrome.permissions.contains({origins:[pattern]});
+    } catch (_) {}
+    const hostname = normalizeSiteHostname(new URL(pattern.replace(/\\/\\*$/, '')).hostname);
+    const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
+    const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
+    const stillNeeded = data.masterEnabled !== false && hostAccess &&
+      (pageSites[hostname] === true || doubleSites[hostname] === true || data.redirectEnabled === true);
+
+    // Settings/permissions changed while this cleanup was awaiting Chrome APIs.
+    // Let the newer change's injection/reconciliation own the final state.
+    if (revision !== runtimeContentScriptSettingsRevision || stillNeeded) return false;
+
     if (chrome.scripting?.unregisterContentScripts) {
-      await chrome.scripting.unregisterContentScripts({ids:[id]});
+      await chrome.scripting.unregisterContentScripts({ids:[runtimeContentScriptIdForPattern(pattern)]});
+      return true;
     }
   } catch (_) {}
+  return false;
 }
 
 async function ensureContentScriptInTab(tabId) {
@@ -5427,9 +5453,11 @@ async function injectRedirectEnabledTabs() {
 }
 
 chrome.permissions?.onAdded?.addListener(details => {
+  runtimeContentScriptSettingsRevision++;
   injectEnabledTabsForGrantedOrigins(details?.origins || []).catch(() => {});
 });
 chrome.permissions?.onRemoved?.addListener(() => {
+  runtimeContentScriptSettingsRevision++;
   reconcileRuntimeContentScriptRegistrations().catch(() => {});
 });
 
@@ -5451,6 +5479,9 @@ chrome.runtime.onInstalled.addListener(async details => {
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
+  if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites || changes.doubleClickBlbSites) {
+    runtimeContentScriptSettingsRevision++;
+  }
   if (changes.masterEnabled?.newValue === false) {
     reconcileRuntimeContentScriptRegistrations().catch(() => {});
   } else if (changes.masterEnabled?.newValue === true) {
