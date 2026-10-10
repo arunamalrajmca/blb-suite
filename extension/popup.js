@@ -175,10 +175,15 @@ async function requestCurrentSiteAccess(origin = currentSiteOrigin) {
 async function setPageButton(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
-  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
+  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}});
   const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
+  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
   sites[state.siteKey] = !!on;
-  await chrome.storage.local.set({pageSelectionButtonSites:sites});
+  // A site grant can activate the bundled "hostname contains bible" default.
+  // Materialize the other feature as OFF on first explicit use so permission
+  // approval does not silently enable both independent features.
+  if (!Object.prototype.hasOwnProperty.call(doubleSites, state.siteKey)) doubleSites[state.siteKey] = false;
+  await chrome.storage.local.set({pageSelectionButtonSites:sites, doubleClickBlbSites:doubleSites});
   if (on) {
     try { const tabs = await chrome.tabs.query({active:true,currentWindow:true}); const tabId = tabs[0]?.id; if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId}); } catch (_) {}
   }
@@ -188,10 +193,14 @@ async function setPageButton(on) {
 async function setDoubleClick(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
-  const data = await chrome.storage.local.get({doubleClickBlbSites:{}});
+  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}});
   const sites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
+  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
   sites[state.siteKey] = !!on;
-  await chrome.storage.local.set({doubleClickBlbSites:sites});
+  // See setPageButton(): the first explicit feature choice must pin the other
+  // feature OFF unless the user has already chosen its state.
+  if (!Object.prototype.hasOwnProperty.call(pageSites, state.siteKey)) pageSites[state.siteKey] = false;
+  await chrome.storage.local.set({doubleClickBlbSites:sites, pageSelectionButtonSites:pageSites});
   if (on) {
     try { const tabs = await chrome.tabs.query({active:true,currentWindow:true}); const tabId = tabs[0]?.id; if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId}); } catch (_) {}
   }
