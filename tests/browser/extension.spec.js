@@ -147,6 +147,63 @@ test('unrelated page checkbox stability and injection cleanup', async ({ page, c
   expect(afterMasterOff).toEqual(beforeMasterOff);
 });
 
+test('unrelated checkbox remains stable with global redirects but site features OFF', async ({ page, context, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    redirectEnabled: true,
+    pageSelectionButtonSites: { 'chrome.google.com': false },
+    doubleClickBlbSites: { 'chrome.google.com': false }
+  });
+  await context.route('https://chrome.google.com/webstore/devconsole/register', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Registration form fixture</title></head><body><main><h1>Register</h1></main></body></html>'
+  }));
+  await page.goto('https://chrome.google.com/webstore/devconsole/register', { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    const form = document.createElement('form');
+    form.id = 'blb-global-redirect-checkbox-form';
+    form.style.cssText = 'position:fixed;left:32px;top:140px;z-index:1000;background:white;padding:16px';
+    form.innerHTML = '<label><input id="blb-global-redirect-checkbox" type="checkbox"> Confirm registration</label>';
+    document.body.appendChild(form);
+    window.scrollTo(0, 0);
+  });
+
+  const registrationCount = () => extensionWorker.evaluate(async () =>
+    (await chrome.scripting.getRegisteredContentScripts()).filter(script =>
+      String(script.id || '').startsWith('blb-suite-runtime-') &&
+      (script.matches || []).includes('https://chrome.google.com/*')
+    ).length
+  );
+  await expect.poll(registrationCount).toBe(1);
+  const checkbox = page.locator('#blb-global-redirect-checkbox');
+  const before = await page.evaluate(() => ({
+    top: document.querySelector('#blb-global-redirect-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  await checkbox.click();
+  await expect(checkbox).toBeChecked();
+  const after = await page.evaluate(() => ({
+    top: document.querySelector('#blb-global-redirect-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  expect(after).toEqual(before);
+
+  await extensionStorage.set({ masterEnabled: false });
+  await expect.poll(registrationCount).toBe(0);
+  const beforeOff = await page.evaluate(() => ({
+    top: document.querySelector('#blb-global-redirect-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  await checkbox.click();
+  await expect(checkbox).not.toBeChecked();
+  const afterOff = await page.evaluate(() => ({
+    top: document.querySelector('#blb-global-redirect-checkbox-form').getBoundingClientRect().top,
+    scrollY: window.scrollY
+  }));
+  expect(afterOff).toEqual(beforeOff);
+});
+
 test.describe('core user-visible E2E', () => {
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
