@@ -6,17 +6,20 @@
 
   let masterEnabled = true;
   let redirectEnabled = false;
-  let settingsReady = Promise.resolve();
+  let settingsReady = false;
 
-  const refreshSettings = () => {
-    settingsReady = chrome.storage.local.get({masterEnabled:true, redirectEnabled:false}).then(settings => {
+  const refreshSettings = async () => {
+    settingsReady = false;
+    try {
+      const settings = await chrome.storage.local.get({masterEnabled:true, redirectEnabled:false});
       masterEnabled = settings.masterEnabled !== false;
       redirectEnabled = settings.redirectEnabled === true;
-    }).catch(() => {
+    } catch (_) {
       masterEnabled = false;
       redirectEnabled = false;
-    });
-    return settingsReady;
+    } finally {
+      settingsReady = true;
+    }
   };
   void refreshSettings();
 
@@ -44,9 +47,8 @@
     return Boolean(event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey);
   }
 
-  document.addEventListener('click', async event => {
-    await settingsReady;
-    if (!masterEnabled || !redirectEnabled || isModifiedLinkActivation(event)) return;
+  document.addEventListener('click', event => {
+    if (!settingsReady || !masterEnabled || !redirectEnabled || isModifiedLinkActivation(event)) return;
     const link = event.target.closest?.('a.BLBST_a[href]');
     if (!link) return;
     const target = normalizeBlbDestinationUrl(link.href);
@@ -54,7 +56,8 @@
     event.preventDefault();
     event.stopImmediatePropagation();
     try {
-      await chrome.runtime.sendMessage({type:'blbSuiteOpenBackgroundUrl',url:target,activeIfNew:true,activateExisting:true});
+      const pending = chrome.runtime.sendMessage({type:'blbSuiteOpenBackgroundUrl',url:target,activeIfNew:true,activateExisting:true});
+      if (pending && typeof pending.catch === 'function') pending.catch(() => {});
     } catch (_) {}
   }, true);
 })();
