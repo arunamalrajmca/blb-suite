@@ -67,14 +67,19 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
   await expect(page.locator('body')).toBeVisible();
 });
 
-test('unrelated page checkbox stability and injection cleanup', async ({ page, extensionStorage, extensionWorker }) => {
+test('unrelated page checkbox stability and injection cleanup', async ({ page, context, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({
     masterEnabled: true,
     redirectEnabled: false,
-    pageSelectionButtonSites: { 'example.com': true },
-    doubleClickBlbSites: { 'example.com': false }
+    pageSelectionButtonSites: { 'chrome.google.com': true },
+    doubleClickBlbSites: { 'chrome.google.com': false }
   });
-  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await context.route('https://chrome.google.com/webstore/devconsole/register', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Registration form fixture</title></head><body><main id="devconsole-fixture"><h1>Register</h1></main></body></html>'
+  }));
+  await page.goto('https://chrome.google.com/webstore/devconsole/register', { waitUntil: 'domcontentloaded' });
   const button = page.locator('#blb-suite-page-selection-button');
   await expect(button).toBeAttached({ timeout: 15000 });
 
@@ -103,11 +108,11 @@ test('unrelated page checkbox stability and injection cleanup', async ({ page, e
   const registrationCount = () => extensionWorker.evaluate(async () =>
     (await chrome.scripting.getRegisteredContentScripts()).filter(script =>
       String(script.id || '').startsWith('blb-suite-runtime-') &&
-      (script.matches || []).includes('https://example.com/*')
+      (script.matches || []).includes('https://chrome.google.com/*')
     ).length
   );
 
-  await extensionStorage.set({ pageSelectionButtonSites: { 'example.com': false } });
+  await extensionStorage.set({ pageSelectionButtonSites: { 'chrome.google.com': false } });
   await expect(button).toHaveCount(0);
   await expect.poll(registrationCount).toBe(0);
   const beforeFeatureOff = await page.evaluate(() => ({
@@ -122,7 +127,7 @@ test('unrelated page checkbox stability and injection cleanup', async ({ page, e
   }));
   expect(afterFeatureOff).toEqual(beforeFeatureOff);
 
-  await extensionStorage.set({ pageSelectionButtonSites: { 'example.com': true } });
+  await extensionStorage.set({ pageSelectionButtonSites: { 'chrome.google.com': true } });
   await expect(button).toBeAttached({ timeout: 15000 });
   await expect.poll(registrationCount).toBe(1);
 
