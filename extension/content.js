@@ -86,8 +86,34 @@ function isModifiedLinkActivation(event) {
   return Boolean(event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey);
 }
 
-// ScriptTagger click handling is isolated in redirect-scripttagger.js so
-// arbitrary websites do not load unrelated Suite content features.
+// Keep the URL normalizer and opener for BLB's own parsing-popup links.
+// Ordinary-site ScriptTagger clicks are handled by redirect-scripttagger.js.
+function normalizeBlbDestinationUrl(url) {
+  const target = String(url || '').trim();
+  try {
+    const parsed = new URL(target);
+    if (!/^https?:$/.test(parsed.protocol)) return '';
+    const hostname = parsed.hostname.toLowerCase();
+    if (!['blueletterbible.org', 'www.blueletterbible.org', 'blueletterbible.com', 'www.blueletterbible.com'].includes(hostname)) return '';
+    parsed.protocol = 'https:';
+    parsed.hostname = 'www.blueletterbible.org';
+    parsed.port = '';
+    return parsed.href;
+  } catch (_) {
+    return '';
+  }
+}
+
+function openBlbDestinationFromContent(url) {
+  const target = normalizeBlbDestinationUrl(url);
+  if (!target) return;
+  void safeRuntimeSendMessage({
+    type: 'blbSuiteOpenBackgroundUrl',
+    url: target,
+    activeIfNew: true,
+    activateExisting: true
+  });
+}
 
 function normalizeSelectionText(s) {
   return String(s || '')
