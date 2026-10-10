@@ -1086,34 +1086,33 @@ document.addEventListener('click', e => {
 
 guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
-async function setSiteFeaturesEnabled(on) {
+async function setIndependentSiteFeature(feature, on) {
   const state = await getState();
-  if (!state.siteKey || !state.master || state.isBlbSite) return;
-  if (on && !(await requestCurrentSiteAccess())) {
-    await setPageButton(false);
-    await setDoubleClick(false);
+  if (!state.siteKey || !state.master || state.isBlbSite) {
+    render(state);
     return;
   }
-  // Show on BLB and Double-click KJV are paired controls: either ON action
-  // enables both, and either OFF action disables both.
-  await setPageButton(!!on);
-  await setDoubleClick(!!on);
-  if (on) {
-    try {
-      const tabs = await chrome.tabs.query({active:true,currentWindow:true});
-      const tabId = tabs[0]?.id;
-      if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
-    } catch (_) {}
+
+  // Ask for access only when enabling this feature. If access is denied,
+  // leave this feature OFF without changing the other site's feature.
+  if (on && !(await requestCurrentSiteAccess())) {
+    render(await getState());
+    return;
   }
-  render(await getState());
+
+  if (feature === 'pageButton') {
+    await setPageButton(!!on);
+  } else if (feature === 'doubleClick') {
+    await setDoubleClick(!!on);
+  }
 }
 
 async function handlePageButtonToggle(on) {
-  await setSiteFeaturesEnabled(on);
+  await setIndependentSiteFeature('pageButton', on);
 }
 
 async function handleDoubleClickToggle(on) {
-  await setSiteFeaturesEnabled(on);
+  await setIndependentSiteFeature('doubleClick', on);
 }
 
 document.getElementById('pageButton').addEventListener('change', e => handlePageButtonToggle(e.target.checked));
