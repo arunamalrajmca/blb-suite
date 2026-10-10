@@ -1692,8 +1692,8 @@ async function getSiteDefaultEnabled() {
     });
     return response?.enabled === true;
   } catch (_) {
-    const host = String(location.hostname || '').toLowerCase();
-    return host.includes('bible');
+    // Per-site features default OFF; only their own explicit preference enables them.
+    return false;
   }
 }
 
