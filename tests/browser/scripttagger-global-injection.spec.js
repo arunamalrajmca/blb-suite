@@ -110,6 +110,22 @@ test.describe('global ScriptTagger content-script injection', () => {
       tab,
       { ...settings, redirectEnabled: false }
     )).toBe(false);
+    expect(await context.shouldInjectContentScriptForTab(
+      tab,
+      { ...settings, masterEnabled: false }
+    )).toBe(false);
+  });
+
+  test('master OFF blocks global redirect injection even when host access remains granted', async () => {
+    const { context, injected } = runInjectionHelper(['injectRedirectEnabledTabs'], {
+      settings: { masterEnabled: false, redirectEnabled: true },
+      tabs: [
+        { id: 71, url: 'https://chrome.google.com/webstore/devconsole/register', hostAccess: true }
+      ]
+    });
+
+    await context.injectRedirectEnabledTabs();
+    expect(injected).toEqual([]);
   });
 
   test('turning the global toggle on injects all already-open tabs with granted host access', async () => {
