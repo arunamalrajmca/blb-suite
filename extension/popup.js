@@ -172,13 +172,38 @@ async function requestCurrentSiteAccess(origin = currentSiteOrigin) {
 }
 
 
+async function pinSiteFeatureChoice(feature) {
+  const state = await getState();
+  if (!state.siteKey || !state.master || state.isBlbSite) return;
+  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}});
+  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
+  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
+
+  // Persist intent before requesting permission: Brave may close the popup
+  // while its permission prompt is open, interrupting code after the await.
+  // Explicitly pin the requested feature ON and the unchosen feature OFF.
+  if (feature === 'pageButton') {
+    pageSites[state.siteKey] = true;
+    if (!Object.prototype.hasOwnProperty.call(doubleSites, state.siteKey)) doubleSites[state.siteKey] = false;
+  } else {
+    doubleSites[state.siteKey] = true;
+    if (!Object.prototype.hasOwnProperty.call(pageSites, state.siteKey)) pageSites[state.siteKey] = false;
+  }
+  await chrome.storage.local.set({pageSelectionButtonSites:pageSites, doubleClickBlbSites:doubleSites});
+}
+
 async function setPageButton(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
-  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
+  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}});
   const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
+  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
   sites[state.siteKey] = !!on;
-  await chrome.storage.local.set({pageSelectionButtonSites:sites});
+  // A site grant can activate the bundled "hostname contains bible" default.
+  // Materialize the other feature as OFF on first explicit use so permission
+  // approval does not silently enable both independent features.
+  if (!Object.prototype.hasOwnProperty.call(doubleSites, state.siteKey)) doubleSites[state.siteKey] = false;
+  await chrome.storage.local.set({pageSelectionButtonSites:sites, doubleClickBlbSites:doubleSites});
   if (on) {
     try { const tabs = await chrome.tabs.query({active:true,currentWindow:true}); const tabId = tabs[0]?.id; if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId}); } catch (_) {}
   }
@@ -188,10 +213,14 @@ async function setPageButton(on) {
 async function setDoubleClick(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
-  const data = await chrome.storage.local.get({doubleClickBlbSites:{}});
+  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}});
   const sites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
+  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
   sites[state.siteKey] = !!on;
-  await chrome.storage.local.set({doubleClickBlbSites:sites});
+  // See setPageButton(): the first explicit feature choice must pin the other
+  // feature OFF unless the user has already chosen its state.
+  if (!Object.prototype.hasOwnProperty.call(pageSites, state.siteKey)) pageSites[state.siteKey] = false;
+  await chrome.storage.local.set({doubleClickBlbSites:sites, pageSelectionButtonSites:pageSites});
   if (on) {
     try { const tabs = await chrome.tabs.query({active:true,currentWindow:true}); const tabId = tabs[0]?.id; if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId}); } catch (_) {}
   }
@@ -1086,34 +1115,30 @@ document.addEventListener('click', e => {
 
 guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
-async function setSiteFeaturesEnabled(on) {
+async function handlePageButtonToggle(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
-  if (on && !(await requestCurrentSiteAccess())) {
-    await setPageButton(false);
-    await setDoubleClick(false);
-    return;
-  }
-  // Show on BLB and Double-click KJV are paired controls: either ON action
-  // enables both, and either OFF action disables both.
-  await setPageButton(!!on);
-  await setDoubleClick(!!on);
   if (on) {
-    try {
-      const tabs = await chrome.tabs.query({active:true,currentWindow:true});
-      const tabId = tabs[0]?.id;
-      if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
-    } catch (_) {}
+    await pinSiteFeatureChoice('pageButton');
+    if (!(await requestCurrentSiteAccess())) {
+      await setPageButton(false);
+      return;
+    }
   }
-  render(await getState());
-}
-
-async function handlePageButtonToggle(on) {
-  await setSiteFeaturesEnabled(on);
+  await setPageButton(!!on);
 }
 
 async function handleDoubleClickToggle(on) {
-  await setSiteFeaturesEnabled(on);
+  const state = await getState();
+  if (!state.siteKey || !state.master || state.isBlbSite || state.isPdfContext) return;
+  if (on) {
+    await pinSiteFeatureChoice('doubleClick');
+    if (!(await requestCurrentSiteAccess())) {
+      await setDoubleClick(false);
+      return;
+    }
+  }
+  await setDoubleClick(!!on);
 }
 
 document.getElementById('pageButton').addEventListener('change', e => handlePageButtonToggle(e.target.checked));

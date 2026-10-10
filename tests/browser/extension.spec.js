@@ -1,4 +1,48 @@
 const { test, expect } = require('./fixtures');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
+
+const popupSource = fs.readFileSync(path.resolve(__dirname, '../../extension/popup.js'), 'utf8');
+
+function exerciseToggleHandler(name, nextMarker, { access = true, state = {} } = {}) {
+  const start = popupSource.indexOf(`async function ${name}(on) {`);
+  const end = popupSource.indexOf(nextMarker, start);
+  if (start < 0 || end < 0) throw new Error(`Could not extract ${name} from extension/popup.js`);
+  const calls = [];
+  const context = {
+    getState: async () => ({
+      siteKey: 'example.com', master: true, isBlbSite: false, isPdfContext: false, ...state
+    }),
+    pinSiteFeatureChoice: async feature => { calls.push(['pinChoice', feature]); },
+    requestCurrentSiteAccess: async () => { calls.push('requestAccess'); return access; },
+    setPageButton: async value => { calls.push(['pageButton', value]); },
+    setDoubleClick: async value => { calls.push(['doubleClick', value]); }
+  };
+  vm.runInNewContext(popupSource.slice(start, end), context);
+  return { handler: context[name], calls };
+}
+
+function exerciseSiteSetter(name, nextMarker, initial = {}) {
+  const start = popupSource.indexOf(`async function ${name}(on) {`);
+  const end = popupSource.indexOf(nextMarker, start);
+  if (start < 0 || end < 0) throw new Error(`Could not extract ${name} from extension/popup.js`);
+  const storage = { masterEnabled: true, pageSelectionButtonSites: {}, doubleClickBlbSites: {}, ...initial };
+  const context = {
+    getState: async () => ({ siteKey: 'example.com', master: true, isBlbSite: false, isPdfContext: false }),
+    chrome: {
+      storage: { local: {
+        get: async defaults => ({ ...defaults, ...storage }),
+        set: async values => Object.assign(storage, values)
+      }},
+      tabs: { query: async () => [] },
+      runtime: { sendMessage: async () => ({}) }
+    },
+    render: () => {}
+  };
+  vm.runInNewContext(popupSource.slice(start, end), context);
+  return { setter: context[name], storage };
+}
 
 async function dblclickAt(locator, rect) {
   const box = await locator.boundingBox();
@@ -65,6 +109,61 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await expect(page).toHaveTitle(/BLB|Blue Letter Bible/i);
   await expect(page.locator('body')).toBeVisible();
+});
+
+test('Show on BLB and Double-click toggles remain independent', async () => {
+  const pageOn = exerciseToggleHandler('handlePageButtonToggle', '\nasync function handleDoubleClickToggle');
+  await pageOn.handler(true);
+  expect(pageOn.calls).toEqual([['pinChoice', 'pageButton'], 'requestAccess', ['pageButton', true]]);
+
+  const pageOff = exerciseToggleHandler('handlePageButtonToggle', '\nasync function handleDoubleClickToggle');
+  await pageOff.handler(false);
+  expect(pageOff.calls).toEqual([['pageButton', false]]);
+
+  const doubleOn = exerciseToggleHandler('handleDoubleClickToggle', "\ndocument.getElementById('pageButton').addEventListener");
+  await doubleOn.handler(true);
+  expect(doubleOn.calls).toEqual([['pinChoice', 'doubleClick'], 'requestAccess', ['doubleClick', true]]);
+
+  const doubleOff = exerciseToggleHandler('handleDoubleClickToggle', "\ndocument.getElementById('pageButton').addEventListener");
+  await doubleOff.handler(false);
+  expect(doubleOff.calls).toEqual([['doubleClick', false]]);
+
+  const deniedPage = exerciseToggleHandler('handlePageButtonToggle', '\nasync function handleDoubleClickToggle', { access: false });
+  await deniedPage.handler(true);
+  expect(deniedPage.calls).toEqual([['pinChoice', 'pageButton'], 'requestAccess', ['pageButton', false]]);
+
+  const deniedDouble = exerciseToggleHandler('handleDoubleClickToggle', "\ndocument.getElementById('pageButton').addEventListener", { access: false });
+  await deniedDouble.handler(true);
+  expect(deniedDouble.calls).toEqual([['pinChoice', 'doubleClick'], 'requestAccess', ['doubleClick', false]]);
+});
+
+test('Permission request follows persisted independent feature choice', async () => {
+  const page = exerciseToggleHandler('handlePageButtonToggle', '\nasync function handleDoubleClickToggle');
+  await page.handler(true);
+  expect(page.calls.indexOf('requestAccess')).toBeGreaterThan(page.calls.findIndex(call => Array.isArray(call) && call[0] === 'pinChoice'));
+
+  const double = exerciseToggleHandler('handleDoubleClickToggle', "\ndocument.getElementById('pageButton').addEventListener");
+  await double.handler(true);
+  expect(double.calls.indexOf('requestAccess')).toBeGreaterThan(double.calls.findIndex(call => Array.isArray(call) && call[0] === 'pinChoice'));
+});
+
+test('First site-feature enable pins the other feature OFF without overwriting an existing choice', async () => {
+  const pageFirst = exerciseSiteSetter('setPageButton', '\nasync function setDoubleClick');
+  await pageFirst.setter(true);
+  expect(pageFirst.storage.pageSelectionButtonSites['example.com']).toBe(true);
+  expect(pageFirst.storage.doubleClickBlbSites['example.com']).toBe(false);
+
+  const doubleFirst = exerciseSiteSetter('setDoubleClick', '\n\nasync function setRedirect');
+  await doubleFirst.setter(true);
+  expect(doubleFirst.storage.doubleClickBlbSites['example.com']).toBe(true);
+  expect(doubleFirst.storage.pageSelectionButtonSites['example.com']).toBe(false);
+
+  const preserveChoice = exerciseSiteSetter('setPageButton', '\nasync function setDoubleClick', {
+    doubleClickBlbSites: { 'example.com': true }
+  });
+  await preserveChoice.setter(true);
+  expect(preserveChoice.storage.pageSelectionButtonSites['example.com']).toBe(true);
+  expect(preserveChoice.storage.doubleClickBlbSites['example.com']).toBe(true);
 });
 
 test.describe('core user-visible E2E', () => {
