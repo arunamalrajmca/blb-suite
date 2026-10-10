@@ -118,7 +118,7 @@ test.describe('core user-action E2E coverage', () => {
     expect(captured.html).toMatch(/\/kjv\/(?:jhn|John)\/3\/16\/?/i);
   });
 
-  test('BLB verse links inside parse popups open in a new tab', async ({ page, context, extensionStorage }) => {
+  test('BLB verse links inside parse popups open in a new tab', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true });
     // Parse-popup interception is BLB-host-specific, so serve a deterministic
     // fixture at the BLB origin instead of depending on the live website.
@@ -140,14 +140,26 @@ test.describe('core user-action E2E coverage', () => {
     const link = page.locator('#blb-e2e-popup-link');
     await expect(link).toHaveAttribute('data-blb-suite-popup', '1');
 
-    const newPagePromise = context.waitForEvent('page', { timeout: 10000 });
-    await link.click();
-    const newPage = await newPagePromise;
-    await newPage.waitForLoadState('domcontentloaded').catch(() => {});
+    // The extension creates tabs through chrome.tabs.create in its service
+    // worker. Observe that authoritative browser-tab state directly rather
+    // than relying on Playwright's page event, which can miss extension-created
+    // tabs in a persistent context even when Chromium creates them.
+    const sourceUrl = page.url();
+    const tabsBefore = await extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({url:'https://www.blueletterbible.org/*'})).map(tab => tab.id)
+    );
 
-    expect(new URL(newPage.url()).hostname).toBe('www.blueletterbible.org');
-    expect(new URL(newPage.url()).pathname).toBe('/kjv/jhn/3/16/');
-    await newPage.close();
+    await link.click();
+
+    await expect.poll(async () => extensionWorker.evaluate(async (previousIds) => {
+      const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
+      return tabs.some(tab =>
+        !previousIds.includes(tab.id) &&
+        new URL(tab.url || tab.pendingUrl || '').pathname === '/kjv/jhn/3/16/'
+      );
+    }, tabsBefore), { timeout: 10000 }).toBe(true);
+
+    expect(page.url()).toBe(sourceUrl);
   });
   test('selection containing a reference and authored prose opens MultiVerse and Criteria Search', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
