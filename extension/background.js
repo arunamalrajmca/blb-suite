@@ -2983,10 +2983,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!(await isSuiteEnabled())) { sendResponse({ok:false}); return true; }
     const url = String(message.url || '');
     if (!/^https:\/\/www\.blueletterbible\.org\//i.test(url)) { sendResponse({ok:false}); return true; }
-    // A clicked ScriptTagger link is an explicit navigation request. Always
-    // honor its exact destination instead of allowing the generic logical-tab
-    // registry or pending-request coalescing to substitute an earlier click.
-    createBlbTabGeneric(url, true).then(() => sendResponse({ok:true})).catch(error => {
+    // Match other explicit BLB destination opens (including MultiVerse):
+    // deduplicate the same canonical destination, but create a distinct tab
+    // for a different verse and activate an existing match when reused.
+    openBlbDestination(url, true, true).then(() => sendResponse({ok:true})).catch(error => {
       console.error('BLB Suite ScriptTagger destination:', error);
       sendResponse({ok:false, error:String(error)});
     });
