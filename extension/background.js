@@ -2304,13 +2304,15 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     rememberBlbTab(key, tabId);
     if (reservedKey && key === reservedKey) scriptTaggerTabReservations.delete(tabId);
   }
-  if (changeInfo?.status === 'complete' && reservedKey && key !== reservedKey) {
+  if (changeInfo?.status === 'complete' && reservedKey && key !== reservedKey &&
+      /^https:\/\/www\.blueletterbible\.org\//i.test(url)) {
     scriptTaggerTabReservations.delete(tabId);
     if (blbLogicalTabRegistry.get(reservedKey) === tabId) blbLogicalTabRegistry.delete(reservedKey);
   }
 });
 
 chrome.tabs.onRemoved.addListener(tabId => {
+  scriptTaggerTabReservations.delete(tabId);
   forgetBlbTab(tabId);
   intentionalNewBlbTabs.delete(tabId);
   clearTrackedMultiVerseTab(tabId).catch(()=>{});
