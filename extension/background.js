@@ -5441,8 +5441,13 @@ async function syncPdfSelectionContextMenuVisibility(tab) {
   } catch (_) {}
 }
 
-chrome.tabs.onActivated.addListener(({tabId}) => {
-  chrome.tabs.get(tabId).then(tab => {
+chrome.tabs.onActivated.addListener(() => {
+  // Context-menu visibility is global, so synchronize only against the active
+  // tab in the last-focused window. An activation in a background window must
+  // not hide/show the item for the window the user is currently using.
+  chrome.tabs.query({active:true,lastFocusedWindow:true}).then(tabs => {
+    const tab = tabs[0];
+    if (!tab) return;
     syncWebSelectionContextMenuVisibility(tab).catch(() => {});
     syncPdfSelectionContextMenuVisibility(tab).catch(() => {});
   }).catch(() => {});
@@ -5464,8 +5469,14 @@ async function shouldInjectContentScriptForTab(tab, data) {
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.url || changeInfo.status === 'complete') {
-    syncWebSelectionContextMenuVisibility(tab).catch(() => {});
-    syncPdfSelectionContextMenuVisibility(tab).catch(() => {});
+    // The menu item is global, but onUpdated fires for inactive tabs too.
+    // Only let the currently active tab in the last-focused window control it.
+    chrome.tabs.query({active:true,lastFocusedWindow:true}).then(tabs => {
+      const activeTab = tabs[0];
+      if (activeTab?.id !== tabId) return;
+      syncWebSelectionContextMenuVisibility(activeTab).catch(() => {});
+      syncPdfSelectionContextMenuVisibility(activeTab).catch(() => {});
+    }).catch(() => {});
   }
   if (changeInfo.status === 'complete' && tab?.url && isHttpPageUrl(tab.url)) {
     chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false}).then(async data => {
@@ -5562,11 +5573,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
     // Keep the existing web-selection menu item in place. Only its visibility
     // changes with the site preference; removing/recreating it here causes a
     // first-right-click race.
-    chrome.tabs.query({active:true})
+    chrome.tabs.query({active:true,lastFocusedWindow:true})
       .then(tabs => {
-        for (const tab of tabs) {
-          syncWebSelectionContextMenuVisibility(tab).catch(() => {});
-        }
+        const tab = tabs[0];
+        if (tab) syncWebSelectionContextMenuVisibility(tab).catch(() => {});
       })
       .catch(() => {});
     installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true})
