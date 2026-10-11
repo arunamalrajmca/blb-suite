@@ -78,4 +78,60 @@ test.describe('source Bible URL syntax regression coverage', () => {
     expect(runSourceRedirect('https://www.bibleportal.com/verse-topic?v=john+3%3A16&version=NIV').redirectedTo)
       .toBe('https://blb.test/kjv/john/3/16/');
   });
+
+  test('Bible.com single verse, chapter, and range formats always target KJV', () => {
+    expect(runSourceRedirect('https://www.bible.com/bible/111/GEN.1.1.niv').redirectedTo)
+      .toBe('https://blb.test/kjv/gen/1/1/');
+    expect(runSourceRedirect('https://www.bible.com/bible/1/PSA.23.niv').redirectedTo)
+      .toBe('https://blb.test/kjv/psa/23/1/');
+    expect(runSourceRedirect('https://www.bible.com/bible/111/1JN.4.7-8.esv').redirectedTo)
+      .toBe('https://blb.test/kjv/1jn/4/7-8/');
+  });
+
+  test('BibleGateway passage search supports single verses, ranges, and ignored versions', () => {
+    expect(runSourceRedirect('https://www.biblegateway.com/passage/?search=Romans%208%3A28&version=NIV').redirectedTo)
+      .toBe('https://blb.test/kjv/romans/8/28/');
+    expect(runSourceRedirect('https://biblegateway.com/passage/?version=ESV&search=1%20John%204%3A7-8').redirectedTo)
+      .toBe('https://blb.test/kjv/1-john/4/7-8/');
+    expect(runSourceRedirect('https://biblegateway.com/passage/?search=Psalm%2023&version=KJV').redirectedTo)
+      .toBe('https://blb.test/kjv/psalm/23/1/');
+  });
+
+  test('Bible Hub supports single verses, chapters, and ranges in standard and translation paths', () => {
+    expect(runSourceRedirect('https://biblehub.com/genesis/1.htm').redirectedTo)
+      .toBe('https://blb.test/kjv/genesis/1/1/');
+    expect(runSourceRedirect('https://biblehub.com/john/3-16-18.htm').redirectedTo)
+      .toBe('https://blb.test/kjv/john/3/16-18/');
+    expect(runSourceRedirect('https://biblehub.com/niv/1_john/4-7-8.htm').redirectedTo)
+      .toBe('https://blb.test/kjv/1_john/4/7-8/');
+  });
+
+  test('King James Bible Online supports chapter routes and the kjbo.org alias', () => {
+    expect(runSourceRedirect('https://kingjamesbibleonline.org/John-Chapter-3/').redirectedTo)
+      .toBe('https://blb.test/kjv/john/3/1/');
+    expect(runSourceRedirect('https://kjbo.org/John-3-16/').redirectedTo)
+      .toBe('https://blb.test/kjv/john/3/16/');
+  });
+
+  test('KJV.site supports chapter and verse routes independently of www', () => {
+    expect(runSourceRedirect('https://kjv.site/John-3-kjv/').redirectedTo)
+      .toBe('https://blb.test/kjv/john/3/1/');
+    expect(runSourceRedirect('https://www.kjv.site/John-3-16-kjv/').redirectedTo)
+      .toBe('https://blb.test/kjv/john/3/16/');
+  });
+
+  test('BiblePortal supports its alternate reference parameter and version ordering', () => {
+    expect(runSourceRedirect('https://bibleportal.com/verse-topic?verse-topic=Matthew.5.3-5&version=ESV').redirectedTo)
+      .toBe('https://blb.test/kjv/matthew/5/3-5/');
+    expect(runSourceRedirect('https://www.bibleportal.com/verse-topic?v=Psalm%2023&version=NKJV').redirectedTo)
+      .toBe('https://blb.test/kjv/psalm/23/1/');
+  });
+
+  test('unsupported and malformed source URLs do not redirect', () => {
+    expect(runSourceRedirect('https://biblehub.com/not-a-book/abc.htm').redirectedTo).toBe(null);
+    expect(runSourceRedirect('https://biblehub.com/john/3-16-18-20.htm').redirectedTo).toBe(null);
+    expect(runSourceRedirect('https://example.com/john/3-16.htm').redirectedTo).toBe(null);
+    expect(runSourceRedirect('https://biblegateway.com/search/?search=John%203%3A16').redirectedTo).toBe(null);
+  });
+
 });
