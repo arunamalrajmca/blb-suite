@@ -173,27 +173,20 @@ async function requestCurrentSiteAccess(origin = currentSiteOrigin) {
 
 
 async function pinSiteFeatureChoice(feature, otherFeatureEnabled) {
-  const state = await getState();
-  if (!state.siteKey || !state.master || state.isBlbSite || state.isPdfContext) return;
-  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}});
-  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
-  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
-
-  // Persist intent before requesting permission: the popup may close while
-  // the browser permission prompt is open. Preserve the other feature's
-  // effective state if permission approval would otherwise change its default.
-  if (feature === 'pageButton') {
-    pageSites[state.siteKey] = true;
-    if (!Object.prototype.hasOwnProperty.call(doubleSites, state.siteKey)) {
-      doubleSites[state.siteKey] = otherFeatureEnabled === true;
-    }
-  } else {
-    doubleSites[state.siteKey] = true;
-    if (!Object.prototype.hasOwnProperty.call(pageSites, state.siteKey)) {
-      pageSites[state.siteKey] = otherFeatureEnabled === true;
-    }
+  // Hand the preference to the service worker before opening Chrome's host
+  // permission prompt. The popup may be destroyed while that prompt is shown;
+  // the background can finish the durable write and inject after permission.
+  if (!currentSiteOrigin) return {ok:false};
+  try {
+    return await chrome.runtime.sendMessage({
+      type:'blbSuitePrepareSiteFeatureToggle',
+      origin:currentSiteOrigin,
+      feature,
+      otherFeatureEnabled:otherFeatureEnabled === true
+    });
+  } catch (_) {
+    return {ok:false};
   }
-  await chrome.storage.local.set({pageSelectionButtonSites:pageSites, doubleClickBlbSites:doubleSites});
 }
 
 async function setPageButton(on) {
