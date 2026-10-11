@@ -2462,14 +2462,15 @@ const BLB_CONTENT_SCRIPT_FILES = [
 // bundle because they also need supported non-KJV-to-KJV page redirects.
 const SCRIPT_TAGGER_CONTENT_SCRIPT_FILES = ['redirect-scripttagger.js'];
 
+// Hostnames are normalized by hostnameFromTabUrl() before this set is checked.
+// Keep entries in normalized form (without "www.") to avoid unreachable duplicates.
 const REDIRECT_HOSTNAMES = new Set([
-  'www.bible.com', 'www.biblegateway.com', 'www.bibleref.com',
-  'biblehub.com', 'www.biblehub.com',
-  'bibleportal.com', 'www.bibleportal.com',
-  'www.kingjamesbibleonline.org', 'kjbo.org', 'www.kjbo.org',
-  'www.kjv.site', 'kjv.site', 'm.kjv.site',
-  'officialkingjamesbible.com', 'www.officialkingjamesbible.com',
-  'webstersdictionary1828.com', 'www.blueletterbible.org'
+  'bible.com', 'biblegateway.com', 'bibleref.com',
+  'biblehub.com', 'bibleportal.com',
+  'kingjamesbibleonline.org', 'kjbo.org',
+  'kjv.site', 'm.kjv.site',
+  'officialkingjamesbible.com',
+  'webstersdictionary1828.com', 'blueletterbible.org'
 ]);
 
 function isRedirectHostname(hostname) {
