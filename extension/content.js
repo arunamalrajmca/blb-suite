@@ -203,14 +203,22 @@ function redirectBibleSite() {
     // Normalize only this source site's path before applying its known routes.
     const path=u.pathname.replace(/^\/{2,}/, "/");
     let m=path.match(/^\/([^/]+)-Chapter-(\d+)\/?$/i);
-    if (m) ref={book:m[1],chapter:+m[2],from:1,to:null};
+    if (m && bookKey(m[1])) ref={book:m[1],chapter:+m[2],from:1,to:null};
     else {
-      m=path.match(/^\/([^/]+)-(\d+)-(\d+)(?:-(\d+))?\/?$/i);
-      if (m) ref={book:m[1],chapter:+m[2],from:+m[3],to:m[4]?+m[4]:null};
+      // Compact chapter routes use /Psalms-23/. Require a known book so
+      // verse URLs cannot be misclassified as chapters.
+      m=path.match(/^\/([^/]+?)-(\d+)\/?$/i);
+      if (m && bookKey(m[1])) ref={book:m[1],chapter:+m[2],from:1,to:null};
       else {
-        // KJV Online also represents same-chapter ranges as John-3-16_3-17.
-        m=path.match(/^\/([^/]+)-(\d+)-(\d+)_(\d+)-(\d+)\/?$/i);
-        if (m && m[2]===m[4]) ref={book:m[1],chapter:+m[2],from:+m[3],to:+m[5]};
+        // Non-greedy book capture preserves numbered books and verse ranges:
+        // /John-3-16-18/ and /1-John-4-7-8/.
+        m=path.match(/^\/([^/]+?)-(\d+)-(\d+)(?:-(\d+))?\/?$/i);
+        if (m && bookKey(m[1])) ref={book:m[1],chapter:+m[2],from:+m[3],to:m[4]?+m[4]:null};
+        else {
+          // KJV Online also represents same-chapter ranges as John-3-16_3-17.
+          m=path.match(/^\/([^/]+?)-(\d+)-(\d+)_(\d+)-(\d+)\/?$/i);
+          if (m && bookKey(m[1]) && m[2]===m[4]) ref={book:m[1],chapter:+m[2],from:+m[3],to:+m[5]};
+        }
       }
     }
   }
