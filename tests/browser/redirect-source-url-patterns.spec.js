@@ -106,8 +106,10 @@ test.describe('source Bible URL syntax regression coverage', () => {
       .toBe('https://www.blueletterbible.org/kjv/1jo/4/7-8/');
   });
 
-  test('King James Bible Online supports chapter routes and the kjbo.org alias', () => {
+  test('King James Bible Online supports chapter routes, repeated leading slashes, and the kjbo.org alias', () => {
     expect(runSourceRedirect('https://kingjamesbibleonline.org/John-Chapter-3/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/jhn/3/1/');
+    expect(runSourceRedirect('https://www.kingjamesbibleonline.org/' + '/John-Chapter-3/').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/1/');
     expect(runSourceRedirect('https://kjbo.org/John-3-16/').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16/');
