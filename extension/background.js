@@ -3023,9 +3023,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!(await isSuiteEnabled())) { sendResponse({ok:false}); return true; }
     const url = String(message.url || '');
     if (!/^https:\/\/www\.blueletterbible\.org\//i.test(url)) { sendResponse({ok:false}); return true; }
-    // Match other explicit BLB destination opens (including MultiVerse):
-    // deduplicate the same canonical destination, but create a distinct tab
-    // for a different verse and activate an existing match when reused.
+    // Use ScriptTagger-specific matching so a still-loading tab's stale
+    // url cannot substitute a previous verse for this exact clicked target.
+    // Reuse only a matching canonical destination and activate that tab.
     openScriptTaggerDestination(url).then(() => sendResponse({ok:true})).catch(error => {
       console.error('BLB Suite ScriptTagger destination:', error);
       sendResponse({ok:false, error:String(error)});
