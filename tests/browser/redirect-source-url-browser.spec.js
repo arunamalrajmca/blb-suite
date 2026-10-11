@@ -50,6 +50,16 @@ test.describe('real-browser source URL redirect regressions', () => {
     await expect(page).toHaveURL(targetUrl);
   });
 
+  test('King James Bible Online original 1611 chapter URL navigates to the standard BLB KJV destination', async ({ page }) => {
+    const sourceUrl = 'https://www.kingjamesbibleonline.org/John-Chapter-1_Original-1611-KJV/';
+    const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/1/1/';
+    await loadProductionRedirect(page, sourceUrl);
+    const navigated = page.waitForURL(targetUrl, { waitUntil: 'domcontentloaded' });
+    await page.addScriptTag({ content: productionRedirectGate });
+    await navigated;
+    await expect(page).toHaveURL(targetUrl);
+  });
+
   test('www KJV.site verse URL navigates to the resolved BLB destination', async ({ page }) => {
     const sourceUrl = 'https://www.kjv.site/John-3-16-kjv/';
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
