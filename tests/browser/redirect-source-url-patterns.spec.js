@@ -109,6 +109,8 @@ test.describe('source Bible URL syntax regression coverage', () => {
   test('King James Bible Online supports chapter routes, compact chapter routes, and repeated leading slashes', () => {
     expect(runSourceRedirect('https://kingjamesbibleonline.org/John-Chapter-3/').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/1/');
+    expect(runSourceRedirect('https://www.kingjamesbibleonline.org/John-Chapter-1_Original-1611-KJV/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/jhn/1/1/');
     expect(runSourceRedirect('https://www.kingjamesbibleonline.org/' + '/John-Chapter-3/').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/1/');
     expect(runSourceRedirect('https://www.kingjamesbibleonline.org/Psalms-23/').redirectedTo)
