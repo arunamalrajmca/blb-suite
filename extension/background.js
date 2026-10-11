@@ -2607,6 +2607,16 @@ async function ensureContentScriptInTab(tabId) {
       // ScriptTagger handler guards against duplicate execution.
       try {
         await chrome.scripting.executeScript({target:{tabId}, files});
+        // Injection can race the popup's final preference write on an already
+        // open non-default host. Once the bundle has executed, explicitly
+        // refresh the feature gates from storage rather than relying only on
+        // document-start initialization.
+        if (files.includes('content.js')) {
+          try {
+            const refreshed = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
+            if (refreshed?.ok === true) return true;
+          } catch (_) {}
+        }
         return true;
       } catch (_) {
         return false;
