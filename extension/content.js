@@ -202,7 +202,7 @@ function redirectBibleSite() {
     // Some entry URLs arrive with repeated leading slashes after the host.
     // Normalize only this source site's path before applying its known routes.
     const path=u.pathname.replace(/^\/{2,}/, "/");
-    let m=path.match(/^\/([^/]+)-Chapter-(\d+)\/?$/i);
+    let m=path.match(/^\/([^/]+)-Chapter-(\d+)(?:_Original-1611-KJV)?\/?$/i);
     if (m && bookKey(m[1])) ref={book:m[1],chapter:+m[2],from:1,to:null};
     else {
       // Compact chapter routes use /Psalms-23/. Require a known book so
