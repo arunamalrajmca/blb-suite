@@ -37,23 +37,23 @@ function runSourceRedirect(url) {
 
 test.describe('source Bible URL syntax regression coverage', () => {
   test('Bible Hub general and translation-prefixed verse URLs', () => {
-    expect(runSourceRedirect('https://biblehub.com/jhn/3-16.htm').redirectedTo)
+    expect(runSourceRedirect('https://biblehub.com/john/3-16.htm').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16/');
-    expect(runSourceRedirect('https://biblehub.com/kjv/jhn/3-16.htm').redirectedTo)
+    expect(runSourceRedirect('https://biblehub.com/kjv/john/3-16.htm').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16/');
-    expect(runSourceRedirect('https://biblehub.com/esv/jhn/3-16.htm').redirectedTo)
+    expect(runSourceRedirect('https://biblehub.com/esv/john/3-16.htm').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16/');
   });
 
   test('Bible Hub alternate passage URL preserves a verse range', () => {
-    expect(runSourceRedirect('https://biblehub.com/passage/jhn/3/16-18').redirectedTo)
+    expect(runSourceRedirect('https://biblehub.com/passage/john/3/16-18').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16-18/');
   });
 
   test('BibleRef commentary path extracts the verse from the repeated chapter slug', () => {
-    expect(runSourceRedirect('https://www.bibleref.com/jhn/3/john-3-16.html').redirectedTo)
+    expect(runSourceRedirect('https://www.bibleref.com/john/3/john-3-16.html').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16/');
-    expect(runSourceRedirect('https://www.bibleref.com/jhn/3/john-3-16-17.html').redirectedTo)
+    expect(runSourceRedirect('https://www.bibleref.com/john/3/john-3-16-17.html').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16-17/');
   });
 
@@ -63,7 +63,7 @@ test.describe('source Bible URL syntax regression coverage', () => {
   });
 
   test('Official King James Bible preserves a verse range', () => {
-    expect(runSourceRedirect('https://officialkingjamesbible.com/bible/1jo/3/16-17').redirectedTo)
+    expect(runSourceRedirect('https://officialkingjamesbible.com/bible/1-john/3/16-17').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/1jo/3/16-17/');
   });
 
@@ -98,11 +98,11 @@ test.describe('source Bible URL syntax regression coverage', () => {
   });
 
   test('Bible Hub supports single verses, chapters, and ranges in standard and translation paths', () => {
-    expect(runSourceRedirect('https://biblehub.com/gen/1.htm').redirectedTo)
+    expect(runSourceRedirect('https://biblehub.com/genesis/1.htm').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/gen/1/1/');
-    expect(runSourceRedirect('https://biblehub.com/jhn/3-16-18.htm').redirectedTo)
+    expect(runSourceRedirect('https://biblehub.com/john/3-16-18.htm').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16-18/');
-    expect(runSourceRedirect('https://biblehub.com/niv/1jo/4-7-8.htm').redirectedTo)
+    expect(runSourceRedirect('https://biblehub.com/niv/1_john/4-7-8.htm').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/1jo/4/7-8/');
   });
 
@@ -129,8 +129,8 @@ test.describe('source Bible URL syntax regression coverage', () => {
 
   test('unsupported and malformed source URLs do not redirect', () => {
     expect(runSourceRedirect('https://biblehub.com/not-a-book/abc.htm').redirectedTo).toBe(null);
-    expect(runSourceRedirect('https://biblehub.com/jhn/3-16-18-20.htm').redirectedTo).toBe(null);
-    expect(runSourceRedirect('https://example.com/jhn/3-16.htm').redirectedTo).toBe(null);
+    expect(runSourceRedirect('https://biblehub.com/john/3-16-18-20.htm').redirectedTo).toBe(null);
+    expect(runSourceRedirect('https://example.com/john/3-16.htm').redirectedTo).toBe(null);
     expect(runSourceRedirect('https://biblegateway.com/search/?search=John%203%3A16').redirectedTo).toBe(null);
   });
 
