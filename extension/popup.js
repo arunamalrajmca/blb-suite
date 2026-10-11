@@ -1111,6 +1111,21 @@ document.addEventListener('click', e => {
 guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
 async function setIndependentSiteFeature(feature, on) {
+  // Chrome requires permissions.request() to be invoked directly from the
+  // user's click/change gesture. Do not wait for getState() or storage reads
+  // before starting the request, or the browser can reject it as lacking a
+  // user gesture and leave an enabled-looking site feature without access.
+  let accessPromise = Promise.resolve(true);
+  if (on && currentSiteOrigin) {
+    try {
+      accessPromise = chrome.permissions.request({origins:[currentSiteOrigin]})
+        .then(granted => granted === true)
+        .catch(() => false);
+    } catch (_) {
+      accessPromise = Promise.resolve(false);
+    }
+  }
+
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite ||
       (feature === 'doubleClick' && state.isPdfContext)) {
@@ -1118,11 +1133,14 @@ async function setIndependentSiteFeature(feature, on) {
     return;
   }
 
-  // Pin the user's choice and preserve the other feature's effective state
-  // before permission approval can change hostname-based defaults.
+  // Persist the selected feature and preserve the other feature's effective
+  // state. The permission request above was started synchronously in the
+  // original user-gesture call stack; await it only after this state check.
   if (on) {
-    await pinSiteFeatureChoice(feature);
-    if (!(await requestCurrentSiteAccess())) {
+    const pinPromise = pinSiteFeatureChoice(feature);
+    const granted = await accessPromise;
+    await pinPromise;
+    if (!granted) {
       if (feature === 'pageButton') await setPageButton(false);
       else if (feature === 'doubleClick') await setDoubleClick(false);
       render(await getState());
