@@ -2474,7 +2474,7 @@ const REDIRECT_HOSTNAMES = new Set([
 ]);
 
 function isRedirectHostname(hostname) {
-  return REDIRECT_HOSTNAMES.has(String(hostname || '').toLowerCase());
+  return REDIRECT_HOSTNAMES.has(normalizeSiteHostname(String(hostname || '')));
 }
 
 function contentScriptFilesForTab(tab, data) {
