@@ -6,12 +6,14 @@ const vm = require('node:vm');
 const source = fs.readFileSync(path.resolve(__dirname, '../../extension/content.js'), 'utf8');
 const decodeStart = source.indexOf('function decodeSafe(v) {');
 const parseStart = source.indexOf('function parseRef(text) {', decodeStart);
+const blbUrlStart = source.indexOf('function blbUrl(', decodeStart);
 const redirectStart = source.indexOf('function redirectBibleSite() {', parseStart);
 const redirectEnd = source.indexOf('\nfunction redirectBlbNet() {', redirectStart);
-if ([decodeStart, parseStart, redirectStart, redirectEnd].some(index => index < 0)) {
+if ([decodeStart, blbUrlStart, parseStart, redirectStart, redirectEnd].some(index => index < 0)) {
   throw new Error('Could not locate source-site redirect functions in extension/content.js');
 }
-const helpers = source.slice(decodeStart, parseStart) +
+// Exclude the production blbUrl() helper entirely so the test's stub is used.
+const helpers = source.slice(decodeStart, blbUrlStart) +
   source.slice(parseStart, redirectStart) +
   source.slice(redirectStart, redirectEnd);
 
