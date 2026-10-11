@@ -5,9 +5,11 @@ const vm = require('node:vm');
 
 const source = fs.readFileSync(path.resolve(__dirname, '../../extension/content.js'), 'utf8');
 const start = source.indexOf('function redirectBlbNet() {');
-const end = source.indexOf('\n}\n\nconst REDIRECT_HOSTS', start);
-if (start < 0 || end < 0) throw new Error('Could not locate redirectBlbNet() in extension/content.js');
-const functionSource = source.slice(start, end + 2);
+const end = source.indexOf('\nconst REDIRECT_HOSTS = new Set([', start);
+if (start < 0 || end < 0) throw new Error('Could not locate redirectBlbNet() or REDIRECT_HOSTS in extension/content.js');
+// Include the function's closing brace and any comments between it and the set.
+// This avoids coupling the extraction to exact whitespace/comment placement.
+const functionSource = source.slice(start, end);
 
 function runRedirect(hostname, pathname) {
   let redirectedTo = null;

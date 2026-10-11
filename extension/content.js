@@ -168,37 +168,71 @@ function redirectBibleSite() {
   if (host==="bibleref.com") {
     const p=u.pathname.split("/").filter(Boolean);
     if (p.length>=2 && /^\d+$/.test(p[1])) {
-      // The filename repeats the chapter, e.g. John-3-16.html or
-      // John-3-16-18.html. Match the chapter explicitly so the first
-      // captured number is the verse, not the chapter.
+      // Commentary path: /john/3/john-3-16.html (or a verse range).
       const vm=u.pathname.match(new RegExp("-"+p[1]+"-(\\d+)(?:-(\\d+))?\\.html$", "i"));
-      ref={book:p[0],chapter:+p[1],from:vm?+vm[1]:1,to:vm&&vm[2]?+vm[2]:null};
+      if (vm) ref={book:p[0],chapter:+p[1],from:+vm[1],to:vm[2]?+vm[2]:null};
+      else if (/^\/[^/]+\/\d+\/?$/i.test(u.pathname)) ref={book:p[0],chapter:+p[1],from:1,to:null};
+    }
+    // Search-result route: /biblepassage/?search=John_3%3A16-17.
+    if (!ref && u.pathname.toLowerCase()==="/biblepassage/") {
+      const search=u.searchParams.get("search")||"";
+      ref=parseRef(search.replace(/_/g," "));
     }
   }
 
   if (host==="biblehub.com") {
-    const m=u.pathname.match(/^\/([^/]+)\/(\d+)(?:-(\d+)(?:-(\d+))?)?\.htm$/i);
-    if (m) ref={book:m[1],chapter:+m[2],from:m[3]?+m[3]:1,to:m[4]?+m[4]:null};
+    // Standard passage: /john/3-16.htm. Translation-prefixed passage:
+    // /kjv/john/3-16.htm (the source version never controls BLB's KJV target).
+    let m=u.pathname.match(/^\/([^/]+)\/(\d+)(?:-(\d+)(?:-(\d+))?)?\.htm$/i);
+    if (m) {
+      ref={book:m[1],chapter:+m[2],from:m[3]?+m[3]:1,to:m[4]?+m[4]:null};
+    } else {
+      m=u.pathname.match(/^\/([a-z0-9-]+)\/([^/]+)\/(\d+)(?:-(\d+)(?:-(\d+))?)?\.htm$/i);
+      if (m && /^(?:kjv|niv|esv|nkjv|nasb|nasb20|nlt|bsb|asv|web|amp|net|csb|msg|hcsb)$/i.test(m[1])) {
+        ref={book:m[2],chapter:+m[3],from:m[4]?+m[4]:1,to:m[5]?+m[5]:null};
+      } else {
+        // Bible Hub's alternate passage route: /passage/john/3/16-18.
+        m=u.pathname.match(/^\/passage\/([^/]+)\/(\d+)\/(\d+)(?:-(\d+))?\/?$/i);
+        if (m) ref={book:m[1],chapter:+m[2],from:+m[3],to:m[4]?+m[4]:null};
+      }
+    }
   }
 
   if (host==="kingjamesbibleonline.org" || host==="kjbo.org") {
-    let m=u.pathname.match(/^\/([^/]+)-Chapter-(\d+)\/?$/i);
-    if (m) ref={book:m[1],chapter:+m[2],from:1,to:null};
+    // Some entry URLs arrive with repeated leading slashes after the host.
+    // Normalize only this source site's path before applying its known routes.
+    const path=u.pathname.replace(/^\/{2,}/, "/");
+    let m=path.match(/^\/([^/]+)-Chapter-(\d+)(?:_Original-1611-KJV)?\/?$/i);
+    if (m && bookKey(m[1])) ref={book:m[1],chapter:+m[2],from:1,to:null};
     else {
-      m=u.pathname.match(/^\/([^/]+)-(\d+)-(\d+)(?:-(\d+))?\/?$/i);
-      if (m) ref={book:m[1],chapter:+m[2],from:+m[3],to:m[4]?+m[4]:null};
+      // Compact chapter routes use /Psalms-23/. Require a known book so
+      // verse URLs cannot be misclassified as chapters.
+      m=path.match(/^\/([^/]+?)-(\d+)\/?$/i);
+      if (m && bookKey(m[1])) ref={book:m[1],chapter:+m[2],from:1,to:null};
+      else {
+        // Non-greedy book capture preserves numbered books and verse ranges:
+        // /John-3-16-18/ and /1-John-4-7-8/.
+        m=path.match(/^\/([^/]+?)-(\d+)-(\d+)(?:-(\d+))?\/?$/i);
+        if (m && bookKey(m[1])) ref={book:m[1],chapter:+m[2],from:+m[3],to:m[4]?+m[4]:null};
+        else {
+          // KJV Online also represents same-chapter ranges as John-3-16_3-17.
+          m=path.match(/^\/([^/]+?)-(\d+)-(\d+)_(\d+)-(\d+)\/?$/i);
+          if (m && bookKey(m[1]) && m[2]===m[4]) ref={book:m[1],chapter:+m[2],from:+m[3],to:+m[5]};
+        }
+      }
     }
   }
 
   if (host==="kjv.site") {
-    // KJV.site uses /Book-11-kjv/ for a chapter page and may also use
-    // /Book-11-16-kjv/ for a verse. Always ignore the source version
-    // and redirect the corresponding passage to BLB KJV.
+    // The chapter pattern can greedily treat a verse URL such as
+    // /John-3-16-kjv/ as book "John-3", chapter 16. Only accept a chapter
+    // match when its book token resolves; otherwise try the verse pattern.
     let m=u.pathname.match(/^\/([^/]+)-(\d+)-kjv\/?$/i);
-    if (m) ref={book:m[1],chapter:+m[2],from:1,to:null};
-    else {
+    if (m && bookKey(m[1])) {
+      ref={book:m[1],chapter:+m[2],from:1,to:null};
+    } else {
       m=u.pathname.match(/^\/([^/]+)-(\d+)-(\d+)(?:-(\d+))?-kjv\/?$/i);
-      if (m) ref={book:m[1],chapter:+m[2],from:+m[3],to:m[4]?+m[4]:null};
+      if (m && bookKey(m[1])) ref={book:m[1],chapter:+m[2],from:+m[3],to:m[4]?+m[4]:null};
     }
   }
 
@@ -206,8 +240,8 @@ function redirectBibleSite() {
     // OfficialKingJamesBible.com uses /bible/<book>/<chapter> for a
     // chapter and /bible/<book>/<chapter>/<verse> for a single verse.
     // It is a KJV site, so send the same passage to BLB KJV.
-    const m=u.pathname.match(/^\/bible\/([^/]+)\/(\d+)(?:\/(\d+))?\/?$/i);
-    if (m) ref={book:m[1],chapter:+m[2],from:m[3]?+m[3]:1,to:null};
+    const m=u.pathname.match(/^\/bible\/([^/]+)\/(\d+)(?:\/(\d+)(?:-(\d+))?)?\/?$/i);
+    if (m) ref={book:m[1],chapter:+m[2],from:m[3]?+m[3]:1,to:m[4]?+m[4]:null};
   }
 
   if (host==="bibleportal.com") {
@@ -247,16 +281,16 @@ function redirectBlbNet() {
   return true;
 }
 
+// Match the same normalized hostname form used by background.js.
+// This makes bare and "www." variants resolve to the same supported source.
 const REDIRECT_HOSTS = new Set([
-  'www.bible.com', 'www.biblegateway.com', 'www.bibleref.com', 'biblehub.com',
-  'www.biblehub.com', 'bibleportal.com', 'www.bibleportal.com',
-  'www.kingjamesbibleonline.org', 'kjbo.org', 'www.kjbo.org',
-  'www.kjv.site', 'kjv.site', 'm.kjv.site',
-  'officialkingjamesbible.com', 'www.officialkingjamesbible.com',
-  'webstersdictionary1828.com', 'www.blueletterbible.org'
+  'bible.com', 'biblegateway.com', 'bibleref.com', 'biblehub.com',
+  'bibleportal.com', 'kingjamesbibleonline.org', 'kjbo.org',
+  'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com',
+  'webstersdictionary1828.com', 'blueletterbible.org'
 ]);
 
-if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
+if (REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\./, ''))) {
   isSuiteEnabled().then(enabled => {
     if (!enabled) return;
     return chrome.storage.local.get({redirectEnabled:false}).then(({redirectEnabled})=>{
