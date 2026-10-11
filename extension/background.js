@@ -2573,6 +2573,10 @@ async function ensureContentScriptInTab(tabId) {
       const tab = await chrome.tabs.get(tabId);
       if (!isHttpPageUrl(tab?.url)) return false;
       if (!(await hasHostAccessForTab(tab))) return false;
+
+      // Read settings only after permission is confirmed. A toggle may be
+      // written while Chrome's permission prompt is closing, so re-read the
+      // feature gates immediately before deciding which scripts to activate.
       const settings = await chrome.storage.local.get({
         masterEnabled:true,
         pageSelectionButtonSites:{},
@@ -2584,10 +2588,12 @@ async function ensureContentScriptInTab(tabId) {
       const files = contentScriptFilesForTab(tab, settings);
       if (!files.length) return false;
 
-      // Register only the feature bundle needed for this host. Ordinary sites
-      // using global ScriptTagger redirection receive one isolated script.
-      if (!(await ensureRuntimeContentScriptRegistered(tab, files))) return false;
+      await ensureRuntimeContentScriptRegistered(tab, files);
 
+      // First refresh an already-installed content script. If it responds,
+      // its feature gates have been re-read from storage and no reinjection is
+      // needed. If it does not respond (for example after an extension reload),
+      // inject the current bundle and then refresh the newly installed gates.
       if (files.includes('content.js')) {
         try {
           const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
@@ -2600,14 +2606,35 @@ async function ensureContentScriptInTab(tabId) {
         } catch (_) {}
       }
 
-      // Inject into the current document without reloading it. The minimal
-      // ScriptTagger handler guards against duplicate execution.
       try {
         await chrome.scripting.executeScript({target:{tabId}, files});
-        return true;
       } catch (_) {
         return false;
       }
+
+      if (files.includes('content.js')) {
+        // A successful executeScript call can race the content script's
+        // asynchronous storage initialization. Retry the refresh once after
+        // the initial message, and don't mistake a missing response for a
+        // verified activation.
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
+            if (response?.ok === true) {
+              if (files.includes('redirect-scripttagger.js')) {
+                await chrome.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
+              }
+              return true;
+            }
+          } catch (_) {}
+        }
+        // Injection succeeded, but the content script didn't acknowledge its
+        // feature refresh. Report failure so the caller can retry instead of
+        // silently claiming the activation completed.
+        return false;
+      }
+
+      return true;
     } catch (_) {
       return false;
     }
@@ -2622,7 +2649,6 @@ async function ensureContentScriptInTab(tabId) {
     }
   }
 }
-
 function isTrustedExtensionSender(sender) {
   return !!sender && sender.id === chrome.runtime.id;
 }
@@ -2637,7 +2663,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;
@@ -2985,6 +3011,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'blbSuiteStopStudyRecording') {
     try { sendResponse(await stopStudyRecording()); } catch (error) { sendResponse({ok:false, error:String(error)}); }
+    return true;
+  }
+
+  if (message.type === 'blbSuitePrepareSiteFeatureToggle') {
+    try {
+      const origin = String(message.origin || '');
+      const feature = message.feature === 'pageButton' ? 'pageButton' : message.feature === 'doubleClick' ? 'doubleClick' : '';
+      const parsed = new URL(origin.endsWith('/*') ? origin.slice(0, -1) : origin);
+      if (!feature || !/^https?:$/.test(parsed.protocol)) {
+        sendResponse({ok:false});
+        return true;
+      }
+      const key = normalizeSiteHostname(parsed.hostname);
+      if (!key || key === 'blueletterbible.org') {
+        sendResponse({ok:false});
+        return true;
+      }
+      const data = await chrome.storage.local.get({masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}});
+      if (data.masterEnabled === false) {
+        sendResponse({ok:false});
+        return true;
+      }
+      const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
+      const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
+      if (feature === 'pageButton') {
+        pageSites[key] = true;
+        if (!Object.prototype.hasOwnProperty.call(doubleSites, key)) doubleSites[key] = message.otherFeatureEnabled === true;
+      } else {
+        doubleSites[key] = true;
+        if (!Object.prototype.hasOwnProperty.call(pageSites, key)) pageSites[key] = message.otherFeatureEnabled === true;
+      }
+      await chrome.storage.local.set({pageSelectionButtonSites:pageSites,doubleClickBlbSites:doubleSites});
+      sendResponse({ok:true});
+    } catch (error) {
+      sendResponse({ok:false,error:String(error)});
+    }
     return true;
   }
 
@@ -5402,8 +5464,13 @@ async function syncPdfSelectionContextMenuVisibility(tab) {
   } catch (_) {}
 }
 
-chrome.tabs.onActivated.addListener(({tabId}) => {
-  chrome.tabs.get(tabId).then(tab => {
+chrome.tabs.onActivated.addListener(() => {
+  // Context-menu visibility is global, so synchronize only against the active
+  // tab in the last-focused window. An activation in a background window must
+  // not hide/show the item for the window the user is currently using.
+  chrome.tabs.query({active:true,lastFocusedWindow:true}).then(tabs => {
+    const tab = tabs[0];
+    if (!tab) return;
     syncWebSelectionContextMenuVisibility(tab).catch(() => {});
     syncPdfSelectionContextMenuVisibility(tab).catch(() => {});
   }).catch(() => {});
@@ -5425,8 +5492,14 @@ async function shouldInjectContentScriptForTab(tab, data) {
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.url || changeInfo.status === 'complete') {
-    syncWebSelectionContextMenuVisibility(tab).catch(() => {});
-    syncPdfSelectionContextMenuVisibility(tab).catch(() => {});
+    // The menu item is global, but onUpdated fires for inactive tabs too.
+    // Only let the currently active tab in the last-focused window control it.
+    chrome.tabs.query({active:true,lastFocusedWindow:true}).then(tabs => {
+      const activeTab = tabs[0];
+      if (activeTab?.id !== tabId) return;
+      syncWebSelectionContextMenuVisibility(activeTab).catch(() => {});
+      syncPdfSelectionContextMenuVisibility(activeTab).catch(() => {});
+    }).catch(() => {});
   }
   if (changeInfo.status === 'complete' && tab?.url && isHttpPageUrl(tab.url)) {
     chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false}).then(async data => {
@@ -5518,26 +5591,29 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.redirectEnabled?.newValue === true) {
     injectRedirectEnabledTabs().catch(() => {});
   }
-  if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites) {
+  if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites || changes.doubleClickBlbSites) {
     installRules();
     // Keep the existing web-selection menu item in place. Only its visibility
     // changes with the site preference; removing/recreating it here causes a
     // first-right-click race.
-    chrome.tabs.query({active:true})
+    chrome.tabs.query({active:true,lastFocusedWindow:true})
       .then(tabs => {
-        for (const tab of tabs) {
-          syncWebSelectionContextMenuVisibility(tab).catch(() => {});
-        }
+        const tab = tabs[0];
+        if (tab) syncWebSelectionContextMenuVisibility(tab).catch(() => {});
       })
       .catch(() => {});
     installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true})
       .then(async tabs => {
         for (const tab of tabs) {
-          if (tab?.id && changes.pageSelectionButtonSites) {
+          if (tab?.id && (changes.pageSelectionButtonSites || changes.doubleClickBlbSites)) {
             const key = pageSelectionSettingKeyFromTab(tab);
-            const sites = changes.pageSelectionButtonSites.newValue && typeof changes.pageSelectionButtonSites.newValue === 'object'
-              ? changes.pageSelectionButtonSites.newValue : {};
-            if (key && sites[key] === true) await ensureContentScriptInTab(tab.id);
+            const pageSites = changes.pageSelectionButtonSites?.newValue && typeof changes.pageSelectionButtonSites.newValue === 'object'
+              ? changes.pageSelectionButtonSites.newValue
+              : (await chrome.storage.local.get({pageSelectionButtonSites:{}})).pageSelectionButtonSites;
+            const doubleSites = changes.doubleClickBlbSites?.newValue && typeof changes.doubleClickBlbSites.newValue === 'object'
+              ? changes.doubleClickBlbSites.newValue
+              : (await chrome.storage.local.get({doubleClickBlbSites:{}})).doubleClickBlbSites;
+            if (key && (pageSites?.[key] === true || doubleSites?.[key] === true)) await ensureContentScriptInTab(tab.id);
           }
           await syncPdfSelectionContextMenuVisibility(tab);
         }
@@ -5545,6 +5621,22 @@ chrome.storage.onChanged.addListener((changes, area) => {
       .catch(() => {}));
   }
   if (changes.currentStudySessionId || changes.studyAutoStopMinutes) refreshStudyAutoStopAlarm().catch(()=>{});
+});
+
+chrome.permissions.onAdded.addListener(() => {
+  // A feature preference may be persisted before Chrome finishes its host
+  // permission prompt. Retry injection after the grant arrives.
+  chrome.tabs.query({active:true,currentWindow:true}).then(async tabs => {
+    const data = await chrome.storage.local.get({masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}});
+    if (data.masterEnabled === false) return;
+    for (const tab of tabs) {
+      if (!tab?.id) continue;
+      const key = pageSelectionSettingKeyFromTab(tab);
+      if (key && (data.pageSelectionButtonSites?.[key] === true || data.doubleClickBlbSites?.[key] === true)) {
+        await ensureContentScriptInTab(tab.id);
+      }
+    }
+  }).catch(() => {});
 });
 
 chrome.alarms.onAlarm.addListener(alarm => {

@@ -6,6 +6,7 @@
 <title>BLB Suite</title>
 <style>
 *{box-sizing:border-box}
+body.popup-loading{visibility:hidden}
 body{margin:0;width:360px;padding:10px;background:#1b1c1f;color:#e8eaed;font-family:Arial,Helvetica,sans-serif;font-size:12px;color-scheme:dark}
 button,input,textarea{font:inherit}
 .app-header{display:flex;align-items:center;gap:9px;padding:1px 3px 10px;border-bottom:1px solid #3b3e43;margin-bottom:9px}
@@ -30,7 +31,7 @@ button,input,textarea{font:inherit}
 .guide-version{font-size:8px;color:#6f757c;white-space:nowrap}.guide-footer{display:flex;align-items:center;justify-content:flex-end;gap:6px;padding:5px 10px 6px;border-top:1px solid #3b3e43;color:#858b92;font-size:8px;line-height:1}.guide-label{margin-right:auto;white-space:nowrap}.guide-btn{height:20px;min-width:42px;padding:0 7px;border:1px solid #4f555c;border-radius:5px;background:#25272a;color:#cfd4da;font-size:8px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:4px;text-decoration:none}.guide-btn svg{width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}.guide-btn:hover{background:#34373b;color:#fff}.guide-btn:focus-visible{outline:1px solid #8ab4f8;outline-offset:1px}
 </style>
 </head>
-<body>
+<body class="popup-loading">
   <header class="app-header">
     <img class="header-icon" src="icons/icon48.png" alt="KJV Bible Study">
     <div class="header-copy">

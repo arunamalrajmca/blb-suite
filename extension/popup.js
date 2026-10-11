@@ -152,6 +152,7 @@ async function setMaster(on) {
   noteInput.value = '';
   setStatus('Select a topic and start recording');
   render(await getState());
+
   await refreshStudyState();
   // refreshStudyState intentionally never auto-selects from stored history.
   topicInput.value = '';
@@ -173,27 +174,20 @@ async function requestCurrentSiteAccess(origin = currentSiteOrigin) {
 
 
 async function pinSiteFeatureChoice(feature, otherFeatureEnabled) {
-  const state = await getState();
-  if (!state.siteKey || !state.master || state.isBlbSite || state.isPdfContext) return;
-  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}});
-  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
-  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
-
-  // Persist intent before requesting permission: the popup may close while
-  // the browser permission prompt is open. Preserve the other feature's
-  // effective state if permission approval would otherwise change its default.
-  if (feature === 'pageButton') {
-    pageSites[state.siteKey] = true;
-    if (!Object.prototype.hasOwnProperty.call(doubleSites, state.siteKey)) {
-      doubleSites[state.siteKey] = otherFeatureEnabled === true;
-    }
-  } else {
-    doubleSites[state.siteKey] = true;
-    if (!Object.prototype.hasOwnProperty.call(pageSites, state.siteKey)) {
-      pageSites[state.siteKey] = otherFeatureEnabled === true;
-    }
+  // Hand the preference to the service worker before opening Chrome's host
+  // permission prompt. The popup may be destroyed while that prompt is shown;
+  // the background can finish the durable write and inject after permission.
+  if (!currentSiteOrigin) return {ok:false};
+  try {
+    return await chrome.runtime.sendMessage({
+      type:'blbSuitePrepareSiteFeatureToggle',
+      origin:currentSiteOrigin,
+      feature,
+      otherFeatureEnabled:otherFeatureEnabled === true
+    });
+  } catch (_) {
+    return {ok:false};
   }
-  await chrome.storage.local.set({pageSelectionButtonSites:pageSites, doubleClickBlbSites:doubleSites});
 }
 
 async function setPageButton(on) {
@@ -1111,17 +1105,20 @@ document.addEventListener('click', e => {
 guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
 async function setIndependentSiteFeature(feature, on) {
-  // Snapshot the OTHER feature before requesting access. Granting this site's
-  // host permission can change effective defaults while async reads are in
-  // flight; never use that post-grant state to turn a previously-OFF feature ON.
+  // Capture the other toggle before any permission change can alter defaults.
   const otherFeatureEnabled = feature === 'pageButton'
     ? document.getElementById('doubleClick').checked
     : document.getElementById('pageButton').checked;
 
-  // Chrome requires permissions.request() to be invoked directly from the
-  // user's click/change gesture. Do not wait for getState() or storage reads
-  // before starting the request, or the browser can reject it as lacking a
-  // user gesture and leave an enabled-looking site feature without access.
+  // Start pinning the explicit choice immediately. The popup can be closed by
+  // Chrome while its permission prompt is open; waiting for getState() first
+  // delayed this durable write until after that interruption.
+  const pinPromise = on
+    ? pinSiteFeatureChoice(feature, otherFeatureEnabled)
+    : Promise.resolve();
+
+  // permissions.request must still be invoked synchronously in the original
+  // change-handler call stack (before any await).
   let accessPromise = Promise.resolve(true);
   if (on && currentSiteOrigin) {
     try {
@@ -1140,13 +1137,8 @@ async function setIndependentSiteFeature(feature, on) {
     return;
   }
 
-  // Persist the selected feature and preserve the other feature's effective
-  // state. The permission request above was started synchronously in the
-  // original user-gesture call stack; await it only after this state check.
   if (on) {
-    const pinPromise = pinSiteFeatureChoice(feature, otherFeatureEnabled);
-    const granted = await accessPromise;
-    await pinPromise;
+    const [granted] = await Promise.all([accessPromise, pinPromise]);
     if (!granted) {
       if (feature === 'pageButton') await setPageButton(false);
       else if (feature === 'doubleClick') await setDoubleClick(false);
@@ -1176,6 +1168,7 @@ document.getElementById('redirectEnabled').addEventListener('change', e => setRe
 
 (async () => {
   render(await getState());
+  document.body.classList.remove('popup-loading');
   await loadSelectedTopic();
   await refreshStudyState();
   await refreshStudyAutoStop();
