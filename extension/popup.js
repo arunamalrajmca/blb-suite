@@ -172,30 +172,6 @@ async function requestCurrentSiteAccess(origin = currentSiteOrigin) {
 }
 
 
-async function pinSiteFeatureChoice(feature, otherFeatureEnabled) {
-  const state = await getState();
-  if (!state.siteKey || !state.master || state.isBlbSite || state.isPdfContext) return;
-  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}});
-  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
-  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
-
-  // Persist intent before requesting permission: the popup may close while
-  // the browser permission prompt is open. Preserve the other feature's
-  // effective state if permission approval would otherwise change its default.
-  if (feature === 'pageButton') {
-    pageSites[state.siteKey] = true;
-    if (!Object.prototype.hasOwnProperty.call(doubleSites, state.siteKey)) {
-      doubleSites[state.siteKey] = otherFeatureEnabled === true;
-    }
-  } else {
-    doubleSites[state.siteKey] = true;
-    if (!Object.prototype.hasOwnProperty.call(pageSites, state.siteKey)) {
-      pageSites[state.siteKey] = otherFeatureEnabled === true;
-    }
-  }
-  await chrome.storage.local.set({pageSelectionButtonSites:pageSites, doubleClickBlbSites:doubleSites});
-}
-
 async function setPageButton(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
@@ -1110,64 +1086,34 @@ document.addEventListener('click', e => {
 
 guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
-async function setIndependentSiteFeature(feature, on) {
-  // Snapshot the OTHER feature before requesting access. Granting this site's
-  // host permission can change effective defaults while async reads are in
-  // flight; never use that post-grant state to turn a previously-OFF feature ON.
-  const otherFeatureEnabled = feature === 'pageButton'
-    ? document.getElementById('doubleClick').checked
-    : document.getElementById('pageButton').checked;
-
-  // Chrome requires permissions.request() to be invoked directly from the
-  // user's click/change gesture. Do not wait for getState() or storage reads
-  // before starting the request, or the browser can reject it as lacking a
-  // user gesture and leave an enabled-looking site feature without access.
-  let accessPromise = Promise.resolve(true);
-  if (on && currentSiteOrigin) {
-    try {
-      accessPromise = chrome.permissions.request({origins:[currentSiteOrigin]})
-        .then(granted => granted === true)
-        .catch(() => false);
-    } catch (_) {
-      accessPromise = Promise.resolve(false);
-    }
-  }
-
+async function setSiteFeaturesEnabled(on) {
   const state = await getState();
-  if (!state.siteKey || !state.master || state.isBlbSite ||
-      (feature === 'doubleClick' && state.isPdfContext)) {
-    render(state);
+  if (!state.siteKey || !state.master || state.isBlbSite) return;
+  if (on && !(await requestCurrentSiteAccess())) {
+    await setPageButton(false);
+    await setDoubleClick(false);
     return;
   }
-
-  // Persist the selected feature and preserve the other feature's effective
-  // state. The permission request above was started synchronously in the
-  // original user-gesture call stack; await it only after this state check.
+  // Show on BLB and Double-click KJV are paired controls: either ON action
+  // enables both, and either OFF action disables both.
+  await setPageButton(!!on);
+  await setDoubleClick(!!on);
   if (on) {
-    const pinPromise = pinSiteFeatureChoice(feature, otherFeatureEnabled);
-    const granted = await accessPromise;
-    await pinPromise;
-    if (!granted) {
-      if (feature === 'pageButton') await setPageButton(false);
-      else if (feature === 'doubleClick') await setDoubleClick(false);
-      render(await getState());
-      return;
-    }
+    try {
+      const tabs = await chrome.tabs.query({active:true,currentWindow:true});
+      const tabId = tabs[0]?.id;
+      if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
+    } catch (_) {}
   }
-
-  if (feature === 'pageButton') {
-    await setPageButton(!!on);
-  } else if (feature === 'doubleClick') {
-    await setDoubleClick(!!on);
-  }
+  render(await getState());
 }
 
 async function handlePageButtonToggle(on) {
-  await setIndependentSiteFeature('pageButton', on);
+  await setSiteFeaturesEnabled(on);
 }
 
 async function handleDoubleClickToggle(on) {
-  await setIndependentSiteFeature('doubleClick', on);
+  await setSiteFeaturesEnabled(on);
 }
 
 document.getElementById('pageButton').addEventListener('change', e => handlePageButtonToggle(e.target.checked));
