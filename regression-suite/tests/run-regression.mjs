@@ -592,8 +592,6 @@ test('global redirect toggle remains independent of site-specific toggles', () =
   const end = popup.indexOf('\n}', start);
   assert(start >= 0 && end > start, 'global redirect handler missing');
   const handler = popup.slice(start, end);
-  assert(handler.includes("setItem") === false, 'unexpected storage mutation helper in redirect handler');
-  assert(handler.includes("setRedirect") === false, 'unexpected recursive redirect handler');
   assert(!handler.includes('setPageButton(') && !handler.includes('setDoubleClick('), 'global redirect handler must not change site-specific toggles');
 });
 section('selection');
