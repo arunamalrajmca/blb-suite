@@ -2300,6 +2300,9 @@ async function createBlbTabGeneric(url, active = true, {forceNew = false} = {}) 
 chrome.tabs.onRemoved.addListener(tabId => {
   forgetBlbTab(tabId);
   intentionalNewBlbTabs.delete(tabId);
+  for (const [key, id] of scriptTaggerDestinationTabs) {
+    if (id === tabId) scriptTaggerDestinationTabs.delete(key);
+  }
   clearTrackedMultiVerseTab(tabId).catch(()=>{});
   chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}}).then(data=>{
     const map = data.blbSuitePendingMultiVerseRefsByTab && typeof data.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...data.blbSuitePendingMultiVerseRefsByTab} : {};
@@ -2316,6 +2319,85 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     clearTrackedMultiVerseTab(tabId).catch(()=>{});
   }
 });
+
+// ScriptTagger has a stricter destination identity than the general BLB
+// manager: verse links must never collapse onto another verse's tab. Keep its
+// own key namespace, but serialize the complete lookup/create operation using
+// the shared low-level creation queue so rapid clicks cannot race each other.
+const pendingScriptTaggerDestinations = new Map();
+const scriptTaggerDestinationTabs = new Map();
+
+function canonicalScriptTaggerDestinationKey(url) {
+  try {
+    const u = new URL(String(url || ''));
+    const host = u.hostname.toLowerCase().replace(/^www\\./, '');
+    let path = u.pathname.replace(/\\/+$/, '').toLowerCase() || '/';
+    const kjv = path.match(/^\\/kjv\\/([^/]+)\\/(\\d+)(?:\\/(\\d+(?:-\\d+)?))?(?:\\/.*)?$/);
+    if (host === 'blueletterbible.org' && kjv) {
+      const book = kjv[1];
+      const chapter = kjv[2];
+      const verse = kjv[3] || '';
+      // BLB can normalize verse 1 to its chapter URL after loading.
+      return !verse || verse === '1' || verse === '1-1'
+        ? `script-tagger|kjv|${book}|${chapter}`
+        : `script-tagger|kjv|${book}|${chapter}|${verse}`;
+    }
+    // For other supported BLB URL forms, preserve the complete normalized path
+    // and query so separate destinations do not collide.
+    const query = new URLSearchParams(u.search);
+    query.sort();
+    return `script-tagger|${host}${path}${query.toString() ? `?${query.toString()}` : ''}`;
+  } catch (_) {
+    return `script-tagger|${String(url || '').trim().replace(/\\/+$/, '').toLowerCase()}`;
+  }
+}
+
+async function openScriptTaggerDestination(url) {
+  const target = String(url || '');
+  const key = canonicalScriptTaggerDestinationKey(target);
+  if (pendingScriptTaggerDestinations.has(key)) return pendingScriptTaggerDestinations.get(key);
+
+  const operation = enqueueBlbTabCreation(async () => {
+    const rememberedId = scriptTaggerDestinationTabs.get(key);
+    const remembered = await getLiveTabById(rememberedId);
+    if (remembered?.id != null) {
+      await chrome.tabs.update(remembered.id, {active:true});
+      if (remembered.windowId != null) {
+        try { await chrome.windows.update(remembered.windowId, {focused:true}); } catch (_) {}
+      }
+      return remembered;
+    }
+    if (rememberedId != null) scriptTaggerDestinationTabs.delete(key);
+
+    // Recover matching tabs after a service-worker restart. Compare using the
+    // ScriptTagger-specific key, not the general manager's broader key.
+    try {
+      const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
+      const existing = tabs.find(tab =>
+        canonicalScriptTaggerDestinationKey(tab?.url || tab?.pendingUrl || '') === key
+      );
+      if (existing?.id != null) {
+        scriptTaggerDestinationTabs.set(key, existing.id);
+        await chrome.tabs.update(existing.id, {active:true});
+        if (existing.windowId != null) {
+          try { await chrome.windows.update(existing.windowId, {focused:true}); } catch (_) {}
+        }
+        return existing;
+      }
+    } catch (_) {}
+
+    const created = await chrome.tabs.create({url:target, active:true});
+    if (created?.id != null) scriptTaggerDestinationTabs.set(key, created.id);
+    return created;
+  });
+
+  pendingScriptTaggerDestinations.set(key, operation);
+  try {
+    return await operation;
+  } finally {
+    if (pendingScriptTaggerDestinations.get(key) === operation) pendingScriptTaggerDestinations.delete(key);
+  }
+}
 
 async function openBlbDestination(url, activeIfNew = false, activateExisting = activeIfNew) {
   const target = String(url || '');
@@ -2977,11 +3059,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!(await isSuiteEnabled())) { sendResponse({ok:false}); return true; }
     const url = String(message.url || '');
     if (!/^https:\/\/www\.blueletterbible\.org\//i.test(url)) { sendResponse({ok:false}); return true; }
-    // Use the same central BLB tab manager as MultiVerse, Show on BLB,
-    // Alt+B, and other extension destinations. It canonicalizes destinations,
-    // coalesces identical in-flight opens, and records each tab under its
-    // destination key so different verses cannot reuse one another.
-    openBlbDestination(url, true, true).then(() => sendResponse({ok:true})).catch(error => {
+    // ScriptTagger requires per-verse identity: the general BLB destination
+    // key intentionally equates chapter-only and verse-1 URLs, so use its
+    // stricter keyed find-or-create path while sharing the serialized creation
+    // queue. Identical clicks coalesce; different verse keys cannot share tabs.
+    openScriptTaggerDestination(url).then(() => sendResponse({ok:true})).catch(error => {
       console.error('BLB Suite ScriptTagger destination:', error);
       sendResponse({ok:false, error:String(error)});
     });
