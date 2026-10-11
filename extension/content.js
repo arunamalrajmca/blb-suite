@@ -168,17 +168,34 @@ function redirectBibleSite() {
   if (host==="bibleref.com") {
     const p=u.pathname.split("/").filter(Boolean);
     if (p.length>=2 && /^\d+$/.test(p[1])) {
-      // The filename repeats the chapter, e.g. John-3-16.html or
-      // John-3-16-18.html. Match the chapter explicitly so the first
-      // captured number is the verse, not the chapter.
+      // Commentary path: /john/3/john-3-16.html (or a verse range).
       const vm=u.pathname.match(new RegExp("-"+p[1]+"-(\\d+)(?:-(\\d+))?\\.html$", "i"));
-      ref={book:p[0],chapter:+p[1],from:vm?+vm[1]:1,to:vm&&vm[2]?+vm[2]:null};
+      if (vm) ref={book:p[0],chapter:+p[1],from:+vm[1],to:vm[2]?+vm[2]:null};
+      else if (/^\/[^/]+\/\d+\/?$/i.test(u.pathname)) ref={book:p[0],chapter:+p[1],from:1,to:null};
+    }
+    // Search-result route: /biblepassage/?search=John_3%3A16-17.
+    if (!ref && u.pathname.toLowerCase()==="/biblepassage/") {
+      const search=u.searchParams.get("search")||"";
+      ref=parseRef(search.replace(/_/g," "));
     }
   }
 
   if (host==="biblehub.com") {
-    const m=u.pathname.match(/^\/([^/]+)\/(\d+)(?:-(\d+)(?:-(\d+))?)?\.htm$/i);
-    if (m) ref={book:m[1],chapter:+m[2],from:m[3]?+m[3]:1,to:m[4]?+m[4]:null};
+    // Standard passage: /john/3-16.htm. Translation-prefixed passage:
+    // /kjv/john/3-16.htm (the source version never controls BLB's KJV target).
+    let m=u.pathname.match(/^\/([^/]+)\/(\d+)(?:-(\d+)(?:-(\d+))?)?\.htm$/i);
+    if (m) {
+      ref={book:m[1],chapter:+m[2],from:m[3]?+m[3]:1,to:m[4]?+m[4]:null};
+    } else {
+      m=u.pathname.match(/^\/([a-z0-9-]+)\/([^/]+)\/(\d+)(?:-(\d+)(?:-(\d+))?)?\.htm$/i);
+      if (m && /^(?:kjv|niv|esv|nkjv|nasb|nasb20|nlt|bsb|asv|web|amp|net|csb|msg|hcsb)$/i.test(m[1])) {
+        ref={book:m[2],chapter:+m[3],from:m[4]?+m[4]:1,to:m[5]?+m[5]:null};
+      } else {
+        // Bible Hub's alternate passage route: /passage/john/3/16-18.
+        m=u.pathname.match(/^\/passage\/([^/]+)\/(\d+)\/(\d+)(?:-(\d+))?\/?$/i);
+        if (m) ref={book:m[1],chapter:+m[2],from:+m[3],to:m[4]?+m[4]:null};
+      }
+    }
   }
 
   if (host==="kingjamesbibleonline.org" || host==="kjbo.org") {
@@ -187,6 +204,11 @@ function redirectBibleSite() {
     else {
       m=u.pathname.match(/^\/([^/]+)-(\d+)-(\d+)(?:-(\d+))?\/?$/i);
       if (m) ref={book:m[1],chapter:+m[2],from:+m[3],to:m[4]?+m[4]:null};
+      else {
+        // KJV Online also represents same-chapter ranges as John-3-16_3-17.
+        m=u.pathname.match(/^\/([^/]+)-(\d+)-(\d+)_(\d+)-(\d+)\/?$/i);
+        if (m && m[2]===m[4]) ref={book:m[1],chapter:+m[2],from:+m[3],to:+m[5]};
+      }
     }
   }
 
@@ -206,8 +228,8 @@ function redirectBibleSite() {
     // OfficialKingJamesBible.com uses /bible/<book>/<chapter> for a
     // chapter and /bible/<book>/<chapter>/<verse> for a single verse.
     // It is a KJV site, so send the same passage to BLB KJV.
-    const m=u.pathname.match(/^\/bible\/([^/]+)\/(\d+)(?:\/(\d+))?\/?$/i);
-    if (m) ref={book:m[1],chapter:+m[2],from:m[3]?+m[3]:1,to:null};
+    const m=u.pathname.match(/^\/bible\/([^/]+)\/(\d+)(?:\/(\d+)(?:-(\d+))?)?\/?$/i);
+    if (m) ref={book:m[1],chapter:+m[2],from:m[3]?+m[3]:1,to:m[4]?+m[4]:null};
   }
 
   if (host==="bibleportal.com") {
