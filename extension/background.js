@@ -2573,6 +2573,10 @@ async function ensureContentScriptInTab(tabId) {
       const tab = await chrome.tabs.get(tabId);
       if (!isHttpPageUrl(tab?.url)) return false;
       if (!(await hasHostAccessForTab(tab))) return false;
+
+      // Read settings only after permission is confirmed. A toggle may be
+      // written while Chrome's permission prompt is closing, so re-read the
+      // feature gates immediately before deciding which scripts to activate.
       const settings = await chrome.storage.local.get({
         masterEnabled:true,
         pageSelectionButtonSites:{},
@@ -2584,13 +2588,12 @@ async function ensureContentScriptInTab(tabId) {
       const files = contentScriptFilesForTab(tab, settings);
       if (!files.length) return false;
 
-      // Register only the feature bundle needed for this host. Ordinary sites
-      // using global ScriptTagger redirection receive one isolated script.
-      // Persistent registration is best-effort: Chrome may reject an update when
-      // an older feature bundle is already registered for this origin. That must
-      // never prevent injection into the already-open tab.
       await ensureRuntimeContentScriptRegistered(tab, files);
 
+      // First refresh an already-installed content script. If it responds,
+      // its feature gates have been re-read from storage and no reinjection is
+      // needed. If it does not respond (for example after an extension reload),
+      // inject the current bundle and then refresh the newly installed gates.
       if (files.includes('content.js')) {
         try {
           const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
@@ -2603,24 +2606,35 @@ async function ensureContentScriptInTab(tabId) {
         } catch (_) {}
       }
 
-      // Inject into the current document without reloading it. The minimal
-      // ScriptTagger handler guards against duplicate execution.
       try {
         await chrome.scripting.executeScript({target:{tabId}, files});
-        // Injection can race the popup's final preference write on an already
-        // open non-default host. Once the bundle has executed, explicitly
-        // refresh the feature gates from storage rather than relying only on
-        // document-start initialization.
-        if (files.includes('content.js')) {
-          try {
-            const refreshed = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
-            if (refreshed?.ok === true) return true;
-          } catch (_) {}
-        }
-        return true;
       } catch (_) {
         return false;
       }
+
+      if (files.includes('content.js')) {
+        // A successful executeScript call can race the content script's
+        // asynchronous storage initialization. Retry the refresh once after
+        // the initial message, and don't mistake a missing response for a
+        // verified activation.
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
+            if (response?.ok === true) {
+              if (files.includes('redirect-scripttagger.js')) {
+                await chrome.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
+              }
+              return true;
+            }
+          } catch (_) {}
+        }
+        // Injection succeeded, but the content script didn't acknowledge its
+        // feature refresh. Report failure so the caller can retry instead of
+        // silently claiming the activation completed.
+        return false;
+      }
+
+      return true;
     } catch (_) {
       return false;
     }
@@ -2635,7 +2649,6 @@ async function ensureContentScriptInTab(tabId) {
     }
   }
 }
-
 function isTrustedExtensionSender(sender) {
   return !!sender && sender.id === chrome.runtime.id;
 }
