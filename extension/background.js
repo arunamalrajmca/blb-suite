@@ -2297,22 +2297,28 @@ async function createBlbTabGeneric(url, active = true, {forceNew = false} = {}) 
 }
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  const url = String(tab?.pendingUrl || changeInfo?.url || tab?.url || '');
-  const key = canonicalBlbTabKey(url);
   const reservedKey = scriptTaggerTabReservations.get(tabId);
-  if (key && /^https:\/\/www\.blueletterbible\.org\//i.test(url)) {
-    rememberBlbTab(key, tabId);
-    if (reservedKey && key === reservedKey) scriptTaggerTabReservations.delete(tabId);
-  }
-  if (changeInfo?.status === 'complete' && reservedKey && key !== reservedKey &&
-      /^https:\/\/www\.blueletterbible\.org\//i.test(url)) {
+  if (!reservedKey) return;
+  const url = String(tab?.pendingUrl || changeInfo?.url || tab?.url || '');
+  const isBlb = /^https:\/\/www\.blueletterbible\.org\//i.test(url);
+  const key = isBlb ? canonicalBlbTabKey(url) : null;
+
+  // Release the in-flight reservation only after Chrome confirms the exact
+  // requested destination. If navigation completes elsewhere, discard only
+  // this ScriptTagger mapping; never mutate the shared logical-tab registry.
+  if (key === reservedKey) {
     scriptTaggerTabReservations.delete(tabId);
-    if (blbLogicalTabRegistry.get(reservedKey) === tabId) blbLogicalTabRegistry.delete(reservedKey);
+  } else if (changeInfo?.status === 'complete') {
+    scriptTaggerTabReservations.delete(tabId);
+    if (scriptTaggerDestinationTabs.get(reservedKey) === tabId) {
+      scriptTaggerDestinationTabs.delete(reservedKey);
+    }
   }
 });
 
 chrome.tabs.onRemoved.addListener(tabId => {
   scriptTaggerTabReservations.delete(tabId);
+  for (const [key, id] of scriptTaggerDestinationTabs) { if (id === tabId) scriptTaggerDestinationTabs.delete(key); }
   forgetBlbTab(tabId);
   intentionalNewBlbTabs.delete(tabId);
   clearTrackedMultiVerseTab(tabId).catch(()=>{});
@@ -2332,10 +2338,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
-// ScriptTagger uses its own exact-destination opening path. Reserve a tab for
-// its requested destination until navigation confirms that destination. Chrome
-// can briefly expose the old URL (or no URL) after tabs.create resolves.
+// ScriptTagger maintains an isolated destination-to-tab map. It deliberately
+// does not write in-flight reservations into the shared BLB tab registry: while
+// Chromium is navigating, tab.url can still describe a previous destination.
 const pendingScriptTaggerDestinations = new Map();
+const scriptTaggerDestinationTabs = new Map();
 const scriptTaggerTabReservations = new Map();
 
 async function openScriptTaggerDestination(url) {
@@ -2345,37 +2352,41 @@ async function openScriptTaggerDestination(url) {
   if (pendingScriptTaggerDestinations.has(key)) return pendingScriptTaggerDestinations.get(key);
 
   const operation = enqueueBlbTabCreation(async () => {
-    // The shared registry is updated as soon as a tab is created, before its
-    // navigation finishes. Reuse it only when its pending/current destination
-    // still identifies this exact verse.
-    const rememberedId = blbLogicalTabRegistry.get(key);
+    // A same-destination tab may still be loading and therefore not yet expose
+    // the target URL. Its per-destination reservation is safe to reuse; a
+    // different destination can never match that reservation.
+    const reservedEntry = [...scriptTaggerTabReservations.entries()]
+      .find(([, reservedKey]) => reservedKey === key);
+    const reservedId = reservedEntry?.[0];
+    const mappedId = scriptTaggerDestinationTabs.get(key);
+    const rememberedId = reservedId ?? mappedId;
     const remembered = await getLiveTabById(rememberedId);
     const rememberedUrl = String(remembered?.pendingUrl || remembered?.url || '');
+    const reservationMatches = remembered?.id != null &&
+      scriptTaggerTabReservations.get(remembered.id) === key;
     if (remembered?.id != null &&
-        ((/^https:\/\/www\.blueletterbible\.org\//i.test(rememberedUrl) &&
-          canonicalBlbTabKey(rememberedUrl) === key) ||
-         (scriptTaggerTabReservations.get(remembered.id) === key))) {
+        (reservationMatches ||
+         (/^https:\/\/www\.blueletterbible\.org\//i.test(rememberedUrl) &&
+          canonicalBlbTabKey(rememberedUrl) === key))) {
+      scriptTaggerDestinationTabs.set(key, remembered.id);
       await chrome.tabs.update(remembered.id, {active:true});
       if (remembered.windowId != null) {
         try { await chrome.windows.update(remembered.windowId, {focused:true}); } catch (_) {}
       }
       return remembered;
     }
-    if (rememberedId != null && scriptTaggerTabReservations.get(rememberedId) !== key) {
-      blbLogicalTabRegistry.delete(key);
-    }
+    if (mappedId != null && mappedId === rememberedId) scriptTaggerDestinationTabs.delete(key);
 
+    // Search existing tabs by their actual pending/current destination. Never
+    // treat an unrelated in-flight tab as a match for this destination.
     const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
     const existing = tabs.find(tab => {
-      // A loading tab's pendingUrl is the requested destination; tab.url may
-      // still identify its previous verse.
       const effectiveUrl = String(tab?.pendingUrl || tab?.url || '');
-      return scriptTaggerTabReservations.get(tab?.id) === key ||
-        (/^https:\/\/www\.blueletterbible\.org\//i.test(effectiveUrl) &&
-         canonicalBlbTabKey(effectiveUrl) === key);
+      return /^https:\/\/www\.blueletterbible\.org\//i.test(effectiveUrl) &&
+        canonicalBlbTabKey(effectiveUrl) === key;
     });
     if (existing?.id != null) {
-      rememberBlbTab(key, existing.id);
+      scriptTaggerDestinationTabs.set(key, existing.id);
       await chrome.tabs.update(existing.id, {active:true});
       if (existing.windowId != null) {
         try { await chrome.windows.update(existing.windowId, {focused:true}); } catch (_) {}
@@ -2384,10 +2395,10 @@ async function openScriptTaggerDestination(url) {
     }
 
     const created = await chrome.tabs.create({url:target, active:true});
-    // Register synchronously after create resolves, without waiting for
-    // onUpdated; the next click can now find the in-flight navigation.
     if (created?.id != null) {
-      rememberBlbTab(key, created.id);
+      // Reserve this exact key immediately so rapid repeat clicks deduplicate,
+      // without claiming that tab for any other verse in the shared registry.
+      scriptTaggerDestinationTabs.set(key, created.id);
       scriptTaggerTabReservations.set(created.id, key);
     }
     return created;
