@@ -2586,7 +2586,10 @@ async function ensureContentScriptInTab(tabId) {
 
       // Register only the feature bundle needed for this host. Ordinary sites
       // using global ScriptTagger redirection receive one isolated script.
-      if (!(await ensureRuntimeContentScriptRegistered(tab, files))) return false;
+      // Persistent registration is best-effort: Chrome may reject an update when
+      // an older feature bundle is already registered for this origin. That must
+      // never prevent injection into the already-open tab.
+      await ensureRuntimeContentScriptRegistered(tab, files);
 
       if (files.includes('content.js')) {
         try {
