@@ -2986,7 +2986,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // A clicked ScriptTagger link is an explicit navigation request. Always
     // honor its exact destination instead of allowing the generic logical-tab
     // registry or pending-request coalescing to substitute an earlier click.
-    createBlbTabGeneric(url, true, {forceNew:true}).then(() => sendResponse({ok:true})).catch(error => {
+    createBlbTabGeneric(url, true).then(() => sendResponse({ok:true})).catch(error => {
       console.error('BLB Suite ScriptTagger destination:', error);
       sendResponse({ok:false, error:String(error)});
     });
