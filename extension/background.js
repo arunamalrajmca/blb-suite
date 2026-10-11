@@ -2296,29 +2296,8 @@ async function createBlbTabGeneric(url, active = true, {forceNew = false} = {}) 
   return {tab: created, reused: false};
 }
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  const reservedKey = scriptTaggerTabReservations.get(tabId);
-  if (!reservedKey) return;
-  const url = String(tab?.pendingUrl || changeInfo?.url || tab?.url || '');
-  const isBlb = /^https:\/\/www\.blueletterbible\.org\//i.test(url);
-  const key = isBlb ? canonicalBlbTabKey(url) : null;
-
-  // Release the in-flight reservation only after Chrome confirms the exact
-  // requested destination. If navigation completes elsewhere, discard only
-  // this ScriptTagger mapping; never mutate the shared logical-tab registry.
-  if (changeInfo?.status === 'complete' && key === reservedKey) {
-    scriptTaggerTabReservations.delete(tabId);
-  } else if (changeInfo?.status === 'complete') {
-    scriptTaggerTabReservations.delete(tabId);
-    if (scriptTaggerDestinationTabs.get(reservedKey) === tabId) {
-      scriptTaggerDestinationTabs.delete(reservedKey);
-    }
-  }
-});
 
 chrome.tabs.onRemoved.addListener(tabId => {
-  scriptTaggerTabReservations.delete(tabId);
-  for (const [key, id] of scriptTaggerDestinationTabs) { if (id === tabId) scriptTaggerDestinationTabs.delete(key); }
   forgetBlbTab(tabId);
   intentionalNewBlbTabs.delete(tabId);
   clearTrackedMultiVerseTab(tabId).catch(()=>{});
@@ -2337,80 +2316,6 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     clearTrackedMultiVerseTab(tabId).catch(()=>{});
   }
 });
-
-// ScriptTagger maintains an isolated destination-to-tab map. It deliberately
-// does not write in-flight reservations into the shared BLB tab registry: while
-// Chromium is navigating, tab.url can still describe a previous destination.
-const pendingScriptTaggerDestinations = new Map();
-const scriptTaggerDestinationTabs = new Map();
-const scriptTaggerTabReservations = new Map();
-
-async function openScriptTaggerDestination(url) {
-  const target = String(url || '').trim();
-  const key = canonicalBlbTabKey(target);
-  if (!key) throw new Error('invalid-scripttagger-destination');
-  if (pendingScriptTaggerDestinations.has(key)) return pendingScriptTaggerDestinations.get(key);
-
-  const operation = enqueueBlbTabCreation(async () => {
-    // A same-destination tab may still be loading and therefore not yet expose
-    // the target URL. Its per-destination reservation is safe to reuse; a
-    // different destination can never match that reservation.
-    const reservedEntry = [...scriptTaggerTabReservations.entries()]
-      .find(([, reservedKey]) => reservedKey === key);
-    const reservedId = reservedEntry?.[0];
-    const mappedId = scriptTaggerDestinationTabs.get(key);
-    const rememberedId = reservedId ?? mappedId;
-    const remembered = await getLiveTabById(rememberedId);
-    const rememberedUrl = String(remembered?.pendingUrl || remembered?.url || '');
-    const reservationMatches = remembered?.id != null &&
-      scriptTaggerTabReservations.get(remembered.id) === key;
-    if (remembered?.id != null &&
-        (reservationMatches ||
-         (/^https:\/\/www\.blueletterbible\.org\//i.test(rememberedUrl) &&
-          canonicalBlbTabKey(rememberedUrl) === key))) {
-      scriptTaggerDestinationTabs.set(key, remembered.id);
-      await chrome.tabs.update(remembered.id, {active:true});
-      if (remembered.windowId != null) {
-        try { await chrome.windows.update(remembered.windowId, {focused:true}); } catch (_) {}
-      }
-      return remembered;
-    }
-    if (mappedId != null && mappedId === rememberedId) scriptTaggerDestinationTabs.delete(key);
-
-    // Search existing tabs by their actual pending/current destination. Never
-    // treat an unrelated in-flight tab as a match for this destination.
-    const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
-    const existing = tabs.find(tab => {
-      const effectiveUrl = String(tab?.pendingUrl || tab?.url || '');
-      return /^https:\/\/www\.blueletterbible\.org\//i.test(effectiveUrl) &&
-        canonicalBlbTabKey(effectiveUrl) === key;
-    });
-    if (existing?.id != null) {
-      scriptTaggerDestinationTabs.set(key, existing.id);
-      await chrome.tabs.update(existing.id, {active:true});
-      if (existing.windowId != null) {
-        try { await chrome.windows.update(existing.windowId, {focused:true}); } catch (_) {}
-      }
-      return existing;
-    }
-
-    const created = await chrome.tabs.create({url:target, active:true});
-    if (created?.id != null) {
-      // Reserve this exact key immediately so rapid repeat clicks deduplicate,
-      // without claiming that tab for any other verse in the shared registry.
-      scriptTaggerDestinationTabs.set(key, created.id);
-      scriptTaggerTabReservations.set(created.id, key);
-    }
-    return created;
-  });
-
-  pendingScriptTaggerDestinations.set(key, operation);
-  try {
-    return await operation;
-  } finally {
-    pendingScriptTaggerDestinations.delete(key);
-  }
-}
 
 async function openBlbDestination(url, activeIfNew = false, activateExisting = activeIfNew) {
   const target = String(url || '');
@@ -3072,10 +2977,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!(await isSuiteEnabled())) { sendResponse({ok:false}); return true; }
     const url = String(message.url || '');
     if (!/^https:\/\/www\.blueletterbible\.org\//i.test(url)) { sendResponse({ok:false}); return true; }
-    // Use ScriptTagger-specific matching so a still-loading tab's stale
-    // url cannot substitute a previous verse for this exact clicked target.
-    // Reuse only a matching canonical destination and activate that tab.
-    openScriptTaggerDestination(url).then(() => sendResponse({ok:true})).catch(error => {
+    // Use the same central BLB tab manager as MultiVerse, Show on BLB,
+    // Alt+B, and other extension destinations. It canonicalizes destinations,
+    // coalesces identical in-flight opens, and records each tab under its
+    // destination key so different verses cannot reuse one another.
+    openBlbDestination(url, true, true).then(() => sendResponse({ok:true})).catch(error => {
       console.error('BLB Suite ScriptTagger destination:', error);
       sendResponse({ok:false, error:String(error)});
     });
