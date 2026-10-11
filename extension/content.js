@@ -247,16 +247,16 @@ function redirectBlbNet() {
   return true;
 }
 
+// Match the same normalized hostname form used by background.js.
+// This makes bare and "www." variants resolve to the same supported source.
 const REDIRECT_HOSTS = new Set([
-  'www.bible.com', 'www.biblegateway.com', 'www.bibleref.com', 'biblehub.com',
-  'www.biblehub.com', 'bibleportal.com', 'www.bibleportal.com',
-  'www.kingjamesbibleonline.org', 'kjbo.org', 'www.kjbo.org',
-  'www.kjv.site', 'kjv.site', 'm.kjv.site',
-  'officialkingjamesbible.com', 'www.officialkingjamesbible.com',
-  'webstersdictionary1828.com', 'www.blueletterbible.org'
+  'bible.com', 'biblegateway.com', 'bibleref.com', 'biblehub.com',
+  'bibleportal.com', 'kingjamesbibleonline.org', 'kjbo.org',
+  'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com',
+  'webstersdictionary1828.com', 'blueletterbible.org'
 ]);
 
-if (REDIRECT_HOSTS.has(location.hostname.toLowerCase())) {
+if (REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\./, ''))) {
   isSuiteEnabled().then(enabled => {
     if (!enabled) return;
     return chrome.storage.local.get({redirectEnabled:false}).then(({redirectEnabled})=>{
