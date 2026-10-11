@@ -2992,7 +2992,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     try {
       const origin = String(message.origin || '');
       const feature = message.feature === 'pageButton' ? 'pageButton' : message.feature === 'doubleClick' ? 'doubleClick' : '';
-      const parsed = new URL(origin.replace(/\\/\\*$/, '/'));
+      const parsed = new URL(origin.endsWith('/*') ? origin.slice(0, -1) : origin);
       if (!feature || !/^https?:$/.test(parsed.protocol)) {
         sendResponse({ok:false});
         return true;
