@@ -2354,7 +2354,7 @@ async function openScriptTaggerDestination(url) {
     if (remembered?.id != null &&
         ((/^https:\/\/www\.blueletterbible\.org\//i.test(rememberedUrl) &&
           canonicalBlbTabKey(rememberedUrl) === key) ||
-         (scriptTaggerTabReservations.get(remembered.id) === key && remembered.status === 'loading'))) {
+         (scriptTaggerTabReservations.get(remembered.id) === key))) {
       await chrome.tabs.update(remembered.id, {active:true});
       if (remembered.windowId != null) {
         try { await chrome.windows.update(remembered.windowId, {focused:true}); } catch (_) {}
