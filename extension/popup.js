@@ -172,6 +172,30 @@ async function requestCurrentSiteAccess(origin = currentSiteOrigin) {
 }
 
 
+async function pinSiteFeatureChoice(feature) {
+  const state = await getState();
+  if (!state.siteKey || !state.master || state.isBlbSite || state.isPdfContext) return;
+  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}});
+  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
+  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
+
+  // Persist intent before requesting permission: the popup may close while
+  // the browser permission prompt is open. Preserve the other feature's
+  // effective state if permission approval would otherwise change its default.
+  if (feature === 'pageButton') {
+    pageSites[state.siteKey] = true;
+    if (!Object.prototype.hasOwnProperty.call(doubleSites, state.siteKey)) {
+      doubleSites[state.siteKey] = state.doubleClick === true;
+    }
+  } else {
+    doubleSites[state.siteKey] = true;
+    if (!Object.prototype.hasOwnProperty.call(pageSites, state.siteKey)) {
+      pageSites[state.siteKey] = state.pageButton === true;
+    }
+  }
+  await chrome.storage.local.set({pageSelectionButtonSites:pageSites, doubleClickBlbSites:doubleSites});
+}
+
 async function setPageButton(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite) return;
@@ -1088,16 +1112,22 @@ guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.p
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
 async function setIndependentSiteFeature(feature, on) {
   const state = await getState();
-  if (!state.siteKey || !state.master || state.isBlbSite) {
+  if (!state.siteKey || !state.master || state.isBlbSite ||
+      (feature === 'doubleClick' && state.isPdfContext)) {
     render(state);
     return;
   }
 
-  // Ask for access only when enabling this feature. If access is denied,
-  // leave this feature OFF without changing the other site's feature.
-  if (on && !(await requestCurrentSiteAccess())) {
-    render(await getState());
-    return;
+  // Pin the user's choice and preserve the other feature's effective state
+  // before permission approval can change hostname-based defaults.
+  if (on) {
+    await pinSiteFeatureChoice(feature);
+    if (!(await requestCurrentSiteAccess())) {
+      if (feature === 'pageButton') await setPageButton(false);
+      else if (feature === 'doubleClick') await setDoubleClick(false);
+      render(await getState());
+      return;
+    }
   }
 
   if (feature === 'pageButton') {
