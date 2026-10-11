@@ -573,6 +573,29 @@ test('popup exposes all core feature controls', () => {
     assert(popup.includes("getElementById('" + control + "')") || popup.includes('getElementById("' + control + '")'), 'popup control missing: ' + control);
   }
 });
+test('Show on BLB and Double-click handlers remain independent', () => {
+  const popup = read('popup.js');
+  assert(popup.includes('async function setIndependentSiteFeature(feature, on)'), 'independent site-feature handler missing');
+  assert(popup.includes("setIndependentSiteFeature('pageButton', on)"), 'Show on BLB is not routed through its own feature key');
+  assert(popup.includes("setIndependentSiteFeature('doubleClick', on)"), 'Double-click is not routed through its own feature key');
+  assert(!popup.includes('setSiteFeaturesEnabled'), 'legacy coupled site-feature handler returned');
+  const handler = popup.slice(popup.indexOf('async function setIndependentSiteFeature'), popup.indexOf("document.getElementById('pageButton').addEventListener"));
+  assert(handler.includes('await setPageButton(!!on)'), 'Show on BLB setting update missing');
+  assert(handler.includes('await setDoubleClick(!!on)'), 'Double-click setting update missing');
+  assert(handler.includes('pinSiteFeatureChoice(feature)'), 'feature choice is not pinned before permission request');
+  assert(handler.includes('if (!(await requestCurrentSiteAccess()))'), 'permission denial path missing');
+  assert(handler.includes('render(await getState())'), 'permission denial must refresh the effective UI state');
+});
+test('global redirect toggle remains independent of site-specific toggles', () => {
+  const popup = read('popup.js');
+  const start = popup.indexOf('async function setRedirect(on)');
+  const end = popup.indexOf('\n}', start);
+  assert(start >= 0 && end > start, 'global redirect handler missing');
+  const handler = popup.slice(start, end);
+  assert(handler.includes("setItem") === false, 'unexpected storage mutation helper in redirect handler');
+  assert(handler.includes("setRedirect") === false, 'unexpected recursive redirect handler');
+  assert(!handler.includes('setPageButton(') && !handler.includes('setDoubleClick('), 'global redirect handler must not change site-specific toggles');
+});
 section('selection');
 test('reference classification retains all major selection types', () => {
   const bg = read('background.js');
