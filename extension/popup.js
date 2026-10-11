@@ -1111,17 +1111,20 @@ document.addEventListener('click', e => {
 guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
 async function setIndependentSiteFeature(feature, on) {
-  // Snapshot the OTHER feature before requesting access. Granting this site's
-  // host permission can change effective defaults while async reads are in
-  // flight; never use that post-grant state to turn a previously-OFF feature ON.
+  // Capture the other toggle before any permission change can alter defaults.
   const otherFeatureEnabled = feature === 'pageButton'
     ? document.getElementById('doubleClick').checked
     : document.getElementById('pageButton').checked;
 
-  // Chrome requires permissions.request() to be invoked directly from the
-  // user's click/change gesture. Do not wait for getState() or storage reads
-  // before starting the request, or the browser can reject it as lacking a
-  // user gesture and leave an enabled-looking site feature without access.
+  // Start pinning the explicit choice immediately. The popup can be closed by
+  // Chrome while its permission prompt is open; waiting for getState() first
+  // delayed this durable write until after that interruption.
+  const pinPromise = on
+    ? pinSiteFeatureChoice(feature, otherFeatureEnabled)
+    : Promise.resolve();
+
+  // permissions.request must still be invoked synchronously in the original
+  // change-handler call stack (before any await).
   let accessPromise = Promise.resolve(true);
   if (on && currentSiteOrigin) {
     try {
@@ -1140,13 +1143,8 @@ async function setIndependentSiteFeature(feature, on) {
     return;
   }
 
-  // Persist the selected feature and preserve the other feature's effective
-  // state. The permission request above was started synchronously in the
-  // original user-gesture call stack; await it only after this state check.
   if (on) {
-    const pinPromise = pinSiteFeatureChoice(feature, otherFeatureEnabled);
-    const granted = await accessPromise;
-    await pinPromise;
+    const [granted] = await Promise.all([accessPromise, pinPromise]);
     if (!granted) {
       if (feature === 'pageButton') await setPageButton(false);
       else if (feature === 'doubleClick') await setDoubleClick(false);
