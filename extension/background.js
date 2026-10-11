@@ -2979,6 +2979,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'blbSuiteOpenScriptTaggerUrl') {
+    if (!(await isSuiteEnabled())) { sendResponse({ok:false}); return true; }
+    const url = String(message.url || '');
+    if (!/^https:\/\/www\.blueletterbible\.org\//i.test(url)) { sendResponse({ok:false}); return true; }
+    // A clicked ScriptTagger link is an explicit navigation request. Always
+    // honor its exact destination instead of allowing the generic logical-tab
+    // registry or pending-request coalescing to substitute an earlier click.
+    createBlbTabGeneric(url, true, {forceNew:true}).then(() => sendResponse({ok:true})).catch(error => {
+      console.error('BLB Suite ScriptTagger destination:', error);
+      sendResponse({ok:false, error:String(error)});
+    });
+    return true;
+  }
+
   if (message.type === 'blbSuiteOpenBackgroundUrl') {
     if (!(await isSuiteEnabled())) { sendResponse({ok:false}); return true; }
     const url = String(message.url || '');
