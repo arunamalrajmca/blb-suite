@@ -2508,9 +2508,11 @@ async function ensureContentScriptInTab(tabId) {
       const files = contentScriptFilesForTab(tab, settings);
       if (!files.length) return false;
 
-      // Register only the feature bundle needed for this host. Ordinary sites
-      // using global ScriptTagger redirection receive one isolated script.
-      if (!(await ensureRuntimeContentScriptRegistered(tab, files))) return false;
+      // Register only the feature bundle needed for this host. Registration
+      // enables future navigations, but must not block immediate activation
+      // on the already-open page if Chrome rejects or cannot update the
+      // dynamic registration. executeScript below is the current-tab fallback.
+      await ensureRuntimeContentScriptRegistered(tab, files);
 
       if (files.includes('content.js')) {
         try {
