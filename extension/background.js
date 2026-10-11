@@ -2148,7 +2148,7 @@ function canonicalBlbTabKey(url) {
     if (!/^https?:$/i.test(u.protocol)) return String(url || '').trim();
 
     const host = u.hostname.toLowerCase().replace(/^www\./, '');
-    let path = u.pathname.replace(/\/+$/, '') || '/';
+    let path = u.pathname.replace(/\/+$/, '').toLowerCase() || '/';
     path = path.toLowerCase();
 
     // BLB Bible destinations are identified by their semantic KJV path.
@@ -2330,9 +2330,9 @@ const scriptTaggerDestinationTabs = new Map();
 function canonicalScriptTaggerDestinationKey(url) {
   try {
     const u = new URL(String(url || ''));
-    const host = u.hostname.toLowerCase().replace(/^www\\./, '');
-    let path = u.pathname.replace(/\\/+$/, '').toLowerCase() || '/';
-    const kjv = path.match(/^\\/kjv\\/([^/]+)\\/(\\d+)(?:\\/(\\d+(?:-\\d+)?))?(?:\\/.*)?$/);
+    const host = u.hostname.toLowerCase().replace(/^www\./, '');
+    let path = u.pathname.replace(/\/+$/, '').toLowerCase() || '/';
+    const kjv = path.match(/^\/kjv\/([^/]+)\/(\d+)(?:\/(\d+(?:-\d+)?))?(?:\/.*)?$/);
     if (host === 'blueletterbible.org' && kjv) {
       const book = kjv[1];
       const chapter = kjv[2];
@@ -2348,7 +2348,7 @@ function canonicalScriptTaggerDestinationKey(url) {
     query.sort();
     return `script-tagger|${host}${path}${query.toString() ? `?${query.toString()}` : ''}`;
   } catch (_) {
-    return `script-tagger|${String(url || '').trim().replace(/\\/+$/, '').toLowerCase()}`;
+    return `script-tagger|${String(url || '').trim().replace(/\/+$/, '').toLowerCase()}`;
   }
 }
 
@@ -4883,7 +4883,7 @@ async function openBlbBook(bookOrNumber, tabBehavior = {activeIfNew:true, activa
     try {
       if (!candidateUrl) return null;
       const u = new URL(String(candidateUrl));
-      const host = u.hostname.toLowerCase().replace(/^www\./, '');
+    const host = u.hostname.toLowerCase().replace(/^www\./, '');
       if (host !== 'blueletterbible.org' && !host.endsWith('.blueletterbible.org')) return null;
 
       const parts = u.pathname.split('/').filter(Boolean).map(part => {
