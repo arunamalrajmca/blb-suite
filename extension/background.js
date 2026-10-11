@@ -2637,7 +2637,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;
@@ -2985,6 +2985,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'blbSuiteStopStudyRecording') {
     try { sendResponse(await stopStudyRecording()); } catch (error) { sendResponse({ok:false, error:String(error)}); }
+    return true;
+  }
+
+  if (message.type === 'blbSuitePrepareSiteFeatureToggle') {
+    try {
+      const origin = String(message.origin || '');
+      const feature = message.feature === 'pageButton' ? 'pageButton' : message.feature === 'doubleClick' ? 'doubleClick' : '';
+      const parsed = new URL(origin.replace(/\\/\\*$/, '/'));
+      if (!feature || !/^https?:$/.test(parsed.protocol)) {
+        sendResponse({ok:false});
+        return true;
+      }
+      const key = normalizeSiteHostname(parsed.hostname);
+      if (!key || key === 'blueletterbible.org') {
+        sendResponse({ok:false});
+        return true;
+      }
+      const data = await chrome.storage.local.get({masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}});
+      if (data.masterEnabled === false) {
+        sendResponse({ok:false});
+        return true;
+      }
+      const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
+      const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
+      if (feature === 'pageButton') {
+        pageSites[key] = true;
+        if (!Object.prototype.hasOwnProperty.call(doubleSites, key)) doubleSites[key] = message.otherFeatureEnabled === true;
+      } else {
+        doubleSites[key] = true;
+        if (!Object.prototype.hasOwnProperty.call(pageSites, key)) pageSites[key] = message.otherFeatureEnabled === true;
+      }
+      await chrome.storage.local.set({pageSelectionButtonSites:pageSites,doubleClickBlbSites:doubleSites});
+      sendResponse({ok:true});
+    } catch (error) {
+      sendResponse({ok:false,error:String(error)});
+    }
     return true;
   }
 
@@ -5518,7 +5554,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.redirectEnabled?.newValue === true) {
     injectRedirectEnabledTabs().catch(() => {});
   }
-  if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites) {
+  if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites || changes.doubleClickBlbSites) {
     installRules();
     // Keep the existing web-selection menu item in place. Only its visibility
     // changes with the site preference; removing/recreating it here causes a
@@ -5533,11 +5569,15 @@ chrome.storage.onChanged.addListener((changes, area) => {
     installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true})
       .then(async tabs => {
         for (const tab of tabs) {
-          if (tab?.id && changes.pageSelectionButtonSites) {
+          if (tab?.id && (changes.pageSelectionButtonSites || changes.doubleClickBlbSites)) {
             const key = pageSelectionSettingKeyFromTab(tab);
-            const sites = changes.pageSelectionButtonSites.newValue && typeof changes.pageSelectionButtonSites.newValue === 'object'
-              ? changes.pageSelectionButtonSites.newValue : {};
-            if (key && sites[key] === true) await ensureContentScriptInTab(tab.id);
+            const pageSites = changes.pageSelectionButtonSites?.newValue && typeof changes.pageSelectionButtonSites.newValue === 'object'
+              ? changes.pageSelectionButtonSites.newValue
+              : (await chrome.storage.local.get({pageSelectionButtonSites:{}})).pageSelectionButtonSites;
+            const doubleSites = changes.doubleClickBlbSites?.newValue && typeof changes.doubleClickBlbSites.newValue === 'object'
+              ? changes.doubleClickBlbSites.newValue
+              : (await chrome.storage.local.get({doubleClickBlbSites:{}})).doubleClickBlbSites;
+            if (key && (pageSites?.[key] === true || doubleSites?.[key] === true)) await ensureContentScriptInTab(tab.id);
           }
           await syncPdfSelectionContextMenuVisibility(tab);
         }
@@ -5545,6 +5585,22 @@ chrome.storage.onChanged.addListener((changes, area) => {
       .catch(() => {}));
   }
   if (changes.currentStudySessionId || changes.studyAutoStopMinutes) refreshStudyAutoStopAlarm().catch(()=>{});
+});
+
+chrome.permissions.onAdded.addListener(() => {
+  // A feature preference may be persisted before Chrome finishes its host
+  // permission prompt. Retry injection after the grant arrives.
+  chrome.tabs.query({active:true,currentWindow:true}).then(async tabs => {
+    const data = await chrome.storage.local.get({masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}});
+    if (data.masterEnabled === false) return;
+    for (const tab of tabs) {
+      if (!tab?.id) continue;
+      const key = pageSelectionSettingKeyFromTab(tab);
+      if (key && (data.pageSelectionButtonSites?.[key] === true || data.doubleClickBlbSites?.[key] === true)) {
+        await ensureContentScriptInTab(tab.id);
+      }
+    }
+  }).catch(() => {});
 });
 
 chrome.alarms.onAlarm.addListener(alarm => {
