@@ -12,10 +12,14 @@ const bookKeyStart = contentSource.indexOf('function bookKey(value) {');
 if ([parseStart, redirectStart, redirectEnd, bookKeyStart].some(i => i < 0)) {
   throw new Error('Could not locate production source redirect helpers');
 }
+const gateStart = contentSource.indexOf('const REDIRECT_HOSTS = new Set([');
+const gateEnd = contentSource.indexOf('// ---------- BLB MultiVerse', gateStart);
+if (gateStart < 0 || gateEnd < 0) throw new Error('Could not locate production content-side redirect gate');
 const productionRedirectHelpers =
   contentSource.slice(bookKeyStart, parseStart) +
   contentSource.slice(parseStart, redirectStart) +
   contentSource.slice(redirectStart, redirectEnd);
+const productionRedirectGate = contentSource.slice(gateStart, gateEnd);
 
 async function loadProductionRedirect(page, sourceUrl) {
   const sourceOrigin = new URL(sourceUrl).origin;
@@ -30,6 +34,9 @@ async function loadProductionRedirect(page, sourceUrl) {
   await page.addScriptTag({ content: read('extension/book-aliases.js') });
   await page.addScriptTag({ content: read('extension/reference-core.js') });
   await page.addScriptTag({ content: productionRedirectHelpers });
+  // Stub only the extension APIs and unrelated BLB-native handler. The hostname
+  // gate and redirectBibleSite() call below are copied verbatim from production.
+  await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) } } }; function redirectBlbNet() { return false; }' });
 }
 
 test.describe('real-browser source URL redirect regressions', () => {
@@ -38,7 +45,7 @@ test.describe('real-browser source URL redirect regressions', () => {
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/1/';
     await loadProductionRedirect(page, sourceUrl);
     const navigated = page.waitForURL(targetUrl, { waitUntil: 'domcontentloaded' });
-    await page.evaluate(() => redirectBibleSite());
+    await page.addScriptTag({ content: productionRedirectGate });
     await navigated;
     await expect(page).toHaveURL(targetUrl);
   });
