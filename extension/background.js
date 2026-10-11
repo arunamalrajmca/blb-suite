@@ -2324,10 +2324,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 });
 
 // ScriptTagger uses its own exact-destination opening path. During navigation,
-// Chromium may expose the previous tab.url alongside the new pendingUrl. The
-// generic tab registry historically preferred url first, which can make a
-// different verse look like the old destination. Always compare pendingUrl
-// first and coalesce only requests for the same canonical verse.
+// Chromium may expose the previous tab.url alongside the new pendingUrl. Compare
+// pendingUrl first, remember newly-created tabs immediately, and serialize the
+// query/create decision so repeated clicks cannot race into duplicate tabs.
 const pendingScriptTaggerDestinations = new Map();
 
 async function openScriptTaggerDestination(url) {
@@ -2336,24 +2335,47 @@ async function openScriptTaggerDestination(url) {
   if (!key) throw new Error('invalid-scripttagger-destination');
   if (pendingScriptTaggerDestinations.has(key)) return pendingScriptTaggerDestinations.get(key);
 
-  const operation = (async () => {
-    const tabs = await chrome.tabs.query({});
+  const operation = enqueueBlbTabCreation(async () => {
+    // The shared registry is updated as soon as a tab is created, before its
+    // navigation finishes. Reuse it only when its pending/current destination
+    // still identifies this exact verse.
+    const rememberedId = blbLogicalTabRegistry.get(key);
+    const remembered = await getLiveTabById(rememberedId);
+    const rememberedUrl = String(remembered?.pendingUrl || remembered?.url || '');
+    if (remembered?.id != null &&
+        /^https:\/\/www\.blueletterbible\.org\//i.test(rememberedUrl) &&
+        canonicalBlbTabKey(rememberedUrl) === key) {
+      await chrome.tabs.update(remembered.id, {active:true});
+      if (remembered.windowId != null) {
+        try { await chrome.windows.update(remembered.windowId, {focused:true}); } catch (_) {}
+      }
+      return remembered;
+    }
+    if (rememberedId != null) blbLogicalTabRegistry.delete(key);
+
+    const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
     const existing = tabs.find(tab => {
-      // pendingUrl is the destination currently loading; tab.url can still
-      // describe the previous verse until navigation commits.
+      // A loading tab's pendingUrl is the requested destination; tab.url may
+      // still identify its previous verse.
       const effectiveUrl = String(tab?.pendingUrl || tab?.url || '');
       return /^https:\/\/www\.blueletterbible\.org\//i.test(effectiveUrl) &&
         canonicalBlbTabKey(effectiveUrl) === key;
     });
     if (existing?.id != null) {
+      rememberBlbTab(key, existing.id);
       await chrome.tabs.update(existing.id, {active:true});
       if (existing.windowId != null) {
         try { await chrome.windows.update(existing.windowId, {focused:true}); } catch (_) {}
       }
       return existing;
     }
-    return await chrome.tabs.create({url:target, active:true});
-  })();
+
+    const created = await chrome.tabs.create({url:target, active:true});
+    // Register synchronously after create resolves, without waiting for
+    // onUpdated; the next click can now find the in-flight navigation.
+    if (created?.id != null) rememberBlbTab(key, created.id);
+    return created;
+  });
 
   pendingScriptTaggerDestinations.set(key, operation);
   try {
