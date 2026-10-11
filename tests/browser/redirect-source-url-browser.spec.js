@@ -1,0 +1,55 @@
+const { test, expect } = require('@playwright/test');
+const fs = require('node:fs');
+const path = require('node:path');
+
+const root = path.resolve(__dirname, '../..');
+const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
+const contentSource = read('extension/content.js');
+const parseStart = contentSource.indexOf('function parseRef(text) {');
+const redirectStart = contentSource.indexOf('function redirectBibleSite() {', parseStart);
+const redirectEnd = contentSource.indexOf('\nfunction redirectBlbNet() {', redirectStart);
+const bookKeyStart = contentSource.indexOf('function bookKey(value) {');
+if ([parseStart, redirectStart, redirectEnd, bookKeyStart].some(i => i < 0)) {
+  throw new Error('Could not locate production source redirect helpers');
+}
+const productionRedirectHelpers =
+  contentSource.slice(bookKeyStart, parseStart) +
+  contentSource.slice(parseStart, redirectStart) +
+  contentSource.slice(redirectStart, redirectEnd);
+
+async function loadProductionRedirect(page, sourceUrl) {
+  const sourceOrigin = new URL(sourceUrl).origin;
+  await page.route(sourceOrigin + '/**', route =>
+    route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Source Bible page</title>' })
+  );
+  await page.route('https://www.blueletterbible.org/**', route =>
+    route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>BLB destination</title>' })
+  );
+  await page.goto(sourceUrl);
+  await page.addScriptTag({ content: read('extension/books.js') });
+  await page.addScriptTag({ content: read('extension/book-aliases.js') });
+  await page.addScriptTag({ content: read('extension/reference-core.js') });
+  await page.addScriptTag({ content: productionRedirectHelpers });
+}
+
+test.describe('real-browser source URL redirect regressions', () => {
+  test('King James Bible Online chapter URL navigates to the resolved BLB destination', async ({ page }) => {
+    const sourceUrl = 'https://kingjamesbibleonline.org/John-Chapter-3/';
+    const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/1/';
+    await loadProductionRedirect(page, sourceUrl);
+    const navigated = page.waitForURL(targetUrl, { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => redirectBibleSite());
+    await navigated;
+    await expect(page).toHaveURL(targetUrl);
+  });
+
+  test('www KJV.site verse URL navigates to the resolved BLB destination', async ({ page }) => {
+    const sourceUrl = 'https://www.kjv.site/John-3-16-kjv/';
+    const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+    await loadProductionRedirect(page, sourceUrl);
+    const navigated = page.waitForURL(targetUrl, { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => redirectBibleSite());
+    await navigated;
+    await expect(page).toHaveURL(targetUrl);
+  });
+});
