@@ -8,7 +8,7 @@ const scriptTaggerScript = fs.readFileSync(path.resolve(__dirname, '../../extens
 
 function runBlbUrlNormalizer() {
   const start = scriptTaggerScript.indexOf('function normalizeBlbDestinationUrl(');
-  const end = scriptTaggerScript.indexOf('\nfunction isModifiedLinkActivation(', start);
+  const end = scriptTaggerScript.indexOf('\n  function isModifiedLinkActivation(', start);
   if (start < 0 || end < 0) throw new Error('Could not extract normalizeBlbDestinationUrl from extension/redirect-scripttagger.js');
   const context = { URL };
   vm.runInNewContext(scriptTaggerScript.slice(start, end), context);
