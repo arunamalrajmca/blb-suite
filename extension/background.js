@@ -2297,10 +2297,17 @@ async function createBlbTabGeneric(url, active = true, {forceNew = false} = {}) 
 }
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  const url = String(tab?.url || changeInfo?.url || '');
-  if (!/^https:\/\/www\.blueletterbible\.org\//i.test(url)) return;
+  const url = String(tab?.pendingUrl || changeInfo?.url || tab?.url || '');
   const key = canonicalBlbTabKey(url);
-  if (key) rememberBlbTab(key, tabId);
+  const reservedKey = scriptTaggerTabReservations.get(tabId);
+  if (key && /^https:\/\/www\.blueletterbible\.org\//i.test(url)) {
+    rememberBlbTab(key, tabId);
+    if (reservedKey && key === reservedKey) scriptTaggerTabReservations.delete(tabId);
+  }
+  if (changeInfo?.status === 'complete' && reservedKey && key !== reservedKey) {
+    scriptTaggerTabReservations.delete(tabId);
+    if (blbLogicalTabRegistry.get(reservedKey) === tabId) blbLogicalTabRegistry.delete(reservedKey);
+  }
 });
 
 chrome.tabs.onRemoved.addListener(tabId => {
@@ -2323,11 +2330,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
-// ScriptTagger uses its own exact-destination opening path. During navigation,
-// Chromium may expose the previous tab.url alongside the new pendingUrl. Compare
-// pendingUrl first, remember newly-created tabs immediately, and serialize the
-// query/create decision so repeated clicks cannot race into duplicate tabs.
+// ScriptTagger uses its own exact-destination opening path. Reserve a tab for
+// its requested destination until navigation confirms that destination. Chrome
+// can briefly expose the old URL (or no URL) after tabs.create resolves.
 const pendingScriptTaggerDestinations = new Map();
+const scriptTaggerTabReservations = new Map();
 
 async function openScriptTaggerDestination(url) {
   const target = String(url || '').trim();
@@ -2343,23 +2350,27 @@ async function openScriptTaggerDestination(url) {
     const remembered = await getLiveTabById(rememberedId);
     const rememberedUrl = String(remembered?.pendingUrl || remembered?.url || '');
     if (remembered?.id != null &&
-        /^https:\/\/www\.blueletterbible\.org\//i.test(rememberedUrl) &&
-        canonicalBlbTabKey(rememberedUrl) === key) {
+        ((/^https:\/\/www\.blueletterbible\.org\//i.test(rememberedUrl) &&
+          canonicalBlbTabKey(rememberedUrl) === key) ||
+         (scriptTaggerTabReservations.get(remembered.id) === key && remembered.status === 'loading'))) {
       await chrome.tabs.update(remembered.id, {active:true});
       if (remembered.windowId != null) {
         try { await chrome.windows.update(remembered.windowId, {focused:true}); } catch (_) {}
       }
       return remembered;
     }
-    if (rememberedId != null) blbLogicalTabRegistry.delete(key);
+    if (rememberedId != null && scriptTaggerTabReservations.get(rememberedId) !== key) {
+      blbLogicalTabRegistry.delete(key);
+    }
 
     const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
     const existing = tabs.find(tab => {
       // A loading tab's pendingUrl is the requested destination; tab.url may
       // still identify its previous verse.
       const effectiveUrl = String(tab?.pendingUrl || tab?.url || '');
-      return /^https:\/\/www\.blueletterbible\.org\//i.test(effectiveUrl) &&
-        canonicalBlbTabKey(effectiveUrl) === key;
+      return scriptTaggerTabReservations.get(tab?.id) === key ||
+        (/^https:\/\/www\.blueletterbible\.org\//i.test(effectiveUrl) &&
+         canonicalBlbTabKey(effectiveUrl) === key);
     });
     if (existing?.id != null) {
       rememberBlbTab(key, existing.id);
@@ -2373,7 +2384,10 @@ async function openScriptTaggerDestination(url) {
     const created = await chrome.tabs.create({url:target, active:true});
     // Register synchronously after create resolves, without waiting for
     // onUpdated; the next click can now find the in-flight navigation.
-    if (created?.id != null) rememberBlbTab(key, created.id);
+    if (created?.id != null) {
+      rememberBlbTab(key, created.id);
+      scriptTaggerTabReservations.set(created.id, key);
+    }
     return created;
   });
 
