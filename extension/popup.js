@@ -152,7 +152,7 @@ async function setMaster(on) {
   noteInput.value = '';
   setStatus('Select a topic and start recording');
   render(await getState());
-  document.body.classList.remove('popup-loading');
+
   await refreshStudyState();
   // refreshStudyState intentionally never auto-selects from stored history.
   topicInput.value = '';
@@ -1168,6 +1168,7 @@ document.getElementById('redirectEnabled').addEventListener('change', e => setRe
 
 (async () => {
   render(await getState());
+  document.body.classList.remove('popup-loading');
   await loadSelectedTopic();
   await refreshStudyState();
   await refreshStudyAutoStop();
