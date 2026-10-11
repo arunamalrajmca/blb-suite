@@ -57,7 +57,7 @@
     event.stopImmediatePropagation();
     try {
       const pending = chrome.runtime.sendMessage({
-        type:'blbSuiteOpenBackgroundUrl',
+        type:'blbSuiteOpenScriptTaggerUrl',
         url:target,
         activeIfNew:true,
         activateExisting:true
