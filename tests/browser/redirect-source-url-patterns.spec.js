@@ -106,11 +106,23 @@ test.describe('source Bible URL syntax regression coverage', () => {
       .toBe('https://www.blueletterbible.org/kjv/1jo/4/7-8/');
   });
 
-  test('King James Bible Online supports chapter routes, repeated leading slashes, and the kjbo.org alias', () => {
+  test('King James Bible Online supports chapter routes, compact chapter routes, and repeated leading slashes', () => {
     expect(runSourceRedirect('https://kingjamesbibleonline.org/John-Chapter-3/').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/1/');
     expect(runSourceRedirect('https://www.kingjamesbibleonline.org/' + '/John-Chapter-3/').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/1/');
+    expect(runSourceRedirect('https://www.kingjamesbibleonline.org/Psalms-23/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/psa/23/1/');
+  });
+
+  test('King James Bible Online preserves verse ranges and numbered book names', () => {
+    expect(runSourceRedirect('https://www.kingjamesbibleonline.org/John-3-16-18/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/jhn/3/16-18/');
+    expect(runSourceRedirect('https://www.kingjamesbibleonline.org/1-John-4-7-8/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/1jo/4/7-8/');
+  });
+
+  test('KJBO alias hostname is checked separately from the main domain', () => {
     expect(runSourceRedirect('https://kjbo.org/John-3-16/').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16/');
   });
