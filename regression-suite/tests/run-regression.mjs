@@ -363,6 +363,16 @@ section('features');
 // Static cross-file contracts for high-risk regressions.
 const bg=read('background.js');
 const content=read('content.js');
+test('current-tab feature injection falls back when dynamic registration fails', () => {
+  const bg = read('background.js');
+  const start = bg.indexOf('async function ensureContentScriptInTab(tabId)');
+  const end = bg.indexOf('\nfunction ', start + 1);
+  assert(start >= 0 && end > start, 'current-tab content-script injection handler missing');
+  const handler = bg.slice(start, end);
+  assert(handler.includes('await ensureRuntimeContentScriptRegistered(tab, files)'), 'runtime registration attempt missing');
+  assert(!handler.includes('if (!(await ensureRuntimeContentScriptRegistered(tab, files))) return false'), 'registration failure must not abort current-tab injection');
+  assert(handler.includes("chrome.scripting.executeScript({target:{tabId}, files})"), 'direct current-tab injection fallback missing');
+});
 section('selection');
 test('web contextual resolver is present', () => {
   for (const s of ['getContextualBibleReference','resolveBibleReferenceFromContextWindow','blbSuiteResolveContextualSelection']) assert(bg.includes(s)||content.includes(s), s);
