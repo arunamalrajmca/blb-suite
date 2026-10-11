@@ -2306,7 +2306,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   // Release the in-flight reservation only after Chrome confirms the exact
   // requested destination. If navigation completes elsewhere, discard only
   // this ScriptTagger mapping; never mutate the shared logical-tab registry.
-  if (key === reservedKey) {
+  if (changeInfo?.status === 'complete' && key === reservedKey) {
     scriptTaggerTabReservations.delete(tabId);
   } else if (changeInfo?.status === 'complete') {
     scriptTaggerTabReservations.delete(tabId);
