@@ -172,7 +172,7 @@ async function requestCurrentSiteAccess(origin = currentSiteOrigin) {
 }
 
 
-async function pinSiteFeatureChoice(feature) {
+async function pinSiteFeatureChoice(feature, otherFeatureEnabled) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isBlbSite || state.isPdfContext) return;
   const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}});
@@ -185,12 +185,12 @@ async function pinSiteFeatureChoice(feature) {
   if (feature === 'pageButton') {
     pageSites[state.siteKey] = true;
     if (!Object.prototype.hasOwnProperty.call(doubleSites, state.siteKey)) {
-      doubleSites[state.siteKey] = state.doubleClick === true;
+      doubleSites[state.siteKey] = otherFeatureEnabled === true;
     }
   } else {
     doubleSites[state.siteKey] = true;
     if (!Object.prototype.hasOwnProperty.call(pageSites, state.siteKey)) {
-      pageSites[state.siteKey] = state.pageButton === true;
+      pageSites[state.siteKey] = otherFeatureEnabled === true;
     }
   }
   await chrome.storage.local.set({pageSelectionButtonSites:pageSites, doubleClickBlbSites:doubleSites});
@@ -1111,6 +1111,13 @@ document.addEventListener('click', e => {
 guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
 async function setIndependentSiteFeature(feature, on) {
+  // Snapshot the OTHER feature before requesting access. Granting this site's
+  // host permission can change effective defaults while async reads are in
+  // flight; never use that post-grant state to turn a previously-OFF feature ON.
+  const otherFeatureEnabled = feature === 'pageButton'
+    ? document.getElementById('doubleClick').checked
+    : document.getElementById('pageButton').checked;
+
   // Chrome requires permissions.request() to be invoked directly from the
   // user's click/change gesture. Do not wait for getState() or storage reads
   // before starting the request, or the browser can reject it as lacking a
@@ -1137,7 +1144,7 @@ async function setIndependentSiteFeature(feature, on) {
   // state. The permission request above was started synchronously in the
   // original user-gesture call stack; await it only after this state check.
   if (on) {
-    const pinPromise = pinSiteFeatureChoice(feature);
+    const pinPromise = pinSiteFeatureChoice(feature, otherFeatureEnabled);
     const granted = await accessPromise;
     await pinPromise;
     if (!granted) {
