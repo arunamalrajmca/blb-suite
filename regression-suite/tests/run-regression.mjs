@@ -594,6 +594,14 @@ test('Show on BLB and Double-click handlers remain independent', () => {
   assert(handler.includes('await setDoubleClick(!!on)'), 'Double-click setting update missing');
   assert(handler.includes('const otherFeatureEnabled = feature === \'pageButton\''), 'other feature state must be captured before permission changes');
   assert(handler.includes('pinSiteFeatureChoice(feature, otherFeatureEnabled)'), 'feature choice must preserve the pre-permission state of the other feature');
+  const pinStart = popup.indexOf('async function pinSiteFeatureChoice(feature, otherFeatureEnabled)');
+  const pinEnd = popup.indexOf('\n}', pinStart) + 2;
+  const pin = popup.slice(pinStart, pinEnd);
+  assert(pin.includes("if (feature === 'pageButton')"), 'Show on BLB first-time activation branch missing');
+  assert(pin.includes("doubleSites[state.siteKey] = otherFeatureEnabled === true;"), 'Show on BLB activation must preserve Double-click OFF/ON state');
+  assert(pin.includes("pageSites[state.siteKey] = otherFeatureEnabled === true;"), 'Double-click activation must preserve Show on BLB OFF/ON state');
+  assert(pin.includes("if (!Object.prototype.hasOwnProperty.call(doubleSites, state.siteKey))"), 'Show on BLB must preserve an existing Double-click preference');
+  assert(pin.includes("if (!Object.prototype.hasOwnProperty.call(pageSites, state.siteKey))"), 'Double-click must preserve an existing Show on BLB preference');
   assert(handler.includes('chrome.permissions.request({origins:[currentSiteOrigin]})'), 'site permission request missing');
   assert(handler.indexOf('chrome.permissions.request({origins:[currentSiteOrigin]})') < handler.indexOf('const state = await getState()'), 'permission request must start before asynchronous state reads to preserve the user gesture');
   assert(handler.includes('if (!granted)'), 'permission denial path missing');
