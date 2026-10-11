@@ -199,14 +199,17 @@ function redirectBibleSite() {
   }
 
   if (host==="kingjamesbibleonline.org" || host==="kjbo.org") {
-    let m=u.pathname.match(/^\/([^/]+)-Chapter-(\d+)\/?$/i);
+    // Some entry URLs arrive with repeated leading slashes after the host.
+    // Normalize only this source site's path before applying its known routes.
+    const path=u.pathname.replace(/^\/{2,}/, "/");
+    let m=path.match(/^\/([^/]+)-Chapter-(\d+)\/?$/i);
     if (m) ref={book:m[1],chapter:+m[2],from:1,to:null};
     else {
-      m=u.pathname.match(/^\/([^/]+)-(\d+)-(\d+)(?:-(\d+))?\/?$/i);
+      m=path.match(/^\/([^/]+)-(\d+)-(\d+)(?:-(\d+))?\/?$/i);
       if (m) ref={book:m[1],chapter:+m[2],from:+m[3],to:m[4]?+m[4]:null};
       else {
         // KJV Online also represents same-chapter ranges as John-3-16_3-17.
-        m=u.pathname.match(/^\/([^/]+)-(\d+)-(\d+)_(\d+)-(\d+)\/?$/i);
+        m=path.match(/^\/([^/]+)-(\d+)-(\d+)_(\d+)-(\d+)\/?$/i);
         if (m && m[2]===m[4]) ref={book:m[1],chapter:+m[2],from:+m[3],to:+m[5]};
       }
     }
