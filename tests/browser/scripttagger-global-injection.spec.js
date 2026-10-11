@@ -195,7 +195,7 @@ test('minimal ScriptTagger handler redirects only when master and global redirec
   expect(enabled.event.prevented).toBe(true);
   expect(enabled.event.stopped).toBe(true);
   expect(enabled.messages).toEqual([{
-    type:'blbSuiteOpenBackgroundUrl',
+    type:'blbSuiteOpenScriptTaggerUrl',
     url:'https://www.blueletterbible.org/kjv/jhn/3/16/',
     activeIfNew:true,
     activateExisting:true
