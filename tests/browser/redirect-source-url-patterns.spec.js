@@ -4,6 +4,9 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(path.resolve(__dirname, '../../extension/content.js'), 'utf8');
+const booksSource = fs.readFileSync(path.resolve(__dirname, '../../extension/books.js'), 'utf8');
+const aliasesSource = fs.readFileSync(path.resolve(__dirname, '../../extension/book-aliases.js'), 'utf8');
+const referenceCoreSource = fs.readFileSync(path.resolve(__dirname, '../../extension/reference-core.js'), 'utf8');
 const decodeStart = source.indexOf('function decodeSafe(v) {');
 const parseStart = source.indexOf('function parseRef(text) {', decodeStart);
 const blbUrlStart = source.indexOf('function blbUrl(', decodeStart);
@@ -13,9 +16,10 @@ if ([decodeStart, blbUrlStart, parseStart, redirectStart, redirectEnd].some(inde
   throw new Error('Could not locate source-site redirect functions in extension/content.js');
 }
 // Exclude the production blbUrl() helper entirely so the test's stub is used.
-const helpers = source.slice(decodeStart, blbUrlStart) +
-  source.slice(parseStart, redirectStart) +
-  source.slice(redirectStart, redirectEnd);
+// Exercise the production book table, alias resolver, reference validator, and URL builder.
+const helpers = booksSource + '\\n' + aliasesSource + '\\n' + referenceCoreSource + '\\n' +
+  source.slice(source.indexOf('function bookKey(value) {'), parseStart) +
+  source.slice(parseStart, redirectStart) + source.slice(redirectStart, redirectEnd);
 
 function runSourceRedirect(url) {
   let redirectedTo = null;
@@ -25,11 +29,8 @@ function runSourceRedirect(url) {
       href: url,
       replace(target) { redirectedTo = target; }
     },
-    // Isolate URL parsing from the shared book resolver. These tests assert
-    // the exact book/chapter/verse/range passed to the destination builder.
-    blbUrl(book, chapter, from = 1, to = null) {
-      return `https://blb.test/kjv/${String(book).toLowerCase()}/${chapter}/${from}${to ? `-${to}` : ''}/`;
-    }
+    // No blbUrl stub: this calls the real production resolver.
+
   };
   vm.runInNewContext(helpers + '\nresult = redirectBibleSite();', context);
   return { result: context.result, redirectedTo };
