@@ -2323,6 +2323,46 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
+// ScriptTagger uses its own exact-destination opening path. During navigation,
+// Chromium may expose the previous tab.url alongside the new pendingUrl. The
+// generic tab registry historically preferred url first, which can make a
+// different verse look like the old destination. Always compare pendingUrl
+// first and coalesce only requests for the same canonical verse.
+const pendingScriptTaggerDestinations = new Map();
+
+async function openScriptTaggerDestination(url) {
+  const target = String(url || '').trim();
+  const key = canonicalBlbTabKey(target);
+  if (!key) throw new Error('invalid-scripttagger-destination');
+  if (pendingScriptTaggerDestinations.has(key)) return pendingScriptTaggerDestinations.get(key);
+
+  const operation = (async () => {
+    const tabs = await chrome.tabs.query({});
+    const existing = tabs.find(tab => {
+      // pendingUrl is the destination currently loading; tab.url can still
+      // describe the previous verse until navigation commits.
+      const effectiveUrl = String(tab?.pendingUrl || tab?.url || '');
+      return /^https:\/\/www\\.blueletterbible\\.org\//i.test(effectiveUrl) &&
+        canonicalBlbTabKey(effectiveUrl) === key;
+    });
+    if (existing?.id != null) {
+      await chrome.tabs.update(existing.id, {active:true});
+      if (existing.windowId != null) {
+        try { await chrome.windows.update(existing.windowId, {focused:true}); } catch (_) {}
+      }
+      return existing;
+    }
+    return await chrome.tabs.create({url:target, active:true});
+  })();
+
+  pendingScriptTaggerDestinations.set(key, operation);
+  try {
+    return await operation;
+  } finally {
+    pendingScriptTaggerDestinations.delete(key);
+  }
+}
+
 async function openBlbDestination(url, activeIfNew = false, activateExisting = activeIfNew) {
   const target = String(url || '');
   const key = canonicalBlbTabKey(target);
@@ -2986,7 +3026,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Match other explicit BLB destination opens (including MultiVerse):
     // deduplicate the same canonical destination, but create a distinct tab
     // for a different verse and activate an existing match when reused.
-    openBlbDestination(url, true, true).then(() => sendResponse({ok:true})).catch(error => {
+    openScriptTaggerDestination(url).then(() => sendResponse({ok:true})).catch(error => {
       console.error('BLB Suite ScriptTagger destination:', error);
       sendResponse({ok:false, error:String(error)});
     });
