@@ -582,8 +582,10 @@ test('Show on BLB and Double-click handlers remain independent', () => {
   const handler = popup.slice(popup.indexOf('async function setIndependentSiteFeature'), popup.indexOf("document.getElementById('pageButton').addEventListener"));
   assert(handler.includes('await setPageButton(!!on)'), 'Show on BLB setting update missing');
   assert(handler.includes('await setDoubleClick(!!on)'), 'Double-click setting update missing');
-  assert(handler.includes('pinSiteFeatureChoice(feature)'), 'feature choice is not pinned before permission request');
-  assert(handler.includes('if (!(await requestCurrentSiteAccess()))'), 'permission denial path missing');
+  assert(handler.includes('pinSiteFeatureChoice(feature)'), 'feature choice must be persisted');
+  assert(handler.includes('chrome.permissions.request({origins:[currentSiteOrigin]})'), 'site permission request missing');
+  assert(handler.indexOf('chrome.permissions.request({origins:[currentSiteOrigin]})') < handler.indexOf('const state = await getState()'), 'permission request must start before asynchronous state reads to preserve the user gesture');
+  assert(handler.includes('if (!granted)'), 'permission denial path missing');
   assert(handler.includes('render(await getState())'), 'permission denial must refresh the effective UI state');
 });
 test('global redirect toggle remains independent of site-specific toggles', () => {
