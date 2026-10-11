@@ -2342,7 +2342,7 @@ async function openScriptTaggerDestination(url) {
       // pendingUrl is the destination currently loading; tab.url can still
       // describe the previous verse until navigation commits.
       const effectiveUrl = String(tab?.pendingUrl || tab?.url || '');
-      return /^https:\/\/www\\.blueletterbible\\.org\//i.test(effectiveUrl) &&
+      return /^https:\/\/www\.blueletterbible\.org\//i.test(effectiveUrl) &&
         canonicalBlbTabKey(effectiveUrl) === key;
     });
     if (existing?.id != null) {
