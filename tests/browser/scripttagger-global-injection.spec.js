@@ -195,7 +195,7 @@ test('minimal ScriptTagger handler redirects only when master and global redirec
   expect(enabled.event.prevented).toBe(true);
   expect(enabled.event.stopped).toBe(true);
   expect(enabled.messages).toEqual([{
-    type:'blbSuiteOpenBackgroundUrl',
+    type:'blbSuiteOpenScriptTaggerUrl',
     url:'https://www.blueletterbible.org/kjv/jhn/3/16/',
     activeIfNew:true,
     activateExisting:true
@@ -208,4 +208,57 @@ test('minimal ScriptTagger handler redirects only when master and global redirec
   const masterOff = await runMinimalScriptTaggerClick({masterEnabled:false,redirectEnabled:true});
   expect(masterOff.event.prevented).toBe(false);
   expect(masterOff.messages).toEqual([]);
+});
+
+test('ScriptTagger destination keys keep distinct verses separate and coalesce repeats', async () => {
+  const start = background.indexOf('// ScriptTagger has a stricter destination identity');
+  const end = background.indexOf('async function openBlbDestination(', start);
+  if (start < 0 || end < 0) throw new Error('Could not extract ScriptTagger destination manager');
+
+  const tabs = [];
+  let nextId = 1;
+  let queue = Promise.resolve();
+  const chrome = {
+    tabs: {
+      query: async () => tabs,
+      create: async options => {
+        const tab = { id: nextId++, url: options.url, pendingUrl: options.url, windowId: 1, active: options.active };
+        tabs.push(tab);
+        return tab;
+      },
+      update: async (id, changes) => {
+        const tab = tabs.find(item => item.id === id);
+        if (tab) Object.assign(tab, changes);
+        return tab;
+      }
+    },
+    windows: { update: async () => ({ focused: true }) }
+  };
+  const context = {
+    URL,
+    URLSearchParams,
+    Map,
+    chrome,
+    getLiveTabById: async id => tabs.find(tab => tab.id === id) || null,
+    enqueueBlbTabCreation: operation => {
+      const result = queue.then(operation, operation);
+      queue = result.catch(() => {});
+      return result;
+    }
+  };
+  vm.runInNewContext(background.slice(start, end), context);
+
+  const first = await context.openScriptTaggerDestination('https://www.blueletterbible.org/kjv/jhn/3/16/');
+  const second = await context.openScriptTaggerDestination('https://www.blueletterbible.org/kjv/jhn/3/17/');
+  const firstAgain = await context.openScriptTaggerDestination('https://www.blueletterbible.org/kjv/jhn/3/16/');
+  expect(first.id).not.toBe(second.id);
+  expect(firstAgain.id).toBe(first.id);
+  expect(tabs).toHaveLength(2);
+
+  const concurrent = await Promise.all([
+    context.openScriptTaggerDestination('https://www.blueletterbible.org/kjv/rom/8/28/'),
+    context.openScriptTaggerDestination('https://www.blueletterbible.org/kjv/rom/8/28/')
+  ]);
+  expect(concurrent[0].id).toBe(concurrent[1].id);
+  expect(tabs).toHaveLength(3);
 });

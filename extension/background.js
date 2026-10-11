@@ -2148,7 +2148,7 @@ function canonicalBlbTabKey(url) {
     if (!/^https?:$/i.test(u.protocol)) return String(url || '').trim();
 
     const host = u.hostname.toLowerCase().replace(/^www\./, '');
-    let path = u.pathname.replace(/\/+$/, '') || '/';
+    let path = u.pathname.replace(/\/+$/, '').toLowerCase() || '/';
     path = path.toLowerCase();
 
     // BLB Bible destinations are identified by their semantic KJV path.
@@ -2296,16 +2296,13 @@ async function createBlbTabGeneric(url, active = true, {forceNew = false} = {}) 
   return {tab: created, reused: false};
 }
 
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  const url = String(tab?.url || changeInfo?.url || '');
-  if (!/^https:\/\/www\.blueletterbible\.org\//i.test(url)) return;
-  const key = canonicalBlbTabKey(url);
-  if (key) rememberBlbTab(key, tabId);
-});
 
 chrome.tabs.onRemoved.addListener(tabId => {
   forgetBlbTab(tabId);
   intentionalNewBlbTabs.delete(tabId);
+  for (const [key, id] of scriptTaggerDestinationTabs) {
+    if (id === tabId) scriptTaggerDestinationTabs.delete(key);
+  }
   clearTrackedMultiVerseTab(tabId).catch(()=>{});
   chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}}).then(data=>{
     const map = data.blbSuitePendingMultiVerseRefsByTab && typeof data.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...data.blbSuitePendingMultiVerseRefsByTab} : {};
@@ -2322,6 +2319,85 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     clearTrackedMultiVerseTab(tabId).catch(()=>{});
   }
 });
+
+// ScriptTagger has a stricter destination identity than the general BLB
+// manager: verse links must never collapse onto another verse's tab. Keep its
+// own key namespace, but serialize the complete lookup/create operation using
+// the shared low-level creation queue so rapid clicks cannot race each other.
+const pendingScriptTaggerDestinations = new Map();
+const scriptTaggerDestinationTabs = new Map();
+
+function canonicalScriptTaggerDestinationKey(url) {
+  try {
+    const u = new URL(String(url || ''));
+    const host = u.hostname.toLowerCase().replace(/^www\./, '');
+    let path = u.pathname.replace(/\/+$/, '').toLowerCase() || '/';
+    const kjv = path.match(/^\/kjv\/([^/]+)\/(\d+)(?:\/(\d+(?:-\d+)?))?(?:\/.*)?$/);
+    if (host === 'blueletterbible.org' && kjv) {
+      const book = kjv[1];
+      const chapter = kjv[2];
+      const verse = kjv[3] || '';
+      // BLB can normalize verse 1 to its chapter URL after loading.
+      return !verse || verse === '1' || verse === '1-1'
+        ? `script-tagger|kjv|${book}|${chapter}`
+        : `script-tagger|kjv|${book}|${chapter}|${verse}`;
+    }
+    // For other supported BLB URL forms, preserve the complete normalized path
+    // and query so separate destinations do not collide.
+    const query = new URLSearchParams(u.search);
+    query.sort();
+    return `script-tagger|${host}${path}${query.toString() ? `?${query.toString()}` : ''}`;
+  } catch (_) {
+    return `script-tagger|${String(url || '').trim().replace(/\/+$/, '').toLowerCase()}`;
+  }
+}
+
+async function openScriptTaggerDestination(url) {
+  const target = String(url || '');
+  const key = canonicalScriptTaggerDestinationKey(target);
+  if (pendingScriptTaggerDestinations.has(key)) return pendingScriptTaggerDestinations.get(key);
+
+  const operation = enqueueBlbTabCreation(async () => {
+    const rememberedId = scriptTaggerDestinationTabs.get(key);
+    const remembered = await getLiveTabById(rememberedId);
+    if (remembered?.id != null) {
+      await chrome.tabs.update(remembered.id, {active:true});
+      if (remembered.windowId != null) {
+        try { await chrome.windows.update(remembered.windowId, {focused:true}); } catch (_) {}
+      }
+      return remembered;
+    }
+    if (rememberedId != null) scriptTaggerDestinationTabs.delete(key);
+
+    // Recover matching tabs after a service-worker restart. Compare using the
+    // ScriptTagger-specific key, not the general manager's broader key.
+    try {
+      const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
+      const existing = tabs.find(tab =>
+        canonicalScriptTaggerDestinationKey(tab?.url || tab?.pendingUrl || '') === key
+      );
+      if (existing?.id != null) {
+        scriptTaggerDestinationTabs.set(key, existing.id);
+        await chrome.tabs.update(existing.id, {active:true});
+        if (existing.windowId != null) {
+          try { await chrome.windows.update(existing.windowId, {focused:true}); } catch (_) {}
+        }
+        return existing;
+      }
+    } catch (_) {}
+
+    const created = await chrome.tabs.create({url:target, active:true});
+    if (created?.id != null) scriptTaggerDestinationTabs.set(key, created.id);
+    return created;
+  });
+
+  pendingScriptTaggerDestinations.set(key, operation);
+  try {
+    return await operation;
+  } finally {
+    if (pendingScriptTaggerDestinations.get(key) === operation) pendingScriptTaggerDestinations.delete(key);
+  }
+}
 
 async function openBlbDestination(url, activeIfNew = false, activateExisting = activeIfNew) {
   const target = String(url || '');
@@ -2561,7 +2637,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBrowserUrl"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;
@@ -2976,6 +3052,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'blbSuiteGetDefaultSiteStatus') {
     const enabled = await isSiteEnabledByDefault(String(message.hostname || ''), String(message.title || ''));
     sendResponse({ok:true, enabled});
+    return true;
+  }
+
+  if (message.type === 'blbSuiteOpenScriptTaggerUrl') {
+    if (!(await isSuiteEnabled())) { sendResponse({ok:false}); return true; }
+    const url = String(message.url || '');
+    if (!/^https:\/\/www\.blueletterbible\.org\//i.test(url)) { sendResponse({ok:false}); return true; }
+    // ScriptTagger requires per-verse identity: the general BLB destination
+    // key intentionally equates chapter-only and verse-1 URLs, so use its
+    // stricter keyed find-or-create path while sharing the serialized creation
+    // queue. Identical clicks coalesce; different verse keys cannot share tabs.
+    openScriptTaggerDestination(url).then(() => sendResponse({ok:true})).catch(error => {
+      console.error('BLB Suite ScriptTagger destination:', error);
+      sendResponse({ok:false, error:String(error)});
+    });
     return true;
   }
 
@@ -4792,7 +4883,7 @@ async function openBlbBook(bookOrNumber, tabBehavior = {activeIfNew:true, activa
     try {
       if (!candidateUrl) return null;
       const u = new URL(String(candidateUrl));
-      const host = u.hostname.toLowerCase().replace(/^www\./, '');
+    const host = u.hostname.toLowerCase().replace(/^www\./, '');
       if (host !== 'blueletterbible.org' && !host.endsWith('.blueletterbible.org')) return null;
 
       const parts = u.pathname.split('/').filter(Boolean).map(part => {
