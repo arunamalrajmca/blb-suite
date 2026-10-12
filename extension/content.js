@@ -1723,6 +1723,7 @@ let pageButtonMonitoring = false;
 let pageButtonSelectionFrame = 0;
 let pageButtonValidationToken = 0;
 let pageButtonActionInProgress = false;
+let pageButtonDomObserver = null;
 
 function isBlbPageButtonExcludedSite() {
   const host = String(location.hostname || '').toLowerCase();
@@ -1808,10 +1809,36 @@ function invalidateBlbPageSelectionButton() {
   blbPageButtonSelection = '';
   blbPageButtonContextualReference = null;
   blbPageButtonDirectUrl = null;
+  lastSelectionContextualReference = null;
+  lastSelectionContextualText = '';
   blbPageButtonVisible = false;
   const button = document.getElementById(BLB_PAGE_BUTTON_ID);
   if (button) button.style.display = 'none';
   // Do not expose a stale selection to the context-menu entry.
+}
+
+// A page can replace or rewrite selected DOM without dispatching input,
+// keyboard, or pointer events. If that happens, the native Selection can
+// continue to reference detached nodes and the floating action must be
+// invalidated instead of acting on cached text from the old document content.
+function validateBlbPageSelectionAfterDomMutation() {
+  if (!pageButtonMonitoring || !blbPageButtonVisible) return;
+  try {
+    const selection = window.getSelection?.();
+    if (!selection || selection.rangeCount === 0) {
+      invalidateBlbPageSelectionButton();
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    const currentText = normalizeSelectionText(selection.toString());
+    const cachedText = normalizeSelectionText(blbPageButtonSelection);
+    if (!range.startContainer?.isConnected || !range.endContainer?.isConnected ||
+        !currentText || currentText !== cachedText) {
+      invalidateBlbPageSelectionButton();
+    }
+  } catch (_) {
+    invalidateBlbPageSelectionButton();
+  }
 }
 
 function setBlbPageButtonVisible(visible) {
@@ -1996,6 +2023,17 @@ function enableBlbPageButtonMonitoring() {
     };
   } catch (_) {}
   pageButtonMonitoring = true;
+  if (pageButtonDomObserver) pageButtonDomObserver.disconnect();
+  pageButtonDomObserver = new MutationObserver(() => {
+    validateBlbPageSelectionAfterDomMutation();
+  });
+  if (document.documentElement) {
+    pageButtonDomObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true
+    });
+  }
   document.addEventListener('mousedown', handleBlbPageSelectionMouseDown, true);
   document.addEventListener('keydown', handleBlbPageSelectionKeyDown, true);
   document.addEventListener('mouseup', handleBlbPageSelectionMouseUp, true);
@@ -2013,6 +2051,10 @@ function enableBlbPageButtonMonitoring() {
 
 function disableBlbPageButtonMonitoring() {
   pageButtonValidationToken++;
+  if (pageButtonDomObserver) {
+    pageButtonDomObserver.disconnect();
+    pageButtonDomObserver = null;
+  }
   if (pageButtonSelectionFrame) {
     cancelAnimationFrame(pageButtonSelectionFrame);
     pageButtonSelectionFrame = 0;
