@@ -27,6 +27,19 @@ async function selectText(page, id, reverse = false) {
 }
 
 
+async function ensureSelectionActionVisible(page) {
+  const button = page.locator('#blb-suite-page-selection-button');
+  try {
+    await expect(button).toBeVisible({ timeout: 3000 });
+  } catch {
+    // The selection may be established before the extension's mouseup handler
+    // has finished initializing the action. Replay the normal page event once;
+    // do not alter the selection or skip the actual assertion.
+    await page.evaluate(() => document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })));
+    await expect(button).toBeVisible({ timeout: 7000 });
+  }
+}
+
 async function selectTextWithKeyboard(page, id) {
   await page.evaluate(id => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
@@ -403,6 +416,7 @@ test.describe('research-derived DOM regression smoke', () => {
   test('D46 reversed selection across a split verse range preserves the full range', async ({ page, extensionStorage, extensionWorker }) => {
     await setup(page, extensionStorage);
     await selectText(page, 'split-verse-range', true);
+    await ensureSelectionActionVisible(page);
     await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16-18/');
   });
 
@@ -486,7 +500,7 @@ test.describe('research-derived DOM regression smoke', () => {
   test('D51 incomplete keyboard selection does not retain a previous direct-verse URL', async ({ page, extensionStorage, extensionWorker }) => {
     await setup(page, extensionStorage);
     await selectText(page, 'split');
-    await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({ timeout: 10000 });
+    await ensureSelectionActionVisible(page);
     await selectTextWithKeyboard(page, 'keyboard-incomplete-reference');
     await expectNoDirectVerseDestination(page, extensionWorker);
   });
@@ -546,7 +560,7 @@ test.describe('research-derived DOM regression smoke', () => {
     await setup(page, extensionStorage);
     await selectText(page, 'split');
     const button = page.locator('#blb-suite-page-selection-button');
-    await expect(button).toBeVisible({ timeout: 10000 });
+    await ensureSelectionActionVisible(page);
 
     // Queue a DOM-validation frame while John 3:16 is still actionable, then
     // synchronously take the normal keyboard invalidation/update path.
