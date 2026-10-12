@@ -550,10 +550,13 @@ test.describe('research-derived DOM regression smoke', () => {
 
     // Queue a DOM-validation frame while John 3:16 is still actionable, then
     // synchronously take the normal keyboard invalidation/update path.
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       const unrelated = document.createElement('div');
       unrelated.textContent = 'queue DOM validation';
       document.body.appendChild(unrelated);
+      // Deliver the MutationObserver callback so its RAF is queued, but keep
+      // this task ahead of the next animation frame.
+      await Promise.resolve();
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
       const node = document.getElementById('keyboard-range-reference');
       const range = document.createRange();
