@@ -2,6 +2,8 @@ name: BLB Suite BROWSER E2E — REFERENCES & DOUBLE-CLICK
 run-name: References & Double-click — PR #${{ github.event.pull_request.number || 'main' }} — Run ${{ github.run_number }} — Attempt ${{ github.run_attempt }}
 
 on:
+  push:
+    branches: [ main ]
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened, labeled]
@@ -23,7 +25,7 @@ jobs:
         run: |
           set -euo pipefail
           echo "runtime_changed=false" >> "$GITHUB_OUTPUT"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || jq -e 'any(.[]; .name == "ci-run-all" or .name == "ci-run-references")' <<< "$LABELS" >/dev/null; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "${{ github.event_name }}" == "push" ]] || jq -e 'any(.[]; .name == "ci-run-all" or .name == "ci-run-references")' <<< "$LABELS" >/dev/null; then
             echo "browser_e2e_required=true" >> "$GITHUB_OUTPUT"
           else
             echo "browser_e2e_required=false" >> "$GITHUB_OUTPUT"
