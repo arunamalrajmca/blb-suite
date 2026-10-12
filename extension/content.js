@@ -1723,6 +1723,8 @@ let pageButtonMonitoring = false;
 let pageButtonSelectionFrame = 0;
 let pageButtonValidationToken = 0;
 let pageButtonActionInProgress = false;
+let pageButtonDomObserver = null;
+let pageButtonDomValidationFrame = 0;
 
 function isBlbPageButtonExcludedSite() {
   const host = String(location.hostname || '').toLowerCase();
@@ -1804,20 +1806,87 @@ function hasLocalValidBibleReference(text) {
   return false;
 }
 
+function stopBlbPageSelectionDomObserver() {
+  // A queued validation belongs to the visibility/selection state that
+  // scheduled it. Do not let it run after the observer is stopped and the
+  // button is subsequently shown for a different keyboard selection.
+  if (pageButtonDomValidationFrame) {
+    cancelAnimationFrame(pageButtonDomValidationFrame);
+    pageButtonDomValidationFrame = 0;
+  }
+  if (!pageButtonDomObserver) return;
+  pageButtonDomObserver.disconnect();
+  pageButtonDomObserver = null;
+}
+
+function syncBlbPageSelectionDomObserver() {
+  // Observe only while there is a visible action whose cached selection needs
+  // protection. Hidden-button pages should not pay for document-wide mutation
+  // notifications.
+  if (!pageButtonMonitoring || !blbPageButtonVisible || !document.documentElement) {
+    stopBlbPageSelectionDomObserver();
+    return;
+  }
+  if (!pageButtonDomObserver) {
+    pageButtonDomObserver = new MutationObserver(() => {
+      // Mutation callbacks can run between DOM updates that belong to one
+      // selection change. Validate once the browser has settled the frame.
+      if (pageButtonDomValidationFrame) return;
+      pageButtonDomValidationFrame = requestAnimationFrame(() => {
+        pageButtonDomValidationFrame = 0;
+        validateBlbPageSelectionAfterDomMutation();
+      });
+    });
+  }
+  pageButtonDomObserver.observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+    characterData: true
+  });
+}
+
 function invalidateBlbPageSelectionButton() {
   blbPageButtonSelection = '';
   blbPageButtonContextualReference = null;
   blbPageButtonDirectUrl = null;
+  lastSelectionContextualReference = null;
+  lastSelectionContextualText = '';
   blbPageButtonVisible = false;
+  stopBlbPageSelectionDomObserver();
   const button = document.getElementById(BLB_PAGE_BUTTON_ID);
   if (button) button.style.display = 'none';
   // Do not expose a stale selection to the context-menu entry.
+}
+
+// A page can replace or rewrite selected DOM without dispatching input,
+// keyboard, or pointer events. If that happens, the native Selection can
+// continue to reference detached nodes and the floating action must be
+// invalidated instead of acting on cached text from the old document content.
+function validateBlbPageSelectionAfterDomMutation() {
+  if (!pageButtonMonitoring || !blbPageButtonVisible) return;
+  try {
+    const selection = window.getSelection?.();
+    if (!selection || selection.rangeCount === 0) {
+      invalidateBlbPageSelectionButton();
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    const currentText = normalizeSelectionText(selection.toString());
+    const cachedText = normalizeSelectionText(blbPageButtonSelection);
+    if (!range.startContainer?.isConnected || !range.endContainer?.isConnected ||
+        !currentText || currentText !== cachedText) {
+      invalidateBlbPageSelectionButton();
+    }
+  } catch (_) {
+    invalidateBlbPageSelectionButton();
+  }
 }
 
 function setBlbPageButtonVisible(visible) {
   blbPageButtonVisible = !!visible;
   const button = document.getElementById(BLB_PAGE_BUTTON_ID);
   if (button) button.style.display = blbPageButtonVisible ? 'block' : 'none';
+  syncBlbPageSelectionDomObserver();
   // Keep the right-click Show on BLB item synchronized with the exact same
   // live eligibility state. The background handler also receives tab context
   // through sender.tab, so no separate classifier is needed here.
@@ -1996,6 +2065,9 @@ function enableBlbPageButtonMonitoring() {
     };
   } catch (_) {}
   pageButtonMonitoring = true;
+  // The observer is armed by setBlbPageButtonVisible(true), not for the
+  // entire time this feature is enabled.
+  syncBlbPageSelectionDomObserver();
   document.addEventListener('mousedown', handleBlbPageSelectionMouseDown, true);
   document.addEventListener('keydown', handleBlbPageSelectionKeyDown, true);
   document.addEventListener('mouseup', handleBlbPageSelectionMouseUp, true);
@@ -2013,6 +2085,7 @@ function enableBlbPageButtonMonitoring() {
 
 function disableBlbPageButtonMonitoring() {
   pageButtonValidationToken++;
+  stopBlbPageSelectionDomObserver();
   if (pageButtonSelectionFrame) {
     cancelAnimationFrame(pageButtonSelectionFrame);
     pageButtonSelectionFrame = 0;

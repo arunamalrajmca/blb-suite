@@ -27,6 +27,19 @@ async function selectText(page, id, reverse = false) {
 }
 
 
+async function ensureSelectionActionVisible(page) {
+  const button = page.locator('#blb-suite-page-selection-button');
+  try {
+    await expect(button).toBeVisible({ timeout: 3000 });
+  } catch {
+    // The selection may be established before the extension's mouseup handler
+    // has finished initializing the action. Replay the normal page event once;
+    // do not alter the selection or skip the actual assertion.
+    await page.evaluate(() => document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })));
+    await expect(button).toBeVisible({ timeout: 7000 });
+  }
+}
+
 async function selectTextWithKeyboard(page, id) {
   await page.evaluate(id => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
@@ -171,6 +184,11 @@ test.describe('research-derived DOM regression smoke', () => {
   test('D25c repeated spaces between book and chapter/verse remain resolvable', async ({ page, extensionStorage, extensionWorker }) => {
     await setup(page, extensionStorage);
     await selectText(page, 'repeated-space');
+
+    // Confirm the browser has the intended selection before testing the
+    // extension's asynchronous mouseup-to-action update path.
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || '')).toBe('John   3:16');
+    await ensureSelectionActionVisible(page);
     await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
   });
 
@@ -403,6 +421,7 @@ test.describe('research-derived DOM regression smoke', () => {
   test('D46 reversed selection across a split verse range preserves the full range', async ({ page, extensionStorage, extensionWorker }) => {
     await setup(page, extensionStorage);
     await selectText(page, 'split-verse-range', true);
+    await ensureSelectionActionVisible(page);
     await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16-18/');
   });
 
@@ -486,7 +505,7 @@ test.describe('research-derived DOM regression smoke', () => {
   test('D51 incomplete keyboard selection does not retain a previous direct-verse URL', async ({ page, extensionStorage, extensionWorker }) => {
     await setup(page, extensionStorage);
     await selectText(page, 'split');
-    await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({ timeout: 10000 });
+    await ensureSelectionActionVisible(page);
     await selectTextWithKeyboard(page, 'keyboard-incomplete-reference');
     await expectNoDirectVerseDestination(page, extensionWorker);
   });
@@ -540,6 +559,101 @@ test.describe('research-derived DOM regression smoke', () => {
     await expect(button).toBeVisible({ timeout: 10000 });
     await extensionStorage.set({ masterEnabled: false });
     await expect(button).toHaveCount(0, { timeout: 10000 });
+  });
+
+  test('D59 pending DOM-validation frame cannot invalidate a keyboard-updated range', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split');
+    const button = page.locator('#blb-suite-page-selection-button');
+    await ensureSelectionActionVisible(page);
+
+    // Queue a DOM-validation frame while John 3:16 is still actionable, then
+    // synchronously take the normal keyboard invalidation/update path.
+    await page.evaluate(async () => {
+      const unrelated = document.createElement('div');
+      unrelated.textContent = 'queue DOM validation';
+      document.body.appendChild(unrelated);
+      // Deliver the MutationObserver callback so its RAF is queued, but keep
+      // this task ahead of the next animation frame.
+      await Promise.resolve();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      const node = document.getElementById('keyboard-range-reference');
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight', bubbles: true }));
+    });
+
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || '')).toBe('John 3:16-18');
+    await page.locator('#blb-suite-page-selection-button').click();
+    await expectBlbPath(extensionWorker, '/kjv/jhn/3/16-18/');
+  });
+
+  test('D60 a completed old DOM-validation frame does not block the subsequent keyboard range update', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split');
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+
+    // Let the mutation observer's queued validation frame complete first.
+    await page.evaluate(() => {
+      const unrelated = document.createElement('div');
+      unrelated.textContent = 'flush DOM validation';
+      document.body.appendChild(unrelated);
+    });
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
+    await selectTextWithKeyboard(page, 'keyboard-range-reference');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || '')).toBe('John 3:16-18');
+    await button.click();
+    await expectBlbPath(extensionWorker, '/kjv/jhn/3/16-18/');
+  });
+
+  test('D58 unrelated DOM mutations preserve a valid visible selection action', async ({ page, extensionStorage }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split');
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+
+    // Unrelated page activity must not invalidate an otherwise live selection.
+    await page.evaluate(() => {
+      const unrelated = document.createElement('div');
+      unrelated.textContent = 'Unrelated page update';
+      document.body.appendChild(unrelated);
+      // Also exercise a text-node mutation outside the selected range.
+      unrelated.firstChild.textContent = 'Unrelated page update completed';
+    });
+
+    await expect(button).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || '')).toBe('John 3:16');
+  });
+
+  test('D57 dynamic replacement of selected DOM invalidates the stale floating action', async ({ page, extensionStorage }) => {
+    await setup(page, extensionStorage);
+    const button = page.locator('#blb-suite-page-selection-button');
+
+    // Establish and verify the exact starting selection before testing mutation.
+    // Re-dispatch mouseup if the extension's initial selection handler is delayed.
+    await selectText(page, 'split');
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || '')).toBe('John 3:16');
+    try {
+      await expect(button).toBeVisible({ timeout: 3000 });
+    } catch {
+      await page.evaluate(() => document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })));
+      await expect(button).toBeVisible({ timeout: 7000 });
+    }
+
+    // A page can replace selected text without producing a mouse or keyboard
+    // event. The cached selection must not remain actionable after that change.
+    await page.evaluate(() => {
+      document.getElementById('split').innerHTML = '<span>Romans</span> <strong>8:28</strong>';
+    });
+
+    await expect(button).toBeHidden({ timeout: 10000 });
   });
 
 
