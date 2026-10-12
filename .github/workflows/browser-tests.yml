@@ -2,6 +2,8 @@ name: BLB Suite HARD-GATE
 run-name: HARD-GATE — PR #${{ github.event.pull_request.number || 'main' }} — Run ${{ github.run_number }} — Attempt ${{ github.run_attempt }}
 
 on:
+  push:
+    branches: [ main ]
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened, labeled]
@@ -21,7 +23,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]] || jq -e 'any(.[]; .name == "ci-run-all" or .name == "ci-run-hard-gate")' <<< "$LABELS" >/dev/null; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "${{ github.event_name }}" == "push" ]] || jq -e 'any(.[]; .name == "ci-run-all" or .name == "ci-run-hard-gate")' <<< "$LABELS" >/dev/null; then
             echo "runtime_changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "runtime_changed=false" >> "$GITHUB_OUTPUT"
@@ -29,7 +31,7 @@ jobs:
 
   regression-package:
     name: Regression — package
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-hard-gate') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-hard-gate') }}
     needs: change-detection
     runs-on: ubuntu-latest
     timeout-minutes: 20
