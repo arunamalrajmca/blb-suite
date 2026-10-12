@@ -1832,7 +1832,7 @@ function addBlbPageSelectionButton() {
   button.id = BLB_PAGE_BUTTON_ID;
   button.type = 'button';
   button.textContent = 'Show on BLB';
-  button.title = 'Open the selected Bible text or references in BLB';
+  button.title = 'Open the selected Bible text or references in BLB (Alt+B)';
   button.setAttribute('aria-label', 'Show on BLB');
   const isWebsterPage = location.hostname.toLowerCase() === 'webstersdictionary1828.com';
   const buttonBottom = isWebsterPage ? 'bottom:68px' : 'bottom:20px';
