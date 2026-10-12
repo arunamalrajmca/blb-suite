@@ -542,6 +542,23 @@ test.describe('research-derived DOM regression smoke', () => {
     await expect(button).toHaveCount(0, { timeout: 10000 });
   });
 
+  test('D58 unrelated DOM mutations preserve a valid visible selection action', async ({ page, extensionStorage }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split');
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+
+    // Unrelated page activity must not invalidate an otherwise live selection.
+    await page.evaluate(() => {
+      const unrelated = document.createElement('div');
+      unrelated.textContent = 'Unrelated asynchronous page update';
+      document.body.appendChild(unrelated);
+    });
+
+    await expect(button).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || '')).toBe('John 3:16');
+  });
+
   test('D57 dynamic replacement of selected DOM invalidates the stale floating action', async ({ page, extensionStorage }) => {
     await setup(page, extensionStorage);
     const button = page.locator('#blb-suite-page-selection-button');
