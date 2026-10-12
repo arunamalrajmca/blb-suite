@@ -2477,6 +2477,14 @@ function isRedirectHostname(hostname) {
   return REDIRECT_HOSTNAMES.has(normalizeSiteHostname(String(hostname || '')));
 }
 
+function isSensitiveSiteHostname(hostname) {
+  const host = String(hostname || '').toLowerCase().replace(/\.$/, '');
+  if (!host || host === 'localhost' || /^127(?:\.\d{1,3}){3}$/.test(host)) return false;
+  // Match hostname labels, not page text or titles. This gate overrides saved
+  // per-site opt-ins for interaction features on likely sensitive services.
+  return /(?:^|[.-])(?:bank|banking|banker|creditunion|credit-union|financial|finance|hospital|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)(?:[.-]|$)/i.test(host);
+}
+
 function contentScriptFilesForTab(tab, data) {
   const hostname = hostnameFromTabUrl(tab?.url);
   const key = normalizeSiteHostname(hostname);
@@ -2484,7 +2492,8 @@ function contentScriptFilesForTab(tab, data) {
     ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
     ? data.doubleClickBlbSites : {};
-  const explicitSiteFeature = pageSites[key] === true || doubleSites[key] === true;
+  const sensitiveSite = isSensitiveSiteHostname(hostname);
+  const explicitSiteFeature = !sensitiveSite && (pageSites[key] === true || doubleSites[key] === true);
   const redirectEnabled = data.redirectEnabled === true;
   const needsFullBundle = explicitSiteFeature || (redirectEnabled && isRedirectHostname(hostname));
   if (needsFullBundle && redirectEnabled) {
@@ -3018,6 +3027,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'blbSuitePrepareSiteFeatureToggle') {
     try {
       const origin = String(message.origin || '');
+      let originHost = '';
+      try { originHost = new URL(origin).hostname; } catch (_) {}
+      if (isSensitiveSiteHostname(originHost)) { sendResponse({ok:false, blockedSensitiveSite:true}); return true; }
       const feature = message.feature === 'pageButton' ? 'pageButton' : message.feature === 'doubleClick' ? 'doubleClick' : '';
       const parsed = new URL(origin.endsWith('/*') ? origin.slice(0, -1) : origin);
       if (!feature || !/^https?:$/.test(parsed.protocol)) {
