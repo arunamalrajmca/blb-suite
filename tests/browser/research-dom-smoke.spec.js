@@ -551,8 +551,10 @@ test.describe('research-derived DOM regression smoke', () => {
     // Unrelated page activity must not invalidate an otherwise live selection.
     await page.evaluate(() => {
       const unrelated = document.createElement('div');
-      unrelated.textContent = 'Unrelated asynchronous page update';
+      unrelated.textContent = 'Unrelated page update';
       document.body.appendChild(unrelated);
+      // Also exercise a text-node mutation outside the selected range.
+      unrelated.firstChild.textContent = 'Unrelated page update completed';
     });
 
     await expect(button).toBeVisible();
