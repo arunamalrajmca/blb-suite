@@ -184,6 +184,11 @@ test.describe('research-derived DOM regression smoke', () => {
   test('D25c repeated spaces between book and chapter/verse remain resolvable', async ({ page, extensionStorage, extensionWorker }) => {
     await setup(page, extensionStorage);
     await selectText(page, 'repeated-space');
+
+    // Confirm the browser has the intended selection before testing the
+    // extension's asynchronous mouseup-to-action update path.
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || '')).toBe('John   3:16');
+    await ensureSelectionActionVisible(page);
     await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
   });
 
