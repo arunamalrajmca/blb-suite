@@ -359,4 +359,23 @@ test.describe('research-derived DOM regression smoke', () => {
     }
   });
 
+
+  test('D38 partial selection across inline DOM nodes resolves only the selected reference', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await page.evaluate(() => {
+      const node = document.getElementById('partial-multinode');
+      const start = node.querySelector('span').firstChild;
+      const end = node.querySelector('strong').firstChild;
+      const range = document.createRange();
+      range.setStart(start, 0);
+      range.setEnd(end, end.textContent.length);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
+    await expect(page).toHaveURL('https://example.com/');
+  });
+
 });
