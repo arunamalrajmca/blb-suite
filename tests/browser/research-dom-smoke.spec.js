@@ -398,4 +398,22 @@ test.describe('research-derived DOM regression smoke', () => {
     await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/35-36/');
   });
 
+  test('D42 selected single verse at the chapter maximum remains valid', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'maximum-single-verse');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/36/');
+  });
+
+  test('D43 range starting at the chapter maximum clamps an oversized endpoint', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'range-from-maximum-oversized-end');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/36/');
+  });
+
+  test('D44 range wholly beyond the chapter maximum clamps to the final verse', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'range-beyond-maximum');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/36/');
+  });
+
 });
