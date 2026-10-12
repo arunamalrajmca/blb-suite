@@ -392,4 +392,10 @@ test.describe('research-derived DOM regression smoke', () => {
     await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/35-36/');
   });
 
+  test('D41 selected verse range ending at the chapter maximum remains unchanged', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'exact-maximum-verse-range');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/35-36/');
+  });
+
 });
