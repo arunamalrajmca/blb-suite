@@ -108,4 +108,22 @@ test.describe('research-derived DOM regression smoke', () => {
     });
     await useShowOnBlb(page, extensionWorker, '/kjv/2jo/1/4/');
   });
+
+  test('D25a line break between book and chapter/verse remains resolvable', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'linebreak');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
+  });
+
+  test('D25b non-breaking space between book and chapter/verse remains resolvable', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'nbsp');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
+  });
+
+  test('D25c repeated spaces between book and chapter/verse remain resolvable', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'repeated-space');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
+  });
 });
