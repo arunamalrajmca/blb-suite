@@ -225,4 +225,10 @@ test.describe('research-derived DOM regression smoke', () => {
     }
   });
 
+  test('D14 zero-width spaces inside a reference preserve resolution', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'invisible');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
+  });
+
 });
