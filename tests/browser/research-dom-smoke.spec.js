@@ -379,6 +379,19 @@ test.describe('research-derived DOM regression smoke', () => {
   });
 
 
+
+  test('D45 reversed selection across inline DOM nodes preserves the reference', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split', true);
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
+  });
+
+  test('D46 reversed selection across a split verse range preserves the full range', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split-verse-range', true);
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16-18/');
+  });
+
   test('D39 selected out-of-range chapter and verse clamp to the known book limits', async ({ page, extensionStorage, extensionWorker }) => {
     await setup(page, extensionStorage);
     await selectText(page, 'out-of-range-reference');
