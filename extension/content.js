@@ -790,8 +790,9 @@ if (location.hostname==="webstersdictionary1828.com") {
     mount.appendChild(button);
   }
 
-  let websterRedirectEnabled = true;
-  chrome.storage.local.get({redirectEnabled:true}).then(data=>{
+  // Global external redirects default OFF. Keep this handler fail-closed when storage is empty or unavailable.
+  let websterRedirectEnabled = false;
+  chrome.storage.local.get({redirectEnabled:false}).then(data=>{
     websterRedirectEnabled = data.redirectEnabled !== false;
   }).catch(()=>{});
 
@@ -1671,19 +1672,26 @@ async function getSiteDefaultEnabled() {
 }
 
 async function refreshDoubleClickBlb() {
-  const siteKey = getPageSelectionSiteKey();
-  if (siteKey === 'blueletterbible.org' || !suiteEnabled || !siteKey) {
+  try {
+    const siteKey = getPageSelectionSiteKey();
+    if (siteKey === 'blueletterbible.org' || !suiteEnabled || !siteKey) {
+      doubleClickBlbEnabled = false;
+      disableDoubleClickBlb();
+      return;
+    }
+    const data = await chrome.storage.local.get({doubleClickBlbSites:{}});
+    const sites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
+      ? data.doubleClickBlbSites : {};
+    const hasExplicitPreference = Object.prototype.hasOwnProperty.call(sites, siteKey);
+    const defaultEnabled = await getSiteDefaultEnabled();
+    doubleClickBlbEnabled = hasExplicitPreference ? sites[siteKey] === true : defaultEnabled;
+    if (doubleClickBlbEnabled) enableDoubleClickBlb();
+    else disableDoubleClickBlb();
+  } catch (_) {
+    // Fail closed if site-feature settings or defaults cannot be read.
+    doubleClickBlbEnabled = false;
     disableDoubleClickBlb();
-    return;
   }
-  const data = await chrome.storage.local.get({doubleClickBlbSites:{}});
-  const sites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
-    ? data.doubleClickBlbSites : {};
-  const hasExplicitPreference = Object.prototype.hasOwnProperty.call(sites, siteKey);
-  const defaultEnabled = await getSiteDefaultEnabled();
-  doubleClickBlbEnabled = hasExplicitPreference ? sites[siteKey] === true : defaultEnabled;
-  if (doubleClickBlbEnabled) enableDoubleClickBlb();
-  else disableDoubleClickBlb();
 }
 
 function ensureDoubleClickSettingsReady() {
@@ -2057,30 +2065,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 async function refreshBlbPageSelectionButton() {
-  if (isBlbPageButtonExcludedSite()) {
+  try {
+    if (isBlbPageButtonExcludedSite()) {
+      disableBlbPageButtonMonitoring();
+      return;
+    }
+    const siteKey = getPageSelectionSiteKey();
+    const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
+    const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
+      ? data.pageSelectionButtonSites
+      : {};
+    const hasExplicitPreference = Object.prototype.hasOwnProperty.call(sites, siteKey);
+    // Show on BLB is site-based. An explicit site setting wins; otherwise the
+    // hostname/default-sites rule supplies the site's default (ON or OFF).
+    const defaultEnabled = await getSiteDefaultEnabled();
+    const shouldEnable = hasExplicitPreference ? sites[siteKey] === true : defaultEnabled;
+    // Keep the native context-menu item in lockstep with the exact setting that
+    // controls the floating Show on BLB button.
+    await safeRuntimeSendMessage({type:'blbSuiteSyncSelectionContextMenu'});
+    if (!suiteEnabled || !shouldEnable) {
+      disableBlbPageButtonMonitoring();
+      return;
+    }
+    enableBlbPageButtonMonitoring();
+  } catch (_) {
+    // Fail closed if site-feature settings or defaults cannot be read.
     disableBlbPageButtonMonitoring();
-    return;
+    try { await safeRuntimeSendMessage({type:'blbSuiteSyncSelectionContextMenu'}); } catch (_) {}
   }
-  const siteKey = getPageSelectionSiteKey();
-  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
-  const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
-    ? data.pageSelectionButtonSites
-    : {};
-  const hasExplicitPreference = Object.prototype.hasOwnProperty.call(sites, siteKey);
-  // Show on BLB is site-based. An explicit site setting wins; otherwise the
-  // hostname/default-sites rule supplies the site's default (ON or OFF).
-  const defaultEnabled = await getSiteDefaultEnabled();
-  const shouldEnable = hasExplicitPreference ? sites[siteKey] === true : defaultEnabled;
-  // Keep the native context-menu item in lockstep with the exact setting that
-  // controls the floating Show on BLB button. Do this proactively rather than
-  // waiting for contextMenus.onShown, because an asynchronous visibility
-  // update from onShown can take effect only on the second right-click.
-  await safeRuntimeSendMessage({type:'blbSuiteSyncSelectionContextMenu'});
-  if (!suiteEnabled || !shouldEnable) {
-    disableBlbPageButtonMonitoring();
-    return;
-  }
-  enableBlbPageButtonMonitoring();
 }
 
 if (!isBlbPageButtonExcludedSite()) {
