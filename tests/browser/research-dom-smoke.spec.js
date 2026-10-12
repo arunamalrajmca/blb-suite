@@ -255,4 +255,10 @@ test.describe('research-derived DOM regression smoke', () => {
     await useShowOnBlb(page, extensionWorker, '/kjv/act/17/11/');
   });
 
+  test('D29 verse range split across DOM nodes preserves the full range', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split-verse-range');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16-18/');
+  });
+
 });
