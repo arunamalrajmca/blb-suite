@@ -261,4 +261,10 @@ test.describe('research-derived DOM regression smoke', () => {
     await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16-18/');
   });
 
+
+  test('D30 line break between chapter and verse preserves the reference', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'chapter-verse-linebreak');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
+  });
 });
