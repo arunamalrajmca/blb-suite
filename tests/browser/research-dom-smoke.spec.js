@@ -273,4 +273,34 @@ test.describe('research-derived DOM regression smoke', () => {
     await selectText(page, 'verse-range-linebreak');
     await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16-18/');
   });
+
+  test('D32 punctuation around a selected reference does not alter its destination', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'punctuation');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
+  });
+
+  test('D33 reference nested inside a link remains selectable without following the link', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'linked-reference');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
+    await expect(page).toHaveURL('https://example.com/');
+  });
+
+  test('D34 reference selected from surrounding prose resolves only the selected text', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await page.evaluate(() => {
+      const node = document.getElementById('partial-selection').firstChild;
+      const text = node.textContent;
+      const start = text.indexOf('John 3:16');
+      const range = document.createRange();
+      range.setStart(node, start);
+      range.setEnd(node, start + 'John 3:16'.length);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
+  });
 });
