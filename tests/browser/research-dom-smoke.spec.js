@@ -378,4 +378,11 @@ test.describe('research-derived DOM regression smoke', () => {
     await expect(page).toHaveURL('https://example.com/');
   });
 
+
+  test('D39 selected out-of-range chapter and verse clamp to the known book limits', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'out-of-range-reference');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/21/25/');
+  });
+
 });
