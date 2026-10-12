@@ -542,5 +542,29 @@ test.describe('research-derived DOM regression smoke', () => {
     await expect(button).toHaveCount(0, { timeout: 10000 });
   });
 
+  test('D57 dynamic replacement of selected DOM invalidates the stale floating action', async ({ page, extensionStorage }) => {
+    await setup(page, extensionStorage);
+    const button = page.locator('#blb-suite-page-selection-button');
+
+    // Establish and verify the exact starting selection before testing mutation.
+    // Re-dispatch mouseup if the extension's initial selection handler is delayed.
+    await selectText(page, 'split');
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || '')).toBe('John 3:16');
+    try {
+      await expect(button).toBeVisible({ timeout: 3000 });
+    } catch {
+      await page.evaluate(() => document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true })));
+      await expect(button).toBeVisible({ timeout: 7000 });
+    }
+
+    // A page can replace selected text without producing a mouse or keyboard
+    // event. The cached selection must not remain actionable after that change.
+    await page.evaluate(() => {
+      document.getElementById('split').innerHTML = '<span>Romans</span> <strong>8:28</strong>';
+    });
+
+    await expect(button).toBeHidden({ timeout: 10000 });
+  });
+
 
 });
