@@ -521,4 +521,26 @@ test.describe('research-derived DOM regression smoke', () => {
   });
 
 
+
+  test('D55 right-button press preserves the selected reference for the context-menu path', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split');
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await page.locator('body').dispatchEvent('mousedown', { button: 2, bubbles: true });
+    await expect(button).toBeVisible();
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || '')).toContain('John 3:16');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
+  });
+
+  test('D56 disabling the master extension setting removes the visible selection action', async ({ page, extensionStorage }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split');
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await extensionStorage.set({ masterEnabled: false });
+    await expect(button).toHaveCount(0, { timeout: 10000 });
+  });
+
+
 });
