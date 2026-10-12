@@ -5523,8 +5523,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 
-chrome.commands.onCommand.addListener(async command => {
-  if (command !== 'open-bible-selection-in-blb') return;
+async function handleOpenBibleSelectionCommand() {
   if (!(await isSuiteEnabled())) return;
   try {
     const tabs = await chrome.tabs.query({active:true,currentWindow:true});
@@ -5541,6 +5540,11 @@ chrome.commands.onCommand.addListener(async command => {
   } catch (err) {
     console.error('BLB Suite Alt+B:', err);
   }
+}
+
+chrome.commands.onCommand.addListener(async command => {
+  if (command !== 'open-bible-selection-in-blb') return;
+  await handleOpenBibleSelectionCommand();
 });
 
 async function injectEnabledTabsForGrantedOrigins(origins) {
