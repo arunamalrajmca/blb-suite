@@ -140,30 +140,39 @@ test.describe('research-derived DOM regression smoke', () => {
       await page.locator('#blb-suite-page-selection-button').click();
       await page.waitForTimeout(1500);
 
-      const directVerseTabs = await extensionWorker.evaluate(beforeIds =>
-        chrome.tabs.query({}).then(tabs => tabs.filter(tab => {
-          if (beforeIds.includes(tab.id)) return false;
-          try {
-            const url = new URL(tab.url || tab.pendingUrl || '');
-            return url.hostname === 'www.blueletterbible.org' &&
-              /^\/kjv\/[^/]+\/\d+\/\d+\/?$/.test(url.pathname);
-          } catch (_) {
-            return false;
-          }
-        }).map(tab => ({ id: tab.id, url: tab.url || tab.pendingUrl || '' })),
-      before);
+      const tabsAfter = await extensionWorker.evaluate(() =>
+        chrome.tabs.query({}).then(tabs => tabs.map(tab => ({
+          id: tab.id,
+          url: tab.url || tab.pendingUrl || ''
+        })))
+      );
+      const directVerseTabs = tabsAfter.filter(tab => {
+        if (before.includes(tab.id)) return false;
+        try {
+          const url = new URL(tab.url);
+          return url.hostname === 'www.blueletterbible.org' &&
+            /^\/kjv\/[^/]+\/\d+\/\d+\/?$/.test(url.pathname);
+        } catch (_) {
+          return false;
+        }
+      });
 
       expect(directVerseTabs, 'numeric prose must not open a direct verse destination').toEqual([]);
     } finally {
-      await extensionWorker.evaluate(beforeIds =>
-        chrome.tabs.query({}).then(tabs => Promise.all(tabs
-          .filter(tab => !beforeIds.includes(tab.id) && (() => {
-            try { return new URL(tab.url || tab.pendingUrl || '').hostname === 'www.blueletterbible.org'; }
-            catch (_) { return false; }
-          })())
-          .map(tab => chrome.tabs.remove(tab.id).catch(() => {})))),
-      before);
+      const tabsToClose = await extensionWorker.evaluate(() =>
+        chrome.tabs.query({}).then(tabs => tabs.map(tab => ({
+          id: tab.id,
+          url: tab.url || tab.pendingUrl || ''
+        })))
+      );
+      for (const tab of tabsToClose) {
+        if (before.includes(tab.id)) continue;
+        try {
+          if (new URL(tab.url).hostname === 'www.blueletterbible.org') {
+            await extensionWorker.evaluate(id => chrome.tabs.remove(id).catch(() => {}), tab.id);
+          }
+        } catch (_) {}
+      }
     }
   });
-
 });
