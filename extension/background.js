@@ -5374,7 +5374,13 @@ let pdfSelectionMenuKnownPresent = false;
 async function ensureWebSelectionContextMenu() {
   if (selectionMenuKnownPresent) return true;
   try {
-    await chrome.contextMenus.update('blb-suite-web-selection', {title:'Show on BLB\tAlt+B'});
+    // Context-menu visibility can persist across service-worker restarts.
+    // Start hidden until the active tab's eligibility has been re-evaluated;
+    // otherwise a stale visible=true state can leak onto blueletterbible.org.
+    await chrome.contextMenus.update('blb-suite-web-selection', {
+      title:'Show on BLB\tAlt+B',
+      visible:false
+    });
     selectionMenuKnownPresent = true;
     return true;
   } catch (_) {}
