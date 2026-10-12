@@ -1724,6 +1724,7 @@ let pageButtonSelectionFrame = 0;
 let pageButtonValidationToken = 0;
 let pageButtonActionInProgress = false;
 let pageButtonDomObserver = null;
+let pageButtonDomValidationFrame = 0;
 
 function isBlbPageButtonExcludedSite() {
   const host = String(location.hostname || '').toLowerCase();
@@ -1821,7 +1822,13 @@ function syncBlbPageSelectionDomObserver() {
   }
   if (!pageButtonDomObserver) {
     pageButtonDomObserver = new MutationObserver(() => {
-      validateBlbPageSelectionAfterDomMutation();
+      // Mutation callbacks can run between DOM updates that belong to one
+      // selection change. Validate once the browser has settled the frame.
+      if (pageButtonDomValidationFrame) return;
+      pageButtonDomValidationFrame = requestAnimationFrame(() => {
+        pageButtonDomValidationFrame = 0;
+        validateBlbPageSelectionAfterDomMutation();
+      });
     });
   }
   pageButtonDomObserver.observe(document.documentElement, {
