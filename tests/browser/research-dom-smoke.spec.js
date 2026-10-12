@@ -249,4 +249,10 @@ test.describe('research-derived DOM regression smoke', () => {
     await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
   });
 
+  test('D28 nested chapter and verse elements preserve reference boundaries', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'nested-chapter-verse');
+    await useShowOnBlb(page, extensionWorker, '/kjv/act/17/11/');
+  });
+
 });
