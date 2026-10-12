@@ -501,4 +501,25 @@ test.describe('research-derived DOM regression smoke', () => {
   });
 
 
+
+  test('D53 pointer interaction clearing the selection hides the stale floating action', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split');
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await page.mouse.click(5, 5);
+    await expect(button).toBeHidden({ timeout: 10000 });
+    await expectNoDirectVerseDestination(page, extensionWorker);
+  });
+
+  test('D54 disabling the site-specific selection feature hides an already visible action', async ({ page, extensionStorage }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split');
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await extensionStorage.set({ pageSelectionButtonSites: { 'example.com': false } });
+    await expect(button).toBeHidden({ timeout: 10000 });
+  });
+
+
 });
