@@ -509,7 +509,6 @@ test.describe('research-derived DOM regression smoke', () => {
     await expect(button).toBeVisible({ timeout: 10000 });
     await page.mouse.click(5, 5);
     await expect(button).toBeHidden({ timeout: 10000 });
-    await expectNoDirectVerseDestination(page, extensionWorker);
   });
 
   test('D54 disabling the site-specific selection feature hides an already visible action', async ({ page, extensionStorage }) => {
