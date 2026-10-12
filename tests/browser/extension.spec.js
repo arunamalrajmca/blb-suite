@@ -805,3 +805,76 @@ test.describe('core user-visible E2E', () => {
     )).toBe(true);
   });
 });
+
+
+test.describe('Alt+B toggle enforcement', () => {
+  async function selectReference(page) {
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-altb-reference';
+      el.textContent = 'John 3:16';
+      document.body.appendChild(el);
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      el.focus?.();
+    });
+  }
+
+  async function expectNoBlbReferenceTab(extensionWorker, timeout = 1500) {
+    await new Promise(resolve => setTimeout(resolve, timeout));
+    const found = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+      tabs.some(tab => {
+        try {
+          const url = new URL(String(tab.url || tab.pendingUrl || ''));
+          return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/jhn/3/16/';
+        } catch (_) { return false; }
+      })
+    ));
+    expect(found).toBe(false);
+  }
+
+  test('Alt+B toggle enforcement — OFF blocks the action on an external page', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({
+      masterEnabled: true,
+      pageSelectionButtonSites: { 'example.com': false }
+    });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await selectReference(page);
+    await page.keyboard.press('Alt+b');
+    await expectNoBlbReferenceTab(extensionWorker);
+  });
+
+  test('Alt+B toggle enforcement — ON opens the selected reference on an external page', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({
+      masterEnabled: true,
+      pageSelectionButtonSites: { 'example.com': true }
+    });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await selectReference(page);
+    await page.keyboard.press('Alt+b');
+    const blb = await waitForBlbTabPath(extensionWorker, '/kjv/jhn/3/16/');
+    expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
+  });
+
+  test('Alt+B toggle enforcement — BLB hostname remains excluded even when the site setting is ON', async ({ page, extensionStorage, extensionWorker }) => {
+    await page.route('https://www.blueletterbible.org/**', route => route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><head><title>Controlled BLB test page</title></head><body><main>Controlled BLB test page</main></body></html>'
+    }));
+    await extensionStorage.set({
+      masterEnabled: true,
+      pageSelectionButtonSites: { 'blueletterbible.org': true }
+    });
+    await page.goto('https://www.blueletterbible.org/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(500);
+    await selectReference(page);
+    await page.keyboard.press('Alt+b');
+    await expectNoBlbReferenceTab(extensionWorker);
+  });
+});
