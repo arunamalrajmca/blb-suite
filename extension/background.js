@@ -5524,13 +5524,23 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
 
 chrome.commands.onCommand.addListener(async command => {
-  if (!(await isSuiteEnabled())) return;
   if (command !== 'open-bible-selection-in-blb') return;
-  chrome.tabs.query({active:true,currentWindow:true}).then(tabs => {
+  if (!(await isSuiteEnabled())) return;
+  try {
+    const tabs = await chrome.tabs.query({active:true,currentWindow:true});
     const tab = tabs[0];
     if (!tab?.id) return;
-    openCurrentSelectionInBlb(tab.id).catch(err=>console.error('BLB Suite Alt+B:',err));
-  });
+
+    // Alt+B is an entry point for the same Show on BLB feature as the
+    // floating button and right-click menu. Enforce both the BLB-site
+    // exclusion and the effective per-site setting before reading selection.
+    const siteKey = pageSelectionSettingKeyFromTab(tab);
+    if (!(await isPageButtonEnabledForHostname(siteKey, tab.title || ''))) return;
+
+    await openCurrentSelectionInBlb(tab.id);
+  } catch (err) {
+    console.error('BLB Suite Alt+B:', err);
+  }
 });
 
 async function injectEnabledTabsForGrantedOrigins(origins) {
