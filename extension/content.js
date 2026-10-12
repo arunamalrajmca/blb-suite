@@ -116,7 +116,7 @@ function openBlbDestinationFromContent(url) {
 function isSensitiveSiteHostname(hostname) {
   const host = String(hostname || '').toLowerCase().replace(/\.$/, '');
   if (!host || host === 'localhost' || /^127(?:\.\d{1,3}){3}$/.test(host)) return false;
-  return /(?:^|[.-])(?:bank|banking|banker|creditunion|credit-union|financial|finance|hospital|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)(?:[.-]|$)/i.test(host);
+  return /(?:bank|banking|banker|credit.?union|financial|finance|hospital|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)/i.test(host);
 }
 
 function normalizeSelectionText(s) {

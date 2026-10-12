@@ -30,6 +30,8 @@ test('sensitive-site feature toggles are blocked even when the user has opted in
   const results = await extensionWorker.evaluate(async () => {
     const cases = [
       'https://secure.bank.example/',
+      'https://www.hdfcbank.com/',
+      'https://apollohospitals.com/',
       'https://portal.hospital.example/',
       'https://member.insurance.example/',
       'https://example.com/'
@@ -46,6 +48,8 @@ test('sensitive-site feature toggles are blocked even when the user has opted in
     return output;
   });
   expect(results['https://secure.bank.example/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
+  expect(results['https://www.hdfcbank.com/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
+  expect(results['https://apollohospitals.com/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
   expect(results['https://portal.hospital.example/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
   expect(results['https://member.insurance.example/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
   expect(results['https://example.com/']).not.toMatchObject({ blockedSensitiveSite: true });
