@@ -2,6 +2,8 @@ name: BLB Suite BROWSER E2E — GROUP B
 run-name: E2E-B Clipboard/Links — PR #${{ github.event.pull_request.number || 'main' }} — Run ${{ github.run_number }}
 
 on:
+  push:
+    branches: [ main ]
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened, labeled]
@@ -17,22 +19,22 @@ jobs:
         with:
           fetch-depth: 0
       - uses: actions/setup-node@v4
-        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
         with:
           node-version: 22
       - run: npm install
-        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
       - run: npx playwright install --with-deps chromium
-        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
       - name: Run native redirect hostname regression tests
-        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
         run: npx playwright test tests/browser/redirect-hostnames.spec.js
       - name: Run non-KJV BLB redirect regression tests
-        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
         run: npx playwright test tests/browser/blb-non-kjv-redirect.spec.js
       - name: Run ScriptTagger injection and toggle regression tests
-        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
         run: npx playwright test tests/browser/scripttagger-global-injection.spec.js
       - name: Run Group B
-        if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-b') }}
         run: npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep 'copying selected Bible text|BLB verse links inside parse popups'
