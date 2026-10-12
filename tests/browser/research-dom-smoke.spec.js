@@ -26,6 +26,20 @@ async function selectText(page, id, reverse = false) {
   }, { id, reverse });
 }
 
+
+async function selectTextWithKeyboard(page, id) {
+  await page.evaluate(id => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    const node = document.getElementById(id);
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight', bubbles: true }));
+  }, id);
+}
+
 async function expectBlbPath(worker, pathname) {
   let match;
   await expect.poll(async () => {
@@ -428,5 +442,36 @@ test.describe('research-derived DOM regression smoke', () => {
     await selectText(page, 'range-beyond-maximum');
     await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/36/');
   });
+
+
+  test('D47 keyboard-driven selection change replaces the previous direct reference', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split');
+    await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({ timeout: 10000 });
+    await selectTextWithKeyboard(page, 'keyboard-next-reference');
+    await useShowOnBlb(page, extensionWorker, '/kjv/rom/8/28/');
+  });
+
+  test('D48 clearing a selection with the keyboard hides the floating action', async ({ page, extensionStorage }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split');
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await page.evaluate(() => {
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      window.getSelection().removeAllRanges();
+      document.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight', bubbles: true }));
+    });
+    await expect(button).toBeHidden({ timeout: 10000 });
+  });
+
+  test('D49 keyboard selection of unrelated prose does not reuse the previous direct verse URL', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split');
+    await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({ timeout: 10000 });
+    await selectTextWithKeyboard(page, 'keyboard-unrelated-prose');
+    await expectNoDirectVerseDestination(page, extensionWorker);
+  });
+
 
 });
