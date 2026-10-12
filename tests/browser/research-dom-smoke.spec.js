@@ -231,4 +231,10 @@ test.describe('research-derived DOM regression smoke', () => {
     await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
   });
 
+  test('D17 numbered-book reference split across DOM nodes resolves through the selection action', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'numbered-split');
+    await useShowOnBlb(page, extensionWorker, '/kjv/1jo/5/1/');
+  });
+
 });
