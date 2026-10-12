@@ -45,6 +45,39 @@ async function useShowOnBlb(page, worker, path) {
   await expectBlbPath(worker, path);
 }
 
+async function expectNoDirectVerseDestination(page, worker) {
+  const before = await worker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id)));
+  try {
+    await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({ timeout: 10000 });
+    await page.locator('#blb-suite-page-selection-button').click();
+    await page.waitForTimeout(1200);
+    const tabsAfter = await worker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.map(tab => ({
+      id: tab.id, url: tab.url || tab.pendingUrl || ''
+    }))));
+    const directVerseTabs = tabsAfter.filter(tab => {
+      if (before.includes(tab.id)) return false;
+      try {
+        const url = new URL(tab.url);
+        return url.hostname === 'www.blueletterbible.org' &&
+          /^\/kjv\/[^/]+\/\d+\/\d+(?:-\d+)?\/?$/.test(url.pathname);
+      } catch (_) { return false; }
+    });
+    expect(directVerseTabs, 'incomplete or boundary-crossing selection must not open a direct verse destination').toEqual([]);
+  } finally {
+    const tabs = await worker.evaluate(() => chrome.tabs.query({}).then(items => items.map(t => ({
+      id: t.id, url: t.url || t.pendingUrl || ''
+    }))));
+    for (const tab of tabs) {
+      if (before.includes(tab.id)) continue;
+      try {
+        if (new URL(tab.url).hostname === 'www.blueletterbible.org') {
+          await worker.evaluate(id => chrome.tabs.remove(id).catch(() => {}), tab.id);
+        }
+      } catch (_) {}
+    }
+  }
+}
+
 test.describe('research-derived DOM regression smoke', () => {
   test('D19 split inline nodes preserve the selected reference', async ({ page, extensionStorage, extensionWorker }) => {
     await setup(page, extensionStorage);
@@ -303,4 +336,27 @@ test.describe('research-derived DOM regression smoke', () => {
     });
     await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
   });
+
+  test('D35 selecting across adjacent reference boundaries does not create a combined direct-verse destination', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'cross-boundary');
+    await expectNoDirectVerseDestination(page, extensionWorker);
+  });
+
+  test('D36 incomplete reference forms do not open an incorrect direct-verse destination', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    for (const id of ['incomplete-chapter', 'missing-chapter', 'incomplete-range']) {
+      await selectText(page, id);
+      await expectNoDirectVerseDestination(page, extensionWorker);
+    }
+  });
+
+  test('D37 near-miss reference syntax and unrelated numbers do not trigger a direct-verse destination', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    for (const id of ['book-name-only', 'unrelated-numbers-near-reference']) {
+      await selectText(page, id);
+      await expectNoDirectVerseDestination(page, extensionWorker);
+    }
+  });
+
 });
