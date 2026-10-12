@@ -385,4 +385,11 @@ test.describe('research-derived DOM regression smoke', () => {
     await useShowOnBlb(page, extensionWorker, '/kjv/jhn/21/25/');
   });
 
+
+  test('D40 selected verse-range endpoint clamps to the chapter maximum', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'out-of-range-verse-range');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/35-36/');
+  });
+
 });
