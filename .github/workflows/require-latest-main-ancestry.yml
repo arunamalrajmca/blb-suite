@@ -1,0 +1,44 @@
+name: Require latest main ancestry
+
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: latest-main-ancestry-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  latest-main-ancestry:
+    name: Require latest main ancestry
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out proposed PR head
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+
+      - name: Fetch current main
+        run: git fetch --no-tags origin main:refs/remotes/origin/main
+
+      - name: Require current main to be an ancestor of the PR head
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if git merge-base --is-ancestor origin/main "$PR_HEAD_SHA"; then
+            echo "PASS: PR head includes the current main commit."
+          else
+            echo "::error::This PR branch is behind main or diverges from it."
+            echo "Update/rebase the branch onto the latest main, push it, and rerun checks."
+            echo "Current main: $(git rev-parse origin/main)"
+            echo "PR head:     $PR_HEAD_SHA"
+            exit 1
+          fi
