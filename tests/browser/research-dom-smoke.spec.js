@@ -542,6 +542,55 @@ test.describe('research-derived DOM regression smoke', () => {
     await expect(button).toHaveCount(0, { timeout: 10000 });
   });
 
+  test('D59 pending DOM-validation frame cannot invalidate a keyboard-updated range', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split');
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+
+    // Queue a DOM-validation frame while John 3:16 is still actionable, then
+    // synchronously take the normal keyboard invalidation/update path.
+    await page.evaluate(() => {
+      const unrelated = document.createElement('div');
+      unrelated.textContent = 'queue DOM validation';
+      document.body.appendChild(unrelated);
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+      const node = document.getElementById('keyboard-range-reference');
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new KeyboardEvent('keyup', { key: 'ArrowRight', bubbles: true }));
+    });
+
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || '')).toBe('John 3:16-18');
+    await page.locator('#blb-suite-page-selection-button').click();
+    await expectBlbPath(extensionWorker, '/kjv/jhn/3/16-18/');
+  });
+
+  test('D60 a completed old DOM-validation frame does not block the subsequent keyboard range update', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split');
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+
+    // Let the mutation observer's queued validation frame complete first.
+    await page.evaluate(() => {
+      const unrelated = document.createElement('div');
+      unrelated.textContent = 'flush DOM validation';
+      document.body.appendChild(unrelated);
+    });
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+
+    await selectTextWithKeyboard(page, 'keyboard-range-reference');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || '')).toBe('John 3:16-18');
+    await button.click();
+    await expectBlbPath(extensionWorker, '/kjv/jhn/3/16-18/');
+  });
+
   test('D58 unrelated DOM mutations preserve a valid visible selection action', async ({ page, extensionStorage }) => {
     await setup(page, extensionStorage);
     await selectText(page, 'split');
