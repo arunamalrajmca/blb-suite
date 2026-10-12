@@ -243,4 +243,10 @@ test.describe('research-derived DOM regression smoke', () => {
     await useShowOnBlb(page, extensionWorker, '/kjv/sng/2/1/');
   });
 
+  test('D27 chapter and verse split across DOM nodes remain resolvable', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'chapter-verse-split');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
+  });
+
 });
