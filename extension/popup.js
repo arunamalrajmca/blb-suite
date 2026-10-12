@@ -28,7 +28,7 @@ async function getDefaultSiteEnabled(siteKey, pageTitle = '') {
   try {
     const response = await chrome.runtime.sendMessage({type:'blbSuiteGetDefaultSiteStatus', hostname:siteKey, title:pageTitle});
     return response?.enabled === true;
-  } catch (_) { return siteKey.includes('bible'); }
+  } catch (_) { return false; }
 }
 
 async function hasSiteFeatureHostAccess(origin) {
@@ -77,7 +77,7 @@ async function getState() {
   // An explicit per-site preference remains independent of global redirects.
   // Wildcard HTTP(S) access can authorize an explicitly enabled feature, but
   // must not make the host-based defaults (for example, bible.com) appear ON.
-  // Defaults become active only when this site has its own specific grant.
+  // There are no hostname-based defaults; only explicit saved per-site choices enable features.
   const effectiveDefaultEnabled = defaultEnabled && hasCurrentSiteAccess && hasSiteSpecificAccess;
   const effectivePageEnabled = Object.prototype.hasOwnProperty.call(pageSites, siteKey)
     ? pageSites[siteKey] === true && hasCurrentSiteAccess
@@ -87,9 +87,8 @@ async function getState() {
     : effectiveDefaultEnabled;
   return {
     master: data.masterEnabled !== false,
-    // Both site-based toggles are OFF by default except on hostnames containing
-    // "bible". An explicit per-site setting wins, but neither can appear ON
-    // until Chrome has granted the site's host permission.
+    // Both site-based toggles are OFF by default. An explicit per-site setting
+    // wins, but neither can appear ON until Chrome has granted host permission.
     pageButton: !isBlbSite && !!siteKey && effectivePageEnabled,
     doubleClick: !isBlbSite && !isPdfContext && !!siteKey && effectiveDoubleEnabled,
     redirect: data.redirectEnabled !== false,
