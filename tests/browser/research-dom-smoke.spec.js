@@ -175,4 +175,54 @@ test.describe('research-derived DOM regression smoke', () => {
       }
     }
   });
+
+  test('D18 nested unrelated numeric prose is not treated as a direct Bible-verse reference', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'nested-unrelated');
+
+    const before = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+    );
+
+    try {
+      await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({ timeout: 10000 });
+      await page.locator('#blb-suite-page-selection-button').click();
+      await page.waitForTimeout(1500);
+
+      const tabsAfter = await extensionWorker.evaluate(() =>
+        chrome.tabs.query({}).then(tabs => tabs.map(tab => ({
+          id: tab.id,
+          url: tab.url || tab.pendingUrl || ''
+        })))
+      );
+      const directVerseTabs = tabsAfter.filter(tab => {
+        if (before.includes(tab.id)) return false;
+        try {
+          const url = new URL(tab.url);
+          return url.hostname === 'www.blueletterbible.org' &&
+            /^\/kjv\/[^/]+\/\d+\/\d+\/?$/.test(url.pathname);
+        } catch (_) {
+          return false;
+        }
+      });
+
+      expect(directVerseTabs, 'nested numeric prose must not open a direct verse destination').toEqual([]);
+    } finally {
+      const tabsToClose = await extensionWorker.evaluate(() =>
+        chrome.tabs.query({}).then(tabs => tabs.map(tab => ({
+          id: tab.id,
+          url: tab.url || tab.pendingUrl || ''
+        })))
+      );
+      for (const tab of tabsToClose) {
+        if (before.includes(tab.id)) continue;
+        try {
+          if (new URL(tab.url).hostname === 'www.blueletterbible.org') {
+            await extensionWorker.evaluate(id => chrome.tabs.remove(id).catch(() => {}), tab.id);
+          }
+        } catch (_) {}
+      }
+    }
+  });
+
 });
