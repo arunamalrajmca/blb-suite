@@ -1594,7 +1594,7 @@ function parseSearchInputForFallback(text) {
     if (x.type==="range") csr=x.value; else bookNumber=x.value;
     criteria=(text.slice(0,x.start)+text.slice(x.end)).trim();
   }
-  criteria=criteria.replace(/\b(and)\b/gi,"AND").replace(/\b(or)\b/gi,"OR") || text;
+  criteria=criteria || text;
   return {searchCriteria:criteria,searchBookNumber:bookNumber,searchCsr:csr};
 }
 
@@ -1654,6 +1654,24 @@ async function seedStudyTestData() {
   // Importing Study test data is a storage-only developer action. Do not
   // navigate the user away from the page they are currently testing.
   return added;
+}
+
+function hasUnquotedBooleanOperator(value) {
+  const text = String(value || '');
+  let quote = '';
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (quote) { if (ch === quote) quote = ''; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (/[A-Za-z]/.test(ch) && (i === 0 || !/[A-Za-z0-9_]/.test(text[i - 1]))) {
+      const match = text.slice(i).match(/^(AND|NOT|OR)(?![A-Za-z0-9_])/);
+      if (match) return true;
+    }
+  }
+  return false;
 }
 
 function normalizeOmniboxSearchPhrase(value) {
@@ -1946,7 +1964,8 @@ async function handleBCommand(text) {
     }
   }
 
-  const singleKjvMatch = findSingleKjvPhraseMatch(t);
+  const hasBooleanOperators = hasUnquotedBooleanOperator(t);
+  const singleKjvMatch = hasBooleanOperators ? null : findSingleKjvPhraseMatch(t);
   if (singleKjvMatch) {
     if (await openSingleKjvVerse(singleKjvMatch)) {
       await recordStudySearchTerm(t);
@@ -1954,7 +1973,7 @@ async function handleBCommand(text) {
     }
   }
 
-  const singleKjvWordMatch = findSingleKjvWordIntersectionMatch(t);
+  const singleKjvWordMatch = hasBooleanOperators ? null : findSingleKjvWordIntersectionMatch(t);
   if (singleKjvWordMatch) {
     if (await openSingleKjvVerse(singleKjvWordMatch)) {
       await recordStudySearchTerm(t);
