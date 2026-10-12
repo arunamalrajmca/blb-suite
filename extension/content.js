@@ -1807,6 +1807,13 @@ function hasLocalValidBibleReference(text) {
 }
 
 function stopBlbPageSelectionDomObserver() {
+  // A queued validation belongs to the visibility/selection state that
+  // scheduled it. Do not let it run after the observer is stopped and the
+  // button is subsequently shown for a different keyboard selection.
+  if (pageButtonDomValidationFrame) {
+    cancelAnimationFrame(pageButtonDomValidationFrame);
+    pageButtonDomValidationFrame = 0;
+  }
   if (!pageButtonDomObserver) return;
   pageButtonDomObserver.disconnect();
   pageButtonDomObserver = null;
