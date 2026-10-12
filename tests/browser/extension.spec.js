@@ -844,7 +844,11 @@ test.describe('Alt+B toggle enforcement', () => {
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
     await selectReference(page);
-    await page.keyboard.press('Alt+b');
+    await page.bringToFront();
+    // Playwright keyboard events do not reliably dispatch Chrome extension
+    // command shortcuts in headless Chromium. Invoke the exact handler wired
+    // to chrome.commands.onCommand so this test exercises its real gate.
+    await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
     await expectNoBlbReferenceTab(extensionWorker);
   });
 
@@ -856,7 +860,10 @@ test.describe('Alt+B toggle enforcement', () => {
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
     await selectReference(page);
-    await page.keyboard.press('Alt+b');
+    await page.bringToFront();
+    // Invoke the same handler registered for Alt+B; keyboard simulation does
+    // not trigger browser-level extension commands in headless Chromium.
+    await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
     const blb = await waitForBlbTabPath(extensionWorker, '/kjv/jhn/3/16/');
     expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
   });
@@ -874,7 +881,8 @@ test.describe('Alt+B toggle enforcement', () => {
     await page.goto('https://www.blueletterbible.org/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(500);
     await selectReference(page);
-    await page.keyboard.press('Alt+b');
+    await page.bringToFront();
+    await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
     await expectNoBlbReferenceTab(extensionWorker);
   });
 });
