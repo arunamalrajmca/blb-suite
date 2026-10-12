@@ -267,4 +267,10 @@ test.describe('research-derived DOM regression smoke', () => {
     await selectText(page, 'chapter-verse-linebreak');
     await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
   });
+
+  test('D31 verse-range endpoint after a line break preserves the full range', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'verse-range-linebreak');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16-18/');
+  });
 });
