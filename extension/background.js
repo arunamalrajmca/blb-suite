@@ -5375,14 +5375,14 @@ let pdfSelectionMenuKnownPresent = false;
 async function ensureWebSelectionContextMenu() {
   if (selectionMenuKnownPresent) return true;
   try {
-    await chrome.contextMenus.update('blb-suite-web-selection', {title:'Show on BLB'});
+    await chrome.contextMenus.update('blb-suite-web-selection', {title:'Show on BLB\tAlt+B'});
     selectionMenuKnownPresent = true;
     return true;
   } catch (_) {}
   try {
     await chrome.contextMenus.create({
       id:'blb-suite-web-selection',
-      title:'Show on BLB',
+      title:'Show on BLB\tAlt+B',
       contexts:['selection'],
       documentUrlPatterns:['http://*/*','https://*/*'],
       visible:false
@@ -5443,7 +5443,7 @@ async function installPdfSelectionContextMenu() {
     try {
       await chrome.contextMenus.create({
         id:'blb-suite-pdf-selection',
-        title:'Show on BLB',
+        title:'Show on BLB\tAlt+B',
         contexts:['selection'],
         documentUrlPatterns:['file:///*.pdf'],
         visible:false
