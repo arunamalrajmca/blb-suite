@@ -474,4 +474,31 @@ test.describe('research-derived DOM regression smoke', () => {
   });
 
 
+
+  test('D50 keyboard selection change updates a single verse to the selected range', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split');
+    await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({ timeout: 10000 });
+    await selectTextWithKeyboard(page, 'keyboard-range-reference');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16-18/');
+  });
+
+  test('D51 incomplete keyboard selection does not retain a previous direct-verse URL', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split');
+    await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({ timeout: 10000 });
+    await selectTextWithKeyboard(page, 'keyboard-incomplete-reference');
+    await expectNoDirectVerseDestination(page, extensionWorker);
+  });
+
+  test('D52 rapid successive selection changes use the final selected reference', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'split');
+    await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({ timeout: 10000 });
+    await selectTextWithKeyboard(page, 'keyboard-next-reference');
+    await selectTextWithKeyboard(page, 'keyboard-range-reference');
+    await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16-18/');
+  });
+
+
 });
