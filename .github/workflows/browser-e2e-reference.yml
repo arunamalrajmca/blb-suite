@@ -62,7 +62,7 @@ jobs:
           - group: resolver
             grep: 'All 66 canonical'
           - group: research-derived
-            file: tests/browser/research-derived-regression.spec.js
+            file: tests/browser/research-dom-smoke.spec.js
             grep: 'D19|D20|D21|D22|D23'
     steps:
       - name: ⏱ Workflow ETA — start
