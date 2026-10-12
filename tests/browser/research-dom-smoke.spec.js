@@ -237,4 +237,10 @@ test.describe('research-derived DOM regression smoke', () => {
     await useShowOnBlb(page, extensionWorker, '/kjv/1jo/5/1/');
   });
 
+  test('D26 multiword book name split across DOM nodes remains resolvable', async ({ page, extensionStorage, extensionWorker }) => {
+    await setup(page, extensionStorage);
+    await selectText(page, 'multiword-split');
+    await useShowOnBlb(page, extensionWorker, '/kjv/sng/2/1/');
+  });
+
 });
