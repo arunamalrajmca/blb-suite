@@ -4,10 +4,8 @@ const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},
 const bookData = BOOKS;
 const DEFAULT_HOMEPAGE_URL = "https://www.blueletterbible.org/";
 
-// Site defaults:
-//   * Hostnames containing "bible" are enabled by default.
-//   * Other sites are OFF by default until the user explicitly enables a
-//     site-based feature. The per-site preference is retained in storage.
+// Site-based features are OFF by default on every hostname.
+// Only an explicit saved per-site preference enables them.
 
 function normalizeSiteHostname(hostname) {
   let host = String(hostname || '').trim().toLowerCase();
@@ -27,8 +25,10 @@ function hostnameMatchesBundledPattern(hostname, pattern) {
 }
 
 async function isSiteEnabledByDefault(hostname, title = '') {
-  const host = normalizeSiteHostname(hostname);
-  return !!host && host.includes('bible');
+  // A hostname containing "bible" is not evidence that the user enabled a
+  // feature. Keep this default OFF; explicit per-site preferences are checked
+  // separately by isPageButtonEnabledForHostname and the Double-click path.
+  return false;
 }
 
 function redirectToHomepage() {
@@ -5343,9 +5343,8 @@ async function isPageButtonEnabledForHostname(hostname, title = '') {
   const data = await chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}});
   if (data.masterEnabled === false) return false;
   const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
-  // Right-click follows exactly the effective Show on BLB setting for this
-  // site. An explicit site setting wins; otherwise use the same hostname /
-  // default-sites rule that supplies Show on BLB's default.
+  // Right-click follows the saved Show on BLB setting for this site.
+  // Without an explicit preference, the feature is OFF.
   if (Object.prototype.hasOwnProperty.call(sites, siteKey)) return sites[siteKey] === true;
   return isSiteEnabledByDefault(siteKey, title);
 }
