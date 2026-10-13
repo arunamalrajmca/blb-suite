@@ -868,7 +868,7 @@ test.describe('Alt+B toggle enforcement', () => {
     expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
   });
 
-  test('Alt+B toggle enforcement — BLB hostname remains excluded even when the site setting is ON', async ({ page, extensionStorage, extensionWorker }) => {
+  test('Alt+B on BLB opens the selected reference without duplicating the passage tab', async ({ page, extensionStorage, extensionWorker }) => {
     await page.route('https://www.blueletterbible.org/**', route => route.fulfill({
       status: 200,
       contentType: 'text/html',
@@ -883,6 +883,17 @@ test.describe('Alt+B toggle enforcement', () => {
     await selectReference(page);
     await page.bringToFront();
     await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
-    await expectNoBlbReferenceTab(extensionWorker);
+    const blb = await waitForBlbTabPath(extensionWorker, '/kjv/jhn/3/16/');
+    expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
+    const matchingTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+      tabs.filter(tab => {
+        try {
+          const url = new URL(String(tab.url || tab.pendingUrl || ''));
+          return url.hostname.replace(/^www\./i, '').toLowerCase() === 'blueletterbible.org'
+            && url.pathname.replace(/\/$/, '') === '/kjv/jhn/3/16';
+        } catch (_) { return false; }
+      }).length
+    ));
+    expect(matchingTabs).toBe(1);
   });
 });

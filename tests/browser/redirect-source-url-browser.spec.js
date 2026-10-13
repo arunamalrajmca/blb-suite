@@ -30,6 +30,8 @@ async function loadProductionRedirect(page, sourceUrl) {
     route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>BLB destination</title>' })
   );
   await page.goto(sourceUrl);
+  await page.addScriptTag({ content: read('extension/regex-patterns.js') });
+  await page.addScriptTag({ content: 'const BLB_HOSTNAME = BLBShared.hostnames.blb;' });
   await page.addScriptTag({ content: read('extension/books.js') });
   await page.addScriptTag({ content: read('extension/book-aliases.js') });
   await page.addScriptTag({ content: read('extension/reference-core.js') });

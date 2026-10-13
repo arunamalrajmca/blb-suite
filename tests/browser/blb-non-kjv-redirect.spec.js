@@ -4,6 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(path.resolve(__dirname, '../../extension/content.js'), 'utf8');
+const sharedPatternsSource = fs.readFileSync(path.resolve(__dirname, '../../extension/regex-patterns.js'), 'utf8');
 const start = source.indexOf('function redirectBlbNet() {');
 const end = source.indexOf('\nconst REDIRECT_HOSTS = new Set([', start);
 if (start < 0 || end < 0) throw new Error('Could not locate redirectBlbNet() or REDIRECT_HOSTS in extension/content.js');
@@ -20,7 +21,7 @@ function runRedirect(hostname, pathname) {
       replace(url) { redirectedTo = url; }
     }
   };
-  vm.runInNewContext(functionSource + '\nresult = redirectBlbNet();', context);
+  vm.runInNewContext(sharedPatternsSource + '\nconst BLB_HOSTNAME = BLBShared.hostnames.blb;\n' + functionSource + '\nresult = redirectBlbNet();', context);
   return { result: context.result, redirectedTo };
 }
 

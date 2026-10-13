@@ -5467,6 +5467,8 @@ function isPdfViewerTab(tab) {
 async function isPageButtonEnabledForHostname(hostname, title = '') {
   const siteKey = normalizeSiteHostname(hostname);
   if (!siteKey || (siteKey !== BLB_HOSTNAME && siteKey.endsWith('.blueletterbible.org'))) return false;
+  // Stale preferences must never bypass the sensitive-site policy.
+  if (isSensitiveSiteHostname(siteKey)) return false;
   const data = await chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}});
   if (data.masterEnabled === false) return false;
   const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
