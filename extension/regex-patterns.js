@@ -20,7 +20,7 @@ globalThis.BLBShared = Object.freeze({
   // complete global directory; expand it only with targeted tests. It is static:
   // no browsing, network requests, or classification work occurs at runtime.
   sensitiveSiteDomainSuffixes: Object.freeze([
-    'bank', 'bank.in', 'insurance', 'gov', 'gov.in',
+    'bank', 'bank.in', 'insurance', 'gov', 'gov.in', 'gov.scot', 'gov.wales',
     'chase.com', 'citi.com', 'bankofamerica.com', 'wellsfargo.com',
     'capitalone.com', 'discover.com', 'americanexpress.com',
     'hdfcbank.com', 'icicibank.com', 'sbi.co.in', 'axisbank.com', 'kotak.com',
