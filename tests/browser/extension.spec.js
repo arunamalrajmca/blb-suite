@@ -200,6 +200,59 @@ test.describe('core user-visible E2E', () => {
       }), expectedPath);
     }
   });
+  test('Double-click selects only the adjacent reference in a multi-reference sentence', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const paragraph = document.createElement('p');
+      paragraph.id = 'blb-e2e-multiple-adjacent-references';
+      paragraph.innerHTML = '<span id="target-luke">Luke</span> 1:46–47; <span id="target-romans">Romans</span> 1:3–4';
+      document.body.appendChild(paragraph);
+    });
+
+    const cases = [
+      ['#target-luke', '/kjv/luk/1/46-47/'],
+      ['#target-romans', '/kjv/rom/1/3-4/']
+    ];
+
+    for (const [selector, expectedPath] of cases) {
+      const before = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+        tabs.filter(tab => {
+          try { return new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org'); }
+          catch (_) { return false; }
+        }).map(tab => tab.id)
+      ));
+      await page.locator(selector).dblclick();
+      await activateBlbTabForPath(extensionWorker, expectedPath, {
+        fragment: selector,
+        selector: '#blb-e2e-multiple-adjacent-references',
+        selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
+      });
+      const openedPaths = await extensionWorker.evaluate((beforeIds) => chrome.tabs.query({}).then(tabs =>
+        tabs.filter(tab => !beforeIds.includes(tab.id)).map(tab => {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            return url.hostname.endsWith('blueletterbible.org') ? url.pathname : '';
+          } catch (_) { return ''; }
+        }).filter(Boolean)
+      ), before);
+      expect(openedPaths).toContain(expectedPath);
+      expect(openedPaths.some(path => path === '/kjv/luk/1/46-47/' && expectedPath !== path)).toBe(false);
+      expect(openedPaths.some(path => path === '/kjv/rom/1/3-4/' && expectedPath !== path)).toBe(false);
+      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+        for (const tab of tabs) {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            if (url.hostname.endsWith('blueletterbible.org') && url.pathname === path && tab.id != null) {
+              await chrome.tabs.remove(tab.id);
+            }
+          } catch (_) {}
+        }
+      }), expectedPath);
+    }
+  });
+
   test('Double-click standalone book numbers do not borrow context across lines', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
