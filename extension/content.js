@@ -1734,10 +1734,10 @@ let pageButtonDomObserver = null;
 let pageButtonDomValidationFrame = 0;
 
 function isBlbPageButtonExcludedSite() {
-  const host = String(location.hostname || '').toLowerCase().replace(/^www\./, '');
-  // Only the main BLB hostname is eligible for the special Show on BLB opt-in.
-  // Other BLB subdomains remain excluded.
-  return host !== BLBShared.hostnames.blb;
+  const host = String(location.hostname || '').toLowerCase().replace(/\.$/, '').replace(/^www\./, '');
+  // Exclude only BLB subdomains other than the main hostname. Ordinary external
+  // sites must remain eligible when Show on BLB is explicitly enabled.
+  return host !== BLBShared.hostnames.blb && host.endsWith('.' + BLBShared.hostnames.blb);
 }
 
 
