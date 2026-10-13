@@ -2127,8 +2127,21 @@ async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
   }
 }
 async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab') {
-  const parsed = BLBCaseSensitiveCore.parseCaseSensitiveQuery(queryText);
+  // Apply the same quote-aware Boolean normalization used by ordinary `b`
+  // searches. Keep the raw quoted text intact so operators inside a quoted
+  // phrase do not become Boolean syntax.
+  const rawQuery = String(queryText || '').replace(/^cs\s+/i, '').trim();
+  const normalizedRawQuery = normalizeBooleanOperatorsOutsideQuotes(rawQuery);
+  const parsed = BLBCaseSensitiveCore.parseCaseSensitiveQuery('cs ' + normalizedRawQuery);
   if (!parsed || !parsed.words.length) return false;
+
+  // Boolean expressions belong to BLB's native search engine, not the local
+  // exact-case KJV corpus matcher. Send the normalized query to native BLB
+  // before local case-sensitive routing can treat AND/OR/NOT as search words.
+  if (hasUnquotedBooleanOperator(normalizedRawQuery)) {
+    await openCaseSensitiveNativeSearch(normalizedRawQuery, disposition);
+    return true;
+  }
 
   // `b cs` is the only entry point into this routing layer. Ordinary `b ...`
   // never reaches it. `b cs` deliberately has no CSR/range/book-scope syntax;
