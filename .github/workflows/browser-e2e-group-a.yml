@@ -46,3 +46,7 @@ jobs:
       - name: Run Supply of Grace Ephesians chapter-context regression
         if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
         run: npx playwright test tests/browser/extension.spec.js --grep 'Supply of Grace Substack Ephesians chapter context does not fall back to Ephesians 1:1'
+
+      - name: Run Facebook Revelation directional-format range regression
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
+        run: npx playwright test tests/browser/extension.spec.js --grep 'Facebook directional-format Revelation 20:1-10 resolves the whole range from book-name double-click'
