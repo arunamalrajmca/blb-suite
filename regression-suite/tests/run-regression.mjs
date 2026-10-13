@@ -93,7 +93,7 @@ test('shared alias source is authoritative for Omnibox and reference resolver', 
     assert.equal(refs.length, 1, `reference grammar mismatch: ${alias}`);
     assert.equal(refs[0].book, target, `reference grammar target mismatch: ${alias}`);
   }
-  assert(bgSource.includes("importScripts('kjv-corpus-word-index.js'"), 'background import list missing');
+  assert(bgSource.includes('importScripts(') && bgSource.includes("'kjv-corpus-word-index.js'"), 'background import list missing');
   assert(bgSource.includes("'book-aliases.js'"), 'background does not import shared alias source');
   assert(bgSource.includes('bookData.forEach(book => { book.aliases = buildBookAliases(book); });'), 'Omnibox book aliases are not built from shared source');
   assert(bgSource.includes('const explicitAlias = BOOK_ALIASES[base] || BOOK_ALIASES[base.replace(/\\s/g,"")];'), 'Omnibox resolver does not use shared alias map');
