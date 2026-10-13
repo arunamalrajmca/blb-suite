@@ -38,3 +38,7 @@ jobs:
       - name: Run Group A
         if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
         run: npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep 'Alt.B command path opens an exact selected Bible reference'
+      # Keep the Facebook-style DOM regression in this targeted suite so range-context fixes are exercised on branch pushes.
+      - name: Run Facebook nested reference token regression
+        if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
+        run: npx playwright test tests/browser/extension.spec.js --grep 'Facebook nested dir-auto reference resolves from book, chapter, and verse-range gestures'
