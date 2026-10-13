@@ -60,6 +60,7 @@
         "file:///*.htm"
       ],
       "js": [
+        "regex-patterns.js",
         "kjv-corpus-word-index.js",
         "books.js",
         "book-aliases.js",
