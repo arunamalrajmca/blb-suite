@@ -2574,7 +2574,8 @@ function contentScriptFilesForTab(tab, data) {
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
     ? data.doubleClickBlbSites : {};
   const sensitiveSite = isSensitiveSiteHostname(hostname);
-  const explicitSiteFeature = !sensitiveSite && (pageSites[key] === true || doubleSites[key] === true);
+  const blbSite = key === BLB_HOSTNAME;
+  const explicitSiteFeature = blbSite ? pageSites[key] === true : !sensitiveSite && (pageSites[key] === true || doubleSites[key] === true);
   const redirectEnabled = data.redirectEnabled === true;
   const needsFullBundle = explicitSiteFeature || (redirectEnabled && isRedirectHostname(hostname));
   if (needsFullBundle && redirectEnabled) {
@@ -3033,6 +3034,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // If an adjacent reference is found, it is authoritative and we return
       // immediately. We do NOT run the KJV Criteria Search for that selection.
       // This preserves the selected reference's chapter/verse information.
+      if (normalizeSiteHostname(hostnameFromTabUrl(sender?.tab?.url)) === BLB_HOSTNAME) {
+        const result = await openBlbPageSelection(text, behavior);
+        sendResponse({...result, sourceSite:BLB_HOSTNAME});
+        return true;
+      }
       const directUrl = typeof message.directUrl === 'string' ? message.directUrl.trim() : '';
       if (directUrl && /^https:\/\/www\.blueletterbible\.org\/kjv\//i.test(directUrl)
           && message.contextualReference?.url === directUrl) {
@@ -3118,8 +3124,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
       }
       const key = normalizeSiteHostname(parsed.hostname);
-      if (!key || key === BLB_HOSTNAME) {
-        sendResponse({ok:false});
+      const blbSite = key === BLB_HOSTNAME;
+      if (!key || (blbSite && feature !== 'pageButton')) {
+        sendResponse({ok:false, ...(blbSite ? {blockedBlbDoubleClick:true} : {})});
         return true;
       }
       const data = await chrome.storage.local.get({masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}});
@@ -3131,7 +3138,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
       if (feature === 'pageButton') {
         pageSites[key] = true;
-        if (!Object.prototype.hasOwnProperty.call(doubleSites, key)) doubleSites[key] = message.otherFeatureEnabled === true;
+        if (blbSite) {
+          // BLB's own pages get Show on BLB only; Double-click remains blocked.
+          doubleSites[key] = false;
+        } else if (!Object.prototype.hasOwnProperty.call(doubleSites, key)) {
+          doubleSites[key] = message.otherFeatureEnabled === true;
+        }
       } else {
         doubleSites[key] = true;
         if (!Object.prototype.hasOwnProperty.call(pageSites, key)) pageSites[key] = message.otherFeatureEnabled === true;
@@ -5371,6 +5383,25 @@ async function getActiveTabSelection(tabId) {
   }
 }
 
+async function openBlbPageSelection(selectionText, tabBehavior = {activeIfNew:true, activateExisting:true}) {
+  const text = normalizeSelectedScriptureText(selectionText);
+  if (!text) return {ok:false};
+
+  // Explicit passage references take priority over text search on BLB itself.
+  const directRef = getDirectSelectedReference(text);
+  const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
+  const bookOnly = getSelectedBookOnlyReference(text);
+  if (directRef || selectedRefs.length || bookOnly?.url) {
+    await openSelectedPdfBibleRefs(text, tabBehavior, null);
+    return {ok:true, referenceNavigation:true, referenceCount:selectedRefs.length || (directRef || bookOnly ? 1 : 0)};
+  }
+
+  const query = text.replace(/\s+/g, ' ').trim();
+  const url = BLB_SEARCH_URL + '?Criteria=' + encodeURIComponent(query).replace(/%20/g, '+');
+  const result = await openBlbDestination(url, true, true);
+  return {ok:true, criteriaSearch:true, reused:!!result?.reused};
+}
+
 async function openCurrentSelectionInBlb(tabId) {
   const text = await getActiveTabSelection(tabId);
   if (!text) return;
@@ -5432,12 +5463,13 @@ function isPdfViewerTab(tab) {
 
 async function isPageButtonEnabledForHostname(hostname, title = '') {
   const siteKey = normalizeSiteHostname(hostname);
-  if (!siteKey || siteKey === BLB_HOSTNAME || siteKey.endsWith('.blueletterbible.org')) return false;
+  if (!siteKey || (siteKey !== BLB_HOSTNAME && siteKey.endsWith('.blueletterbible.org'))) return false;
   const data = await chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}});
   if (data.masterEnabled === false) return false;
   const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   // Right-click follows the saved Show on BLB setting for this site.
   // Without an explicit preference, the feature is OFF.
+  if (siteKey === BLB_HOSTNAME) return sites[siteKey] === true;
   if (Object.prototype.hasOwnProperty.call(sites, siteKey)) return sites[siteKey] === true;
   return isSiteEnabledByDefault(siteKey, title);
 }
@@ -5579,7 +5611,7 @@ async function shouldInjectContentScriptForTab(tab, data) {
   const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
-  const explicitEnabled = pageSites[key] === true || doubleSites[key] === true;
+  const explicitEnabled = key === BLB_HOSTNAME ? pageSites[key] === true : !isSensitiveSiteHostname(key) && (pageSites[key] === true || doubleSites[key] === true);
 
   // Global Redirect External Bible Links is intentionally available on any
   // HTTP(S) host for which the user granted host access. Do not limit runtime
@@ -5615,6 +5647,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const text = String(info.selectionText || '').trim();
   if (!text) return;
   if (!(await shouldShowBlbContextMenu(tab, text))) return;
+  if (normalizeSiteHostname(hostnameFromTabUrl(tab?.url)) === BLB_HOSTNAME) {
+    openBlbPageSelection(text, {activeIfNew:true, activateExisting:true})
+      .catch(err=>console.error('BLB Suite BLB-page selection:',err));
+    return;
+  }
   const contextualRef = await getContextualSelectionReference(tab?.id, text);
   openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true}, contextualRef || null)
     .catch(err=>console.error('BLB Suite selection:',err));
@@ -5634,6 +5671,11 @@ async function handleOpenBibleSelectionCommand() {
     const siteKey = pageSelectionSettingKeyFromTab(tab);
     if (!(await isPageButtonEnabledForHostname(siteKey, tab.title || ''))) return;
 
+    if (siteKey === BLB_HOSTNAME) {
+      const selectedText = await getActiveTabSelection(tab.id);
+      if (selectedText) await openBlbPageSelection(selectedText, {activeIfNew:true, activateExisting:true});
+      return;
+    }
     await openCurrentSelectionInBlb(tab.id);
   } catch (err) {
     console.error('BLB Suite Alt+B:', err);
