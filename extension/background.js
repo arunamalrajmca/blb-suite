@@ -2562,11 +2562,7 @@ function isRedirectHostname(hostname) {
 }
 
 function isSensitiveSiteHostname(hostname) {
-  const host = String(hostname || '').toLowerCase().replace(/\.$/, '');
-  if (!host || host === 'localhost' || /^127(?:\.\d{1,3}){3}$/.test(host)) return false;
-  // Match hostname labels, not page text or titles. This gate overrides saved
-  // per-site opt-ins for interaction features on likely sensitive services.
-  return /(?:bank|banking|banker|credit.?union|financial|finance|hospital|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)/i.test(host);
+  return BLBShared.isSensitiveSiteHostname(hostname);
 }
 
 function contentScriptFilesForTab(tab, data) {
