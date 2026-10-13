@@ -136,7 +136,7 @@ test('stale saved Show on BLB preferences cannot activate context menu on sensit
     await chrome.storage.local.set({
       masterEnabled: true,
       pageSelectionButtonSites: {
-        'www.hdfcbank.com': true,
+        'hdfcbank.com': true,
         'apollohospitals.com': true
       },
       doubleClickBlbSites: {}
