@@ -98,7 +98,7 @@ async function getState() {
     master: data.masterEnabled !== false,
     // Both site-based toggles are OFF by default. An explicit per-site setting
     // wins, but neither can appear ON until Chrome has granted host permission.
-    pageButton: !isBlbSite && !isSensitiveSite && !!siteKey && effectivePageEnabled,
+    pageButton: (isBlbSite || !isSensitiveSite) && !!siteKey && effectivePageEnabled,
     doubleClick: !isBlbSite && !isSensitiveSite && !isPdfContext && !!siteKey && effectiveDoubleEnabled,
     redirect: data.redirectEnabled !== false,
     siteKey,
@@ -131,13 +131,13 @@ function render(state) {
   const page = document.getElementById('pageButton');
   const dbl = document.getElementById('doubleClick');
   const redirect = document.getElementById('redirectEnabled');
-  page.disabled = !state.master || !state.siteKey || state.isBlbSite || state.isSensitiveSite;
+  page.disabled = !state.master || !state.siteKey || (state.isSensitiveSite && !state.isBlbSite);
   dbl.disabled = !state.master || !state.siteKey || state.isBlbSite || state.isSensitiveSite || state.isPdfContext;
   redirect.disabled = !state.master;
   document.getElementById('pageSetting').classList.toggle('disabled', page.disabled);
   document.getElementById('doubleSetting').classList.toggle('disabled', dbl.disabled);
   document.getElementById('redirectSetting').classList.toggle('disabled', redirect.disabled);
-  if (state.isBlbSite) { page.checked = false; dbl.checked = false; }
+  if (state.isBlbSite) { dbl.checked = false; }
   // The three feature toggles above must never directly control Study
   // action states. Study controls have a single source of truth:
   // updateStudyButtons(), which considers the master gate, selected topic,
@@ -201,7 +201,7 @@ async function pinSiteFeatureChoice(feature, otherFeatureEnabled) {
 
 async function setPageButton(on) {
   const state = await getState();
-  if (!state.siteKey || !state.master || state.isBlbSite || state.isSensitiveSite) return;
+  if (!state.siteKey || !state.master || (state.isSensitiveSite && !state.isBlbSite)) return;
   const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
   const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
   sites[state.siteKey] = !!on;
@@ -1142,8 +1142,8 @@ async function setIndependentSiteFeature(feature, on) {
   }
 
   const state = await getState();
-  if (!state.siteKey || !state.master || state.isBlbSite ||
-      (feature === 'doubleClick' && state.isPdfContext)) {
+  if (!state.siteKey || !state.master || (state.isBlbSite && feature !== 'pageButton') ||
+      (state.isSensitiveSite && !state.isBlbSite) || (feature === 'doubleClick' && state.isPdfContext)) {
     render(state);
     return;
   }
