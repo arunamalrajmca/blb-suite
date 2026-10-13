@@ -1094,4 +1094,101 @@ test.describe('Alt+B toggle enforcement', () => {
     ));
     expect(matchingTabs).toBe(1);
   });
+
+  test('Facebook nested dir-auto reference resolves from book, chapter, and verse-range gestures', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const fixture = document.createElement('div');
+      fixture.id = 'blb-e2e-facebook-dir-auto-reference';
+      fixture.innerHTML = '<div role="article"><div data-ad-comet-preview="message"><div><div dir="auto"><span><span id="fb-book-luke">Luke</span></span> <span><span id="fb-chapter-luke">1</span>:<span id="fb-range-luke">46–47</span></span>; <span><span id="fb-book-romans">Romans</span></span> <span><span id="fb-chapter-romans">1</span>:<span id="fb-range-romans">3–4</span></span></div></div></div>';
+      document.body.appendChild(fixture);
+    });
+
+    // Capture the page-world double-click target and native Selection at dispatch time.
+    // These diagnostics help distinguish browser selection timing from resolver logic.
+    await page.evaluate(() => {
+      window.__blbDblClickDiagnostics = [];
+      document.addEventListener('dblclick', event => {
+        const selection = window.getSelection?.();
+        const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+        const target = document.elementFromPoint(event.clientX, event.clientY) || event.target;
+        const ancestors = [];
+        let node = target;
+        for (let depth = 0; node && depth < 8; depth++, node = node.parentElement) {
+          ancestors.push({ tag: node.tagName, id: node.id || '', text: (node.textContent || '').slice(0, 240), html: node.outerHTML?.slice(0, 600) || '' });
+        }
+        window.__blbDblClickDiagnostics.push({
+          target: { tag: event.target?.tagName, id: event.target?.id || '', text: event.target?.textContent || '' },
+          pointTarget: { tag: target?.tagName, id: target?.id || '', text: target?.textContent || '' },
+          client: { x: event.clientX, y: event.clientY },
+          selection: selection?.toString() || '',
+          collapsed: range?.collapsed ?? null,
+          range: range ? { startNode: range.startContainer?.nodeName, startText: range.startContainer?.textContent || '', startOffset: range.startOffset, endNode: range.endContainer?.nodeName, endText: range.endContainer?.textContent || '', endOffset: range.endOffset } : null,
+          ancestors
+        });
+      }, true);
+    });
+
+    // The uploaded Facebook DOM showed dir="auto" containers and deeply nested
+    // spans. Exercise each visible token, while keeping both references adjacent.
+    const gestures = [
+      ['#fb-book-luke', '/kjv/luk/1/46-47/'],
+      ['#fb-chapter-luke', '/kjv/luk/1/46-47/'],
+      ['#fb-range-luke', '/kjv/luk/1/46-47/'],
+      ['#fb-book-romans', '/kjv/rom/1/3-4/'],
+      ['#fb-chapter-romans', '/kjv/rom/1/3-4/'],
+      ['#fb-range-romans', '/kjv/rom/1/3-4/']
+    ];
+
+    for (const [selector, expectedPath] of gestures) {
+      const before = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+        tabs.filter(tab => {
+          try { return new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org'); }
+          catch (_) { return false; }
+        }).map(tab => tab.id)
+      ));
+      await page.locator(selector).dblclick();
+      try {
+        await activateBlbTabForPath(extensionWorker, expectedPath, {
+          fragment: selector,
+          selector: '#blb-e2e-facebook-dir-auto-reference',
+          selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
+        });
+      } catch (error) {
+        console.error('Facebook double-click DOM/Selection diagnostics: ' + JSON.stringify({
+          gesture: selector,
+          expectedPath,
+          fixture: await page.locator('#blb-e2e-facebook-dir-auto-reference').evaluate(el => el.outerHTML),
+          events: await page.evaluate(() => window.__blbDblClickDiagnostics || []),
+          finalSelection: await page.evaluate(() => window.getSelection?.().toString() || '')
+        }));
+        throw error;
+      }
+      const openedPaths = await extensionWorker.evaluate((beforeIds) => chrome.tabs.query({}).then(tabs =>
+        tabs.filter(tab => !beforeIds.includes(tab.id)).map(tab => {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            return url.hostname.endsWith('blueletterbible.org') ? url.pathname : '';
+          } catch (_) { return ''; }
+        }).filter(Boolean)
+      ), before);
+      expect(openedPaths, selector + ': missing intended passage').toContain(expectedPath);
+      const otherPassage = expectedPath === '/kjv/luk/1/46-47/' ? '/kjv/rom/1/3-4/' : '/kjv/luk/1/46-47/';
+      expect(openedPaths, selector + ': opened the adjacent passage instead').not.toContain(otherPassage);
+
+      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+        for (const tab of tabs) {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            if (url.hostname.endsWith('blueletterbible.org') && url.pathname === path && tab.id != null) {
+              await chrome.tabs.remove(tab.id);
+            }
+          } catch (_) {}
+        }
+      }), expectedPath);
+    }
+  });
+
 });
