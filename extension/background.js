@@ -1,8 +1,12 @@
-importScripts('kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js');
+importScripts('regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js');
 // Blue Letter Bible Suite 5.2.18 - Shared Reference Core
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
+const BLB_HOSTNAME = BLBShared.hostnames.blb;
+const BLB_ORIGIN = BLBShared.urls.blbOrigin;
+const BLB_HOME_URL = BLBShared.urls.blbHome;
+const BLB_SEARCH_URL = BLBShared.urls.blbSearch;
 const bookData = BOOKS;
-const DEFAULT_HOMEPAGE_URL = "https://www.blueletterbible.org/";
+const DEFAULT_HOMEPAGE_URL = BLB_HOME_URL;
 
 // Site-based features are OFF by default on every hostname.
 // Only an explicit saved per-site preference enables them.
@@ -788,7 +792,7 @@ function parseBlbKjvUrlToStudyRef(url) {
   try {
     const u = new URL(String(url || ''));
     const host = u.hostname.toLowerCase().replace(/^www\./, '');
-    if (host !== 'blueletterbible.org') return null;
+    if (host !== BLB_HOSTNAME) return null;
     const parts = u.pathname.split('/').filter(Boolean);
     if (parts.length < 3 || parts[0].toLowerCase() !== 'kjv') return null;
     const urlKey = parts[1].toLowerCase();
@@ -1929,9 +1933,9 @@ async function handleBCommand(text) {
   const g=low.match(/^(g|h)\s*(\d+)(\.?)$/);
   if (g) {
     const n=Number(g[2]);
-    if (g[3]===".") chrome.tabs.update({url:`https://www.blueletterbible.org/search/search.cfm?Criteria=${g[1]}${g[2]}`});
+    if (g[3]===".") chrome.tabs.update({url:`${BLB_SEARCH_URL}?Criteria=${g[1]}${g[2]}`});
     else if ((g[1]==="g" && n<=5624) || (g[1]==="h" && n<=8674))
-      chrome.tabs.update({url:`https://www.blueletterbible.org/lexicon/${g[1]}${g[2]}/kjv/${g[1]==="g"?"tr":"wlc"}/0-1/`});
+      chrome.tabs.update({url:`${BLB_HOME_URL}lexicon/${g[1]}${g[2]}/kjv/${g[1]==="g"?"tr":"wlc"}/0-1/`});
     else redirectToHomepage();
     await recordStudyStrong(`${g[1]}${g[2]}`);
     return;
@@ -1952,7 +1956,7 @@ async function handleBCommand(text) {
       if (singleMatch) {
         await openSingleKjvVerse(singleMatch, 'currentTab');
       } else {
-        chrome.tabs.update({url:`https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(phrase).replace(/%20/g,"+")}`});
+        chrome.tabs.update({url:`${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(phrase).replace(/%20/g,"+")}`});
       }
       await recordStudySearchTerm(t);
       return;
@@ -1962,7 +1966,7 @@ async function handleBCommand(text) {
   if (low.endsWith(".")) {
     const b=findBestBookMatch(parseInput(low.slice(0,-1)));
     if (b) {
-      chrome.tabs.update({url:`https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(b.name).replace(/%20/g,"+")}`});
+      chrome.tabs.update({url:`${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(b.name).replace(/%20/g,"+")}`});
       await recordStudySearchTerm(t); return;
     }
   }
@@ -2032,14 +2036,14 @@ async function handleBCommand(text) {
   // perform the requested safe fallback search instead of sending meaningless
   // text to BLB.
   if (isObviouslyGibberishQuery(t)) {
-    chrome.tabs.update({url:`https://www.blueletterbible.org/search/search.cfm?Criteria=Lord+Jesus+Christ`});
+    chrome.tabs.update({url:`${BLB_SEARCH_URL}?Criteria=Lord+Jesus+Christ`});
     return;
   }
 
   const f=parseSearchInputForFallback(t);
   const encoded=f.searchCriteria ? encodeURIComponent(f.searchCriteria).replace(/%20/g,"+") : "";
   if (!encoded && f.searchBookNumber===null && f.searchCsr===null) { redirectToHomepage(); return; }
-  let url=`https://www.blueletterbible.org/search/search.cfm?Criteria=${encoded}`;
+  let url=`${BLB_SEARCH_URL}?Criteria=${encoded}`;
   if (f.searchCsr!==null) url += `&csr=${f.searchCsr}#s=s_primary_0_1`;
   else if (f.searchBookNumber!==null) url += `#s=s_primary_${f.searchBookNumber}_1`;
   chrome.tabs.update({url});
@@ -2049,7 +2053,7 @@ async function handleBCommand(text) {
 
 function caseSensitiveNativeSearchUrl(query) {
   const q = String(query || '').trim();
-  let url = `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(q).replace(/%20/g,"+")}`;
+  let url = `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(q).replace(/%20/g,"+")}`;
   return url;
 }
 
@@ -2210,7 +2214,7 @@ function getBlbKjvChapterKey(url) {
   try {
     const u = new URL(String(url || ''));
     const host = u.hostname.toLowerCase().replace(/^www\./, '');
-    if (host !== 'blueletterbible.org') return null;
+    if (host !== BLB_HOSTNAME) return null;
     const m = u.pathname.match(/^\/kjv\/([^/]+)\/(\d+)(?:\/[^/]*)?\/?$/i);
     if (!m) return null;
     const rawBook = m[1].toLowerCase();
@@ -2231,7 +2235,7 @@ function canonicalBlbTabKey(url) {
     // BLB Bible destinations are identified by their semantic KJV path.
     // Ignore query/hash additions that BLB may append after navigation.
     const kjv = path.match(/^\/kjv\/([^/]+)\/(\d+)(?:\/(\d+(?:-\d+)?))?(?:\/.*)?$/);
-    if (host === 'blueletterbible.org' && kjv) {
+    if (host === BLB_HOSTNAME && kjv) {
       const rawBook = kjv[1].toLowerCase();
       const book = bookData.find(b => String(b.urlKey || '').toLowerCase() === rawBook || String(b.name || '').toLowerCase().replace(/\s+/g,'-') === rawBook);
       const bookKey = book ? String(book.bookNumber) : rawBook;
@@ -2246,13 +2250,13 @@ function canonicalBlbTabKey(url) {
 
     // BLB home is one canonical destination regardless of trailing slash,
     // query string, or hash.
-    if (host === 'blueletterbible.org' && (path === '/' || path === '')) {
+    if (host === BLB_HOSTNAME && (path === '/' || path === '')) {
       return 'blb-home';
     }
 
     // BLB search destinations: normalize the Criteria value while ignoring
     // presentation differences in the URL.
-    if (host === 'blueletterbible.org' && path === '/search/search.cfm') {
+    if (host === BLB_HOSTNAME && path === '/search/search.cfm') {
       const criteria = (u.searchParams.get('Criteria') || '').trim().toLowerCase();
       return `blb-search|${criteria}`;
     }
@@ -2410,7 +2414,7 @@ function canonicalScriptTaggerDestinationKey(url) {
     const host = u.hostname.toLowerCase().replace(/^www\./, '');
     let path = u.pathname.replace(/\/+$/, '').toLowerCase() || '/';
     const kjv = path.match(/^\/kjv\/([^/]+)\/(\d+)(?:\/(\d+(?:-\d+)?))?(?:\/.*)?$/);
-    if (host === 'blueletterbible.org' && kjv) {
+    if (host === BLB_HOSTNAME && kjv) {
       const book = kjv[1];
       const chapter = kjv[2];
       const verse = kjv[3] || '';
@@ -2547,7 +2551,7 @@ const REDIRECT_HOSTNAMES = new Set([
   'kingjamesbibleonline.org', 'kjbo.org',
   'kjv.site', 'm.kjv.site',
   'officialkingjamesbible.com',
-  'webstersdictionary1828.com', 'blueletterbible.org'
+  'webstersdictionary1828.com', BLB_HOSTNAME
 ]);
 
 function isRedirectHostname(hostname) {
@@ -3114,7 +3118,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
       }
       const key = normalizeSiteHostname(parsed.hostname);
-      if (!key || key === 'blueletterbible.org') {
+      if (!key || key === BLB_HOSTNAME) {
         sendResponse({ok:false});
         return true;
       }
@@ -4677,7 +4681,7 @@ async function searchSelectionInKjv(selectionText, decision = null) {
   // scanning the same words a second time.
   if (!decision || !decision.valid || (decision.type !== 'KJV_WORD' && decision.type !== 'KJV_PHRASE')) return false;
 
-  const blb = `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(source).replace(/%20/g,'+')}`;
+  const blb = `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(source).replace(/%20/g,'+')}`;
   await openBlbDestination(blb, false);
   return true;
 }
@@ -4858,7 +4862,7 @@ function classifySelectionForBlb(selectionText) {
     if (n >= 1 && n <= 66) {
       const book = bookData.find(b => Number(b.bookNumber) === n);
       if (book) {
-        const url = `https://www.blueletterbible.org/kjv/${book.urlKey}/1/`;
+        const url = `${BLB_HOME_URL}kjv/${book.urlKey}/1/`;
         return {
           valid:true, type:'BOOK', text:source,
           bookOnly:{book, url},
@@ -5036,7 +5040,7 @@ async function openBlbBook(bookOrNumber, tabBehavior = {activeIfNew:true, activa
       if (!candidateUrl) return null;
       const u = new URL(String(candidateUrl));
     const host = u.hostname.toLowerCase().replace(/^www\./, '');
-      if (host !== 'blueletterbible.org' && !host.endsWith('.blueletterbible.org')) return null;
+      if (host !== BLB_HOSTNAME && !host.endsWith('.blueletterbible.org')) return null;
 
       const parts = u.pathname.split('/').filter(Boolean).map(part => {
         try { return decodeURIComponent(part).toLowerCase(); } catch (_) { return part.toLowerCase(); }
@@ -5052,7 +5056,7 @@ async function openBlbBook(bookOrNumber, tabBehavior = {activeIfNew:true, activa
   };
 
   const operation = (async () => {
-    const target = `https://www.blueletterbible.org/kjv/${book.urlKey}/1/`;
+    const target = `${BLB_HOME_URL}kjv/${book.urlKey}/1/`;
     const result = await createBlbTabGeneric(target, !!tabBehavior.activeIfNew, {forceNew:!!tabBehavior.forceNew});
     const tab = result.tab;
     if (tab?.id != null && !tabBehavior.forceNew) rememberBlbTab(key, tab.id);
@@ -5109,7 +5113,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     );
     const criteriaOpen = fastCriteriaQuery
       ? openBlbDestination(
-          `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(fastCriteriaQuery).replace(/%20/g,'+')}`,
+          `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(fastCriteriaQuery).replace(/%20/g,'+')}`,
           false,
           false
         )
@@ -5133,12 +5137,12 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
         if (criteriaTab?.id != null && authoritativeQuery) {
           try {
             await chrome.tabs.update(criteriaTab.id, {
-              url: `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(authoritativeQuery).replace(/%20/g,'+')}`
+              url: `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(authoritativeQuery).replace(/%20/g,'+')}`
             });
           } catch (_) {}
         } else if (authoritativeQuery) {
           await openBlbDestination(
-            `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(authoritativeQuery).replace(/%20/g,'+')}`,
+            `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(authoritativeQuery).replace(/%20/g,'+')}`,
             false,
             false
           );
@@ -5186,7 +5190,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       const criteriaQuery = authoritativeQuery || fastCriteriaQuery;
       if (criteriaQuery) {
         await openBlbDestination(
-          `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(criteriaQuery).replace(/%20/g,'+')}`,
+          `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(criteriaQuery).replace(/%20/g,'+')}`,
           false,
           false
         );
@@ -5216,7 +5220,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   }
 
   if (decision.type === 'KJV_PASSAGE') {
-    const blb = `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(cleanedText).replace(/%20/g,'+')}`;
+    const blb = `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(cleanedText).replace(/%20/g,'+')}`;
     await openBlbDestination(blb, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
     return;
   }
@@ -5234,7 +5238,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       );
       const criteriaOpen = decision.kjvPassageQuery
         ? openBlbDestination(
-            `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(decision.kjvPassageQuery).replace(/%20/g,'+')}`,
+            `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(decision.kjvPassageQuery).replace(/%20/g,'+')}`,
             false,
             false
           )
@@ -5245,7 +5249,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       const referenceOpen = openBlbDestination(decision.refs[0].url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
       const criteriaOpen = decision.kjvPassageQuery
         ? openBlbDestination(
-            `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(decision.kjvPassageQuery).replace(/%20/g,'+')}`,
+            `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(decision.kjvPassageQuery).replace(/%20/g,'+')}`,
             false,
             false
           )
@@ -5266,12 +5270,12 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       const chapter = Number(singleMatch[1]);
       const verse = Number(singleMatch[2]);
       if (book && Number.isInteger(chapter) && Number.isInteger(verse)) {
-        const url = `https://www.blueletterbible.org/kjv/${book.urlKey}/${chapter}/${verse}/`;
+        const url = `${BLB_HOME_URL}kjv/${book.urlKey}/${chapter}/${verse}/`;
         await openBlbDestination(url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
         return;
       }
     }
-    const blb = `https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(cleanedText).replace(/%20/g,'+')}`;
+    const blb = `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(cleanedText).replace(/%20/g,'+')}`;
     await openBlbDestination(blb, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
     return;
   }
@@ -5326,7 +5330,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     const bookName = String(decision.bookOnly.book?.name || '').trim();
     const isSingleKjvWord = /^[A-Za-z]+$/.test(bookName) && KJV_CORPUS_WORD_INDEX.has(bookName.toLowerCase());
     if (isSingleKjvWord) {
-      await openBlbDestination(`https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(bookName).replace(/%20/g,'+')}`, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
+      await openBlbDestination(`${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(bookName).replace(/%20/g,'+')}`, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
     } else {
       await openBlbHomeNoDuplicate(!!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
     }
@@ -5342,7 +5346,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
 
   // The generic classifier has already established that this is a valid
   // KJV word/phrase. Search it directly on BLB, reusing that decision.
-  await openBlbDestination(`https://www.blueletterbible.org/search/search.cfm?Criteria=${encodeURIComponent(cleanedText).replace(/%20/g,'+')}`, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
+  await openBlbDestination(`${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(cleanedText).replace(/%20/g,'+')}`, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
 }
 
 async function getActiveTabSelection(tabId) {
@@ -5428,7 +5432,7 @@ function isPdfViewerTab(tab) {
 
 async function isPageButtonEnabledForHostname(hostname, title = '') {
   const siteKey = normalizeSiteHostname(hostname);
-  if (!siteKey || siteKey === 'blueletterbible.org' || siteKey.endsWith('.blueletterbible.org')) return false;
+  if (!siteKey || siteKey === BLB_HOSTNAME || siteKey.endsWith('.blueletterbible.org')) return false;
   const data = await chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}});
   if (data.masterEnabled === false) return false;
   const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
