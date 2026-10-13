@@ -1191,4 +1191,66 @@ test.describe('Alt+B toggle enforcement', () => {
     }
   });
 
+
+  test('Supply of Grace Substack Ephesians chapter context does not fall back to Ephesians 1:1', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+
+    // Model the relevant Substack article structure: an earlier Eph 5:19
+    // reference, followed by a separate paragraph saying "throughout Ephesians 5".
+    // The clicked book name must resolve against its local chapter context.
+    await page.evaluate(() => {
+      const fixture = document.createElement('div');
+      fixture.id = 'blb-e2e-supplyofgrace-substack';
+      fixture.innerHTML = '<div class="reader-content"><article><div class="body"><p class="paragraph">Eph 5:19 Speaking to yourselves in psalms and hymns and spiritual songs.</p><p class="paragraph">However, I think Paul is continuing to instruct us on things we are TO DO, as he has been doing throughout <span><span id="sog-ephesians">Ephesians</span></span> <span id="sog-chapter">5</span>.</p></div></article></div>';
+      document.body.appendChild(fixture);
+    });
+
+    const before = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+      tabs.filter(tab => {
+        try { return new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org'); }
+        catch (_) { return false; }
+      }).map(tab => tab.id)
+    ));
+
+    await page.locator('#sog-ephesians').dblclick();
+    try {
+      await activateBlbTabForPath(extensionWorker, '/kjv/eph/5/', {
+        fragment: '#sog-ephesians',
+        selector: '#blb-e2e-supplyofgrace-substack',
+        selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
+      });
+    } catch (error) {
+      console.error('Supply of Grace Ephesians chapter-context diagnostics: ' + JSON.stringify({
+        fixture: await page.locator('#blb-e2e-supplyofgrace-substack').evaluate(el => el.outerHTML),
+        selectedText: await page.evaluate(() => window.getSelection?.().toString() || ''),
+        tabs: await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.map(tab => ({ id: tab.id, url: tab.url, pendingUrl: tab.pendingUrl }))))
+      }));
+      throw error;
+    }
+
+    const openedPaths = await extensionWorker.evaluate((beforeIds) => chrome.tabs.query({}).then(tabs =>
+      tabs.filter(tab => !beforeIds.includes(tab.id)).map(tab => {
+        try {
+          const url = new URL(String(tab.url || tab.pendingUrl || ''));
+          return url.hostname.endsWith('blueletterbible.org') ? url.pathname : '';
+        } catch (_) { return ''; }
+      }).filter(Boolean)
+    ), before);
+    expect(openedPaths, 'double-clicking Ephesians in "throughout Ephesians 5" must open chapter 5').toContain('/kjv/eph/5/');
+    expect(openedPaths, 'must not fall back to Ephesians 1:1').not.toContain('/kjv/eph/1/1/');
+
+    await extensionWorker.evaluate((paths) => chrome.tabs.query({}).then(async tabs => {
+      for (const tab of tabs) {
+        try {
+          const url = new URL(String(tab.url || tab.pendingUrl || ''));
+          if (url.hostname.endsWith('blueletterbible.org') && paths.includes(url.pathname) && tab.id != null) {
+            await chrome.tabs.remove(tab.id);
+          }
+        } catch (_) {}
+      }
+    }), ['/kjv/eph/5/', '/kjv/eph/1/1/']);
+  });
+
 });
