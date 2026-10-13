@@ -1702,7 +1702,21 @@ function normalizeBooleanOperatorsOutsideQuotes(value) {
 }
 
 function hasUnquotedBooleanOperator(value) {
-  return normalizeBooleanOperatorsOutsideQuotes(value) !== String(value || '');
+  const text = String(value || '');
+  let quote = '';
+  let escaped = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\') { escaped = true; continue; }
+    if (quote) { if (ch === quote) quote = ''; continue; }
+    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    if (/[A-Za-z]/.test(ch) && (i === 0 || !/[A-Za-z0-9_]/.test(text[i - 1]))) {
+      const match = text.slice(i).match(/^(AND|NOT|OR)(?![A-Za-z0-9_])/i);
+      if (match) return true;
+    }
+  }
+  return false;
 }
 
 function normalizeOmniboxSearchPhrase(value) {
