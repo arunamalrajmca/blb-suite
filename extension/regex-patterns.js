@@ -29,6 +29,6 @@ globalThis.BLBShared = Object.freeze({
 
     // Search syntax
     encodedSpaces: () => /%20/g,
-    booleanOperatorsOutsideQuotes: () => /\b(?:and|or|not)\b/gi
+    booleanOperatorWords: () => /\b(?:and|or|not)\b/gi
   })
 });
