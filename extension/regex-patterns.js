@@ -15,6 +15,32 @@ globalThis.BLBShared = Object.freeze({
     blbHome: 'https://www.blueletterbible.org/',
     blbSearch: 'https://www.blueletterbible.org/search/search.cfm'
   }),
+  // Curated domain suffixes cover providers whose hostnames do not reveal
+  // their category (for example chase.com). This list is intentionally static:
+  // no browsing, network requests, or classification work occurs at runtime.
+  sensitiveSiteDomainSuffixes: Object.freeze([
+    'bank', 'bank.in', 'insurance',
+    'chase.com', 'citi.com', 'bankofamerica.com', 'wellsfargo.com',
+    'capitalone.com', 'discover.com', 'americanexpress.com',
+    'hdfcbank.com', 'icicibank.com', 'sbi.co.in', 'axisbank.com', 'kotak.com',
+    'mychart.com', 'mayoclinic.org', 'clevelandclinic.org', 'hopkinsmedicine.org',
+    'massgeneralbrigham.org', 'uclahealth.org', 'kp.org', 'apollohospitals.com',
+    'unitedhealthcare.com', 'uhc.com', 'aetna.com', 'cigna.com', 'humana.com',
+    'anthem.com', 'bcbs.com', 'geico.com', 'progressive.com', 'statefarm.com',
+    'allstate.com', 'licindia.in', 'policybazaar.com', 'healthcare.gov'
+  ]),
+  isSensitiveSiteHostname(value) {
+    let host = String(value || '').trim().toLowerCase().replace(/\.$/, '');
+    try {
+      if (/^[a-z][a-z\d+.-]*:\/\//i.test(host)) host = new URL(host).hostname.toLowerCase().replace(/\.$/, '');
+    } catch (_) {}
+    if (host.startsWith('www.')) host = host.slice(4);
+    if (!host || host === 'localhost' || /^127(?:\.\d{1,3}){3}$/.test(host)) return false;
+    if (this.sensitiveSiteDomainSuffixes.some(domain => host === domain || host.endsWith('.' + domain))) return true;
+    // Preserve clear category-label matching for lesser-known providers, while
+    // avoiding incidental substrings such as "health" in healthline.com.
+    return /(?:^|[.-])(?:bank|banking|banker|credit.?union|hospital|hospitals|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)(?:[.-]|$)/i.test(host);
+  },
   regex: Object.freeze({
     // URL and hostname handling
     trailingDot: () => /\.$/,
