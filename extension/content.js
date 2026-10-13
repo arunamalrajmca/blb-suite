@@ -1366,6 +1366,14 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     if (!source) return null;
     const refs = resolveBibleReferenceText(source);
     if (!refs.length) return null;
+    // Reference parsing removes invisible directional marks and collapses
+    // whitespace. Occurrence matching must use that same normalized text,
+    // while Range-derived offsets must be translated from the original DOM
+    // text into the normalized string before comparing positions.
+    const normalizedMatchSource = normalizeSelectionText(rawSource).replace(/[\\u2010-\\u2015\\u2212]/g, '-');
+    const toNormalizedOffset = offset => normalizeSelectionText(
+      rawSource.slice(0, Math.max(0, Math.min(rawSource.length, offset)))
+    ).length;
 
     // Context is positional: the selected browser range must be inside the
     // exact occurrence of the parsed reference. Sharing a paragraph is not
@@ -1461,12 +1469,17 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const pattern = new RegExp(parts.join('\\s+'), 'gi');
       const occurrences = [];
       let match;
-      while ((match = pattern.exec(rawSource))) {
+      while ((match = pattern.exec(normalizedMatchSource))) {
         occurrences.push({start: match.index, end: match.index + match[0].length});
         if (match[0].length === 0) pattern.lastIndex++;
       }
       return occurrences;
     };
+
+    if (selectionStart != null && selectionEnd != null) {
+      selectionStart = toNormalizedOffset(selectionStart);
+      selectionEnd = toNormalizedOffset(selectionEnd);
+    }
 
     for (const ref of refs) {
       if (!ref || ref.chapter == null || !ref.text) continue;
