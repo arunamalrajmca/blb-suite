@@ -31,6 +31,8 @@ function runInjectionHelper(functionNames, { settings, tabs }) {
   const context = {
     chrome,
     URL,
+    BLB_HOSTNAME: 'blueletterbible.org',
+    isSensitiveSiteHostname: value => /(?:bank|banking|banker|credit.?union|financial|finance|hospital|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)/i.test(String(value || '')),
     injected,
     isHttpPageUrl: url => /^https?:\/\//i.test(String(url || '')),
     originPatternForUrl: url => {
@@ -134,6 +136,8 @@ test('global redirect uses only the minimal ScriptTagger handler on ordinary sit
   if (start < 0 || end < 0) throw new Error('Could not extract content script selection helpers');
   const context = {
     URL,
+    BLB_HOSTNAME: 'blueletterbible.org',
+    isSensitiveSiteHostname: value => /(?:bank|banking|banker|credit.?union|financial|finance|hospital|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)/i.test(String(value || '')),
     hostnameFromTabUrl: value => { try { return new URL(String(value || '')).hostname; } catch (_) { return ''; } },
     normalizeSiteHostname: value => String(value || '').toLowerCase().replace(/^www\./, '')
   };
@@ -147,13 +151,13 @@ test('global redirect uses only the minimal ScriptTagger handler on ordinary sit
     {url:'https://www.biblegateway.com/passage/?search=John+3%3A16'},
     {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}
   ))).toEqual([
-    'kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','content.js','redirect-scripttagger.js'
+    'regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','content.js','redirect-scripttagger.js'
   ]);
 
   expect(Array.from(context.contentScriptFilesForTab(
     {url:'https://sagacityweb.com/article'},
     {redirectEnabled:false,pageSelectionButtonSites:{'sagacityweb.com':true},doubleClickBlbSites:{}}
-  ))).toEqual(['kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','content.js']);
+  ))).toEqual(['regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','content.js']);
 });
 
 async function runMinimalScriptTaggerClick(settings, eventOverrides = {}) {
