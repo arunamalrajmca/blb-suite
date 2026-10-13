@@ -40,7 +40,7 @@ globalThis.BLBShared = Object.freeze({
     if (this.sensitiveSiteDomainSuffixes.some(domain => host === domain || host.endsWith('.' + domain))) return true;
     // Treat any hostname label exactly equal to "gov" as government-related,
     // regardless of the country-code suffix (for example example.gov.uk or example.gov.in).
-    if (/(?:^|\.)gov(?:\.|$)/i.test(host)) return true;
+    if (/(?:^|\.)gov(?:\.[a-z]{2})+$/i.test(host)) return true;
     // Preserve clear category-label matching for lesser-known providers, while
     // avoiding incidental substrings such as "health" in healthline.com.
     return /(?:^|[.-])(?:bank|banking|banker|credit.?union|hospital|hospitals|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)(?:[.-]|$)/i.test(host);
