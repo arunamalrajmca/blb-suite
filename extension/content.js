@@ -1507,10 +1507,49 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       selectionEnd = toNormalizedOffset(selectionEnd);
     }
 
+    // Book-name selections can still be identified reliably when a rich-text
+    // DOM makes Range-derived offsets drift after whitespace normalization.
+    // Anchor the selected canonical book token to the same parsed occurrence;
+    // never let a prose mention borrow a different reference elsewhere.
+    const selectedBook = resolveBibleBook(selected);
+    const selectedBookPositions = [];
+    if (selectedBook) {
+      const escapedSelected = selected.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
+      const selectedPattern = new RegExp('(?<![A-Za-z0-9])' + escapedSelected + '(?![A-Za-z0-9])', 'gi');
+      let selectedMatch;
+      while ((selectedMatch = selectedPattern.exec(normalizedMatchSource))) {
+        selectedBookPositions.push(selectedMatch.index);
+        if (!selectedMatch[0].length) selectedPattern.lastIndex++;
+      }
+    }
+    const nearestSelectedBookPosition = selectedBookPositions.length
+      ? selectedBookPositions.reduce((best, position) =>
+          Math.abs(position - selectionStart) < Math.abs(best - selectionStart) ? position : best,
+        selectedBookPositions[0])
+      : null;
+
     for (const ref of refs) {
       if (!ref || ref.chapter == null || !ref.text) continue;
-      for (const occurrence of findOccurrences(ref.text)) {
+      const occurrences = findOccurrences(ref.text);
+      for (const occurrence of occurrences) {
         if (selectionStart >= occurrence.start && selectionEnd <= occurrence.end) {
+          return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
+        }
+      }
+
+      // If the clicked token is itself a Bible book name, permit a normalized
+      // token-position match as a fallback for nested spans/formatting marks.
+      // The book token must occupy the corresponding position inside this
+      // exact parsed reference occurrence; an unrelated mention cannot qualify.
+      const refBook = resolveBibleBook(ref.book);
+      if (!selectedBook || !refBook || selectedBook.urlKey !== refBook.urlKey ||
+          nearestSelectedBookPosition == null) continue;
+      const normalizedRefText = normalizeSelectionText(ref.text || '').replace(/[\u2010-\u2015\u2212]/g, '-');
+      const escapedRefBook = refBook.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
+      const bookInRef = new RegExp('(?<![A-Za-z0-9])' + escapedRefBook + '(?![A-Za-z0-9])', 'i').exec(normalizedRefText);
+      if (!bookInRef) continue;
+      for (const occurrence of occurrences) {
+        if (occurrence.start + bookInRef.index === nearestSelectedBookPosition) {
           return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
         }
       }
