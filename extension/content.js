@@ -1322,6 +1322,18 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
 
       let start = null;
       let end = null;
+      const normalizedOffset = (rawText, offset) => {
+        const bounded = Math.max(0, Math.min(rawText.length, offset));
+        const prefix = rawText.slice(0, bounded);
+        const normalizedPrefix = normalizeSelectionText(prefix);
+        // Prefix normalization trims trailing whitespace; restore one space
+        // when it separates this prefix from the next visible token.
+        const separator = normalizedPrefix.length > 0 &&
+          bounded < rawText.length &&
+          /[\\s\\u00A0\\u2007\\u202F]$/.test(prefix) &&
+          /\\S/.test(rawText.slice(bounded));
+        return normalizedPrefix.length + (separator ? 1 : 0);
+      };
       try {
         const contextualTarget = getDoubleClickTargetElement(event) || initialNode;
         if (contextualTarget && candidate.contains(contextualTarget)) {
@@ -1330,14 +1342,16 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const scratch = document.createRange();
           scratch.selectNodeContents(candidate);
           scratch.setEnd(targetRange.startContainer, targetRange.startOffset);
-          start = normalizeSelectionText(scratch.toString()).length;
+          start = normalizedOffset(candidateRaw, scratch.toString().length);
           scratch.setEnd(targetRange.endContainer, targetRange.endOffset);
-          end = normalizeSelectionText(scratch.toString()).length;
+          end = normalizedOffset(candidateRaw, scratch.toString().length);
         }
       } catch (_) {}
 
       if (start == null || end == null || end <= start) {
-        const tokenIndex = candidateSource.indexOf(selected);
+        // Locate the selected token in normalized text; don't let a trimmed
+        // prefix shift later adjacent references one character to the left.
+        const tokenIndex = candidateMatchSource.indexOf(selected.replace(/[\\u2010-\\u2015\\u2212]/g, '-'));
         if (tokenIndex >= 0) { start = tokenIndex; end = tokenIndex + selected.length; }
       }
 
