@@ -1197,13 +1197,13 @@ test.describe('Alt+B toggle enforcement', () => {
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
 
-    // Model the relevant Substack article structure: an earlier Eph 5:19
-    // reference, followed by a separate paragraph saying "throughout Ephesians 5".
+    // Model the supplied Substack DOM: the sentence and adjacent chapter number
+    // are inside one span, with the earlier Eph 5:19 reference in another paragraph.
     // The clicked book name must resolve against its local chapter context.
     await page.evaluate(() => {
       const fixture = document.createElement('div');
       fixture.id = 'blb-e2e-supplyofgrace-substack';
-      fixture.innerHTML = '<div class="reader-content"><article><div class="body"><p class="paragraph">Eph 5:19 Speaking to yourselves in psalms and hymns and spiritual songs.</p><p class="paragraph">However, I think Paul is continuing to instruct us on things we are TO DO, as he has been doing throughout <span><span id="sog-ephesians">Ephesians</span></span> <span id="sog-chapter">5</span>.</p></div></article></div>';
+      fixture.innerHTML = '<div class="reader-content"><article><div class="body"><p class="paragraph">Eph 5:19 Speaking to yourselves in psalms and hymns and spiritual songs.</p><p class="paragraph"><span>the result of being filled with the Spirit. (Yes, there is truth in that — a Spirit-filled believer will naturally be like this with praise in his heart.) However, I think Paul is continuing to instruct us on things we are TO DO, as he has been doing throughout <span id="sog-ephesians">Ephesians</span> <span id="sog-chapter">5</span>.</span></p></div></article></div>';
       document.body.appendChild(fixture);
     });
 
