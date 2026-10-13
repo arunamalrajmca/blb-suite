@@ -102,6 +102,12 @@ function normalizeBlbDestinationUrl(url) {
   }
 }
 
+function isSensitiveSiteHostname(hostname) {
+  const host = String(hostname || '').toLowerCase().replace(/\.$/, '');
+  if (!host || host === 'localhost' || /^127(?:\.\d{1,3}){3}$/.test(host)) return false;
+  return /(?:bank|banking|banker|credit.?union|financial|finance|hospital|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)/i.test(host);
+}
+
 function openBlbDestinationFromContent(url) {
   const target = normalizeBlbDestinationUrl(url);
   if (!target) return;
@@ -1544,7 +1550,7 @@ function getDoubleClickSelection(event) {
 
 function handleDoubleClickBlb(event) {
   try {
-    if (!suiteEnabled || isDoubleClickExcludedTarget(event.target)) return;
+    if (!suiteEnabled || isSensitiveSiteHostname(location.hostname) || isDoubleClickExcludedTarget(event.target)) return;
 
     // Chromium may dispatch dblclick before the new word selection has replaced
     // the previous native selection. Never freeze that early selection/context:
@@ -1674,7 +1680,7 @@ async function getSiteDefaultEnabled() {
 async function refreshDoubleClickBlb() {
   try {
     const siteKey = getPageSelectionSiteKey();
-    if (siteKey === 'blueletterbible.org' || !suiteEnabled || !siteKey) {
+    if (siteKey === 'blueletterbible.org' || isSensitiveSiteHostname(siteKey) || !suiteEnabled || !siteKey) {
       doubleClickBlbEnabled = false;
       disableDoubleClickBlb();
       return;
@@ -1952,7 +1958,7 @@ function addBlbPageSelectionButton() {
 }
 
 async function updateBlbPageSelectionButtonFromSelection() {
-  if (!pageButtonMonitoring || isBlbPageButtonExcludedSite()) return;
+  if (!pageButtonMonitoring || isBlbPageButtonExcludedSite() || isSensitiveSiteHostname(location.hostname)) return;
   let button = document.getElementById(BLB_PAGE_BUTTON_ID);
   if (!button) {
     addBlbPageSelectionButton();
@@ -2049,7 +2055,7 @@ function handleBlbPageSelectionKeyUp() {
 
 const PAGE_BUTTON_HANDLERS_GUARD = '__blbSuitePageButtonHandlersV2';
 function enableBlbPageButtonMonitoring() {
-  if (pageButtonMonitoring || isBlbPageButtonExcludedSite() || !suiteEnabled) return;
+  if (pageButtonMonitoring || isBlbPageButtonExcludedSite() || isSensitiveSiteHostname(location.hostname) || !suiteEnabled) return;
   try {
     const previous = window[PAGE_BUTTON_HANDLERS_GUARD];
     if (previous && typeof previous === 'object') {
@@ -2139,7 +2145,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 async function refreshBlbPageSelectionButton() {
   try {
-    if (isBlbPageButtonExcludedSite()) {
+    if (isBlbPageButtonExcludedSite() || isSensitiveSiteHostname(location.hostname)) {
       disableBlbPageButtonMonitoring();
       return;
     }
@@ -2168,7 +2174,7 @@ async function refreshBlbPageSelectionButton() {
   }
 }
 
-if (!isBlbPageButtonExcludedSite()) {
+if (!isBlbPageButtonExcludedSite() && !isSensitiveSiteHostname(location.hostname)) {
   suiteSettingsReadyPromise.then(refreshBlbPageSelectionButton).catch(()=>{});
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', () => { refreshBlbPageSelectionButton().catch(()=>{}); }, {once:true});

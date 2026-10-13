@@ -1,5 +1,12 @@
 let currentSiteOrigin = '';
 
+function isSensitiveSiteHostname(value) {
+  let host = String(value || '').toLowerCase().replace(/\.$/, '');
+  try { host = new URL(host).hostname.toLowerCase().replace(/\.$/, ''); } catch (_) {}
+  if (!host || host === 'localhost' || /^127(?:\.\d{1,3}){3}$/.test(host)) return false;
+  return /(?:bank|banking|banker|credit.?union|financial|finance|hospital|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)/i.test(host);
+}
+
 function getSiteKey(url, title = '') {
   try {
     const raw = String(url || '');
@@ -62,6 +69,7 @@ async function getState() {
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
   const defaultEnabled = await getDefaultSiteEnabled(siteKey, pageTitleForDefaultCheck);
   const isBlbSite = siteKey === 'blueletterbible.org';
+  const isSensitiveSite = isSensitiveSiteHostname(siteKey);
   const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
   let hasCurrentSiteAccess = true;
   let hasSiteSpecificAccess = true;
@@ -89,12 +97,13 @@ async function getState() {
     master: data.masterEnabled !== false,
     // Both site-based toggles are OFF by default. An explicit per-site setting
     // wins, but neither can appear ON until Chrome has granted host permission.
-    pageButton: !isBlbSite && !!siteKey && effectivePageEnabled,
-    doubleClick: !isBlbSite && !isPdfContext && !!siteKey && effectiveDoubleEnabled,
+    pageButton: !isBlbSite && !isSensitiveSite && !!siteKey && effectivePageEnabled,
+    doubleClick: !isBlbSite && !isSensitiveSite && !isPdfContext && !!siteKey && effectiveDoubleEnabled,
     redirect: data.redirectEnabled !== false,
     siteKey,
     pageCaption: deriveSiteCaption(siteKey),
     isBlbSite,
+    isSensitiveSite,
     isPdfContext
   };
 }
@@ -121,8 +130,8 @@ function render(state) {
   const page = document.getElementById('pageButton');
   const dbl = document.getElementById('doubleClick');
   const redirect = document.getElementById('redirectEnabled');
-  page.disabled = !state.master || !state.siteKey || state.isBlbSite;
-  dbl.disabled = !state.master || !state.siteKey || state.isBlbSite || state.isPdfContext;
+  page.disabled = !state.master || !state.siteKey || state.isBlbSite || state.isSensitiveSite;
+  dbl.disabled = !state.master || !state.siteKey || state.isBlbSite || state.isSensitiveSite || state.isPdfContext;
   redirect.disabled = !state.master;
   document.getElementById('pageSetting').classList.toggle('disabled', page.disabled);
   document.getElementById('doubleSetting').classList.toggle('disabled', dbl.disabled);
@@ -191,7 +200,7 @@ async function pinSiteFeatureChoice(feature, otherFeatureEnabled) {
 
 async function setPageButton(on) {
   const state = await getState();
-  if (!state.siteKey || !state.master || state.isBlbSite) return;
+  if (!state.siteKey || !state.master || state.isBlbSite || state.isSensitiveSite) return;
   const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
   const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
   sites[state.siteKey] = !!on;
@@ -204,7 +213,7 @@ async function setPageButton(on) {
 
 async function setDoubleClick(on) {
   const state = await getState();
-  if (!state.siteKey || !state.master || state.isBlbSite) return;
+  if (!state.siteKey || !state.master || state.isBlbSite || state.isSensitiveSite) return;
   const data = await chrome.storage.local.get({doubleClickBlbSites:{}});
   const sites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
   sites[state.siteKey] = !!on;
@@ -1104,6 +1113,8 @@ document.addEventListener('click', e => {
 guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
 async function setIndependentSiteFeature(feature, on) {
+  // Do not request host permissions or persist feature opt-ins on sensitive sites.
+  if (isSensitiveSiteHostname(currentSiteOrigin)) { render(await getState()); return; }
   // Capture the other toggle before any permission change can alter defaults.
   const otherFeatureEnabled = feature === 'pageButton'
     ? document.getElementById('doubleClick').checked

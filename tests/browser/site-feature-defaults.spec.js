@@ -25,3 +25,33 @@ test('hostname text never enables Show on BLB by default', async ({ extensionWor
     expect(results[hostname], hostname).toMatchObject({ ok: true, enabled: false });
   }
 });
+
+
+test('sensitive-site feature toggles are blocked even when the user has opted in', async ({ extensionWorker }) => {
+  const results = await extensionWorker.evaluate(async () => {
+    const cases = [
+      'https://secure.bank.example/',
+      'https://www.hdfcbank.com/',
+      'https://apollohospitals.com/',
+      'https://portal.hospital.example/',
+      'https://member.insurance.example/',
+      'https://example.com/'
+    ];
+    const output = {};
+    for (const origin of cases) {
+      output[origin] = await chrome.runtime.sendMessage({
+        type: 'blbSuitePrepareSiteFeatureToggle',
+        origin,
+        feature: 'pageButton',
+        otherFeatureEnabled: true
+      });
+    }
+    return output;
+  });
+  expect(results['https://secure.bank.example/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
+  expect(results['https://www.hdfcbank.com/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
+  expect(results['https://apollohospitals.com/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
+  expect(results['https://portal.hospital.example/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
+  expect(results['https://member.insurance.example/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
+  expect(results['https://example.com/']).not.toMatchObject({ blockedSensitiveSite: true });
+});
