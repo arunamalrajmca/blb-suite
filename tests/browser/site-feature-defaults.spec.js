@@ -39,6 +39,8 @@ test('sensitive-site feature toggles are blocked even when the user has opted in
       'https://apollohospitals.com/',
       'https://portal.hospital.example/',
       'https://member.insurance.example/',
+      'https://www.gov.scot/',
+      'https://www.gov.wales/',
       'https://example.com/'
     ];
     const output = {};
@@ -61,6 +63,8 @@ test('sensitive-site feature toggles are blocked even when the user has opted in
   expect(results['https://apollohospitals.com/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
   expect(results['https://portal.hospital.example/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
   expect(results['https://member.insurance.example/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
+  expect(results['https://www.gov.scot/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
+  expect(results['https://www.gov.wales/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
   expect(results['https://example.com/']).not.toMatchObject({ blockedSensitiveSite: true });
 });
 
