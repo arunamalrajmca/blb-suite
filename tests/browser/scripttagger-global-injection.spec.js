@@ -4,6 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const background = fs.readFileSync(path.resolve(__dirname, '../../extension/background.js'), 'utf8');
+const sharedRegexPatterns = fs.readFileSync(path.resolve(__dirname, '../../extension/regex-patterns.js'), 'utf8');
 const scriptTaggerScript = fs.readFileSync(path.resolve(__dirname, '../../extension/redirect-scripttagger.js'), 'utf8');
 
 function runBlbUrlNormalizer() {
@@ -137,10 +138,11 @@ test('global redirect uses only the minimal ScriptTagger handler on ordinary sit
   const context = {
     URL,
     BLB_HOSTNAME: 'blueletterbible.org',
-    isSensitiveSiteHostname: value => /(?:bank|banking|banker|credit.?union|financial|finance|hospital|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)/i.test(String(value || '')),
     hostnameFromTabUrl: value => { try { return new URL(String(value || '')).hostname; } catch (_) { return ''; } },
     normalizeSiteHostname: value => String(value || '').toLowerCase().replace(/^www\./, '')
   };
+  context.globalThis = context;
+  vm.runInNewContext(sharedRegexPatterns, context);
   vm.runInNewContext(background.slice(start, end), context);
   expect(Array.from(context.contentScriptFilesForTab(
     {url:'https://sagacityweb.com/article'},

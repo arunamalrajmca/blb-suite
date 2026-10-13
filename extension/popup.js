@@ -2,10 +2,7 @@ const BLB_HOSTNAME = BLBShared.hostnames.blb;
 let currentSiteOrigin = '';
 
 function isSensitiveSiteHostname(value) {
-  let host = String(value || '').toLowerCase().replace(/\.$/, '');
-  try { host = new URL(host).hostname.toLowerCase().replace(/\.$/, ''); } catch (_) {}
-  if (!host || host === 'localhost' || /^127(?:\.\d{1,3}){3}$/.test(host)) return false;
-  return /(?:bank|banking|banker|credit.?union|financial|finance|hospital|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)/i.test(host);
+  return BLBShared.isSensitiveSiteHostname(value);
 }
 
 function getSiteKey(url, title = '') {

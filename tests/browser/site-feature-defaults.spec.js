@@ -32,6 +32,10 @@ test('sensitive-site feature toggles are blocked even when the user has opted in
     const cases = [
       'https://secure.bank.example/',
       'https://www.hdfcbank.com/',
+      'https://chase.com/',
+      'https://online.citi.com/',
+      'https://portal.mychart.com/',
+      'https://member.aetna.com/',
       'https://apollohospitals.com/',
       'https://portal.hospital.example/',
       'https://member.insurance.example/',
@@ -50,6 +54,10 @@ test('sensitive-site feature toggles are blocked even when the user has opted in
   });
   expect(results['https://secure.bank.example/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
   expect(results['https://www.hdfcbank.com/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
+  expect(results['https://chase.com/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
+  expect(results['https://online.citi.com/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
+  expect(results['https://portal.mychart.com/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
+  expect(results['https://member.aetna.com/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
   expect(results['https://apollohospitals.com/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
   expect(results['https://portal.hospital.example/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
   expect(results['https://member.insurance.example/']).toMatchObject({ ok: false, blockedSensitiveSite: true });
@@ -144,7 +152,9 @@ test('stale saved Show on BLB preferences cannot activate context menu on sensit
 
     const cases = [
       { hostname: 'www.hdfcbank.com', url: 'https://www.hdfcbank.com/' },
-      { hostname: 'apollohospitals.com', url: 'https://apollohospitals.com/' }
+      { hostname: 'apollohospitals.com', url: 'https://apollohospitals.com/' },
+      { hostname: 'chase.com', url: 'https://chase.com/' },
+      { hostname: 'portal.mychart.com', url: 'https://portal.mychart.com/' }
     ];
     const output = [];
     for (const item of cases) {
