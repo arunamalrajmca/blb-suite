@@ -1594,7 +1594,7 @@ function parseSearchInputForFallback(text) {
     if (x.type==="range") csr=x.value; else bookNumber=x.value;
     criteria=(text.slice(0,x.start)+text.slice(x.end)).trim();
   }
-  criteria=criteria || text;
+  criteria=normalizeBooleanOperatorsOutsideQuotes(criteria || text);
   return {searchCriteria:criteria,searchBookNumber:bookNumber,searchCsr:csr};
 }
 
@@ -1656,22 +1656,53 @@ async function seedStudyTestData() {
   return added;
 }
 
-function hasUnquotedBooleanOperator(value) {
+function normalizeBooleanOperatorsOutsideQuotes(value) {
   const text = String(value || '');
+  let result = '';
   let quote = '';
   let escaped = false;
-  for (let i = 0; i < text.length; i++) {
+  for (let i = 0; i < text.length;) {
     const ch = text[i];
-    if (escaped) { escaped = false; continue; }
-    if (ch === '\\') { escaped = true; continue; }
-    if (quote) { if (ch === quote) quote = ''; continue; }
-    if (ch === '"' || ch === "'") { quote = ch; continue; }
-    if (/[A-Za-z]/.test(ch) && (i === 0 || !/[A-Za-z0-9_]/.test(text[i - 1]))) {
-      const match = text.slice(i).match(/^(AND|NOT|OR)(?![A-Za-z0-9_])/);
-      if (match) return true;
+    if (escaped) {
+      result += ch;
+      escaped = false;
+      i++;
+      continue;
     }
+    if (ch === '\\') {
+      result += ch;
+      escaped = true;
+      i++;
+      continue;
+    }
+    if (quote) {
+      result += ch;
+      if (ch === quote) quote = '';
+      i++;
+      continue;
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      result += ch;
+      i++;
+      continue;
+    }
+    if (/[A-Za-z]/.test(ch) && (i === 0 || !/[A-Za-z0-9_]/.test(text[i - 1]))) {
+      const match = text.slice(i).match(/^(and|not|or)(?![A-Za-z0-9_])/i);
+      if (match) {
+        result += match[0].toUpperCase();
+        i += match[0].length;
+        continue;
+      }
+    }
+    result += ch;
+    i++;
   }
-  return false;
+  return result;
+}
+
+function hasUnquotedBooleanOperator(value) {
+  return normalizeBooleanOperatorsOutsideQuotes(value) !== String(value || '');
 }
 
 function normalizeOmniboxSearchPhrase(value) {
