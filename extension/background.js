@@ -2531,6 +2531,9 @@ async function openBlbHomeNoDuplicate(activeIfNew = true, activateExisting = act
 
 // Reopen the action popup on the newly focused guide tab where supported.
 const BLB_CONTENT_SCRIPT_FILES = [
+  // Runtime-injected pages need the shared constants before content.js runs,
+  // just like pages matched by manifest.content_scripts.
+  'regex-patterns.js',
   'kjv-corpus-word-index.js',
   'books.js',
   'book-aliases.js',

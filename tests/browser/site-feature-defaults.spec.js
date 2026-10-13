@@ -113,3 +113,19 @@ test('BLB page selection reuses a Criteria search tab and prioritizes references
   expect(result.reference).toMatchObject({ok:true,referenceNavigation:true});
   expect(result.referenceTabCount).toBeGreaterThan(0);
 });
+
+test('runtime-injected external-site features load shared regex constants before content.js', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    const settings = {
+      masterEnabled: true,
+      pageSelectionButtonSites: {'en.wikipedia.org': true},
+      doubleClickBlbSites: {'en.wikipedia.org': true},
+      redirectEnabled: false
+    };
+    return contentScriptFilesForTab({url:'https://en.wikipedia.org/wiki/Grace'}, settings);
+  });
+  expect(result[0]).toBe('regex-patterns.js');
+  expect(result).toContain('content.js');
+  expect(result.indexOf('regex-patterns.js')).toBeLessThan(result.indexOf('content.js'));
+});
+
