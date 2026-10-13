@@ -4,6 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const background = fs.readFileSync(path.resolve(__dirname, '../../extension/background.js'), 'utf8');
+const sharedRegexPatterns = fs.readFileSync(path.resolve(__dirname, '../../extension/regex-patterns.js'), 'utf8');
 const scriptTaggerScript = fs.readFileSync(path.resolve(__dirname, '../../extension/redirect-scripttagger.js'), 'utf8');
 
 function runBlbUrlNormalizer() {
