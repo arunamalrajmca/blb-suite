@@ -1674,8 +1674,7 @@ async function getSiteDefaultEnabled() {
     });
     return response?.enabled === true;
   } catch (_) {
-    const host = String(location.hostname || '').toLowerCase();
-    return host.includes('bible');
+    return false;
   }
 }
 
@@ -1735,8 +1734,10 @@ let pageButtonDomObserver = null;
 let pageButtonDomValidationFrame = 0;
 
 function isBlbPageButtonExcludedSite() {
-  const host = String(location.hostname || '').toLowerCase();
-  return host === BLB_HOSTNAME || host.endsWith('.blueletterbible.org');
+  const host = String(location.hostname || '').toLowerCase().replace(/^www\./, '');
+  // Only the main BLB hostname is eligible for the special Show on BLB opt-in.
+  // Other BLB subdomains remain excluded.
+  return host !== BLBShared.hostnames.blb;
 }
 
 
@@ -1952,7 +1953,13 @@ function addBlbPageSelectionButton() {
       return;
     }
     // Ignore stale content-script contexts if the extension was reloaded.
-    safeRuntimeSendMessage({type:'blbSuiteOpenSelectionText', text, contextualReference: blbPageButtonContextualReference || null, directUrl: blbPageButtonDirectUrl || null});
+    safeRuntimeSendMessage({
+      type:'blbSuiteOpenSelectionText',
+      text,
+      contextualReference: blbPageButtonContextualReference || null,
+      directUrl: blbPageButtonDirectUrl || null,
+      tabBehavior:{activeIfNew:true,activateExisting:true}
+    });
     setTimeout(() => { pageButtonActionInProgress = false; }, 0);
   });
 
@@ -2197,9 +2204,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
       disableBlbPageButtonMonitoring();
     } else {
       if (location.hostname === 'webstersdictionary1828.com') ensureWebsterButton?.();
-      if (location.hostname !== BLB_HOSTNAME && !location.hostname.endsWith('.blueletterbible.org')) {
-        refreshBlbPageSelectionButton();
-      }
+      refreshBlbPageSelectionButton();
     }
   }
 
