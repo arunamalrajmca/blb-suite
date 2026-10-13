@@ -1,3 +1,4 @@
+const BLB_HOSTNAME = BLBShared.hostnames.blb;
 let currentSiteOrigin = '';
 
 function isSensitiveSiteHostname(value) {
@@ -68,7 +69,7 @@ async function getState() {
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
   const defaultEnabled = await getDefaultSiteEnabled(siteKey, pageTitleForDefaultCheck);
-  const isBlbSite = siteKey === 'blueletterbible.org';
+  const isBlbSite = siteKey === BLB_HOSTNAME;
   const isSensitiveSite = isSensitiveSiteHostname(siteKey);
   const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
   let hasCurrentSiteAccess = true;
