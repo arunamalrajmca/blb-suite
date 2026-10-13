@@ -2130,7 +2130,7 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
   // Apply the same quote-aware Boolean normalization used by ordinary `b`
   // searches. Keep the raw quoted text intact so operators inside a quoted
   // phrase do not become Boolean syntax.
-  const rawQuery = String(queryText || '').replace(/^cs\\s+/i, '').trim();
+  const rawQuery = String(queryText || '').replace(/^cs\s+/i, '').trim();
   const normalizedRawQuery = normalizeBooleanOperatorsOutsideQuotes(rawQuery);
   const parsed = BLBCaseSensitiveCore.parseCaseSensitiveQuery('cs ' + normalizedRawQuery);
   if (!parsed || !parsed.words.length) return false;
