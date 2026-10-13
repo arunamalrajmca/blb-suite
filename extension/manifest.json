@@ -60,11 +60,11 @@
         "file:///*.htm"
       ],
       "js": [
+        "regex-patterns.js",
         "kjv-corpus-word-index.js",
         "books.js",
         "book-aliases.js",
         "reference-core.js",
-        "regex-patterns.js",
         "content.js"
       ],
       "run_at": "document_start"
