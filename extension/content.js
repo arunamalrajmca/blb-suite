@@ -1371,9 +1371,21 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // while Range-derived offsets must be translated from the original DOM
     // text into the normalized string before comparing positions.
     const normalizedMatchSource = normalizeSelectionText(rawSource).replace(/[\u2010-\u2015\u2212]/g, '-');
-    const toNormalizedOffset = offset => normalizeSelectionText(
-      rawSource.slice(0, Math.max(0, Math.min(rawSource.length, offset)))
-    ).length;
+    const toNormalizedOffset = offset => {
+      const boundedOffset = Math.max(0, Math.min(rawSource.length, offset));
+      const prefix = rawSource.slice(0, boundedOffset);
+      const normalizedPrefix = normalizeSelectionText(prefix);
+      // normalizeSelectionText trims both ends. When the raw prefix ends at
+      // a separator between two tokens, the full normalized source retains
+      // one interior space at that position. Count that separator so offsets
+      // for the following token (e.g. "Romans" after "; ") stay aligned.
+      const hasInteriorSeparator =
+        normalizedPrefix.length > 0 &&
+        boundedOffset < rawSource.length &&
+        /[\\s\\u00A0\\u2007\\u202F]$/.test(prefix) &&
+        /\\S/.test(rawSource.slice(boundedOffset));
+      return normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
+    };
 
     // Context is positional: the selected browser range must be inside the
     // exact occurrence of the parsed reference. Sharing a paragraph is not
