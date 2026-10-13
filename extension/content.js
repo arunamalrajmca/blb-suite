@@ -1370,7 +1370,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // whitespace. Occurrence matching must use that same normalized text,
     // while Range-derived offsets must be translated from the original DOM
     // text into the normalized string before comparing positions.
-    const normalizedMatchSource = normalizeSelectionText(rawSource).replace(/[\\u2010-\\u2015\\u2212]/g, '-');
+    const normalizedMatchSource = normalizeSelectionText(rawSource).replace(/[\u2010-\u2015\u2212]/g, '-');
     const toNormalizedOffset = offset => normalizeSelectionText(
       rawSource.slice(0, Math.max(0, Math.min(rawSource.length, offset)))
     ).length;
