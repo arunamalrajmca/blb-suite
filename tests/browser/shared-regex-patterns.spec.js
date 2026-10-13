@@ -33,6 +33,10 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     patientPortal: BLBShared.isSensitiveSiteHostname('portal.mychart.com'),
     hospital: BLBShared.isSensitiveSiteHostname('apollohospitals.com'),
     insurance: BLBShared.isSensitiveSiteHostname('member.aetna.com'),
+    government: BLBShared.isSensitiveSiteHostname('agency.example.gov'),
+    governmentSubdomain: BLBShared.isSensitiveSiteHostname('portal.department.example.gov'),
+    indianGovernment: BLBShared.isSensitiveSiteHostname('services.example.gov.in'),
+    lookalikeGov: BLBShared.isSensitiveSiteHostname('example.gov.com'),
     healthInformationSite: BLBShared.isSensitiveSiteHostname('healthline.com'),
     financeContentSubdomain: BLBShared.isSensitiveSiteHostname('finance.yahoo.com'),
     unrelated: BLBShared.isSensitiveSiteHostname('example.com')
@@ -44,6 +48,10 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     patientPortal: true,
     hospital: true,
     insurance: true,
+    government: true,
+    governmentSubdomain: true,
+    indianGovernment: true,
+    lookalikeGov: false,
     healthInformationSite: false,
     financeContentSubdomain: false,
     unrelated: false
