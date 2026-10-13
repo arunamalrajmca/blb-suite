@@ -349,6 +349,31 @@ test.describe('core user-visible E2E', () => {
       document.body.appendChild(fixture);
     });
 
+    // Capture the page-world double-click target and native Selection at dispatch time.
+    // These diagnostics help distinguish browser selection timing from resolver logic.
+    await page.evaluate(() => {
+      window.__blbDblClickDiagnostics = [];
+      document.addEventListener('dblclick', event => {
+        const selection = window.getSelection?.();
+        const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+        const target = document.elementFromPoint(event.clientX, event.clientY) || event.target;
+        const ancestors = [];
+        let node = target;
+        for (let depth = 0; node && depth < 8; depth++, node = node.parentElement) {
+          ancestors.push({ tag: node.tagName, id: node.id || '', text: (node.textContent || '').slice(0, 240), html: node.outerHTML?.slice(0, 600) || '' });
+        }
+        window.__blbDblClickDiagnostics.push({
+          target: { tag: event.target?.tagName, id: event.target?.id || '', text: event.target?.textContent || '' },
+          pointTarget: { tag: target?.tagName, id: target?.id || '', text: target?.textContent || '' },
+          client: { x: event.clientX, y: event.clientY },
+          selection: selection?.toString() || '',
+          collapsed: range?.collapsed ?? null,
+          range: range ? { startNode: range.startContainer?.nodeName, startText: range.startContainer?.textContent || '', startOffset: range.startOffset, endNode: range.endContainer?.nodeName, endText: range.endContainer?.textContent || '', endOffset: range.endOffset } : null,
+          ancestors
+        });
+      }, true);
+    });
+
     // The uploaded Facebook DOM showed dir="auto" containers and deeply nested
     // spans. Exercise each visible token, while keeping both references adjacent.
     const gestures = [
@@ -368,11 +393,22 @@ test.describe('core user-visible E2E', () => {
         }).map(tab => tab.id)
       ));
       await page.locator(selector).dblclick();
-      await activateBlbTabForPath(extensionWorker, expectedPath, {
-        fragment: selector,
-        selector: '#blb-e2e-facebook-dir-auto-reference',
-        selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
-      });
+      try {
+        await activateBlbTabForPath(extensionWorker, expectedPath, {
+          fragment: selector,
+          selector: '#blb-e2e-facebook-dir-auto-reference',
+          selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
+        });
+      } catch (error) {
+        console.error('Facebook double-click DOM/Selection diagnostics', {
+          gesture: selector,
+          expectedPath,
+          fixture: await page.locator('#blb-e2e-facebook-dir-auto-reference').evaluate(el => el.outerHTML),
+          events: await page.evaluate(() => window.__blbDblClickDiagnostics || []),
+          finalSelection: await page.evaluate(() => window.getSelection?.().toString() || '')
+        });
+        throw error;
+      }
       const openedPaths = await extensionWorker.evaluate((beforeIds) => chrome.tabs.query({}).then(tabs =>
         tabs.filter(tab => !beforeIds.includes(tab.id)).map(tab => {
           try {
