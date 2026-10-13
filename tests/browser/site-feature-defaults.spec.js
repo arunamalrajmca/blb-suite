@@ -129,3 +129,36 @@ test('runtime-injected external-site features load shared regex constants before
   expect(result.indexOf('regex-patterns.js')).toBeLessThan(result.indexOf('content.js'));
 });
 
+
+
+test('stale saved Show on BLB preferences cannot activate context menu on sensitive hosts', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    await chrome.storage.local.set({
+      masterEnabled: true,
+      pageSelectionButtonSites: {
+        'www.hdfcbank.com': true,
+        'apollohospitals.com': true
+      },
+      doubleClickBlbSites: {}
+    });
+
+    const cases = [
+      { hostname: 'www.hdfcbank.com', url: 'https://www.hdfcbank.com/' },
+      { hostname: 'apollohospitals.com', url: 'https://apollohospitals.com/' }
+    ];
+    const output = [];
+    for (const item of cases) {
+      output.push({
+        hostname: item.hostname,
+        directEligibility: await isPageButtonEnabledForHostname(item.hostname),
+        contextMenu: await shouldShowBlbContextMenu({ url: item.url, title: 'Test page' }, 'John 3:16')
+      });
+    }
+    return output;
+  });
+
+  for (const item of result) {
+    expect(item.directEligibility, item.hostname).toBe(false);
+    expect(item.contextMenu, item.hostname).toBe(false);
+  }
+});
