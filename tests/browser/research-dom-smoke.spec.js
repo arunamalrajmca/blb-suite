@@ -466,7 +466,7 @@ test.describe('research-derived DOM regression smoke', () => {
   test('D47 keyboard-driven selection change replaces the previous direct reference', async ({ page, extensionStorage, extensionWorker }) => {
     await setup(page, extensionStorage);
     await selectText(page, 'split');
-    await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({ timeout: 10000 });
+    await ensureSelectionActionVisible(page);
     await selectTextWithKeyboard(page, 'keyboard-next-reference');
     await useShowOnBlb(page, extensionWorker, '/kjv/rom/8/28/');
   });

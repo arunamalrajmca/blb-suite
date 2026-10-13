@@ -1322,6 +1322,18 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
 
       let start = null;
       let end = null;
+      const normalizedOffset = (rawText, offset) => {
+        const bounded = Math.max(0, Math.min(rawText.length, offset));
+        const prefix = rawText.slice(0, bounded);
+        const normalizedPrefix = normalizeSelectionText(prefix);
+        // Prefix normalization trims trailing whitespace; restore one space
+        // when it separates this prefix from the next visible token.
+        const separator = normalizedPrefix.length > 0 &&
+          bounded < rawText.length &&
+          /[\\s\\u00A0\\u2007\\u202F]$/.test(prefix) &&
+          /\\S/.test(rawText.slice(bounded));
+        return normalizedPrefix.length + (separator ? 1 : 0);
+      };
       try {
         const contextualTarget = getDoubleClickTargetElement(event) || initialNode;
         if (contextualTarget && candidate.contains(contextualTarget)) {
@@ -1330,14 +1342,16 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const scratch = document.createRange();
           scratch.selectNodeContents(candidate);
           scratch.setEnd(targetRange.startContainer, targetRange.startOffset);
-          start = normalizeSelectionText(scratch.toString()).length;
+          start = normalizedOffset(candidateRaw, scratch.toString().length);
           scratch.setEnd(targetRange.endContainer, targetRange.endOffset);
-          end = normalizeSelectionText(scratch.toString()).length;
+          end = normalizedOffset(candidateRaw, scratch.toString().length);
         }
       } catch (_) {}
 
       if (start == null || end == null || end <= start) {
-        const tokenIndex = candidateSource.indexOf(selected);
+        // Locate the selected token in normalized text; don't let a trimmed
+        // prefix shift later adjacent references one character to the left.
+        const tokenIndex = candidateMatchSource.indexOf(selected.replace(/[\\u2010-\\u2015\\u2212]/g, '-'));
         if (tokenIndex >= 0) { start = tokenIndex; end = tokenIndex + selected.length; }
       }
 
@@ -1366,6 +1380,26 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     if (!source) return null;
     const refs = resolveBibleReferenceText(source);
     if (!refs.length) return null;
+    // Reference parsing removes invisible directional marks and collapses
+    // whitespace. Occurrence matching must use that same normalized text,
+    // while Range-derived offsets must be translated from the original DOM
+    // text into the normalized string before comparing positions.
+    const normalizedMatchSource = normalizeSelectionText(rawSource).replace(/[\u2010-\u2015\u2212]/g, '-');
+    const toNormalizedOffset = offset => {
+      const boundedOffset = Math.max(0, Math.min(rawSource.length, offset));
+      const prefix = rawSource.slice(0, boundedOffset);
+      const normalizedPrefix = normalizeSelectionText(prefix);
+      // normalizeSelectionText trims both ends. When the raw prefix ends at
+      // a separator between two tokens, the full normalized source retains
+      // one interior space at that position. Count that separator so offsets
+      // for the following token (e.g. "Romans" after "; ") stay aligned.
+      const hasInteriorSeparator =
+        normalizedPrefix.length > 0 &&
+        boundedOffset < rawSource.length &&
+        /[\\s\\u00A0\\u2007\\u202F]$/.test(prefix) &&
+        /\\S/.test(rawSource.slice(boundedOffset));
+      return normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
+    };
 
     // Context is positional: the selected browser range must be inside the
     // exact occurrence of the parsed reference. Sharing a paragraph is not
@@ -1461,17 +1495,61 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const pattern = new RegExp(parts.join('\\s+'), 'gi');
       const occurrences = [];
       let match;
-      while ((match = pattern.exec(rawSource))) {
+      while ((match = pattern.exec(normalizedMatchSource))) {
         occurrences.push({start: match.index, end: match.index + match[0].length});
         if (match[0].length === 0) pattern.lastIndex++;
       }
       return occurrences;
     };
 
+    if (selectionStart != null && selectionEnd != null) {
+      selectionStart = toNormalizedOffset(selectionStart);
+      selectionEnd = toNormalizedOffset(selectionEnd);
+    }
+
+    // Book-name selections can still be identified reliably when a rich-text
+    // DOM makes Range-derived offsets drift after whitespace normalization.
+    // Anchor the selected canonical book token to the same parsed occurrence;
+    // never let a prose mention borrow a different reference elsewhere.
+    const selectedBook = resolveBibleBook(selected);
+    const selectedBookPositions = [];
+    if (selectedBook) {
+      const escapedSelected = selected.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
+      const selectedPattern = new RegExp('(?<![A-Za-z0-9])' + escapedSelected + '(?![A-Za-z0-9])', 'gi');
+      let selectedMatch;
+      while ((selectedMatch = selectedPattern.exec(normalizedMatchSource))) {
+        selectedBookPositions.push(selectedMatch.index);
+        if (!selectedMatch[0].length) selectedPattern.lastIndex++;
+      }
+    }
+    const nearestSelectedBookPosition = selectedBookPositions.length
+      ? selectedBookPositions.reduce((best, position) =>
+          Math.abs(position - selectionStart) < Math.abs(best - selectionStart) ? position : best,
+        selectedBookPositions[0])
+      : null;
+
     for (const ref of refs) {
       if (!ref || ref.chapter == null || !ref.text) continue;
-      for (const occurrence of findOccurrences(ref.text)) {
+      const occurrences = findOccurrences(ref.text);
+      for (const occurrence of occurrences) {
         if (selectionStart >= occurrence.start && selectionEnd <= occurrence.end) {
+          return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
+        }
+      }
+
+      // If the clicked token is itself a Bible book name, permit a normalized
+      // token-position match as a fallback for nested spans/formatting marks.
+      // The book token must occupy the corresponding position inside this
+      // exact parsed reference occurrence; an unrelated mention cannot qualify.
+      const refBook = resolveBibleBook(ref.book);
+      if (!selectedBook || !refBook || selectedBook.urlKey !== refBook.urlKey ||
+          nearestSelectedBookPosition == null) continue;
+      const normalizedRefText = normalizeSelectionText(ref.text || '').replace(/[\u2010-\u2015\u2212]/g, '-');
+      const escapedRefBook = refBook.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
+      const bookInRef = new RegExp('(?<![A-Za-z0-9])' + escapedRefBook + '(?![A-Za-z0-9])', 'i').exec(normalizedRefText);
+      if (!bookInRef) continue;
+      for (const occurrence of occurrences) {
+        if (occurrence.start + bookInRef.index === nearestSelectedBookPosition) {
           return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
         }
       }
