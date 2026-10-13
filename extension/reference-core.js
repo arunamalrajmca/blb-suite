@@ -148,6 +148,26 @@ function resolveDirectBibleReference(value) {
   };
 }
 
+function resolveBibleBookCapture(match) {
+  const captured = String(match?.[1] || '').trim();
+  if (!captured) return null;
+
+  const words = captured.split(/\s+/);
+  for (let start = 0; start < words.length; start++) {
+    // Keep existing alias behavior for the full capture. If a greedy match
+    // includes prose before a real book name, retry only suffixes that begin
+    // like a displayed book name to avoid treating lowercase prose such as
+    // "is" as the abbreviation for Isaiah.
+    if (start > 0 && !/^(?:[1-3]|i{1,3})$/i.test(words[start]) && !/^[A-Z]/.test(words[start])) continue;
+    const candidate = words.slice(start).join(' ');
+    const book = resolveBibleBook(candidate);
+    if (!book) continue;
+    const offset = words.slice(0, start).join(' ').length + (start > 0 ? 1 : 0);
+    return { book, text: String(match[0] || '').slice(offset).trim() };
+  }
+  return null;
+}
+
 function isShadowedNumberedOrRomanBookMatch(source, index) {
   if (index <= 0) return false;
   const prefix = source.slice(Math.max(0, index - 8), index);
@@ -182,38 +202,38 @@ function resolveBibleReferenceText(text, options = {}) {
   const colonRangeRe = /(?<![A-Za-z0-9])(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)\s*:\s*(-?\d+)\s*[-–—]\s*(-?\d+)(?![A-Za-z0-9])/gi;
   while ((m = colonRangeRe.exec(source))) {
     if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
-    const book = resolveBibleBook(m[1]);
-    if (book) add(book, Number(m[2]), Number(m[3]), Number(m[4]), m[0]);
+    const match = resolveBibleBookCapture(m);
+    if (match) add(match.book, Number(m[2]), Number(m[3]), Number(m[4]), match.text);
   }
 
   const colonRe = /(?<![A-Za-z0-9])(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)\s*[:.]\s*(-?\d+)(?!\s*[-–—]\s*-?\d)(?![A-Za-z0-9])/gi;
   while ((m = colonRe.exec(source))) {
     if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
-    const book = resolveBibleBook(m[1]);
-    if (book) add(book, Number(m[2]), Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), m[0]);
+    const match = resolveBibleBookCapture(m);
+    if (match) add(match.book, Number(m[2]), Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), match.text);
   }
 
   const chapterOnlyRe = /(?<![A-Za-z0-9])(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)(?!\s*[:.]\s*-?\d)(?!\s+-?\d)(?=$|[\s,.;:!?\)\]\}])/gi;
   while ((m = chapterOnlyRe.exec(source))) {
     if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
-    const book = resolveBibleBook(m[1]);
-    if (!book || book.chapterCount === 1) continue;
-    add(book, Number(m[2]), null, null, m[0]);
+    const match = resolveBibleBookCapture(m);
+    if (!match || match.book.chapterCount === 1) continue;
+    add(match.book, Number(m[2]), null, null, match.text);
   }
 
   const oneChapterRe = /(?<![A-Za-z0-9])(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)(?:\s*[-–—]\s*(-?\d+))?(?!\s*[:.]\s*-?\d)(?!\s+-?\d)(?![A-Za-z0-9])/gi;
   while ((m = oneChapterRe.exec(source))) {
     if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
-    const book = resolveBibleBook(m[1]);
-    if (!book || book.chapterCount !== 1) continue;
-    add(book, 1, Number(m[2]), m[3] ? Number(m[3]) : Number(m[2]), m[0]);
+    const match = resolveBibleBookCapture(m);
+    if (!match || match.book.chapterCount !== 1) continue;
+    add(match.book, 1, Number(m[2]), m[3] ? Number(m[3]) : Number(m[2]), match.text);
   }
 
   const spacedRe = /(?<![A-Za-z0-9])(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s+(-?\d+)\s+(-?\d+)(?:\s*[-–—]\s*(-?\d+))?(?![A-Za-z0-9])/gi;
   while ((m = spacedRe.exec(source))) {
     if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
-    const book = resolveBibleBook(m[1]);
-    if (book) add(book, Number(m[2]), Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), m[0]);
+    const match = resolveBibleBookCapture(m);
+    if (match) add(match.book, Number(m[2]), Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), match.text);
   }
 
   refs.sort((a, b) => source.indexOf(a.text) - source.indexOf(b.text));
