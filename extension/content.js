@@ -1,4 +1,6 @@
 (async function () {
+const BLB_HOSTNAME = BLBShared.hostnames.blb;
+const BLB_ORIGIN = BLBShared.urls.blbOrigin;
 // Blue Letter Bible Suite 5.2.25 - unified content script
 
 // Access policy:
@@ -92,9 +94,9 @@ function normalizeBlbDestinationUrl(url) {
     const parsed = new URL(target);
     if (!/^https?:$/.test(parsed.protocol)) return '';
     const hostname = parsed.hostname.toLowerCase();
-    if (!['blueletterbible.org', 'www.blueletterbible.org', 'blueletterbible.com', 'www.blueletterbible.com'].includes(hostname)) return '';
+    if (![BLB_HOSTNAME, BLBShared.hostnames.blbWww, BLBShared.hostnames.blbCom, BLBShared.hostnames.blbWwwCom].includes(hostname)) return '';
     parsed.protocol = 'https:';
-    parsed.hostname = 'www.blueletterbible.org';
+    parsed.hostname = BLBShared.hostnames.blbWww;
     parsed.port = '';
     return parsed.href;
   } catch (_) {
@@ -269,7 +271,7 @@ function redirectBibleSite() {
 }
 
 function redirectBlbNet() {
-  if (location.hostname.toLowerCase() !== "www.blueletterbible.org") return false;
+  if (location.hostname.toLowerCase() !== BLBShared.hostnames.blbWww) return false;
 
   // BLB passage URLs may appear as /<version>/<book>/<chapter>/<verse>/
   // or include the optional /s_<id> suffix. This is BLB URL syntax, separate
@@ -282,7 +284,7 @@ function redirectBlbNet() {
   const chapter = m[3];
   const verse = m[4];
   const endVerse = m[5] ? "-" + m[5] : "";
-  const target = `https://www.blueletterbible.org/kjv/${book}/${chapter}/${verse}${endVerse}/`;
+  const target = `${BLBShared.urls.blbHome}kjv/${book}/${chapter}/${verse}${endVerse}/`;
   location.replace(target);
   return true;
 }
@@ -293,7 +295,7 @@ const REDIRECT_HOSTS = new Set([
   'bible.com', 'biblegateway.com', 'bibleref.com', 'biblehub.com',
   'bibleportal.com', 'kingjamesbibleonline.org', 'kjbo.org',
   'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com',
-  'webstersdictionary1828.com', 'blueletterbible.org'
+  'webstersdictionary1828.com', BLB_HOSTNAME
 ]);
 
 if (REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\./, ''))) {
@@ -309,7 +311,7 @@ if (REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\./, ''))) {
 // Augment BLB's native MultiVerse clipboard operation with text/html.
 // IMPORTANT: preserve BLB's native Copy button/payload while enriching the clipboard with HTML.
 if (
-  location.hostname === "www.blueletterbible.org" &&
+  location.hostname === BLBShared.hostnames.blbWww &&
   /\/tools\/MultiVerse\.cfm$/i.test(location.pathname)
 ) {
   document.addEventListener("copy", e => {
@@ -419,13 +421,13 @@ function formatBlbTextToHtml(rawText) {
     if (i<0) return;
     const book=x.slice(0,i).replace(/\./g,"").replace(/\s+/g,"");
     const cv=x.slice(i+1).replace(":","/");
-    html=html.replace(ref,`<a href="https://www.blueletterbible.org/kjv/${book}/${cv}/" style="color:#1155cc;text-decoration:underline;">${ref}</a>`);
+    html=html.replace(ref,`<a href="${BLBShared.urls.blbHome}kjv/${book}/${cv}/" style="color:#1155cc;text-decoration:underline;">${ref}</a>`);
   });
   html=html.replace(/\n/g,"<br>");
   return `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`;
 }
 
-if (location.hostname.endsWith("blueletterbible.org") &&
+if (location.hostname.endsWith(BLB_HOSTNAME) &&
     !/(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)$/i.test(location.pathname)) {
   // The copy event must be handled synchronously. Awaiting storage state inside
   // the event handler lets the browser finish its normal copy operation before
@@ -464,7 +466,7 @@ if (location.hostname.endsWith("blueletterbible.org") &&
 // Keep parsing-popup links working on both normal BLB verse pages and
 // Criteria Search pages. A stable window name prevents repeated clicks from
 // opening duplicate tabs; the same tab is reused for the same destination.
-if (location.hostname.endsWith("blueletterbible.org")) {
+if (location.hostname.endsWith(BLB_HOSTNAME)) {
   const handleParsePopupLink = link => {
     if (!link || !link.href || !link.closest?.(".parse-popup")) return;
     if (link.dataset.blbSuitePopup) return;
@@ -479,7 +481,7 @@ if (location.hostname.endsWith("blueletterbible.org")) {
       const m = link.href.match(/lexicon\/(g|h)\d+/i);
       if (m) {
         const criteriaUrl =
-          `https://www.blueletterbible.org/search/search.cfm?Criteria=${m[0].split("/").pop()}`;
+          `${BLBShared.urls.blbSearch}?Criteria=${m[0].split("/").pop()}`;
         openBlbDestinationFromContent(criteriaUrl);
       }
     }, true);
@@ -579,7 +581,7 @@ if (location.hostname.endsWith("blueletterbible.org")) {
 // MultiVerse is intentionally outside the normal BLB New Tab exclusion block.
 // Own KJV verse navigation here so native _blank handling cannot create duplicates.
 if (
-  location.hostname.endsWith("blueletterbible.org") &&
+  location.hostname.endsWith(BLB_HOSTNAME) &&
   /\/tools\/MultiVerse\.cfm$/i.test(location.pathname)
 ) {
   document.addEventListener("click", e => {
@@ -601,7 +603,7 @@ if (
 // links here, using the same stable popup naming as normal BLB verse pages.
 // Do not intercept ordinary Criteria Search links.
 if (
-  location.hostname.endsWith("blueletterbible.org") &&
+  location.hostname.endsWith(BLB_HOSTNAME) &&
   location.pathname.toLowerCase() === "/search/search.cfm"
 ) {
   document.addEventListener("click", e => {
@@ -635,7 +637,7 @@ if (
 // Criteria Search result verses are Suite-owned new-tab actions. Keep them
 // separate from the broad nowrap handler so each click has exactly one owner.
 if (
-  location.hostname.endsWith("blueletterbible.org") &&
+  location.hostname.endsWith(BLB_HOSTNAME) &&
   location.pathname.toLowerCase() === "/search/search.cfm"
 ) {
   document.addEventListener("click", e => {
@@ -655,7 +657,7 @@ if (
 // Keep this separate from the existing copy/hyperlink handler.  Do not cancel
 // native BLB clicks; only supply target="_blank" to verse links that BLB adds
 // dynamically or places outside the older bVerse_ containers.
-if (location.hostname.endsWith("blueletterbible.org")) {
+if (location.hostname.endsWith(BLB_HOSTNAME)) {
   const applyPassiveNewTabTargets = (root=document) => {
     if (!suiteEnabled) return;
     const apply = link => {
@@ -859,7 +861,7 @@ if (location.hostname==="webstersdictionary1828.com") {
 // Suite-generated MultiVerse tabs must never expose BLB's bootstrap/default
 // result set. Keep the document hidden until the requested reference set is
 // actually visible after Retrieve has completed.
-if (location.hostname==="www.blueletterbible.org" &&
+if (location.hostname===BLBShared.hostnames.blbWww &&
     /(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)/i.test(location.pathname) &&
     /[?&]blbSuiteMultiVerse=1(?:&|$)/i.test(location.search)) {
   let multiverseHandoffHidden=false;
@@ -1014,7 +1016,7 @@ if (location.hostname==="www.blueletterbible.org" &&
 // Capture only useful BLB Bible/Strong's destinations while a named Study Topic
 // is active. This is deliberately navigation/result based: no click logging,
 // polling, or page-wide MutationObserver is used for the audit.
-if (location.hostname.toLowerCase().replace(/^www\./,'') === 'blueletterbible.org') {
+if (location.hostname.toLowerCase().replace(/^www\./,'') === BLB_HOSTNAME) {
   const captureStudyRefs = async () => {
     try {
       if (!(await isSuiteEnabled())) return;
@@ -1026,7 +1028,7 @@ if (location.hostname.toLowerCase().replace(/^www\./,'') === 'blueletterbible.or
         try {
           const u = new URL(String(href || ''), location.href);
           const host = u.hostname.toLowerCase().replace(/^www\./,'');
-          if (host !== 'blueletterbible.org') return;
+          if (host !== BLB_HOSTNAME) return;
           const parts = u.pathname.split('/').filter(Boolean);
           if (parts.length < 3 || parts[0].toLowerCase() !== 'kjv' || !/^\d+$/.test(parts[2])) return;
           // Verse/result links have a verse component. Chapter links are handled
@@ -1258,7 +1260,7 @@ function getStandaloneBookReference(selectionText) {
       chapter: 1,
       from: 1,
       to: 1,
-      url: `https://www.blueletterbible.org/kjv/${urlKey}/1/1/`
+      url: `${BLBShared.urls.blbHome}kjv/${urlKey}/1/1/`
     };
   } catch (_) {
     return null;
@@ -1680,7 +1682,7 @@ async function getSiteDefaultEnabled() {
 async function refreshDoubleClickBlb() {
   try {
     const siteKey = getPageSelectionSiteKey();
-    if (siteKey === 'blueletterbible.org' || isSensitiveSiteHostname(siteKey) || !suiteEnabled || !siteKey) {
+    if (siteKey === BLB_HOSTNAME || isSensitiveSiteHostname(siteKey) || !suiteEnabled || !siteKey) {
       doubleClickBlbEnabled = false;
       disableDoubleClickBlb();
       return;
@@ -1734,7 +1736,7 @@ let pageButtonDomValidationFrame = 0;
 
 function isBlbPageButtonExcludedSite() {
   const host = String(location.hostname || '').toLowerCase();
-  return host === 'blueletterbible.org' || host.endsWith('.blueletterbible.org');
+  return host === BLB_HOSTNAME || host.endsWith('.blueletterbible.org');
 }
 
 
@@ -2195,7 +2197,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
       disableBlbPageButtonMonitoring();
     } else {
       if (location.hostname === 'webstersdictionary1828.com') ensureWebsterButton?.();
-      if (location.hostname !== 'blueletterbible.org' && !location.hostname.endsWith('.blueletterbible.org')) {
+      if (location.hostname !== BLB_HOSTNAME && !location.hostname.endsWith('.blueletterbible.org')) {
         refreshBlbPageSelectionButton();
       }
     }
