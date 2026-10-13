@@ -16,7 +16,8 @@ globalThis.BLBShared = Object.freeze({
     blbSearch: 'https://www.blueletterbible.org/search/search.cfm'
   }),
   // Curated domain suffixes cover providers whose hostnames do not reveal
-  // their category (for example chase.com). This list is intentionally static:
+  // their category (for example chase.com). This reviewed seed list is not a
+  // complete global directory; expand it only with targeted tests. It is static:
   // no browsing, network requests, or classification work occurs at runtime.
   sensitiveSiteDomainSuffixes: Object.freeze([
     'bank', 'bank.in', 'insurance',
