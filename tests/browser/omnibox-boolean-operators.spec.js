@@ -25,7 +25,7 @@ test('case-insensitive standalone Boolean words are uppercased outside quoted te
     ['candy, android, orbit', 'candy, android, orbit'],
     ['faith "and or not" hope', 'faith "and or not" hope'],
     ['"faith AND hope"', '"faith AND hope"'],
-    ['faith "quoted \\"and\\" text" or hope', 'faith "quoted \\"and\\" text" OR hope'],
+    ['faith "quoted and text" or hope', 'faith "quoted and text" OR hope'],
     ["faith 'and or not' hope", "faith 'and or not' hope"],
   ];
   for (const [input, expected] of cases) {
