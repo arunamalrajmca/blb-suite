@@ -1313,6 +1313,9 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     for (const candidate of blockCandidates) {
       const candidateRaw = String(candidate.textContent || '');
       const candidateSource = normalizeSelectionText(candidateRaw);
+      // Normalize typographic dashes for source-to-parser matching. Each dash
+      // maps to one code unit, so DOM selection offsets remain unchanged.
+      const candidateMatchSource = candidateSource.replace(/[\u2010-\u2015\u2212]/g, '-');
       if (!candidateSource) continue;
       const candidateRefs = resolveBibleReferenceText(candidateSource);
       if (!candidateRefs.length) continue;
@@ -1340,13 +1343,13 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
 
       if (start != null && end != null) {
         const containsReference = candidateRefs.some(ref => {
-          const refText = normalizeSelectionText(ref.text || '');
+          const refText = normalizeSelectionText(ref.text || '').replace(/[\u2010-\u2015\u2212]/g, '-');
           if (!refText) return false;
-          let from = candidateSource.indexOf(refText);
+          let from = candidateMatchSource.indexOf(refText);
           while (from >= 0) {
             const to = from + refText.length;
             if (start < to && end > from) return true;
-            from = candidateSource.indexOf(refText, from + 1);
+            from = candidateMatchSource.indexOf(refText, from + 1);
           }
           return false;
         });
@@ -1453,7 +1456,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const value = normalizeSelectionText(needle || '');
       if (!value) return [];
       const escapeRegex = part => part.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
-      const parts = value.split(/\s+/).map(escapeRegex);
+      const parts = value.split(/\s+/).map(part => escapeRegex(part).replace(/[\u2010-\u2015\u2212]/g, '-').replace(/-/g, '[-\\u2010-\\u2015\\u2212]'));
       if (!parts.length) return [];
       const pattern = new RegExp(parts.join('\\s+'), 'gi');
       const occurrences = [];
