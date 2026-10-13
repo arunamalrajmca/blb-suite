@@ -400,13 +400,13 @@ test.describe('core user-visible E2E', () => {
           selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
         });
       } catch (error) {
-        console.error('Facebook double-click DOM/Selection diagnostics', {
+        console.error('Facebook double-click DOM/Selection diagnostics: ' + JSON.stringify({
           gesture: selector,
           expectedPath,
           fixture: await page.locator('#blb-e2e-facebook-dir-auto-reference').evaluate(el => el.outerHTML),
           events: await page.evaluate(() => window.__blbDblClickDiagnostics || []),
           finalSelection: await page.evaluate(() => window.getSelection?.().toString() || '')
-        });
+        }));
         throw error;
       }
       const openedPaths = await extensionWorker.evaluate((beforeIds) => chrome.tabs.query({}).then(tabs =>
