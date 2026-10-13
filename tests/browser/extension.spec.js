@@ -253,6 +253,91 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  test('Double-click resolves references in nested social and article DOM patterns', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+
+    // Representative DOM shapes only: do not depend on live third-party sites
+    // or their unstable/private class names in the automated regression suite.
+    const patterns = [
+      {
+        name: 'Facebook-style article',
+        html: '<div role="article"><div data-ad-comet-preview="message"><div><span id="book-luke">Luke</span> <span>1:46–47</span>; <span id="book-romans">Romans</span> <span>1:3–4</span></div></div></div>'
+      },
+      {
+        name: 'X-style tweet',
+        html: '<article data-testid="tweet"><div data-testid="tweetText"><span id="book-luke">Luke</span> <span>1:46–47</span>; <a href="/topic"><span id="book-romans">Romans</span> <span>1:3–4</span></a></div></article>'
+      },
+      {
+        name: 'Instagram-style caption',
+        html: '<article><div role="presentation"><span id="book-luke">Luke</span> <span>1:46–47</span>; <span><span id="book-romans">Romans</span> <span>1:3–4</span></span></div></article>'
+      },
+      {
+        name: 'YouTube-style description',
+        html: '<ytd-text-inline-expander id="description-inline-expander"><div id="content"><span id="book-luke">Luke</span> <span>1:46–47</span>; <span id="book-romans">Romans</span> <span>1:3–4</span></div></ytd-text-inline-expander>'
+      },
+      {
+        name: 'article paragraph with line break',
+        html: '<main><article><p><span id="book-luke">Luke</span> 1:46–47;<br><span id="book-romans">Romans</span> 1:3–4</p></article></main>'
+      }
+    ];
+
+    for (const pattern of patterns) {
+      await page.evaluate((html) => {
+        document.querySelector('#blb-e2e-dom-pattern')?.remove();
+        const fixture = document.createElement('div');
+        fixture.id = 'blb-e2e-dom-pattern';
+        fixture.innerHTML = html;
+        document.body.appendChild(fixture);
+      }, pattern.html);
+
+      for (const [selector, expectedPath] of [
+        ['#book-luke', '/kjv/luk/1/46-47/'],
+        ['#book-romans', '/kjv/rom/1/3-4/']
+      ]) {
+        const before = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+          tabs.filter(tab => {
+            try { return new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org'); }
+            catch (_) { return false; }
+          }).map(tab => tab.id)
+        ));
+        await page.locator(selector).dblclick();
+        await activateBlbTabForPath(extensionWorker, expectedPath, {
+          fragment: selector,
+          selector: '#blb-e2e-dom-pattern',
+          selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
+        });
+        const openedPaths = await extensionWorker.evaluate((beforeIds) => chrome.tabs.query({}).then(tabs =>
+          tabs.filter(tab => !beforeIds.includes(tab.id)).map(tab => {
+            try {
+              const url = new URL(String(tab.url || tab.pendingUrl || ''));
+              return url.hostname.endsWith('blueletterbible.org') ? url.pathname : '';
+            } catch (_) { return ''; }
+          }).filter(Boolean)
+        ), before);
+        expect(openedPaths, pattern.name + ': wrong or missing destination').toContain(expectedPath);
+        expect(openedPaths.some(path =>
+          path === '/kjv/luk/1/46-47/' && expectedPath !== path
+        ), pattern.name + ': opened Luke when Romans was clicked').toBe(false);
+        expect(openedPaths.some(path =>
+          path === '/kjv/rom/1/3-4/' && expectedPath !== path
+        ), pattern.name + ': opened Romans when Luke was clicked').toBe(false);
+
+        await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+          for (const tab of tabs) {
+            try {
+              const url = new URL(String(tab.url || tab.pendingUrl || ''));
+              if (url.hostname.endsWith('blueletterbible.org') && url.pathname === path && tab.id != null) {
+                await chrome.tabs.remove(tab.id);
+              }
+            } catch (_) {}
+          }
+        }), expectedPath);
+      }
+    }
+  });
+
   test('Double-click standalone book numbers do not borrow context across lines', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
