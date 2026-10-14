@@ -1163,6 +1163,29 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
     if (resolved) return {book:resolved.book,chapter:resolved.chapter,from:resolved.from,to:resolved.to,url:resolved.url};
   }
 
+  // When the book name (or the complete citation) is selected in a
+  // same-chapter comma-separated verse list, open the combined range only
+  // when every listed verse is consecutive. Keep the exact-token handler
+  // above authoritative for a selection of the second verse number itself.
+  const verseListRe = /((?:[1-3]\\s*|i{1,3}\\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\\s+(\\d+)\\s*:\\s*(\\d+(?:\\s*,\\s*\\d+)+)/gi;
+  let verseListMatch;
+  while ((verseListMatch = verseListRe.exec(source))) {
+    const book = resolveBibleBook(verseListMatch[1]);
+    if (!book) continue;
+    const bookStart = verseListMatch.index;
+    const bookEnd = bookStart + verseListMatch[1].length;
+    const citationEnd = verseListMatch.index + verseListMatch[0].length;
+    const selectsBook = selectionStart < bookEnd && selectionEnd > bookStart;
+    const selectsWholeCitation = selectionStart <= bookStart && selectionEnd >= citationEnd;
+    if (!selectsBook && !selectsWholeCitation) continue;
+
+    const verses = verseListMatch[3].split(',').map(value => Number(value.trim()));
+    if (verses.some((verse, index) => index > 0 && verse !== verses[index - 1] + 1)) continue;
+    const chapter = Number(verseListMatch[2]);
+    const resolved = resolveBibleReference(book.name, chapter, verses[0], verses[verses.length - 1]);
+    if (resolved) return {book:resolved.book,chapter:resolved.chapter,from:resolved.from,to:resolved.to,url:resolved.url};
+  }
+
   const refs = resolveBibleReferenceText(source);
   const candidates = [];
 
