@@ -1133,10 +1133,48 @@ function getSelectionContextPosition() {
     // Normalize each segment separately so the selection offsets stay aligned
     // with the normalized context string. Normalizing only after concatenation
     // would collapse whitespace before the selected text and shift its offsets.
-    const before = normalizeSelectionText(beforeRange.toString());
-    const selected = normalizeSelectionText(range.toString());
-    const after = normalizeSelectionText(afterRange.toString());
-    return { text: before + selected + after, start: before.length, end: before.length + selected.length };
+    // Range.toString() omits the visible boundary represented by <br> in
+    // Chromium. Instagram captions use <br> extensively, so a plain range
+    // string can concatenate unrelated sentences and references (for example
+    // "Psalm 102:20 ... Psalm 38:11-14"). Clone the range and serialize its DOM
+    // structure, converting line breaks and block boundaries into whitespace.
+    // Use the same serializer for all three segments so selection offsets remain
+    // aligned with the context that the reference resolver actually receives.
+    const rangeText = sourceRange => {
+      const fragment = sourceRange.cloneContents();
+      const pieces = [];
+      const walk = current => {
+        for (const child of current.childNodes || []) {
+          if (child.nodeType === Node.TEXT_NODE) {
+            pieces.push(child.nodeValue || '');
+          } else if (child.nodeType === Node.ELEMENT_NODE) {
+            const tag = child.tagName;
+            if (tag === 'BR') {
+              pieces.push(' ');
+              continue;
+            }
+            const blockLike = /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DL|DT|FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|LI|MAIN|NAV|OL|P|PRE|SECTION|TABLE|TR|UL)$/.test(tag);
+            if (blockLike && pieces.length && !/\\s$/.test(pieces[pieces.length - 1])) pieces.push(' ');
+            walk(child);
+            if (blockLike && pieces.length && !/^\\s/.test(pieces[pieces.length - 1])) pieces.push(' ');
+          }
+        }
+      };
+      walk(fragment);
+      return pieces.join('');
+    };
+    const before = normalizeSelectionText(rangeText(beforeRange));
+    const selected = normalizeSelectionText(rangeText(range));
+    const after = normalizeSelectionText(rangeText(afterRange));
+    if (!selected) return null;
+
+    // Normalize segments independently, then preserve a separator between
+    // each segment. This keeps citations intact when only a word or number is
+    // selected inside a nested span, while <br> keeps adjacent citations apart.
+    const prefix = before ? before + ' ' : '';
+    const suffix = after ? ' ' + after : '';
+    const start = prefix.length;
+    return { text: prefix + selected + suffix, start, end: start + selected.length };
   } catch (_) { return null; }
 }
 
@@ -1285,6 +1323,29 @@ function getStandaloneBookReference(selectionText) {
 
 function getDoubleClickBlockContextReference(selectionText, target, event = null) {
   try {
+    // textContent and Range.toString() omit <br> boundaries. Instagram captions
+    // use <br> inside a single inline container, so preserve those boundaries
+    // when building both the reference text and the offsets used to match it.
+    const serializeDomChildren = root => {
+      const pieces = [];
+      const walk = current => {
+        for (const child of current.childNodes || []) {
+          if (child.nodeType === Node.TEXT_NODE) pieces.push(child.nodeValue || '');
+          else if (child.nodeType === Node.ELEMENT_NODE) {
+            const tag = child.tagName;
+            if (tag === 'BR') { pieces.push(' '); continue; }
+            const blockLike = /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DL|DT|FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|LI|MAIN|NAV|OL|P|PRE|SECTION|TABLE|TR|UL)$/.test(tag);
+            if (blockLike && pieces.length && !/\\s$/.test(pieces[pieces.length - 1])) pieces.push(' ');
+            walk(child);
+            if (blockLike && pieces.length && !/^\\s/.test(pieces[pieces.length - 1])) pieces.push(' ');
+          }
+        }
+      };
+      walk(root);
+      return pieces.join('');
+    };
+    const domText = element => serializeDomChildren(element);
+    const domRangeText = range => serializeDomChildren(range.cloneContents());
     let selected = normalizeSelectionText(selectionText).normalize('NFKC');
     const initialNode = target instanceof Element ? target : (target?.parentElement || null);
 
@@ -1329,7 +1390,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
 
     let block = null;
     for (const candidate of blockCandidates) {
-      const candidateRaw = String(candidate.textContent || '');
+      const candidateRaw = domText(candidate);
       const candidateSource = normalizeSelectionText(candidateRaw).normalize('NFKC');
       // Normalize typographic dashes for source-to-parser matching. Each dash
       // maps to one code unit, so DOM selection offsets remain unchanged.
@@ -1360,9 +1421,9 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const scratch = document.createRange();
           scratch.selectNodeContents(candidate);
           scratch.setEnd(targetRange.startContainer, targetRange.startOffset);
-          start = normalizedOffset(candidateRaw, scratch.toString().length);
+          start = normalizedOffset(candidateRaw, domRangeText(scratch).length);
           scratch.setEnd(targetRange.endContainer, targetRange.endOffset);
-          end = normalizedOffset(candidateRaw, scratch.toString().length);
+          end = normalizedOffset(candidateRaw, domRangeText(scratch).length);
         }
       } catch (_) {}
 
@@ -1393,7 +1454,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     if (!block) block = node?.closest?.('p,li,td,th,blockquote,article,section,div') || node;
     if (!block) return null;
 
-    const rawSource = String(block.textContent || '');
+    const rawSource = domText(block);
     const source = normalizeSelectionText(rawSource).normalize('NFKC');
     if (!source) return null;
     const refs = resolveBibleReferenceText(source);
@@ -1429,7 +1490,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const scratch = document.createRange();
       scratch.selectNodeContents(block);
       scratch.setEnd(container, offset);
-      return scratch.toString().length;
+      return domRangeText(scratch).length;
     };
     let selectionStart = null;
     let selectionEnd = null;

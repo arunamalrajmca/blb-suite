@@ -422,3 +422,35 @@ test('Double-Click resolves references through custom and framework-generated DO
     await removeTabById(extensionWorker, resolved.id);
   }
 });
+
+
+test('Double-Click resolves partial references in Instagram-style rich text with line breaks', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const post = document.createElement('div');
+    post.id = 'blb-e2e-instagram-caption';
+    post.innerHTML = '<span dir="auto">But thou, O LORD, be merciful unto me, And raise me up, that I may requite them.<br><span>Psalm</span> <span id="psalm-41-chapter">41</span><span>:</span><span>10</span> <span>KJV</span><br><br>He will regard the prayer of the destitute, And not despise their prayer.<br><span>Psalm</span> <span>102</span><span>:</span><span>17</span> <span>KJV</span><br><br>To hear the groaning of the prisoner; To loose those that are appointed to death;<br><span>Psalm</span> <span>102</span><span>:</span><span>20</span> <span>KJV</span><br><br>11 My lovers and my friends stand aloof from my sore; And my kinsmen stand afar off.<br>12 They also that seek after my life lay snares for me: And they that seek my hurt speak mischievous things, and imagine deceits all the day long.<br>13 But I, as a deaf man, heard not; And I was as a dumb man that openeth not his mouth.<br>14 Thus I was as a man that heareth not; And in whose mouth are no reproofs.<br><span>Psalm</span> <span>38</span><span>:</span><span>11-</span><span id="psalm-38-end">14</span> <span>KJV</span></span>';
+    post.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:18px Arial,sans-serif;max-width:900px;';
+    document.body.appendChild(post);
+  });
+
+  const cases = [
+    ['#psalm-41-chapter', '/kjv/psa/41/10/'],
+    ['#psalm-38-end', '/kjv/psa/38/11-14/']
+  ];
+
+  for (const [selector, expectedPath] of cases) {
+    await page.locator(selector).dblclick();
+    const resolved = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.url);
+        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+      } catch (_) { return false; }
+    });
+    expect(new URL(resolved.url).pathname).toBe(expectedPath);
+    await removeTabById(extensionWorker, resolved.id);
+  }
+});
