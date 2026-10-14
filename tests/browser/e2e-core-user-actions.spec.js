@@ -161,6 +161,46 @@ test.describe('core user-action E2E coverage', () => {
 
     expect(page.url()).toBe(sourceUrl);
   });
+  test('continuous same-chapter multi-reference selection opens the normal chapter range', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-continuous-range-selection';
+      el.textContent = 'Romans 10:9 and Romans 10:10';
+      document.body.appendChild(el);
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await button.click();
+
+    const rangeTab = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.url);
+        return url.hostname === 'www.blueletterbible.org'
+          && url.pathname === '/kjv/rom/10/9-10/';
+      } catch (_) { return false; }
+    });
+    expect(new URL(rangeTab.url).pathname).toBe('/kjv/rom/10/9-10/');
+
+    const multiVerseTabs = await extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({ url: 'https://www.blueletterbible.org/tools/MultiVerse.cfm*' }))
+        .filter(tab => /blbSuiteMultiVerse=1/.test(tab.url || tab.pendingUrl || ''))
+        .map(tab => tab.id)
+    );
+    expect(multiVerseTabs).toHaveLength(0);
+    await removeTabById(extensionWorker, rangeTab.id);
+  });
+
   test('selection containing a reference and authored prose opens MultiVerse and Criteria Search', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
