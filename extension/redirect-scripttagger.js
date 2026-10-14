@@ -54,14 +54,27 @@
   function contextualVerseDestination(link, fallbackUrl) {
     const bookText = String(link.textContent || '').replace(/\s+/g, ' ').trim();
     if (!bookText) return fallbackUrl;
-    const context = String(link.parentElement?.textContent || '').replace(/\s+/g, ' ');
+
+    // The anchor may contain only the book name while the reference is in a
+    // sibling or a higher-level Facebook post container. Search ancestors.
     const escapedBook = bookText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const pattern = new RegExp('(?:^|[^A-Za-z])' + escapedBook + '\\s+(\\d+)\\s*:\\s*(\\d+)(?:[a-z])?(?=$|[^A-Za-z0-9])', 'ig');
-    let match;
     let lastMatch = null;
-    while ((match = pattern.exec(context)) !== null) lastMatch = match;
-    if (!lastMatch) return fallbackUrl;
+    let node = link.parentElement;
 
+    for (let depth = 0; node && depth < 8; depth += 1, node = node.parentElement) {
+      const context = String(node.textContent || '').replace(/\s+/g, ' ');
+      let match;
+      let candidate = null;
+      while ((match = pattern.exec(context)) !== null) candidate = match;
+      pattern.lastIndex = 0;
+      if (candidate) {
+        lastMatch = candidate;
+        break;
+      }
+    }
+
+    if (!lastMatch) return fallbackUrl;
     try {
       const parsed = new URL(fallbackUrl);
       const path = parsed.pathname.match(/^(.*\/kjv\/[^/]+\/)\d+\/\d+(\/.*)$/i);
