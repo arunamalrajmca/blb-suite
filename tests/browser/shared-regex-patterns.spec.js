@@ -80,7 +80,7 @@ test('reference parser accepts verse-part suffixes without changing the destinat
   }));
 
   expect(refs.esther).toEqual([[
-    'esther', 4, 14, 14, 'https://www.blueletterbible.org/kjv/esther/4/14/'
+    'esther', 4, 14, 14, 'https://www.blueletterbible.org/kjv/est/4/14/'
   ]]);
   expect(refs.romans).toEqual([[
     'romans', 15, 4, 4, 'https://www.blueletterbible.org/kjv/rom/15/4/'
