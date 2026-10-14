@@ -1167,7 +1167,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
   // same-chapter comma-separated verse list, open the combined range only
   // when every listed verse is consecutive. Keep the exact-token handler
   // above authoritative for a selection of the second verse number itself.
-  const verseListRe = /((?:[1-3]\\s*|i{1,3}\\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\\s+(\\d+)\\s*:\\s*(\\d+(?:\\s*,\\s*\\d+)+)/gi;
+  const verseListRe = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*:\s*(\d+(?:\s*,\s*\d+)+)/gi;
   let verseListMatch;
   while ((verseListMatch = verseListRe.exec(source))) {
     const book = resolveBibleBook(verseListMatch[1]);
