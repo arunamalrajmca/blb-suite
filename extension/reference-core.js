@@ -300,6 +300,7 @@ function resolveBibleReferenceText(text, options = {}) {
     }
   }
 
-  refs.sort((a, b) => source.indexOf(a.text) - source.indexOf(b.text));
+  const referencePosition = new Map(shorthandPositions.map(item => [item.ref, item.start]));
+  refs.sort((a, b) => (referencePosition.get(a) ?? Number.MAX_SAFE_INTEGER) - (referencePosition.get(b) ?? Number.MAX_SAFE_INTEGER));
   return refs;
 }
