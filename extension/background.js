@@ -5648,16 +5648,29 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const text = String(info.selectionText || '').trim();
   if (!text) return;
   if (!(await shouldShowBlbContextMenu(tab, text))) return;
-  if (normalizeSiteHostname(hostnameFromTabUrl(tab?.url)) === BLB_HOSTNAME) {
-    openBlbPageSelection(text, {activeIfNew:true, activateExisting:true})
-      .catch(err=>console.error('BLB Suite BLB-page selection:',err));
-    return;
+  try {
+    if (normalizeSiteHostname(hostnameFromTabUrl(tab?.url)) === BLB_HOSTNAME) {
+      await openBlbPageSelection(text, {activeIfNew:true, activateExisting:true});
+    } else {
+      const contextualRef = await getContextualSelectionReference(tab?.id, text);
+      await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true}, contextualRef || null);
+    }
+    await clearPageSelectionAfterBlbAction(tab?.id);
+  } catch (err) {
+    console.error('BLB Suite selection:',err);
   }
-  const contextualRef = await getContextualSelectionReference(tab?.id, text);
-  openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true}, contextualRef || null)
-    .catch(err=>console.error('BLB Suite selection:',err));
 });
 
+
+async function clearPageSelectionAfterBlbAction(tabId) {
+  if (!Number.isInteger(tabId)) return;
+  try {
+    await chrome.tabs.sendMessage(tabId, {type:'blbSuiteClearPageSelection'});
+  } catch (_) {
+    // Some supported pages (notably PDF viewers) may not expose a content
+    // script message endpoint; the BLB action itself should still complete.
+  }
+}
 
 async function handleOpenBibleSelectionCommand() {
   if (!(await isSuiteEnabled())) return;
@@ -5674,10 +5687,14 @@ async function handleOpenBibleSelectionCommand() {
 
     if (siteKey === BLB_HOSTNAME) {
       const selectedText = await getActiveTabSelection(tab.id);
-      if (selectedText) await openBlbPageSelection(selectedText, {activeIfNew:true, activateExisting:true});
+      if (selectedText) {
+        await openBlbPageSelection(selectedText, {activeIfNew:true, activateExisting:true});
+        await clearPageSelectionAfterBlbAction(tab.id);
+      }
       return;
     }
     await openCurrentSelectionInBlb(tab.id);
+    await clearPageSelectionAfterBlbAction(tab.id);
   } catch (err) {
     console.error('BLB Suite Alt+B:', err);
   }

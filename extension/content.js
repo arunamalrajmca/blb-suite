@@ -1692,6 +1692,7 @@ function handleDoubleClickBlb(event) {
               requestId,
               tabBehavior:{activeIfNew:false,activateExisting:true}
             });
+            clearBlbPageSelectionAfterAction();
             return true;
           }
           if (Date.now()-started<1500) requestAnimationFrame(dispatch);
@@ -1713,6 +1714,7 @@ function handleDoubleClickBlb(event) {
           requestId,
           tabBehavior:{activeIfNew:false,activateExisting:true}
         });
+        clearBlbPageSelectionAfterAction();
         return true;
       } catch (_) {
         return false;
@@ -2039,6 +2041,7 @@ function addBlbPageSelectionButton() {
       directUrl: blbPageButtonDirectUrl || null,
       tabBehavior:{activeIfNew:true,activateExisting:true}
     });
+    clearBlbPageSelectionAfterAction();
     setTimeout(() => { pageButtonActionInProgress = false; }, 0);
   });
 
@@ -2200,7 +2203,24 @@ function getPageSelectionSiteKey() {
   return host;
 }
 
+function clearBlbPageSelectionAfterAction() {
+  // Hide synchronously before clearing the native selection; otherwise the
+  // selectionchange observer can briefly re-show the floating button.
+  setBlbPageButtonVisible(false);
+  blbPageButtonSelection = '';
+  blbPageButtonContextualReference = null;
+  blbPageButtonDirectUrl = null;
+  lastSelectionContextualReference = null;
+  lastSelectionContextualText = '';
+  try { window.getSelection?.()?.removeAllRanges(); } catch (_) {}
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === 'blbSuiteClearPageSelection') {
+    clearBlbPageSelectionAfterAction();
+    sendResponse({ok:true});
+    return;
+  }
   if (message?.type === 'blbSuiteRefreshSiteFeatures') {
     Promise.all([
       refreshBlbPageSelectionButton().catch(()=>{}),
