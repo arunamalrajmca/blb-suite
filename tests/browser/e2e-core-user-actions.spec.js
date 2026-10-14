@@ -320,6 +320,33 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
   await removeTabById(extensionWorker, verse.id);
 });
 
+test('Double-Click anywhere in a consecutive comma-separated verse citation opens the full range', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const el = document.createElement('p');
+    el.id = 'blb-e2e-comma-verse-list';
+    el.innerHTML = '<span id="comma-book">Romans</span> <span id="comma-chapter">10</span><span>:</span><span id="comma-first-verse">9,</span><span id="comma-second-verse">10</span>';
+    el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(el);
+  });
+
+  // Every part of this citation belongs to the same consecutive verse range.
+  for (const selector of ['#comma-book', '#comma-chapter', '#comma-first-verse', '#comma-second-verse']) {
+    await page.locator(selector).dblclick();
+    const range = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.url);
+        return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/rom/10/9-10/';
+      } catch (_) { return false; }
+    });
+    expect(new URL(range.url).pathname).toBe('/kjv/rom/10/9-10/');
+    await removeTabById(extensionWorker, range.id);
+  }
+});
+
 test('Double-Click resolves references through custom and framework-generated DOM containers', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });

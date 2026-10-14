@@ -1143,20 +1143,38 @@ function getSelectionContextPosition() {
 function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionEnd) {
   const source = normalizeSelectionText(text);
   if (!source) return null;
-  // Handle same-book comma continuations by the exact selected token.
-  //   Psalms 1:2, 105:1  -> selecting 105 means Psalm 105:1
-  //   Psalms 1:2, 105     -> selecting 105 means Psalm 1:105, then the
-  //                            normal boundary rule clamps it to Psalm 1:6.
-  // Full book names resolve directly through BOOKS; short forms still use
-  // BOOK_ALIASES through resolveBibleBook().
+  // A same-chapter comma-separated list is one contextual citation for
+  // double-click purposes. Any part of the citation (book, chapter, first
+  // verse, comma, or continuation verse) opens the consecutive range.
+  // Separate comma continuations such as "Psalms 1:2, 105:1" still use the
+  // exact selected-token rule below.
+  const verseListRe = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*:\s*(\d+(?:\s*,\s*\d+)+)/gi;
+  let verseListMatch;
+  while ((verseListMatch = verseListRe.exec(source))) {
+    const book = resolveBibleBook(verseListMatch[1]);
+    if (!book) continue;
+    const citationStart = verseListMatch.index;
+    const citationEnd = citationStart + verseListMatch[0].length;
+    const overlapsCitation = selectionStart < citationEnd && selectionEnd > citationStart;
+    if (!overlapsCitation) continue;
+
+    const verses = verseListMatch[3].split(',').map(value => Number(value.trim()));
+    if (verses.some((verse, index) => index > 0 && verse !== verses[index - 1] + 1)) continue;
+    const chapter = Number(verseListMatch[2]);
+    const resolved = resolveBibleReference(book.name, chapter, verses[0], verses[verses.length - 1]);
+    if (resolved) return {book:resolved.book,chapter:resolved.chapter,from:resolved.from,to:resolved.to,url:resolved.url};
+  }
+
+  // Keep exact-token behavior for other comma continuations, e.g.
+  // "Psalms 1:2, 105:1" -> selecting 105 means Psalm 105:1.
   const commaContinuationRe = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*:\s*(\d+)\s*,\s*(\d+)(?:\s*:\s*(\d+))?/gi;
   let commaMatch;
   while ((commaMatch = commaContinuationRe.exec(source))) {
-    const book = resolveBibleBook(commaMatch[1]);
-    if (!book) continue;
     const secondNumberStart = commaMatch.index + commaMatch[0].lastIndexOf(commaMatch[4]);
     const secondNumberEnd = secondNumberStart + commaMatch[4].length;
     if (selectionStart < secondNumberStart || selectionEnd > secondNumberEnd) continue;
+    const book = resolveBibleBook(commaMatch[1]);
+    if (!book) continue;
     const chapter = commaMatch[5] ? Number(commaMatch[4]) : Number(commaMatch[2]);
     const verse = commaMatch[5] ? Number(commaMatch[5]) : Number(commaMatch[4]);
     const resolved = resolveBibleReference(book.name, chapter, verse, verse);
@@ -1505,6 +1523,22 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     if (selectionStart != null && selectionEnd != null) {
       selectionStart = toNormalizedOffset(selectionStart);
       selectionEnd = toNormalizedOffset(selectionEnd);
+    }
+
+    // Resolve consecutive comma-separated verse lists before consulting the
+    // general parser. The general parser may return only the first verse
+    // (e.g. Romans 10:9) even when the clicked token is the book or chapter
+    // and the surrounding citation is Romans 10:9,10. Use the exact clicked
+    // position to ensure this only expands a citation that contains the
+    // double-clicked token; unrelated references elsewhere in the block do
+    // not qualify.
+    if (selectionStart != null && selectionEnd != null) {
+      const verseListReference = resolveBibleReferenceFromContextWindow(
+        normalizedMatchSource,
+        selectionStart,
+        selectionEnd
+      );
+      if (verseListReference) return verseListReference;
     }
 
     // Book-name selections can still be identified reliably when a rich-text
