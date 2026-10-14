@@ -25,6 +25,16 @@ test('shared regex catalog exposes stable BLB constants and independent regex in
 });
 
 
+test('reference parser expands abbreviated book context in semicolon lists', async ({ extensionWorker }) => {
+  const refs = await extensionWorker.evaluate(() => resolveBibleReferenceText(
+    '(Pr 10:20,31; 15:2; 21:23; Eccl 10:12-14)'
+  ).map(ref => ({ book: ref.book, chapter: ref.chapter, from: ref.from, to: ref.to })));
+
+  expect(refs).toContainEqual({ book: 'Proverbs', chapter: 15, from: 2, to: 2 });
+  expect(refs).toContainEqual({ book: 'Proverbs', chapter: 21, from: 23, to: 23 });
+  expect(refs).toContainEqual({ book: 'Ecclesiastes', chapter: 10, from: 12, to: 14 });
+});
+
 test('shared sensitive-site classifier covers known providers without keyword false positives', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(() => ({
     chase: BLBShared.isSensitiveSiteHostname('chase.com'),
