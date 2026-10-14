@@ -25,6 +25,39 @@ test('shared regex catalog exposes stable BLB constants and independent regex in
 });
 
 
+test('reference parser expands abbreviated book context in semicolon lists', async ({ extensionWorker }) => {
+  const refs = await extensionWorker.evaluate(() => resolveBibleReferenceText(
+    '(Pr 10:20,31; 15:2; 21:23; Eccl 10:12-14)'
+  ).map(ref => [ref.book, ref.chapter, ref.from, ref.to]));
+
+  expect(refs).toEqual([
+    ['proverbs', 10, 20, 20],
+    ['proverbs', 10, 31, 31],
+    ['proverbs', 15, 2, 2],
+    ['proverbs', 21, 23, 23],
+    ['ecclesiastes', 10, 12, 14]
+  ]);
+});
+
+test('reference parser expands shorthand chapters and same-chapter comma verses in source order', async ({ extensionWorker }) => {
+  const refs = await extensionWorker.evaluate(() => resolveBibleReferenceText(
+    'Job 5:21; Jas 3:9-12. Pr 12:18; 13:10; 14:16; 18:6-7,21; 21:24; 28:25; 29:20'
+  ).map(ref => [ref.book, ref.chapter, ref.from, ref.to]));
+
+  expect(refs).toEqual([
+    ['job', 5, 21, 21],
+    ['james', 3, 9, 12],
+    ['proverbs', 12, 18, 18],
+    ['proverbs', 13, 10, 10],
+    ['proverbs', 14, 16, 16],
+    ['proverbs', 18, 6, 7],
+    ['proverbs', 18, 21, 21],
+    ['proverbs', 21, 24, 24],
+    ['proverbs', 28, 25, 25],
+    ['proverbs', 29, 20, 20]
+  ]);
+});
+
 test('shared sensitive-site classifier covers known providers without keyword false positives', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(() => ({
     chase: BLBShared.isSensitiveSiteHostname('chase.com'),

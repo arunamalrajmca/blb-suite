@@ -3592,10 +3592,51 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     addRef(book, Number(m[2]), Number(m[3]), Number(m[4] || m[3]), m[0]);
   }
 
-  // Preserve document order even though the three passes above can discover
-  // references in different orders. Deduplication has already happened.
-  refs.sort((a,b) => source.indexOf(a.text) - source.indexOf(b.text));
-  return refs;
+  // The shared parser is authoritative for conventional references and
+  // abbreviated reference lists. The legacy extractor remains a fallback for
+  // compact/spaced forms and chapter-only references that the shared parser
+  // intentionally does not cover. Previously the legacy results were inserted
+  // first, so a duplicate canonical reference could suppress the shared
+  // parser's better source token and corrupt shorthand-list ordering.
+  const sharedRefs = resolveBibleReferenceText(source);
+  const mergedRefs = [];
+  const mergedKeys = new Set();
+  const appendCanonical = parsed => {
+    const canonical = resolveBibleReference(parsed.book, parsed.chapter, parsed.from, parsed.to);
+    if (!canonical) return;
+    const key = `${canonical.book.urlKey}|${canonical.chapter}|${canonical.from}|${canonical.to}`;
+    if (mergedKeys.has(key)) return;
+    mergedKeys.add(key);
+    mergedRefs.push(parsed);
+  };
+  for (const parsed of sharedRefs) appendCanonical(parsed);
+  for (const parsed of refs) appendCanonical(parsed);
+
+  // Preserve source order using occurrence-aware positions. Exact source
+  // locations from the shared parser are preferred for shorthand entries;
+  // textual fallback is retained for legacy compact/spaced references.
+  const positioned = [];
+  const usedPositions = new Set();
+  for (const ref of mergedRefs) {
+    const needle = String(ref.text || '').trim();
+    let start = -1;
+    if (needle) {
+      for (let candidate = source.indexOf(needle); candidate >= 0; candidate = source.indexOf(needle, candidate + 1)) {
+        if (!usedPositions.has(candidate)) {
+          start = candidate;
+          break;
+        }
+      }
+    }
+    if (start >= 0) usedPositions.add(start);
+    positioned.push({ ref, start });
+  }
+  positioned.sort((a, b) => {
+    if (a.start < 0) return b.start < 0 ? 0 : 1;
+    if (b.start < 0) return -1;
+    return a.start - b.start;
+  });
+  return positioned.map(item => item.ref);
 }
 
 function normalizeSelectedScriptureText(selectionText) {

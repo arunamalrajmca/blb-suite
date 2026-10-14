@@ -236,6 +236,71 @@ function resolveBibleReferenceText(text, options = {}) {
     if (match) add(match.book, Number(m[2]), Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), match.text);
   }
 
-  refs.sort((a, b) => source.indexOf(a.text) - source.indexOf(b.text));
+  // Expand abbreviated entries in reference lists in source order. Processing
+  // each token sequentially is important: a comma verse (",21") may establish
+  // the nearest context for a following semicolon chapter:verse ("; 21:24").
+  // Separate passes lose that chain of context and silently drop later verses.
+  const shorthandPositions = refs.map(ref => {
+    const start = source.indexOf(ref.text);
+    return { ref, start, end: start + ref.text.length };
+  }).filter(item => item.start >= 0);
+
+  const findPriorReference = index => shorthandPositions
+    .filter(item => item.end <= index)
+    .sort((a, b) => b.end - a.end)[0] || null;
+
+  const addInheritedReference = (book, chapter, from, to, text, start, end) => {
+    const resolved = resolveBibleReference(book.name, chapter, from, to);
+    if (!resolved) return;
+    const key = resolved.book.urlKey + '|' + resolved.chapter + '|' + resolved.from + '|' + resolved.to;
+    if (seen.has(key)) return;
+    seen.add(key);
+    const ref = {
+      book: resolved.book.name,
+      chapter: resolved.chapter,
+      from: resolved.from,
+      to: resolved.to,
+      text: text.trim(),
+      url: resolved.url
+    };
+    refs.push(ref);
+    shorthandPositions.push({ ref, start, end });
+  };
+
+  // Match both shorthand forms in one pass so context always comes from the
+  // immediately preceding reference already encountered in the source.
+  const shorthandEntryRe = /[,;]\s*(\d+)\s*:\s*(\d+)(?:\s*[-–—]\s*(\d+))?(?![A-Za-z0-9])|,\s*(\d+)(?!\s*[:.]\s*\d)(?![A-Za-z0-9])/g;
+  while ((m = shorthandEntryRe.exec(source))) {
+    const entryStart = m.index + m[0].search(/\d/);
+    const prior = findPriorReference(m.index);
+    if (!prior) continue;
+
+    // A shorthand token must follow the previous reference directly, apart
+    // from list punctuation and whitespace. Never inherit across prose or a
+    // different, explicitly named book.
+    const gap = source.slice(prior.end, entryStart).replace(/^[,;\s]+/, '');
+    if (gap) continue;
+
+    const book = resolveBibleBook(prior.ref.book);
+    if (!book) continue;
+
+    if (m[4] !== undefined) {
+      // Bare comma verse: ",21" inherits both book and chapter.
+      if (!Number.isInteger(prior.ref.chapter) || !Number.isInteger(prior.ref.from)) continue;
+      addInheritedReference(
+        book, Number(prior.ref.chapter), Number(m[4]), Number(m[4]),
+        source.slice(entryStart, m.index + m[0].length), entryStart, m.index + m[0].length
+      );
+    } else {
+      // Chapter:verse shorthand: "; 15:2" inherits the previous book.
+      addInheritedReference(
+        book, Number(m[1]), Number(m[2]), m[3] ? Number(m[3]) : Number(m[2]),
+        source.slice(entryStart, m.index + m[0].length), entryStart, m.index + m[0].length
+      );
+    }
+  }
+
+  const referencePosition = new Map(shorthandPositions.map(item => [item.ref, item.start]));
+  refs.sort((a, b) => (referencePosition.get(a) ?? Number.MAX_SAFE_INTEGER) - (referencePosition.get(b) ?? Number.MAX_SAFE_INTEGER));
   return refs;
 }
