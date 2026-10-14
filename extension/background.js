@@ -3592,10 +3592,44 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     addRef(book, Number(m[2]), Number(m[3]), Number(m[4] || m[3]), m[0]);
   }
 
-  // Preserve document order even though the three passes above can discover
-  // references in different orders. Deduplication has already happened.
-  refs.sort((a,b) => source.indexOf(a.text) - source.indexOf(b.text));
-  return refs;
+  // The background selection opener uses this legacy extractor rather than
+  // resolveBibleReferenceText() directly. Merge the shared parser's results
+  // here as well, so abbreviated lists handled by the shared parser are not
+  // silently lost on the real Show on BLB / Alt+B / context-menu path.
+  // Keep the existing extractor for legacy compact/spaced forms and chapter-only
+  // references, but use canonical identity to avoid duplicates.
+  for (const parsed of resolveBibleReferenceText(source)) {
+    const key = `${String(parsed.book || '').toLowerCase()}|${parsed.chapter}|${parsed.from}|${parsed.to}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    refs.push(parsed);
+  }
+
+  // Preserve source order using occurrence-aware positions. indexOf(ref.text)
+  // is unsafe for shorthand tokens like "21": it can find an earlier verse
+  // number embedded in a different reference and reorder the opening sequence.
+  const positioned = [];
+  const usedPositions = new Set();
+  for (const ref of refs) {
+    const needle = String(ref.text || '').trim();
+    let start = -1;
+    if (needle) {
+      for (let candidate = source.indexOf(needle); candidate >= 0; candidate = source.indexOf(needle, candidate + 1)) {
+        if (!usedPositions.has(candidate)) {
+          start = candidate;
+          break;
+        }
+      }
+    }
+    if (start >= 0) usedPositions.add(start);
+    positioned.push({ ref, start });
+  }
+  positioned.sort((a, b) => {
+    if (a.start < 0) return b.start < 0 ? 0 : 1;
+    if (b.start < 0) return -1;
+    return a.start - b.start;
+  });
+  return positioned.map(item => item.ref);
 }
 
 function normalizeSelectedScriptureText(selectionText) {
