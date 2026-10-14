@@ -590,9 +590,54 @@ async function findMatchingMultiVerseTab(setKey, tabs) {
   return match;
 }
 
+function getContinuousSameChapterRange(refs) {
+  if (!Array.isArray(refs) || refs.length < 2) return null;
+  const first = refs[0];
+  if (!first || !Number.isInteger(first.bookNumber) || !Number.isInteger(first.chapter) ||
+      !Number.isInteger(first.from) || !Number.isInteger(first.to) ||
+      first.from < 1 || first.to < first.from) return null;
+
+  const sameChapter = refs.every(ref =>
+    ref &&
+    Number(ref.bookNumber) === Number(first.bookNumber) &&
+    Number(ref.chapter) === Number(first.chapter) &&
+    String(ref.version || 'kjv').toLowerCase() === String(first.version || 'kjv').toLowerCase() &&
+    Number.isInteger(ref.from) && Number.isInteger(ref.to) &&
+    ref.from >= 1 && ref.to >= ref.from
+  );
+  if (!sameChapter) return null;
+
+  const intervals = refs
+    .map(ref => ({from:Number(ref.from), to:Number(ref.to)}))
+    .sort((a,b) => a.from - b.from || a.to - b.to);
+  let from = intervals[0].from;
+  let to = intervals[0].to;
+  for (const interval of intervals.slice(1)) {
+    // Overlapping or directly adjacent ranges together form one continuous
+    // verse range; a gap means the MultiVerse destination must be preserved.
+    if (interval.from > to + 1) return null;
+    to = Math.max(to, interval.to);
+  }
+  return {bookNumber:Number(first.bookNumber), chapter:Number(first.chapter), from, to, version:String(first.version || 'kjv').toLowerCase()};
+}
+
 async function openBlbMultiVerseRefs(refs, active = true) {
   const canonical = canonicalMultiVerseSet(refs);
   if (!canonical.key || canonical.refs.length < 2) return {ok:false, reason:"not-enough-references", count:canonical.refs.length};
+
+  // A same-chapter, continuous set is clearer in the normal BLB chapter
+  // reader than in MultiVerse. Only collapse when every requested verse is
+  // represented by the continuous range; cross-chapter and gapped sets retain
+  // the established MultiVerse behavior.
+  const continuousRange = getContinuousSameChapterRange(canonical.refs);
+  if (continuousRange) {
+    const book = bookData.find(item => Number(item.bookNumber) === continuousRange.bookNumber);
+    if (book?.urlKey) {
+      const rangeUrl = `https://www.blueletterbible.org/${encodeURIComponent(continuousRange.version)}/${book.urlKey}/${continuousRange.chapter}/${continuousRange.from}-${continuousRange.to}/`;
+      const tab = await openBlbDestination(rangeUrl, !!active, !!active);
+      return {ok:true, count:canonical.refs.length, collapsedToRange:true, range:{book:book.name,chapter:continuousRange.chapter,from:continuousRange.from,to:continuousRange.to}, tabId:tab?.id ?? tab?.tab?.id ?? null};
+    }
+  }
 
   // Restrict the lookup to BLB MultiVerse handoff tabs rather than every
   // browser tab. This keeps MultiVerse selection latency independent of the
