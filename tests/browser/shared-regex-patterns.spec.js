@@ -71,6 +71,22 @@ test('reference parser normalizes Unicode mathematical-bold Bible references', a
   expect(refs.ordinary).toEqual([['proverbs', 14, 3, 3]]);
 });
 
+test('reference parser accepts verse-part suffixes without changing the destination verse', async ({ extensionWorker }) => {
+  const refs = await extensionWorker.evaluate(() => ({
+    esther: resolveBibleReferenceText('"...such a time as this." (Esther 4:14c)')
+      .map(ref => [ref.book, ref.chapter, ref.from, ref.to, ref.url]),
+    romans: resolveBibleReferenceText('"For whatsoever things were written aforetime..." (Romans 15:4a)')
+      .map(ref => [ref.book, ref.chapter, ref.from, ref.to, ref.url])
+  }));
+
+  expect(refs.esther).toEqual([[
+    'esther', 4, 14, 14, 'https://www.blueletterbible.org/kjv/esther/4/14/'
+  ]]);
+  expect(refs.romans).toEqual([[
+    'romans', 15, 4, 4, 'https://www.blueletterbible.org/kjv/rom/15/4/'
+  ]]);
+});
+
 test('shared sensitive-site classifier covers known providers without keyword false positives', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(() => ({
     chase: BLBShared.isSensitiveSiteHostname('chase.com'),
