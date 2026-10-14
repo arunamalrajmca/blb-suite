@@ -320,6 +320,41 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
   await removeTabById(extensionWorker, verse.id);
 });
 
+test('Double-Click opens consecutive comma-separated verses as a range when the book is selected', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const el = document.createElement('p');
+    el.id = 'blb-e2e-comma-verse-list';
+    el.innerHTML = '<span id="comma-book">Romans</span> <span>10:9,</span><span id="comma-second-verse">10</span>';
+    el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(el);
+  });
+
+  await page.locator('#comma-book').dblclick();
+  const range = await waitForTab(extensionWorker, tab => {
+    try {
+      const url = new URL(tab.url);
+      return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/rom/10/9-10/';
+    } catch (_) { return false; }
+  });
+  expect(new URL(range.url).pathname).toBe('/kjv/rom/10/9-10/');
+  await removeTabById(extensionWorker, range.id);
+
+  // Selecting only the continuation verse must retain exact-token behavior.
+  await page.locator('#comma-second-verse').dblclick();
+  const secondVerse = await waitForTab(extensionWorker, tab => {
+    try {
+      const url = new URL(tab.url);
+      return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/rom/10/10/';
+    } catch (_) { return false; }
+  });
+  expect(new URL(secondVerse.url).pathname).toBe('/kjv/rom/10/10/');
+  await removeTabById(extensionWorker, secondVerse.id);
+});
+
 test('Double-Click resolves references through custom and framework-generated DOM containers', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
