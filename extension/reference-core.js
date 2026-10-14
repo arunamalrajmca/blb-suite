@@ -236,6 +236,47 @@ function resolveBibleReferenceText(text, options = {}) {
     if (match) add(match.book, Number(m[2]), Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), match.text);
   }
 
+  // Expand abbreviated chapter:verse entries in reference lists when the
+  // book is inherited from the immediately preceding reference, e.g.
+  // "Pr 10:20,31; 15:2; 21:23; Eccl 10:12-14". Do not infer context across
+  // prose; between the prior reference and shorthand entry only list
+  // separators, whitespace, and optional bare verse numbers may occur.
+  const shorthandPositions = refs.map(ref => ({
+    ref,
+    start: source.indexOf(ref.text),
+    end: source.indexOf(ref.text) + ref.text.length
+  })).filter(item => item.start >= 0);
+  const shorthandColonRe = /[,;]\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*[-–—]\\s*(\\d+))?(?![A-Za-z0-9])/g;
+  while ((m = shorthandColonRe.exec(source))) {
+    const entryStart = m.index + m[0].search(/\\d/);
+    const prior = shorthandPositions
+      .filter(item => item.end <= m.index)
+      .sort((a, b) => b.end - a.end)[0];
+    if (!prior) continue;
+    const gap = source.slice(prior.end, entryStart).replace(/^[,;\\s]+/, '');
+    if (gap && !/^\\d+(?:\\s*[,;]\\s*\\d+)*$/.test(gap)) continue;
+    const book = resolveBibleBook(prior.ref.book);
+    if (!book) continue;
+    const chapter = Number(m[1]);
+    const from = Number(m[2]);
+    const to = m[3] ? Number(m[3]) : from;
+    const resolved = resolveBibleReference(book.name, chapter, from, to);
+    if (!resolved) continue;
+    const key = `${resolved.book.urlKey}|${resolved.chapter}|${resolved.from}|${resolved.to}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const ref = {
+      book: resolved.book.name,
+      chapter: resolved.chapter,
+      from: resolved.from,
+      to: resolved.to,
+      text: source.slice(entryStart, m.index + m[0].length).trim(),
+      url: resolved.url
+    };
+    refs.push(ref);
+    shorthandPositions.push({ ref, start: entryStart, end: m.index + m[0].length });
+  }
+
   refs.sort((a, b) => source.indexOf(a.text) - source.indexOf(b.text));
   return refs;
 }
