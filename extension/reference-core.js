@@ -269,16 +269,16 @@ function resolveBibleReferenceText(text, options = {}) {
 
   // Match both shorthand forms in one pass so context always comes from the
   // immediately preceding reference already encountered in the source.
-  const shorthandEntryRe = /[,;]\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*[-–—]\\s*(\\d+))?(?![A-Za-z0-9])|,\\s*(\\d+)(?!\\s*[:.]\\s*\\d)(?![A-Za-z0-9])/g;
+  const shorthandEntryRe = /[,;]\s*(\d+)\s*:\s*(\d+)(?:\s*[-–—]\s*(\d+))?(?![A-Za-z0-9])|,\s*(\d+)(?!\s*[:.]\s*\d)(?![A-Za-z0-9])/g;
   while ((m = shorthandEntryRe.exec(source))) {
-    const entryStart = m.index + m[0].search(/\\d/);
+    const entryStart = m.index + m[0].search(/\d/);
     const prior = findPriorReference(m.index);
     if (!prior) continue;
 
     // A shorthand token must follow the previous reference directly, apart
     // from list punctuation and whitespace. Never inherit across prose or a
     // different, explicitly named book.
-    const gap = source.slice(prior.end, entryStart).replace(/^[,;\\s]+/, '');
+    const gap = source.slice(prior.end, entryStart).replace(/^[,;\s]+/, '');
     if (gap) continue;
 
     const book = resolveBibleBook(prior.ref.book);
