@@ -1267,7 +1267,7 @@ function getStandaloneBookReference(selectionText) {
 
 function getDoubleClickBlockContextReference(selectionText, target, event = null) {
   try {
-    let selected = normalizeSelectionText(selectionText);
+    let selected = normalizeSelectionText(selectionText).normalize('NFKC');
     const initialNode = target instanceof Element ? target : (target?.parentElement || null);
 
     // Chromium can report an empty/whitespace native selection immediately
@@ -1284,7 +1284,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       ];
       for (const candidate of candidates) {
         if (!(candidate instanceof Element)) continue;
-        const candidateText = normalizeSelectionText(candidate.textContent || '');
+        const candidateText = normalizeSelectionText(candidate.textContent || '').normalize('NFKC');
         if (candidateText && !/\\s/.test(candidateText)) {
           selected = candidateText;
           break;
@@ -1312,7 +1312,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     let block = null;
     for (const candidate of blockCandidates) {
       const candidateRaw = String(candidate.textContent || '');
-      const candidateSource = normalizeSelectionText(candidateRaw);
+      const candidateSource = normalizeSelectionText(candidateRaw).normalize('NFKC');
       // Normalize typographic dashes for source-to-parser matching. Each dash
       // maps to one code unit, so DOM selection offsets remain unchanged.
       const candidateMatchSource = candidateSource.replace(/[\u2010-\u2015\u2212]/g, '-');
@@ -1325,7 +1325,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const normalizedOffset = (rawText, offset) => {
         const bounded = Math.max(0, Math.min(rawText.length, offset));
         const prefix = rawText.slice(0, bounded);
-        const normalizedPrefix = normalizeSelectionText(prefix);
+        const normalizedPrefix = normalizeSelectionText(prefix).normalize('NFKC');
         // Prefix normalization trims trailing whitespace; restore one space
         // when it separates this prefix from the next visible token.
         const separator = normalizedPrefix.length > 0 &&
@@ -1351,13 +1351,13 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       if (start == null || end == null || end <= start) {
         // Locate the selected token in normalized text; don't let a trimmed
         // prefix shift later adjacent references one character to the left.
-        const tokenIndex = candidateMatchSource.indexOf(selected.replace(/[\\u2010-\\u2015\\u2212]/g, '-'));
+        const tokenIndex = candidateMatchSource.indexOf(selected.normalize('NFKC').replace(/[\\u2010-\\u2015\\u2212]/g, '-'));
         if (tokenIndex >= 0) { start = tokenIndex; end = tokenIndex + selected.length; }
       }
 
       if (start != null && end != null) {
         const containsReference = candidateRefs.some(ref => {
-          const refText = normalizeSelectionText(ref.text || '').replace(/[\u2010-\u2015\u2212]/g, '-');
+          const refText = normalizeSelectionText(ref.text || '').normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-');
           if (!refText) return false;
           let from = candidateMatchSource.indexOf(refText);
           while (from >= 0) {
@@ -1376,7 +1376,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     if (!block) return null;
 
     const rawSource = String(block.textContent || '');
-    const source = normalizeSelectionText(rawSource);
+    const source = normalizeSelectionText(rawSource).normalize('NFKC');
     if (!source) return null;
     const refs = resolveBibleReferenceText(source);
     if (!refs.length) return null;
@@ -1384,11 +1384,11 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // whitespace. Occurrence matching must use that same normalized text,
     // while Range-derived offsets must be translated from the original DOM
     // text into the normalized string before comparing positions.
-    const normalizedMatchSource = normalizeSelectionText(rawSource).replace(/[\u2010-\u2015\u2212]/g, '-');
+    const normalizedMatchSource = normalizeSelectionText(rawSource).normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-');
     const toNormalizedOffset = offset => {
       const boundedOffset = Math.max(0, Math.min(rawSource.length, offset));
       const prefix = rawSource.slice(0, boundedOffset);
-      const normalizedPrefix = normalizeSelectionText(prefix);
+      const normalizedPrefix = normalizeSelectionText(prefix).normalize('NFKC');
       // normalizeSelectionText trims both ends. When the raw prefix ends at
       // a separator between two tokens, the full normalized source retains
       // one interior space at that position. Count that separator so offsets
@@ -1416,7 +1416,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     let selectionStart = null;
     let selectionEnd = null;
     if (selectedRange) {
-      const selectedMeaningfulText = normalizeSelectionText(sel.toString());
+      const selectedMeaningfulText = normalizeSelectionText(sel.toString()).normalize('NFKC');
       if (selectedMeaningfulText) {
         selectionStart = getOffset(selectedRange.startContainer, selectedRange.startOffset);
         selectionEnd = getOffset(selectedRange.endContainer, selectedRange.endOffset);
@@ -1435,7 +1435,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // is only "1", so its text alone cannot tell chapter 1 from verse 1.
     try {
       const contextualTarget = getDoubleClickTargetElement(event) || initialNode;
-      const targetText = normalizeSelectionText(contextualTarget?.textContent || '');
+      const targetText = normalizeSelectionText(contextualTarget?.textContent || '').normalize('NFKC');
       if (contextualTarget && block.contains(contextualTarget) && targetText === selected) {
         const targetRange = document.createRange();
         targetRange.selectNodeContents(contextualTarget);
@@ -1487,7 +1487,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     if (selectionStart == null || selectionEnd == null) return null;
 
     const findOccurrences = (needle) => {
-      const value = normalizeSelectionText(needle || '');
+      const value = normalizeSelectionText(needle || '').normalize('NFKC');
       if (!value) return [];
       const escapeRegex = part => part.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
       const parts = value.split(/\s+/).map(part => escapeRegex(part).replace(/[\u2010-\u2015\u2212]/g, '-').replace(/-/g, '[-\\u2010-\\u2015\\u2212]'));
@@ -1544,7 +1544,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const refBook = resolveBibleBook(ref.book);
       if (!selectedBook || !refBook || selectedBook.urlKey !== refBook.urlKey ||
           nearestSelectedBookPosition == null) continue;
-      const normalizedRefText = normalizeSelectionText(ref.text || '').replace(/[\u2010-\u2015\u2212]/g, '-');
+      const normalizedRefText = normalizeSelectionText(ref.text || '').normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-');
       const escapedRefBook = refBook.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
       const bookInRef = new RegExp('(?<![A-Za-z0-9])' + escapedRefBook + '(?![A-Za-z0-9])', 'i').exec(normalizedRefText);
       if (!bookInRef) continue;

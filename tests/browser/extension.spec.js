@@ -200,6 +200,35 @@ test.describe('core user-visible E2E', () => {
       }), expectedPath);
     }
   });
+  test('Double-click resolves a Unicode-styled Bible book in a reference', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const paragraph = document.createElement('p');
+      paragraph.id = 'blb-e2e-doubleclick-unicode-reference';
+      paragraph.innerHTML = '<span id="styled-proverbs-book">𝐏𝐫𝐨𝐯𝐞𝐫𝐛𝐬</span> <span>𝟏𝟒</span>:<span>𝟑</span>';
+      document.body.appendChild(paragraph);
+    });
+
+    const expectedPath = '/kjv/pro/14/3/';
+    await page.locator('#styled-proverbs-book').dblclick();
+    await activateBlbTabForPath(extensionWorker, expectedPath, {
+      fragment: '𝐏𝐫𝐨𝐯𝐞𝐫𝐛𝐬',
+      selector: '#blb-e2e-doubleclick-unicode-reference',
+      selectedText: '𝐏𝐫𝐨𝐯𝐞𝐫𝐛𝐬'
+    });
+    await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+      for (const tab of tabs) {
+        try {
+          const url = new URL(String(tab.url || tab.pendingUrl || ''));
+          if (url.hostname.endsWith('blueletterbible.org') && url.pathname === path && tab.id != null) {
+            await chrome.tabs.remove(tab.id);
+          }
+        } catch (_) {}
+      }
+    }), expectedPath);
+  });
   test('Double-click selects only the adjacent reference in a multi-reference sentence', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
