@@ -4,7 +4,10 @@
 // remains in content.js because the service worker cannot access the DOM.
 
 function normalizeBibleReferenceText(value) {
-  return String(value || '')
+  // Unicode mathematical alphanumeric characters (e.g. Facebook bold text)
+  // are presentation variants of ordinary letters/digits. Normalize them
+  // before reference matching, without altering the user's original selection.
+  return String(value || '').normalize('NFKC')
     .replace(/[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '')
     .replace(/[\u00A0\u2007\u202F]/g, ' ')
     .replace(/[\u2010\u2011\u2012\u2013\u2014]/g, '-')
