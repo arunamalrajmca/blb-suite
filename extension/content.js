@@ -1143,46 +1143,41 @@ function getSelectionContextPosition() {
 function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionEnd) {
   const source = normalizeSelectionText(text);
   if (!source) return null;
-  // Handle same-book comma continuations by the exact selected token.
-  //   Psalms 1:2, 105:1  -> selecting 105 means Psalm 105:1
-  //   Psalms 1:2, 105     -> selecting 105 means Psalm 1:105, then the
-  //                            normal boundary rule clamps it to Psalm 1:6.
-  // Full book names resolve directly through BOOKS; short forms still use
-  // BOOK_ALIASES through resolveBibleBook().
-  const commaContinuationRe = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*:\s*(\d+)\s*,\s*(\d+)(?:\s*:\s*(\d+))?/gi;
-  let commaMatch;
-  while ((commaMatch = commaContinuationRe.exec(source))) {
-    const book = resolveBibleBook(commaMatch[1]);
-    if (!book) continue;
-    const secondNumberStart = commaMatch.index + commaMatch[0].lastIndexOf(commaMatch[4]);
-    const secondNumberEnd = secondNumberStart + commaMatch[4].length;
-    if (selectionStart < secondNumberStart || selectionEnd > secondNumberEnd) continue;
-    const chapter = commaMatch[5] ? Number(commaMatch[4]) : Number(commaMatch[2]);
-    const verse = commaMatch[5] ? Number(commaMatch[5]) : Number(commaMatch[4]);
-    const resolved = resolveBibleReference(book.name, chapter, verse, verse);
-    if (resolved) return {book:resolved.book,chapter:resolved.chapter,from:resolved.from,to:resolved.to,url:resolved.url};
-  }
-
-  // When the book name (or the complete citation) is selected in a
-  // same-chapter comma-separated verse list, open the combined range only
-  // when every listed verse is consecutive. Keep the exact-token handler
-  // above authoritative for a selection of the second verse number itself.
+  // A same-chapter comma-separated list is one contextual citation for
+  // double-click purposes. Any part of the citation (book, chapter, first
+  // verse, comma, or continuation verse) opens the consecutive range.
+  // Separate comma continuations such as "Psalms 1:2, 105:1" still use the
+  // exact selected-token rule below.
   const verseListRe = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*:\s*(\d+(?:\s*,\s*\d+)+)/gi;
   let verseListMatch;
   while ((verseListMatch = verseListRe.exec(source))) {
     const book = resolveBibleBook(verseListMatch[1]);
     if (!book) continue;
-    const bookStart = verseListMatch.index;
-    const bookEnd = bookStart + verseListMatch[1].length;
-    const citationEnd = verseListMatch.index + verseListMatch[0].length;
-    const selectsBook = selectionStart < bookEnd && selectionEnd > bookStart;
-    const selectsWholeCitation = selectionStart <= bookStart && selectionEnd >= citationEnd;
-    if (!selectsBook && !selectsWholeCitation) continue;
+    const citationStart = verseListMatch.index;
+    const citationEnd = citationStart + verseListMatch[0].length;
+    const overlapsCitation = selectionStart < citationEnd && selectionEnd > citationStart;
+    if (!overlapsCitation) continue;
 
     const verses = verseListMatch[3].split(',').map(value => Number(value.trim()));
     if (verses.some((verse, index) => index > 0 && verse !== verses[index - 1] + 1)) continue;
     const chapter = Number(verseListMatch[2]);
     const resolved = resolveBibleReference(book.name, chapter, verses[0], verses[verses.length - 1]);
+    if (resolved) return {book:resolved.book,chapter:resolved.chapter,from:resolved.from,to:resolved.to,url:resolved.url};
+  }
+
+  // Keep exact-token behavior for other comma continuations, e.g.
+  // "Psalms 1:2, 105:1" -> selecting 105 means Psalm 105:1.
+  const commaContinuationRe = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*:\s*(\d+)\s*,\s*(\d+)(?:\s*:\s*(\d+))?/gi;
+  let commaMatch;
+  while ((commaMatch = commaContinuationRe.exec(source))) {
+    const secondNumberStart = commaMatch.index + commaMatch[0].lastIndexOf(commaMatch[4]);
+    const secondNumberEnd = secondNumberStart + commaMatch[4].length;
+    if (selectionStart < secondNumberStart || selectionEnd > secondNumberEnd) continue;
+    const book = resolveBibleBook(commaMatch[1]);
+    if (!book) continue;
+    const chapter = commaMatch[5] ? Number(commaMatch[4]) : Number(commaMatch[2]);
+    const verse = commaMatch[5] ? Number(commaMatch[5]) : Number(commaMatch[4]);
+    const resolved = resolveBibleReference(book.name, chapter, verse, verse);
     if (resolved) return {book:resolved.book,chapter:resolved.chapter,from:resolved.from,to:resolved.to,url:resolved.url};
   }
 
