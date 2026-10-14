@@ -254,7 +254,7 @@ function resolveBibleReferenceText(text, options = {}) {
       .sort((a, b) => b.end - a.end)[0];
     if (!prior) continue;
     const gap = source.slice(prior.end, entryStart).replace(/^[,;\\s]+/, '');
-    if (gap && !/^\\d+(?:\\s*[,;]\\s*\\d+)*$/.test(gap)) continue;
+    if (gap && !/^\\d+(?:\\s*[,;]\\s*\\d+)*\\s*[,;]?$/.test(gap)) continue;
     const book = resolveBibleBook(prior.ref.book);
     if (!book) continue;
     const chapter = Number(m[1]);
