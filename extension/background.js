@@ -3592,27 +3592,32 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     addRef(book, Number(m[2]), Number(m[3]), Number(m[4] || m[3]), m[0]);
   }
 
-  // The background selection opener uses this legacy extractor rather than
-  // resolveBibleReferenceText() directly. Merge the shared parser's results
-  // here as well, so abbreviated lists handled by the shared parser are not
-  // silently lost on the real Show on BLB / Alt+B / context-menu path.
-  // Keep the existing extractor for legacy compact/spaced forms and chapter-only
-  // references, but use canonical identity to avoid duplicates.
-  for (const parsed of resolveBibleReferenceText(source)) {
+  // The shared parser is authoritative for conventional references and
+  // abbreviated reference lists. The legacy extractor remains a fallback for
+  // compact/spaced forms and chapter-only references that the shared parser
+  // intentionally does not cover. Previously the legacy results were inserted
+  // first, so a duplicate canonical reference could suppress the shared
+  // parser's better source token and corrupt shorthand-list ordering.
+  const sharedRefs = resolveBibleReferenceText(source);
+  const mergedRefs = [];
+  const mergedKeys = new Set();
+  const appendCanonical = parsed => {
     const canonical = resolveBibleReference(parsed.book, parsed.chapter, parsed.from, parsed.to);
-    if (!canonical) continue;
+    if (!canonical) return;
     const key = `${canonical.book.urlKey}|${canonical.chapter}|${canonical.from}|${canonical.to}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    refs.push(parsed);
-  }
+    if (mergedKeys.has(key)) return;
+    mergedKeys.add(key);
+    mergedRefs.push(parsed);
+  };
+  for (const parsed of sharedRefs) appendCanonical(parsed);
+  for (const parsed of refs) appendCanonical(parsed);
 
-  // Preserve source order using occurrence-aware positions. indexOf(ref.text)
-  // is unsafe for shorthand tokens like "21": it can find an earlier verse
-  // number embedded in a different reference and reorder the opening sequence.
+  // Preserve source order using occurrence-aware positions. Exact source
+  // locations from the shared parser are preferred for shorthand entries;
+  // textual fallback is retained for legacy compact/spaced references.
   const positioned = [];
   const usedPositions = new Set();
-  for (const ref of refs) {
+  for (const ref of mergedRefs) {
     const needle = String(ref.text || '').trim();
     let start = -1;
     if (needle) {
