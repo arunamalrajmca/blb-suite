@@ -1525,6 +1525,22 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       selectionEnd = toNormalizedOffset(selectionEnd);
     }
 
+    // Resolve consecutive comma-separated verse lists before consulting the
+    // general parser. The general parser may return only the first verse
+    // (e.g. Romans 10:9) even when the clicked token is the book or chapter
+    // and the surrounding citation is Romans 10:9,10. Use the exact clicked
+    // position to ensure this only expands a citation that contains the
+    // double-clicked token; unrelated references elsewhere in the block do
+    // not qualify.
+    if (selectionStart != null && selectionEnd != null) {
+      const verseListReference = resolveBibleReferenceFromContextWindow(
+        normalizedMatchSource,
+        selectionStart,
+        selectionEnd
+      );
+      if (verseListReference) return verseListReference;
+    }
+
     // Book-name selections can still be identified reliably when a rich-text
     // DOM makes Range-derived offsets drift after whitespace normalization.
     // Anchor the selected canonical book token to the same parsed occurrence;
