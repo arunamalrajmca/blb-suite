@@ -3599,7 +3599,9 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // Keep the existing extractor for legacy compact/spaced forms and chapter-only
   // references, but use canonical identity to avoid duplicates.
   for (const parsed of resolveBibleReferenceText(source)) {
-    const key = `${String(parsed.book || '').toLowerCase()}|${parsed.chapter}|${parsed.from}|${parsed.to}`;
+    const canonical = resolveBibleReference(parsed.book, parsed.chapter, parsed.from, parsed.to);
+    if (!canonical) continue;
+    const key = `${canonical.book.urlKey}|${canonical.chapter}|${canonical.from}|${canonical.to}`;
     if (seen.has(key)) continue;
     seen.add(key);
     refs.push(parsed);
