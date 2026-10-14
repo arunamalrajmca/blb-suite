@@ -1136,7 +1136,18 @@ function getSelectionContextPosition() {
     const before = normalizeSelectionText(beforeRange.toString());
     const selected = normalizeSelectionText(range.toString());
     const after = normalizeSelectionText(afterRange.toString());
-    return { text: before + selected + after, start: before.length, end: before.length + selected.length };
+    if (!selected) return null;
+
+    // Normalizing each Range segment separately trims its boundary whitespace.
+    // Joining those trimmed strings directly can turn a real citation such as
+    // "Psalm 41:10" into "Psalm41:10" when only "41" or "Psalm" is selected.
+    // Keep an explicit separator around the selected segment. The reference
+    // grammar tolerates spaces around punctuation, and the adjusted offsets
+    // continue to point at the exact selected text.
+    const prefix = before ? before + ' ' : '';
+    const suffix = after ? ' ' + after : '';
+    const start = prefix.length;
+    return { text: prefix + selected + suffix, start, end: start + selected.length };
   } catch (_) { return null; }
 }
 
