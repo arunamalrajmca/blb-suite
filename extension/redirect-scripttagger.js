@@ -47,29 +47,26 @@
     return Boolean(event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey);
   }
 
-  // ScriptTagger can wrap only the book name in a citation and give that
-  // anchor a book-home URL (chapter 1, verse 1). When the surrounding citation
-  // includes a specific chapter and verse, use it instead. Verse-part suffixes
-  // such as a/b/c are labels, not part of the BLB destination.
+  // ScriptTagger may wrap only the book name in a citation and give that
+  // anchor a book-home URL (chapter 1, verse 1). Prefer the chapter and verse
+  // in the surrounding citation when available. A verse-part suffix (a/b/c)
+  // is a label, not part of the destination.
   function contextualVerseDestination(link, fallbackUrl) {
-    const bookText = String(link.textContent || '').replace(/\\s+/g, ' ').trim();
+    const bookText = String(link.textContent || '').replace(/\s+/g, ' ').trim();
     if (!bookText) return fallbackUrl;
-    const context = String(link.parentElement?.textContent || '').replace(/\\s+/g, ' ');
-    const escapedBook = bookText.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\  function isModifiedLinkActivation(event) {
-    return Boolean(event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey);
-  }
-
-  document.addEventListener('click', event => {');
-    const pattern = new RegExp(`(?:^|[^A-Za-z])${escapedBook}\\\\s+(\\\\d+)\\\\s*:\\\\s*(\\\\d+)(?:[a-z])?(?=$|[^A-Za-z0-9])`, 'ig');
+    const context = String(link.parentElement?.textContent || '').replace(/\s+/g, ' ');
+    const escapedBook = bookText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const pattern = new RegExp('(?:^|[^A-Za-z])' + escapedBook + '\\s+(\\d+)\\s*:\\s*(\\d+)(?:[a-z])?(?=$|[^A-Za-z0-9])', 'ig');
     let match;
     let lastMatch = null;
     while ((match = pattern.exec(context)) !== null) lastMatch = match;
     if (!lastMatch) return fallbackUrl;
+
     try {
       const parsed = new URL(fallbackUrl);
-      const path = parsed.pathname.match(/^(.*\\/kjv\\/[^/]+\\/)\\d+\\/\\d+(\\/.*)$/i);
+      const path = parsed.pathname.match(/^(.*\/kjv\/[^/]+\/)\d+\/\d+(\/.*)$/i);
       if (!path) return fallbackUrl;
-      parsed.pathname = `${path[1]}${Number(lastMatch[1])}/${Number(lastMatch[2])}${path[2]}`;
+      parsed.pathname = path[1] + Number(lastMatch[1]) + '/' + Number(lastMatch[2]) + path[2];
       return parsed.href;
     } catch (_) {
       return fallbackUrl;
