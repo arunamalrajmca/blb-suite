@@ -1133,17 +1133,44 @@ function getSelectionContextPosition() {
     // Normalize each segment separately so the selection offsets stay aligned
     // with the normalized context string. Normalizing only after concatenation
     // would collapse whitespace before the selected text and shift its offsets.
-    const before = normalizeSelectionText(beforeRange.toString());
-    const selected = normalizeSelectionText(range.toString());
-    const after = normalizeSelectionText(afterRange.toString());
+    // Range.toString() omits the visible boundary represented by <br> in
+    // Chromium. Instagram captions use <br> extensively, so a plain range
+    // string can concatenate unrelated sentences and references (for example
+    // "Psalm 102:20 ... Psalm 38:11-14"). Clone the range and serialize its DOM
+    // structure, converting line breaks and block boundaries into whitespace.
+    // Use the same serializer for all three segments so selection offsets remain
+    // aligned with the context that the reference resolver actually receives.
+    const rangeText = sourceRange => {
+      const fragment = sourceRange.cloneContents();
+      const pieces = [];
+      const walk = current => {
+        for (const child of current.childNodes || []) {
+          if (child.nodeType === Node.TEXT_NODE) {
+            pieces.push(child.nodeValue || '');
+          } else if (child.nodeType === Node.ELEMENT_NODE) {
+            const tag = child.tagName;
+            if (tag === 'BR') {
+              pieces.push(' ');
+              continue;
+            }
+            const blockLike = /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DL|DT|FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|LI|MAIN|NAV|OL|P|PRE|SECTION|TABLE|TR|UL)$/.test(tag);
+            if (blockLike && pieces.length && !/\\s$/.test(pieces[pieces.length - 1])) pieces.push(' ');
+            walk(child);
+            if (blockLike && pieces.length && !/^\\s/.test(pieces[pieces.length - 1])) pieces.push(' ');
+          }
+        }
+      };
+      walk(fragment);
+      return pieces.join('');
+    };
+    const before = normalizeSelectionText(rangeText(beforeRange));
+    const selected = normalizeSelectionText(rangeText(range));
+    const after = normalizeSelectionText(rangeText(afterRange));
     if (!selected) return null;
 
-    // Normalizing each Range segment separately trims its boundary whitespace.
-    // Joining those trimmed strings directly can turn a real citation such as
-    // "Psalm 41:10" into "Psalm41:10" when only "41" or "Psalm" is selected.
-    // Keep an explicit separator around the selected segment. The reference
-    // grammar tolerates spaces around punctuation, and the adjusted offsets
-    // continue to point at the exact selected text.
+    // Normalize segments independently, then preserve a separator between
+    // each segment. This keeps citations intact when only a word or number is
+    // selected inside a nested span, while <br> keeps adjacent citations apart.
     const prefix = before ? before + ' ' : '';
     const suffix = after ? ' ' + after : '';
     const start = prefix.length;
