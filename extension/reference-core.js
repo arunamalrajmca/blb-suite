@@ -236,45 +236,63 @@ function resolveBibleReferenceText(text, options = {}) {
     if (match) add(match.book, Number(m[2]), Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), match.text);
   }
 
-  // Expand abbreviated chapter:verse entries in reference lists when the
-  // book is inherited from the immediately preceding reference, e.g.
-  // "Pr 10:20,31; 15:2; 21:23; Eccl 10:12-14". Do not infer context across
-  // prose; between the prior reference and shorthand entry only list
-  // separators, whitespace, and optional bare verse numbers may occur.
-  const shorthandPositions = refs.map(ref => ({
-    ref,
-    start: source.indexOf(ref.text),
-    end: source.indexOf(ref.text) + ref.text.length
-  })).filter(item => item.start >= 0);
-  const shorthandColonRe = /[,;]\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*[-–—]\\s*(\\d+))?(?![A-Za-z0-9])/g;
-  while ((m = shorthandColonRe.exec(source))) {
-    const entryStart = m.index + m[0].search(/\\d/);
-    const prior = shorthandPositions
-      .filter(item => item.end <= m.index)
-      .sort((a, b) => b.end - a.end)[0];
-    if (!prior) continue;
-    const gap = source.slice(prior.end, entryStart).replace(/^[,;\\s]+/, '');
-    if (gap && !/^\\d+(?:\\s*[,;]\\s*\\d+)*\\s*[,;]?$/.test(gap)) continue;
-    const book = resolveBibleBook(prior.ref.book);
-    if (!book) continue;
-    const chapter = Number(m[1]);
-    const from = Number(m[2]);
-    const to = m[3] ? Number(m[3]) : from;
+  // Expand abbreviated entries in reference lists by inheriting the previous
+  // book, and for a bare comma verse, the previous chapter as well.
+  // Examples: Pr 10:20,31; 15:2; 21:23 and Pr 18:6-7,21.
+  const shorthandPositions = refs.map(ref => {
+    const start = source.indexOf(ref.text);
+    return { ref, start, end: start + ref.text.length };
+  }).filter(item => item.start >= 0);
+
+  const findPriorReference = index => shorthandPositions
+    .filter(item => item.end <= index)
+    .sort((a, b) => b.end - a.end)[0] || null;
+
+  const addInheritedReference = (book, chapter, from, to, text, start, end) => {
     const resolved = resolveBibleReference(book.name, chapter, from, to);
-    if (!resolved) continue;
-    const key = `${resolved.book.urlKey}|${resolved.chapter}|${resolved.from}|${resolved.to}`;
-    if (seen.has(key)) continue;
+    if (!resolved) return;
+    const key = resolved.book.urlKey + '|' + resolved.chapter + '|' + resolved.from + '|' + resolved.to;
+    if (seen.has(key)) return;
     seen.add(key);
     const ref = {
       book: resolved.book.name,
       chapter: resolved.chapter,
       from: resolved.from,
       to: resolved.to,
-      text: source.slice(entryStart, m.index + m[0].length).trim(),
+      text: text.trim(),
       url: resolved.url
     };
     refs.push(ref);
-    shorthandPositions.push({ ref, start: entryStart, end: m.index + m[0].length });
+    shorthandPositions.push({ ref, start, end });
+  };
+
+  const shorthandColonRe = /[,;]\s*(\d+)\s*:\s*(\d+)(?:\s*[-–—]\s*(\d+))?(?![A-Za-z0-9])/g;
+  while ((m = shorthandColonRe.exec(source))) {
+    const entryStart = m.index + m[0].search(/\d/);
+    const prior = findPriorReference(m.index);
+    if (!prior) continue;
+    const gap = source.slice(prior.end, entryStart).replace(/^[,;\s]+/, '');
+    if (gap && !/^\d+(?:\s*[,;]\s*\d+)*\s*[,;]?$/.test(gap)) continue;
+    const book = resolveBibleBook(prior.ref.book);
+    if (!book) continue;
+    addInheritedReference(
+      book, Number(m[1]), Number(m[2]), m[3] ? Number(m[3]) : Number(m[2]),
+      source.slice(entryStart, m.index + m[0].length), entryStart, m.index + m[0].length
+    );
+  }
+
+  const shorthandVerseRe = /,\s*(\d+)(?!\s*[:.]\s*\d)(?![A-Za-z0-9])/g;
+  while ((m = shorthandVerseRe.exec(source))) {
+    const entryStart = m.index + m[0].search(/\d/);
+    const prior = findPriorReference(m.index);
+    if (!prior || !Number.isInteger(prior.ref.chapter) || !Number.isInteger(prior.ref.from)) continue;
+    if (source.slice(prior.end, m.index).trim()) continue;
+    const book = resolveBibleBook(prior.ref.book);
+    if (!book) continue;
+    addInheritedReference(
+      book, Number(prior.ref.chapter), Number(m[1]), Number(m[1]),
+      source.slice(entryStart, m.index + m[0].length), entryStart, m.index + m[0].length
+    );
   }
 
   refs.sort((a, b) => source.indexOf(a.text) - source.indexOf(b.text));
