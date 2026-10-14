@@ -28,29 +28,34 @@ test('shared regex catalog exposes stable BLB constants and independent regex in
 test('reference parser expands abbreviated book context in semicolon lists', async ({ extensionWorker }) => {
   const refs = await extensionWorker.evaluate(() => resolveBibleReferenceText(
     '(Pr 10:20,31; 15:2; 21:23; Eccl 10:12-14)'
-  ).map(ref => ({ book: ref.book, chapter: ref.chapter, from: ref.from, to: ref.to })));
+  ).map(ref => [ref.book, ref.chapter, ref.from, ref.to]));
 
-  expect(refs).toContainEqual({ book: 'Proverbs', chapter: 10, from: 31, to: 31 });
-  expect(refs).toContainEqual({ book: 'Proverbs', chapter: 15, from: 2, to: 2 });
-  expect(refs).toContainEqual({ book: 'Proverbs', chapter: 21, from: 23, to: 23 });
-  expect(refs).toContainEqual({ book: 'Ecclesiastes', chapter: 10, from: 12, to: 14 });
+  expect(refs).toEqual([
+    ['proverbs', 10, 20, 20],
+    ['proverbs', 10, 31, 31],
+    ['proverbs', 15, 2, 2],
+    ['proverbs', 21, 23, 23],
+    ['ecclesiastes', 10, 12, 14]
+  ]);
 });
 
-test('reference parser expands shorthand chapters and same-chapter comma verses', async ({ extensionWorker }) => {
+test('reference parser expands shorthand chapters and same-chapter comma verses in source order', async ({ extensionWorker }) => {
   const refs = await extensionWorker.evaluate(() => resolveBibleReferenceText(
     'Job 5:21; Jas 3:9-12. Pr 12:18; 13:10; 14:16; 18:6-7,21; 21:24; 28:25; 29:20'
-  ).map(ref => ({ book: ref.book, chapter: ref.chapter, from: ref.from, to: ref.to })));
+  ).map(ref => [ref.book, ref.chapter, ref.from, ref.to]));
 
-  for (const expected of [
-    { book: 'Proverbs', chapter: 12, from: 18, to: 18 },
-    { book: 'Proverbs', chapter: 13, from: 10, to: 10 },
-    { book: 'Proverbs', chapter: 14, from: 16, to: 16 },
-    { book: 'Proverbs', chapter: 18, from: 6, to: 7 },
-    { book: 'Proverbs', chapter: 18, from: 21, to: 21 },
-    { book: 'Proverbs', chapter: 21, from: 24, to: 24 },
-    { book: 'Proverbs', chapter: 28, from: 25, to: 25 },
-    { book: 'Proverbs', chapter: 29, from: 20, to: 20 }
-  ]) expect(refs).toContainEqual(expected);
+  expect(refs).toEqual([
+    ['job', 5, 21, 21],
+    ['james', 3, 9, 12],
+    ['proverbs', 12, 18, 18],
+    ['proverbs', 13, 10, 10],
+    ['proverbs', 14, 16, 16],
+    ['proverbs', 18, 6, 7],
+    ['proverbs', 18, 21, 21],
+    ['proverbs', 21, 24, 24],
+    ['proverbs', 28, 25, 25],
+    ['proverbs', 29, 20, 20]
+  ]);
 });
 
 test('shared sensitive-site classifier covers known providers without keyword false positives', async ({ extensionWorker }) => {
