@@ -1836,7 +1836,10 @@ function getSelectedPageText() {
 // reference such as "John 3:16". Phrase/topic selections still use the
 // background KJV verification path below.
 function hasLocalValidBibleReference(text) {
+  // Keep the user's selection untouched elsewhere; normalize styled Unicode
+  // only for this fast local reference check.
   const source = normalizeSelectionText(text)
+    .normalize('NFKC')
     .replace(/\s+/g, ' ')
     .trim();
   if (!source) return false;
