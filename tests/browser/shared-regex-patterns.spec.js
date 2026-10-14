@@ -58,6 +58,19 @@ test('reference parser expands shorthand chapters and same-chapter comma verses 
   ]);
 });
 
+
+test('reference parser normalizes Unicode mathematical-bold Bible references', async ({ extensionWorker }) => {
+  const refs = await extensionWorker.evaluate(() => ({
+    styled: resolveBibleReferenceText('𝐏𝐫𝐨𝐯𝐞𝐫𝐛𝐬 𝟏𝟒:𝟑')
+      .map(ref => [ref.book, ref.chapter, ref.from, ref.to]),
+    ordinary: resolveBibleReferenceText('Proverbs 14:3')
+      .map(ref => [ref.book, ref.chapter, ref.from, ref.to])
+  }));
+
+  expect(refs.styled).toEqual([['proverbs', 14, 3, 3]]);
+  expect(refs.ordinary).toEqual([['proverbs', 14, 3, 3]]);
+});
+
 test('shared sensitive-site classifier covers known providers without keyword false positives', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(() => ({
     chase: BLBShared.isSensitiveSiteHostname('chase.com'),
