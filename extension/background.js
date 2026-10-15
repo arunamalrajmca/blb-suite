@@ -2800,7 +2800,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;
@@ -3280,6 +3280,42 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       console.error('BLB Suite ScriptTagger destination:', error);
       sendResponse({ok:false, error:String(error)});
     });
+    return true;
+  }
+
+  if (message.type === 'blbSuiteOpenBibleRefRange') {
+    if (!(await isSuiteEnabled())) { sendResponse({ok:false}); return true; }
+    try {
+      const source = new URL(String(message.url || ''));
+      if (!['bibleref.com', 'www.bibleref.com'].includes(source.hostname.toLowerCase())) {
+        sendResponse({ok:false});
+        return true;
+      }
+      const match = source.pathname.match(/^\/([^/]+)\/(\d+)\/([^/]+)-(\d+)-(\d+)\.html$/i);
+      if (!match) { sendResponse({ok:false}); return true; }
+      const bookName = decodeURIComponent(match[1]);
+      const chapter = Number(match[2]);
+      const startVerse = Number(match[4]);
+      const endVerse = Number(match[5]);
+      if (!Number.isInteger(chapter) || chapter < 1 || !Number.isInteger(startVerse) || startVerse < 1 ||
+          !Number.isInteger(endVerse) || endVerse <= startVerse) {
+        sendResponse({ok:false});
+        return true;
+      }
+      const resolved = resolveBibleReference(bookName, chapter, startVerse, endVerse);
+      if (!resolved?.book?.urlKey) { sendResponse({ok:false}); return true; }
+      const target = 'https://www.blueletterbible.org/kjv/' +
+        resolved.book.urlKey + '/' + resolved.chapter + '/' + resolved.from +
+        (resolved.to != null && resolved.to !== resolved.from ? '-' + resolved.to : '') + '/';
+      openBlbDestination(target, !!message.activeIfNew, !!message.activateExisting)
+        .then(() => sendResponse({ok:true}))
+        .catch(error => {
+          console.error('BLB Suite BibleRef range destination:', error);
+          sendResponse({ok:false, error:String(error)});
+        });
+    } catch (error) {
+      sendResponse({ok:false, error:String(error)});
+    }
     return true;
   }
 
