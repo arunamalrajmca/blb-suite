@@ -1335,9 +1335,9 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             const tag = child.tagName;
             if (tag === 'BR') { pieces.push(' '); continue; }
             const blockLike = /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DL|DT|FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|LI|MAIN|NAV|OL|P|PRE|SECTION|TABLE|TR|UL)$/.test(tag);
-            if (blockLike && pieces.length && !/\\s$/.test(pieces[pieces.length - 1])) pieces.push(' ');
+            if (blockLike && pieces.length && !/\s$/.test(pieces[pieces.length - 1])) pieces.push(' ');
             walk(child);
-            if (blockLike && pieces.length && !/^\\s/.test(pieces[pieces.length - 1])) pieces.push(' ');
+            if (blockLike && pieces.length && !/^\s/.test(pieces[pieces.length - 1])) pieces.push(' ');
           }
         }
       };
@@ -1364,7 +1364,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       for (const candidate of candidates) {
         if (!(candidate instanceof Element)) continue;
         const candidateText = normalizeSelectionText(candidate.textContent || '').normalize('NFKC');
-        if (candidateText && !/\\s/.test(candidateText)) {
+        if (candidateText && !/\s/.test(candidateText)) {
           selected = candidateText;
           break;
         }
@@ -1409,8 +1409,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         // when it separates this prefix from the next visible token.
         const separator = normalizedPrefix.length > 0 &&
           bounded < rawText.length &&
-          /[\\s\\u00A0\\u2007\\u202F]$/.test(prefix) &&
-          /\\S/.test(rawText.slice(bounded));
+          /[\s\u00A0\u2007\u202F]$/.test(prefix) &&
+          /\S/.test(rawText.slice(bounded));
         return normalizedPrefix.length + (separator ? 1 : 0);
       };
       try {
@@ -1430,7 +1430,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       if (start == null || end == null || end <= start) {
         // Locate the selected token in normalized text; don't let a trimmed
         // prefix shift later adjacent references one character to the left.
-        const tokenIndex = candidateMatchSource.indexOf(selected.normalize('NFKC').replace(/[\\u2010-\\u2015\\u2212]/g, '-'));
+        const tokenIndex = candidateMatchSource.indexOf(selected.normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-'));
         if (tokenIndex >= 0) { start = tokenIndex; end = tokenIndex + selected.length; }
       }
 
@@ -1458,7 +1458,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     const source = normalizeSelectionText(rawSource).normalize('NFKC');
     if (!source) return null;
     const refs = resolveBibleReferenceText(source);
-    if (!refs.length) return null;
     // Reference parsing removes invisible directional marks and collapses
     // whitespace. Occurrence matching must use that same normalized text,
     // while Range-derived offsets must be translated from the original DOM
@@ -1475,8 +1474,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const hasInteriorSeparator =
         normalizedPrefix.length > 0 &&
         boundedOffset < rawSource.length &&
-        /[\\s\\u00A0\\u2007\\u202F]$/.test(prefix) &&
-        /\\S/.test(rawSource.slice(boundedOffset));
+        /[\s\u00A0\u2007\u202F]$/.test(prefix) &&
+        /\S/.test(rawSource.slice(boundedOffset));
       return normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
     };
 
@@ -1596,18 +1595,12 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     if (selected.toLowerCase().replace(/\.$/, '') === 'cor' &&
         selectionStart != null && selectionEnd != null) {
       const corCitationPattern = /\b([12])\s+Cor(?:\.|inthians?)\s+(\d+)(?::\s*(\d+)(?:\s*[-–—]\s*(\d+))?)?/gi;
-      const corMatches = Array.from(normalizedMatchSource.matchAll(corCitationPattern));
-      // Prefer the exact positional match when the browser offsets align. On
-      // plain-text Substack paragraphs, Range-derived offsets can differ from
-      // the normalized source; if there is only one Cor citation in the block,
-      // it is still unambiguous and safe to use as the fallback.
-      const matchingCor = corMatches.find(match => {
-        const bookStart = match.index + match[0].indexOf('Cor');
+      let corMatch;
+      while ((corMatch = corCitationPattern.exec(normalizedMatchSource))) {
+        const bookStart = corMatch.index + corMatch[0].indexOf('Cor');
         const bookEnd = bookStart + 3;
-        return selectionStart < bookEnd && selectionEnd > bookStart;
-      }) || (corMatches.length === 1 ? corMatches[0] : null);
-      if (matchingCor) {
-        const parsedCitation = resolveBibleReferenceText(matchingCor[0]);
+        if (selectionStart >= bookEnd || selectionEnd <= bookStart) continue;
+        const parsedCitation = resolveBibleReferenceText(corMatch[0]);
         if (parsedCitation.length) {
           const parsed = parsedCitation[0];
           return {book: parsed.book, chapter: parsed.chapter, from: parsed.from, to: parsed.to, url: parsed.url};
@@ -1799,6 +1792,18 @@ function handleDoubleClickBlb(event) {
         );
         const isStandaloneNumericBook=standaloneBook && /^\d+$/.test(selection) && blockText===selection;
         const contextualReference=isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook);
+        if (location.hostname.includes('substack.com') && selection.toLowerCase() === 'cor') {
+          console.info('[BLB Cor trace] content decision', {
+            page: location.href,
+            selectedText: selection,
+            targetTag: contextualTarget?.tagName || null,
+            targetText: normalizeSelectionText(contextualTarget?.textContent || ''),
+            blockText: normalizeSelectionText(contextualTarget?.closest?.('p,li,td,th,blockquote,article,section,div')?.textContent || ''),
+            blockContext: blockContext?.url || null,
+            standaloneBook: standaloneBook?.url || null,
+            contextualReference: contextualReference?.url || null
+          });
+        }
 
         if (!contextualReference) {
           if (/^[A-Za-z][A-Za-z'’-]*$/.test(selection) && !/^(?:i|ii|iii)$/i.test(selection)) {
