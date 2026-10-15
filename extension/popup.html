@@ -77,7 +77,7 @@ button,input,textarea{font:inherit}
 .topic-row .topic-stop-btn:active:not(:disabled) {
   background: #b62324;
 }
-.backup-wrap{position:relative;flex:0 0 auto}.backup-menu{right:0;left:auto;min-width:135px;z-index:20}.backup-wrap{width:100%;min-width:0}.backup-wrap>.action-btn{width:100%;min-width:0;padding:0}.backup-wrap>.action-btn svg{width:17px;height:17px}.backup-menu button{white-space:nowrap}
+.backup-wrap{position:relative;flex:0 0 auto}.backup-menu{right:0;left:auto;min-width:135px;z-index:20}.backup-wrap{width:100%;min-width:0}.backup-wrap>.action-btn{width:100%;min-width:0;padding:0}.backup-wrap>.action-btn svg{width:17px;height:17px}.backup-menu button{white-space:nowrap}.backup-menu button svg{width:14px;height:14px;flex:0 0 14px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.backup-menu button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>
 </head>
 <body class="popup-loading">
@@ -180,10 +180,10 @@ button,input,textarea{font:inherit}
           <input id="studyDate" class="date-picker-proxy" type="date" aria-hidden="true" tabindex="-1">
         </div>
         <div class="backup-wrap">
-          <button id="studyBackupMenuButton" class="action-btn" type="button" title="Import / Export Topics" aria-label="Import or export topics" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v9m0-9-3 3m3-3 3 3"/><path d="M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6"/><path d="M12 21v-9m0 9-3-3m3 3 3-3"/></svg></button>
+          <button id="studyBackupMenuButton" class="action-btn" type="button" title="Import / Export Topics" aria-label="Import or export topics" aria-haspopup="menu" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><path d="m8 3-4 4 4 4M16 13l4 4-4 4"/></svg></button>
           <div id="studyBackupMenu" class="clear-menu backup-menu" role="menu">
-            <button id="exportStudyBackup" type="button" role="menuitem">Export Topics</button>
-            <button id="importStudyBackup" type="button" role="menuitem">Import Topics</button>
+            <button id="exportStudyBackup" type="button" role="menuitem" title="Export saved topics to a JSON backup"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M4 20h16"/></svg><span>Export Topics</span></button>
+            <button id="importStudyBackup" type="button" role="menuitem" title="Restore topics from a JSON backup"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M4 20h16"/></svg><span>Import Topics</span></button>
           </div>
           <input id="studyBackupFile" type="file" accept=".json,application/json" hidden>
         </div>
