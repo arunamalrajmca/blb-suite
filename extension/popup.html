@@ -77,10 +77,7 @@ button,input,textarea{font:inherit}
 .topic-row .topic-stop-btn:active:not(:disabled) {
   background: #b62324;
 }
-.backup-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}
-.backup-btn{height:28px;border:1px solid #59616a;border-radius:7px;background:#30343a;color:#e8eaed;font-size:10px;font-weight:600;cursor:pointer}
-.backup-btn:hover:not(:disabled){background:#41464d}
-.backup-btn:disabled{opacity:.45;cursor:default}
+.backup-wrap{position:relative;flex:0 0 auto}.backup-menu{right:0;left:auto;min-width:135px;z-index:20}.backup-wrap .action-btn{font-size:10px;font-weight:700;padding:0 7px;width:auto;min-width:47px}.backup-menu button{white-space:nowrap}
 </style>
 </head>
 <body class="popup-loading">
@@ -182,6 +179,14 @@ button,input,textarea{font:inherit}
           </div>
           <input id="studyDate" class="date-picker-proxy" type="date" aria-hidden="true" tabindex="-1">
         </div>
+        <div class="backup-wrap">
+          <button id="studyBackupMenuButton" class="action-btn" type="button" title="Study topic backup" aria-label="Backup" aria-expanded="false">Backup</button>
+          <div id="studyBackupMenu" class="clear-menu backup-menu" role="menu">
+            <button id="exportStudyBackup" type="button" role="menuitem">Export Topics</button>
+            <button id="importStudyBackup" type="button" role="menuitem">Import Topics</button>
+          </div>
+          <input id="studyBackupFile" type="file" accept=".json,application/json" hidden>
+        </div>
         <div class="clear-wrap">
           <button id="clearStudy" class="action-btn danger" type="button" title="Delete" aria-label="Delete">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"/><path d="M9 7V4h6v3"/><path d="M7 7l1 13h8l1-13"/><path d="M10 11v5M14 11v5"/></svg>
@@ -201,11 +206,7 @@ button,input,textarea{font:inherit}
         <textarea id="studyNote" placeholder="Add a note to the selected topic..."></textarea>
       </div>
       <div id="studyStatus" class="status"></div>
-      <div class="backup-row" aria-label="Study data backup">
-        <button id="exportStudyBackup" class="backup-btn" type="button" title="Save topics, notes, references, and study history to a JSON backup">Export Backup</button>
-        <button id="importStudyBackup" class="backup-btn" type="button" title="Restore topics, notes, references, and study history from a JSON backup">Import Backup</button>
-        <input id="studyBackupFile" type="file" accept=".json,application/json" hidden>
-      </div>
+
     </section>
     <div class="guide-footer" aria-label="Feature guide">
       <span class="guide-label">Feature Guide</span>
