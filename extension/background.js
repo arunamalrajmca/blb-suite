@@ -2278,12 +2278,14 @@ async function handleOmniboxCommand(text, disposition) {
           const project = matches[0];
           if (project) {
             clearInterval(timer);
+            const priorUrl = location.href;
             project.el.click();
             const prompt = project.prompt;
             const startPrompt = Date.now();
             const composerTimer = setInterval(() => {
               const composer = document.querySelector('#prompt-textarea, [data-testid="prompt-textarea"], [contenteditable="true"][role="textbox"], textarea');
-              if (composer && composer.isConnected && composer.getClientRects().length) {
+              const navigationReady = location.href !== priorUrl || Date.now() - startPrompt > 1500;
+              if (navigationReady && composer && composer.isConnected && composer.getClientRects().length) {
                 clearInterval(composerTimer);
                 if ('value' in composer) {
                   const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(composer), 'value')?.set;
