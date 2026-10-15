@@ -2244,7 +2244,7 @@ async function handleOmniboxCommand(text, disposition) {
 
   // A dedicated prefix routes to ChatGPT without intercepting Bible searches
   // that begin with ordinary words such as "ask". A bare `askai` opens home.
-  const askAiMatch = normalized.match(/^askai(?:\s+(.*))?$/i);
+  const askAiMatch = normalized.match(/^askai(?:\\s+(.*))?$/i);
   if (askAiMatch) {
     const query = String(askAiMatch[1] || '').trim();
     const tab = await chrome.tabs.update({url:'https://chatgpt.com/'});
@@ -2252,121 +2252,43 @@ async function handleOmniboxCommand(text, disposition) {
       const tabId = tab.id;
       const submitAskAi = (rawQuery) => new Promise(resolve => {
         const startedAt = Date.now();
-        const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
         const timer = setInterval(() => {
           const queryText = String(rawQuery || '').trim();
-          // Search all visible navigation/sidebar regions. A generic first
-          // <nav> can be the main navigation rather than the project sidebar,
-          // which caused short project names such as "KJV" to be missed.
-          const candidates = Array.from(document.querySelectorAll('a, button, [role="button"]'))
-            .filter(el => el.isConnected && el.getClientRects().length)
-            .map(el => ({
-              el,
-              label: String(el.getAttribute('aria-label') || el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim(),
-              href: String(el.getAttribute('href') || '')
-            }))
-            .filter(item => item.label && (item.href.includes('/g/') || item.href.includes('/project/') ||
-              /project/i.test(item.label) || item.el.closest('nav, aside, [data-testid*="sidebar"]')));
-          // Match the longest visible project label at the beginning of the
-          // command. The remaining text is the prompt. If no project matches,
-          // submit the entire command as a normal new chat.
-          const matches = candidates.map(item => {
-            const label = item.label;
-            if (!queryText.toLowerCase().startsWith(label.toLowerCase() + ' ')) return null;
-            const prompt = queryText.slice(label.length).trim();
-            if (!prompt) return null;
-            return {...item, prompt, labelLength:label.length};
-          }).filter(Boolean).sort((a,b) => b.labelLength - a.labelLength);
-          const project = matches[0];
-          if (project) {
+          const composer = document.querySelector('#prompt-textarea, [data-testid="prompt-textarea"], [contenteditable="true"][role="textbox"], textarea');
+          if (composer && composer.isConnected && composer.getClientRects().length) {
             clearInterval(timer);
-            const priorUrl = location.href;
-            project.el.click();
-            const prompt = project.prompt;
-            const startPrompt = Date.now();
-            const composerTimer = setInterval(() => {
-              const composer = document.querySelector('#prompt-textarea, [data-testid="prompt-textarea"], [contenteditable="true"][role="textbox"], textarea');
-              const navigationReady = location.href !== priorUrl || Date.now() - startPrompt > 1500;
-              if (navigationReady && composer && composer.isConnected && composer.getClientRects().length) {
-                clearInterval(composerTimer);
-                if ('value' in composer) {
-                  const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(composer), 'value')?.set;
-                  if (setter) setter.call(composer, prompt); else composer.value = prompt;
-                } else {
-                  composer.focus();
-                  document.execCommand('selectAll', false, null);
-                  document.execCommand('insertText', false, prompt);
-                }
-                composer.dispatchEvent(new InputEvent('input', {bubbles:true, inputType:'insertText', data:prompt}));
-                const send = () => {
-                  const button = composer.closest('form')?.querySelector('button[type="submit"], button[data-testid*="send"]') ||
-                    document.querySelector('button[data-testid="send-button"], button[aria-label*="Send prompt"], button[aria-label^="Send"], button[aria-label*="Send message"]');
-                  if (button && !button.disabled && button.getAttribute('aria-disabled') !== 'true') {
-                    button.click();
-                    resolve({project:true, submitted:true});
-                    return true;
-                  }
-                  return false;
-                };
-                const sendTimer = setInterval(() => {
-                  if (send()) clearInterval(sendTimer);
-                  else if (Date.now() - startPrompt > 20000) {
-                    clearInterval(sendTimer);
-                    resolve({project:true, submitted:false});
-                  }
-                }, 250);
-                return;
-              }
-              if (Date.now() - startPrompt > 20000) {
-                clearInterval(composerTimer);
-                resolve({project:true, submitted:false});
+            if ('value' in composer) {
+              const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(composer), 'value')?.set;
+              if (setter) setter.call(composer, queryText); else composer.value = queryText;
+            } else {
+              composer.focus();
+              document.execCommand('insertText', false, queryText);
+            }
+            composer.dispatchEvent(new InputEvent('input', {bubbles:true, inputType:'insertText', data:queryText}));
+            const sendTimer = setInterval(() => {
+              const button = composer.closest('form')?.querySelector('button[type="submit"], button[data-testid*="send"]') ||
+                document.querySelector('button[data-testid="send-button"], button[aria-label*="Send prompt"], button[aria-label^="Send"], button[aria-label*="Send message"]');
+              if (button && !button.disabled && button.getAttribute('aria-disabled') !== 'true') {
+                clearInterval(sendTimer);
+                button.click();
+                resolve({submitted:true});
+              } else if (Date.now() - startedAt > 25000) {
+                clearInterval(sendTimer);
+                resolve({submitted:false});
               }
             }, 250);
             return;
           }
-
-          // Give the sidebar a short opportunity to render before deciding the
-          // project is not present. Then use normal new-chat behavior.
-          if (Date.now() - startedAt > 5000) {
+          if (Date.now() - startedAt > 10000) {
             clearInterval(timer);
-            const composer = document.querySelector('#prompt-textarea, [data-testid="prompt-textarea"], [contenteditable="true"][role="textbox"], textarea');
-            if (composer && composer.isConnected) {
-              if ('value' in composer) {
-                const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(composer), 'value')?.set;
-                if (setter) setter.call(composer, queryText); else composer.value = queryText;
-              } else {
-                composer.focus();
-                document.execCommand('insertText', false, queryText);
-              }
-              composer.dispatchEvent(new InputEvent('input', {bubbles:true, inputType:'insertText', data:queryText}));
-              const send = () => {
-                const button = composer.closest('form')?.querySelector('button[type="submit"], button[data-testid*="send"]') ||
-                  document.querySelector('button[data-testid="send-button"], button[aria-label*="Send prompt"], button[aria-label^="Send"], button[aria-label*="Send message"]');
-                if (button && !button.disabled && button.getAttribute('aria-disabled') !== 'true') {
-                  button.click();
-                  resolve({project:false, submitted:true});
-                  return true;
-                }
-                return false;
-              };
-              const sendTimer = setInterval(() => {
-                if (send()) clearInterval(sendTimer);
-                else if (Date.now() - startedAt > 25000) {
-                  clearInterval(sendTimer);
-                  resolve({project:false, submitted:false});
-                }
-              }, 250);
-            } else {
-              // If the composer is not ready yet, retain the known q-prefill
-              // fallback so the user can submit manually if automation fails.
-              location.href = 'https://chatgpt.com/?q=' + encodeURIComponent(queryText);
-              resolve({project:false, submitted:false, fallback:true});
-            }
+            // Keep the prompt available in ChatGPT if its composer did not
+            // become accessible for automatic submission.
+            location.href = 'https://chatgpt.com/?q=' + encodeURIComponent(queryText);
+            resolve({submitted:false, fallback:true});
           }
         }, 250);
       });
       try {
-        // Let ChatGPT render the sidebar before searching project names.
         const waitForComplete = () => new Promise(resolve => {
           const check = () => chrome.tabs.get(tabId).then(current => {
             if (current.status === 'complete') resolve();
