@@ -1935,9 +1935,9 @@ async function handleBCommand(text) {
   }
   if (!t) { redirectToHomepage(); return; }
 
-  // `v(n)` selects the nth verse of every Bible chapter. Optional angle
-  // brackets are accepted too, so both `b v(1)` and `b <v(1)>` work.
-  const nthVerseMatch = low.match(/^<?v\s*\(\s*(\d+)\s*\)>?$/i);
+  // `vN` and `v(n)` select the nth verse of every Bible chapter. Optional angle
+  // brackets are accepted too, so `b v23`, `b v(23)`, and `b <v(23)>` work.
+  const nthVerseMatch = low.match(/^<?v\s*(?:\(\s*(\d+)\s*\)|(\d+))>?$/i);
   if (nthVerseMatch) {
     const verseNumber = Number(nthVerseMatch[1]);
     if (!Number.isSafeInteger(verseNumber) || verseNumber < 1) return;
