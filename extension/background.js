@@ -1346,7 +1346,7 @@ function buildStudySessionsPdf(content, options = {}) {
 
 function parseStudyFilter(text, prefix) {
   const raw = String(text || '').trim();
-  const m = raw.match(new RegExp(`^${prefix}\s*:\s*(.+)$`, 'i'));
+  const m = raw.match(new RegExp(`^${prefix}\\s*:\\s*(.+)$`, 'i'));
   return m ? m[1].trim() : '';
 }
 
@@ -3485,11 +3485,11 @@ function extractBibleRefsFromSelectedTextUncached(text) {
             book,
             form: clean,
             re: new RegExp(
-              (numericBookForm || /^(?:[1-3]|i{1,3})\s+/i.test(clean) ? '' : '(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)') +
+              (numericBookForm || /^(?:[1-3]|i{1,3})\s+/i.test(clean) ? '' : '(?<![1-3]\\s)(?<!i\\s)(?<!ii\\s)(?<!iii\\s)') +
               '(?<![A-Za-z0-9])' +
-              escapePattern(clean).replace(/\s+/g, '\s+') +
+              escapePattern(clean).replace(/\s+/g, '\\s+') +
               bookBoundary +
-              '\s*(\\d+)\s*:\s*(\\d+)(?:\s*-\s*(\\d+))?',
+              '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?',
               'gi'
             )
           });
@@ -3686,8 +3686,8 @@ function extractBibleRefsFromSelectedTextUncached(text) {
       if (isShadowedBookMatch(m.index)) continue;
       const prefixStart = Math.max(0, m.index - 8);
       const prefix = source.slice(prefixStart, m.index);
-      const prefixMatch = prefix.match(/(?:^|\s)((?:[1-3]|i{1,3})\s+)$/i);
-      if (prefixMatch && !/^(?:[1-3]|i{1,3})\s+/i.test(item.form)) {
+      const prefixMatch = prefix.match(/(?:^|\\s)((?:[1-3]|i{1,3})\\s+)$/i);
+      if (prefixMatch && !/^(?:[1-3]|i{1,3})\\s+/i.test(item.form)) {
         const combined = prefixMatch[1] + item.form;
         if (resolveBook(combined)) continue;
       }
@@ -3875,7 +3875,7 @@ const selectionBookNamePatterns = (() => {
     // They must never act as generic book-name hits inside ordinary prose.
     .filter(alias => alias.length >= 3)
     .sort((a,b) => b.length - a.length)
-    .map(alias => new RegExp(`(?<![A-Za-z0-9])${escapeRegex(alias).replace(/\s+/g, '\s+')}(?![A-Za-z0-9])`, 'i'));
+    .map(alias => new RegExp(`(?<![A-Za-z0-9])${escapeRegex(alias).replace(/\s+/g, '\\s+')}(?![A-Za-z0-9])`, 'i'));
 })();
 
 function selectionContainsBibleBookName(selectionText) {
