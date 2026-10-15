@@ -40,8 +40,20 @@
       const pathMatch = url.pathname.match(/^\/([^/]+)\/(\d+)\/([^/]+)-(\d+)-(\d+)\.html$/i);
       if (!pathMatch) return false;
 
-      const citation = String(link.textContent || '').replace(/\s+/g, ' ').trim();
-      const rangeMatch = citation.match(/\b((?:[1-3]\s*)?[A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+)\s*:\s*(\d+)\s*[-\u2010-\u2015]\s*(\d+)\b/);
+      const rangePattern = /\b((?:[1-3]\s*)?[A-Za-z]+(?:\s+[A-Za-z]+)*)\s+(\d+)\s*:\s*(\d+)\s*[-\u2010-\u2015]\s*(\d+)\b/;
+      // Some article layouts place part of the visible citation outside the
+      // anchor (for example, the linked start verse followed by an unlinked
+      // range suffix). Check the anchor first, then nearby text containers.
+      const citationTexts = [
+        link.textContent,
+        link.parentElement?.textContent,
+        link.parentElement?.parentElement?.textContent
+      ];
+      let rangeMatch = null;
+      for (const text of citationTexts) {
+        rangeMatch = String(text || '').replace(/\s+/g, ' ').trim().match(rangePattern);
+        if (rangeMatch) break;
+      }
       if (!rangeMatch) return false;
 
       const normalizeBook = value => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -72,7 +84,8 @@
 
   document.addEventListener('click', event => {
     if (!settingsReady || !masterEnabled || !redirectEnabled || isModifiedLinkActivation(event)) return;
-    const link = event.target.closest?.('a[href]');
+    const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+    const link = target?.closest?.('a[href]');
     if (!link) return;
     const rangeUrl = preserveVisibleBibleRefRange(link);
     if (!rangeUrl) return;
@@ -87,6 +100,14 @@
       url: rangeUrl,
       activeIfNew: true,
       activateExisting: true
-    }).catch(() => {});
+    }).then(response => {
+      if (!response?.ok) {
+        console.warn('[BLB Suite] BibleRef range redirect was rejected; opening the original link.', response);
+        window.location.assign(link.href);
+      }
+    }).catch(error => {
+      console.warn('[BLB Suite] Could not open BibleRef range; opening the original link.', error);
+      window.location.assign(link.href);
+    });
   }, true);
 })();
