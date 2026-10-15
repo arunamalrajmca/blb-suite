@@ -43,6 +43,33 @@
     }
   }
 
+  // Some ScriptTagger integrations link a visible verse range to only its
+  // first verse. Recover the range from the link's own citation text, but only
+  // when its chapter and starting verse match the destination URL.
+  function preserveVisibleVerseRange(link, target) {
+    try {
+      const url = new URL(target);
+      const pathMatch = url.pathname.match(/^(\\/kjv\\/[^/]+\\/(\\d+)\\/)(\\d+)(?:\\/s_\\d+)?\\/?$/i);
+      if (!pathMatch) return target;
+
+      const text = String(link?.textContent || '').replace(/\\s+/g, ' ').trim();
+      const rangeMatch = text.match(/\\b(\\d+)\\s*:\\s*(\\d+)\\s*[-\\u2010-\\u2015]\\s*(\\d+)\\b/);
+      if (!rangeMatch) return target;
+
+      const chapter = Number(pathMatch[2]);
+      const startVerse = Number(pathMatch[3]);
+      const textChapter = Number(rangeMatch[1]);
+      const textStart = Number(rangeMatch[2]);
+      const endVerse = Number(rangeMatch[3]);
+      if (textChapter !== chapter || textStart !== startVerse || endVerse <= startVerse) return target;
+
+      url.pathname = pathMatch[1] + startVerse + '-' + endVerse + '/';
+      return url.href;
+    } catch (_) {
+      return target;
+    }
+  }
+
   function isModifiedLinkActivation(event) {
     return Boolean(event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey);
   }
@@ -51,8 +78,9 @@
     if (!settingsReady || !masterEnabled || !redirectEnabled || isModifiedLinkActivation(event)) return;
     const link = event.target.closest?.('a.BLBST_a[href]');
     if (!link) return;
-    const target = normalizeBlbDestinationUrl(link.href);
-    if (!target) return;
+    const normalizedTarget = normalizeBlbDestinationUrl(link.href);
+    if (!normalizedTarget) return;
+    const target = preserveVisibleVerseRange(link, normalizedTarget);
     event.preventDefault();
     event.stopImmediatePropagation();
     try {
