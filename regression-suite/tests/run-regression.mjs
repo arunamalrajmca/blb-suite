@@ -602,14 +602,13 @@ if (failures.length) {
   for (const f of failures) console.error(`- ${f.name}: ${f.error}`);
   process.exitCode=1;
 }
-test('Double-click selection clears only after a destination opens', () => {
+test('Double-click lookup never clears the native text selection', () => {
   const content = read('content.js');
-  const bg = read('background.js');
-  const start = content.indexOf('function openDoubleClickSelection(message)');
-  const end = content.indexOf('function handleDoubleClickBlb', start);
-  assert(start >= 0 && end > start, 'double-click response handler missing');
-  const responseHandler = content.slice(start, end);
-  assert(responseHandler.includes('response?.opened === true'), 'selection clear must require confirmed destination open');
-  assert(responseHandler.includes('clearBlbPageSelectionAfterAction()'), 'confirmed open must clear selection');
-  assert(bg.includes('sendResponse({ok:true, opened:!!opened'), 'background must report whether destination opened');
+  const start = content.indexOf('function handleDoubleClickBlb(event)');
+  const end = content.indexOf('function enableDoubleClickBlb()', start);
+  assert(start >= 0 && end > start, 'double-click handler missing');
+  const handler = content.slice(start, end);
+  assert(!handler.includes('clearBlbPageSelectionAfterAction()'), 'double-click must never clear the user's selection');
+  assert(!handler.includes('openDoubleClickSelection'), 'double-click must not use a selection-clearing wrapper');
+  assert(handler.includes('safeRuntimeSendMessage({'), 'double-click lookup must still send its lookup request');
 });
