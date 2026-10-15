@@ -1591,7 +1591,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // Substack paragraphs may contain several citations, and stale/misaligned
     // offsets can otherwise let an unrelated parsed reference win.
     if (selected.normalize('NFKC').toLowerCase() === 'cor') {
-      const corCitationRe = /\\b([12])\\s+Cor\\.?\\s+(\\d+)\\b/gi;
+      const corCitationRe = /\b([12])\s+Cor\.?\s+(\d+)\b/gi;
       let corMatch;
       while ((corMatch = corCitationRe.exec(normalizedMatchSource))) {
         const corOffset = corMatch.index + corMatch[0].toLowerCase().indexOf('cor');
