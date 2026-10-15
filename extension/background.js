@@ -2255,8 +2255,10 @@ async function handleOmniboxCommand(text, disposition) {
         const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
         const timer = setInterval(() => {
           const queryText = String(rawQuery || '').trim();
-          const sidebar = document.querySelector('nav, [data-testid*="sidebar"], aside');
-          const candidates = Array.from((sidebar || document).querySelectorAll('a, button, [role="button"]'))
+          // Search all visible navigation/sidebar regions. A generic first
+          // <nav> can be the main navigation rather than the project sidebar,
+          // which caused short project names such as "KJV" to be missed.
+          const candidates = Array.from(document.querySelectorAll('a, button, [role="button"]'))
             .filter(el => el.isConnected && el.getClientRects().length)
             .map(el => ({
               el,
