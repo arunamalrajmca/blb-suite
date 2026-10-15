@@ -1592,9 +1592,9 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // the general book resolver does not recognize as a standalone book name.
     // Resolve only the citation whose abbreviation overlaps the actual clicked
     // range; never infer a reference from another citation in the paragraph.
-    if (selected.toLowerCase().replace(/\\.$/, '') === 'cor' &&
+    if (selected.toLowerCase().replace(/\.$/, '') === 'cor' &&
         selectionStart != null && selectionEnd != null) {
-      const corCitationPattern = /\\b([12])\\s+Cor(?:\\.|inthians?)\\s+(\\d+)(?::\\s*(\\d+)(?:\\s*[-–—]\\s*(\\d+))?)?/gi;
+      const corCitationPattern = /\b([12])\s+Cor(?:\.|inthians?)\s+(\d+)(?::\s*(\d+)(?:\s*[-–—]\s*(\d+))?)?/gi;
       let corMatch;
       while ((corMatch = corCitationPattern.exec(normalizedMatchSource))) {
         const bookStart = corMatch.index + corMatch[0].indexOf('Cor');
