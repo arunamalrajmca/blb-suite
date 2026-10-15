@@ -1458,7 +1458,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     const source = normalizeSelectionText(rawSource).normalize('NFKC');
     if (!source) return null;
     const refs = resolveBibleReferenceText(source);
-    if (!refs.length) return null;
     // Reference parsing removes invisible directional marks and collapses
     // whitespace. Occurrence matching must use that same normalized text,
     // while Range-derived offsets must be translated from the original DOM
@@ -1605,6 +1604,9 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         }
       }
     }
+
+    if (!refs.length) return null;
+
 
     // Resolve consecutive comma-separated verse lists before consulting the
     // general parser. The general parser may return only the first verse
