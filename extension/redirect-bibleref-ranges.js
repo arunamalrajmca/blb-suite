@@ -64,8 +64,7 @@
       ) return false;
 
       url.pathname = url.pathname.replace(/-(\d+)\.html$/i, '-' + startVerse + '-' + endVerse + '.html');
-      link.href = url.href;
-      return true;
+      return url.href;
     } catch (_) {
       return false;
     }
@@ -75,6 +74,19 @@
     if (!settingsReady || !masterEnabled || !redirectEnabled || isModifiedLinkActivation(event)) return;
     const link = event.target.closest?.('a[href]');
     if (!link) return;
-    preserveVisibleBibleRefRange(link);
+    const rangeUrl = preserveVisibleBibleRefRange(link);
+    if (!rangeUrl) return;
+
+    // Open the final BLB destination through the Suite's existing deduplicating
+    // tab manager instead of navigating to BibleRef first and triggering a
+    // second redirect-created tab.
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    chrome.runtime.sendMessage({
+      type: 'blbSuiteOpenBibleRefRange',
+      url: rangeUrl,
+      activeIfNew: true,
+      activateExisting: true
+    }).catch(() => {});
   }, true);
 })();
