@@ -496,6 +496,7 @@ function updateStudyActionLabels(topic, existing) {
 
 function updateStudyButtons() {
   const suiteOn = document.getElementById('master').checked;
+  if (exportStudyBackupButton) exportStudyBackupButton.disabled = !(studyState.topics || []).length;
   if (!suiteOn) {
     startButton.disabled = true;
     multiViewButton.disabled = true;
@@ -1218,6 +1219,10 @@ const importStudyBackupButton = document.getElementById('importStudyBackup');
 const studyBackupFileInput = document.getElementById('studyBackupFile');
 
 async function exportStudyBackup() {
+  if (!(studyState.topics || []).length) {
+    setStatus('There are no saved topics to export.');
+    return;
+  }
   exportStudyBackupButton.disabled = true;
   try {
     const stored = await chrome.storage.local.get(STUDY_BACKUP_KEYS);
@@ -1246,7 +1251,7 @@ async function exportStudyBackup() {
     console.error('BLB Suite Study backup export failed:', error);
     setStatus('Unable to export Study backup.');
   } finally {
-    exportStudyBackupButton.disabled = false;
+    exportStudyBackupButton.disabled = !(studyState.topics || []).length;
   }
 }
 
