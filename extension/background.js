@@ -3050,6 +3050,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
     const text = String(message.text || '').trim();
+    const traceCorDoubleClick = text.toLowerCase() === 'cor' && String(sender?.tab?.url || '').includes('substack.com');
+    if (traceCorDoubleClick) console.info('[BLB Cor trace] background received', {
+      page: sender?.tab?.url || null,
+      text,
+      contextualReference: message.contextualReference?.url || null,
+      requestId: message.requestId || null
+    });
     if (!text) {
       sendResponse({ok:false});
       return true;
@@ -3119,6 +3126,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // only its first citation (and suppress Criteria Search).
         if (selectedRefs.length < 2) {
           const contextualRef = await getContextualSelectionReference(sender?.tab?.id, text);
+          if (traceCorDoubleClick) console.info('[BLB Cor trace] background contextual lookup', {reference: contextualRef?.url || null});
           if (contextualRef?.url) {
             await openSelectedPdfBibleRefs(text, behavior, contextualRef);
             sendResponse({ok:true, contextual:true});
@@ -5300,6 +5308,14 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // reference was supplied. A multi-reference paragraph must never pay the
   // full corpus-classification cost twice.
   const decision = contextualDecision || classifySelectionForBlb(text);
+  if (String(selectionText || '').trim().toLowerCase() === 'cor') console.info('[BLB Cor trace] generic selection classification', {
+    contextualReference: contextualRef?.url || null,
+    valid: decision?.valid ?? null,
+    type: decision?.type || null,
+    directUrl: decision?.directRef?.url || null,
+    refs: (decision?.refs || []).map(ref => ref.url),
+    cleanedText: decision?.text || null
+  });
   if (!decision.valid) return;
   const cleanedText = decision.text;
   if (!cleanedText) return;
