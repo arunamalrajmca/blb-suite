@@ -2244,7 +2244,7 @@ async function handleOmniboxCommand(text, disposition) {
 
   // A dedicated prefix routes to ChatGPT without intercepting Bible searches
   // that begin with ordinary words such as "ask". A bare `askai` opens home.
-  const askAiMatch = normalized.match(/^askai(?:\\s+(.*))?$/i);
+  const askAiMatch = normalized.match(/^askai(?:\s+(.*))?$/i);
   if (askAiMatch) {
     const query = String(askAiMatch[1] || '').trim();
     const tab = await chrome.tabs.update({url:'https://chatgpt.com/'});
