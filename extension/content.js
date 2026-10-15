@@ -1596,12 +1596,18 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     if (selected.toLowerCase().replace(/\.$/, '') === 'cor' &&
         selectionStart != null && selectionEnd != null) {
       const corCitationPattern = /\b([12])\s+Cor(?:\.|inthians?)\s+(\d+)(?::\s*(\d+)(?:\s*[-–—]\s*(\d+))?)?/gi;
-      let corMatch;
-      while ((corMatch = corCitationPattern.exec(normalizedMatchSource))) {
-        const bookStart = corMatch.index + corMatch[0].indexOf('Cor');
+      const corMatches = Array.from(normalizedMatchSource.matchAll(corCitationPattern));
+      // Prefer the exact positional match when the browser offsets align. On
+      // plain-text Substack paragraphs, Range-derived offsets can differ from
+      // the normalized source; if there is only one Cor citation in the block,
+      // it is still unambiguous and safe to use as the fallback.
+      const matchingCor = corMatches.find(match => {
+        const bookStart = match.index + match[0].indexOf('Cor');
         const bookEnd = bookStart + 3;
-        if (selectionStart >= bookEnd || selectionEnd <= bookStart) continue;
-        const parsedCitation = resolveBibleReferenceText(corMatch[0]);
+        return selectionStart < bookEnd && selectionEnd > bookStart;
+      }) || (corMatches.length === 1 ? corMatches[0] : null);
+      if (matchingCor) {
+        const parsedCitation = resolveBibleReferenceText(matchingCor[0]);
         if (parsedCitation.length) {
           const parsed = parsedCitation[0];
           return {book: parsed.book, chapter: parsed.chapter, from: parsed.from, to: parsed.to, url: parsed.url};
