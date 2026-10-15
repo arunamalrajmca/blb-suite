@@ -3291,12 +3291,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ok:false});
         return true;
       }
-      const match = source.pathname.match(/^\/([^/]+)\/(\d+)\/([^/]+)-(\d+)-(\d+)\.html$/i);
+      const match = source.pathname.match(/^\/([^/]+)\/(\d+)\/([^/]+)-(\d+)-(\d+)-(\d+)\.html$/i);
       if (!match) { sendResponse({ok:false}); return true; }
       const bookName = decodeURIComponent(match[1]);
       const chapter = Number(match[2]);
-      const startVerse = Number(match[4]);
-      const endVerse = Number(match[5]);
+      const slugChapter = Number(match[4]);
+      const startVerse = Number(match[5]);
+      const endVerse = Number(match[6]);
+      if (slugChapter !== chapter) { sendResponse({ok:false}); return true; }
       if (!Number.isInteger(chapter) || chapter < 1 || !Number.isInteger(startVerse) || startVerse < 1 ||
           !Number.isInteger(endVerse) || endVerse <= startVerse) {
         sendResponse({ok:false});
