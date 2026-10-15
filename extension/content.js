@@ -1806,7 +1806,6 @@ function handleDoubleClickBlb(event) {
               requestId,
               tabBehavior:{activeIfNew:false,activateExisting:true}
             });
-            clearBlbPageSelectionAfterAction();
             return true;
           }
           if (Date.now()-started<1500) requestAnimationFrame(dispatch);
@@ -1828,7 +1827,6 @@ function handleDoubleClickBlb(event) {
           requestId,
           tabBehavior:{activeIfNew:false,activateExisting:true}
         });
-        clearBlbPageSelectionAfterAction();
         return true;
       } catch (_) {
         return false;
