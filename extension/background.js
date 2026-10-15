@@ -1937,7 +1937,7 @@ async function handleBCommand(text) {
 
   // `v(n)` selects the nth verse of every Bible chapter. Optional angle
   // brackets are accepted too, so both `b v(1)` and `b <v(1)>` work.
-  const nthVerseMatch = low.match(/^<?v\\s*\\(\\s*(\\d+)\\s*\\)>?$/i);
+  const nthVerseMatch = low.match(/^<?v\s*\(\s*(\d+)\s*\)>?$/i);
   if (nthVerseMatch) {
     const verseNumber = Number(nthVerseMatch[1]);
     if (!Number.isSafeInteger(verseNumber) || verseNumber < 1) return;
