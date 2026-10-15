@@ -1464,7 +1464,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // parser fallback; never treat bare "Cor" as a global book alias.
     if (selected.normalize('NFKC').toLowerCase() === 'cor') {
       const corMatches = [...source.matchAll(/\\b([12])\\s+Cor\\.?\\s+(\\d+)\\b/gi)];
-      const clickedCorIndex = source.toLowerCase().indexOf('cor');
+      const clickedCorIndex = source.toLowerCase().search(/\\bcor\\b/);
       if (corMatches.length === 1 && clickedCorIndex >= 0) {
         const match = corMatches[0];
         const corIndex = match.index + match[0].toLowerCase().indexOf('cor');
