@@ -273,6 +273,7 @@ const downloadMenuButton = document.getElementById('downloadMenuButton');
 const downloadMenu = document.getElementById('downloadMenu');
 const dateQuickMenu = document.getElementById('dateQuickMenu');
 const startButton = document.getElementById('startTopic');
+const stopButton = document.getElementById('stopTopic');
 const guidePdfButton = document.getElementById('guidePdf');
 
 async function openAndDownloadGuide(path, filename) {
@@ -495,8 +496,8 @@ function updateStudyButtons() {
     downloadButton.disabled = true;
     downloadMenuButton.disabled = true;
     clearStudyButton.disabled = true;
-    topicArrow.disabled = true;
-    topicArrow.setAttribute('aria-disabled', 'true');
+    topicArrow.disabled = false;
+    topicArrow.setAttribute('aria-disabled', 'false');
     clearSelectedTopicButton.disabled = true;
     clearSelectedTopicInputButton.disabled = true;
     noteInput.disabled = true;
@@ -513,14 +514,21 @@ function updateStudyButtons() {
   const isRecordingSelected = !!studyState.recording && recordingTopic.toLowerCase() === topic.toLowerCase();
   const isPausedSelected = !studyState.recording && studyState.pausedReason === 'inactivity' &&
     String(studyState.pausedTopic || '').toLowerCase() === topic.toLowerCase() && !!topic;
+  // Play/Pause toggles the selected topic's recording. Stop is a separate
+  // hard stop that also clears the topic selection. Recording is global, so
+  // Stop remains available even if the input currently names another topic.
   startButton.innerHTML = isRecordingSelected
-    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10H7z"/></svg>'
+    ? '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5h3v14H8zM15 5h3v14h-3z"/></svg>'
     : '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z"/></svg>';
-  startButton.title = isPausedSelected ? 'Resume Bible Study' : (isRecordingSelected ? 'Stop recording' : 'Start recording');
-  startButton.setAttribute('aria-label', isPausedSelected ? 'Resume Bible Study' : (isRecordingSelected ? 'Stop recording' : 'Start recording'));
+  startButton.title = isPausedSelected ? 'Resume recording' : (isRecordingSelected ? 'Pause recording' : 'Start recording');
+  startButton.setAttribute('aria-label', isPausedSelected ? 'Resume recording' : (isRecordingSelected ? 'Pause recording' : 'Start recording'));
   startButton.classList.toggle('recording', isRecordingSelected);
   startButton.classList.toggle('paused', isPausedSelected);
   startButton.disabled = !hasTopic;
+  stopButton.disabled = !studyState.recording;
+  stopButton.title = studyState.recording
+    ? 'Stop recording and clear topic selection'
+    : 'No active recording to stop';
   const topicStat = existing ? (studyState.topicStats?.[findTopicKey(topic)] || {}) : {};
   const refs = Number(topicStat.refs || 0);
   const strongs = Number(topicStat.strongs || 0);
@@ -569,8 +577,9 @@ function updateStudyButtons() {
   // Show on BLB / Double-Click / Redirect toggles.
   downloadMenuButton.disabled = !hasAnyTopicWithStudyData;
   clearStudyButton.disabled = !hasSavedTopics;
-  topicArrow.disabled = !hasSavedTopics;
-  topicArrow.setAttribute('aria-disabled', String(!hasSavedTopics));
+  // The dropdown arrow is always available, including when the topic list is empty.
+  topicArrow.disabled = false;
+  topicArrow.setAttribute('aria-disabled', 'false');
 
   // Selected Topic requires an actual selected topic and data in THAT topic.
   downloadButton.disabled = !hasTopic || !selectedTopicHasStudyData;
@@ -644,20 +653,35 @@ async function startTopic() {
   if (!topic) { setStatus('Enter a topic first.'); topicInput.focus(); return; }
   topicInput.value = topic;
   await syncSelectedTopic(topic);
-  const isRecordingSelected = !!studyState.recording && String(studyState.recordingTopic || '').toLowerCase() === topic.toLowerCase();
+  const isRecordingSelected = !!studyState.recording &&
+    String(studyState.recordingTopic || '').toLowerCase() === topic.toLowerCase();
   if (isRecordingSelected) {
+    // Pause keeps the topic selected so the user can resume with Play.
     const response = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
-    if (!response?.ok) { setStatus('Unable to stop recording.'); return; }
-    topicInput.value = '';
-    noteInput.value = '';
-    await syncSelectedTopic('');
-    setStatus('Select Start to record this topic.');
+    if (!response?.ok) { setStatus('Unable to pause recording.'); return; }
+    setStatus(`Recording paused: ${topic}`);
     await refreshStudyState();
+    return;
+  }
+  if (studyState.recording) {
+    setStatus(`Stop the current recording before starting “${topic}”.`);
     return;
   }
   const response = await chrome.runtime.sendMessage({type:'blbSuiteStartStudyTopic', title:topic, note:''});
   if (!response?.ok) { setStatus('Unable to start recording.'); return; }
   setStatus(`Recording started: ${response.topic}`);
+  await refreshStudyState();
+}
+
+async function stopTopic() {
+  if (!studyState.recording) return;
+  const response = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
+  if (!response?.ok) { setStatus('Unable to stop recording.'); return; }
+  topicInput.value = '';
+  noteInput.value = '';
+  editingNoteOriginal = '';
+  await syncSelectedTopic('');
+  setStatus('Recording stopped.');
   await refreshStudyState();
 }
 async function downloadTopic() {
@@ -1061,6 +1085,7 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
 });
 startButton.addEventListener('click', startTopic);
+stopButton.addEventListener('click', stopTopic);
 noteInput.addEventListener('blur', async () => { await saveStudyNote(); });
 downloadMenuButton.addEventListener('click', e => { e.stopPropagation(); toggleDownloadMenu(); });
 downloadButton.addEventListener('click', downloadTopic);
