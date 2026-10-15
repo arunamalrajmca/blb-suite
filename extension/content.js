@@ -1457,33 +1457,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     const rawSource = domText(block);
     const source = normalizeSelectionText(rawSource).normalize('NFKC');
     if (!source) return null;
-    // Substack commonly renders a citation as separate inline nodes, so a
-    // double-click on "Cor" can arrive without a usable parsed reference even
-    // though the clicked abbreviation is positioned inside "1 Cor. 13" or
-    // "2 Cor. 13". Resolve this narrowly and positionally before the generic
-    // parser fallback; never treat bare "Cor" as a global book alias.
-    if (selected.normalize('NFKC').toLowerCase() === 'cor') {
-      const corMatches = [...source.matchAll(/\\b([12])\\s+Cor\\.?\\s+(\\d+)\\b/gi)];
-      const clickedCorIndex = source.toLowerCase().search(/\\bcor\\b/);
-      if (corMatches.length === 1 && clickedCorIndex >= 0) {
-        const match = corMatches[0];
-        const corIndex = match.index + match[0].toLowerCase().indexOf('cor');
-        if (clickedCorIndex === corIndex) {
-          const book = resolveBibleBook(match[1] + ' Corinthians');
-          const resolved = book && resolveBibleReference(book.name, Number(match[2]), 1, null);
-          if (resolved) {
-            return {
-              book: resolved.book,
-              chapter: resolved.chapter,
-              from: resolved.from,
-              to: resolved.to,
-              url: resolved.url
-            };
-          }
-        }
-      }
-    }
-
     const refs = resolveBibleReferenceText(source);
     if (!refs.length) return null;
     // Reference parsing removes invisible directional marks and collapses
@@ -1611,6 +1584,26 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     if (selectionStart != null && selectionEnd != null) {
       selectionStart = toNormalizedOffset(selectionStart);
       selectionEnd = toNormalizedOffset(selectionEnd);
+    }
+
+    // Resolve a clicked "Cor" against the citation that actually contains the
+    // clicked DOM position. Do not use the first Cor in a large ancestor block:
+    // Substack paragraphs may contain several citations, and stale/misaligned
+    // offsets can otherwise let an unrelated parsed reference win.
+    if (selected.normalize('NFKC').toLowerCase() === 'cor') {
+      const corCitationRe = /\\b([12])\\s+Cor\\.?\\s+(\\d+)\\b/gi;
+      let corMatch;
+      while ((corMatch = corCitationRe.exec(normalizedMatchSource))) {
+        const corOffset = corMatch.index + corMatch[0].toLowerCase().indexOf('cor');
+        const corEnd = corOffset + 3;
+        if (selectionStart < corEnd && selectionEnd > corOffset) {
+          const book = resolveBibleBook(corMatch[1] + ' Corinthians');
+          const resolved = book && resolveBibleReference(book.name, Number(corMatch[2]), 1, null);
+          if (resolved) {
+            return {book:resolved.book,chapter:resolved.chapter,from:resolved.from,to:resolved.to,url:resolved.url};
+          }
+        }
+      }
     }
 
     // Resolve consecutive comma-separated verse lists before consulting the
