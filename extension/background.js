@@ -2590,6 +2590,7 @@ const BLB_CONTENT_SCRIPT_FILES = [
 // bundle on ordinary sites. Known Bible translation hosts retain the full
 // bundle because they also need supported non-KJV-to-KJV page redirects.
 const SCRIPT_TAGGER_CONTENT_SCRIPT_FILES = ['redirect-scripttagger.js'];
+const BIBLEREF_RANGE_CONTENT_SCRIPT_FILES = ['redirect-bibleref-ranges.js'];
 
 // Hostnames are normalized by hostnameFromTabUrl() before this set is checked.
 // Keep entries in normalized form (without "www.") to avoid unreachable duplicates.
@@ -2623,10 +2624,10 @@ function contentScriptFilesForTab(tab, data) {
   const redirectEnabled = data.redirectEnabled === true;
   const needsFullBundle = explicitSiteFeature || (redirectEnabled && isRedirectHostname(hostname));
   if (needsFullBundle && redirectEnabled) {
-    return [...BLB_CONTENT_SCRIPT_FILES, ...SCRIPT_TAGGER_CONTENT_SCRIPT_FILES];
+    return [...BLB_CONTENT_SCRIPT_FILES, ...SCRIPT_TAGGER_CONTENT_SCRIPT_FILES, ...BIBLEREF_RANGE_CONTENT_SCRIPT_FILES];
   }
   if (needsFullBundle) return BLB_CONTENT_SCRIPT_FILES;
-  if (redirectEnabled) return SCRIPT_TAGGER_CONTENT_SCRIPT_FILES;
+  if (redirectEnabled) return [...SCRIPT_TAGGER_CONTENT_SCRIPT_FILES, ...BIBLEREF_RANGE_CONTENT_SCRIPT_FILES];
   return [];
 }
 
