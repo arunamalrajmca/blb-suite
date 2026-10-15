@@ -49,11 +49,11 @@
   function preserveVisibleVerseRange(link, target) {
     try {
       const url = new URL(target);
-      const pathMatch = url.pathname.match(/^(\\/kjv\\/[^/]+\\/(\\d+)\\/)(\\d+)(?:\\/s_\\d+)?\\/?$/i);
+      const pathMatch = url.pathname.match(/^(\/kjv\/[^/]+\/(\d+)\/)(\d+)(?:\/s_\d+)?\/?$/i);
       if (!pathMatch) return target;
 
-      const text = String(link?.textContent || '').replace(/\\s+/g, ' ').trim();
-      const rangeMatch = text.match(/\\b(\\d+)\\s*:\\s*(\\d+)\\s*[-\\u2010-\\u2015]\\s*(\\d+)\\b/);
+      const text = String(link?.textContent || '').replace(/\s+/g, ' ').trim();
+      const rangeMatch = text.match(/\b(\d+)\s*:\s*(\d+)\s*[-\u2010-\u2015]\s*(\d+)\b/);
       if (!rangeMatch) return target;
 
       const chapter = Number(pathMatch[2]);
