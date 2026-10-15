@@ -2241,6 +2241,70 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
 
 async function handleOmniboxCommand(text, disposition) {
   const normalized=normalizeBibleInput(text);
+
+  // A dedicated prefix routes to ChatGPT without intercepting Bible searches
+  // that begin with ordinary words such as "ask". A bare `askai` opens home.
+  const askAiMatch = normalized.match(/^askai(?:\s+(.*))?$/i);
+  if (askAiMatch) {
+    const query = String(askAiMatch[1] || '').trim();
+    const tab = await chrome.tabs.update({url:'https://chatgpt.com/'});
+    if (query && Number.isInteger(tab?.id)) {
+      const tabId = tab.id;
+      const submitAskAi = (rawQuery) => new Promise(resolve => {
+        const startedAt = Date.now();
+        const timer = setInterval(() => {
+          const queryText = String(rawQuery || '').trim();
+          const composer = document.querySelector('#prompt-textarea, [data-testid="prompt-textarea"], [contenteditable="true"][role="textbox"], textarea');
+          if (composer && composer.isConnected && composer.getClientRects().length) {
+            clearInterval(timer);
+            if ('value' in composer) {
+              const setter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(composer), 'value')?.set;
+              if (setter) setter.call(composer, queryText); else composer.value = queryText;
+            } else {
+              composer.focus();
+              document.execCommand('insertText', false, queryText);
+            }
+            composer.dispatchEvent(new InputEvent('input', {bubbles:true, inputType:'insertText', data:queryText}));
+            const sendTimer = setInterval(() => {
+              const button = composer.closest('form')?.querySelector('button[type="submit"], button[data-testid*="send"]') ||
+                document.querySelector('button[data-testid="send-button"], button[aria-label*="Send prompt"], button[aria-label^="Send"], button[aria-label*="Send message"]');
+              if (button && !button.disabled && button.getAttribute('aria-disabled') !== 'true') {
+                clearInterval(sendTimer);
+                button.click();
+                resolve({submitted:true});
+              } else if (Date.now() - startedAt > 25000) {
+                clearInterval(sendTimer);
+                resolve({submitted:false});
+              }
+            }, 250);
+            return;
+          }
+          if (Date.now() - startedAt > 10000) {
+            clearInterval(timer);
+            // Keep the prompt available in ChatGPT if its composer did not
+            // become accessible for automatic submission.
+            location.href = 'https://chatgpt.com/?q=' + encodeURIComponent(queryText);
+            resolve({submitted:false, fallback:true});
+          }
+        }, 250);
+      });
+      try {
+        const waitForComplete = () => new Promise(resolve => {
+          const check = () => chrome.tabs.get(tabId).then(current => {
+            if (current.status === 'complete') resolve();
+            else setTimeout(check, 200);
+          }).catch(() => resolve());
+          check();
+        });
+        await waitForComplete();
+        await chrome.scripting.executeScript({target:{tabId}, func:submitAskAi, args:[query]});
+      } catch (error) {
+        console.warn('BLB Suite: unable to submit askai prompt in ChatGPT:', error);
+      }
+    }
+    return;
+  }
+
   if (/^cs\s+/i.test(normalized)) {
     if (!(await isSuiteEnabled())) return;
     await recordStudySearchTerm(normalized);

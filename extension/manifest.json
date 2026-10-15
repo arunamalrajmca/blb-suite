@@ -15,7 +15,8 @@
     "alarms"
   ],
   "host_permissions": [
-    "https://www.blueletterbible.org/*"
+    "https://www.blueletterbible.org/*",
+    "https://chatgpt.com/*"
   ],
   "omnibox": {
     "keyword": "b"
