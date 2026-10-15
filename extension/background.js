@@ -2242,6 +2242,17 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
 async function handleOmniboxCommand(text, disposition) {
   const normalized=normalizeBibleInput(text);
 
+  // A dedicated prefix opens a single-word lookup in Webster's 1828 Dictionary.
+  // Reject multiword input rather than silently treating it as a dictionary path.
+  const dictMatch = normalized.match(/^dict(?:\\s+(.*))?$/i);
+  if (dictMatch) {
+    const word = String(dictMatch[1] || '').trim();
+    if (/^\\S+$/.test(word)) {
+      await chrome.tabs.update({url:'https://webstersdictionary1828.com/Dictionary/' + encodeURIComponent(word)});
+    }
+    return;
+  }
+
   // A dedicated prefix routes to ChatGPT without intercepting Bible searches
   // that begin with ordinary words such as "ask". A bare `askai` opens home.
   const askAiMatch = normalized.match(/^askai(?:\s+(.*))?$/i);
