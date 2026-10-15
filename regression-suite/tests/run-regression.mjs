@@ -551,8 +551,9 @@ test('b dict redirects a single word to Webster 1828 and rejects multiword input
   const end = bg.indexOf('  // A dedicated prefix routes to ChatGPT', start);
   assert(start >= 0 && end > start, 'dictionary omnibox route missing');
   const route = bg.slice(start, end);
-  assert(route.includes('/^dict(?:\\\\s+(.*))?$/i'), 'dict prefix parser missing');
-  assert(route.includes('/^\\\\S+$/'), 'dictionary route must enforce a single word');
+  assert(route.includes('dictMatch = normalized.match'), 'dict prefix parser missing');
+  assert(route.includes('encodeURIComponent(word)'), 'dictionary word must be URL-encoded');
+  assert(route.includes('if (/^\\S+$/.test(word))'), 'dictionary route must enforce a single word');
   assert(route.includes('https://webstersdictionary1828.com/Dictionary/'), 'Webster destination missing');
   assert(route.includes('encodeURIComponent(word)'), 'dictionary word must be URL-encoded');
   assert(route.includes('return;'), 'dict prefix must not fall through to Bible search');
