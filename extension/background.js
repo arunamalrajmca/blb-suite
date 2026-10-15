@@ -2244,7 +2244,7 @@ async function handleOmniboxCommand(text, disposition) {
 
   // A dedicated prefix routes to ChatGPT without intercepting Bible searches
   // that begin with ordinary words such as "ask". A bare `askai` opens home.
-  const askAiMatch = normalized.match(/^askai(?:\\s+(.*))?$/i);
+  const askAiMatch = normalized.match(/^askai(?:\s+(.*))?$/i);
   if (askAiMatch) {
     const query = String(askAiMatch[1] || '').trim();
     const tab = await chrome.tabs.update({url:'https://chatgpt.com/'});
@@ -2252,7 +2252,7 @@ async function handleOmniboxCommand(text, disposition) {
       const tabId = tab.id;
       const submitAskAi = (rawQuery) => new Promise(resolve => {
         const startedAt = Date.now();
-        const normalize = value => String(value || '').replace(/\\s+/g, ' ').trim().toLowerCase();
+        const normalize = value => String(value || '').replace(/\s+/g, ' ').trim().toLowerCase();
         const timer = setInterval(() => {
           const queryText = String(rawQuery || '').trim();
           const sidebar = document.querySelector('nav, [data-testid*="sidebar"], aside');
@@ -2260,7 +2260,7 @@ async function handleOmniboxCommand(text, disposition) {
             .filter(el => el.isConnected && el.getClientRects().length)
             .map(el => ({
               el,
-              label: String(el.getAttribute('aria-label') || el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim(),
+              label: String(el.getAttribute('aria-label') || el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim(),
               href: String(el.getAttribute('href') || '')
             }))
             .filter(item => item.label && (item.href.includes('/g/') || item.href.includes('/project/') ||
@@ -2379,7 +2379,7 @@ async function handleOmniboxCommand(text, disposition) {
     return;
   }
 
-  if (/^cs\\s+/i.test(normalized)) {
+  if (/^cs\s+/i.test(normalized)) {
     if (!(await isSuiteEnabled())) return;
     await recordStudySearchTerm(normalized);
     await handleCaseSensitiveBCommand(normalized, disposition || 'currentTab');
