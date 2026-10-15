@@ -5295,10 +5295,11 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // an optional Criteria Search destination, so it must never delay the user's
   // first visible BLB tab.
   let contextualDecision = null;
-  if (contextualRef?.url) {
-    const contextualRefs = selectedRefs.length
-      ? selectedRefs
-      : [contextualRef];
+  // A complete reference explicitly present in the user's selection must win
+  // over an adjacent contextual reference. Context is only a fallback when the
+  // selected text itself contains no resolvable Bible reference.
+  if (contextualRef?.url && selectedRefs.length === 0) {
+    const contextualRefs = [contextualRef];
 
     if (contextualRefs.length < 2) {
       const excludedVerseTexts = contextualRefs
