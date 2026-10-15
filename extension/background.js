@@ -1961,7 +1961,15 @@ async function handleBCommand(text) {
     if (matches.length === 1) {
       await openSingleKjvVerse([matches[0].bookNumber, matches[0].chapter, matches[0].verse], 'currentTab');
     } else if (matches.length > 1) {
-      await openBlbMultiVerseRefs(matches, true);
+      // Use the same URL-size chunking and paced multi-tab opening as the
+      // case-sensitive search path. A single MultiVerse URL can exceed BLB's
+      // practical URL limits when many chapters contain this verse number.
+      const urls = buildCaseSensitiveMultiVerseUrls(matches);
+      if (urls.length) {
+        await openCaseSensitiveDestinations(urls, 'currentTab');
+      } else {
+        redirectToHomepage();
+      }
     } else {
       // Keep the omnibox contract consistent: a valid Suite command with no
       // matching result falls back to the Blue Letter Bible home page.
