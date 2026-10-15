@@ -1744,16 +1744,6 @@ function getDoubleClickSelection(event) {
   return '';
 }
 
-function openDoubleClickSelection(message) {
-  // Clear only after the background confirms a destination was opened.
-  // Failed or unsupported selections remain available for another action.
-  void safeRuntimeSendMessage(message).then(response => {
-    if (response?.ok === true && response?.opened === true && !response?.deduplicated) {
-      clearBlbPageSelectionAfterAction();
-    }
-  }).catch(() => {});
-}
-
 function handleDoubleClickBlb(event) {
   try {
     if (!suiteEnabled || isSensitiveSiteHostname(location.hostname) || isDoubleClickExcludedTarget(event.target)) return;
@@ -1809,7 +1799,7 @@ function handleDoubleClickBlb(event) {
               if (now-previous<1200) return true;
               recentDoubleClickDestinations.set(gestureTarget,now);
             }
-            openDoubleClickSelection({
+            void safeRuntimeSendMessage({
               type:'blbSuiteOpenSelectionText',
               text:selection,
               contextualReference:null,
@@ -1831,7 +1821,7 @@ function handleDoubleClickBlb(event) {
           recentDoubleClickDestinations.set(gestureTarget,now);
         }
 
-        openDoubleClickSelection({
+        void safeRuntimeSendMessage({
           type:'blbSuiteOpenSelectionText',
           text:selection,
           contextualReference,
