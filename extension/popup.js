@@ -494,7 +494,7 @@ function updateStudyActionLabels(topic, existing) {
   if (clearSelectedTopicLabel) {
     const words = displayTopic.split(/\s+/).filter(Boolean);
     const shortTopic = words.length > 2 ? `${words.slice(0, 2).join(' ')}…` : displayTopic;
-    clearSelectedTopicLabel.textContent = displayTopic ? `Delete: ${shortTopic}` : 'Delete: Selected Topic';
+    clearSelectedTopicLabel.textContent = shortTopic || 'Selected Topic';
     clearSelectedTopicLabel.title = displayTopic;
     clearSelectedTopicButton.title = displayTopic ? `Delete topic: ${displayTopic}` : 'Delete the selected topic';
   }
