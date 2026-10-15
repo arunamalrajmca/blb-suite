@@ -1335,9 +1335,9 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             const tag = child.tagName;
             if (tag === 'BR') { pieces.push(' '); continue; }
             const blockLike = /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DL|DT|FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|LI|MAIN|NAV|OL|P|PRE|SECTION|TABLE|TR|UL)$/.test(tag);
-            if (blockLike && pieces.length && !/\s$/.test(pieces[pieces.length - 1])) pieces.push(' ');
+            if (blockLike && pieces.length && !/\\s$/.test(pieces[pieces.length - 1])) pieces.push(' ');
             walk(child);
-            if (blockLike && pieces.length && !/^\s/.test(pieces[pieces.length - 1])) pieces.push(' ');
+            if (blockLike && pieces.length && !/^\\s/.test(pieces[pieces.length - 1])) pieces.push(' ');
           }
         }
       };
@@ -1364,7 +1364,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       for (const candidate of candidates) {
         if (!(candidate instanceof Element)) continue;
         const candidateText = normalizeSelectionText(candidate.textContent || '').normalize('NFKC');
-        if (candidateText && !/\s/.test(candidateText)) {
+        if (candidateText && !/\\s/.test(candidateText)) {
           selected = candidateText;
           break;
         }
@@ -1409,8 +1409,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         // when it separates this prefix from the next visible token.
         const separator = normalizedPrefix.length > 0 &&
           bounded < rawText.length &&
-          /[\s\u00A0\u2007\u202F]$/.test(prefix) &&
-          /\S/.test(rawText.slice(bounded));
+          /[\\s\\u00A0\\u2007\\u202F]$/.test(prefix) &&
+          /\\S/.test(rawText.slice(bounded));
         return normalizedPrefix.length + (separator ? 1 : 0);
       };
       try {
@@ -1430,7 +1430,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       if (start == null || end == null || end <= start) {
         // Locate the selected token in normalized text; don't let a trimmed
         // prefix shift later adjacent references one character to the left.
-        const tokenIndex = candidateMatchSource.indexOf(selected.normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-'));
+        const tokenIndex = candidateMatchSource.indexOf(selected.normalize('NFKC').replace(/[\\u2010-\\u2015\\u2212]/g, '-'));
         if (tokenIndex >= 0) { start = tokenIndex; end = tokenIndex + selected.length; }
       }
 
@@ -1475,7 +1475,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const hasInteriorSeparator =
         normalizedPrefix.length > 0 &&
         boundedOffset < rawSource.length &&
-        /[\s\u00A0\u2007\u202F]$/.test(prefix) &&
+        /[\\s\\u00A0\\u2007\\u202F]$/.test(prefix) &&
         /\S/.test(rawSource.slice(boundedOffset));
       return normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
     };
