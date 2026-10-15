@@ -485,17 +485,24 @@ function renderSelectedTopicInfo() {
 function updateStudyActionLabels(topic, existing) {
   const displayTopic = String(topic || '').trim();
   if (downloadTopicLabel) {
-    downloadTopicLabel.textContent = displayTopic || 'Selected Topic';
+    const words = displayTopic.split(/\s+/).filter(Boolean);
+    const shortTopic = words.length > 2 ? `${words.slice(0, 2).join(' ')}…` : displayTopic;
+    downloadTopicLabel.textContent = shortTopic || 'Selected Topic';
+    downloadTopicLabel.title = displayTopic;
     downloadButton.title = displayTopic ? `Download PDF: ${displayTopic}` : 'Download the selected topic as PDF';
   }
   if (clearSelectedTopicLabel) {
-    clearSelectedTopicLabel.textContent = displayTopic ? `Delete: ${displayTopic}` : 'Delete: Selected Topic';
+    const words = displayTopic.split(/\s+/).filter(Boolean);
+    const shortTopic = words.length > 2 ? `${words.slice(0, 2).join(' ')}…` : displayTopic;
+    clearSelectedTopicLabel.textContent = shortTopic || 'Selected Topic';
+    clearSelectedTopicLabel.title = displayTopic;
     clearSelectedTopicButton.title = displayTopic ? `Delete topic: ${displayTopic}` : 'Delete the selected topic';
   }
 }
 
 function updateStudyButtons() {
   const suiteOn = document.getElementById('master').checked;
+  if (exportStudyBackupButton) exportStudyBackupButton.disabled = !(studyState.topics || []).length;
   if (!suiteOn) {
     startButton.disabled = true;
     multiViewButton.disabled = true;
@@ -1209,6 +1216,132 @@ async function handleDoubleClickToggle(on) {
 document.getElementById('pageButton').addEventListener('change', e => handlePageButtonToggle(e.target.checked));
 document.getElementById('doubleClick').addEventListener('change', e => handleDoubleClickToggle(e.target.checked));
 document.getElementById('redirectEnabled').addEventListener('change', e => setRedirect(e.target.checked));
+
+
+/* Portable Study backup: export only Study data, never extension/site settings. */
+const STUDY_BACKUP_KEYS = ['studySessions', 'studyTopics', 'studySelectedTopic', 'studyAutoStopMinutes'];
+const exportStudyBackupButton = document.getElementById('exportStudyBackup');
+const importStudyBackupButton = document.getElementById('importStudyBackup');
+const studyBackupFileInput = document.getElementById('studyBackupFile');
+
+async function exportStudyBackup() {
+  if (!(studyState.topics || []).length) {
+    setStatus('There are no saved topics to export.');
+    return;
+  }
+  exportStudyBackupButton.disabled = true;
+  try {
+    const stored = await chrome.storage.local.get(STUDY_BACKUP_KEYS);
+    const backup = {
+      format: 'blb-suite-study-backup',
+      schemaVersion: 1,
+      extensionVersion: chrome.runtime.getManifest().version,
+      exportedAt: new Date().toISOString(),
+      study: Object.fromEntries(STUDY_BACKUP_KEYS
+        .filter(key => Object.prototype.hasOwnProperty.call(stored, key))
+        .map(key => [key, stored[key]]))
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    anchor.href = url;
+    anchor.download = `BLB-Suite-Study-Backup-${date}.json`;
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus('Study backup exported. Keep the JSON file somewhere safe.');
+  } catch (error) {
+    console.error('BLB Suite Study backup export failed:', error);
+    setStatus('Unable to export Study backup.');
+  } finally {
+    exportStudyBackupButton.disabled = !(studyState.topics || []).length;
+  }
+}
+
+function isValidStudyBackup(backup) {
+  if (!backup || typeof backup !== 'object' ||
+      backup.format !== 'blb-suite-study-backup' ||
+      backup.schemaVersion !== 1 ||
+      !backup.study || typeof backup.study !== 'object' || Array.isArray(backup.study)) return false;
+  const study = backup.study;
+  if (Object.prototype.hasOwnProperty.call(study, 'studySessions') &&
+      !Array.isArray(study.studySessions)) return false;
+  if (Object.prototype.hasOwnProperty.call(study, 'studyTopics') &&
+      !Array.isArray(study.studyTopics)) return false;
+  if (Object.prototype.hasOwnProperty.call(study, 'studySelectedTopic') &&
+      typeof study.studySelectedTopic !== 'string') return false;
+  if (Object.prototype.hasOwnProperty.call(study, 'studyAutoStopMinutes') &&
+      !(Number.isInteger(study.studyAutoStopMinutes) && study.studyAutoStopMinutes >= 0 && study.studyAutoStopMinutes <= 120)) return false;
+  return STUDY_BACKUP_KEYS.some(key => Object.prototype.hasOwnProperty.call(study, key));
+}
+
+async function importStudyBackupFile(file) {
+  if (!file) return;
+  importStudyBackupButton.disabled = true;
+  try {
+    if (file.size > 25 * 1024 * 1024) {
+      setStatus('Backup file is too large (maximum 25 MB).');
+      return;
+    }
+    const backup = JSON.parse(await file.text());
+    if (!isValidStudyBackup(backup)) {
+      setStatus('This is not a valid BLB Suite Study backup.');
+      return;
+    }
+    const summary = backup.study;
+    const sessionCount = Array.isArray(summary.studySessions) ? summary.studySessions.length : 0;
+    const topicCount = Array.isArray(summary.studyTopics) ? summary.studyTopics.length : 0;
+    if (!confirm(`Restore this backup? It contains ${topicCount} saved topic entr${topicCount === 1 ? 'y' : 'ies'} and ${sessionCount} study session(s). Existing Study data will be replaced. Extension settings will not change.`)) return;
+
+    // Restore only known Study keys. Do not restore active recording/pause state
+    // or site preferences, permissions, history, and other extension settings.
+    const restored = {};
+    for (const key of STUDY_BACKUP_KEYS) {
+      if (Object.prototype.hasOwnProperty.call(summary, key)) restored[key] = summary[key];
+    }
+    await chrome.storage.local.set(restored);
+    topicInput.value = String(restored.studySelectedTopic || '');
+    noteInput.value = '';
+    await refreshStudyState();
+    setStatus(`Study backup restored (${sessionCount} session(s)).`);
+  } catch (error) {
+    console.error('BLB Suite Study backup import failed:', error);
+    setStatus('Unable to read or restore this backup file.');
+  } finally {
+    importStudyBackupButton.disabled = false;
+    studyBackupFileInput.value = '';
+  }
+}
+
+const studyBackupMenuButton = document.getElementById('studyBackupMenuButton');
+const studyBackupMenu = document.getElementById('studyBackupMenu');
+function closeStudyBackupMenu() {
+  studyBackupMenu?.classList.remove('open');
+  studyBackupMenuButton?.setAttribute('aria-expanded', 'false');
+}
+studyBackupMenuButton?.addEventListener('click', () => {
+  const open = !studyBackupMenu.classList.contains('open');
+  closeStudyBackupMenu();
+  if (open) {
+    studyBackupMenu.classList.add('open');
+    studyBackupMenuButton.setAttribute('aria-expanded', 'true');
+  }
+});
+exportStudyBackupButton?.addEventListener('click', () => {
+  closeStudyBackupMenu();
+  void exportStudyBackup();
+});
+importStudyBackupButton?.addEventListener('click', () => {
+  closeStudyBackupMenu();
+  studyBackupFileInput.click();
+});
+studyBackupFileInput?.addEventListener('change', () => importStudyBackupFile(studyBackupFileInput.files?.[0]));
+document.addEventListener('click', event => {
+  if (!event.target.closest('.backup-wrap')) closeStudyBackupMenu();
+});
 
 (async () => {
   render(await getState());
