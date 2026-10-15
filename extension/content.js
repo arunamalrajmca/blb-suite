@@ -1587,6 +1587,27 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
 
 
 
+    // Substack can render "1 Cor. 13" as a single plain-text paragraph.
+    // In that DOM, double-clicking "Cor" selects only the abbreviation, which
+    // the general book resolver does not recognize as a standalone book name.
+    // Resolve only the citation whose abbreviation overlaps the actual clicked
+    // range; never infer a reference from another citation in the paragraph.
+    if (selected.toLowerCase().replace(/\\.$/, '') === 'cor' &&
+        selectionStart != null && selectionEnd != null) {
+      const corCitationPattern = /\\b([12])\\s+Cor(?:\\.|inthians?)\\s+(\\d+)(?::\\s*(\\d+)(?:\\s*[-–—]\\s*(\\d+))?)?/gi;
+      let corMatch;
+      while ((corMatch = corCitationPattern.exec(normalizedMatchSource))) {
+        const bookStart = corMatch.index + corMatch[0].indexOf('Cor');
+        const bookEnd = bookStart + 3;
+        if (selectionStart >= bookEnd || selectionEnd <= bookStart) continue;
+        const parsedCitation = resolveBibleReferenceText(corMatch[0]);
+        if (parsedCitation.length) {
+          const parsed = parsedCitation[0];
+          return {book: parsed.book, chapter: parsed.chapter, from: parsed.from, to: parsed.to, url: parsed.url};
+        }
+      }
+    }
+
     // Resolve consecutive comma-separated verse lists before consulting the
     // general parser. The general parser may return only the first verse
     // (e.g. Romans 10:9) even when the clicked token is the book or chapter
