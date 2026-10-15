@@ -131,7 +131,7 @@ test.describe('global ScriptTagger content-script injection', () => {
   });
 });
 
-test('global redirect uses only the minimal ScriptTagger handler on ordinary sites', () => {
+test('global redirect uses the minimal handlers on ordinary sites and the full bundle on supported Bible sites', () => {
   const start = background.indexOf('const BLB_CONTENT_SCRIPT_FILES = [');
   const end = background.indexOf('\nfunction isHttpPageUrl(', start);
   if (start < 0 || end < 0) throw new Error('Could not extract content script selection helpers');
@@ -147,13 +147,13 @@ test('global redirect uses only the minimal ScriptTagger handler on ordinary sit
   expect(Array.from(context.contentScriptFilesForTab(
     {url:'https://sagacityweb.com/article'},
     {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}
-  ))).toEqual(['redirect-scripttagger.js']);
+  ))).toEqual(['redirect-scripttagger.js','redirect-bibleref-ranges.js']);
 
   expect(Array.from(context.contentScriptFilesForTab(
     {url:'https://www.biblegateway.com/passage/?search=John+3%3A16'},
     {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}
   ))).toEqual([
-    'regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','content.js','redirect-scripttagger.js'
+    'regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','content.js','redirect-scripttagger.js','redirect-bibleref-ranges.js'
   ]);
 
   expect(Array.from(context.contentScriptFilesForTab(
