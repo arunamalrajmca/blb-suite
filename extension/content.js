@@ -1476,7 +1476,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         normalizedPrefix.length > 0 &&
         boundedOffset < rawSource.length &&
         /[\\s\\u00A0\\u2007\\u202F]$/.test(prefix) &&
-        /\S/.test(rawSource.slice(boundedOffset));
+        /\\S/.test(rawSource.slice(boundedOffset));
       return normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
     };
 
