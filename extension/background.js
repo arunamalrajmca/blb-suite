@@ -2249,6 +2249,8 @@ async function handleOmniboxCommand(text, disposition) {
     const word = String(dictMatch[1] || '').trim();
     if (/^\S+$/.test(word)) {
       await chrome.tabs.update({url:'https://webstersdictionary1828.com/Dictionary/' + encodeURIComponent(word)});
+    } else {
+      await chrome.tabs.update({url:'https://webstersdictionary1828.com/'});
     }
     return;
   }
