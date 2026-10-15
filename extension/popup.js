@@ -334,6 +334,11 @@ async function loadSelectedTopic() {
 
 function setStatus(text) { status.textContent = text || ''; }
 
+// The caption below Notes reports the most recent action. Clear stale feedback
+// when the user changes context, so a result from another topic/action is not
+// left looking like guidance for the current Notes box.
+function clearActionStatus() { setStatus(''); }
+
 function formatDisplayDate(iso) {
   const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
   return m ? `${m[2]}/${m[3]}/${m[1]}` : '';
@@ -359,6 +364,7 @@ function setTopicHighlight(index) {
 }
 
 async function selectTopicValue(topic) {
+  clearActionStatus();
   const previousTopic = selectedTopic();
   const recordingTopic = String(studyState.recordingTopic || '');
   const isRecording = !!studyState.recording;
@@ -970,6 +976,7 @@ async function persistTopicValue(topic) {
 }
 
 topicInput.addEventListener('input', async () => {
+  clearActionStatus();
   if (!topicInput.value.trim() && studyState.recording) {
     await clearTopicSelectionInput();
     return;
@@ -1075,6 +1082,7 @@ chrome.runtime.onMessage.addListener((message) => {
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local') return;
   if (changes[SELECTED_TOPIC_STORAGE_KEY]) {
+    clearActionStatus();
     topicInput.value = titleCase(changes[SELECTED_TOPIC_STORAGE_KEY].newValue || '');
     noteInput.value = '';
     closeTopicMenu();
@@ -1086,6 +1094,8 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
 });
 startButton.addEventListener('click', startTopic);
 stopButton.addEventListener('click', stopTopic);
+noteInput.addEventListener('focus', clearActionStatus);
+noteInput.addEventListener('input', clearActionStatus);
 noteInput.addEventListener('blur', async () => { await saveStudyNote(); });
 downloadMenuButton.addEventListener('click', e => { e.stopPropagation(); toggleDownloadMenu(); });
 downloadButton.addEventListener('click', downloadTopic);
