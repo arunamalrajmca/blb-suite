@@ -5591,7 +5591,7 @@ async function openBlbPageSelection(selectionText, tabBehavior = {activeIfNew:tr
   return {ok:true, criteriaSearch:true, reused:!!result?.reused};
 }
 
-async function openCurrentSelectionInBlb(tabId) {
+async function openCurrentSelectionInBlb(tabId, afterSelectionCaptured = null) {
   const text = await getActiveTabSelection(tabId);
   if (!text) return;
 
@@ -5615,12 +5615,14 @@ async function openCurrentSelectionInBlb(tabId) {
     if (selectedRefs.length < 2) {
       const contextualRef = await getContextualSelectionReference(tabId, text);
       if (contextualRef?.url) {
+        if (typeof afterSelectionCaptured === 'function') await afterSelectionCaptured();
         await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true, altB:true}, contextualRef);
         return;
       }
     }
   }
 
+  if (typeof afterSelectionCaptured === 'function') await afterSelectionCaptured();
   await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true, altB:true}, null);
 }
 
@@ -5840,12 +5842,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!(await shouldShowBlbContextMenu(tab, text))) return;
   try {
     if (normalizeSiteHostname(hostnameFromTabUrl(tab?.url)) === BLB_HOSTNAME) {
+      void clearPageSelectionAfterBlbAction(tab?.id);
       await openBlbPageSelection(text, {activeIfNew:true, activateExisting:true});
     } else {
       const contextualRef = await getContextualSelectionReference(tab?.id, text);
+      void clearPageSelectionAfterBlbAction(tab?.id);
       await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true}, contextualRef || null);
     }
-    await clearPageSelectionAfterBlbAction(tab?.id);
   } catch (err) {
     console.error('BLB Suite selection:',err);
   }
@@ -5878,13 +5881,12 @@ async function handleOpenBibleSelectionCommand() {
     if (siteKey === BLB_HOSTNAME) {
       const selectedText = await getActiveTabSelection(tab.id);
       if (selectedText) {
+        void clearPageSelectionAfterBlbAction(tab.id);
         await openBlbPageSelection(selectedText, {activeIfNew:true, activateExisting:true});
-        await clearPageSelectionAfterBlbAction(tab.id);
       }
       return;
     }
-    await openCurrentSelectionInBlb(tab.id);
-    await clearPageSelectionAfterBlbAction(tab.id);
+    await openCurrentSelectionInBlb(tab.id, () => clearPageSelectionAfterBlbAction(tab.id));
   } catch (err) {
     console.error('BLB Suite Alt+B:', err);
   }
