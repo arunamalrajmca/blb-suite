@@ -1585,7 +1585,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       selectionEnd = toNormalizedOffset(selectionEnd);
     }
 
-    if (!refs.length) return null;
 
 
     // Resolve consecutive comma-separated verse lists before consulting the
