@@ -2259,14 +2259,40 @@ async function handleOmniboxCommand(text, disposition) {
       const submitPrompt = () => new Promise(resolve => {
         const startedAt = Date.now();
         const timer = setInterval(() => {
-          const composer = document.querySelector('#prompt-textarea, [contenteditable="true"][data-testid="prompt-textarea"], textarea');
-          const sendButton = document.querySelector('button[data-testid="send-button"], button[aria-label*="Send prompt"], button[aria-label^="Send"]');
+          const composer = document.querySelector('#prompt-textarea, [data-testid="prompt-textarea"], [contenteditable="true"][role="textbox"], textarea');
           const hasText = composer && (('value' in composer && composer.value.trim()) || composer.innerText?.trim() || composer.textContent?.trim());
-          if (hasText && sendButton && !sendButton.disabled) {
+          if (!hasText) {
+            if (Date.now() - startedAt > 20000) {
+              clearInterval(timer);
+              resolve(false);
+            }
+            return;
+          }
+
+          // ChatGPT has changed its Send button markup over time. Prefer a
+          // submit control in the composer form, then fall back to known labels.
+          const form = composer.closest('form');
+          const sendButton = form?.querySelector('button[type="submit"], button[data-testid*="send"]') ||
+            document.querySelector('button[data-testid="send-button"], button[aria-label*="Send prompt"], button[aria-label^="Send"], button[aria-label*="Send message"]');
+          if (sendButton && !sendButton.disabled && sendButton.getAttribute('aria-disabled') !== 'true') {
             clearInterval(timer);
             sendButton.click();
             resolve(true);
-          } else if (Date.now() - startedAt > 20000) {
+            return;
+          }
+
+          // Last resort: trigger Enter on the actual composer. This is useful
+          // when ChatGPT has a working composer but its Send control selector
+          // changes. Do not do this until text is present and the page is ready.
+          if (Date.now() - startedAt > 3000 && composer.isConnected) {
+            clearInterval(timer);
+            composer.focus();
+            composer.dispatchEvent(new KeyboardEvent('keydown', {key:'Enter', code:'Enter', bubbles:true}));
+            composer.dispatchEvent(new KeyboardEvent('keyup', {key:'Enter', code:'Enter', bubbles:true}));
+            resolve(true);
+            return;
+          }
+          if (Date.now() - startedAt > 20000) {
             clearInterval(timer);
             resolve(false);
           }
