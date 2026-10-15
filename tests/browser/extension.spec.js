@@ -200,34 +200,38 @@ test.describe('core user-visible E2E', () => {
       }), expectedPath);
     }
   });
-  test('Double-click resolves Cor in a Substack-style 1 Cor. 13 citation', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click resolves Cor contextually in Substack-style 1 Cor. 13 and 2 Cor. 13 citations', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
     await page.evaluate(() => {
-      const paragraph = document.createElement('p');
-      paragraph.id = 'blb-e2e-substack-corinthians-reference';
-      paragraph.innerHTML = 'Essentially, you are asking yourself, “How do I apply the attributes of charity in <span>1</span> <span id="substack-cor">Cor</span>. <span>13</span> in how I love my wife and how I live my life?”';
-      document.body.appendChild(paragraph);
+      const fixture = document.createElement('div');
+      fixture.id = 'blb-e2e-substack-corinthians-reference';
+      fixture.innerHTML = '<p>Essentially, you are asking yourself, “How do I apply the attributes of charity in <span>1</span> <span id="substack-cor1">Cor</span>. <span>13</span> in how I love my wife and how I live my life?”</p><p>See also <span>2</span> <span id="substack-cor2">Cor</span>. <span>13</span>.</p>';
+      document.body.appendChild(fixture);
     });
 
-    const expectedPath = '/kjv/1co/13/1/';
-    await page.locator('#substack-cor').dblclick();
-    await activateBlbTabForPath(extensionWorker, expectedPath, {
-      fragment: 'Cor',
-      selector: '#blb-e2e-substack-corinthians-reference',
-      selectedText: 'Cor'
-    });
-    await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
-      for (const tab of tabs) {
-        try {
-          const url = new URL(String(tab.url || tab.pendingUrl || ''));
-          if (url.hostname.endsWith('blueletterbible.org') && url.pathname === path && tab.id != null) {
-            await chrome.tabs.remove(tab.id);
-          }
-        } catch (_) {}
-      }
-    }), expectedPath);
+    for (const { selector, expectedPath } of [
+      { selector: '#substack-cor1', expectedPath: '/kjv/1co/13/1/' },
+      { selector: '#substack-cor2', expectedPath: '/kjv/2co/13/1/' }
+    ]) {
+      await page.locator(selector).dblclick();
+      await activateBlbTabForPath(extensionWorker, expectedPath, {
+        fragment: selector,
+        selector: '#blb-e2e-substack-corinthians-reference',
+        selectedText: 'Cor'
+      });
+      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+        for (const tab of tabs) {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            if (url.hostname.endsWith('blueletterbible.org') && url.pathname === path && tab.id != null) {
+              await chrome.tabs.remove(tab.id);
+            }
+          } catch (_) {}
+        }
+      }), expectedPath);
+    }
   });
 
   test('Double-click resolves a Unicode-styled Bible book in a reference', async ({ page, context, extensionStorage, extensionWorker }) => {
