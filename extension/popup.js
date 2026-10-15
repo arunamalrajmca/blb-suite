@@ -492,7 +492,10 @@ function updateStudyActionLabels(topic, existing) {
     downloadButton.title = displayTopic ? `Download PDF: ${displayTopic}` : 'Download the selected topic as PDF';
   }
   if (clearSelectedTopicLabel) {
-    clearSelectedTopicLabel.textContent = displayTopic ? `Delete: ${displayTopic}` : 'Delete: Selected Topic';
+    const words = displayTopic.split(/\s+/).filter(Boolean);
+    const shortTopic = words.length > 2 ? `${words.slice(0, 2).join(' ')}…` : displayTopic;
+    clearSelectedTopicLabel.textContent = displayTopic ? `Delete: ${shortTopic}` : 'Delete: Selected Topic';
+    clearSelectedTopicLabel.title = displayTopic;
     clearSelectedTopicButton.title = displayTopic ? `Delete topic: ${displayTopic}` : 'Delete the selected topic';
   }
 }
