@@ -2241,6 +2241,20 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
 
 async function handleOmniboxCommand(text, disposition) {
   const normalized=normalizeBibleInput(text);
+
+  // A dedicated prefix routes to ChatGPT without intercepting Bible searches
+  // that begin with ordinary words such as "ask". A bare `askai` is
+  // intentionally valid and opens ChatGPT's home page.
+  const askAiMatch = normalized.match(/^askai(?:\s+(.*))?$/i);
+  if (askAiMatch) {
+    const query = String(askAiMatch[1] || '').trim();
+    const url = query
+      ? `https://chatgpt.com/?q=${encodeURIComponent(query)}`
+      : 'https://chatgpt.com/';
+    await chrome.tabs.update({url});
+    return;
+  }
+
   if (/^cs\s+/i.test(normalized)) {
     if (!(await isSuiteEnabled())) return;
     await recordStudySearchTerm(normalized);
