@@ -545,6 +545,18 @@ test('Study Sessions download paths remain wired', () => {
     assert(popup.includes(type), `download caller missing: ${type}`);
   }
 });
+test('b dict redirects a single word to Webster 1828 and rejects multiword input', () => {
+  const bg = read('background.js');
+  const start = bg.indexOf('const dictMatch = normalized.match');
+  const end = bg.indexOf('  // A dedicated prefix routes to ChatGPT', start);
+  assert(start >= 0 && end > start, 'dictionary omnibox route missing');
+  const route = bg.slice(start, end);
+  assert(route.includes('/^dict(?:\\\\s+(.*))?$/i'), 'dict prefix parser missing');
+  assert(route.includes('/^\\\\S+$/'), 'dictionary route must enforce a single word');
+  assert(route.includes('https://webstersdictionary1828.com/Dictionary/'), 'Webster destination missing');
+  assert(route.includes('encodeURIComponent(word)'), 'dictionary word must be URL-encoded');
+  assert(route.includes('return;'), 'dict prefix must not fall through to Bible search');
+});
 test('Omnibox command path remains wired', () => {
   const bg = read('background.js');
   assert(bg.includes('omnibox.onInputEntered'), 'omnibox listener missing');
