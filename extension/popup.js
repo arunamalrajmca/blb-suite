@@ -485,7 +485,10 @@ function renderSelectedTopicInfo() {
 function updateStudyActionLabels(topic, existing) {
   const displayTopic = String(topic || '').trim();
   if (downloadTopicLabel) {
-    downloadTopicLabel.textContent = displayTopic || 'Selected Topic';
+    const words = displayTopic.split(/\s+/).filter(Boolean);
+    const shortTopic = words.length > 2 ? `${words.slice(0, 2).join(' ')}…` : displayTopic;
+    downloadTopicLabel.textContent = shortTopic || 'Selected Topic';
+    downloadTopicLabel.title = displayTopic;
     downloadButton.title = displayTopic ? `Download PDF: ${displayTopic}` : 'Download the selected topic as PDF';
   }
   if (clearSelectedTopicLabel) {
