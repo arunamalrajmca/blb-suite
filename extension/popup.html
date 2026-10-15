@@ -77,6 +77,10 @@ button,input,textarea{font:inherit}
 .topic-row .topic-stop-btn:active:not(:disabled) {
   background: #b62324;
 }
+.backup-row{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:7px}
+.backup-btn{height:28px;border:1px solid #59616a;border-radius:7px;background:#30343a;color:#e8eaed;font-size:10px;font-weight:600;cursor:pointer}
+.backup-btn:hover:not(:disabled){background:#41464d}
+.backup-btn:disabled{opacity:.45;cursor:default}
 </style>
 </head>
 <body class="popup-loading">
@@ -197,6 +201,11 @@ button,input,textarea{font:inherit}
         <textarea id="studyNote" placeholder="Add a note to the selected topic..."></textarea>
       </div>
       <div id="studyStatus" class="status"></div>
+      <div class="backup-row" aria-label="Study data backup">
+        <button id="exportStudyBackup" class="backup-btn" type="button" title="Save topics, notes, references, and study history to a JSON backup">Export Backup</button>
+        <button id="importStudyBackup" class="backup-btn" type="button" title="Restore topics, notes, references, and study history from a JSON backup">Import Backup</button>
+        <input id="studyBackupFile" type="file" accept=".json,application/json" hidden>
+      </div>
     </section>
     <div class="guide-footer" aria-label="Feature guide">
       <span class="guide-label">Feature Guide</span>
