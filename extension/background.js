@@ -2251,7 +2251,41 @@ async function handleOmniboxCommand(text, disposition) {
     const url = query
       ? `https://chatgpt.com/?q=${encodeURIComponent(query)}`
       : 'https://chatgpt.com/';
-    await chrome.tabs.update({url});
+    const tab = await chrome.tabs.update({url});
+    if (query && Number.isInteger(tab?.id)) {
+      // Wait for ChatGPT to load, then submit the prefilled prompt. This runs
+      // only for the explicit askai command and leaves the resulting chat open.
+      const tabId = tab.id;
+      const submitPrompt = () => new Promise(resolve => {
+        const startedAt = Date.now();
+        const timer = setInterval(() => {
+          const composer = document.querySelector('#prompt-textarea, [contenteditable="true"][data-testid="prompt-textarea"], textarea');
+          const sendButton = document.querySelector('button[data-testid="send-button"], button[aria-label*="Send prompt"], button[aria-label^="Send"]');
+          const hasText = composer && (('value' in composer && composer.value.trim()) || composer.innerText?.trim() || composer.textContent?.trim());
+          if (hasText && sendButton && !sendButton.disabled) {
+            clearInterval(timer);
+            sendButton.click();
+            resolve(true);
+          } else if (Date.now() - startedAt > 20000) {
+            clearInterval(timer);
+            resolve(false);
+          }
+        }, 250);
+      });
+      const waitForComplete = () => new Promise(resolve => {
+        const check = () => chrome.tabs.get(tabId).then(current => {
+          if (current.status === 'complete') resolve();
+          else setTimeout(check, 200);
+        }).catch(() => resolve());
+        check();
+      });
+      await waitForComplete();
+      try {
+        await chrome.scripting.executeScript({target:{tabId}, func:submitPrompt});
+      } catch (error) {
+        console.warn('BLB Suite: unable to submit askai prompt in ChatGPT:', error);
+      }
+    }
     return;
   }
 
