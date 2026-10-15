@@ -1458,6 +1458,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     const source = normalizeSelectionText(rawSource).normalize('NFKC');
     if (!source) return null;
     const refs = resolveBibleReferenceText(source);
+    if (!refs.length) return null;
     // Reference parsing removes invisible directional marks and collapses
     // whitespace. Occurrence matching must use that same normalized text,
     // while Range-derived offsets must be translated from the original DOM
@@ -1792,18 +1793,6 @@ function handleDoubleClickBlb(event) {
         );
         const isStandaloneNumericBook=standaloneBook && /^\d+$/.test(selection) && blockText===selection;
         const contextualReference=isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook);
-        if (location.hostname.includes('substack.com') && selection.toLowerCase() === 'cor') {
-          console.info('[BLB Cor trace] content decision', {
-            page: location.href,
-            selectedText: selection,
-            targetTag: contextualTarget?.tagName || null,
-            targetText: normalizeSelectionText(contextualTarget?.textContent || ''),
-            blockText: normalizeSelectionText(contextualTarget?.closest?.('p,li,td,th,blockquote,article,section,div')?.textContent || ''),
-            blockContext: blockContext?.url || null,
-            standaloneBook: standaloneBook?.url || null,
-            contextualReference: contextualReference?.url || null
-          });
-        }
 
         if (!contextualReference) {
           if (/^[A-Za-z][A-Za-z'’-]*$/.test(selection) && !/^(?:i|ii|iii)$/i.test(selection)) {
