@@ -1963,7 +1963,9 @@ async function handleBCommand(text) {
     } else if (matches.length > 1) {
       await openBlbMultiVerseRefs(matches, true);
     } else {
-      console.info(`BLB Suite: no Bible chapters contain verse ${verseNumber}.`);
+      // Keep the omnibox contract consistent: a valid Suite command with no
+      // matching result falls back to the Blue Letter Bible home page.
+      redirectToHomepage();
     }
     await recordStudySearchTerm(t);
     return;
