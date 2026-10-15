@@ -480,6 +480,7 @@ test('BLB native-event interception remains explicitly scoped', () => {
   assert(!dbl.includes('preventDefault()'), 'double-click resolver must not cancel native dblclick');
   assert(!dbl.includes('stopPropagation()'), 'double-click resolver must not stop native propagation');
   assert(!dbl.includes('stopImmediatePropagation()'), 'double-click resolver must not stop native propagation');
+  assert(!dbl.includes('clearBlbPageSelectionAfterAction()'), 'double-click lookup must not clear native text selection');
 });
 test('BLB new-tab and Copy-as-link contracts remain wired', () => {
   const content = read('content.js');
