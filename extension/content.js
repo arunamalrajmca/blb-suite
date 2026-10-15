@@ -1585,26 +1585,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       selectionEnd = toNormalizedOffset(selectionEnd);
     }
 
-    // Resolve a clicked "Cor" against the citation that actually contains the
-    // clicked DOM position. Do not use the first Cor in a large ancestor block:
-    // Substack paragraphs may contain several citations, and stale/misaligned
-    // offsets can otherwise let an unrelated parsed reference win.
-    if (selected.normalize('NFKC').toLowerCase() === 'cor') {
-      const corCitationRe = /\b([12])\s+Cor\.?\s+(\d+)\b/gi;
-      let corMatch;
-      while ((corMatch = corCitationRe.exec(normalizedMatchSource))) {
-        const corOffset = corMatch.index + corMatch[0].toLowerCase().indexOf('cor');
-        const corEnd = corOffset + 3;
-        if (selectionStart < corEnd && selectionEnd > corOffset) {
-          const book = resolveBibleBook(corMatch[1] + ' Corinthians');
-          const resolved = book && resolveBibleReference(book.name, Number(corMatch[2]), 1, null);
-          if (resolved) {
-            return {book:resolved.book,chapter:resolved.chapter,from:resolved.from,to:resolved.to,url:resolved.url};
-          }
-        }
-      }
-    }
-
     if (!refs.length) return null;
 
 
