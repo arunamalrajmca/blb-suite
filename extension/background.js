@@ -2590,6 +2590,7 @@ const BLB_CONTENT_SCRIPT_FILES = [
 // bundle on ordinary sites. Known Bible translation hosts retain the full
 // bundle because they also need supported non-KJV-to-KJV page redirects.
 const SCRIPT_TAGGER_CONTENT_SCRIPT_FILES = ['redirect-scripttagger.js'];
+const BIBLEREF_RANGE_CONTENT_SCRIPT_FILES = ['redirect-bibleref-ranges.js'];
 
 // Hostnames are normalized by hostnameFromTabUrl() before this set is checked.
 // Keep entries in normalized form (without "www.") to avoid unreachable duplicates.
@@ -2623,10 +2624,10 @@ function contentScriptFilesForTab(tab, data) {
   const redirectEnabled = data.redirectEnabled === true;
   const needsFullBundle = explicitSiteFeature || (redirectEnabled && isRedirectHostname(hostname));
   if (needsFullBundle && redirectEnabled) {
-    return [...BLB_CONTENT_SCRIPT_FILES, ...SCRIPT_TAGGER_CONTENT_SCRIPT_FILES];
+    return [...BLB_CONTENT_SCRIPT_FILES, ...SCRIPT_TAGGER_CONTENT_SCRIPT_FILES, ...BIBLEREF_RANGE_CONTENT_SCRIPT_FILES];
   }
   if (needsFullBundle) return BLB_CONTENT_SCRIPT_FILES;
-  if (redirectEnabled) return SCRIPT_TAGGER_CONTENT_SCRIPT_FILES;
+  if (redirectEnabled) return [...SCRIPT_TAGGER_CONTENT_SCRIPT_FILES, ...BIBLEREF_RANGE_CONTENT_SCRIPT_FILES];
   return [];
 }
 
@@ -2799,7 +2800,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;
@@ -3279,6 +3280,44 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       console.error('BLB Suite ScriptTagger destination:', error);
       sendResponse({ok:false, error:String(error)});
     });
+    return true;
+  }
+
+  if (message.type === 'blbSuiteOpenBibleRefRange') {
+    if (!(await isSuiteEnabled())) { sendResponse({ok:false}); return true; }
+    try {
+      const source = new URL(String(message.url || ''));
+      if (!['bibleref.com', 'www.bibleref.com'].includes(source.hostname.toLowerCase())) {
+        sendResponse({ok:false});
+        return true;
+      }
+      const match = source.pathname.match(/^\/([^/]+)\/(\d+)\/([^/]+)-(\d+)-(\d+)-(\d+)\.html$/i);
+      if (!match) { sendResponse({ok:false}); return true; }
+      const bookName = decodeURIComponent(match[1]);
+      const chapter = Number(match[2]);
+      const slugChapter = Number(match[4]);
+      const startVerse = Number(match[5]);
+      const endVerse = Number(match[6]);
+      if (slugChapter !== chapter) { sendResponse({ok:false}); return true; }
+      if (!Number.isInteger(chapter) || chapter < 1 || !Number.isInteger(startVerse) || startVerse < 1 ||
+          !Number.isInteger(endVerse) || endVerse <= startVerse) {
+        sendResponse({ok:false});
+        return true;
+      }
+      const resolved = resolveBibleReference(bookName, chapter, startVerse, endVerse);
+      if (!resolved?.book?.urlKey) { sendResponse({ok:false}); return true; }
+      const target = 'https://www.blueletterbible.org/kjv/' +
+        resolved.book.urlKey + '/' + resolved.chapter + '/' + resolved.from +
+        (resolved.to != null && resolved.to !== resolved.from ? '-' + resolved.to : '') + '/';
+      openBlbDestination(target, !!message.activeIfNew, !!message.activateExisting)
+        .then(() => sendResponse({ok:true}))
+        .catch(error => {
+          console.error('BLB Suite BibleRef range destination:', error);
+          sendResponse({ok:false, error:String(error)});
+        });
+    } catch (error) {
+      sendResponse({ok:false, error:String(error)});
+    }
     return true;
   }
 
