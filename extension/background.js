@@ -1939,7 +1939,7 @@ async function handleBCommand(text) {
   // brackets are accepted too, so `b v23`, `b v(23)`, and `b <v(23)>` work.
   const nthVerseMatch = low.match(/^<?v\s*(?:\(\s*(\d+)\s*\)|(\d+))>?$/i);
   if (nthVerseMatch) {
-    const verseNumber = Number(nthVerseMatch[1]);
+    const verseNumber = Number(nthVerseMatch[1] || nthVerseMatch[2]);
     if (!Number.isSafeInteger(verseNumber) || verseNumber < 1) return;
 
     const matches = [];
