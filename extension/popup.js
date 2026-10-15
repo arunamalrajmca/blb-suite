@@ -681,13 +681,14 @@ async function startTopic() {
 
 async function stopTopic() {
   if (!studyState.recording) return;
+  const lastRecordingTopic = String(studyState.recordingTopic || selectedTopic() || '').trim();
   const response = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
   if (!response?.ok) { setStatus('Unable to stop recording.'); return; }
   topicInput.value = '';
   noteInput.value = '';
   editingNoteOriginal = '';
   await syncSelectedTopic('');
-  setStatus('Recording stopped.');
+  setStatus(lastRecordingTopic ? `Last Recording Stopped: ${lastRecordingTopic}` : 'Last Recording Stopped.');
   await refreshStudyState();
 }
 async function downloadTopic() {
