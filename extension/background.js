@@ -3184,8 +3184,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // Orphan standalone numbers have no contextualReference and therefore
       // continue through the normal standalone-book path.
       if (message.contextualReference?.url && selectedRefs.length < 2) {
-        await openSelectedPdfBibleRefs(text, behavior, message.contextualReference);
-        sendResponse({ok:true, contextual:true});
+        const opened = await openSelectedPdfBibleRefs(text, behavior, message.contextualReference);
+        sendResponse({ok:true, opened:!!opened, contextual:true});
         return true;
       }
 
@@ -3198,8 +3198,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (selectedRefs.length < 2) {
           const contextualRef = await getContextualSelectionReference(sender?.tab?.id, text);
           if (contextualRef?.url) {
-            await openSelectedPdfBibleRefs(text, behavior, contextualRef);
-            sendResponse({ok:true, contextual:true});
+            const opened = await openSelectedPdfBibleRefs(text, behavior, contextualRef);
+            sendResponse({ok:true, opened:!!opened, contextual:true});
             return true;
           }
         }
@@ -3210,8 +3210,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ok:true, bookOnly:true});
         return true;
       }
-      await openSelectedPdfBibleRefs(text, behavior, null);
-      sendResponse({ok:true});
+      const opened = await openSelectedPdfBibleRefs(text, behavior, null);
+      sendResponse({ok:true, opened:!!opened});
     } catch (error) {
       console.error('BLB Suite page selection button:', error);
       sendResponse({ok:false});
@@ -5364,7 +5364,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
         console.warn('BLB Suite paragraph Criteria reconciliation:', err);
       }
     })();
-    return;
+    return true;
   }
 
   // A validated adjacent citation is authoritative for the reference tab.
@@ -5409,7 +5409,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
           false
         );
       }
-      return;
+      return true;
     }
   }
 
@@ -5417,9 +5417,9 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // reference was supplied. A multi-reference paragraph must never pay the
   // full corpus-classification cost twice.
   const decision = contextualDecision || classifySelectionForBlb(text);
-  if (!decision.valid) return;
+  if (!decision.valid) return false;
   const cleanedText = decision.text;
-  if (!cleanedText) return;
+  if (!cleanedText) return false;
 
   // KJV passage extraction feeds the existing BLB Criteria Search. The
   // extension does not resolve the verse itself. Multiple extracted passages
@@ -5430,13 +5430,13 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       await recordStudyRefs([parseBlbKjvUrlToStudyRef(ref.url)].filter(Boolean));
       await openBlbDestination(ref.url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
     }
-    return;
+    return true;
   }
 
   if (decision.type === 'KJV_PASSAGE') {
     const blb = `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(cleanedText).replace(/%20/g,'+')}`;
     await openBlbDestination(blb, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
-    return;
+    return true;
   }
 
   if (decision.type === 'REFERENCE_AND_KJV_PASSAGE') {
@@ -5470,7 +5470,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
         : Promise.resolve(null);
       await Promise.all([referenceOpen, criteriaOpen, studyCapture]);
     }
-    return;
+    return true;
   }
 
   // A single KJV vocabulary word that occurs in exactly one KJV verse is
@@ -5486,12 +5486,12 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       if (book && Number.isInteger(chapter) && Number.isInteger(verse)) {
         const url = `${BLB_HOME_URL}kjv/${book.urlKey}/${chapter}/${verse}/`;
         await openBlbDestination(url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
-        return;
+        return true;
       }
     }
     const blb = `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(cleanedText).replace(/%20/g,'+')}`;
     await openBlbDestination(blb, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
-    return;
+    return true;
   }
 
   // Book-only selections use a dedicated book opener. Do not reduce them to
@@ -5503,14 +5503,14 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       await recordStudyStrong(decision.strong);
       await openBlbDestination(url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
     }
-    return;
+    return true;
   }
 
   if (decision.type === 'BOOK') {
     const book = decision.bookOnly?.book || (decision.directRef?.book ? bookData.find(b => b.name === decision.directRef.book) : null);
     if (book) {
       await openBlbBook(book.bookNumber, tabBehavior);
-      return;
+      return true;
     }
   }
 
@@ -5519,13 +5519,13 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   if (decision.directRef) {
     await recordStudyRefs([parseBlbKjvUrlToStudyRef(decision.directRef.url)].filter(Boolean));
     await openBlbDestination(decision.directRef.url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
-    return;
+    return true;
   }
 
   if (decision.refs?.length === 1) {
     await recordStudyRefs(decision.refs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
     await openBlbDestination(decision.refs[0].url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
-    return;
+    return true;
   }
   if (decision.refs?.length > 1) {
     const parsedRefs = decision.refs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean);
@@ -5535,7 +5535,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     // goes to one MultiVerse window. Never reduce a multi-reference selection
     // to its first verse just because the references share a chapter.
     await openBlbMultiVerseRefs(decision.refs, !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting);
-    return;
+    return true;
   }
 
   if (decision.bookOnly) {
@@ -5548,19 +5548,20 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     } else {
       await openBlbHomeNoDuplicate(!!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
     }
-    return;
+    return true;
   }
 
   if (decision.type === 'BOOK_HOME' || decision.type === 'NON_KJV_SINGLE_WORD') {
     const homeActive = tabBehavior.altB ? false : !!tabBehavior.activeIfNew;
     const homeActivateExisting = tabBehavior.altB ? false : !!tabBehavior.activateExisting;
     await openBlbHomeNoDuplicate(homeActive, homeActivateExisting);
-    return;
+    return true;
   }
 
   // The generic classifier has already established that this is a valid
   // KJV word/phrase. Search it directly on BLB, reusing that decision.
   await openBlbDestination(`${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(cleanedText).replace(/%20/g,'+')}`, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting);
+  return true;
 }
 
 async function getActiveTabSelection(tabId) {
