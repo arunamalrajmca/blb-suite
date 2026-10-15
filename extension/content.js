@@ -1570,7 +1570,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const escapeRegex = part => part.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
       const parts = value.split(/\s+/).map(part => escapeRegex(part).replace(/[\u2010-\u2015\u2212]/g, '-').replace(/-/g, '[-\\u2010-\\u2015\\u2212]'));
       if (!parts.length) return [];
-      const pattern = new RegExp(parts.join('\s+'), 'gi');
+      const pattern = new RegExp(parts.join('\\s+'), 'gi');
       const occurrences = [];
       let match;
       while ((match = pattern.exec(normalizedMatchSource))) {
