@@ -1259,7 +1259,7 @@ function isValidStudyBackup(backup) {
   if (Object.prototype.hasOwnProperty.call(study, 'studySessions') &&
       !Array.isArray(study.studySessions)) return false;
   if (Object.prototype.hasOwnProperty.call(study, 'studyTopics') &&
-      (!study.studyTopics || typeof study.studyTopics !== 'object' || Array.isArray(study.studyTopics))) return false;
+      !Array.isArray(study.studyTopics)) return false;
   if (Object.prototype.hasOwnProperty.call(study, 'studySelectedTopic') &&
       typeof study.studySelectedTopic !== 'string') return false;
   if (Object.prototype.hasOwnProperty.call(study, 'studyAutoStopMinutes') &&
@@ -1282,8 +1282,7 @@ async function importStudyBackupFile(file) {
     }
     const summary = backup.study;
     const sessionCount = Array.isArray(summary.studySessions) ? summary.studySessions.length : 0;
-    const topicCount = summary.studyTopics && typeof summary.studyTopics === 'object'
-      ? Object.keys(summary.studyTopics).length : 0;
+    const topicCount = Array.isArray(summary.studyTopics) ? summary.studyTopics.length : 0;
     if (!confirm(`Restore this backup? It contains ${topicCount} saved topic entr${topicCount === 1 ? 'y' : 'ies'} and ${sessionCount} study session(s). Existing Study data will be replaced. Extension settings will not change.`)) return;
 
     // Restore only known Study keys. Do not restore active recording/pause state
@@ -1306,9 +1305,32 @@ async function importStudyBackupFile(file) {
   }
 }
 
-exportStudyBackupButton?.addEventListener('click', exportStudyBackup);
-importStudyBackupButton?.addEventListener('click', () => studyBackupFileInput.click());
+const studyBackupMenuButton = document.getElementById('studyBackupMenuButton');
+const studyBackupMenu = document.getElementById('studyBackupMenu');
+function closeStudyBackupMenu() {
+  studyBackupMenu?.classList.remove('open');
+  studyBackupMenuButton?.setAttribute('aria-expanded', 'false');
+}
+studyBackupMenuButton?.addEventListener('click', () => {
+  const open = !studyBackupMenu.classList.contains('open');
+  closeStudyBackupMenu();
+  if (open) {
+    studyBackupMenu.classList.add('open');
+    studyBackupMenuButton.setAttribute('aria-expanded', 'true');
+  }
+});
+exportStudyBackupButton?.addEventListener('click', () => {
+  closeStudyBackupMenu();
+  void exportStudyBackup();
+});
+importStudyBackupButton?.addEventListener('click', () => {
+  closeStudyBackupMenu();
+  studyBackupFileInput.click();
+});
 studyBackupFileInput?.addEventListener('change', () => importStudyBackupFile(studyBackupFileInput.files?.[0]));
+document.addEventListener('click', event => {
+  if (!event.target.closest('.backup-wrap')) closeStudyBackupMenu();
+});
 
 (async () => {
   render(await getState());
