@@ -555,6 +555,7 @@ test('b dict redirects a single word to Webster 1828 and rejects multiword input
   assert(route.includes('dictMatch = normalized.match'), 'dict prefix parser missing');
   assert(route.includes('encodeURIComponent(word)'), 'dictionary word must be URL-encoded');
   assert(route.includes('if (/^\\S+$/.test(word))'), 'dictionary route must enforce a single word');
+  assert(route.includes("url:'https://webstersdictionary1828.com/'"), 'multiword dictionary input must redirect to Webster home');
   assert(route.includes('https://webstersdictionary1828.com/Dictionary/'), 'Webster destination missing');
   assert(route.includes('encodeURIComponent(word)'), 'dictionary word must be URL-encoded');
   assert(route.includes('return;'), 'dict prefix must not fall through to Bible search');
