@@ -1935,6 +1935,40 @@ async function handleBCommand(text) {
   }
   if (!t) { redirectToHomepage(); return; }
 
+  // `v(n)` selects the nth verse of every Bible chapter. Optional angle
+  // brackets are accepted too, so both `b v(1)` and `b <v(1)>` work.
+  const nthVerseMatch = low.match(/^<?v\\s*\\(\\s*(\\d+)\\s*\\)>?$/i);
+  if (nthVerseMatch) {
+    const verseNumber = Number(nthVerseMatch[1]);
+    if (!Number.isSafeInteger(verseNumber) || verseNumber < 1) return;
+
+    const matches = [];
+    for (const book of bookData) {
+      for (let chapterIndex = 0; chapterIndex < book.verses.length; chapterIndex++) {
+        if (Number(book.verses[chapterIndex]) < verseNumber) continue;
+        matches.push({
+          bookNumber:Number(book.bookNumber),
+          chapter:chapterIndex + 1,
+          verse:verseNumber,
+          book:book.name,
+          from:verseNumber,
+          to:verseNumber,
+          version:'kjv'
+        });
+      }
+    }
+
+    if (matches.length === 1) {
+      await openSingleKjvVerse([matches[0].bookNumber, matches[0].chapter, matches[0].verse], 'currentTab');
+    } else if (matches.length > 1) {
+      await openBlbMultiVerseRefs(matches, true);
+    } else {
+      console.info(`BLB Suite: no Bible chapters contain verse ${verseNumber}.`);
+    }
+    await recordStudySearchTerm(t);
+    return;
+  }
+
   // Bare book commands are resolved directly by the Suite. This preserves
   // the intended `b 1`-`b 66` and `b <bookkey>` behavior instead of letting
   // the generic reference/search parser treat them as ordinary searches.
