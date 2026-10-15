@@ -60,9 +60,7 @@
       if (!rangeMatch) return false;
 
       const normalizeBook = value => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
-      const urlBook = pathMatch[3].replace(new RegExp('-' + pathMatch[4] + '-' + pathMatch[5] + '
-})();
-, 'i'), '');
+      const urlBook = pathMatch[3];
       const textBook = normalizeBook(rangeMatch[1]);
       const slugBook = normalizeBook(urlBook);
       const chapter = Number(pathMatch[2]);
