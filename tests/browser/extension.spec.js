@@ -234,6 +234,32 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  test('Double-click resolves Cor in a plain-text Substack paragraph without inline spans', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    const point = await page.evaluate(() => {
+      const paragraph = document.createElement('p');
+      paragraph.id = 'blb-e2e-substack-corinthians-plain-text';
+      paragraph.textContent = 'Essentially, you are asking yourself, “How do I apply the attributes of charity in 1 Cor. 13 in how I love my wife and how I live my life?”';
+      document.body.appendChild(paragraph);
+      const textNode = paragraph.firstChild;
+      const start = textNode.textContent.indexOf('Cor');
+      const range = document.createRange();
+      range.setStart(textNode, start);
+      range.setEnd(textNode, start + 3);
+      const rect = range.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+
+    await page.mouse.dblclick(point.x, point.y);
+    await activateBlbTabForPath(extensionWorker, '/kjv/1co/13/1/', {
+      fragment: 'plain-text',
+      selector: '#blb-e2e-substack-corinthians-plain-text',
+      selectedText: 'Cor'
+    });
+  });
+
   test('Double-click resolves a Unicode-styled Bible book in a reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
