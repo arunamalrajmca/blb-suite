@@ -2153,7 +2153,7 @@ function openCaseSensitiveNativeSearch(query, disposition = 'currentTab') {
   return chrome.tabs.update({url});
 }
 
-function buildCaseSensitiveMultiVerseUrls(refs, maxUrlLength = 6000) {
+function buildCaseSensitiveMultiVerseUrls(refs, maxUrlLength = 6000, maxRefsPerUrl = 25) {
   const sorted = (refs || []).map(e => ({bookNumber:Number(e.bookNumber), chapter:Number(e.chapter), verse:Number(e.verse)}))
     .filter(e => Number.isFinite(e.bookNumber) && Number.isFinite(e.chapter) && Number.isFinite(e.verse))
     .sort((a,b) => a.bookNumber-b.bookNumber || a.chapter-b.chapter || a.verse-b.verse);
@@ -2162,7 +2162,10 @@ function buildCaseSensitiveMultiVerseUrls(refs, maxUrlLength = 6000) {
   for (const ref of sorted) {
     const candidate=[...chunk,ref];
     const url=BLBCaseSensitiveCore.buildBlbMultiVerseUrl(candidate, bookData, 'KJV');
-    if (chunk.length && url.length > maxUrlLength) {
+    // BLB's MultiVerse page can accept a long textbox value without actually
+    // loading every reference. Cap references as well as URL characters so
+    // large searches (notably `b v1`) are split into reliably-sized requests.
+    if (chunk.length && (candidate.length > maxRefsPerUrl || url.length > maxUrlLength)) {
       urls.push(BLBCaseSensitiveCore.buildBlbMultiVerseUrl(chunk, bookData, 'KJV'));
       chunk=[ref];
     } else chunk=candidate;
