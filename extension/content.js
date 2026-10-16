@@ -1154,9 +1154,9 @@ function getSelectionContextPosition() {
               continue;
             }
             const blockLike = /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DL|DT|FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|LI|MAIN|NAV|OL|P|PRE|SECTION|TABLE|TR|UL)$/.test(tag);
-            if (blockLike && pieces.length && !/\\s$/.test(pieces[pieces.length - 1])) pieces.push(' ');
+            if (blockLike && pieces.length && !/\s$/.test(pieces[pieces.length - 1])) pieces.push(' ');
             walk(child);
-            if (blockLike && pieces.length && !/^\\s/.test(pieces[pieces.length - 1])) pieces.push(' ');
+            if (blockLike && pieces.length && !/^\s/.test(pieces[pieces.length - 1])) pieces.push(' ');
           }
         }
       };
@@ -1201,7 +1201,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
       const token = labelTokens[tokenIndex];
       const candidate = rawBookLabel.slice(token.index).trim();
       const precedingToken = tokenIndex > 0
-        ? rawBookLabel.slice(0, token.index).trim().split(/\\s+/).pop()
+        ? rawBookLabel.slice(0, token.index).trim().split(/\s+/).pop()
         : '';
       if (/^(?:[1-3]|i{1,3})$/i.test(precedingToken)) continue;
       const candidateBook = resolveBibleBook(candidate);
@@ -1678,7 +1678,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const escapeRegex = part => part.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
       const parts = value.split(/\s+/).map(part => escapeRegex(part).replace(/[\u2010-\u2015\u2212]/g, '-').replace(/-/g, '[-\\u2010-\\u2015\\u2212]'));
       if (!parts.length) return [];
-      const pattern = new RegExp(parts.join('\\s+'), 'gi');
+      const pattern = new RegExp(parts.join('\s+'), 'gi');
       const occurrences = [];
       let match;
       while ((match = pattern.exec(normalizedMatchSource))) {
@@ -2137,8 +2137,8 @@ function hasLocalValidBibleReference(text) {
 
   entries.sort((a,b) => b.name.length - a.name.length);
   for (const entry of entries) {
-    const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-    const re = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}\\.?\\s+(-?\\d+)(?:(?::|\\.)\\s*(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?|\\s+(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?)?(?=$|[^A-Za-z0-9])`, 'i');
+    const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\s+');
+    const re = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}\\.?\s+(-?\\d+)(?:(?::|\\.)\s*(-?\\d+)(?:\s*[-–]\s*(-?\\d+))?|\s+(-?\\d+)(?:\s*[-–]\s*(-?\\d+))?)?(?=$|[^A-Za-z0-9])`, 'i');
     const match = re.exec(source);
     if (!match) continue;
 
