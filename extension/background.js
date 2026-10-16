@@ -2406,7 +2406,7 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
     await openSingleKjvVerse([refs[0].bookNumber, refs[0].chapter, refs[0].verse], disposition);
     return true;
   }
-  const urls=buildCaseSensitiveMultiVerseUrls(refs,6000);
+  const urls=buildCaseSensitiveMultiVerseUrls(refs,6000,BLB_MULTIVERSE_MAX_VERSES);
   if (!urls.length) {
     // A valid case-sensitive query must never fall through to BLB home simply
     // because the local MultiVerse URL builder could not construct a target.
