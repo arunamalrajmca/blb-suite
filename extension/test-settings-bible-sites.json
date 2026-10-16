@@ -1,0 +1,28 @@
+{
+  "format": "blb-suite-settings",
+  "schemaVersion": 1,
+  "extensionVersion": "5.2.51.74",
+  "exportedAt": "2026-10-16T00:00:00.000Z",
+  "settings": {
+    "masterEnabled": true,
+    "pageSelectionButtonSites": {
+      "columbusbiblechurch.org": true,
+      "www.gotquestions.org": true,
+      "gracelifebiblechurch.com": true,
+      "gracelife-store.vercel.app": true,
+      "www.supplyofgrace.com": true,
+      "www.shorewoodbiblechurch.org": true,
+      "www.dispensationalpublishing.com": true
+    },
+    "doubleClickBlbSites": {
+      "columbusbiblechurch.org": true,
+      "www.gotquestions.org": true,
+      "gracelifebiblechurch.com": true,
+      "gracelife-store.vercel.app": true,
+      "www.supplyofgrace.com": true,
+      "www.shorewoodbiblechurch.org": true,
+      "www.dispensationalpublishing.com": true
+    },
+    "redirectEnabled": true
+  }
+}
