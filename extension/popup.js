@@ -1218,6 +1218,138 @@ document.getElementById('doubleClick').addEventListener('change', e => handleDou
 document.getElementById('redirectEnabled').addEventListener('change', e => setRedirect(e.target.checked));
 
 
+/* Portable extension settings backup: intentionally excludes Study data and browser-managed permissions. */
+const SETTINGS_BACKUP_KEYS = ['masterEnabled', 'pageSelectionButtonSites', 'doubleClickBlbSites', 'redirectEnabled'];
+const exportSettingsButton = document.getElementById('exportSettingsButton');
+const importSettingsButton = document.getElementById('importSettingsButton');
+const settingsBackupFileInput = document.getElementById('settingsBackupFile');
+const settingsMenuButton = document.getElementById('settingsMenuButton');
+const settingsBackupMenu = document.getElementById('settingsBackupMenu');
+
+function closeSettingsBackupMenu() {
+  settingsBackupMenu?.classList.remove('open');
+  settingsMenuButton?.setAttribute('aria-expanded', 'false');
+}
+settingsMenuButton?.addEventListener('click', event => {
+  event.stopPropagation();
+  const open = !settingsBackupMenu.classList.contains('open');
+  closeSettingsBackupMenu();
+  if (open) {
+    settingsBackupMenu.classList.add('open');
+    settingsMenuButton.setAttribute('aria-expanded', 'true');
+  }
+});
+
+async function exportExtensionSettings() {
+  exportSettingsButton.disabled = true;
+  try {
+    const stored = await chrome.storage.local.get(SETTINGS_BACKUP_KEYS);
+    const backup = {
+      format: 'blb-suite-settings',
+      schemaVersion: 1,
+      extensionVersion: chrome.runtime.getManifest().version,
+      exportedAt: new Date().toISOString(),
+      settings: Object.fromEntries(SETTINGS_BACKUP_KEYS
+        .filter(key => Object.prototype.hasOwnProperty.call(stored, key))
+        .map(key => [key, stored[key]]))
+    };
+    const blob = new Blob([JSON.stringify(backup, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `BLB-Suite-Settings-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setStatus('BLB Suite settings exported. Keep the JSON backup somewhere safe.');
+  } catch (error) {
+    console.error('BLB Suite settings export failed:', error);
+    setStatus('Unable to export BLB Suite settings.');
+  } finally {
+    exportSettingsButton.disabled = false;
+  }
+}
+
+function isValidSiteSettingsMap(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Object.entries(value).every(([host, enabled]) =>
+    typeof host === 'string' &&
+    host.length > 0 &&
+    host.length <= 253 &&
+    !/[\\s/]/.test(host) &&
+    typeof enabled === 'boolean'
+  );
+}
+
+function isValidExtensionSettingsBackup(backup) {
+  if (!backup || typeof backup !== 'object' || Array.isArray(backup) ||
+      backup.format !== 'blb-suite-settings' || backup.schemaVersion !== 1 ||
+      !backup.settings || typeof backup.settings !== 'object' || Array.isArray(backup.settings)) return false;
+  const settings = backup.settings;
+  const keys = Object.keys(settings);
+  if (!keys.length || keys.some(key => !SETTINGS_BACKUP_KEYS.includes(key))) return false;
+  if (Object.prototype.hasOwnProperty.call(settings, 'masterEnabled') &&
+      typeof settings.masterEnabled !== 'boolean') return false;
+  if (Object.prototype.hasOwnProperty.call(settings, 'redirectEnabled') &&
+      typeof settings.redirectEnabled !== 'boolean') return false;
+  if (Object.prototype.hasOwnProperty.call(settings, 'pageSelectionButtonSites') &&
+      !isValidSiteSettingsMap(settings.pageSelectionButtonSites)) return false;
+  if (Object.prototype.hasOwnProperty.call(settings, 'doubleClickBlbSites') &&
+      !isValidSiteSettingsMap(settings.doubleClickBlbSites)) return false;
+  return true;
+}
+
+async function importExtensionSettingsFile(file) {
+  if (!file) return;
+  importSettingsButton.disabled = true;
+  try {
+    if (file.size > 2 * 1024 * 1024) {
+      setStatus('Settings backup is too large (maximum 2 MB).');
+      return;
+    }
+    const backup = JSON.parse(await file.text());
+    if (!isValidExtensionSettingsBackup(backup)) {
+      setStatus('This is not a valid BLB Suite settings backup.');
+      return;
+    }
+    const settings = backup.settings;
+    const siteCount = new Set([
+      ...Object.keys(settings.pageSelectionButtonSites || {}),
+      ...Object.keys(settings.doubleClickBlbSites || {})
+    ]).size;
+    if (!confirm(`Restore BLB Suite settings? This replaces the current global settings and per-site toggle records for ${siteCount} site(s). Browser-managed site access permissions are not included and may need to be granted again.`)) return;
+
+    // Only restore the four allowlisted extension preference keys. Do not
+    // import Study data, history, arbitrary storage keys, or browser permissions.
+    await chrome.storage.local.set(settings);
+    setStatus(`BLB Suite settings restored (${siteCount} site(s)). Browser site access may need to be granted again.`);
+    render(await getState());
+  } catch (error) {
+    console.error('BLB Suite settings import failed:', error);
+    setStatus('Unable to read or restore this settings backup.');
+  } finally {
+    importSettingsButton.disabled = false;
+    settingsBackupFileInput.value = '';
+  }
+}
+
+exportSettingsButton?.addEventListener('click', () => {
+  closeSettingsBackupMenu();
+  void exportExtensionSettings();
+});
+importSettingsButton?.addEventListener('click', () => {
+  closeSettingsBackupMenu();
+  settingsBackupFileInput.click();
+});
+settingsBackupFileInput?.addEventListener('change', () => {
+  void importExtensionSettingsFile(settingsBackupFileInput.files?.[0]);
+});
+document.addEventListener('click', event => {
+  if (!event.target.closest('.settings-wrap')) closeSettingsBackupMenu();
+});
+
 /* Portable Study backup: export only Study data, never extension/site settings. */
 const STUDY_BACKUP_KEYS = ['studySessions', 'studyTopics', 'studySelectedTopic', 'studyAutoStopMinutes'];
 const exportStudyBackupButton = document.getElementById('exportStudyBackup');
