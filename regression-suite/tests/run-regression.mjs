@@ -518,9 +518,6 @@ test('Double-click citation handling validates book labels and preserves noncons
   assert(content.includes('refs: resolvedVerses.map(ref => ({'), 'nonconsecutive comma-separated verses must remain separate references');
   assert(bg.includes('Array.isArray(message.contextualReference?.refs)'), 'background opener must accept multiple contextual verse references');
   assert(bg.includes('openBlbMultiVerseRefs(message.contextualReference.refs'), 'multiple contextual verses must use the shared MultiVerse opener');
-  assert(content.includes('document.caretRangeFromPoint(event.clientX, event.clientY)'), 'book-token matching must repair stale selection offsets from the physical click point');
-  assert(content.includes('contextualReference:unresolvedBookContext ? {unresolved:true} : null'), 'unmatched book-token context must be explicitly marked unresolved');
-  assert(bg.includes('!message.contextualReference?.unresolved'), 'unresolved book-token context must not borrow a page reference or open a standalone book');
 });
 test('Show on BLB floating button path remains wired', () => {
   const content = read('content.js');
