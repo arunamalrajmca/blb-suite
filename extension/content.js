@@ -1349,6 +1349,45 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     let selected = normalizeSelectionText(selectionText).normalize('NFKC');
     const initialNode = target instanceof Element ? target : (target?.parentElement || null);
 
+    // Prefer the physical double-click location over the browser's Selection:
+    // dblclick can expose a stale, non-empty Selection from the previous word.
+    // Resolve the caret's text node and expand to the actual word token so the
+    // citation matcher uses one consistent source of position and token text.
+    let clickedWordRange = null;
+    let clickedWordText = '';
+    try {
+      if (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+        let pointRange = null;
+        if (typeof document.caretRangeFromPoint === 'function') {
+          pointRange = document.caretRangeFromPoint(event.clientX, event.clientY);
+        } else if (typeof document.caretPositionFromPoint === 'function') {
+          const position = document.caretPositionFromPoint(event.clientX, event.clientY);
+          if (position?.offsetNode) {
+            pointRange = document.createRange();
+            pointRange.setStart(position.offsetNode, position.offset);
+            pointRange.collapse(true);
+          }
+        }
+        const textNode = pointRange?.startContainer;
+        if (textNode?.nodeType === Node.TEXT_NODE) {
+          const value = textNode.nodeValue || '';
+          const pointOffset = Math.max(0, Math.min(value.length, pointRange.startOffset));
+          const isWordChar = char => /[A-Za-z0-9.'’\u2019-]/.test(char || '');
+          let wordStart = pointOffset;
+          let wordEnd = pointOffset;
+          while (wordStart > 0 && isWordChar(value[wordStart - 1])) wordStart--;
+          while (wordEnd < value.length && isWordChar(value[wordEnd])) wordEnd++;
+          if (wordEnd > wordStart) {
+            clickedWordRange = document.createRange();
+            clickedWordRange.setStart(textNode, wordStart);
+            clickedWordRange.setEnd(textNode, wordEnd);
+            clickedWordText = normalizeSelectionText(clickedWordRange.toString()).normalize('NFKC');
+            if (clickedWordText) selected = clickedWordText;
+          }
+        }
+      }
+    } catch (_) {}
+
     // Chromium can report an empty/whitespace native selection immediately
     // after an isolated-token double-click. Recover the exact clicked token
     // before doing any positional reference matching; never substitute the
@@ -1500,6 +1539,15 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         selectionEnd = getOffset(selectedRange.endContainer, selectedRange.endOffset);
       }
     }
+
+    // The physical click is authoritative when its word range is inside this
+    // candidate block. This overrides stale but non-empty native selections.
+    try {
+      if (clickedWordRange && block.contains(clickedWordRange.startContainer)) {
+        selectionStart = getOffset(clickedWordRange.startContainer, clickedWordRange.startOffset);
+        selectionEnd = getOffset(clickedWordRange.endContainer, clickedWordRange.endOffset);
+      }
+    } catch (_) {}
 
     // Chromium can transiently expose a whitespace-only Range for a real
     // double-click on an isolated inline token. In that state, the browser
