@@ -1592,7 +1592,10 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // range; never infer a reference from another citation in the paragraph.
     if (selected.toLowerCase().replace(/\.$/, '') === 'cor' &&
         selectionStart != null && selectionEnd != null) {
-      const corCitationPattern = /\b([12])\s+Cor(?:\.|inthians?)\s+(\d+)(?::\s*(\d+)(?:\s*[-–—]\s*(\d+))?)?/gi;
+      // The clicked abbreviation identifies the whole citation. Preserve
+      // consecutive comma-separated verses (e.g. "(1 Cor. 15:3, 4)") rather
+      // than returning only the first verse from the shared text parser.
+      const corCitationPattern = /\b([12])\s+Cor(?:\.|inthians?)\s+(\d+)(?::\s*(\d+(?:\s*,\s*\d+)*)(?:\s*[-–—]\s*(\d+))?)?/gi;
       let corMatch;
       while ((corMatch = corCitationPattern.exec(normalizedMatchSource))) {
         const bookStart = corMatch.index + corMatch[0].indexOf('Cor');
@@ -1601,6 +1604,14 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         const parsedCitation = resolveBibleReferenceText(corMatch[0]);
         if (parsedCitation.length) {
           const parsed = parsedCitation[0];
+          const listedVerses = corMatch[3]
+            ? corMatch[3].split(',').map(value => Number(value.trim()))
+            : [];
+          if (listedVerses.length > 1 &&
+              listedVerses.every((verse, index) => index === 0 || verse === listedVerses[index - 1] + 1)) {
+            const expanded = resolveBibleReference(parsed.book, parsed.chapter, listedVerses[0], listedVerses[listedVerses.length - 1]);
+            if (expanded) return {book: expanded.book, chapter: expanded.chapter, from: expanded.from, to: expanded.to, url: expanded.url};
+          }
           return {book: parsed.book, chapter: parsed.chapter, from: parsed.from, to: parsed.to, url: parsed.url};
         }
       }
