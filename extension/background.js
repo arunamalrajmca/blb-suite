@@ -3716,8 +3716,39 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // normalized to the same continuous range, so Romans 10:9,10 opens 9-10.
   // We deliberately scan the WHOLE selected string with a global expression,
   // rather than consuming one match and skipping the remainder of a line.
-  const colonRangeRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)\s*-\s*(\d+)/gi;
+  // Cross-chapter ranges such as "Genesis 1:1-8:15" must be expanded
+  // chapter by chapter. Otherwise the same-chapter matcher below accepts the
+  // prefix "Genesis 1:1-8" and silently drops the end chapter/verse.
+  const crossChapterRangeRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)\s*-\s*(\d+)\s*:\s*(\d+)(?!\d)/gi;
   let m;
+  while ((m = crossChapterRangeRe.exec(source))) {
+    if (isShadowedBookMatch(m.index)) continue;
+    const rawBook = m[1].trim();
+    const book = resolveBook(rawBook);
+    if (!book) continue;
+    const startChapter = Number(m[2]);
+    const startVerse = Number(m[3]);
+    const endChapter = Number(m[4]);
+    const endVerse = Number(m[5]);
+    if (!Number.isInteger(startChapter) || !Number.isInteger(endChapter) ||
+        startChapter < 1 || endChapter < startChapter ||
+        endChapter > Number(book.chapterCount)) continue;
+    const startMax = Number(book.verses?.[startChapter - 1]);
+    const endMax = Number(book.verses?.[endChapter - 1]);
+    if (!Number.isInteger(startMax) || !Number.isInteger(endMax) ||
+        startVerse < 1 || startVerse > startMax ||
+        endVerse < 1 || endVerse > endMax) continue;
+    for (let chapter = startChapter; chapter <= endChapter; chapter++) {
+      const maxVerse = Number(book.verses?.[chapter - 1]);
+      const from = chapter === startChapter ? startVerse : 1;
+      const to = chapter === endChapter ? endVerse : maxVerse;
+      addRef(book, chapter, from, to, m[0]);
+    }
+  }
+
+  // Same-chapter ranges. Do not accept a partial prefix when the endpoint is
+  // actually the chapter number in a cross-chapter range (e.g. "-8:15").
+  const colonRangeRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)\s*-\s*(\d+)(?!\s*:\s*\d+)/gi;
   while ((m = colonRangeRe.exec(source))) {
     if (isShadowedBookMatch(m.index)) continue;
     const rawBook = m[1].trim();
