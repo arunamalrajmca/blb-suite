@@ -3390,6 +3390,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // "Jn 3:16" must open John 3:16, not the standalone book/number meaning.
       // Orphan standalone numbers have no contextualReference and therefore
       // continue through the normal standalone-book path.
+      if (Array.isArray(message.contextualReference?.refs) && message.contextualReference.refs.length > 1) {
+        const result = await openBlbMultiVerseRefs(message.contextualReference.refs, !!behavior.activeIfNew || !!behavior.activateExisting);
+        sendResponse({...result, contextual:true, multiVerse:true});
+        return true;
+      }
       if (message.contextualReference?.url && selectedRefs.length < 2) {
         await openSelectedPdfBibleRefs(text, behavior, message.contextualReference);
         sendResponse({ok:true, contextual:true});
