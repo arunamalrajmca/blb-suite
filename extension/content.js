@@ -1585,6 +1585,31 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       selectionEnd = toNormalizedOffset(selectionEnd);
     }
 
+    // Use the physical click point to repair stale/misaligned Selection offsets
+    // for a clicked book token. The click position is more reliable than the
+    // native word Range on rich-text pages that wrap every word in spans.
+    if (resolveBibleBook(selected) && event &&
+        Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+      try {
+        let pointRange = null;
+        if (typeof document.caretRangeFromPoint === 'function') {
+          pointRange = document.caretRangeFromPoint(event.clientX, event.clientY);
+        } else if (typeof document.caretPositionFromPoint === 'function') {
+          const point = document.caretPositionFromPoint(event.clientX, event.clientY);
+          if (point?.offsetNode) {
+            pointRange = document.createRange();
+            pointRange.setStart(point.offsetNode, point.offset);
+            pointRange.collapse(true);
+          }
+        }
+        if (pointRange && block.contains(pointRange.startContainer)) {
+          const pointOffset = getOffset(pointRange.startContainer, pointRange.startOffset);
+          selectionStart = toNormalizedOffset(pointOffset);
+          selectionEnd = selectionStart + selected.length;
+        }
+      } catch (_) {}
+    }
+
     // Some sites render citations as plain text and double-clicking a book
     // abbreviation selects only one token (e.g. "Cor" in "1 Cor. 15:3, 4").
     // Resolve the captured book label itself before trusting a citation match:
@@ -1816,6 +1841,15 @@ function handleDoubleClickBlb(event) {
         const contextualTarget=getDoubleClickTargetElement(event)||event.target;
         const blockContext=getDoubleClickBlockContextReference(selection,contextualTarget,event);
 
+        // If a valid Bible-book token was clicked in a block that contains a
+        // different reference but no citation was positionally matched, mark
+        // the context as explicitly unresolved. The background must not then
+        // borrow that unrelated reference from the page/paragraph.
+        const contextBlock = contextualTarget?.closest?.('p,li,td,th,blockquote,article,section,div');
+        const contextText = normalizeSelectionText(contextBlock?.textContent || '');
+        const unresolvedBookContext = !blockContext && !!resolveBibleBook(selection) &&
+          /\b[A-Za-z][A-Za-z.'-]*\s+\d+\s*:\s*\d+/.test(contextText);
+
         // Numeric tokens are ambiguous: 3/17/etc. are valid standalone book
         // numbers, but inside a nearby Book + Chapter reference they belong to
         // that positional reference. Keep waiting while context is unsettled.
@@ -1842,7 +1876,7 @@ function handleDoubleClickBlb(event) {
             safeRuntimeSendMessage({
               type:'blbSuiteOpenSelectionText',
               text:selection,
-              contextualReference:null,
+              contextualReference:unresolvedBookContext ? {unresolved:true} : null,
               requestId,
               tabBehavior:{activeIfNew:false,activateExisting:true}
             });
