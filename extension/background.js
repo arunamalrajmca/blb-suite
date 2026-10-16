@@ -5314,8 +5314,14 @@ function classifySelectionForBlb(selectionText) {
     return {valid:true, type:'STRONG', text:source, strong};
   }
 
+  // Resolve all explicit references before accepting a direct destination.
+  // A selection may begin with a valid reference and continue with another
+  // disjoint range (for example, "Genesis 48-49 and Genesis 42-46"). In that
+  // case the direct resolver can identify the leading range, but returning it
+  // here would silently discard the rest of the user's selection.
+  const extractedRefs = extractBibleRefsFromSelectedTextUncached(source);
   const directRef = getDirectSelectedReference(source);
-  if (directRef) {
+  if (directRef && extractedRefs.length <= 1) {
     return {valid:true, type:'REFERENCE', text:source, directRef};
   }
 
@@ -5358,8 +5364,6 @@ function classifySelectionForBlb(selectionText) {
   // selection may intentionally contain both cited references and quoted
   // Scripture wording. In that mixed case we must preserve both outputs: the
   // citations go to MultiVerse and the KJV wording goes to Criteria Search.
-  const extractedRefs = extractBibleRefsFromSelectedTextUncached(source);
-
   // When there are explicit references, do not let the contiguous KJV-range
   // resolver collapse the entire mixed selection into a single verse. The
   // explicit citations are authoritative, and the remaining selected wording
