@@ -707,10 +707,34 @@ async function openBlbMultiVerseRefs(refs, active = true) {
     return {ok:true, count:1, singleVerse:true, tabId:tab?.id ?? tab?.tab?.id ?? null, batchCount:1};
   }
 
-  const batches = [];
-  for (let start = 0; start < allVerses.length; start += BLB_MULTIVERSE_MAX_VERSES) {
-    batches.push(allVerses.slice(start, start + BLB_MULTIVERSE_MAX_VERSES));
+  // Batch on chapter boundaries, not arbitrary verse offsets. BLB's
+  // MultiVerse view is chapter-oriented; splitting a chapter across tabs
+  // makes a requested chapter appear incomplete even when no verses are lost.
+  // Group the ordered, deduplicated verses into complete chapters, then pack
+  // whole chapters into each tab without exceeding the 200-verse limit.
+  const chapterGroups = [];
+  for (const verse of allVerses) {
+    const chapterKey = `${verse.bookNumber}|${verse.chapter}|${String(verse.version || 'kjv').toLowerCase()}`;
+    const last = chapterGroups[chapterGroups.length - 1];
+    if (!last || last.key !== chapterKey) {
+      chapterGroups.push({key:chapterKey, verses:[verse]});
+    } else {
+      last.verses.push(verse);
+    }
   }
+
+  const batches = [];
+  let batchVerses = [];
+  for (const chapter of chapterGroups) {
+    // Every canonical Bible chapter is below the 200-verse view limit.
+    // Start the next tab before adding a chapter that would cross that limit.
+    if (batchVerses.length && batchVerses.length + chapter.verses.length > BLB_MULTIVERSE_MAX_VERSES) {
+      batches.push(batchVerses);
+      batchVerses = [];
+    }
+    batchVerses.push(...chapter.verses);
+  }
+  if (batchVerses.length) batches.push(batchVerses);
 
   const results = [];
   for (let index = 0; index < batches.length; index++) {
