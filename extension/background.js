@@ -1935,6 +1935,50 @@ async function handleBCommand(text) {
   }
   if (!t) { redirectToHomepage(); return; }
 
+  // `vN` and `v(n)` select the nth verse of every Bible chapter. Optional angle
+  // brackets are accepted too, so `b v23`, `b v(23)`, and `b <v(23)>` work.
+  const nthVerseMatch = low.match(/^<?v\s*(?:\(\s*(\d+)\s*\)|(\d+))>?$/i);
+  if (nthVerseMatch) {
+    const verseNumber = Number(nthVerseMatch[1] || nthVerseMatch[2]);
+    if (!Number.isSafeInteger(verseNumber) || verseNumber < 1) return;
+
+    const matches = [];
+    for (const book of bookData) {
+      for (let chapterIndex = 0; chapterIndex < book.verses.length; chapterIndex++) {
+        if (Number(book.verses[chapterIndex]) < verseNumber) continue;
+        matches.push({
+          bookNumber:Number(book.bookNumber),
+          chapter:chapterIndex + 1,
+          verse:verseNumber,
+          book:book.name,
+          from:verseNumber,
+          to:verseNumber,
+          version:'kjv'
+        });
+      }
+    }
+
+    if (matches.length === 1) {
+      await openSingleKjvVerse([matches[0].bookNumber, matches[0].chapter, matches[0].verse], 'currentTab');
+    } else if (matches.length > 1) {
+      // Use the same URL-size chunking and paced multi-tab opening as the
+      // case-sensitive search path. A single MultiVerse URL can exceed BLB's
+      // practical URL limits when many chapters contain this verse number.
+      const urls = buildCaseSensitiveMultiVerseUrls(matches, 6000, 200);
+      if (urls.length) {
+        await openCaseSensitiveDestinations(urls, 'currentTab');
+      } else {
+        redirectToHomepage();
+      }
+    } else {
+      // Keep the omnibox contract consistent: a valid Suite command with no
+      // matching result falls back to the Blue Letter Bible home page.
+      redirectToHomepage();
+    }
+    await recordStudySearchTerm(t);
+    return;
+  }
+
   // Bare book commands are resolved directly by the Suite. This preserves
   // the intended `b 1`-`b 66` and `b <bookkey>` behavior instead of letting
   // the generic reference/search parser treat them as ordinary searches.
@@ -2109,7 +2153,7 @@ function openCaseSensitiveNativeSearch(query, disposition = 'currentTab') {
   return chrome.tabs.update({url});
 }
 
-function buildCaseSensitiveMultiVerseUrls(refs, maxUrlLength = 6000) {
+function buildCaseSensitiveMultiVerseUrls(refs, maxUrlLength = 6000, maxReferencesPerUrl = Infinity) {
   const sorted = (refs || []).map(e => ({bookNumber:Number(e.bookNumber), chapter:Number(e.chapter), verse:Number(e.verse)}))
     .filter(e => Number.isFinite(e.bookNumber) && Number.isFinite(e.chapter) && Number.isFinite(e.verse))
     .sort((a,b) => a.bookNumber-b.bookNumber || a.chapter-b.chapter || a.verse-b.verse);
@@ -2118,7 +2162,8 @@ function buildCaseSensitiveMultiVerseUrls(refs, maxUrlLength = 6000) {
   for (const ref of sorted) {
     const candidate=[...chunk,ref];
     const url=BLBCaseSensitiveCore.buildBlbMultiVerseUrl(candidate, bookData, 'KJV');
-    if (chunk.length && url.length > maxUrlLength) {
+    // Keep URL size safe and allow callers to respect BLB's per-page verse display limit.
+    if (chunk.length && (url.length > maxUrlLength || chunk.length >= maxReferencesPerUrl)) {
       urls.push(BLBCaseSensitiveCore.buildBlbMultiVerseUrl(chunk, bookData, 'KJV'));
       chunk=[ref];
     } else chunk=candidate;
