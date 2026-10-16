@@ -67,6 +67,16 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
   await expect(page.locator('body')).toBeVisible();
 });
 
+test('settings gear exposes import and export actions', async ({ page, extensionId }) => {
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  const gear = page.locator('#settingsMenuButton');
+  await expect(gear).toBeVisible();
+  await gear.click();
+  await expect(page.locator('#settingsBackupMenu')).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Export Settings' })).toBeVisible();
+  await expect(page.getByRole('menuitem', { name: 'Import Settings' })).toBeVisible();
+});
+
 test.describe('core user-visible E2E', () => {
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
