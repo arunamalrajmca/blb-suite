@@ -708,7 +708,11 @@ async function openBlbMultiVerseRefs(refs, active = true) {
   for (let index = 0; index < batches.length; index++) {
     const batchVerses = batches[index];
     const compactRefs = compactMultiVerseVerses(batchVerses);
-    const result = await openBlbMultiVerseRefsSingleBatch(compactRefs, index === 0 ? !!active : false);
+    const result = await openBlbMultiVerseRefsSingleBatch(
+      compactRefs,
+      index === 0 ? !!active : false,
+      allVerses.length > 1 && batchVerses.length === 1
+    );
     if (!result?.ok) {
       return {
         ok:false, reason:result?.reason || 'batch-open-failed',
@@ -737,14 +741,14 @@ async function openBlbMultiVerseRefs(refs, active = true) {
   };
 }
 
-async function openBlbMultiVerseRefsSingleBatch(refs, active = true) {
+async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false) {
   // Enforce the cap again at the final handoff boundary. This ensures the
   // references actually stored for the MultiVerse textbox cannot expand to
   // more than 200 individual verses after canonicalization.
   const finalVerses = expandMultiVerseRefsToVerses(refs).slice(0, BLB_MULTIVERSE_MAX_VERSES);
   const finalRefs = compactMultiVerseVerses(finalVerses);
   const canonical = canonicalMultiVerseSet(finalRefs);
-  if (!canonical.key || finalVerses.length < 2 || !canonical.refs.length) {
+  if (!canonical.key || (finalVerses.length < 2 && !allowSingleVerseBatch) || !canonical.refs.length) {
     return {ok:false, reason:"not-enough-references", count:finalVerses.length};
   }
 
