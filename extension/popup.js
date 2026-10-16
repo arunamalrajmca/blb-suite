@@ -1324,7 +1324,7 @@ async function importExtensionSettingsFile(file) {
     // Only restore the four allowlisted extension preference keys. Do not
     // import Study data, history, arbitrary storage keys, or browser permissions.
     await chrome.storage.local.set(settings);
-    setStatus(`BLB Suite settings restored (${siteCount} site(s)). Browser site access may need to be granted again.`);
+    setStatus(`Settings restored for ${siteCount} site(s). Browser site access may need to be granted again. After reinstall, pin BLB Suite from Chrome's Extensions menu.`);
     render(await getState());
   } catch (error) {
     console.error('BLB Suite settings import failed:', error);
