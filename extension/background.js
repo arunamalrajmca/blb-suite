@@ -589,10 +589,18 @@ async function findMatchingMultiVerseTab(setKey, tabs) {
   for (const tab of tabs) {
     const entry = tracked[String(tab.id)];
     if (!entry) continue;
-    const url = String(tab.url || tab.pendingUrl || '');
-    const isMultiVerse = /blueletterbible\.org/i.test(url) && (/\/MultiVerse\.cfm/i.test(url) || /blbSuiteMultiVerse=1/i.test(url));
-    if (!isMultiVerse) { delete tracked[String(tab.id)]; changed = true; continue; }
-    if (!match && entry.key === setKey) match = tab;
+    // During navigation, tab.url can still be about:blank while pendingUrl
+    // already points at MultiVerse. Check both values so a concurrent opener
+    // does not discard the tracking record and create a duplicate tab.
+    const urls = [tab.url, tab.pendingUrl].map(value => String(value || '')).filter(Boolean);
+    const isMultiVerse = urls.some(url =>
+      /blueletterbible\\.org/i.test(url) && (/\\/MultiVerse\\.cfm/i.test(url) || /blbSuiteMultiVerse=1/i.test(url))
+    );
+    const isBlank = urls.length > 0 && urls.every(url => /^about:blank(?:[#?].*)?$/i.test(url));
+    if (!isMultiVerse && !isBlank) { delete tracked[String(tab.id)]; changed = true; continue; }
+    // A tracked blank tab is a reserved destination: its payload was stored
+    // before navigation, so reuse it if another invocation arrives meanwhile.
+    if (!match && entry.key === setKey && (isMultiVerse || isBlank)) match = tab;
   }
   if (changed) await chrome.storage.local.set({blbSuiteMultiVerseTabSets:tracked});
   return match;
