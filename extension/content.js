@@ -1587,10 +1587,10 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
 
     // Some sites render citations as plain text and double-clicking a book
     // abbreviation selects only one token (e.g. "Cor" in "1 Cor. 15:3, 4").
-    // Handle this generically: find a parseable citation whose book-label
-    // portion overlaps the clicked token, then preserve consecutive comma
-    // verse lists. Do not special-case individual Bible books or borrow a
-    // citation elsewhere in the same paragraph.
+    // Resolve the captured book label itself before trusting a citation match:
+    // otherwise a greedy label can absorb unrelated prose and borrow a later
+    // reference (e.g. clicking "Cor" in prose opening Ezekiel).
+    // Preserve nonconsecutive comma lists as individual MultiVerse references.
     if (selectionStart != null && selectionEnd != null) {
       const abbreviatedBookCitationPattern = /\b((?:[1-3]\s+|i{1,3}\s+)?[A-Za-z][A-Za-z.'-]*(?:\s+[A-Za-z][A-Za-z.'-]*){0,3})\s+(\d+)\s*:\s*(\d+(?:\s*,\s*\d+)*)(?:\s*[-–—]\s*(\d+))?/gi;
       let citationMatch;
@@ -1598,18 +1598,35 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         const bookLabelStart = citationMatch.index;
         const bookLabelEnd = bookLabelStart + citationMatch[1].length;
         if (selectionStart >= bookLabelEnd || selectionEnd <= bookLabelStart) continue;
-        const parsedCitation = resolveBibleReferenceText(citationMatch[0]);
-        if (!parsedCitation.length) continue;
-        const parsed = parsedCitation[0];
+        const book = resolveBibleBook(citationMatch[1].trim());
+        if (!book) continue;
+        const chapter = Number(citationMatch[2]);
         const listedVerses = citationMatch[3]
           ? citationMatch[3].split(',').map(value => Number(value.trim()))
           : [];
-        if (listedVerses.length > 1 &&
-            listedVerses.every((verse, index) => index === 0 || verse === listedVerses[index - 1] + 1)) {
-          const expanded = resolveBibleReference(parsed.book, parsed.chapter, listedVerses[0], listedVerses[listedVerses.length - 1]);
-          if (expanded) return {book: expanded.book, chapter: expanded.chapter, from: expanded.from, to: expanded.to, url: expanded.url};
+        if (!listedVerses.length) continue;
+        if (listedVerses.length > 1) {
+          const resolvedVerses = listedVerses.map(verse =>
+            resolveBibleReference(book.name, chapter, verse, verse)
+          );
+          if (resolvedVerses.some(ref => !ref)) continue;
+          if (listedVerses.every((verse, index) => index === 0 || verse === listedVerses[index - 1] + 1)) {
+            const expanded = resolveBibleReference(book.name, chapter, listedVerses[0], listedVerses[listedVerses.length - 1]);
+            if (expanded) return {book: expanded.book, chapter: expanded.chapter, from: expanded.from, to: expanded.to, url: expanded.url};
+          }
+          return {
+            refs: resolvedVerses.map(ref => ({
+              bookNumber: Number(ref.book.bookNumber),
+              chapter: ref.chapter,
+              from: ref.from,
+              to: ref.to,
+              version: 'kjv'
+            }))
+          };
         }
-        return {book: parsed.book, chapter: parsed.chapter, from: parsed.from, to: parsed.to, url: parsed.url};
+        const rangeEnd = citationMatch[4] ? Number(citationMatch[4]) : listedVerses[0];
+        const parsed = resolveBibleReference(book.name, chapter, listedVerses[0], rangeEnd);
+        if (parsed) return {book: parsed.book, chapter: parsed.chapter, from: parsed.from, to: parsed.to, url: parsed.url};
       }
     }
 

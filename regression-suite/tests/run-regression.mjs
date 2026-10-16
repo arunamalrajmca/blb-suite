@@ -511,6 +511,14 @@ test('Double-click BLB path remains wired', () => {
   assert(content.includes("addEventListener('dblclick'"), 'dblclick listener missing');
   assert(content.includes('blbSuiteOpenSelectionText'), 'double-click opener missing');
 });
+test('Double-click citation handling validates book labels and preserves nonconsecutive verse lists', () => {
+  const content = read('content.js');
+  const bg = read('background.js');
+  assert(content.includes('const book = resolveBibleBook(citationMatch[1].trim())'), 'double-click citation must validate the captured book label, not parse unrelated prose');
+  assert(content.includes('refs: resolvedVerses.map(ref => ({'), 'nonconsecutive comma-separated verses must remain separate references');
+  assert(bg.includes('Array.isArray(message.contextualReference?.refs)'), 'background opener must accept multiple contextual verse references');
+  assert(bg.includes('openBlbMultiVerseRefs(message.contextualReference.refs'), 'multiple contextual verses must use the shared MultiVerse opener');
+});
 test('Show on BLB floating button path remains wired', () => {
   const content = read('content.js');
   assert(content.includes('BLB_PAGE_BUTTON_ID'), 'floating button missing');
