@@ -88,7 +88,7 @@ test('settings import reminds users to pin BLB Suite to the toolbar', async ({ p
       schemaVersion: 1,
       extensionVersion: 'test',
       exportedAt: new Date().toISOString(),
-      settings: { masterEnabled: true, redirectEnabled: false }
+      settings: { masterEnabled: true, redirectEnabled: true }
     }))
   });
   await expect(page.locator('#studyStatus')).toContainText('pin BLB Suite from Chrome\'s Extensions menu');
