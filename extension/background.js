@@ -621,7 +621,78 @@ function getContinuousSameChapterRange(refs) {
   return {bookNumber:Number(first.bookNumber), chapter:Number(first.chapter), from, to, version:String(first.version || 'kjv').toLowerCase()};
 }
 
+const BLB_MULTIVERSE_MAX_VERSES = 200;
+
+function expandMultiVerseRefsToVerses(refs) {
+  const canonical = canonicalMultiVerseSet(refs);
+  const verses = [];
+  const seen = new Set();
+
+  for (const ref of canonical.refs) {
+    const book = bookData.find(item => Number(item.bookNumber) === Number(ref.bookNumber));
+    if (!book) continue;
+    const firstChapter = Number(ref.chapter);
+    const lastChapter = firstChapter;
+    if (!Number.isInteger(firstChapter) || firstChapter < 1 || firstChapter > book.chapterCount) continue;
+
+    // A chapter-only reference represents every verse in that chapter.
+    const from = ref.from == null ? 1 : Number(ref.from);
+    const to = ref.to == null ? Number(book.verses[firstChapter - 1]) : Number(ref.to);
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from) continue;
+
+    for (let verse = from; verse <= Math.min(to, Number(book.verses[firstChapter - 1])); verse++) {
+      const key = `${ref.bookNumber}|${firstChapter}|${verse}|${ref.version}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      verses.push({
+        book:book.name,
+        bookNumber:Number(book.bookNumber),
+        chapter:firstChapter,
+        from:verse,
+        to:verse,
+        version:String(ref.version || 'kjv').toLowerCase()
+      });
+    }
+  }
+
+  return verses;
+}
+
 async function openBlbMultiVerseRefs(refs, active = true) {
+  const verses = expandMultiVerseRefsToVerses(refs);
+  if (verses.length < 2) return {ok:false, reason:"not-enough-references", count:verses.length};
+  const batches = [];
+  for (let i = 0; i < verses.length; i += BLB_MULTIVERSE_MAX_VERSES) {
+    batches.push(verses.slice(i, i + BLB_MULTIVERSE_MAX_VERSES));
+  }
+
+  const results = [];
+  for (let i = 0; i < batches.length; i++) {
+    const batch = batches[i];
+    if (batch.length >= 2) {
+      results.push(await openBlbMultiVerseRefsSingleBatch(batch, i === 0 ? active : false));
+      continue;
+    }
+
+    // A one-verse remainder still needs to be opened; never discard the tail
+    // merely because MultiVerse requires at least two references.
+    const ref = batch[0];
+    const book = bookData.find(item => Number(item.bookNumber) === Number(ref.bookNumber));
+    if (!book) continue;
+    const url = `https://www.blueletterbible.org/${encodeURIComponent(ref.version || 'kjv')}/${book.urlKey}/${ref.chapter}/${ref.from}/`;
+    const tab = await openBlbDestination(url, i === 0 ? !!active : false, i === 0 ? !!active : false);
+    results.push({ok:true, count:1, singleVerse:true, tabId:tab?.id ?? tab?.tab?.id ?? null});
+  }
+
+  return {
+    ok:results.some(result => result?.ok),
+    count:verses.length,
+    batchCount:batches.length,
+    batches:results
+  };
+}
+
+async function openBlbMultiVerseRefsSingleBatch(refs, active = true) {
   const canonical = canonicalMultiVerseSet(refs);
   if (!canonical.key || canonical.refs.length < 2) return {ok:false, reason:"not-enough-references", count:canonical.refs.length};
 
@@ -1961,15 +2032,11 @@ async function handleBCommand(text) {
     if (matches.length === 1) {
       await openSingleKjvVerse([matches[0].bookNumber, matches[0].chapter, matches[0].verse], 'currentTab');
     } else if (matches.length > 1) {
-      // Use the same URL-size chunking and paced multi-tab opening as the
-      // case-sensitive search path. A single MultiVerse URL can exceed BLB's
-      // practical URL limits when many chapters contain this verse number.
-      const urls = buildCaseSensitiveMultiVerseUrls(matches, 6000, 200);
-      if (urls.length) {
-        await openCaseSensitiveDestinations(urls, 'currentTab');
-      } else {
-        redirectToHomepage();
-      }
+      // This is an ordinary Bible-reference MultiVerse request, not a
+      // case-sensitive corpus search. Use the shared verse-aware opener so
+      // every entry point observes the same 200-verse batching invariant.
+      const result = await openBlbMultiVerseRefs(matches, true);
+      if (!result?.ok) redirectToHomepage();
     } else {
       // Keep the omnibox contract consistent: a valid Suite command with no
       // matching result falls back to the Blue Letter Bible home page.
