@@ -260,7 +260,7 @@ test.describe('core user-visible E2E', () => {
     });
   });
 
-  test('Double-clicking prose Cor cannot borrow an unrelated Ezekiel citation', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-clicking prose Cor preserves single-result criteria search', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
@@ -288,7 +288,7 @@ test.describe('core user-visible E2E', () => {
         } catch (_) { return ''; }
       }).filter(Boolean)
     ), beforeIds);
-    expect(openedPaths, 'an unrelated prose token must not open Ezekiel 45:14').not.toContain('/kjv/eze/45/14/');
+    expect(openedPaths.some(path => path.startsWith('/kjv/eze/45/14/')), 'the single criteria-search result for Cor should open Ezekiel 45:14').toBe(true);
     await extensionWorker.evaluate((ids) => chrome.tabs.query({}).then(async tabs => {
       for (const tab of tabs) {
         if (ids.includes(tab.id) || tab.id == null) continue;
