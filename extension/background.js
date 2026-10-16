@@ -631,26 +631,26 @@ function expandMultiVerseRefsToVerses(refs) {
   for (const ref of canonical.refs) {
     const book = bookData.find(item => Number(item.bookNumber) === Number(ref.bookNumber));
     if (!book) continue;
-    const firstChapter = Number(ref.chapter);
-    const lastChapter = firstChapter;
-    if (!Number.isInteger(firstChapter) || firstChapter < 1 || firstChapter > book.chapterCount) continue;
+    const chapter = Number(ref.chapter);
+    if (!Number.isInteger(chapter) || chapter < 1 || chapter > book.chapterCount) continue;
 
-    // A chapter-only reference represents every verse in that chapter.
+    const chapterVerseCount = Number(book.verses[chapter - 1]);
     const from = ref.from == null ? 1 : Number(ref.from);
-    const to = ref.to == null ? Number(book.verses[firstChapter - 1]) : Number(ref.to);
+    const to = ref.to == null ? chapterVerseCount : Number(ref.to);
     if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from) continue;
 
-    for (let verse = from; verse <= Math.min(to, Number(book.verses[firstChapter - 1])); verse++) {
-      const key = `${ref.bookNumber}|${firstChapter}|${verse}|${ref.version}`;
+    for (let verse = from; verse <= Math.min(to, chapterVerseCount); verse++) {
+      const version = String(ref.version || 'kjv').toLowerCase();
+      const key = `${ref.bookNumber}|${chapter}|${verse}|${version}`;
       if (seen.has(key)) continue;
       seen.add(key);
       verses.push({
         book:book.name,
         bookNumber:Number(book.bookNumber),
-        chapter:firstChapter,
+        chapter,
         from:verse,
         to:verse,
-        version:String(ref.version || 'kjv').toLowerCase()
+        version
       });
     }
   }
@@ -658,37 +658,48 @@ function expandMultiVerseRefsToVerses(refs) {
   return verses;
 }
 
-async function openBlbMultiVerseRefs(refs, active = true) {
-  const verses = expandMultiVerseRefsToVerses(refs);
-  if (verses.length < 2) return {ok:false, reason:"not-enough-references", count:verses.length};
-  const batches = [];
-  for (let i = 0; i < verses.length; i += BLB_MULTIVERSE_MAX_VERSES) {
-    batches.push(verses.slice(i, i + BLB_MULTIVERSE_MAX_VERSES));
-  }
-
-  const results = [];
-  for (let i = 0; i < batches.length; i++) {
-    const batch = batches[i];
-    if (batch.length >= 2) {
-      results.push(await openBlbMultiVerseRefsSingleBatch(batch, i === 0 ? active : false));
-      continue;
+function compactMultiVerseVerses(verses) {
+  const compact = [];
+  for (const verse of verses) {
+    const previous = compact[compact.length - 1];
+    if (previous &&
+        previous.bookNumber === verse.bookNumber &&
+        previous.chapter === verse.chapter &&
+        previous.version === verse.version &&
+        previous.to + 1 === verse.from) {
+      previous.to = verse.to;
+    } else {
+      compact.push({...verse});
     }
+  }
+  return compact;
+}
 
-    // A one-verse remainder still needs to be opened; never discard the tail
-    // merely because MultiVerse requires at least two references.
-    const ref = batch[0];
-    const book = bookData.find(item => Number(item.bookNumber) === Number(ref.bookNumber));
-    if (!book) continue;
-    const url = `https://www.blueletterbible.org/${encodeURIComponent(ref.version || 'kjv')}/${book.urlKey}/${ref.chapter}/${ref.from}/`;
-    const tab = await openBlbDestination(url, i === 0 ? !!active : false, i === 0 ? !!active : false);
-    results.push({ok:true, count:1, singleVerse:true, tabId:tab?.id ?? tab?.tab?.id ?? null});
+async function openBlbMultiVerseRefs(refs, active = true) {
+  // BLB itself caps displayed MultiVerse verses and textbox input. Our job is
+  // only to hand it references representing at most 200 unique individual
+  // verses. Do not open extra tabs to work around BLB's native limits.
+  const allVerses = expandMultiVerseRefsToVerses(refs);
+  const verses = allVerses.slice(0, BLB_MULTIVERSE_MAX_VERSES);
+  if (verses.length < 2) {
+    if (verses.length === 1) {
+      const ref = verses[0];
+      const book = bookData.find(item => Number(item.bookNumber) === Number(ref.bookNumber));
+      if (!book?.urlKey) return {ok:false, reason:'book-not-found', count:1};
+      const url = `https://www.blueletterbible.org/${encodeURIComponent(ref.version || 'kjv')}/${book.urlKey}/${ref.chapter}/${ref.from}/`;
+      const tab = await openBlbDestination(url, !!active, !!active);
+      return {ok:true, count:1, singleVerse:true, tabId:tab?.id ?? tab?.tab?.id ?? null};
+    }
+    return {ok:false, reason:"not-enough-references", count:0};
   }
 
+  const compactRefs = compactMultiVerseVerses(verses);
+  const result = await openBlbMultiVerseRefsSingleBatch(compactRefs, active);
   return {
-    ok:results.some(result => result?.ok),
+    ...result,
     count:verses.length,
-    batchCount:batches.length,
-    batches:results
+    suppliedReferenceCount:compactRefs.length,
+    truncated:allVerses.length > verses.length
   };
 }
 
