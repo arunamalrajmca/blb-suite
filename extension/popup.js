@@ -1308,8 +1308,8 @@ function getRequestedSiteOrigins(settings) {
   for (const key of ['pageSelectionButtonSites', 'doubleClickBlbSites']) {
     for (const [host, enabled] of Object.entries(settings[key] || {})) {
       if (enabled !== true) continue;
-      const normalized = String(host || '').trim().toLowerCase().replace(/^www\\./, '');
-      if (/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(normalized)) {
+      const normalized = String(host || '').trim().toLowerCase().replace(/^www\./, '');
+      if (/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(normalized)) {
         hosts.add(normalized);
         hosts.add('www.' + normalized);
       }
@@ -1394,7 +1394,7 @@ async function importExtensionSettingsFile(file) {
       if (!Object.prototype.hasOwnProperty.call(settings, key)) continue;
       const normalized = {};
       for (const [rawHost, enabled] of Object.entries(settings[key])) {
-        const host = rawHost.trim().toLowerCase().replace(/^www\\./, '');
+        const host = rawHost.trim().toLowerCase().replace(/^www\./, '');
         if (!host) continue;
         // If aliases conflict, an explicit OFF wins rather than unexpectedly
         // enabling a feature for that site.
