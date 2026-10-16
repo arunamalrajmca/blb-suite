@@ -93,7 +93,7 @@ test('settings import reminds users to pin BLB Suite to the toolbar', async ({ p
   });
   await expect(page.locator('#settingsImportAccess')).toBeVisible();
   await page.locator('#settingsImportAccessButton').click();
-  await expect(page.locator('#studyStatus')).toHaveText('Settings imported. Pin BLB Suite from Chrome’s Extensions menu if needed.');
+  await expect(page.locator('#studyStatus')).toHaveText('Settings imported. Site access granted for enabled per-site features. Pin BLB Suite from Chrome’s Extensions menu if needed.');
   await expect(page.locator('#redirectEnabled')).toBeChecked();
   await expect(page.locator('#master')).toBeChecked();
 });
