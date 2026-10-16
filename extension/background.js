@@ -544,7 +544,15 @@ function canonicalMultiVerseSet(refs) {
   const items = [];
   const seen = new Set();
   for (const raw of Array.isArray(refs) ? refs : []) {
-    const ref = canonicalStoredRef(raw);
+    // Some callers (notably nth-verse search) provide a single verse as
+    // {book, chapter, verse}, while canonicalStoredRef normally treats a
+    // missing from/to pair as a whole-chapter reference. Preserve that verse
+    // identity before canonicalizing so the 200-verse cap counts correctly.
+    const input = raw && typeof raw === 'object' &&
+      raw.verse != null && raw.from == null && raw.to == null
+      ? {...raw, from:Number(raw.verse), to:Number(raw.verse)}
+      : raw;
+    const ref = canonicalStoredRef(input);
     if (!ref) continue;
     const key = `${ref.bookNumber}|${ref.chapter}|${ref.from ?? ''}|${ref.to ?? ''}|${ref.version}`;
     if (seen.has(key)) continue;
