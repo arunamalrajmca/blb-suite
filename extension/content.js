@@ -930,7 +930,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     hidePendingMultiVerseView();
     const response=await chrome.runtime.sendMessage({type:'blbSuiteGetPendingMultiVerseRefs'});
     const refs=response?.refs;
-    if (!Array.isArray(refs) || refs.length<2) {
+    if (!Array.isArray(refs) || refs.length<1) {
       revealPendingMultiVerseView();
       return false;
     }
