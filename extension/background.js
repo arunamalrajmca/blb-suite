@@ -790,7 +790,11 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
       'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
     ]
   });
-  const existing = await findMatchingMultiVerseTab(canonical.key, tabs);
+  // Compare by the actual verse set, not by the caller's compact reference
+  // spelling. Different ranges can describe the same batch while producing
+  // different compact-reference keys.
+  const verseSetKey = canonicalMultiVerseSet(finalVerses).key;
+  const existing = await findMatchingMultiVerseTab(verseSetKey, tabs);
   if (existing?.id != null) {
     if (active) {
       try { await chrome.tabs.update(existing.id, {active:true}); } catch (_) {}
@@ -813,7 +817,7 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
   });
   const trackedMap = pending.blbSuiteMultiVerseTabSets && typeof pending.blbSuiteMultiVerseTabSets === 'object'
     ? {...pending.blbSuiteMultiVerseTabSets} : {};
-  trackedMap[String(tab.id)] = {key:canonical.key, updatedAt:Date.now()};
+  trackedMap[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
   const pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object'
     ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
   pendingMap[String(tab.id)] = canonical.refs;
