@@ -1314,7 +1314,24 @@ async function importExtensionSettingsFile(file) {
       setStatus('This is not a valid BLB Suite settings backup.');
       return;
     }
-    const settings = backup.settings;
+    // Popup site keys are canonical hostnames without a leading "www.".
+    // Normalize imported maps to that same key format so www-only entries
+    // actually apply to the hostnames returned by getSiteKey().
+    const settings = {...backup.settings};
+    for (const key of ['pageSelectionButtonSites', 'doubleClickBlbSites']) {
+      if (!Object.prototype.hasOwnProperty.call(settings, key)) continue;
+      const normalized = {};
+      for (const [rawHost, enabled] of Object.entries(settings[key])) {
+        const host = rawHost.trim().toLowerCase().replace(/^www\\./, '');
+        if (!host) continue;
+        // If aliases conflict, an explicit OFF wins rather than unexpectedly
+        // enabling a feature for that site.
+        normalized[host] = Object.prototype.hasOwnProperty.call(normalized, host)
+          ? normalized[host] === true && enabled === true
+          : enabled;
+      }
+      settings[key] = normalized;
+    }
     const siteCount = new Set([
       ...Object.keys(settings.pageSelectionButtonSites || {}),
       ...Object.keys(settings.doubleClickBlbSites || {})
