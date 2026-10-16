@@ -1304,9 +1304,13 @@ function isValidExtensionSettingsBackup(backup) {
 let pendingSettingsImport = null;
 
 function getRequestedSiteOrigins(settings) {
-  // Global redirects require optional access across HTTP and HTTPS. Requesting
-  // these two declared patterns also covers any enabled per-site preferences.
-  if (settings.redirectEnabled === true) return ['http://*/*', 'https://*/*'];
+  // Global redirects require optional access across HTTP and HTTPS. Keep those
+  // broad patterns, but also include exact origins for explicitly enabled
+  // per-site features. The site toggles are independent preferences and should
+  // not rely on broad redirect permission being treated as a site-specific grant.
+  const origins = settings.redirectEnabled === true
+    ? ['http://*/*', 'https://*/*']
+    : [];
 
   const hosts = new Set();
   for (const key of ['pageSelectionButtonSites', 'doubleClickBlbSites']) {
@@ -1319,7 +1323,6 @@ function getRequestedSiteOrigins(settings) {
       }
     }
   }
-  const origins = [];
   for (const host of hosts) {
     origins.push(`http://${host}/*`, `https://${host}/*`);
   }
