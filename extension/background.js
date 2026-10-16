@@ -792,12 +792,10 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
   // Restrict the lookup to BLB MultiVerse handoff tabs rather than every
   // browser tab. This keeps MultiVerse selection latency independent of the
   // user's total tab count.
-  const tabs = await chrome.tabs.query({
-    url: [
-      'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
-      'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
-    ]
-  });
+  // Query all tabs so a tracked destination that is still about:blank
+  // (or has only pendingUrl set) can be reused during its navigation race.
+  // findMatchingMultiVerseTab filters this list using the tracked set key.
+  const tabs = await chrome.tabs.query({});
   // Compare by the actual verse set, not by the caller's compact reference
   // spelling. Different ranges can describe the same batch while producing
   // different compact-reference keys.
