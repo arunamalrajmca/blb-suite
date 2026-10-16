@@ -2715,9 +2715,17 @@ chrome.tabs.onRemoved.addListener(tabId => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (!changeInfo.url && !tab?.url) return;
-  const url = String(tab?.url || changeInfo.url || '');
-  if (!/blueletterbible\.org/i.test(url) || (!/\/MultiVerse\.cfm/i.test(url) && !/blbSuiteMultiVerse=1/i.test(url) && url !== 'about:blank')) {
+  if (!changeInfo.url && !tab?.pendingUrl && !tab?.url) return;
+
+  // Prefer the URL from this update over tab.url, which can still reflect the
+  // previous navigation during redirects. Otherwise a transient about:blank
+  // value can erase the batch key before the MultiVerse destination commits.
+  const url = String(changeInfo.url || tab?.pendingUrl || tab?.url || '');
+  const isBlank = /^about:blank(?:[#?].*)?$/i.test(url);
+  const isMultiVerse = /blueletterbible\.org/i.test(url) &&
+    (/\/MultiVerse\.cfm/i.test(url) || /blbSuiteMultiVerse=1/i.test(url));
+
+  if (!isBlank && !isMultiVerse) {
     clearTrackedMultiVerseTab(tabId).catch(()=>{});
   }
 });
