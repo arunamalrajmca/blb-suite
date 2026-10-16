@@ -3690,7 +3690,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
               '(?<![A-Za-z0-9])' +
               escapePattern(clean).replace(/\s+/g, '\\s+') +
               bookBoundary +
-              '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?(?!\\s*:\\s*\\d+)',
+              '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?',
               'gi'
             )
           });
