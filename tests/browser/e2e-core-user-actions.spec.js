@@ -519,6 +519,13 @@ test('multiple disjoint chapter-only ranges combine into one complete MultiVerse
     from: ref.from,
     to: ref.to
   })), selectedText);
+  const decision = await extensionWorker.evaluate((text) => {
+    const result = classifySelectionForBlb(text);
+    return { type: result.type, refs: (result.refs || []).map(ref => ({
+      book: ref.book, chapter: ref.chapter, from: ref.from, to: ref.to
+    })) };
+  }, selectedText);
+  expect(decision.type).not.toBe('REFERENCE');
   const genesis = parsed.filter(ref => ref.book.toLowerCase() === 'genesis');
   const expectedChapters = [42, 43, 44, 45, 46, 48, 49];
   expect([...new Set(genesis.map(ref => ref.chapter))].sort((a, b) => a - b)).toEqual(expectedChapters);
