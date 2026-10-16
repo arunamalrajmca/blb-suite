@@ -1194,7 +1194,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
     // actual book label within that capture, then start the citation at that
     // suffix so a prose word cannot overlap an unrelated later reference.
     const rawBookLabel = verseListMatch[1];
-    const labelTokens = [...rawBookLabel.matchAll(/\\S+/g)];
+    const labelTokens = [...rawBookLabel.matchAll(/\S+/g)];
     let book = null;
     let bookOffset = 0;
     for (let tokenIndex = labelTokens.length - 1; tokenIndex >= 0; tokenIndex--) {
