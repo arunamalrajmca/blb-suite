@@ -1964,7 +1964,7 @@ async function handleBCommand(text) {
       // Use the same URL-size chunking and paced multi-tab opening as the
       // case-sensitive search path. A single MultiVerse URL can exceed BLB's
       // practical URL limits when many chapters contain this verse number.
-      const urls = buildCaseSensitiveMultiVerseUrls(matches);
+      const urls = buildCaseSensitiveMultiVerseUrls(matches, 6000, 200);
       if (urls.length) {
         await openCaseSensitiveDestinations(urls, 'currentTab');
       } else {
@@ -2153,7 +2153,7 @@ function openCaseSensitiveNativeSearch(query, disposition = 'currentTab') {
   return chrome.tabs.update({url});
 }
 
-function buildCaseSensitiveMultiVerseUrls(refs, maxUrlLength = 6000) {
+function buildCaseSensitiveMultiVerseUrls(refs, maxUrlLength = 6000, maxReferencesPerUrl = Infinity) {
   const sorted = (refs || []).map(e => ({bookNumber:Number(e.bookNumber), chapter:Number(e.chapter), verse:Number(e.verse)}))
     .filter(e => Number.isFinite(e.bookNumber) && Number.isFinite(e.chapter) && Number.isFinite(e.verse))
     .sort((a,b) => a.bookNumber-b.bookNumber || a.chapter-b.chapter || a.verse-b.verse);
@@ -2162,8 +2162,8 @@ function buildCaseSensitiveMultiVerseUrls(refs, maxUrlLength = 6000) {
   for (const ref of sorted) {
     const candidate=[...chunk,ref];
     const url=BLBCaseSensitiveCore.buildBlbMultiVerseUrl(candidate, bookData, 'KJV');
-    // Split only when the generated URL exceeds the character limit.
-    if (chunk.length && url.length > maxUrlLength) {
+    // Keep URL size safe and allow callers to respect BLB's per-page verse display limit.
+    if (chunk.length && (url.length > maxUrlLength || chunk.length >= maxReferencesPerUrl)) {
       urls.push(BLBCaseSensitiveCore.buildBlbMultiVerseUrl(chunk, bookData, 'KJV'));
       chunk=[ref];
     } else chunk=candidate;
