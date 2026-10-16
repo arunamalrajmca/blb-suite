@@ -3407,7 +3407,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // In that case a single page-context result can incorrectly short-circuit
         // the full-selection classifier and make a two-reference selection open
         // only its first citation (and suppress Criteria Search).
-        if (selectedRefs.length < 2 && !message.contextualReference?.unresolved) {
+        if (selectedRefs.length < 2) {
           const contextualRef = await getContextualSelectionReference(sender?.tab?.id, text);
           if (contextualRef?.url) {
             await openSelectedPdfBibleRefs(text, behavior, contextualRef);
@@ -3416,7 +3416,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
         }
       }
-      if (bookOnly?.url && !message.contextualReference?.url && !message.contextualReference?.unresolved) {
+      if (bookOnly?.url && !message.contextualReference?.url) {
         await recordStudyRefs([parseBlbKjvUrlToStudyRef(bookOnly.url)].filter(Boolean));
         await openBlbDestination(bookOnly.url, !!behavior.activeIfNew, !!behavior.activateExisting);
         sendResponse({ok:true, bookOnly:true});
