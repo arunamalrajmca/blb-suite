@@ -684,30 +684,56 @@ function compactMultiVerseVerses(verses) {
 }
 
 async function openBlbMultiVerseRefs(refs, active = true) {
-  // BLB itself caps displayed MultiVerse verses and textbox input. Our job is
-  // only to hand it references representing at most 200 unique individual
-  // verses. Do not open extra tabs to work around BLB's native limits.
+  // Universal MultiVerse policy: BLB renders at most 200 verses per view.
+  // Expand, canonicalize, and deduplicate once, then deliver every verse in
+  // ordered batches. No caller may silently lose verses after the first 200.
   const allVerses = expandMultiVerseRefsToVerses(refs);
-  const verses = allVerses.slice(0, BLB_MULTIVERSE_MAX_VERSES);
-  if (verses.length < 2) {
-    if (verses.length === 1) {
-      const ref = verses[0];
-      const book = bookData.find(item => Number(item.bookNumber) === Number(ref.bookNumber));
-      if (!book?.urlKey) return {ok:false, reason:'book-not-found', count:1};
-      const url = `https://www.blueletterbible.org/${encodeURIComponent(ref.version || 'kjv')}/${book.urlKey}/${ref.chapter}/${ref.from}/`;
-      const tab = await openBlbDestination(url, !!active, !!active);
-      return {ok:true, count:1, singleVerse:true, tabId:tab?.id ?? tab?.tab?.id ?? null};
-    }
-    return {ok:false, reason:"not-enough-references", count:0};
+  if (!allVerses.length) return {ok:false, reason:"not-enough-references", count:0, batchCount:0};
+
+  if (allVerses.length === 1) {
+    const ref = allVerses[0];
+    const book = bookData.find(item => Number(item.bookNumber) === Number(ref.bookNumber));
+    if (!book?.urlKey) return {ok:false, reason:'book-not-found', count:1, batchCount:1};
+    const url = `https://www.blueletterbible.org/${encodeURIComponent(ref.version || 'kjv')}/${book.urlKey}/${ref.chapter}/${ref.from}/`;
+    const tab = await openBlbDestination(url, !!active, !!active);
+    return {ok:true, count:1, singleVerse:true, tabId:tab?.id ?? tab?.tab?.id ?? null, batchCount:1};
   }
 
-  const compactRefs = compactMultiVerseVerses(verses);
-  const result = await openBlbMultiVerseRefsSingleBatch(compactRefs, active);
+  const batches = [];
+  for (let start = 0; start < allVerses.length; start += BLB_MULTIVERSE_MAX_VERSES) {
+    batches.push(allVerses.slice(start, start + BLB_MULTIVERSE_MAX_VERSES));
+  }
+
+  const results = [];
+  for (let index = 0; index < batches.length; index++) {
+    const batchVerses = batches[index];
+    const compactRefs = compactMultiVerseVerses(batchVerses);
+    const result = await openBlbMultiVerseRefsSingleBatch(compactRefs, index === 0 ? !!active : false);
+    if (!result?.ok) {
+      return {
+        ok:false, reason:result?.reason || 'batch-open-failed',
+        count:results.reduce((sum, item) => sum + Number(item.count || 0), 0),
+        batchCount:results.length, failedBatch:index + 1, results
+      };
+    }
+    results.push({...result, count:batchVerses.length, batch:index + 1});
+
+    // Wait for each destination to finish its initial load before creating
+    // the next background tab. This avoids racing BLB's pending-reference
+    // handoff while keeping only the first requested tab active.
+    if (index < batches.length - 1 && result.tabId != null) {
+      await waitForTabTerminalLoad(result.tabId);
+      await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
+    }
+  }
+
   return {
-    ...result,
-    count:verses.length,
-    suppliedReferenceCount:compactRefs.length,
-    truncated:allVerses.length > verses.length
+    ok:true,
+    count:allVerses.length,
+    batchCount:batches.length,
+    tabIds:results.map(item => item.tabId).filter(id => id != null),
+    results,
+    truncated:false
   };
 }
 
