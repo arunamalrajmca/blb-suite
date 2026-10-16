@@ -493,58 +493,71 @@ test('Double-Click resolves partial references in Instagram-style rich text with
   }
 });
 
-test('chapter-only ranges expand across all chapters and open MultiVerse', async ({ page, extensionStorage, extensionWorker }) => {
+test('multiple disjoint chapter-only ranges combine into one complete MultiVerse selection', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
 
-  for (const reference of ['Genesis 48-49', 'Genesis 42-46']) {
-    await page.evaluate((text) => {
-      let el = document.querySelector('#blb-e2e-chapter-range');
-      if (!el) {
-        el = document.createElement('p');
-        el.id = 'blb-e2e-chapter-range';
-        el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
-        document.body.appendChild(el);
-      }
-      el.textContent = text;
-      const range = document.createRange();
-      range.selectNodeContents(el);
-      const selection = window.getSelection();
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }, reference);
+  const selectedText = 'Genesis 48-49 and Genesis 42-46';
+  await page.evaluate((text) => {
+    const el = document.createElement('p');
+    el.id = 'blb-e2e-disjoint-chapter-ranges';
+    el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    el.textContent = text;
+    document.body.appendChild(el);
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }, selectedText);
 
-    await extensionWorker.evaluate(async () => {
-      const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
-      if (!tab?.id) throw new Error('No active tab for chapter-range E2E');
-      await chrome.scripting.executeScript({
-        target: {tabId: tab.id},
-        world: 'ISOLATED',
-        func: () => new Promise(resolve => {
-          chrome.runtime.sendMessage({
-            type:'blbSuiteOpenSelectionText',
-            text:window.getSelection()?.toString() || '',
-            tabBehavior:{activeIfNew:true,activateExisting:true}
-          }, response => resolve(response || null));
-        })
-      });
-    });
+  // Assert the canonical payload itself, not just that a MultiVerse tab exists.
+  const parsed = await extensionWorker.evaluate((text) => extractBibleRefsFromSelectedText(text).map(ref => ({
+    book: ref.book,
+    chapter: ref.chapter,
+    from: ref.from,
+    to: ref.to
+  })), selectedText);
+  const genesis = parsed.filter(ref => ref.book.toLowerCase() === 'genesis');
+  const expectedChapters = [42, 43, 44, 45, 46, 48, 49];
+  expect([...new Set(genesis.map(ref => ref.chapter))].sort((a, b) => a - b)).toEqual(expectedChapters);
+  expect(genesis).toHaveLength(expectedChapters.length);
+  expect(genesis.every(ref => ref.from === 1)).toBe(true);
+  expect(genesis.every(ref => Number.isInteger(ref.to) && ref.to > 1)).toBe(true);
+  expect(genesis.some(ref => ref.chapter === 47)).toBe(false);
 
-    const multiVerse = await waitForTab(extensionWorker, tab => {
-      try {
-        const url = new URL(tab.url || tab.pendingUrl);
-        return url.hostname === 'www.blueletterbible.org' &&
-          (url.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
-           url.searchParams.get('blbSuiteMultiVerse') === '1');
-      } catch (_) { return false; }
+  // Exercise the shared selection-opening route used by the keyboard/action
+  // entry points. The selected text contains both ranges in a single gesture.
+  await extensionWorker.evaluate(async (text) => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) throw new Error('No active tab for combined chapter-range E2E');
+    await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      world: 'ISOLATED',
+      func: (selected) => new Promise(resolve => {
+        chrome.runtime.sendMessage({
+          type: 'blbSuiteOpenSelectionText',
+          text: selected,
+          tabBehavior: { activeIfNew: true, activateExisting: true }
+        }, response => resolve(response || null));
+      }),
+      args: [text]
     });
-    expect(new URL(multiVerse.url || multiVerse.pendingUrl).hostname).toBe('www.blueletterbible.org');
-    expect(
-      new URL(multiVerse.url || multiVerse.pendingUrl).pathname.toLowerCase() === '/tools/multiverse.cfm' ||
-      new URL(multiVerse.url || multiVerse.pendingUrl).searchParams.get('blbSuiteMultiVerse') === '1'
-    ).toBeTruthy();
-    await removeTabById(extensionWorker, multiVerse.id);
-  }
+  }, selectedText);
+
+  const multiVerse = await waitForTab(extensionWorker, tab => {
+    try {
+      const url = new URL(tab.url || tab.pendingUrl);
+      return url.hostname === 'www.blueletterbible.org' &&
+        (url.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
+         url.searchParams.get('blbSuiteMultiVerse') === '1');
+    } catch (_) { return false; }
+  });
+  const multiVerseUrl = new URL(multiVerse.url || multiVerse.pendingUrl);
+  expect(multiVerseUrl.hostname).toBe('www.blueletterbible.org');
+  expect(multiVerseUrl.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
+    multiVerseUrl.searchParams.get('blbSuiteMultiVerse') === '1').toBeTruthy();
+  await removeTabById(extensionWorker, multiVerse.id);
 });
 
