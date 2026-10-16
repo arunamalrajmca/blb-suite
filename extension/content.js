@@ -1595,11 +1595,27 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const abbreviatedBookCitationPattern = /\b((?:[1-3]\s+|i{1,3}\s+)?[A-Za-z][A-Za-z.'-]*(?:\s+[A-Za-z][A-Za-z.'-]*){0,3})\s+(\d+)\s*:\s*(\d+(?:\s*,\s*\d+)*)(?:\s*[-–—]\s*(\d+))?/gi;
       let citationMatch;
       while ((citationMatch = abbreviatedBookCitationPattern.exec(normalizedMatchSource))) {
-        const bookLabelStart = citationMatch.index;
-        const bookLabelEnd = bookLabelStart + citationMatch[1].length;
-        if (selectionStart >= bookLabelEnd || selectionEnd <= bookLabelStart) continue;
-        const book = resolveBibleBook(citationMatch[1].trim());
+        const rawBookLabel = citationMatch[1];
+        const trimmedBookLabel = rawBookLabel.trim();
+        const leadingTrim = rawBookLabel.length - rawBookLabel.trimStart().length;
+        const labelTokens = [...trimmedBookLabel.matchAll(/\S+/g)];
+        let book = null;
+        let bookLabelStart = citationMatch.index + leadingTrim;
+        // The broad matcher can include preceding prose (e.g. "See Rom.").
+        // Resolve the longest valid suffix as the actual Bible book label.
+        for (let tokenIndex = 0; tokenIndex < labelTokens.length; tokenIndex++) {
+          const token = labelTokens[tokenIndex];
+          const candidate = trimmedBookLabel.slice(token.index);
+          const candidateBook = resolveBibleBook(candidate);
+          if (candidateBook) {
+            book = candidateBook;
+            bookLabelStart = citationMatch.index + leadingTrim + token.index;
+            break;
+          }
+        }
         if (!book) continue;
+        const bookLabelEnd = citationMatch.index + leadingTrim + trimmedBookLabel.length;
+        if (selectionStart >= bookLabelEnd || selectionEnd <= bookLabelStart) continue;
         const chapter = Number(citationMatch[2]);
         const listedVerses = citationMatch[3]
           ? citationMatch[3].split(',').map(value => Number(value.trim()))
