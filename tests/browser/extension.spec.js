@@ -77,6 +77,23 @@ test('settings gear exposes import and export actions', async ({ page, extension
   await expect(page.getByRole('menuitem', { name: 'Import Settings' })).toBeVisible();
 });
 
+test('settings import reminds users to pin BLB Suite to the toolbar', async ({ page, extensionId }) => {
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#settingsBackupFile').setInputFiles({
+    name: 'blb-settings.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      format: 'blb-suite-settings',
+      schemaVersion: 1,
+      extensionVersion: 'test',
+      exportedAt: new Date().toISOString(),
+      settings: { masterEnabled: true, redirectEnabled: false }
+    }))
+  });
+  await expect(page.locator('#studyStatus')).toContainText('pin BLB Suite from Chrome\'s Extensions menu');
+});
+
 test.describe('core user-visible E2E', () => {
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
