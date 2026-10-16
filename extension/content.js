@@ -1592,7 +1592,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // verse lists. Do not special-case individual Bible books or borrow a
     // citation elsewhere in the same paragraph.
     if (selectionStart != null && selectionEnd != null) {
-      const abbreviatedBookCitationPattern = /\\b((?:[1-3]\\s+|i{1,3}\\s+)?[A-Za-z][A-Za-z.'-]*(?:\\s+[A-Za-z][A-Za-z.'-]*){0,3})\\s+(\\d+)\\s*:\\s*(\\d+(?:\\s*,\\s*\\d+)*)(?:\\s*[-–—]\\s*(\\d+))?/gi;
+      const abbreviatedBookCitationPattern = /\b((?:[1-3]\s+|i{1,3}\s+)?[A-Za-z][A-Za-z.'-]*(?:\s+[A-Za-z][A-Za-z.'-]*){0,3})\s+(\d+)\s*:\s*(\d+(?:\s*,\s*\d+)*)(?:\s*[-–—]\s*(\d+))?/gi;
       let citationMatch;
       while ((citationMatch = abbreviatedBookCitationPattern.exec(normalizedMatchSource))) {
         const bookLabelStart = citationMatch.index;
