@@ -1278,7 +1278,7 @@ function isValidSiteSettingsMap(value) {
     typeof host === 'string' &&
     host.length > 0 &&
     host.length <= 253 &&
-    !/[\\s/]/.test(host) &&
+    !/[\s/]/.test(host) &&
     typeof enabled === 'boolean'
   );
 }
