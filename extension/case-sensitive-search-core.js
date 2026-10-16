@@ -58,17 +58,19 @@
     const sorted=(entries||[]).map(e=>({bookNumber:Number(e.bookNumber),chapter:Number(e.chapter),verse:Number(e.verse)}))
       .filter(e=>Number.isFinite(e.bookNumber)&&Number.isFinite(e.chapter)&&Number.isFinite(e.verse))
       .sort((a,b)=>a.bookNumber-b.bookNumber||a.chapter-b.chapter||a.verse-b.verse);
-    const parts=[]; let i=0; let previousBookNumber=null;
+    const parts=[]; let i=0;
     while(i<sorted.length){
       const start=sorted[i]; let end=start; let j=i+1;
       while(j<sorted.length && sorted[j].bookNumber===end.bookNumber && sorted[j].chapter===end.chapter && sorted[j].verse===end.verse+1){end=sorted[j];j++;}
       const book=(books||[]).find(b=>Number(b.bookNumber)===start.bookNumber);
       if(book){
-        const bookPrefix=start.bookNumber===previousBookNumber?'':`${titleCaseBook(book.name)} `;
-        let ref=`${bookPrefix}${start.chapter}:${start.verse}`;
+        // BLB's MultiVerse result parser can leave some entries out when
+        // same-book references omit the book name (for example, "Genesis 1:1; 2:1").
+        // Repeat the full book name so every textbox entry has an unambiguous
+        // reference and is included in the verse list after Retrieve.
+        let ref=`${titleCaseBook(book.name)} ${start.chapter}:${start.verse}`;
         if(end.verse!==start.verse) ref+=`-${end.verse}`;
         parts.push(ref);
-        previousBookNumber=start.bookNumber;
       }
       i=j;
     }
