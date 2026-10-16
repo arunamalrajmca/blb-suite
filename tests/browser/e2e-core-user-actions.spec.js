@@ -75,10 +75,52 @@ test.describe('core user-action E2E coverage', () => {
     await removeTabById(extensionWorker, blb.id);
   });
 
-  test('copying selected Bible text injects a BLB hyperlink into HTML clipboard data', async ({ page, context, extensionStorage }) => {
+  test('MultiVerse Copy button adds a BLB hyperlink to HTML clipboard data', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true });
-    // Exercise the real MultiVerse copy handler against a deterministic fixture.
-    // Keep the required BLB host/path but never depend on the live site.
+    // Exercise BLB's native MultiVerse copy flow against a deterministic fixture.
+    await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: `<!doctype html><html><body>
+        <button id="copyButton" data-clipboard-text="(John 3:16)">Copy</button>
+        <a href="https://www.blueletterbible.org/kjv/jhn/3/16/">John 3:16</a>
+        <p id="blb-e2e-copy">John 3:16</p>
+        <script>
+          document.querySelector('#copyButton').addEventListener('click', function () {
+            const textarea = document.createElement('textarea');
+            textarea.value = this.getAttribute('data-clipboard-text');
+            document.body.appendChild(textarea);
+            textarea.select();
+            document.execCommand('copy');
+            textarea.remove();
+          });
+        </script>
+      </body></html>`
+    }));
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'https://www.blueletterbible.org' });
+    await page.goto('https://www.blueletterbible.org/tools/MultiVerse.cfm', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+
+    await page.locator('#copyButton').click();
+
+    const captured = await page.evaluate(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const items = await navigator.clipboard.read();
+      let html = '';
+      let plain = '';
+      for (const item of items) {
+        if (item.types.includes('text/html')) html = await (await item.getType('text/html')).text();
+        if (item.types.includes('text/plain')) plain = await (await item.getType('text/plain')).text();
+      }
+      return { html, plain };
+    });
+    expect(captured.plain).toBe('(John 3:16)');
+    expect(captured.html).toContain('blueletterbible.org/kjv/jhn/3/16/');
+    expect(captured.html).toContain('/kjv/jhn/3/16/');
+  });
+
+  test('normal Ctrl+C in MultiVerse does not override the default clipboard behaviour', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true });
     await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
       status: 200,
       contentType: 'text/html',
@@ -95,9 +137,6 @@ test.describe('core user-action E2E coverage', () => {
       const selection = window.getSelection();
       selection.removeAllRanges();
       selection.addRange(range);
-    });
-
-    await page.evaluate(() => {
       const result = document.execCommand('copy');
       if (!result) throw new Error("document.execCommand('copy') returned false");
     });
@@ -113,9 +152,8 @@ test.describe('core user-action E2E coverage', () => {
       }
       return { html, plain };
     });
-    expect(captured.plain).toBe('(John 3:16)');
-    expect(captured.html).toContain('blueletterbible.org/kjv/jhn/3/16/');
-    expect(captured.html).toMatch(/\/kjv\/(?:jhn|John)\/3\/16\/?/i);
+    expect(captured.plain).toBe('John 3:16');
+    expect(captured.html).not.toContain('blueletterbible.org/kjv/jhn/3/16/');
   });
 
   test('BLB verse links inside parse popups open in a new tab', async ({ page, context, extensionStorage, extensionWorker }) => {
