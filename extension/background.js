@@ -594,7 +594,7 @@ async function findMatchingMultiVerseTab(setKey, tabs) {
     // does not discard the tracking record and create a duplicate tab.
     const urls = [tab.url, tab.pendingUrl].map(value => String(value || '')).filter(Boolean);
     const isMultiVerse = urls.some(url =>
-      /blueletterbible\\.org/i.test(url) && (/\\/MultiVerse\\.cfm/i.test(url) || /blbSuiteMultiVerse=1/i.test(url))
+      /blueletterbible\.org/i.test(url) && (/\/MultiVerse\.cfm/i.test(url) || /blbSuiteMultiVerse=1/i.test(url))
     );
     const isBlank = urls.length > 0 && urls.every(url => /^about:blank(?:[#?].*)?$/i.test(url));
     if (!isMultiVerse && !isBlank) { delete tracked[String(tab.id)]; changed = true; continue; }
