@@ -36,3 +36,21 @@ test.describe('BLB MultiVerse native-copy reference recognition', () => {
     }
   });
 });
+
+
+test.describe('BLB MultiVerse clipboard scope', () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, '../../extension/content.js'),
+    'utf8'
+  );
+  const blockStart = source.indexOf('// ---------- BLB MultiVerse native-copy hyperlink enhancement ----------');
+  const blockEnd = source.indexOf('// ---------- BLB Auto Hyperlinker ----------', blockStart);
+  const block = source.slice(blockStart, blockEnd);
+
+  test('only enhances copies initiated by BLB native Copy buttons', () => {
+    expect(block).toContain('nativeMultiVerseCopyPending = false');
+    expect(block).toMatch(/closest\?\.\("#copyButton, #copyByVerseButton"\)/);
+    expect(block).toMatch(/if \(!nativeMultiVerseCopyPending\) return;[\s\S]*?e\.preventDefault\(\)/);
+    expect(block).toContain('setTimeout(() => { nativeMultiVerseCopyPending = false; }, 0)');
+  });
+});
