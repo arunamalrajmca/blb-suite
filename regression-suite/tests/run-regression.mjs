@@ -69,6 +69,9 @@ test('all JavaScript source files parse', () => {
 section('resolver');
 // Shared Bible-reference core + production selection extractor.
 const refCtx = loadPure(['books.js','book-aliases.js','reference-core.js']);
+// Top-level const declarations in vm contexts are lexical bindings, not ctx properties.
+const refBooks = vm.runInContext('BOOKS', refCtx);
+const refBookAliases = vm.runInContext('BOOK_ALIASES', refCtx);
 const bgSource = read('background.js');
 test('shared alias source is authoritative for Omnibox and reference resolver', () => {
   const aliasSource = vm.runInContext('EXTRA_BOOK_ALIASES', refCtx);
@@ -76,7 +79,7 @@ test('shared alias source is authoritative for Omnibox and reference resolver', 
   assert(aliasSource && Object.keys(aliasSource).length > 0, 'shared alias source is empty');
   const expectedAliases = Object.create(null);
   for (const [alias, target] of Object.entries(aliasSource)) {
-    const book = refCtx.BOOKS.find(item => item.name === target);
+    const book = refBooks.find(item => item.name === target);
     assert(book, `alias source target is not a canonical book: ${alias}`);
     const normalized = String(alias).toLowerCase().trim();
     const canonical = String(book.name || '').toLowerCase().trim();
@@ -106,7 +109,7 @@ const extractorEnd = bgSource.indexOf('\nfunction ', extractorStart + 10);
 vm.runInContext(bgSource.slice(extractorStart, extractorEnd > extractorStart ? extractorEnd : undefined), refCtx, {filename:'background.js:extractBibleRefsFromSelectedTextUncached'});
 
 test('shared core resolves every numbered Bible-book family', () => {
-  for (const book of refCtx.BOOKS.filter(book => /^[123] /.test(book.name))) {
+  for (const book of refBooks.filter(book => /^[123] /.test(book.name))) {
     const refs = refCtx.resolveBibleReferenceText(`${book.name} 1:1`);
     assert.equal(refs.length, 1, book.name);
     assert.equal(refs[0].book, book.name, book.name);
@@ -129,7 +132,7 @@ test('shared core normalizes URL-style book separators generically', () => {
     const book = refCtx.resolveBibleBook(form);
     assert.equal(book?.name, expected, form);
   }
-  for (const book of refCtx.BOOKS) {
+  for (const book of refBooks) {
     const hyphenated = book.name.replace(/ /g, '-');
     const underscored = book.name.replace(/ /g, '_');
     assert.equal(refCtx.resolveBibleBook(hyphenated)?.name, book.name, hyphenated);
@@ -157,7 +160,7 @@ test('reference grammar preserves chapter, verse, and range after URL-style book
 });
 test('production selection extractor resolves every Roman-numeral numbered book family', () => {
   const roman = {1: 'I', 2: 'II', 3: 'III'};
-  const numbered = refCtx.BOOKS.filter(book => /^[123] /.test(book.name));
+  const numbered = refBooks.filter(book => /^[123] /.test(book.name));
   assert(numbered.length > 0);
   for (const book of numbered) {
     const prefix = Number(book.name[0]);
@@ -175,7 +178,7 @@ test('production selection extractor resolves every Roman-numeral numbered book 
 });
 test('multi-reference paragraph extraction covers every numbered book family', () => {
   const roman = {1: 'I', 2: 'II', 3: 'III'};
-  const numbered = refCtx.BOOKS.filter(book => /^[123] /.test(book.name));
+  const numbered = refBooks.filter(book => /^[123] /.test(book.name));
   const source = numbered.map((book, index) => {
     const prefix = Number(book.name[0]);
     const chapter = (index % book.chapterCount) + 1;
@@ -192,10 +195,10 @@ test('multi-reference paragraph extraction covers every numbered book family', (
   });
 });
 test('generic double-click reference grammar resolves all 66 books and every shared alias', () => {
-  const books = refCtx.BOOKS;
+  const books = refBooks;
   assert.equal(books.length, 66);
   const aliasesByBook = Object.create(null);
-  for (const [alias, target] of Object.entries(refCtx.BOOK_ALIASES || {})) {
+  for (const [alias, target] of Object.entries(refBookAliases || {})) {
     (aliasesByBook[target] ||= []).push(alias);
   }
 
@@ -249,9 +252,9 @@ test('property-based reference grammar generation covers deterministic valid and
   // Deterministic property-style generation: the seed and source-of-truth data
   // make failures reproducible while exercising many combinations beyond the
   // hand-authored matrix above.
-  const books = refCtx.BOOKS;
+  const books = refBooks;
   const aliasesByBook = Object.create(null);
-  for (const [alias, target] of Object.entries(refCtx.BOOK_ALIASES || {})) {
+  for (const [alias, target] of Object.entries(refBookAliases || {})) {
     (aliasesByBook[target] ||= []).push(alias);
   }
 
