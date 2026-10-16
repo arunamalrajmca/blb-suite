@@ -96,6 +96,33 @@ test('settings import reminds users to pin BLB Suite to the toolbar', async ({ p
   await expect(page.locator('#master')).toBeChecked();
 });
 
+test('settings import normalizes www aliases and preserves independent site toggles', async ({ page, extensionId }) => {
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  page.on('dialog', dialog => dialog.accept());
+  await page.locator('#settingsBackupFile').setInputFiles({
+    name: 'site-settings.json',
+    mimeType: 'application/json',
+    buffer: Buffer.from(JSON.stringify({
+      format: 'blb-suite-settings',
+      schemaVersion: 1,
+      settings: {
+        masterEnabled: true,
+        pageSelectionButtonSites: { 'www.example.com': true },
+        doubleClickBlbSites: { 'www.example.com': false }
+      }
+    }))
+  });
+  await expect.poll(() => page.evaluate(async () => {
+    const data = await chrome.storage.local.get(['pageSelectionButtonSites', 'doubleClickBlbSites']);
+    return {
+      page: data.pageSelectionButtonSites?.['example.com'],
+      double: data.doubleClickBlbSites?.['example.com'],
+      oldPage: Object.hasOwn(data.pageSelectionButtonSites || {}, 'www.example.com'),
+      oldDouble: Object.hasOwn(data.doubleClickBlbSites || {}, 'www.example.com')
+    };
+  })).toEqual({ page: true, double: false, oldPage: false, oldDouble: false });
+});
+
 test.describe('core user-visible E2E', () => {
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
