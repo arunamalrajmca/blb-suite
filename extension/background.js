@@ -707,34 +707,14 @@ async function openBlbMultiVerseRefs(refs, active = true) {
     return {ok:true, count:1, singleVerse:true, tabId:tab?.id ?? tab?.tab?.id ?? null, batchCount:1};
   }
 
-  // Batch on chapter boundaries, not arbitrary verse offsets. BLB's
-  // MultiVerse view is chapter-oriented; splitting a chapter across tabs
-  // makes a requested chapter appear incomplete even when no verses are lost.
-  // Group the ordered, deduplicated verses into complete chapters, then pack
-  // whole chapters into each tab without exceeding the 200-verse limit.
-  const chapterGroups = [];
-  for (const verse of allVerses) {
-    const chapterKey = `${verse.bookNumber}|${verse.chapter}|${String(verse.version || 'kjv').toLowerCase()}`;
-    const last = chapterGroups[chapterGroups.length - 1];
-    if (!last || last.key !== chapterKey) {
-      chapterGroups.push({key:chapterKey, verses:[verse]});
-    } else {
-      last.verses.push(verse);
-    }
-  }
-
+  // MultiVerse has a hard 200-verse limit. Batch the expanded, ordered verse
+  // list by count rather than by chapter: a batch may end mid-chapter, and
+  // the next tab must resume with the very next selected verse. This preserves
+  // disjoint selections without filling gaps between them.
   const batches = [];
-  let batchVerses = [];
-  for (const chapter of chapterGroups) {
-    // Every canonical Bible chapter is below the 200-verse view limit.
-    // Start the next tab before adding a chapter that would cross that limit.
-    if (batchVerses.length && batchVerses.length + chapter.verses.length > BLB_MULTIVERSE_MAX_VERSES) {
-      batches.push(batchVerses);
-      batchVerses = [];
-    }
-    batchVerses.push(...chapter.verses);
+  for (let offset = 0; offset < allVerses.length; offset += BLB_MULTIVERSE_MAX_VERSES) {
+    batches.push(allVerses.slice(offset, offset + BLB_MULTIVERSE_MAX_VERSES));
   }
-  if (batchVerses.length) batches.push(batchVerses);
 
   const results = [];
   for (let index = 0; index < batches.length; index++) {
@@ -784,35 +764,9 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
     return {ok:false, reason:"not-enough-references", count:finalVerses.length};
   }
 
-  // A compacted single range is already a continuous same-chapter set. Open
-  // it directly in BLB's normal reader instead of handing one range to
-  // MultiVerse or rejecting it as fewer than two reference entries.
-  if (canonical.refs.length === 1) {
-    const ref = canonical.refs[0];
-    if (ref.from != null && ref.to != null && ref.to > ref.from) {
-      const book = bookData.find(item => Number(item.bookNumber) === Number(ref.bookNumber));
-      if (book?.urlKey) {
-        const rangeUrl = `https://www.blueletterbible.org/${encodeURIComponent(ref.version || 'kjv')}/${book.urlKey}/${ref.chapter}/${ref.from}-${ref.to}/`;
-        const tab = await openBlbDestination(rangeUrl, !!active, !!active);
-        return {ok:true, count:finalVerses.length, collapsedToRange:true, range:{book:book.name,chapter:ref.chapter,from:ref.from,to:ref.to}, tabId:tab?.id ?? tab?.tab?.id ?? null};
-      }
-    }
-  }
-
-  // A same-chapter, continuous set is clearer in the normal BLB chapter
-  // reader than in MultiVerse. Only collapse when every requested verse is
-  // represented by the continuous range; cross-chapter and gapped sets retain
-  // the established MultiVerse behavior.
-  const continuousRange = getContinuousSameChapterRange(canonical.refs);
-  if (continuousRange) {
-    const book = bookData.find(item => Number(item.bookNumber) === continuousRange.bookNumber);
-    if (book?.urlKey) {
-      const rangeUrl = `https://www.blueletterbible.org/${encodeURIComponent(continuousRange.version)}/${book.urlKey}/${continuousRange.chapter}/${continuousRange.from}-${continuousRange.to}/`;
-      const tab = await openBlbDestination(rangeUrl, !!active, !!active);
-      return {ok:true, count:canonical.refs.length, collapsedToRange:true, range:{book:book.name,chapter:continuousRange.chapter,from:continuousRange.from,to:continuousRange.to}, tabId:tab?.id ?? tab?.tab?.id ?? null};
-    }
-  }
-
+  // This function is used only for a batch belonging to a multi-verse
+  // request. Keep even a single compacted range in MultiVerse: routing it to
+  // the normal reader would split one logical request across destination types.
   // Restrict the lookup to BLB MultiVerse handoff tabs rather than every
   // browser tab. This keeps MultiVerse selection latency independent of the
   // user's total tab count.
