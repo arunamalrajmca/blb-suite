@@ -611,14 +611,14 @@ test('MultiVerse batches disjoint chapter ranges only at chapter boundaries', as
   expect(chapterSets).toEqual([[42,43,44,45,46],[48,49]]);
   expect(batches.flat().every(ref => Number(ref.chapter) !== 47)).toBeTruthy();
 
-  for (const refs of batches) {
-    const verseCount = refs.reduce((sum, ref) => {
-      const from = Number(ref.from || 1);
-      const to = Number(ref.to || from);
-      return sum + Math.max(0, to - from + 1);
-    }, 0);
-    expect(verseCount).toBeLessThanOrEqual(200);
-  }
+  const batchVerseCounts = batches.map(refs => refs.reduce((sum, ref) => {
+    const from = Number(ref.from || 1);
+    const to = Number(ref.to || from);
+    return sum + Math.max(0, to - from + 1);
+  }, 0));
+  expect(batchVerseCounts.every(count => count <= 200)).toBeTruthy();
+  expect(batchVerseCounts.reduce((sum, count) => sum + count, 0)).toBe(223);
+  expect([...new Set(batches.flat().map(ref => String(ref.book).toLowerCase()))]).toEqual(['genesis']);
 
   for (const tab of state) await removeTabById(extensionWorker, tab.id);
 });
