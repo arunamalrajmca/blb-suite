@@ -1304,6 +1304,10 @@ function isValidExtensionSettingsBackup(backup) {
 let pendingSettingsImport = null;
 
 function getRequestedSiteOrigins(settings) {
+  // Global redirects require optional access across HTTP and HTTPS. Requesting
+  // these two declared patterns also covers any enabled per-site preferences.
+  if (settings.redirectEnabled === true) return ['http://*/*', 'https://*/*'];
+
   const hosts = new Set();
   for (const key of ['pageSelectionButtonSites', 'doubleClickBlbSites']) {
     for (const [host, enabled] of Object.entries(settings[key] || {})) {
@@ -1328,9 +1332,11 @@ function showPendingSettingsImport(settings, siteCount, accessOrigins) {
   const summary = document.getElementById('settingsImportAccessSummary');
   const button = document.getElementById('settingsImportAccessButton');
   if (summary) {
-    summary.textContent = accessOrigins.length
-      ? `This backup enables per-site features on ${siteCount} site(s). Chrome will ask for access to those sites before the settings are imported.`
-      : 'This backup has no enabled per-site features. Import the settings now.';
+    summary.textContent = accessOrigins.includes('http://*/*')
+      ? 'This backup enables global redirects. Chrome will ask for access to websites before the settings are imported.'
+      : accessOrigins.length
+        ? `This backup enables per-site features on ${siteCount} site(s). Chrome will ask for access to those sites before the settings are imported.`
+        : 'This backup has no enabled per-site features. Import the settings now.';
   }
   if (button) button.textContent = accessOrigins.length ? 'Grant site access & import' : 'Import settings';
   if (panel) panel.hidden = false;
