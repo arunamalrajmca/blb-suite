@@ -718,7 +718,24 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true) {
   const finalVerses = expandMultiVerseRefsToVerses(refs).slice(0, BLB_MULTIVERSE_MAX_VERSES);
   const finalRefs = compactMultiVerseVerses(finalVerses);
   const canonical = canonicalMultiVerseSet(finalRefs);
-  if (!canonical.key || canonical.refs.length < 2) return {ok:false, reason:"not-enough-references", count:canonical.refs.length};
+  if (!canonical.key || finalVerses.length < 2 || !canonical.refs.length) {
+    return {ok:false, reason:"not-enough-references", count:finalVerses.length};
+  }
+
+  // A compacted single range is already a continuous same-chapter set. Open
+  // it directly in BLB's normal reader instead of handing one range to
+  // MultiVerse or rejecting it as fewer than two reference entries.
+  if (canonical.refs.length === 1) {
+    const ref = canonical.refs[0];
+    if (ref.from != null && ref.to != null && ref.to > ref.from) {
+      const book = bookData.find(item => Number(item.bookNumber) === Number(ref.bookNumber));
+      if (book?.urlKey) {
+        const rangeUrl = `https://www.blueletterbible.org/${encodeURIComponent(ref.version || 'kjv')}/${book.urlKey}/${ref.chapter}/${ref.from}-${ref.to}/`;
+        const tab = await openBlbDestination(rangeUrl, !!active, !!active);
+        return {ok:true, count:finalVerses.length, collapsedToRange:true, range:{book:book.name,chapter:ref.chapter,from:ref.from,to:ref.to}, tabId:tab?.id ?? tab?.tab?.id ?? null};
+      }
+    }
+  }
 
   // A same-chapter, continuous set is clearer in the normal BLB chapter
   // reader than in MultiVerse. Only collapse when every requested verse is
