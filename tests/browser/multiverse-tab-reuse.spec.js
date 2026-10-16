@@ -1,23 +1,22 @@
 const { test, expect } = require('./fixtures');
 
-const BATCH_A = [
-  { bookNumber: 1, chapter: 1, from: 1, to: 1, version: 'kjv' },
-  { bookNumber: 1, chapter: 1, from: 3, to: 3, version: 'kjv' }
-];
-
-const BATCH_B = [
-  { bookNumber: 2, chapter: 1, from: 1, to: 1, version: 'kjv' },
-  { bookNumber: 2, chapter: 1, from: 3, to: 3, version: 'kjv' }
+// Genesis 42–46 plus Genesis 48–49 exceeds BLB's 200-verse MultiVerse limit,
+// producing two batches: the first 200 verses and the remaining verses.
+const SELECTION = [
+  { bookNumber: 1, chapter: 42, from: 1, to: 38, version: 'kjv' },
+  { bookNumber: 1, chapter: 43, from: 1, to: 34, version: 'kjv' },
+  { bookNumber: 1, chapter: 44, from: 1, to: 34, version: 'kjv' },
+  { bookNumber: 1, chapter: 45, from: 1, to: 28, version: 'kjv' },
+  { bookNumber: 1, chapter: 46, from: 1, to: 34, version: 'kjv' },
+  { bookNumber: 1, chapter: 48, from: 1, to: 22, version: 'kjv' },
+  { bookNumber: 1, chapter: 49, from: 1, to: 33, version: 'kjv' }
 ];
 
 async function openMultiVerse(extensionWorker, refs) {
-  return extensionWorker.evaluate(async (payload) => {
-    const response = await chrome.runtime.sendMessage({
-      type: 'blbSuiteOpenWebsterMultiVerse',
-      refs: payload
-    });
-    return response;
-  }, refs);
+  return extensionWorker.evaluate(async payload => chrome.runtime.sendMessage({
+    type: 'blbSuiteOpenWebsterMultiVerse',
+    refs: payload
+  }), refs);
 }
 
 async function getTrackedMultiVerseTabs(extensionWorker) {
@@ -36,56 +35,32 @@ async function getTrackedMultiVerseTabs(extensionWorker) {
   });
 }
 
-test.describe('MultiVerse batch tab identity', () => {
-  test('reuses both distinct batches when repeated in either order', async ({ context, extensionWorker }) => {
-    await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
-      status: 200,
-      contentType: 'text/html',
-      body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
-    }));
+test('MultiVerse reuses both 200-verse batches when the same selection is repeated or reordered', async ({ context, extensionWorker }) => {
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
+  }));
 
-    const first = await openMultiVerse(extensionWorker, [...BATCH_A, ...BATCH_B]);
-    expect(first?.ok).toBe(true);
-    expect(first.batchCount).toBe(1);
-    const firstIds = first.tabIds;
-    expect(firstIds).toHaveLength(1);
+  const first = await openMultiVerse(extensionWorker, SELECTION);
+  expect(first?.ok).toBe(true);
+  expect(first.batchCount).toBe(2);
+  expect(first.tabIds).toHaveLength(2);
+  expect(first.tabIds[0]).not.toBe(first.tabIds[1]);
 
-    const repeated = await openMultiVerse(extensionWorker, [...BATCH_A, ...BATCH_B]);
-    expect(repeated?.ok).toBe(true);
-    expect(repeated.tabIds).toEqual(firstIds);
+  const repeated = await openMultiVerse(extensionWorker, SELECTION);
+  expect(repeated?.ok).toBe(true);
+  expect(repeated.batchCount).toBe(2);
+  expect(repeated.tabIds).toEqual(first.tabIds);
 
-    // Reversing the reference order must still find each batch by its own
-    // canonical verse-set key rather than assuming batch position is identity.
-    const reversed = await openMultiVerse(extensionWorker, [...BATCH_B, ...BATCH_A]);
-    expect(reversed?.ok).toBe(true);
-    expect(reversed.tabIds).toEqual(firstIds);
+  // canonicalMultiVerseSet should normalize reference ordering before batches
+  // are formed, so reversing the input refs must reuse the same two batches.
+  const reversed = await openMultiVerse(extensionWorker, [...SELECTION].reverse());
+  expect(reversed?.ok).toBe(true);
+  expect(reversed.batchCount).toBe(2);
+  expect(reversed.tabIds).toEqual(first.tabIds);
 
-    const trackedTabs = await getTrackedMultiVerseTabs(extensionWorker);
-    expect(new Set(trackedTabs.map(tab => tab.id))).toEqual(new Set(firstIds));
-    expect(new Set(trackedTabs.map(tab => tab.key)).size).toBe(1);
-  });
-
-  test('keeps separate verse sets in separate tabs and reuses each after order changes', async ({ context, extensionWorker }) => {
-    await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
-      status: 200,
-      contentType: 'text/html',
-      body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
-    }));
-
-    const a = await openMultiVerse(extensionWorker, BATCH_A);
-    const b = await openMultiVerse(extensionWorker, BATCH_B);
-    expect(a?.ok).toBe(true);
-    expect(b?.ok).toBe(true);
-    expect(a.tabIds).toHaveLength(1);
-    expect(b.tabIds).toHaveLength(1);
-    expect(a.tabIds[0]).not.toBe(b.tabIds[0]);
-
-    const bThenA = await openMultiVerse(extensionWorker, [...BATCH_B, ...BATCH_A]);
-    expect(bThenA?.ok).toBe(true);
-    expect(new Set(bThenA.tabIds)).toEqual(new Set([...a.tabIds, ...b.tabIds]));
-
-    const trackedTabs = await getTrackedMultiVerseTabs(extensionWorker);
-    expect(new Set(trackedTabs.map(tab => tab.id))).toEqual(new Set([...a.tabIds, ...b.tabIds]));
-    expect(new Set(trackedTabs.map(tab => tab.key)).size).toBe(2);
-  });
+  const trackedTabs = await getTrackedMultiVerseTabs(extensionWorker);
+  expect(new Set(trackedTabs.map(tab => tab.id))).toEqual(new Set(first.tabIds));
+  expect(new Set(trackedTabs.map(tab => tab.key)).size).toBe(2);
 });
