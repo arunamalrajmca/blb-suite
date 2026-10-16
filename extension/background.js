@@ -804,13 +804,12 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
   }
 
   const multiVerseUrl = "https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1";
-  // Create the actual MultiVerse destination immediately. The previous
-  // about:blank -> storage -> tabs.update sequence added a second navigation
-  // to the user's critical path. The tab id is still available from create()
-  // for the same tracking/storage bookkeeping.
-  const tab = await chrome.tabs.create({url:multiVerseUrl, active:!!active});
+  // Create an inert tab first so the MultiVerse content script cannot run
+  // before its per-tab reference payload has been committed to storage.
+  const tab = await chrome.tabs.create({url:'about:blank', active:!!active});
   if (tab?.id == null) return {ok:false, reason:'tab-create-failed'};
-  // Batch tracking and pending-handoff storage into one read/write pair.
+
+  // Commit both tracking and the pending handoff before navigating to BLB.
   const pending = await chrome.storage.local.get({
     blbSuiteMultiVerseTabSets:{},
     blbSuitePendingMultiVerseRefsByTab:{}
@@ -825,6 +824,20 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
     blbSuiteMultiVerseTabSets:trackedMap,
     blbSuitePendingMultiVerseRefsByTab:pendingMap
   });
+
+  try {
+    await chrome.tabs.update(tab.id, {url:multiVerseUrl});
+  } catch (error) {
+    // Do not leave a dangling payload that could be mistaken for a later
+    // navigation in this tab if the destination update fails.
+    delete trackedMap[String(tab.id)];
+    delete pendingMap[String(tab.id)];
+    await chrome.storage.local.set({
+      blbSuiteMultiVerseTabSets:trackedMap,
+      blbSuitePendingMultiVerseRefsByTab:pendingMap
+    }).catch(()=>{});
+    return {ok:false, reason:'tab-navigation-failed', error:String(error)};
+  }
   return {ok:true, count:canonical.refs.length, reused:false, tabId:tab.id};
 }
 
