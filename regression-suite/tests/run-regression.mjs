@@ -520,6 +520,7 @@ test('Double-click citation handling validates book labels and preserves noncons
   assert(content.includes('if (textNode?.nodeType === Node.ELEMENT_NODE)'), 'double-click must handle caret APIs that return element boundaries');
   assert(content.includes('const findText = (root, fromEnd = false) =>'), 'element caret boundaries must be resolved to nearby text nodes');
   assert(content.includes('const candidateBook = resolveBibleBook(candidate)'), 'double-click citation must validate the actual captured book label, not parse unrelated prose');
+  assert(content.includes('const citationStart = verseListMatch.index + bookOffset;'), 'context-window verse-list matching must exclude prose before the actual book label');
   assert(content.includes('refs: resolvedVerses.map(ref => ({'), 'nonconsecutive comma-separated verses must remain separate references');
   assert(content.includes('book: ref.book.name,'), 'contextual verse refs must include the canonical book name required by the MultiVerse canonicalizer');
   assert(bg.includes('Array.isArray(message.contextualReference?.refs)'), 'background opener must accept multiple contextual verse references');
