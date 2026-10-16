@@ -3475,12 +3475,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (blbSite) {
           // BLB's own pages get Show on BLB only; Double-click remains blocked.
           doubleSites[key] = false;
-        } else if (!Object.prototype.hasOwnProperty.call(doubleSites, key)) {
-          doubleSites[key] = message.otherFeatureEnabled === true;
         }
       } else {
+        // Site features are independent: enabling Double-click must not create
+        // or enable a Show on BLB preference, and vice versa.
         doubleSites[key] = true;
-        if (!Object.prototype.hasOwnProperty.call(pageSites, key)) pageSites[key] = message.otherFeatureEnabled === true;
       }
       await chrome.storage.local.set({pageSelectionButtonSites:pageSites,doubleClickBlbSites:doubleSites});
       sendResponse({ok:true});
