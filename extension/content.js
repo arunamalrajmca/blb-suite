@@ -1368,15 +1368,54 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             pointRange.collapse(true);
           }
         }
-        const textNode = pointRange?.startContainer;
+        // caretRangeFromPoint may return an element boundary on some rich-text
+        // sites instead of a text-node boundary. Convert that boundary to the
+        // nearest text node at the physical click before expanding the word.
+        let textNode = pointRange?.startContainer || null;
+        let pointOffset = pointRange?.startOffset ?? 0;
+        if (textNode?.nodeType === Node.ELEMENT_NODE) {
+          const children = textNode.childNodes || [];
+          const right = children[Math.min(pointOffset, children.length)] || null;
+          const left = pointOffset > 0 ? children[pointOffset - 1] : null;
+          const findText = (root, fromEnd = false) => {
+            if (!root) return null;
+            if (root.nodeType === Node.TEXT_NODE && (root.nodeValue || '').length) return root;
+            const descendants = [...(root.childNodes || [])];
+            if (fromEnd) descendants.reverse();
+            for (const child of descendants) {
+              const found = findText(child, fromEnd);
+              if (found) return found;
+            }
+            return null;
+          };
+          const rightText = findText(right);
+          const leftText = findText(left, true);
+          if (rightText) {
+            textNode = rightText;
+            pointOffset = 0;
+          } else if (leftText) {
+            textNode = leftText;
+            pointOffset = (leftText.nodeValue || '').length;
+          } else {
+            textNode = null;
+          }
+        }
         if (textNode?.nodeType === Node.TEXT_NODE) {
           const value = textNode.nodeValue || '';
-          const pointOffset = Math.max(0, Math.min(value.length, pointRange.startOffset));
+          pointOffset = Math.max(0, Math.min(value.length, pointOffset));
           const isWordChar = char => /[A-Za-z0-9.'’\u2019-]/.test(char || '');
           let wordStart = pointOffset;
           let wordEnd = pointOffset;
           while (wordStart > 0 && isWordChar(value[wordStart - 1])) wordStart--;
           while (wordEnd < value.length && isWordChar(value[wordEnd])) wordEnd++;
+          // Caret APIs can place the caret just after a token with a trailing
+          // boundary. If needed, step left into the word under the click.
+          if (wordEnd === wordStart && pointOffset > 0 && isWordChar(value[pointOffset - 1])) {
+            wordStart = pointOffset - 1;
+            wordEnd = pointOffset;
+            while (wordStart > 0 && isWordChar(value[wordStart - 1])) wordStart--;
+            while (wordEnd < value.length && isWordChar(value[wordEnd])) wordEnd++;
+          }
           if (wordEnd > wordStart) {
             clickedWordRange = document.createRange();
             clickedWordRange.setStart(textNode, wordStart);
