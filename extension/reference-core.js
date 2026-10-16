@@ -307,3 +307,88 @@ function resolveBibleReferenceText(text, options = {}) {
   refs.sort((a, b) => (referencePosition.get(a) ?? Number.MAX_SAFE_INTEGER) - (referencePosition.get(b) ?? Number.MAX_SAFE_INTEGER));
   return refs;
 }
+
+// Shared Bible-reference normalizer used by both the background service worker
+// and content scripts. It uses the same 66-book chapter/verse table everywhere,
+// so Omnibox, Alt+B, Show on BLB, and site redirects resolve out-of-range
+// references consistently without asking BLB to interpret an invalid URL.
+function resolveBibleReference(bookOrName, chapter, fromVerse = null, toVerse = null) {
+  const raw = String(bookOrName || '').toLowerCase().trim();
+  if (!raw) return null;
+  const compact = raw.replace(/[.]/g, '').replace(/\s+/g, '');
+  const normalized = raw.replace(/[.]/g, '').replace(/\s+/g, ' ');
+
+  const book = BOOKS.find(b => {
+    const names = [b.name, b.urlKey, b.bookNumber, b.name.replace(/\s/g, '')];
+    return names.some(name => {
+      const n = String(name).toLowerCase();
+      return n === normalized || n.replace(/\s/g, '') === compact;
+    });
+  });
+  if (!book) return null;
+
+  // Chapter-only references remain chapter URLs. Invalid chapter numbers are
+  // clamped to the final chapter in the same way as verse references.
+  if (chapter == null || chapter === '') {
+    return {
+      book,
+      chapter: 1,
+      from: null,
+      to: null,
+      url: `https://www.blueletterbible.org/kjv/${book.urlKey}/1/`
+    };
+  }
+
+  let ch = Number(chapter);
+  if (!Number.isFinite(ch)) return null;
+
+  // One-chapter books use a bare numeric suffix as the verse number.
+  // This matches the Omnibox parser semantics (for example, "Jude 10"
+  // means Jude 1:10), and keeps the shared resolver consistent for Alt+B,
+  // Show on BLB, right-click, and Omnibox entry. Keep the original numeric
+  // value here because a value such as "Jude 30" must clamp to verse 25,
+  // not first clamp to chapter 1 and accidentally become verse 1.
+  if ((fromVerse == null || fromVerse === '') && book.chapterCount === 1) {
+    const verse = Math.max(1, Math.min(Math.trunc(ch), book.verses[0]));
+    return {
+      book,
+      chapter: 1,
+      from: verse,
+      to: verse,
+      url: `https://www.blueletterbible.org/kjv/${book.urlKey}/1/${verse}/`
+    };
+  }
+
+  ch = Math.max(1, Math.min(Math.trunc(ch), book.chapterCount));
+  const maxVerse = book.verses?.[ch - 1];
+  if (!maxVerse) return null;
+
+  // A chapter reference has no verse component. Keep the chapter URL rather
+  // than inventing verse 1.
+  if (fromVerse == null || fromVerse === '') {
+    return {
+      book,
+      chapter: ch,
+      from: null,
+      to: null,
+      url: `https://www.blueletterbible.org/kjv/${book.urlKey}/${ch}/`
+    };
+  }
+
+  let from = Number(fromVerse);
+  if (!Number.isFinite(from)) return null;
+  from = Math.max(1, Math.min(Math.trunc(from), maxVerse));
+
+  let to = toVerse == null || toVerse === '' ? from : Number(toVerse);
+  if (!Number.isFinite(to)) return null;
+  to = Math.max(from, Math.min(Math.trunc(to), maxVerse));
+
+  return {
+    book,
+    chapter: ch,
+    from,
+    to,
+    url: `https://www.blueletterbible.org/kjv/${book.urlKey}/${ch}/${from}${to !== from ? `-${to}` : ''}/`
+  };
+}
+
