@@ -1688,8 +1688,12 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         const labelTokens = [...trimmedBookLabel.matchAll(/\S+/g)];
         let book = null;
         let bookLabelStart = citationMatch.index + leadingTrim;
-        // The broad matcher can include preceding prose (e.g. "See Rom.").
-        // Resolve the longest valid suffix as the actual Bible book label.
+        let bookLabelEnd = null;
+        // The broad matcher can include preceding prose (e.g. "The word Cor
+        // appears here. See Ezekiel"). Resolve the longest valid suffix as the
+        // actual Bible book label, and bound the positional match to that suffix
+        // only. Including the preceding prose makes an unrelated word such as
+        // "Cor" appear to belong to the later Ezekiel citation.
         for (let tokenIndex = 0; tokenIndex < labelTokens.length; tokenIndex++) {
           const token = labelTokens[tokenIndex];
           const candidate = trimmedBookLabel.slice(token.index);
@@ -1697,11 +1701,11 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           if (candidateBook) {
             book = candidateBook;
             bookLabelStart = citationMatch.index + leadingTrim + token.index;
+            bookLabelEnd = bookLabelStart + candidate.length;
             break;
           }
         }
-        if (!book) continue;
-        const bookLabelEnd = citationMatch.index + leadingTrim + trimmedBookLabel.length;
+        if (!book || bookLabelEnd == null) continue;
         if (selectionStart >= bookLabelEnd || selectionEnd <= bookLabelStart) continue;
         const chapter = Number(citationMatch[2]);
         const listedVerses = citationMatch[3]
