@@ -935,17 +935,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       return false;
     }
 
-    // Keep the hand-off textbox in the same compact format as the URL
-    // builder. Repeating the full book name for every reference greatly
-    // expands the input and can cause BLB's Retrieve parser to omit results.
-    // BLB accepts chapter:verse continuations while the book remains the same.
-    let previousBookNumber=null;
-    const values=refs.map(r=>{
-      const bookNumber=Number(r.bookNumber);
-      const bookPrefix=bookNumber===previousBookNumber?'':`${r.book} `;
-      previousBookNumber=bookNumber;
-      return `${bookPrefix}${r.chapter}:${r.from}${r.to && r.to!==r.from ? "-"+r.to : ""}`;
-    });
+    const values=refs.map(r=>`${r.book} ${r.chapter}:${r.from}${r.to && r.to!==r.from ? "-"+r.to : ""}`);
     const combined=values.join("; ");
 
     const started=Date.now();
