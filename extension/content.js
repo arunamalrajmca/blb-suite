@@ -1189,10 +1189,31 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
   const verseListRe = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*:\s*(\d+(?:\s*,\s*\d+)+)/gi;
   let verseListMatch;
   while ((verseListMatch = verseListRe.exec(source))) {
-    const book = resolveBibleBook(verseListMatch[1]);
+    // The broad book-label regex may greedily include prose before a valid
+    // book suffix (e.g. "The word Cor appears here. See Ezekiel"). Resolve the
+    // actual book label within that capture, then start the citation at that
+    // suffix so a prose word cannot overlap an unrelated later reference.
+    const rawBookLabel = verseListMatch[1];
+    const labelTokens = [...rawBookLabel.matchAll(/\\S+/g)];
+    let book = null;
+    let bookOffset = 0;
+    for (let tokenIndex = labelTokens.length - 1; tokenIndex >= 0; tokenIndex--) {
+      const token = labelTokens[tokenIndex];
+      const candidate = rawBookLabel.slice(token.index).trim();
+      const precedingToken = tokenIndex > 0
+        ? rawBookLabel.slice(0, token.index).trim().split(/\\s+/).pop()
+        : '';
+      if (/^(?:[1-3]|i{1,3})$/i.test(precedingToken)) continue;
+      const candidateBook = resolveBibleBook(candidate);
+      if (candidateBook) {
+        book = candidateBook;
+        bookOffset = token.index;
+        break;
+      }
+    }
     if (!book) continue;
-    const citationStart = verseListMatch.index;
-    const citationEnd = citationStart + verseListMatch[0].length;
+    const citationStart = verseListMatch.index + bookOffset;
+    const citationEnd = verseListMatch.index + verseListMatch[0].length;
     const overlapsCitation = selectionStart < citationEnd && selectionEnd > citationStart;
     if (!overlapsCitation) continue;
 
