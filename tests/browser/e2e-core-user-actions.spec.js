@@ -567,6 +567,10 @@ test('MultiVerse batches disjoint chapter ranges only at chapter boundaries', as
     selection.addRange(range);
   }, requestedText);
 
+  const baselineTabIds = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({})).map(tab => tab.id)
+  );
+
   await extensionWorker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
     if (!tab?.id) throw new Error('No active tab for disjoint chapter-range E2E');
@@ -582,11 +586,12 @@ test('MultiVerse batches disjoint chapter ranges only at chapter boundaries', as
   });
 
   await page.waitForTimeout(1500);
-  const state = await extensionWorker.evaluate(async () => {
+  const state = await extensionWorker.evaluate(async (baselineTabIds) => {
     const tabs = await chrome.tabs.query({});
     const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
     const pending = data.blbSuitePendingMultiVerseRefsByTab || {};
     const multiverseTabs = tabs.filter(tab => {
+      if (baselineTabIds.includes(tab.id)) return false;
       try {
         const url = new URL(tab.url || tab.pendingUrl);
         return url.hostname === 'www.blueletterbible.org' &&
@@ -595,14 +600,16 @@ test('MultiVerse batches disjoint chapter ranges only at chapter boundaries', as
       } catch (_) { return false; }
     });
     return multiverseTabs.map(tab => ({id:tab.id, refs:pending[String(tab.id)] || []}));
-  });
+  }, baselineTabIds);
 
   expect(state).toHaveLength(2);
   const batches = state.map(tab => tab.refs);
   expect(batches.every(refs => refs.length > 0)).toBeTruthy();
 
-  const chapterSets = batches.map(refs => [...new Set(refs.map(ref => ref.chapter))].sort((a,b) => a-b));
+  const chapterSets = batches.map(refs => [...new Set(refs.map(ref => ref.chapter))].sort((a,b) => a-b))
+    .sort((a,b) => a[0] - b[0]);
   expect(chapterSets).toEqual([[42,43,44,45,46],[48,49]]);
+  expect(batches.flat().every(ref => Number(ref.chapter) !== 47)).toBeTruthy();
 
   for (const refs of batches) {
     const verseCount = refs.reduce((sum, ref) => {
