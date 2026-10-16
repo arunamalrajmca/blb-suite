@@ -202,35 +202,7 @@ function resolveBibleReferenceText(text, options = {}) {
   };
 
   let m;
-  // Cross-chapter ranges must be recognized before same-chapter ranges.
-  // Otherwise "Genesis 1:1-16:17" can be partially read as "Genesis 1:1-16",
-  // silently dropping the ending chapter and verse.
-  const crossChapterRangeRe = /(?<![A-Za-z0-9])(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)\s*:\s*(-?\d+)\s*[-–—]\s*(-?\d+)\s*:\s*(-?\d+)(?![A-Za-z0-9])/gi;
-  while ((m = crossChapterRangeRe.exec(source))) {
-    if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
-    const match = resolveBibleBookCapture(m);
-    if (!match) continue;
-    const startChapter = Number(m[2]);
-    const startVerse = Number(m[3]);
-    const endChapter = Number(m[4]);
-    const endVerse = Number(m[5]);
-    const book = match.book;
-    if (startChapter < 1 || endChapter < startChapter || endChapter > book.chapterCount) continue;
-    const startMax = Number(book.verses?.[startChapter - 1]);
-    const endMax = Number(book.verses?.[endChapter - 1]);
-    if (!Number.isInteger(startMax) || !Number.isInteger(endMax) ||
-        startVerse < 1 || startVerse > startMax || endVerse < 1 || endVerse > endMax) continue;
-    for (let chapter = startChapter; chapter <= endChapter; chapter++) {
-      const maxVerse = Number(book.verses?.[chapter - 1]);
-      const from = chapter === startChapter ? startVerse : 1;
-      const to = chapter === endChapter ? endVerse : maxVerse;
-      add(book, chapter, from, to, match.text);
-    }
-  }
-
-  // Do not accept a same-chapter prefix when the endpoint is followed by
-  // another ":verse" pair belonging to a cross-chapter range.
-  const colonRangeRe = /(?<![A-Za-z0-9])(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)\s*:\s*(-?\d+)\s*[-–—]\s*(-?\d+)(?:[a-z])?(?!\s*:\s*-?\d+)(?![A-Za-z0-9])/gi;
+  const colonRangeRe = /(?<![A-Za-z0-9])(?<![1-3]\s)(?<!i\s)(?<!ii\s)(?<!iii\s)(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)\s*:\s*(-?\d+)\s*[-–—]\s*(-?\d+)(?:[a-z])?(?![A-Za-z0-9])/gi;
   while ((m = colonRangeRe.exec(source))) {
     if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
     const match = resolveBibleBookCapture(m);
