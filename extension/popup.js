@@ -1322,7 +1322,7 @@ async function importExtensionSettingsFile(file) {
       if (!Object.prototype.hasOwnProperty.call(settings, key)) continue;
       const normalized = {};
       for (const [rawHost, enabled] of Object.entries(settings[key])) {
-        const host = rawHost.trim().toLowerCase().replace(/^www\\./, '');
+        const host = rawHost.trim().toLowerCase().replace(/^www\./, '');
         if (!host) continue;
         // If aliases conflict, an explicit OFF wins rather than unexpectedly
         // enabling a feature for that site.
