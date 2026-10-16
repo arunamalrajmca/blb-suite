@@ -9,7 +9,7 @@ const SELECTION = [
   { bookNumber: 1, chapter: 45, from: 1, to: 28, version: 'kjv' },
   { bookNumber: 1, chapter: 46, from: 1, to: 34, version: 'kjv' },
   { bookNumber: 1, chapter: 48, from: 1, to: 22, version: 'kjv' },
-  { bookNumber: 1, chapter: 49, from: 1, to: 33, version: 'kjv' }
+  { bookNumber: 1, chapter: 49, from: 1, to: 26, version: 'kjv' }
 ];
 
 async function openMultiVerse(extensionWorker, refs) {
