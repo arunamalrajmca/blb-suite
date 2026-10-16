@@ -3743,6 +3743,29 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     });
   };
 
+  // Chapter-only ranges (for example, "Genesis 42-46") must expand to
+  // every verse in every chapter. All selection entry points feed this shared
+  // extractor, so Double-Click, Alt+B, right-click, and Show on BLB use the
+  // same MultiVerse reference set instead of falling back to the first chapter.
+  // Do not match chapter:verse references or one-chapter books as chapter ranges.
+  const chapterRangeRe = /(?<![A-Za-z0-9])((?:[1-3]\\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\\s+(\\d+)\\s*-\\s*(\\d+)(?!\\s*[:.]\\s*\\d)(?![A-Za-z0-9])/gi;
+  let chapterRangeMatch;
+  while ((chapterRangeMatch = chapterRangeRe.exec(source))) {
+    if (isShadowedBookMatch(chapterRangeMatch.index)) continue;
+    const book = resolveBook(chapterRangeMatch[1].trim());
+    if (!book || Number(book.chapterCount) === 1) continue;
+    const startChapter = Number(chapterRangeMatch[2]);
+    const endChapter = Number(chapterRangeMatch[3]);
+    if (!Number.isInteger(startChapter) || !Number.isInteger(endChapter) ||
+        startChapter < 1 || endChapter < startChapter ||
+        endChapter > Number(book.chapterCount)) continue;
+    for (let chapter = startChapter; chapter <= endChapter; chapter++) {
+      const maxVerse = Number(book.verses?.[chapter - 1]);
+      if (!Number.isInteger(maxVerse) || maxVerse < 1) continue;
+      addRef(book, chapter, 1, maxVerse, chapterRangeMatch[0]);
+    }
+  }
+
   // Pass 1: references with an explicit chapter:verse separator. The book
   // token may touch the chapter ("prv1:2") or have spaces around the colon.
   // Support both hyphenated ranges (Romans 10:9-12) and comma-separated
