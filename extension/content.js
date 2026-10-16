@@ -1729,6 +1729,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           }
           return {
             refs: resolvedVerses.map(ref => ({
+              book: ref.book.name,
               bookNumber: Number(ref.book.bookNumber),
               chapter: ref.chapter,
               from: ref.from,
