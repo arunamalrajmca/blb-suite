@@ -1941,6 +1941,7 @@ function handleDoubleClickBlb(event) {
               type:'blbSuiteOpenSelectionText',
               text:selection,
               contextualReference:null,
+              contextualReferenceResolved:true,
               requestId,
               tabBehavior:{activeIfNew:false,activateExisting:true}
             });
@@ -1962,6 +1963,7 @@ function handleDoubleClickBlb(event) {
           type:'blbSuiteOpenSelectionText',
           text:selection,
           contextualReference,
+          contextualReferenceResolved:true,
           requestId,
           tabBehavior:{activeIfNew:false,activateExisting:true}
         });
