@@ -544,7 +544,15 @@ function canonicalMultiVerseSet(refs) {
   const items = [];
   const seen = new Set();
   for (const raw of Array.isArray(refs) ? refs : []) {
-    const ref = canonicalStoredRef(raw);
+    // Some callers (notably nth-verse search) provide a single verse as
+    // {book, chapter, verse}, while canonicalStoredRef normally treats a
+    // missing from/to pair as a whole-chapter reference. Preserve that verse
+    // identity before canonicalizing so the 200-verse cap counts correctly.
+    const input = raw && typeof raw === 'object' &&
+      raw.verse != null && raw.from == null && raw.to == null
+      ? {...raw, from:Number(raw.verse), to:Number(raw.verse)}
+      : raw;
+    const ref = canonicalStoredRef(input);
     if (!ref) continue;
     const key = `${ref.bookNumber}|${ref.chapter}|${ref.from ?? ''}|${ref.to ?? ''}|${ref.version}`;
     if (seen.has(key)) continue;
@@ -581,10 +589,18 @@ async function findMatchingMultiVerseTab(setKey, tabs) {
   for (const tab of tabs) {
     const entry = tracked[String(tab.id)];
     if (!entry) continue;
-    const url = String(tab.url || tab.pendingUrl || '');
-    const isMultiVerse = /blueletterbible\.org/i.test(url) && (/\/MultiVerse\.cfm/i.test(url) || /blbSuiteMultiVerse=1/i.test(url));
-    if (!isMultiVerse) { delete tracked[String(tab.id)]; changed = true; continue; }
-    if (!match && entry.key === setKey) match = tab;
+    // During navigation, tab.url can still be about:blank while pendingUrl
+    // already points at MultiVerse. Check both values so a concurrent opener
+    // does not discard the tracking record and create a duplicate tab.
+    const urls = [tab.url, tab.pendingUrl].map(value => String(value || '')).filter(Boolean);
+    const isMultiVerse = urls.some(url =>
+      /blueletterbible\.org/i.test(url) && (/\/MultiVerse\.cfm/i.test(url) || /blbSuiteMultiVerse=1/i.test(url))
+    );
+    const isBlank = urls.length > 0 && urls.every(url => /^about:blank(?:[#?].*)?$/i.test(url));
+    if (!isMultiVerse && !isBlank) { delete tracked[String(tab.id)]; changed = true; continue; }
+    // A tracked blank tab is a reserved destination: its payload was stored
+    // before navigation, so reuse it if another invocation arrives meanwhile.
+    if (!match && entry.key === setKey && (isMultiVerse || isBlank)) match = tab;
   }
   if (changed) await chrome.storage.local.set({blbSuiteMultiVerseTabSets:tracked});
   return match;
@@ -621,9 +637,143 @@ function getContinuousSameChapterRange(refs) {
   return {bookNumber:Number(first.bookNumber), chapter:Number(first.chapter), from, to, version:String(first.version || 'kjv').toLowerCase()};
 }
 
-async function openBlbMultiVerseRefs(refs, active = true) {
+const BLB_MULTIVERSE_MAX_VERSES = 200;
+
+function expandMultiVerseRefsToVerses(refs) {
   const canonical = canonicalMultiVerseSet(refs);
-  if (!canonical.key || canonical.refs.length < 2) return {ok:false, reason:"not-enough-references", count:canonical.refs.length};
+  const verses = [];
+  const seen = new Set();
+
+  for (const ref of canonical.refs) {
+    const book = bookData.find(item => Number(item.bookNumber) === Number(ref.bookNumber));
+    if (!book) continue;
+    const chapter = Number(ref.chapter);
+    if (!Number.isInteger(chapter) || chapter < 1 || chapter > book.chapterCount) continue;
+
+    const chapterVerseCount = Number(book.verses[chapter - 1]);
+    const from = ref.from == null ? 1 : Number(ref.from);
+    const to = ref.to == null ? chapterVerseCount : Number(ref.to);
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from) continue;
+
+    for (let verse = from; verse <= Math.min(to, chapterVerseCount); verse++) {
+      const version = String(ref.version || 'kjv').toLowerCase();
+      const key = `${ref.bookNumber}|${chapter}|${verse}|${version}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      verses.push({
+        book:book.name,
+        bookNumber:Number(book.bookNumber),
+        chapter,
+        from:verse,
+        to:verse,
+        version
+      });
+    }
+  }
+
+  return verses;
+}
+
+function compactMultiVerseVerses(verses) {
+  const compact = [];
+  for (const verse of verses) {
+    const previous = compact[compact.length - 1];
+    if (previous &&
+        previous.bookNumber === verse.bookNumber &&
+        previous.chapter === verse.chapter &&
+        previous.version === verse.version &&
+        previous.to + 1 === verse.from) {
+      previous.to = verse.to;
+    } else {
+      compact.push({...verse});
+    }
+  }
+  return compact;
+}
+
+async function openBlbMultiVerseRefs(refs, active = true) {
+  // Universal MultiVerse policy: BLB renders at most 200 verses per view.
+  // Expand, canonicalize, and deduplicate once, then deliver every verse in
+  // ordered batches. No caller may silently lose verses after the first 200.
+  const allVerses = expandMultiVerseRefsToVerses(refs);
+  if (!allVerses.length) return {ok:false, reason:"not-enough-references", count:0, batchCount:0};
+
+  if (allVerses.length === 1) {
+    const ref = allVerses[0];
+    const book = bookData.find(item => Number(item.bookNumber) === Number(ref.bookNumber));
+    if (!book?.urlKey) return {ok:false, reason:'book-not-found', count:1, batchCount:1};
+    const url = `https://www.blueletterbible.org/${encodeURIComponent(ref.version || 'kjv')}/${book.urlKey}/${ref.chapter}/${ref.from}/`;
+    const tab = await openBlbDestination(url, !!active, !!active);
+    return {ok:true, count:1, singleVerse:true, tabId:tab?.id ?? tab?.tab?.id ?? null, batchCount:1};
+  }
+
+  const batches = [];
+  for (let start = 0; start < allVerses.length; start += BLB_MULTIVERSE_MAX_VERSES) {
+    batches.push(allVerses.slice(start, start + BLB_MULTIVERSE_MAX_VERSES));
+  }
+
+  const results = [];
+  for (let index = 0; index < batches.length; index++) {
+    const batchVerses = batches[index];
+    const compactRefs = compactMultiVerseVerses(batchVerses);
+    const result = await openBlbMultiVerseRefsSingleBatch(
+      compactRefs,
+      index === 0 ? !!active : false,
+      allVerses.length > 1 && batchVerses.length === 1
+    );
+    if (!result?.ok) {
+      return {
+        ok:false, reason:result?.reason || 'batch-open-failed',
+        count:results.reduce((sum, item) => sum + Number(item.count || 0), 0),
+        batchCount:results.length, failedBatch:index + 1, results
+      };
+    }
+    results.push({...result, count:batchVerses.length, batch:index + 1});
+
+    // Wait for each destination to finish its initial load before creating
+    // the next background tab. This avoids racing BLB's pending-reference
+    // handoff while keeping only the first requested tab active.
+    if (index < batches.length - 1 && result.tabId != null) {
+      await waitForTabTerminalLoad(result.tabId);
+      await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
+    }
+  }
+
+  return {
+    ok:true,
+    count:allVerses.length,
+    batchCount:batches.length,
+    tabIds:results.map(item => item.tabId).filter(id => id != null),
+    results,
+    truncated:false
+  };
+}
+
+async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false) {
+  // Enforce the cap again at the final handoff boundary. This ensures the
+  // references actually stored for the MultiVerse textbox cannot expand to
+  // more than 200 individual verses after canonicalization.
+  const finalVerses = expandMultiVerseRefsToVerses(refs).slice(0, BLB_MULTIVERSE_MAX_VERSES);
+  const finalRefs = compactMultiVerseVerses(finalVerses);
+  const canonical = canonicalMultiVerseSet(finalRefs);
+  if (!canonical.key || (finalVerses.length < 2 && !allowSingleVerseBatch) || !canonical.refs.length) {
+    return {ok:false, reason:"not-enough-references", count:finalVerses.length};
+  }
+
+  // A compacted single range is already a continuous same-chapter set. Open
+  // it directly in BLB's normal reader instead of handing one range to
+  // MultiVerse or rejecting it as fewer than two reference entries.
+  if (canonical.refs.length === 1) {
+    const ref = canonical.refs[0];
+    if (ref.from != null && ref.to != null && ref.to > ref.from) {
+      const book = bookData.find(item => Number(item.bookNumber) === Number(ref.bookNumber));
+      if (book?.urlKey) {
+        const rangeUrl = `https://www.blueletterbible.org/${encodeURIComponent(ref.version || 'kjv')}/${book.urlKey}/${ref.chapter}/${ref.from}-${ref.to}/`;
+        const tab = await openBlbDestination(rangeUrl, !!active, !!active);
+        return {ok:true, count:finalVerses.length, collapsedToRange:true, range:{book:book.name,chapter:ref.chapter,from:ref.from,to:ref.to}, tabId:tab?.id ?? tab?.tab?.id ?? null};
+      }
+    }
+  }
 
   // A same-chapter, continuous set is clearer in the normal BLB chapter
   // reader than in MultiVerse. Only collapse when every requested verse is
@@ -648,7 +798,11 @@ async function openBlbMultiVerseRefs(refs, active = true) {
       'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
     ]
   });
-  const existing = await findMatchingMultiVerseTab(canonical.key, tabs);
+  // Compare by the actual verse set, not by the caller's compact reference
+  // spelling. Different ranges can describe the same batch while producing
+  // different compact-reference keys.
+  const verseSetKey = canonicalMultiVerseSet(finalVerses).key;
+  const existing = await findMatchingMultiVerseTab(verseSetKey, tabs);
   if (existing?.id != null) {
     if (active) {
       try { await chrome.tabs.update(existing.id, {active:true}); } catch (_) {}
@@ -658,20 +812,19 @@ async function openBlbMultiVerseRefs(refs, active = true) {
   }
 
   const multiVerseUrl = "https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1";
-  // Create the actual MultiVerse destination immediately. The previous
-  // about:blank -> storage -> tabs.update sequence added a second navigation
-  // to the user's critical path. The tab id is still available from create()
-  // for the same tracking/storage bookkeeping.
-  const tab = await chrome.tabs.create({url:multiVerseUrl, active:!!active});
+  // Create an inert tab first so the MultiVerse content script cannot run
+  // before its per-tab reference payload has been committed to storage.
+  const tab = await chrome.tabs.create({url:'about:blank', active:!!active});
   if (tab?.id == null) return {ok:false, reason:'tab-create-failed'};
-  // Batch tracking and pending-handoff storage into one read/write pair.
+
+  // Commit both tracking and the pending handoff before navigating to BLB.
   const pending = await chrome.storage.local.get({
     blbSuiteMultiVerseTabSets:{},
     blbSuitePendingMultiVerseRefsByTab:{}
   });
   const trackedMap = pending.blbSuiteMultiVerseTabSets && typeof pending.blbSuiteMultiVerseTabSets === 'object'
     ? {...pending.blbSuiteMultiVerseTabSets} : {};
-  trackedMap[String(tab.id)] = {key:canonical.key, updatedAt:Date.now()};
+  trackedMap[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
   const pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object'
     ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
   pendingMap[String(tab.id)] = canonical.refs;
@@ -679,6 +832,20 @@ async function openBlbMultiVerseRefs(refs, active = true) {
     blbSuiteMultiVerseTabSets:trackedMap,
     blbSuitePendingMultiVerseRefsByTab:pendingMap
   });
+
+  try {
+    await chrome.tabs.update(tab.id, {url:multiVerseUrl});
+  } catch (error) {
+    // Do not leave a dangling payload that could be mistaken for a later
+    // navigation in this tab if the destination update fails.
+    delete trackedMap[String(tab.id)];
+    delete pendingMap[String(tab.id)];
+    await chrome.storage.local.set({
+      blbSuiteMultiVerseTabSets:trackedMap,
+      blbSuitePendingMultiVerseRefsByTab:pendingMap
+    }).catch(()=>{});
+    return {ok:false, reason:'tab-navigation-failed', error:String(error)};
+  }
   return {ok:true, count:canonical.refs.length, reused:false, tabId:tab.id};
 }
 
@@ -1961,15 +2128,11 @@ async function handleBCommand(text) {
     if (matches.length === 1) {
       await openSingleKjvVerse([matches[0].bookNumber, matches[0].chapter, matches[0].verse], 'currentTab');
     } else if (matches.length > 1) {
-      // Use the same URL-size chunking and paced multi-tab opening as the
-      // case-sensitive search path. A single MultiVerse URL can exceed BLB's
-      // practical URL limits when many chapters contain this verse number.
-      const urls = buildCaseSensitiveMultiVerseUrls(matches, 6000, 200);
-      if (urls.length) {
-        await openCaseSensitiveDestinations(urls, 'currentTab');
-      } else {
-        redirectToHomepage();
-      }
+      // This is an ordinary Bible-reference MultiVerse request, not a
+      // case-sensitive corpus search. Use the shared verse-aware opener so
+      // every entry point observes the same 200-verse batching invariant.
+      const result = await openBlbMultiVerseRefs(matches, true);
+      if (!result?.ok) redirectToHomepage();
     } else {
       // Keep the omnibox contract consistent: a valid Suite command with no
       // matching result falls back to the Blue Letter Bible home page.
@@ -2272,7 +2435,7 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
     await openSingleKjvVerse([refs[0].bookNumber, refs[0].chapter, refs[0].verse], disposition);
     return true;
   }
-  const urls=buildCaseSensitiveMultiVerseUrls(refs,6000);
+  const urls=buildCaseSensitiveMultiVerseUrls(refs,6000,BLB_MULTIVERSE_MAX_VERSES);
   if (!urls.length) {
     // A valid case-sensitive query must never fall through to BLB home simply
     // because the local MultiVerse URL builder could not construct a target.
@@ -3582,8 +3745,39 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // normalized to the same continuous range, so Romans 10:9,10 opens 9-10.
   // We deliberately scan the WHOLE selected string with a global expression,
   // rather than consuming one match and skipping the remainder of a line.
-  const colonRangeRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)\s*-\s*(\d+)/gi;
+  // Cross-chapter ranges such as "Genesis 1:1-8:15" must be expanded
+  // chapter by chapter. Otherwise the same-chapter matcher below accepts the
+  // prefix "Genesis 1:1-8" and silently drops the end chapter/verse.
+  const crossChapterRangeRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)\s*-\s*(\d+)\s*:\s*(\d+)(?!\d)/gi;
   let m;
+  while ((m = crossChapterRangeRe.exec(source))) {
+    if (isShadowedBookMatch(m.index)) continue;
+    const rawBook = m[1].trim();
+    const book = resolveBook(rawBook);
+    if (!book) continue;
+    const startChapter = Number(m[2]);
+    const startVerse = Number(m[3]);
+    const endChapter = Number(m[4]);
+    const endVerse = Number(m[5]);
+    if (!Number.isInteger(startChapter) || !Number.isInteger(endChapter) ||
+        startChapter < 1 || endChapter < startChapter ||
+        endChapter > Number(book.chapterCount)) continue;
+    const startMax = Number(book.verses?.[startChapter - 1]);
+    const endMax = Number(book.verses?.[endChapter - 1]);
+    if (!Number.isInteger(startMax) || !Number.isInteger(endMax) ||
+        startVerse < 1 || startVerse > startMax ||
+        endVerse < 1 || endVerse > endMax) continue;
+    for (let chapter = startChapter; chapter <= endChapter; chapter++) {
+      const maxVerse = Number(book.verses?.[chapter - 1]);
+      const from = chapter === startChapter ? startVerse : 1;
+      const to = chapter === endChapter ? endVerse : maxVerse;
+      addRef(book, chapter, from, to, m[0]);
+    }
+  }
+
+  // Same-chapter ranges. Do not accept a partial prefix when the endpoint is
+  // actually the chapter number in a cross-chapter range (e.g. "-8:15").
+  const colonRangeRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)\s*-\s*(\d+)(?!\s*:\s*\d+)/gi;
   while ((m = colonRangeRe.exec(source))) {
     if (isShadowedBookMatch(m.index)) continue;
     const rawBook = m[1].trim();
