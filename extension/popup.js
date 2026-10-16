@@ -1369,9 +1369,11 @@ async function finishPendingSettingsImport() {
     pendingSettingsImport = null;
     const panel = document.getElementById('settingsImportAccess');
     if (panel) panel.hidden = true;
-    setStatus(pending.accessOrigins.length
-      ? 'Settings imported. Site access granted for enabled per-site features. Pin BLB Suite from Chrome’s Extensions menu if needed.'
-      : 'Settings imported. Pin BLB Suite from Chrome’s Extensions menu if needed.');
+    setStatus(pending.settings.redirectEnabled === true
+      ? 'Settings imported. Global website access granted for redirects. Pin BLB Suite from Chrome’s Extensions menu if needed.'
+      : pending.accessOrigins.length
+        ? 'Settings imported. Site access granted for enabled per-site features. Pin BLB Suite from Chrome’s Extensions menu if needed.'
+        : 'Settings imported. Pin BLB Suite from Chrome’s Extensions menu if needed.');
     render(await getState());
   } catch (error) {
     console.error('BLB Suite settings import failed:', error);
