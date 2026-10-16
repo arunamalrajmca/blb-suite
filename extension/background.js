@@ -3416,7 +3416,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
         }
       }
-      if (bookOnly?.url && !message.contextualReference?.url) {
+      if (bookOnly?.url && !message.contextualReference?.url && !message.contextualReference?.unresolved) {
         await recordStudyRefs([parseBlbKjvUrlToStudyRef(bookOnly.url)].filter(Boolean));
         await openBlbDestination(bookOnly.url, !!behavior.activeIfNew, !!behavior.activateExisting);
         sendResponse({ok:true, bookOnly:true});
