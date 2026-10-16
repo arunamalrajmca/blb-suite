@@ -1349,6 +1349,84 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     let selected = normalizeSelectionText(selectionText).normalize('NFKC');
     const initialNode = target instanceof Element ? target : (target?.parentElement || null);
 
+    // Prefer the physical double-click location over the browser's Selection:
+    // dblclick can expose a stale, non-empty Selection from the previous word.
+    // Resolve the caret's text node and expand to the actual word token so the
+    // citation matcher uses one consistent source of position and token text.
+    let clickedWordRange = null;
+    let clickedWordText = '';
+    try {
+      if (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+        let pointRange = null;
+        if (typeof document.caretRangeFromPoint === 'function') {
+          pointRange = document.caretRangeFromPoint(event.clientX, event.clientY);
+        } else if (typeof document.caretPositionFromPoint === 'function') {
+          const position = document.caretPositionFromPoint(event.clientX, event.clientY);
+          if (position?.offsetNode) {
+            pointRange = document.createRange();
+            pointRange.setStart(position.offsetNode, position.offset);
+            pointRange.collapse(true);
+          }
+        }
+        // caretRangeFromPoint may return an element boundary on some rich-text
+        // sites instead of a text-node boundary. Convert that boundary to the
+        // nearest text node at the physical click before expanding the word.
+        let textNode = pointRange?.startContainer || null;
+        let pointOffset = pointRange?.startOffset ?? 0;
+        if (textNode?.nodeType === Node.ELEMENT_NODE) {
+          const children = textNode.childNodes || [];
+          const right = children[Math.min(pointOffset, children.length)] || null;
+          const left = pointOffset > 0 ? children[pointOffset - 1] : null;
+          const findText = (root, fromEnd = false) => {
+            if (!root) return null;
+            if (root.nodeType === Node.TEXT_NODE && (root.nodeValue || '').length) return root;
+            const descendants = [...(root.childNodes || [])];
+            if (fromEnd) descendants.reverse();
+            for (const child of descendants) {
+              const found = findText(child, fromEnd);
+              if (found) return found;
+            }
+            return null;
+          };
+          const rightText = findText(right);
+          const leftText = findText(left, true);
+          if (rightText) {
+            textNode = rightText;
+            pointOffset = 0;
+          } else if (leftText) {
+            textNode = leftText;
+            pointOffset = (leftText.nodeValue || '').length;
+          } else {
+            textNode = null;
+          }
+        }
+        if (textNode?.nodeType === Node.TEXT_NODE) {
+          const value = textNode.nodeValue || '';
+          pointOffset = Math.max(0, Math.min(value.length, pointOffset));
+          const isWordChar = char => /[A-Za-z0-9.'’\u2019-]/.test(char || '');
+          let wordStart = pointOffset;
+          let wordEnd = pointOffset;
+          while (wordStart > 0 && isWordChar(value[wordStart - 1])) wordStart--;
+          while (wordEnd < value.length && isWordChar(value[wordEnd])) wordEnd++;
+          // Caret APIs can place the caret just after a token with a trailing
+          // boundary. If needed, step left into the word under the click.
+          if (wordEnd === wordStart && pointOffset > 0 && isWordChar(value[pointOffset - 1])) {
+            wordStart = pointOffset - 1;
+            wordEnd = pointOffset;
+            while (wordStart > 0 && isWordChar(value[wordStart - 1])) wordStart--;
+            while (wordEnd < value.length && isWordChar(value[wordEnd])) wordEnd++;
+          }
+          if (wordEnd > wordStart) {
+            clickedWordRange = document.createRange();
+            clickedWordRange.setStart(textNode, wordStart);
+            clickedWordRange.setEnd(textNode, wordEnd);
+            clickedWordText = normalizeSelectionText(clickedWordRange.toString()).normalize('NFKC');
+            if (clickedWordText) selected = clickedWordText;
+          }
+        }
+      }
+    } catch (_) {}
+
     // Chromium can report an empty/whitespace native selection immediately
     // after an isolated-token double-click. Recover the exact clicked token
     // before doing any positional reference matching; never substitute the
@@ -1501,6 +1579,15 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       }
     }
 
+    // The physical click is authoritative when its word range is inside this
+    // candidate block. This overrides stale but non-empty native selections.
+    try {
+      if (clickedWordRange && block.contains(clickedWordRange.startContainer)) {
+        selectionStart = getOffset(clickedWordRange.startContainer, clickedWordRange.startOffset);
+        selectionEnd = getOffset(clickedWordRange.endContainer, clickedWordRange.endOffset);
+      }
+    } catch (_) {}
+
     // Chromium can transiently expose a whitespace-only Range for a real
     // double-click on an isolated inline token. In that state, the browser
     // selection is not authoritative, but the event target still identifies
@@ -1585,24 +1672,75 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       selectionEnd = toNormalizedOffset(selectionEnd);
     }
 
-    // Substack can render "1 Cor. 13" as a single plain-text paragraph.
-    // In that DOM, double-clicking "Cor" selects only the abbreviation, which
-    // the general book resolver does not recognize as a standalone book name.
-    // Resolve only the citation whose abbreviation overlaps the actual clicked
-    // range; never infer a reference from another citation in the paragraph.
-    if (selected.toLowerCase().replace(/\.$/, '') === 'cor' &&
-        selectionStart != null && selectionEnd != null) {
-      const corCitationPattern = /\b([12])\s+Cor(?:\.|inthians?)\s+(\d+)(?::\s*(\d+)(?:\s*[-–—]\s*(\d+))?)?/gi;
-      let corMatch;
-      while ((corMatch = corCitationPattern.exec(normalizedMatchSource))) {
-        const bookStart = corMatch.index + corMatch[0].indexOf('Cor');
-        const bookEnd = bookStart + 3;
-        if (selectionStart >= bookEnd || selectionEnd <= bookStart) continue;
-        const parsedCitation = resolveBibleReferenceText(corMatch[0]);
-        if (parsedCitation.length) {
-          const parsed = parsedCitation[0];
-          return {book: parsed.book, chapter: parsed.chapter, from: parsed.from, to: parsed.to, url: parsed.url};
+    // Some sites render citations as plain text and double-clicking a book
+    // abbreviation selects only one token (e.g. "Cor" in "1 Cor. 15:3, 4").
+    // Resolve the captured book label itself before trusting a citation match:
+    // otherwise a greedy label can absorb unrelated prose and borrow a later
+    // reference (e.g. clicking "Cor" in prose opening Ezekiel).
+    // Preserve nonconsecutive comma lists as individual MultiVerse references.
+    if (selectionStart != null && selectionEnd != null) {
+      const abbreviatedBookCitationPattern = /\b((?:[1-3]\s+|i{1,3}\s+)?[A-Za-z][A-Za-z.'-]*(?:\s+[A-Za-z][A-Za-z.'-]*){0,3})\s+(\d+)\s*:\s*(\d+(?:\s*,\s*\d+)*)(?:\s*[-–—]\s*(\d+))?/gi;
+      let citationMatch;
+      while ((citationMatch = abbreviatedBookCitationPattern.exec(normalizedMatchSource))) {
+        const rawBookLabel = citationMatch[1];
+        const trimmedBookLabel = rawBookLabel.trim();
+        const leadingTrim = rawBookLabel.length - rawBookLabel.trimStart().length;
+        const labelTokens = [...trimmedBookLabel.matchAll(/\S+/g)];
+        let book = null;
+        let bookLabelStart = citationMatch.index + leadingTrim;
+        let bookLabelEnd = null;
+        // The broad matcher can include preceding prose (e.g. "The word Cor
+        // appears here. See Ezekiel"). Resolve the longest valid suffix as the
+        // actual Bible book label, and bound the positional match to that suffix
+        // only. Including the preceding prose makes an unrelated word such as
+        // "Cor" appear to belong to the later Ezekiel citation.
+        for (let tokenIndex = labelTokens.length - 1; tokenIndex >= 0; tokenIndex--) {
+          const token = labelTokens[tokenIndex];
+          const candidate = trimmedBookLabel.slice(token.index);
+          // Keep an explicit book ordinal attached to its abbreviation: "1 Cor"
+          // must not be shortened to an ambiguous "Cor" suffix.
+          const precedingToken = tokenIndex > 0
+            ? trimmedBookLabel.slice(0, token.index).trim().split(/\s+/).pop()
+            : '';
+          if (/^(?:[1-3]|i{1,3})$/i.test(precedingToken)) continue;
+          const candidateBook = resolveBibleBook(candidate);
+          if (candidateBook) {
+            book = candidateBook;
+            bookLabelStart = citationMatch.index + leadingTrim + token.index;
+            bookLabelEnd = bookLabelStart + candidate.length;
+            break;
+          }
         }
+        if (!book || bookLabelEnd == null) continue;
+        if (selectionStart >= bookLabelEnd || selectionEnd <= bookLabelStart) continue;
+        const chapter = Number(citationMatch[2]);
+        const listedVerses = citationMatch[3]
+          ? citationMatch[3].split(',').map(value => Number(value.trim()))
+          : [];
+        if (!listedVerses.length) continue;
+        if (listedVerses.length > 1) {
+          const resolvedVerses = listedVerses.map(verse =>
+            resolveBibleReference(book.name, chapter, verse, verse)
+          );
+          if (resolvedVerses.some(ref => !ref)) continue;
+          if (listedVerses.every((verse, index) => index === 0 || verse === listedVerses[index - 1] + 1)) {
+            const expanded = resolveBibleReference(book.name, chapter, listedVerses[0], listedVerses[listedVerses.length - 1]);
+            if (expanded) return {book: expanded.book, chapter: expanded.chapter, from: expanded.from, to: expanded.to, url: expanded.url};
+          }
+          return {
+            refs: resolvedVerses.map(ref => ({
+              book: ref.book.name,
+              bookNumber: Number(ref.book.bookNumber),
+              chapter: ref.chapter,
+              from: ref.from,
+              to: ref.to,
+              version: 'kjv'
+            }))
+          };
+        }
+        const rangeEnd = citationMatch[4] ? Number(citationMatch[4]) : listedVerses[0];
+        const parsed = resolveBibleReference(book.name, chapter, listedVerses[0], rangeEnd);
+        if (parsed) return {book: parsed.book, chapter: parsed.chapter, from: parsed.from, to: parsed.to, url: parsed.url};
       }
     }
 
