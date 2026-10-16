@@ -312,7 +312,20 @@ if (
   location.hostname === BLBShared.hostnames.blbWww &&
   /\/tools\/MultiVerse\.cfm$/i.test(location.pathname)
 ) {
+  // Only enhance clipboard data when BLB's own Copy button initiates the copy.
+  // A regular Ctrl+C (including copying text from the references textbox) must
+  // retain the browser/BLB default behaviour.
+  let nativeMultiVerseCopyPending = false;
+  document.addEventListener("click", event => {
+    const button = event.target?.closest?.("#copyButton, #copyByVerseButton");
+    if (!button) return;
+    nativeMultiVerseCopyPending = true;
+    setTimeout(() => { nativeMultiVerseCopyPending = false; }, 0);
+  }, true);
+
   document.addEventListener("copy", e => {
+    if (!nativeMultiVerseCopyPending) return;
+    nativeMultiVerseCopyPending = false;
     if (!suiteEnabled) return;
 	if (!e.clipboardData) return;
 
