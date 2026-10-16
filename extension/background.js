@@ -4032,6 +4032,9 @@ function extractBibleRefsFromSelectedTextUncached(text) {
 
 function normalizeSelectedScriptureText(selectionText) {
   return String(selectionText || '')
+    // Normalize typographic dashes before Bible-range parsing so all entry
+    // points interpret an en/em dash as a range separator consistently.
+    .replace(/[\u2010-\u2014]/g, '-')
     // Some rich-text sites, notably Facebook, insert invisible Unicode
     // bidirectional/formatting marks around reference text. These characters
     // are presentation-only and must not interfere with Bible-reference
