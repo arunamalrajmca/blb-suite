@@ -712,7 +712,12 @@ async function openBlbMultiVerseRefs(refs, active = true) {
 }
 
 async function openBlbMultiVerseRefsSingleBatch(refs, active = true) {
-  const canonical = canonicalMultiVerseSet(refs);
+  // Enforce the cap again at the final handoff boundary. This ensures the
+  // references actually stored for the MultiVerse textbox cannot expand to
+  // more than 200 individual verses after canonicalization.
+  const finalVerses = expandMultiVerseRefsToVerses(refs).slice(0, BLB_MULTIVERSE_MAX_VERSES);
+  const finalRefs = compactMultiVerseVerses(finalVerses);
+  const canonical = canonicalMultiVerseSet(finalRefs);
   if (!canonical.key || canonical.refs.length < 2) return {ok:false, reason:"not-enough-references", count:canonical.refs.length};
 
   // A same-chapter, continuous set is clearer in the normal BLB chapter
