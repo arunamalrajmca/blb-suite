@@ -511,6 +511,20 @@ test('Double-click BLB path remains wired', () => {
   assert(content.includes("addEventListener('dblclick'"), 'dblclick listener missing');
   assert(content.includes('blbSuiteOpenSelectionText'), 'double-click opener missing');
 });
+test('Double-click citation handling validates book labels and preserves nonconsecutive verse lists', () => {
+  const content = read('content.js');
+  const bg = read('background.js');
+  assert(content.includes('let clickedWordRange = null;'), 'double-click must recover the word at the physical click location');
+  assert(content.includes('clickedWordText = normalizeSelectionText(clickedWordRange.toString()).normalize(\'NFKC\');'), 'physical click word must replace stale native selection text');
+  assert(content.includes('if (clickedWordRange && block.contains(clickedWordRange.startContainer))'), 'physical click range must override stale non-empty Selection offsets');
+  assert(content.includes('if (textNode?.nodeType === Node.ELEMENT_NODE)'), 'double-click must handle caret APIs that return element boundaries');
+  assert(content.includes('const findText = (root, fromEnd = false) =>'), 'element caret boundaries must be resolved to nearby text nodes');
+  assert(content.includes('const candidateBook = resolveBibleBook(candidate)'), 'double-click citation must validate the actual captured book label, not parse unrelated prose');
+  assert(content.includes('refs: resolvedVerses.map(ref => ({'), 'nonconsecutive comma-separated verses must remain separate references');
+  assert(content.includes('book: ref.book.name,'), 'contextual verse refs must include the canonical book name required by the MultiVerse canonicalizer');
+  assert(bg.includes('Array.isArray(message.contextualReference?.refs)'), 'background opener must accept multiple contextual verse references');
+  assert(bg.includes('openBlbMultiVerseRefs(message.contextualReference.refs'), 'multiple contextual verses must use the shared MultiVerse opener');
+});
 test('Show on BLB floating button path remains wired', () => {
   const content = read('content.js');
   assert(content.includes('BLB_PAGE_BUTTON_ID'), 'floating button missing');
