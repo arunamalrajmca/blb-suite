@@ -1585,35 +1585,31 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       selectionEnd = toNormalizedOffset(selectionEnd);
     }
 
-    // Substack can render "1 Cor. 13" as a single plain-text paragraph.
-    // In that DOM, double-clicking "Cor" selects only the abbreviation, which
-    // the general book resolver does not recognize as a standalone book name.
-    // Resolve only the citation whose abbreviation overlaps the actual clicked
-    // range; never infer a reference from another citation in the paragraph.
-    if (selected.toLowerCase().replace(/\.$/, '') === 'cor' &&
-        selectionStart != null && selectionEnd != null) {
-      // The clicked abbreviation identifies the whole citation. Preserve
-      // consecutive comma-separated verses (e.g. "(1 Cor. 15:3, 4)") rather
-      // than returning only the first verse from the shared text parser.
-      const corCitationPattern = /\b([12])\s+Cor(?:\.|inthians?)\s+(\d+)(?::\s*(\d+(?:\s*,\s*\d+)*)(?:\s*[-–—]\s*(\d+))?)?/gi;
-      let corMatch;
-      while ((corMatch = corCitationPattern.exec(normalizedMatchSource))) {
-        const bookStart = corMatch.index + corMatch[0].indexOf('Cor');
-        const bookEnd = bookStart + 3;
-        if (selectionStart >= bookEnd || selectionEnd <= bookStart) continue;
-        const parsedCitation = resolveBibleReferenceText(corMatch[0]);
-        if (parsedCitation.length) {
-          const parsed = parsedCitation[0];
-          const listedVerses = corMatch[3]
-            ? corMatch[3].split(',').map(value => Number(value.trim()))
-            : [];
-          if (listedVerses.length > 1 &&
-              listedVerses.every((verse, index) => index === 0 || verse === listedVerses[index - 1] + 1)) {
-            const expanded = resolveBibleReference(parsed.book, parsed.chapter, listedVerses[0], listedVerses[listedVerses.length - 1]);
-            if (expanded) return {book: expanded.book, chapter: expanded.chapter, from: expanded.from, to: expanded.to, url: expanded.url};
-          }
-          return {book: parsed.book, chapter: parsed.chapter, from: parsed.from, to: parsed.to, url: parsed.url};
+    // Some sites render citations as plain text and double-clicking a book
+    // abbreviation selects only one token (e.g. "Cor" in "1 Cor. 15:3, 4").
+    // Handle this generically: find a parseable citation whose book-label
+    // portion overlaps the clicked token, then preserve consecutive comma
+    // verse lists. Do not special-case individual Bible books or borrow a
+    // citation elsewhere in the same paragraph.
+    if (selectionStart != null && selectionEnd != null) {
+      const abbreviatedBookCitationPattern = /\\b((?:[1-3]\\s+|i{1,3}\\s+)?[A-Za-z][A-Za-z.'-]*(?:\\s+[A-Za-z][A-Za-z.'-]*){0,3})\\s+(\\d+)\\s*:\\s*(\\d+(?:\\s*,\\s*\\d+)*)(?:\\s*[-–—]\\s*(\\d+))?/gi;
+      let citationMatch;
+      while ((citationMatch = abbreviatedBookCitationPattern.exec(normalizedMatchSource))) {
+        const bookLabelStart = citationMatch.index;
+        const bookLabelEnd = bookLabelStart + citationMatch[1].length;
+        if (selectionStart >= bookLabelEnd || selectionEnd <= bookLabelStart) continue;
+        const parsedCitation = resolveBibleReferenceText(citationMatch[0]);
+        if (!parsedCitation.length) continue;
+        const parsed = parsedCitation[0];
+        const listedVerses = citationMatch[3]
+          ? citationMatch[3].split(',').map(value => Number(value.trim()))
+          : [];
+        if (listedVerses.length > 1 &&
+            listedVerses.every((verse, index) => index === 0 || verse === listedVerses[index - 1] + 1)) {
+          const expanded = resolveBibleReference(parsed.book, parsed.chapter, listedVerses[0], listedVerses[listedVerses.length - 1]);
+          if (expanded) return {book: expanded.book, chapter: expanded.chapter, from: expanded.from, to: expanded.to, url: expanded.url};
         }
+        return {book: parsed.book, chapter: parsed.chapter, from: parsed.from, to: parsed.to, url: parsed.url};
       }
     }
 
