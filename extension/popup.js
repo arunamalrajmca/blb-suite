@@ -1366,6 +1366,16 @@ async function finishPendingSettingsImport() {
     }
 
     await chrome.storage.local.set(pending.settings);
+    // Refresh the global redirect rules and initialize the active tab just as
+    // the interactive toggles do after a user changes them manually.
+    try { await chrome.runtime.sendMessage({type:'blbSuiteRefreshRedirectRules'}); } catch (_) {}
+    if (pending.settings.redirectEnabled === true || pending.accessOrigins.length) {
+      try {
+        const tabs = await chrome.tabs.query({active:true,currentWindow:true});
+        const tabId = tabs[0]?.id;
+        if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
+      } catch (_) {}
+    }
     pendingSettingsImport = null;
     const panel = document.getElementById('settingsImportAccess');
     if (panel) panel.hidden = true;
