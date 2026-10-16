@@ -91,7 +91,9 @@ test('settings import reminds users to pin BLB Suite to the toolbar', async ({ p
       settings: { masterEnabled: true, redirectEnabled: true }
     }))
   });
-  await expect(page.locator('#studyStatus')).toHaveText('Settings imported. Pin BLB Suite from Chrome’s Extensions menu if needed.');
+  await expect(page.locator('#settingsImportAccess')).toBeVisible();
+  await page.locator('#settingsImportAccessButton').click();
+  await expect(page.locator('#studyStatus')).toHaveText('Settings imported. Site access granted for enabled per-site features. Pin BLB Suite from Chrome’s Extensions menu if needed.');
   await expect(page.locator('#redirectEnabled')).toBeChecked();
   await expect(page.locator('#master')).toBeChecked();
 });
@@ -112,6 +114,9 @@ test('settings import normalizes www aliases and preserves independent site togg
       }
     }))
   });
+  await expect(page.locator('#settingsImportAccess')).toBeVisible();
+  await expect(page.locator('#settingsImportAccessSummary')).toContainText('1 site(s)');
+  await page.locator('#settingsImportAccessButton').click();
   await expect.poll(() => page.evaluate(async () => {
     const data = await chrome.storage.local.get(['pageSelectionButtonSites', 'doubleClickBlbSites']);
     return {
