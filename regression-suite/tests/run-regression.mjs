@@ -514,7 +514,10 @@ test('Double-click BLB path remains wired', () => {
 test('Double-click citation handling validates book labels and preserves nonconsecutive verse lists', () => {
   const content = read('content.js');
   const bg = read('background.js');
-  assert(content.includes('const book = resolveBibleBook(citationMatch[1].trim())'), 'double-click citation must validate the captured book label, not parse unrelated prose');
+  assert(content.includes('let clickedWordRange = null;'), 'double-click must recover the word at the physical click location');
+  assert(content.includes('clickedWordText = normalizeSelectionText(clickedWordRange.toString()).normalize(\'NFKC\');'), 'physical click word must replace stale native selection text');
+  assert(content.includes('if (clickedWordRange && block.contains(clickedWordRange.startContainer))'), 'physical click range must override stale non-empty Selection offsets');
+  assert(content.includes('const book = resolveBibleBook(citationMatch[1].trim())') || content.includes('const candidateBook = resolveBibleBook(candidate)'), 'double-click citation must validate the actual captured book label, not parse unrelated prose');
   assert(content.includes('refs: resolvedVerses.map(ref => ({'), 'nonconsecutive comma-separated verses must remain separate references');
   assert(bg.includes('Array.isArray(message.contextualReference?.refs)'), 'background opener must accept multiple contextual verse references');
   assert(bg.includes('openBlbMultiVerseRefs(message.contextualReference.refs'), 'multiple contextual verses must use the shared MultiVerse opener');
