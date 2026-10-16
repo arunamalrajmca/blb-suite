@@ -635,7 +635,7 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
 
   const expected = [];
   for (const chapter of [42,43,44,45,46,48,49]) {
-    const verseCounts = {42:38,43:34,44:34,45:28,46:34,48:22,49:26};
+    const verseCounts = {42:38,43:34,44:34,45:28,46:34,48:22,49:33};
     for (let verse = 1; verse <= verseCounts[chapter]; verse++) expected.push({book:1,chapter,verse});
   }
   expect(flat).toEqual(expected);
