@@ -1301,6 +1301,78 @@ function isValidExtensionSettingsBackup(backup) {
   return true;
 }
 
+let pendingSettingsImport = null;
+
+function getRequestedSiteOrigins(settings) {
+  const hosts = new Set();
+  for (const key of ['pageSelectionButtonSites', 'doubleClickBlbSites']) {
+    for (const [host, enabled] of Object.entries(settings[key] || {})) {
+      if (enabled !== true) continue;
+      const normalized = String(host || '').trim().toLowerCase().replace(/^www\\./, '');
+      if (/^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(normalized)) {
+        hosts.add(normalized);
+        hosts.add('www.' + normalized);
+      }
+    }
+  }
+  const origins = [];
+  for (const host of hosts) {
+    origins.push(`http://${host}/*`, `https://${host}/*`);
+  }
+  return [...new Set(origins)];
+}
+
+function showPendingSettingsImport(settings, siteCount, accessOrigins) {
+  pendingSettingsImport = {settings, siteCount, accessOrigins};
+  const panel = document.getElementById('settingsImportAccess');
+  const summary = document.getElementById('settingsImportAccessSummary');
+  const button = document.getElementById('settingsImportAccessButton');
+  if (summary) {
+    summary.textContent = accessOrigins.length
+      ? `This backup enables per-site features on ${siteCount} site(s). Chrome will ask for access to those sites before the settings are imported.`
+      : 'This backup has no enabled per-site features. Import the settings now.';
+  }
+  if (button) button.textContent = accessOrigins.length ? 'Grant site access & import' : 'Import settings';
+  if (panel) panel.hidden = false;
+  closeSettingsBackupMenu();
+}
+
+async function finishPendingSettingsImport() {
+  if (!pendingSettingsImport) return;
+  const pending = pendingSettingsImport;
+  const button = document.getElementById('settingsImportAccessButton');
+  if (button) button.disabled = true;
+  try {
+    // Call permissions.request directly from this button's click handler,
+    // before awaiting anything, to preserve Chrome's user-gesture requirement.
+    if (pending.accessOrigins.length) {
+      let granted = false;
+      try {
+        granted = await chrome.permissions.request({origins:pending.accessOrigins});
+      } catch (error) {
+        console.warn('BLB Suite site permission request failed:', error);
+      }
+      const allGranted = granted && await chrome.permissions.contains({origins:pending.accessOrigins}).catch(() => false);
+      if (!allGranted) {
+        setStatus('Settings not imported: Chrome site access was not granted. Try importing again and allow the requested sites.');
+        return;
+      }
+    }
+
+    await chrome.storage.local.set(pending.settings);
+    pendingSettingsImport = null;
+    const panel = document.getElementById('settingsImportAccess');
+    if (panel) panel.hidden = true;
+    setStatus('Settings imported. Site access granted for enabled per-site features. Pin BLB Suite from Chrome’s Extensions menu if needed.');
+    render(await getState());
+  } catch (error) {
+    console.error('BLB Suite settings import failed:', error);
+    setStatus('Unable to restore these settings.');
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 async function importExtensionSettingsFile(file) {
   if (!file) return;
   importSettingsButton.disabled = true;
@@ -1322,7 +1394,7 @@ async function importExtensionSettingsFile(file) {
       if (!Object.prototype.hasOwnProperty.call(settings, key)) continue;
       const normalized = {};
       for (const [rawHost, enabled] of Object.entries(settings[key])) {
-        const host = rawHost.trim().toLowerCase().replace(/^www\./, '');
+        const host = rawHost.trim().toLowerCase().replace(/^www\\./, '');
         if (!host) continue;
         // If aliases conflict, an explicit OFF wins rather than unexpectedly
         // enabling a feature for that site.
@@ -1336,13 +1408,13 @@ async function importExtensionSettingsFile(file) {
       ...Object.keys(settings.pageSelectionButtonSites || {}),
       ...Object.keys(settings.doubleClickBlbSites || {})
     ]).size;
-    if (!confirm(`Restore BLB Suite settings? This replaces the current global settings and per-site toggle records for ${siteCount} site(s). Browser-managed site access permissions are not included and may need to be granted again.`)) return;
+    if (!confirm(`Restore BLB Suite settings? This replaces the current global settings and per-site toggle records for ${siteCount} site(s). Enabled per-site features will request Chrome site access before import.`)) return;
 
-    // Only restore the four allowlisted extension preference keys. Do not
-    // import Study data, history, arbitrary storage keys, or browser permissions.
-    await chrome.storage.local.set(settings);
-    setStatus('Settings imported. Pin BLB Suite from Chrome’s Extensions menu if needed.');
-    render(await getState());
+    const accessOrigins = getRequestedSiteOrigins(settings);
+    showPendingSettingsImport(settings, siteCount, accessOrigins);
+    setStatus(accessOrigins.length
+      ? 'Review the site-access request to finish importing settings.'
+      : 'Settings ready to import.');
   } catch (error) {
     console.error('BLB Suite settings import failed:', error);
     setStatus('Unable to read or restore this settings backup.');
@@ -1362,6 +1434,15 @@ importSettingsButton?.addEventListener('click', () => {
 });
 settingsBackupFileInput?.addEventListener('change', () => {
   void importExtensionSettingsFile(settingsBackupFileInput.files?.[0]);
+});
+document.getElementById('settingsImportAccessButton')?.addEventListener('click', () => {
+  void finishPendingSettingsImport();
+});
+document.getElementById('settingsImportCancelButton')?.addEventListener('click', () => {
+  pendingSettingsImport = null;
+  const panel = document.getElementById('settingsImportAccess');
+  if (panel) panel.hidden = true;
+  setStatus('Settings import cancelled.');
 });
 document.addEventListener('click', event => {
   if (!event.target.closest('.settings-wrap')) closeSettingsBackupMenu();
