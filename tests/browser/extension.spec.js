@@ -260,6 +260,47 @@ test.describe('core user-visible E2E', () => {
     });
   });
 
+  test('Double-clicking prose Cor cannot borrow an unrelated Ezekiel citation', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const paragraph = document.createElement('p');
+      paragraph.id = 'blb-e2e-orphan-cor-near-ezekiel';
+      paragraph.innerHTML = 'The word <span id="orphan-cor">Cor</span> appears here. See Ezekiel 45:14.';
+      document.body.appendChild(paragraph);
+    });
+
+    const beforeIds = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+      tabs.filter(tab => {
+        try { return new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org'); }
+        catch (_) { return false; }
+      }).map(tab => tab.id)
+    ));
+    await page.locator('#orphan-cor').dblclick();
+    await page.waitForTimeout(1800);
+
+    const openedPaths = await extensionWorker.evaluate((ids) => chrome.tabs.query({}).then(tabs =>
+      tabs.filter(tab => !ids.includes(tab.id)).map(tab => {
+        try {
+          const url = new URL(String(tab.url || tab.pendingUrl || ''));
+          return url.hostname.endsWith('blueletterbible.org') ? url.pathname : '';
+        } catch (_) { return ''; }
+      }).filter(Boolean)
+    ), beforeIds);
+    expect(openedPaths, 'an unrelated prose token must not open Ezekiel 45:14').not.toContain('/kjv/eze/45/14/');
+    await extensionWorker.evaluate((ids) => chrome.tabs.query({}).then(async tabs => {
+      for (const tab of tabs) {
+        if (ids.includes(tab.id) || tab.id == null) continue;
+        try {
+          if (new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org')) {
+            await chrome.tabs.remove(tab.id);
+          }
+        } catch (_) {}
+      }
+    }), beforeIds);
+  });
+
   test('Double-click resolves a Unicode-styled Bible book in a reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
