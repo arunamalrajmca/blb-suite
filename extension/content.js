@@ -1694,9 +1694,15 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         // actual Bible book label, and bound the positional match to that suffix
         // only. Including the preceding prose makes an unrelated word such as
         // "Cor" appear to belong to the later Ezekiel citation.
-        for (let tokenIndex = 0; tokenIndex < labelTokens.length; tokenIndex++) {
+        for (let tokenIndex = labelTokens.length - 1; tokenIndex >= 0; tokenIndex--) {
           const token = labelTokens[tokenIndex];
           const candidate = trimmedBookLabel.slice(token.index);
+          // Keep an explicit book ordinal attached to its abbreviation: "1 Cor"
+          // must not be shortened to an ambiguous "Cor" suffix.
+          const precedingToken = tokenIndex > 0
+            ? trimmedBookLabel.slice(0, token.index).trim().split(/\s+/).pop()
+            : '';
+          if (/^(?:[1-3]|i{1,3})$/i.test(precedingToken)) continue;
           const candidateBook = resolveBibleBook(candidate);
           if (candidateBook) {
             book = candidateBook;
