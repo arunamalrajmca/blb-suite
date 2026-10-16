@@ -116,7 +116,7 @@ test.describe('core user-action E2E coverage', () => {
     });
     expect(captured.plain).toBe('(John 3:16)');
     expect(captured.html).toContain('blueletterbible.org/kjv/jhn/3/16/');
-    expect(captured.html).toMatch(/\\/kjv\\/(?:jhn|John)\\/3\\/16\\/?/i);
+    expect(captured.html).toContain('/kjv/jhn/3/16/');
   });
 
   test('normal Ctrl+C in MultiVerse does not override the default clipboard behaviour', async ({ page, context, extensionStorage }) => {
