@@ -548,3 +548,70 @@ test('chapter-only ranges expand across all chapters and open MultiVerse', async
   }
 });
 
+
+test('MultiVerse batches disjoint chapter ranges only at chapter boundaries', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  const requestedText = 'Genesis 42-46; Genesis 48-49';
+  await page.evaluate((text) => {
+    const el = document.createElement('p');
+    el.id = 'blb-e2e-disjoint-chapter-ranges';
+    el.textContent = text;
+    document.body.appendChild(el);
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  }, requestedText);
+
+  await extensionWorker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!tab?.id) throw new Error('No active tab for disjoint chapter-range E2E');
+    await chrome.scripting.executeScript({
+      target: {tabId:tab.id},
+      world:'ISOLATED',
+      func: () => new Promise(resolve => chrome.runtime.sendMessage({
+        type:'blbSuiteOpenSelectionText',
+        text:window.getSelection()?.toString() || '',
+        tabBehavior:{activeIfNew:true,activateExisting:true}
+      }, response => resolve(response || null)))
+    });
+  });
+
+  await page.waitForTimeout(1500);
+  const state = await extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({});
+    const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
+    const pending = data.blbSuitePendingMultiVerseRefsByTab || {};
+    const multiverseTabs = tabs.filter(tab => {
+      try {
+        const url = new URL(tab.url || tab.pendingUrl);
+        return url.hostname === 'www.blueletterbible.org' &&
+          (url.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
+           url.searchParams.get('blbSuiteMultiVerse') === '1');
+      } catch (_) { return false; }
+    });
+    return multiverseTabs.map(tab => ({id:tab.id, refs:pending[String(tab.id)] || []}));
+  });
+
+  expect(state).toHaveLength(2);
+  const batches = state.map(tab => tab.refs);
+  expect(batches.every(refs => refs.length > 0)).toBeTruthy();
+
+  const chapterSets = batches.map(refs => [...new Set(refs.map(ref => ref.chapter))].sort((a,b) => a-b));
+  expect(chapterSets).toEqual([[42,43,44,45,46],[48,49]]);
+
+  for (const refs of batches) {
+    const verseCount = refs.reduce((sum, ref) => {
+      const from = Number(ref.from || 1);
+      const to = Number(ref.to || from);
+      return sum + Math.max(0, to - from + 1);
+    }, 0);
+    expect(verseCount).toBeLessThanOrEqual(200);
+  }
+
+  for (const tab of state) await removeTabById(extensionWorker, tab.id);
+});
