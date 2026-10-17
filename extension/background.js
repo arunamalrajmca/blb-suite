@@ -3049,7 +3049,10 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     valueStart: String(diagnostic.valueStart || '').slice(0, 120),
     valueEnd: String(diagnostic.valueEnd || '').slice(-120),
     hasProblematicSignature: !!diagnostic.hasProblematicSignature,
-    isRevelation22_7_21: !!diagnostic.isRevelation22_7_21
+    isRevelation22_7_21: !!diagnostic.isRevelation22_7_21,
+    expectedAvailable: diagnostic.expectedAvailable !== false,
+    documentReadyState: String(diagnostic.documentReadyState || ''),
+    searchParamS: String(diagnostic.searchParamS || '').slice(0, 80)
   });
 });
 
