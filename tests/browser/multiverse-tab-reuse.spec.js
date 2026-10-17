@@ -73,7 +73,19 @@ test('case-sensitive gods search opens and reuses both batches', async ({ contex
   }));
 
   const first = await extensionWorker.evaluate(async () => {
-    const handled = await handleCaseSensitiveBCommand('gods', 'newForegroundTab');
+    const originalOpenMultiVerse = openBlbMultiVerseRefs;
+    const openResults = [];
+    openBlbMultiVerseRefs = async (...args) => {
+      const result = await originalOpenMultiVerse(...args);
+      openResults.push(result);
+      return result;
+    };
+    let handled;
+    try {
+      handled = await handleCaseSensitiveBCommand('gods', 'newForegroundTab');
+    } finally {
+      openBlbMultiVerseRefs = originalOpenMultiVerse;
+    }
     const tabs = await chrome.tabs.query({
       url: [
         'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
@@ -88,6 +100,7 @@ test('case-sensitive gods search opens and reuses both batches', async ({ contex
     const pending = data.blbSuitePendingMultiVerseRefsByTab || {};
     return {
       handled,
+      openResults,
       tabs: tabs.filter(tab => tracked[String(tab.id)]?.key)
         .map(tab => ({
           id:tab.id,
