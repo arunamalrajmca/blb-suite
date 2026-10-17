@@ -9,7 +9,7 @@
       // The possessive suffix is grammatical, not a capitalization signal.
       // Canonicalize only its final s/S so LORD's matches corpus LORD'S,
       // while preserving the base-word distinction: LORD's, Lord's, lord's.
-      .replace(/(['\u0027])S\b/g, "$1s")
+      .replace(/'S\b/g, "'s")
       .replace(/[^A-Za-z0-9'\-]+/g,' ')
       .replace(/\s+/g,' ')
       .trim()
