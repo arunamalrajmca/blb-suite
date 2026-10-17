@@ -926,9 +926,9 @@ if (
   const emitMultiVerseSubmitDiagnostic = (stage, submitEvent = null) => {
     try {
       const heading = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
-        .find(el => /^\\s*multiverse retrieval\\s*$/i.test((el.innerText || el.textContent || "").trim()));
+        .find(el => /^\s*multiverse retrieval\s*$/i.test((el.innerText || el.textContent || "").trim()));
       const advancedHeading = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
-        .find(el => /^\\s*advanced multiverse search options\\s*$/i.test((el.innerText || el.textContent || "").trim()));
+        .find(el => /^\s*advanced multiverse search options\s*$/i.test((el.innerText || el.textContent || "").trim()));
       const controls = Array.from(document.querySelectorAll("input[type=text], textarea, input:not([type])"));
       const afterHeading = el => !heading || !!(heading.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
       const beforeAdvanced = el => !advancedHeading || !!(el.compareDocumentPosition(advancedHeading) & Node.DOCUMENT_POSITION_FOLLOWING);
@@ -940,7 +940,7 @@ if (
       try { formActionPath = form ? new URL(form.action || location.href, location.href).pathname : ""; } catch (_) {}
       const submitter = submitEvent?.submitter;
       const submitterLabel = String(submitter?.value || submitter?.innerText || submitter?.textContent || "")
-        .trim().replace(/\\s+/g, " ").slice(0, 40);
+        .trim().replace(/\s+/g, " ").slice(0, 40);
       chrome.runtime.sendMessage({
         type: "blbSuiteMultiVerseTextboxDiagnostic",
         diagnostic: {
@@ -955,7 +955,7 @@ if (
           valueStart: value.slice(0, 120),
           valueEnd: value.slice(-120),
           hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(value),
-          isRevelation22_7_21: /Revelation\\s+22:7-21/i.test(value),
+          isRevelation22_7_21: /Revelation\s+22:7-21/i.test(value),
           formActionPath,
           formMethod: String(form?.method || "").toUpperCase(),
           submitterLabel,
@@ -1368,9 +1368,9 @@ function getSelectionContextPosition() {
               continue;
             }
             const blockLike = /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DL|DT|FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|LI|MAIN|NAV|OL|P|PRE|SECTION|TABLE|TR|UL)$/.test(tag);
-            if (blockLike && pieces.length && !/\\s$/.test(pieces[pieces.length - 1])) pieces.push(' ');
+            if (blockLike && pieces.length && !/\s$/.test(pieces[pieces.length - 1])) pieces.push(' ');
             walk(child);
-            if (blockLike && pieces.length && !/^\\s/.test(pieces[pieces.length - 1])) pieces.push(' ');
+            if (blockLike && pieces.length && !/^\s/.test(pieces[pieces.length - 1])) pieces.push(' ');
           }
         }
       };
@@ -1871,7 +1871,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const escapeRegex = part => part.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
       const parts = value.split(/\s+/).map(part => escapeRegex(part).replace(/[\u2010-\u2015\u2212]/g, '-').replace(/-/g, '[-\\u2010-\\u2015\\u2212]'));
       if (!parts.length) return [];
-      const pattern = new RegExp(parts.join('\\s+'), 'gi');
+      const pattern = new RegExp(parts.join('\s+'), 'gi');
       const occurrences = [];
       let match;
       while ((match = pattern.exec(normalizedMatchSource))) {
@@ -2332,8 +2332,8 @@ function hasLocalValidBibleReference(text) {
 
   entries.sort((a,b) => b.name.length - a.name.length);
   for (const entry of entries) {
-    const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-    const re = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}\\.?\\s+(-?\\d+)(?:(?::|\\.)\\s*(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?|\\s+(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?)?(?=$|[^A-Za-z0-9])`, 'i');
+    const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\s+');
+    const re = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}\\.?\s+(-?\\d+)(?:(?::|\\.)\s*(-?\\d+)(?:\s*[-–]\s*(-?\\d+))?|\s+(-?\\d+)(?:\s*[-–]\s*(-?\\d+))?)?(?=$|[^A-Za-z0-9])`, 'i');
     const match = re.exec(source);
     if (!match) continue;
 
