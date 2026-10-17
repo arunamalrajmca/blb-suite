@@ -46,11 +46,14 @@
     // if a compact candidate index is incomplete. Keep the existing indexed
     // path for ordinary words to avoid imposing a full-corpus scan on them.
     const needsApostropheScan=words.some(word=>word.includes("'"));
-    const candidates=needsApostropheScan
-      ? corpus
-      : (index && Array.isArray(index[words[0]])
-          ? index[words[0]].map(i=>corpus[i]).filter(Boolean)
-          : []);
+    // The compact index is intentionally incomplete: it covers reviewed
+    // capitalization-sensitive terms, not every word/capitalization form.
+    // If the first query word has no index entry, scan the corpus rather than
+    // treating an index miss as proof that the query has no matches.
+    const indexedCandidates = index && Array.isArray(index[words[0]])
+      ? index[words[0]].map(i=>corpus[i]).filter(Boolean)
+      : corpus;
+    const candidates = needsApostropheScan ? corpus : indexedCandidates;
     const out=[];
     for(const entry of candidates){
       if(!entry || (allowedBooks && !allowedBooks.has(Number(entry[0])))) continue;
