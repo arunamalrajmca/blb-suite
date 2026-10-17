@@ -696,16 +696,16 @@ function compactMultiVerseVerses(verses) {
 // either request has finished reserving every batch.
 let pendingMultiVerseRequest = Promise.resolve();
 
-function openBlbMultiVerseRefs(refs, active = true) {
+function openBlbMultiVerseRefs(refs, active = true, options = {}) {
   const run = pendingMultiVerseRequest.then(
-    () => openBlbMultiVerseRefsSerialized(refs, active),
-    () => openBlbMultiVerseRefsSerialized(refs, active)
+    () => openBlbMultiVerseRefsSerialized(refs, active, options),
+    () => openBlbMultiVerseRefsSerialized(refs, active, options)
   );
   pendingMultiVerseRequest = run.then(() => undefined, () => undefined);
   return run;
 }
 
-async function openBlbMultiVerseRefsSerialized(refs, active = true) {
+async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}) {
   // Universal MultiVerse policy: BLB renders at most 200 verses per view.
   // Expand, canonicalize, and deduplicate once, then deliver every verse in
   // ordered batches. No caller may silently lose verses after the first 200.
@@ -737,7 +737,8 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true) {
     const result = await openBlbMultiVerseRefsSingleBatch(
       compactRefs,
       index === 0 ? !!active : false,
-      allVerses.length > 1 && batchVerses.length === 1
+      allVerses.length > 1 && batchVerses.length === 1,
+      index === 0 ? options.preferredTabId : null
     );
     if (!result?.ok) {
       return {
@@ -802,7 +803,7 @@ async function openBlbDestinationByIdentity({key, active = false, findExisting, 
   }
 }
 
-async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false) {
+async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false, preferredTabId = null) {
   // Enforce the cap again at the final handoff boundary. This ensures the
   // references actually stored for the MultiVerse textbox cannot expand to
   // more than 200 individual verses after canonicalization.
@@ -846,7 +847,19 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         return findMatchingMultiVerseTab(verseSetKey, [...multiVerseTabs, ...reservedTabs]);
       },
       create:async () => {
-        const tab = await chrome.tabs.create({url:'about:blank', active:!!active});
+        // The first case-sensitive batch should consume the command's active
+        // tab instead of creating an about:blank orphan. Additional batches
+        // still reserve their own background tabs. Only use this preference
+        // when no existing matching batch tab was found above.
+        let tab = null;
+        let reusedOriginTab = false;
+        if (preferredTabId != null) {
+          try {
+            tab = await chrome.tabs.get(Number(preferredTabId));
+            reusedOriginTab = tab?.id != null;
+          } catch (_) {}
+        }
+        if (!reusedOriginTab) tab = await chrome.tabs.create({url:'about:blank', active:!!active});
         if (tab?.id == null) return null;
         const pending = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}, blbSuitePendingMultiVerseRefsByTab:{}});
         const trackedMap = pending.blbSuiteMultiVerseTabSets && typeof pending.blbSuiteMultiVerseTabSets === 'object' ? {...pending.blbSuiteMultiVerseTabSets} : {};
@@ -855,12 +868,12 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         pendingMap[String(tab.id)] = canonical.refs;
         await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap});
         try {
-          await chrome.tabs.update(tab.id, {url:'https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1'});
+          await chrome.tabs.update(tab.id, {url:'https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1', active:reusedOriginTab ? !!active : !!active});
         } catch (error) {
           navigationError = error;
           delete trackedMap[String(tab.id)]; delete pendingMap[String(tab.id)];
           await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap}).catch(()=>{});
-          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+          if (!reusedOriginTab) { try { await chrome.tabs.remove(tab.id); } catch (_) {} }
           throw error;
         }
         return tab;
@@ -2410,6 +2423,15 @@ async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
   }
 }
 async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab') {
+  // Capture the tab in which the omnibox command was entered before async
+  // search work begins. The shared batch manager uses it for batch one only.
+  let originatingTabId = null;
+  if (disposition === 'currentTab') {
+    try {
+      const activeTabs = await chrome.tabs.query({active:true, lastFocusedWindow:true});
+      originatingTabId = activeTabs.find(tab => Number.isInteger(tab.id))?.id ?? null;
+    } catch (_) {}
+  }
   // Apply the same quote-aware Boolean normalization used by ordinary `b`
   // searches. Keep the raw quoted text intact so operators inside a quoted
   // phrase do not become Boolean syntax.
@@ -2477,7 +2499,7 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
       version:'kjv'
     };
   });
-  const opened = await openBlbMultiVerseRefs(multiVerseRefs, disposition !== 'newBackgroundTab');
+  const opened = await openBlbMultiVerseRefs(multiVerseRefs, disposition !== 'newBackgroundTab', {preferredTabId:originatingTabId});
   if (!opened?.ok) {
     console.warn('BLB Suite: case-sensitive MultiVerse open failed:', opened?.reason || 'unknown');
   }
