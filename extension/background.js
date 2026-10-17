@@ -2892,7 +2892,7 @@ function diagnosticTabOperation(kind, args) {
       ? (Array.isArray(first) ? first : (typeof first === 'number' ? [first] : []))
       : (typeof first === 'number' ? [first] : []);
   const trackedTabIds = tabIds.filter(id => diagnosticMultiVerseTabIds.has(id));
-  const isMultiVerseUrl = /blueletterbible\\.org/i.test(targetUrl) && /MultiVerse\\.cfm|blbSuiteMultiVerse=1/i.test(targetUrl);
+  const isMultiVerseUrl = /blueletterbible\.org/i.test(targetUrl) && /MultiVerse\.cfm|blbSuiteMultiVerse=1/i.test(targetUrl);
   if (isMultiVerseUrl || trackedTabIds.length || (kind === 'remove' && tabIds.length)) {
     let parsed = null;
     try { parsed = new URL(targetUrl); } catch (_) {}
@@ -2901,10 +2901,10 @@ function diagnosticTabOperation(kind, args) {
       tabId: typeof first === 'number' ? first : null,
       tabIds: tabIds.length ? tabIds : undefined,
       urlProvided: !!targetUrl,
-      pageType: /multiverse\\.cfm/i.test(parsed?.pathname || '') ? 'MultiVerse' : '',
+      pageType: /multiverse\.cfm/i.test(parsed?.pathname || '') ? 'MultiVerse' : '',
       hasHandoffMarker: /[?&]blbSuiteMultiVerse=1(?:&|$)/i.test(targetUrl),
       isHistoricalSessionUrl: /[?&]s=00LCeE(?:&|$)/i.test(targetUrl),
-      caller: String(new Error().stack || '').split('\\n').slice(2, 6).map(line => line.trim())
+      caller: String(new Error().stack || '').split('\n').slice(2, 6).map(line => line.trim())
     });
   }
 }
