@@ -826,17 +826,24 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
     result = await openBlbDestinationByIdentity({
       key:`multiverse|${verseSetKey}`, active:!!active,
       findExisting:async () => {
-        const [multiVerseTabs, blankTabs] = await Promise.all([
-          chrome.tabs.query({url:[
-            'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
-            'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
-          ]}),
-          // A tab can be reserved and tracked before its first navigation.
-          // Include those inert tabs so a restarted worker can still reuse it.
-          chrome.tabs.query({url:'about:blank'})
-        ]);
-        const tabs = [...multiVerseTabs, ...blankTabs];
-        return findMatchingMultiVerseTab(verseSetKey, tabs);
+        const multiVerseTabs = await chrome.tabs.query({url:[
+          'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
+          'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
+        ]});
+        // about:blank is not reliably matched by Chrome URL filters. Recover
+        // only tracked reservations for this batch by tab ID instead of
+        // querying every unrelated browser tab.
+        const tracked = await getTrackedMultiVerseTabs();
+        const reservedTabs = [];
+        for (const [id, entry] of Object.entries(tracked)) {
+          if (entry?.key !== verseSetKey) continue;
+          try {
+            const tab = await chrome.tabs.get(Number(id));
+            if (/^about:blank(?:[#?].*)?$/i.test(String(tab?.url || '')) ||
+                /^about:blank(?:[#?].*)?$/i.test(String(tab?.pendingUrl || ''))) reservedTabs.push(tab);
+          } catch (_) {}
+        }
+        return findMatchingMultiVerseTab(verseSetKey, [...multiVerseTabs, ...reservedTabs]);
       },
       create:async () => {
         const tab = await chrome.tabs.create({url:'about:blank', active:!!active});
