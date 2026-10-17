@@ -2466,13 +2466,17 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
   // matching collapses every MultiVerse.cfm URL to one tab identity, which
   // caused duplicate searches to reuse incorrectly and later batches to be
   // lost. The shared manager keys each batch by its canonical verse set.
-  const multiVerseRefs = refs.map(ref => ({
-    bookNumber:ref.bookNumber,
-    chapter:ref.chapter,
-    from:ref.verse,
-    to:ref.verse,
-    version:'kjv'
-  }));
+  const multiVerseRefs = refs.map(ref => {
+    const book = bookData.find(item => Number(item.bookNumber) === Number(ref.bookNumber));
+    return {
+      book:book?.name || '',
+      bookNumber:ref.bookNumber,
+      chapter:ref.chapter,
+      from:ref.verse,
+      to:ref.verse,
+      version:'kjv'
+    };
+  });
   const opened = await openBlbMultiVerseRefs(multiVerseRefs, disposition !== 'newBackgroundTab');
   if (!opened?.ok) {
     console.warn('BLB Suite: case-sensitive MultiVerse open failed:', opened?.reason || 'unknown');
