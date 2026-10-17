@@ -2884,7 +2884,11 @@ chrome.tabs.onCreated.addListener(tab => {
   });
 });
 
-chrome.tabs.onRemoved.addListener(tabId => {
+chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+  console.info('[BLB Suite MultiVerse tab lifecycle] removed', {
+    tabId, windowId:removeInfo?.windowId ?? null,
+    isWindowClosing:!!removeInfo?.isWindowClosing
+  });
   forgetBlbTab(tabId);
   intentionalNewBlbTabs.delete(tabId);
   for (const [key, id] of scriptTaggerDestinationTabs) {
