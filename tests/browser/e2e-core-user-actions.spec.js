@@ -308,7 +308,7 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
   const matthew = await waitForTab(extensionWorker, tab => {
     try {
       const url = new URL(tab.url);
-      return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/mat/18/';
+      return url.hostname === 'www.blueletterbible.org' && /^\/kjv\/gen\/(?:42|43|44|45|46|48|49)\//i.test(url.pathname);
     } catch (_) { return false; }
   });
   expect(new URL(matthew.url).pathname).toBe('/kjv/mat/18/');
