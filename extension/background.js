@@ -2912,6 +2912,7 @@ function diagnosticTabsCreate(...args) {
 chrome.tabs.onCreated.addListener(tab => {
   const url = String(tab?.pendingUrl || tab?.url || '');
   if (!/blueletterbible\.org/i.test(url) || !/MultiVerse\.cfm|blbSuiteMultiVerse=1/i.test(url)) return;
+  if (tab?.id != null) diagnosticMultiVerseTabIds.add(tab.id);
   console.info('[BLB Suite MultiVerse tab lifecycle] created', {
     tabId: tab.id ?? null, openerTabId: tab.openerTabId ?? null,
     active: !!tab.active, status: String(tab.status || ''),
@@ -2941,9 +2942,10 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 
 chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
   console.info('[BLB Suite MultiVerse tab lifecycle] removed', {
-    tabId, windowId:removeInfo?.windowId ?? null,
+    tabId, wasTrackedMultiVerse:diagnosticMultiVerseTabIds.has(tabId), windowId:removeInfo?.windowId ?? null,
     isWindowClosing:!!removeInfo?.isWindowClosing
   });
+  diagnosticMultiVerseTabIds.delete(tabId);
   forgetBlbTab(tabId);
   intentionalNewBlbTabs.delete(tabId);
   for (const [key, id] of scriptTaggerDestinationTabs) {
@@ -2998,6 +3000,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   const isBlank = /^about:blank(?:[#?].*)?$/i.test(url);
   const isMultiVerse = /blueletterbible\.org/i.test(url) &&
     (/\/MultiVerse\.cfm/i.test(url) || /blbSuiteMultiVerse=1/i.test(url));
+
+  if (isMultiVerse) diagnosticMultiVerseTabIds.add(tabId);
+  else if (!isBlank) diagnosticMultiVerseTabIds.delete(tabId);
 
   if (isMultiVerse || isBlank) {
     console.info('[BLB Suite MultiVerse tab lifecycle] updated', {
