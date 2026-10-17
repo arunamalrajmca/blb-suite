@@ -755,7 +755,8 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
     // afterward, which can otherwise overlap the next batch's session setup.
     if (index < batches.length - 1 && result.tabId != null) {
       await waitForTabTerminalLoad(result.tabId);
-      await waitForTabNextNavigationComplete(result.tabId);
+      const initialUrl = await chrome.tabs.get(result.tabId).then(tab => String(tab?.url || '')).catch(() => '');
+      await waitForTabNextNavigationComplete(result.tabId, initialUrl);
       await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
     }
   }
@@ -2445,7 +2446,7 @@ function waitForTabTerminalLoad(tabId, timeout = CASE_SENSITIVE_MULTI_VERSE_TAB_
 // still saving the current textbox/session. Wait for that follow-up navigation
 // to finish before creating the next batch. The timeout is a safety valve for
 // BLB versions that process Retrieve without a full navigation.
-function waitForTabNextNavigationComplete(tabId, timeout = CASE_SENSITIVE_MULTI_VERSE_TAB_LOAD_TIMEOUT_MS) {
+function waitForTabNextNavigationComplete(tabId, baselineUrl = '', timeout = CASE_SENSITIVE_MULTI_VERSE_TAB_LOAD_TIMEOUT_MS) {
   return new Promise(resolve => {
     let settled = false;
     let sawLoading = false;
@@ -2468,8 +2469,9 @@ function waitForTabNextNavigationComplete(tabId, timeout = CASE_SENSITIVE_MULTI_
     chrome.tabs.onUpdated.addListener(onUpdated);
     timer = setTimeout(finish, timeout);
     chrome.tabs.get(tabId).then(tab => {
-      // The follow-up POST may begin before this waiter is installed.
+      // The follow-up POST may begin or even finish before this waiter is installed.
       if (tab?.status === 'loading') sawLoading = true;
+      else if (tab?.status === 'complete' && baselineUrl && String(tab.url || '') !== baselineUrl) finish();
     }).catch(() => finish());
   });
 }
