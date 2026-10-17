@@ -2391,52 +2391,22 @@ async function paceCaseSensitiveTab(tabPromise) {
   return tab;
 }
 
-// Case-sensitive MultiVerse URLs share a pathname, so include their full
-// normalized query in the identity to keep distinct result batches separate.
-function canonicalCaseSensitiveDestinationKey(url) {
-  try {
-    const u = new URL(String(url || ''));
-    const host = u.hostname.toLowerCase().replace(/^www\./, '');
-    const path = u.pathname.replace(/\/+$/, '').toLowerCase() || '/';
-    const params = [...u.searchParams.entries()].sort(([ak,av],[bk,bv]) =>
-      ak.localeCompare(bk) || av.localeCompare(bv)
-    );
-    const query = params.map(([k,v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
-    return `case-sensitive|${host}${path}${query ? `?${query}` : ''}`;
-  } catch (_) {
-    return `case-sensitive|${String(url || '').trim()}`;
-  }
-}
-
-async function openCaseSensitiveDestination(url, active) {
-  const target = String(url || '');
-  const key = canonicalCaseSensitiveDestinationKey(target);
-  const result = await openBlbDestinationByIdentity({
-    key, active:!!active,
-    findExisting:async () => {
-      const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
-      return tabs.find(tab => [tab?.url, tab?.pendingUrl].filter(Boolean)
-        .some(candidate => canonicalCaseSensitiveDestinationKey(candidate) === key)) || null;
-    },
-    create:() => chrome.tabs.create({url:target, active:!!active})
-  });
-  return result?.tab || null;
-}
-
 async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
   const targets=[...new Set((urls||[]).filter(Boolean))];
   if (!targets.length) throw new Error('No BLB Multi-Verse destinations');
 
+  // Use the established generic BLB destination opener. Do not maintain a
+  // separate case-sensitive MultiVerse tab identity or matching path.
   const first = disposition === 'newForegroundTab'
-    ? await openCaseSensitiveDestination(targets[0], true)
+    ? await openBlbDestination(targets[0], true, true)
     : disposition === 'newBackgroundTab'
-      ? await openCaseSensitiveDestination(targets[0], false)
+      ? await openBlbDestination(targets[0], false, false)
       : await chrome.tabs.update({url:targets[0]});
 
   await paceCaseSensitiveTab(Promise.resolve(first));
 
   for (let i=1;i<targets.length;i++) {
-    await paceCaseSensitiveTab(openCaseSensitiveDestination(targets[i], false));
+    await paceCaseSensitiveTab(openBlbDestination(targets[i], false, false));
   }
 }
 async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab') {
