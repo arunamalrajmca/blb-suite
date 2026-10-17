@@ -86,12 +86,7 @@ test('case-sensitive gods search opens and reuses both batches', async ({ contex
     } finally {
       openBlbMultiVerseRefs = originalOpenMultiVerse;
     }
-    const tabs = await chrome.tabs.query({
-      url: [
-        'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
-        'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
-      ]
-    });
+    const tabs = await chrome.tabs.query({});
     const data = await chrome.storage.local.get({
       blbSuiteMultiVerseTabSets:{},
       blbSuitePendingMultiVerseRefsByTab:{}
@@ -101,12 +96,12 @@ test('case-sensitive gods search opens and reuses both batches', async ({ contex
     return {
       handled,
       openResults,
-      tabs: tabs.filter(tab => tracked[String(tab.id)]?.key)
-        .map(tab => ({
-          id:tab.id,
-          key:tracked[String(tab.id)].key,
-          verseCount:expandMultiVerseRefsToVerses(pending[String(tab.id)] || []).length
-        }))
+      tabs: tabs.map(tab => ({
+        id:tab.id,
+        url:tab.url || '',
+        trackedKey:tracked[String(tab.id)]?.key || null,
+        verseCount:expandMultiVerseRefsToVerses(pending[String(tab.id)] || []).length
+      }))
     };
   });
   expect(first.handled).toBe(true);
@@ -114,10 +109,11 @@ test('case-sensitive gods search opens and reuses both batches', async ({ contex
   expect(first.openResults[0]?.ok, JSON.stringify(first.openResults)).toBe(true);
   expect(first.openResults[0]?.batchCount, JSON.stringify(first.openResults)).toBe(2);
   expect(first.openResults[0]?.tabIds, JSON.stringify(first.openResults)).toHaveLength(2);
-  expect(first.tabs).toHaveLength(2);
-  expect(first.tabs[0].id).not.toBe(first.tabs[1].id);
-  expect(new Set(first.tabs.map(tab => tab.key)).size).toBe(2);
-  expect(first.tabs.map(tab => tab.verseCount).sort((a,b) => b-a)).toEqual([200,14]);
+  const firstTrackedTabs = first.tabs.filter(tab => tab.trackedKey);
+  expect(firstTrackedTabs, JSON.stringify({openResults:first.openResults,tabs:first.tabs})).toHaveLength(2);
+  expect(firstTrackedTabs[0].id).not.toBe(firstTrackedTabs[1].id);
+  expect(new Set(firstTrackedTabs.map(tab => tab.trackedKey)).size).toBe(2);
+  expect(firstTrackedTabs.map(tab => tab.verseCount).sort((a,b) => b-a)).toEqual([200,14]);
 
   const repeated = await extensionWorker.evaluate(async () => {
     await handleCaseSensitiveBCommand('gods', 'newForegroundTab');
@@ -140,7 +136,7 @@ test('case-sensitive gods search opens and reuses both batches', async ({ contex
         verseCount:expandMultiVerseRefsToVerses(pending[String(tab.id)] || []).length
       }));
   });
-  expect(repeated.map(tab => tab.id).sort()).toEqual(first.tabs.map(tab => tab.id).sort());
+  expect(repeated.map(tab => tab.id).sort()).toEqual(firstTrackedTabs.map(tab => tab.id).sort());
   expect(repeated.map(tab => tab.verseCount).sort((a,b) => b-a)).toEqual([200,14]);
 });
 
