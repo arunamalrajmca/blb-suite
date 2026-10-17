@@ -37,15 +37,18 @@
     const words=normalizeCaseSensitiveWords(query);
     if(!words.length||!Array.isArray(corpus)) return [];
     const allowedBooks=filter&&Array.isArray(filter.bookNumbers)?new Set(filter.bookNumbers.map(Number)):null;
-    // Search the full original-case corpus instead of trusting the compact
-    // candidate index. That index is intentionally partial and can omit valid
-    // capitalization spellings or verse candidates; using even one partial
-    // token list can silently drop exact-case matches for single- and
-    // multi-word queries. A full scan makes this behavior generic for every
-    // spelling and capitalization combination in the corpus.
-    void index;
+    // Possessive/apostrophe spellings are the targeted exception: scan the
+    // original-case corpus so every capitalization variant is covered even
+    // if a compact candidate index is incomplete. Keep the existing indexed
+    // path for ordinary words to avoid imposing a full-corpus scan on them.
+    const needsApostropheScan=words.some(word=>word.includes("'"));
+    const candidates=needsApostropheScan
+      ? corpus
+      : (index && Array.isArray(index[words[0]])
+          ? index[words[0]].map(i=>corpus[i]).filter(Boolean)
+          : []);
     const out=[];
-    for(const entry of corpus){
+    for(const entry of candidates){
       if(!entry || (allowedBooks && !allowedBooks.has(Number(entry[0])))) continue;
       const tokens=normalizeCaseSensitiveWords(entry[3]);
       if(containsExactSequence(tokens,words)) out.push(entry);
