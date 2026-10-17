@@ -194,6 +194,49 @@ test('case-sensitive apostrophe search finds all capitalization variants with an
   expect(result.childrensUpper).toEqual([6]);
 });
 
+test('case-sensitive apostrophe queries preserve exact capitalization and avoid native fallback', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const originalSearch = BLBCaseSensitiveCore.searchCaseSensitiveCorpus;
+    const originalNativeSearch = openCaseSensitiveNativeSearch;
+    const originalOpenSingle = openSingleKjvVerse;
+    const localQueries = [];
+    const nativeQueries = [];
+    const openedRefs = [];
+    const queries = ["LORD's", "Lord's", "lord's", "CHILDREN'S", "Children's", "children's"];
+    const verseByQuery = new Map(queries.map((query, index) => [query, index + 1]));
+
+    try {
+      BLBCaseSensitiveCore.searchCaseSensitiveCorpus = query => {
+        localQueries.push(query);
+        return [[1, 1, verseByQuery.get(query), query]];
+      };
+      openCaseSensitiveNativeSearch = async query => {
+        nativeQueries.push(query);
+      };
+      openSingleKjvVerse = async ref => {
+        openedRefs.push(ref);
+      };
+
+      for (const query of queries) {
+        await handleCaseSensitiveBCommand(query, 'currentTab');
+      }
+    } finally {
+      BLBCaseSensitiveCore.searchCaseSensitiveCorpus = originalSearch;
+      openCaseSensitiveNativeSearch = originalNativeSearch;
+      openSingleKjvVerse = originalOpenSingle;
+    }
+
+    return {localQueries, nativeQueries, openedRefs};
+  });
+
+  expect(result.localQueries).toEqual(["LORD's", "Lord's", "lord's", "CHILDREN'S", "Children's", "children's"]);
+  expect(result.nativeQueries).toEqual([]);
+  expect(result.openedRefs).toEqual([
+    [1, 1, 1], [1, 1, 2], [1, 1, 3],
+    [1, 1, 4], [1, 1, 5], [1, 1, 6]
+  ]);
+});
+
 test('case-sensitive searches without apostrophes retain indexed candidate behavior', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(() => {
     const corpus = [
