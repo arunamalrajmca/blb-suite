@@ -397,7 +397,6 @@ function saveStudyTopicFromPopup(title) {
 async function saveStudyTopicFromPopupNow(title) {
   const topic = normalizeStudyTopic(title);
   if (!topic || topic.toLowerCase() === "uncategorized") return {ok:false, reason:"empty-or-uncategorized"};
-
   const data = await getStudySessions();
   const topicKey = topic.toLowerCase();
   let session = data.sessions.find(s => String(s.title || "").trim().toLowerCase() === topicKey);
@@ -797,8 +796,7 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
     if (index < batches.length - 1 && result.tabId != null) {
       await waitForTabTerminalLoad(result.tabId);
       await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
-    }
-  }
+    }  }
 
   return {
     ok:true,
@@ -1197,8 +1195,7 @@ function displayStudyDate(iso) {
   return m ? `${m[2]}/${m[3]}/${m[1]}` : String(iso || '');
 }
 
-function studySessionText(session) {
-  const lines = [
+function studySessionText(session) {  const lines = [
     `SESSION: ${session.title}`,
     `DATE: ${displayStudyDate(session.date || '')}`,
     ''
@@ -1597,7 +1594,6 @@ function buildStudySessionsPdf(content, options = {}) {
   pdf += `trailer\n<< /Size ${objects.length+1} /Root ${catalogObj} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
   return btoa(pdf);
 }
-
 function parseStudyFilter(text, prefix) {
   const raw = String(text || '').trim();
   const m = raw.match(new RegExp(`^${prefix}\\s*:\\s*(.+)$`, 'i'));
@@ -1997,8 +1993,7 @@ function normalizeBooleanOperatorsOutsideQuotes(value) {
       continue;
     }
     if (/[A-Za-z]/.test(ch) && (i === 0 || !/[A-Za-z0-9_]/.test(text[i - 1]))) {
-      const match = text.slice(i).match(/^(and|not|or)(?![A-Za-z0-9_])/i);
-      if (match) {
+      const match = text.slice(i).match(/^(and|not|or)(?![A-Za-z0-9_])/i);      if (match) {
         result += match[0].toUpperCase();
         i += match[0].length;
         continue;
@@ -2397,8 +2392,7 @@ async function handleBCommand(text, disposition = 'currentTab') {
   const singleKjvMatch = hasBooleanOperators ? null : findSingleKjvPhraseMatch(t);
   if (singleKjvMatch) {
     if (await openSingleKjvVerse(singleKjvMatch)) {
-      await recordStudySearchTerm(t);
-      return;
+      await recordStudySearchTerm(t);      return;
     }
   }
 
@@ -2797,8 +2791,7 @@ function shouldAcceptSelectionOpenRequest(tabId, text, requestId = '') {
     ? `request|${normalizedRequestId}`
     : `${Number.isInteger(tabId) ? tabId : 'no-tab'}|${String(text || '').trim().replace(/\s+/g, ' ').toLowerCase()}`;
   const now = Date.now();
-  const previous = recentSelectionOpenRequests.get(key) || 0;
-  if (now - previous < SELECTION_OPEN_DEDUP_MS) return false;
+  const previous = recentSelectionOpenRequests.get(key) || 0;  if (now - previous < SELECTION_OPEN_DEDUP_MS) return false;
   recentSelectionOpenRequests.set(key, now);
   for (const [k, ts] of recentSelectionOpenRequests) {
     if (now - ts > 5000) recentSelectionOpenRequests.delete(k);
@@ -2874,10 +2867,12 @@ async function createBlbTabGeneric(url, active = true, {forceNew = false} = {}) 
 
 // Diagnostic report buffer for the MultiVerse navigation incident. This is temporary,
 // bounded, and records metadata only; it never stores full URLs or selected PDF text.
-const BLB_DIAGNOSTIC_REPORT_LIMIT = 2000;
+const BLB_DIAGNOSTIC_REPORT_LIMIT = 3000;
 const blbDiagnosticReportEvents = [];
 const blbDiagnosticReportStartedAt = new Date().toISOString();
-const blbDiagnosticReportExportedTabs = new Set();
+let blbDiagnosticReportExportScheduled = false;
+let blbDiagnosticReportExported = false;
+let blbDiagnosticReportExportTimer = null;
 function diagnosticRecord(label, details = {}, level = 'info') {
   const event = {
     timestamp: new Date().toISOString(),
@@ -2894,11 +2889,11 @@ function diagnosticRecord(label, details = {}, level = 'info') {
   return event;
 }
 async function exportBlbDiagnosticReport(triggerTabId, triggerReason) {
-  if (blbDiagnosticReportExportedTabs.has(triggerTabId)) return;
-  blbDiagnosticReportExportedTabs.add(triggerTabId);
+  if (blbDiagnosticReportExported) return;
+  blbDiagnosticReportExported = true;
   const report = {
     reportType: 'BLB Suite MultiVerse navigation diagnostics',
-    schemaVersion: 1,
+    schemaVersion: 2,
     generatedAt: new Date().toISOString(),
     startedAt: blbDiagnosticReportStartedAt,
     trigger: {tabId:triggerTabId, reason:triggerReason},
@@ -2917,11 +2912,57 @@ async function exportBlbDiagnosticReport(triggerTabId, triggerReason) {
       tabId:triggerTabId, eventCount:report.eventCount, reason:triggerReason
     });
   } catch (error) {
-    blbDiagnosticReportExportedTabs.delete(triggerTabId);
+    blbDiagnosticReportExported = false;
     diagnosticRecord('[BLB Suite diagnostic report] download-failed', {
       tabId:triggerTabId, reason:triggerReason, error:String(error)
     }, 'warn');
   }
+}
+function scheduleBlbDiagnosticReportExport(tabId, reason) {
+  if (blbDiagnosticReportExportScheduled || blbDiagnosticReportExported) return;
+  blbDiagnosticReportExportScheduled = true;
+  diagnosticRecord('[BLB Suite diagnostic report] export-scheduled', {
+    tabId:tabId ?? null, reason, delayMs:6000
+  });
+  // Give other tabs time to emit their navigation and textbox-relay events so
+  // a single report captures the whole reproduction rather than one snapshot per tab.
+  blbDiagnosticReportExportTimer = setTimeout(() => {
+    blbDiagnosticReportExportTimer = null;
+    void exportBlbDiagnosticReport(tabId, reason);
+  }, 6000);
+}
+
+// Browser navigation events distinguish document navigations from extension tabs.update calls.
+// Store only URL structure and the relevant s parameter, never the full URL or other query values.
+function recordMultiVerseWebNavigation(eventName, details) {
+  const rawUrl = String(details?.url || '');
+  let parsed = null;
+  try { parsed = new URL(rawUrl); } catch (_) {}
+  if (!parsed || !/^(?:www\.)?blueletterbible\.org$/i.test(parsed.hostname) ||
+      !/\/tools\/multiverse\.cfm$/i.test(parsed.pathname)) return;
+  const searchParamS = parsed.searchParams.get('s') || '';
+  const isHistoricalSessionUrl = searchParamS.toLowerCase() === '00lcce';
+  diagnosticRecord('[BLB Suite webNavigation] ' + eventName, {
+    tabId: details?.tabId ?? null,
+    frameId: details?.frameId ?? null,
+    parentFrameId: details?.parentFrameId ?? null,
+    documentId: details?.documentId ?? null,
+    parentDocumentId: details?.parentDocumentId ?? null,
+    timeStamp: details?.timeStamp ?? null,
+    path: parsed.pathname,
+    searchParamS,
+    isHistoricalSessionUrl,
+    hasHandoffMarker: parsed.searchParams.get('blbSuiteMultiVerse') === '1',
+    transitionType: details?.transitionType ?? null,
+    transitionQualifiers: Array.isArray(details?.transitionQualifiers) ? details.transitionQualifiers : [],
+    initiatorOrigin: (() => { try { return details?.initiator ? new URL(details.initiator).origin : ''; } catch (_) { return ''; } })()
+  });
+  if (isHistoricalSessionUrl) scheduleBlbDiagnosticReportExport(details?.tabId ?? null, 'historical-multiverse-session-url-observed');
+}
+if (chrome.webNavigation?.onBeforeNavigate) {
+  chrome.webNavigation.onBeforeNavigate.addListener(details => recordMultiVerseWebNavigation('before-navigate', details));
+  chrome.webNavigation.onCommitted.addListener(details => recordMultiVerseWebNavigation('committed', details));
+  chrome.webNavigation.onHistoryStateUpdated.addListener(details => recordMultiVerseWebNavigation('history-state-updated', details));
 }
 
 // Diagnostic-only attribution for MultiVerse navigations/removals. This records only
@@ -3057,7 +3098,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       hasHandoffMarker: /[?&]blbSuiteMultiVerse=1(?:&|$)/i.test(observedUrl)
     });
     if (observedIsMultiVerse && /[?&]s=00LCeE(?:&|$)/i.test(observedUrl)) {
-      void exportBlbDiagnosticReport(tabId, 'historical-multiverse-session-url-observed');
+      scheduleBlbDiagnosticReportExport(tabId, 'historical-multiverse-session-url-observed');
     }
   }
 
@@ -3197,8 +3238,7 @@ async function openBlbHomeNoDuplicate(activeIfNew = true, activateExisting = act
 
   const operation = (async () => {
     const result = await createBlbTabGeneric(DEFAULT_HOMEPAGE_URL, !!activeIfNew);
-    const tab = result.tab;
-    if (result.reused && activateExisting && tab?.id != null) {
+    const tab = result.tab;    if (result.reused && activateExisting && tab?.id != null) {
       await diagnosticTabsUpdate(tab.id, {active:true});
       if (tab.windowId != null) {
         try { await chrome.windows.update(tab.windowId, {focused:true}); } catch (_) {}
@@ -3597,8 +3637,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const url = String(message.url || '');
     if (!/^https:\/\/www\.blueletterbible\.org\/tools\/MultiVerse\.cfm\?/i.test(url)) {
       sendResponse({ok:false, reason:'invalid-multiverse-url'}); return true;
-    }
-    if (url.length > 7000) {
+    }    if (url.length > 7000) {
       sendResponse({ok:false, reason:'multiverse-url-too-large'}); return true;
     }
     try {
@@ -3997,8 +4036,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!/^(chrome|brave):\/\//i.test(url)) {
       sendResponse({ok:false});
       return;
-    }
-    diagnosticTabsCreate({url}).then(() => sendResponse({ok:true})).catch(error => {
+    }    diagnosticTabsCreate({url}).then(() => sendResponse({ok:true})).catch(error => {
       console.error('BLB Suite browser URL:', error);
       sendResponse({ok:false});
     });
@@ -4397,8 +4435,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // parser's better source token and corrupt shorthand-list ordering.
   const sharedRefs = resolveBibleReferenceText(source);
   const mergedRefs = [];
-  const mergedKeys = new Set();
-  const appendCanonical = parsed => {
+  const mergedKeys = new Set();  const appendCanonical = parsed => {
     const canonical = resolveBibleReference(parsed.book, parsed.chapter, parsed.from, parsed.to);
     if (!canonical) return;
     const key = `${canonical.book.urlKey}|${canonical.chapter}|${canonical.from}|${canonical.to}`;
@@ -4797,8 +4834,7 @@ function findKjvVerseRangeForSelection(selectionText) {
   // prose. Short exact phrases continue through the normal KJV search path.
   if (words.length < 5) return null;
 
-  const seedLength = words.length >= 8 ? 4 : 3;
-  // Candidate lookup uses longer 3/4-word anchors, but the exact matcher
+  const seedLength = words.length >= 8 ? 4 : 3;  // Candidate lookup uses longer 3/4-word anchors, but the exact matcher
   // uses KJV_PASSAGE_MIN_WORDS (currently 2) as its lookup key. Keep these
   // concerns separate: the longer seed narrows candidate verses, while the
   // matcher positions must use the same key size it actually probes.
@@ -5197,8 +5233,7 @@ function extractKjvPassageSearchQuery(selectionText, excludedVerseTexts = [], op
   };
   const addQuotedCorpusMatches = () => {
     if (!quotedSegments.length || !Array.isArray(KJV_CORPUS_VERSES)) return;
-    for (const quoted of quotedSegments) {
-      const quoteWords = quoted.words;
+    for (const quoted of quotedSegments) {      const quoteWords = quoted.words;
       let best = null;
       const candidateIndexes = candidateVerseIndexesForWords(quoteWords);
       for (const verseIndex of candidateIndexes) {
@@ -5597,8 +5632,7 @@ function removeKjvVerseTextFromSelection(source, refs) {
   const referenceTexts = [...new Set(refs.map(r => String(r?.text || '').trim()).filter(Boolean))]
     .sort((a,b) => b.length - a.length);
   for (const refText of referenceTexts) {
-    const escaped = refText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    remaining = remaining.replace(new RegExp(`(?<![A-Za-z0-9])${escaped}(?![A-Za-z0-9])`, 'ig'), ' ');
+    const escaped = refText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');    remaining = remaining.replace(new RegExp(`(?<![A-Za-z0-9])${escaped}(?![A-Za-z0-9])`, 'ig'), ' ');
   }
 
   // The selected paragraph may contain only part of a cited verse. Find the
@@ -5997,8 +6031,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     // tab-opening critical path. If it produces a different authoritative
     // Criteria query, update the already-open Criteria tab in the background.
     void (async () => {
-      try {
-        const authoritativeDecision = classifySelectionForBlb(text);
+      try {        const authoritativeDecision = classifySelectionForBlb(text);
         const authoritativeQuery = authoritativeDecision?.kjvPassageQuery || '';
         if (authoritativeQuery === fastCriteriaQuery) return;
 
@@ -6398,7 +6431,6 @@ async function updateSelectionContextMenuVisibility(visible) {
     return false;
   }
 }
-
 async function syncWebSelectionContextMenuVisibility(tab) {
   const operation = selectionMenuOperation.then(async () => {
     try {
