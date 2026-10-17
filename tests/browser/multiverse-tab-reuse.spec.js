@@ -64,3 +64,47 @@ test('MultiVerse reuses both 200-verse batches when the same selection is repeat
   expect(new Set(trackedTabs.map(tab => tab.id))).toEqual(new Set(first.tabIds));
   expect(new Set(trackedTabs.map(tab => tab.key)).size).toBe(2);
 });
+
+test('case-sensitive gods search opens and reuses both batches', async ({ context, extensionWorker }) => {
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
+  }));
+
+  const first = await extensionWorker.evaluate(async () => {
+    const handled = await handleCaseSensitiveBCommand('gods', 'newForegroundTab');
+    const tabs = await chrome.tabs.query({
+      url: [
+        'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
+        'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
+      ]
+    });
+    const data = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
+    const tracked = data.blbSuiteMultiVerseTabSets || {};
+    return {
+      handled,
+      tabs: tabs.filter(tab => tracked[String(tab.id)]?.key)
+        .map(tab => ({id:tab.id, key:tracked[String(tab.id)].key}))
+    };
+  });
+  expect(first.handled).toBe(true);
+  expect(first.tabs).toHaveLength(2);
+  expect(first.tabs[0].id).not.toBe(first.tabs[1].id);
+  expect(new Set(first.tabs.map(tab => tab.key)).size).toBe(2);
+
+  const repeated = await extensionWorker.evaluate(async () => {
+    await handleCaseSensitiveBCommand('gods', 'newForegroundTab');
+    const tabs = await chrome.tabs.query({
+      url: [
+        'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
+        'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
+      ]
+    });
+    const data = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
+    const tracked = data.blbSuiteMultiVerseTabSets || {};
+    return tabs.filter(tab => tracked[String(tab.id)]?.key)
+      .map(tab => ({id:tab.id, key:tracked[String(tab.id)].key}));
+  });
+  expect(repeated.map(tab => tab.id).sort()).toEqual(first.tabs.map(tab => tab.id).sort());
+});
