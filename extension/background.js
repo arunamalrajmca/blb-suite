@@ -2471,7 +2471,13 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
     return true;
   }
 
-  if (!shouldUseCaseSensitiveRouting(parsed.query)) {
+  // Apostrophe-bearing words are not guaranteed to appear in the lowercase
+  // case-sensitive routing index as complete possessive tokens. Route them
+  // through the exact-case corpus matcher anyway; it scans the original-case
+  // corpus for apostrophe queries, preserving distinctions such as LORD's,
+  // Lord's, and lord's. Scrambled capitalization is still rejected above.
+  const hasApostrophe = /['’]/.test(parsed.query);
+  if (!hasApostrophe && !shouldUseCaseSensitiveRouting(parsed.query)) {
     await openCaseSensitiveNativeSearch(parsed.rawQuery, disposition);
     return true;
   }
