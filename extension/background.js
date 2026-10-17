@@ -2446,11 +2446,18 @@ function waitForTabTerminalLoad(tabId, timeout = CASE_SENSITIVE_MULTI_VERSE_TAB_
 // still saving the current textbox/session. Wait for that follow-up navigation
 // to finish before creating the next batch. The timeout is a safety valve for
 // BLB versions that process Retrieve without a full navigation.
-function waitForTabNextNavigationComplete(tabId, baselineUrl = '', timeout = CASE_SENSITIVE_MULTI_VERSE_TAB_LOAD_TIMEOUT_MS) {
+const CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_START_TIMEOUT_MS = 2500;
+const CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_COMPLETE_TIMEOUT_MS = 10000;
+
+function waitForTabNextNavigationComplete(tabId, baselineUrl = '') {
   return new Promise(resolve => {
     let settled = false;
     let sawLoading = false;
     let timer = 0;
+    const armTimeout = (timeout) => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(finish, timeout);
+    };
     const finish = () => {
       if (settled) return;
       settled = true;
@@ -2462,16 +2469,23 @@ function waitForTabNextNavigationComplete(tabId, baselineUrl = '', timeout = CAS
       if (updatedTabId !== tabId) return;
       if (changeInfo.status === 'loading') {
         sawLoading = true;
+        armTimeout(CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_COMPLETE_TIMEOUT_MS);
         return;
       }
       if (sawLoading && changeInfo.status === 'complete') finish();
     };
     chrome.tabs.onUpdated.addListener(onUpdated);
-    timer = setTimeout(finish, timeout);
+    // Most batches should proceed after a short grace period if Retrieve does
+    // not navigate. Once navigation starts, allow more time for its completion.
+    armTimeout(CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_START_TIMEOUT_MS);
     chrome.tabs.get(tabId).then(tab => {
       // The follow-up POST may begin or even finish before this waiter is installed.
-      if (tab?.status === 'loading') sawLoading = true;
-      else if (tab?.status === 'complete' && baselineUrl && String(tab.url || '') !== baselineUrl) finish();
+      if (tab?.status === 'loading') {
+        sawLoading = true;
+        armTimeout(CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_COMPLETE_TIMEOUT_MS);
+      } else if (tab?.status === 'complete' && baselineUrl && String(tab.url || '') !== baselineUrl) {
+        finish();
+      }
     }).catch(() => finish());
   });
 }
