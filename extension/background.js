@@ -2991,7 +2991,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   const diagnostic = message.diagnostic && typeof message.diagnostic === 'object' ? message.diagnostic : {};
   diagnosticRecord('[BLB Suite MultiVerse textbox diagnostic relay]', {
     tabId: sender?.tab?.id ?? null,
-    senderUrl: String(sender?.url || '').slice(0, 240),
+    senderUrl: (() => { try { const url = new URL(String(sender?.url || '')); return url.origin + url.pathname; } catch (_) { return ''; } })(),
     stage: String(diagnostic.stage || ''),
     elapsedMs: Number(diagnostic.elapsedMs || 0),
     elementConnected: !!diagnostic.elementConnected,
