@@ -2880,7 +2880,7 @@ function diagnosticTabOperation(kind, args) {
   const properties = kind === 'create' ? first : args?.[1];
   const targetUrl = String(properties?.url || '');
   const tabId = kind === 'create' ? null : (typeof first === 'number' ? first : null);
-  const isMultiVerseUrl = /blueletterbible\\.org/i.test(targetUrl) && /MultiVerse\\.cfm|blbSuiteMultiVerse=1/i.test(targetUrl);
+  const isMultiVerseUrl = /blueletterbible\.org/i.test(targetUrl) && /MultiVerse\.cfm|blbSuiteMultiVerse=1/i.test(targetUrl);
   if (isMultiVerseUrl || (tabId != null && diagnosticMultiVerseTabIds.has(tabId) && (kind === 'remove' || targetUrl))) {
     let parsed = null;
     try { parsed = new URL(targetUrl); } catch (_) {}
@@ -2888,10 +2888,10 @@ function diagnosticTabOperation(kind, args) {
       operation: kind,
       tabId,
       urlProvided: !!targetUrl,
-      pageType: /multiverse\\.cfm/i.test(parsed?.pathname || '') ? 'MultiVerse' : '',
+      pageType: /multiverse\.cfm/i.test(parsed?.pathname || '') ? 'MultiVerse' : '',
       hasHandoffMarker: /[?&]blbSuiteMultiVerse=1(?:&|$)/i.test(targetUrl),
       isHistoricalSessionUrl: /[?&]s=00LCeE(?:&|$)/i.test(targetUrl),
-      caller: String(new Error().stack || '').split('\\n').slice(2, 6).map(line => line.trim())
+      caller: String(new Error().stack || '').split('\n').slice(2, 6).map(line => line.trim())
     });
   }
 }
@@ -3948,8 +3948,8 @@ const dynamicRules = [
   {id:2,priority:1,action:{type:"redirect",redirect:{regexSubstitution:"https://www.blueletterbible.org/kjv/\\1/\\2/\\3/"}}}
 ];
 
-dynamicRules[0].condition={regexFilter:"^https://www\\.blueletterbible\\.org/net/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)-([a-zA-Z0-9]+)/s_\\d+$",resourceTypes:["main_frame"]};
-dynamicRules[1].condition={regexFilter:"^https://www\\.blueletterbible\\.org/net/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)/s_\\d+$",resourceTypes:["main_frame"]};
+dynamicRules[0].condition={regexFilter:"^https://www\\.blueletterbible\.org/net/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)-([a-zA-Z0-9]+)/s_\\d+$",resourceTypes:["main_frame"]};
+dynamicRules[1].condition={regexFilter:"^https://www\\.blueletterbible\.org/net/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)/s_\\d+$",resourceTypes:["main_frame"]};
 
 async function installRules() {
   try {
