@@ -1000,8 +1000,88 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       await new Promise(resolve=>setTimeout(resolve,25));
     }
     if (actual!==combined) {
+      console.warn('[BLB Suite MultiVerse textbox diagnostic] initial-value-mismatch', {
+        page: location.href,
+        refCount: refs.length,
+        expectedLength: combined.length,
+        actualLength: actual.length,
+        expectedStart: combined.slice(0, 120),
+        expectedEnd: combined.slice(-120),
+        actualStart: actual.slice(0, 120),
+        actualEnd: actual.slice(-120)
+      });
       revealPendingMultiVerseView();
       return false;
+    }
+
+    const currentBeforeRetrieve = String(primary.value || primary.getAttribute("value") || "").trim();
+    console.info('[BLB Suite MultiVerse textbox diagnostic] before-retrieve', {
+      page: location.href,
+      refCount: refs.length,
+      expectedLength: combined.length,
+      actualLength: currentBeforeRetrieve.length,
+      matchesExpected: currentBeforeRetrieve === combined,
+      expectedStart: combined.slice(0, 120),
+      expectedEnd: combined.slice(-120),
+      actualStart: currentBeforeRetrieve.slice(0, 120),
+      actualEnd: currentBeforeRetrieve.slice(-120),
+      hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(currentBeforeRetrieve)
+    });
+
+    // Diagnostic only: observe the textbox after the initial handoff to catch a later overwrite.
+    // Polling is bounded and read-only; it does not dispatch events or change page state.
+    {
+      const diagnosticStartedAt = Date.now();
+      let lastObservedElement = primary;
+      const findCurrentPrimary = () => {
+        const currentHeading = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
+          .find(el => /^\s*multiverse retrieval\s*$/i.test((el.innerText || el.textContent || "").trim()));
+        if (!currentHeading) return primary.isConnected ? primary : null;
+        const currentAdvancedHeading = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
+          .find(el => /^\s*advanced multiverse search options\s*$/i.test((el.innerText || el.textContent || "").trim()));
+        const controls = Array.from(document.querySelectorAll("input[type=text], textarea, input:not([type])"));
+        const afterCurrentHeading = el => !!(currentHeading.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+        const beforeCurrentAdvanced = el => !currentAdvancedHeading || !!(currentAdvancedHeading.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING);
+        return controls.find(el => afterCurrentHeading(el) && beforeCurrentAdvanced(el)) || (primary.isConnected ? primary : null);
+      };
+      const describeValue = (stage, element, value) => ({
+        page: location.href,
+        elapsedMs: Date.now() - diagnosticStartedAt,
+        stage,
+        elementConnected: !!element?.isConnected,
+        elementChanged: element !== lastObservedElement,
+        valueLength: value.length,
+        matchesExpected: value === combined,
+        valueStart: value.slice(0, 120),
+        valueEnd: value.slice(-120),
+        hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(value),
+        isRevelation22_7_21: /Revelation\s+22:7-21/i.test(value)
+      });
+      console.info('[BLB Suite MultiVerse textbox diagnostic] watch-start', describeValue('before-retrieve', primary, currentBeforeRetrieve));
+      let previousElement = primary;
+      let previousValue = currentBeforeRetrieve;
+      const watchTimer = window.setInterval(() => {
+        const element = findCurrentPrimary();
+        const value = String(element?.value || element?.getAttribute?.("value") || "").trim();
+        if (element !== previousElement || value !== previousValue) {
+          console.info('[BLB Suite MultiVerse textbox diagnostic] value-change', describeValue('poll', element, value));
+          previousElement = element;
+          previousValue = value;
+          lastObservedElement = element;
+        }
+        if (Date.now() - diagnosticStartedAt >= 30000) {
+          window.clearInterval(watchTimer);
+          console.info('[BLB Suite MultiVerse textbox diagnostic] watch-end', {
+            page: location.href,
+            elapsedMs: Date.now() - diagnosticStartedAt,
+            finalValueLength: previousValue.length,
+            finalValueStart: previousValue.slice(0, 120),
+            finalValueEnd: previousValue.slice(-120),
+            hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(previousValue),
+            isRevelation22_7_21: /Revelation\s+22:7-21/i.test(previousValue)
+          });
+        }
+      }, 100);
     }
 
     await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
