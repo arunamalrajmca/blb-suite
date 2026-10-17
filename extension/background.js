@@ -767,6 +767,41 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true) {
   };
 }
 
+// Shared destination identity/reuse/creation coordinator for BLB tabs.
+// Feature-specific code supplies only its identity and any handoff-specific
+// lookup/creation steps; locking and activation policy stay centralized.
+const pendingBlbDestinationOperations = new Map();
+
+async function openBlbDestinationByIdentity({key, active = false, findExisting, create}) {
+  const identity = String(key || '');
+  if (!identity) throw new Error('A BLB destination identity is required');
+  const pending = pendingBlbDestinationOperations.get(identity);
+  if (pending) {
+    const result = await pending;
+    if (active && result?.tab?.id != null) {
+      await chrome.tabs.update(result.tab.id, {active:true}).catch(()=>{});
+      if (result.tab.windowId != null) await chrome.windows.update(result.tab.windowId, {focused:true}).catch(()=>{});
+    }
+    return result;
+  }
+  const operation = (async () => {
+    const existing = await findExisting();
+    if (existing?.id != null) {
+      if (active) {
+        await chrome.tabs.update(existing.id, {active:true}).catch(()=>{});
+        if (existing.windowId != null) await chrome.windows.update(existing.windowId, {focused:true}).catch(()=>{});
+      }
+      return {tab:existing, reused:true};
+    }
+    return {tab:await create(), reused:false};
+  })();
+  pendingBlbDestinationOperations.set(identity, operation);
+  try { return await operation; }
+  finally {
+    if (pendingBlbDestinationOperations.get(identity) === operation) pendingBlbDestinationOperations.delete(identity);
+  }
+}
+
 async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false) {
   // Enforce the cap again at the final handoff boundary. This ensures the
   // references actually stored for the MultiVerse textbox cannot expand to
@@ -784,61 +819,45 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
   // Restrict the lookup to BLB MultiVerse handoff tabs rather than every
   // browser tab. This keeps MultiVerse selection latency independent of the
   // user's total tab count.
-  const tabs = await chrome.tabs.query({
-    url: [
-      'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
-      'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
-    ]
-  });
-  // Compare by the actual verse set, not by the caller's compact reference
-  // spelling. Different ranges can describe the same batch while producing
-  // different compact-reference keys.
   const verseSetKey = canonicalMultiVerseSet(finalVerses).key;
-  const existing = await findMatchingMultiVerseTab(verseSetKey, tabs);
-  if (existing?.id != null) {
-    if (active) {
-      try { await chrome.tabs.update(existing.id, {active:true}); } catch (_) {}
-      if (existing.windowId != null) { try { await chrome.windows.update(existing.windowId, {focused:true}); } catch (_) {} }
-    }
-    return {ok:true, count:canonical.refs.length, reused:true, tabId:existing.id};
-  }
-
-  const multiVerseUrl = "https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1";
-  // Create an inert tab first so the MultiVerse content script cannot run
-  // before its per-tab reference payload has been committed to storage.
-  const tab = await chrome.tabs.create({url:'about:blank', active:!!active});
-  if (tab?.id == null) return {ok:false, reason:'tab-create-failed'};
-
-  // Commit both tracking and the pending handoff before navigating to BLB.
-  const pending = await chrome.storage.local.get({
-    blbSuiteMultiVerseTabSets:{},
-    blbSuitePendingMultiVerseRefsByTab:{}
-  });
-  const trackedMap = pending.blbSuiteMultiVerseTabSets && typeof pending.blbSuiteMultiVerseTabSets === 'object'
-    ? {...pending.blbSuiteMultiVerseTabSets} : {};
-  trackedMap[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
-  const pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object'
-    ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
-  pendingMap[String(tab.id)] = canonical.refs;
-  await chrome.storage.local.set({
-    blbSuiteMultiVerseTabSets:trackedMap,
-    blbSuitePendingMultiVerseRefsByTab:pendingMap
-  });
-
+  let navigationError = null;
+  let result;
   try {
-    await chrome.tabs.update(tab.id, {url:multiVerseUrl});
+    result = await openBlbDestinationByIdentity({
+      key:`multiverse|${verseSetKey}`, active:!!active,
+      findExisting:async () => {
+        const tabs = await chrome.tabs.query({url:[
+          'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
+          'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
+        ]});
+        return findMatchingMultiVerseTab(verseSetKey, tabs);
+      },
+      create:async () => {
+        const tab = await chrome.tabs.create({url:'about:blank', active:!!active});
+        if (tab?.id == null) return null;
+        const pending = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}, blbSuitePendingMultiVerseRefsByTab:{}});
+        const trackedMap = pending.blbSuiteMultiVerseTabSets && typeof pending.blbSuiteMultiVerseTabSets === 'object' ? {...pending.blbSuiteMultiVerseTabSets} : {};
+        trackedMap[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
+        const pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
+        pendingMap[String(tab.id)] = canonical.refs;
+        await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap});
+        try {
+          await chrome.tabs.update(tab.id, {url:'https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1'});
+        } catch (error) {
+          navigationError = error;
+          delete trackedMap[String(tab.id)]; delete pendingMap[String(tab.id)];
+          await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap}).catch(()=>{});
+          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+          throw error;
+        }
+        return tab;
+      }
+    });
   } catch (error) {
-    // Do not leave a dangling payload that could be mistaken for a later
-    // navigation in this tab if the destination update fails.
-    delete trackedMap[String(tab.id)];
-    delete pendingMap[String(tab.id)];
-    await chrome.storage.local.set({
-      blbSuiteMultiVerseTabSets:trackedMap,
-      blbSuitePendingMultiVerseRefsByTab:pendingMap
-    }).catch(()=>{});
-    return {ok:false, reason:'tab-navigation-failed', error:String(error)};
+    return {ok:false, reason:navigationError ? 'tab-navigation-failed' : 'tab-open-failed', error:String(error)};
   }
-  return {ok:true, count:canonical.refs.length, reused:false, tabId:tab.id};
+  if (result?.tab?.id == null) return {ok:false, reason:'tab-create-failed'};
+  return {ok:true, count:canonical.refs.length, reused:!!result.reused, tabId:result.tab.id};
 }
 
 async function getStudyTopicHistory(topic) {
@@ -2376,38 +2395,19 @@ function canonicalCaseSensitiveDestinationKey(url) {
   }
 }
 
-const pendingCaseSensitiveDestinations = new Map();
-
 async function openCaseSensitiveDestination(url, active) {
   const target = String(url || '');
   const key = canonicalCaseSensitiveDestinationKey(target);
-  if (pendingCaseSensitiveDestinations.has(key)) {
-    const pending = await pendingCaseSensitiveDestinations.get(key);
-    if (active && pending?.id != null) await chrome.tabs.update(pending.id, {active:true}).catch(()=>{});
-    return pending;
-  }
-
-  const operation = (async () => {
-    const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
-    const existing = tabs.find(tab =>
-      canonicalCaseSensitiveDestinationKey(tab?.pendingUrl || tab?.url || '') === key
-    );
-    if (existing?.id != null) {
-      if (active) {
-        await chrome.tabs.update(existing.id, {active:true}).catch(()=>{});
-        if (existing.windowId != null) await chrome.windows.update(existing.windowId, {focused:true}).catch(()=>{});
-      }
-      return existing;
-    }
-    return chrome.tabs.create({url:target, active:!!active});
-  })();
-
-  pendingCaseSensitiveDestinations.set(key, operation);
-  try {
-    return await operation;
-  } finally {
-    if (pendingCaseSensitiveDestinations.get(key) === operation) pendingCaseSensitiveDestinations.delete(key);
-  }
+  const result = await openBlbDestinationByIdentity({
+    key, active:!!active,
+    findExisting:async () => {
+      const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
+      return tabs.find(tab => [tab?.url, tab?.pendingUrl].filter(Boolean)
+        .some(candidate => canonicalCaseSensitiveDestinationKey(candidate) === key)) || null;
+    },
+    create:() => chrome.tabs.create({url:target, active:!!active})
+  });
+  return result?.tab || null;
 }
 
 async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
