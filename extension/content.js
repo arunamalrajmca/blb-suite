@@ -397,7 +397,9 @@ html = html.replace(
     const match = verseLinks.find(link =>
       link.urlKey === urlKey &&
       link.chapter === Number(chapter) &&
-      link.verse === Number(verse)    );
+      link.verse === Number(verse)
+    );
+
     if (!match) return whole;
 
     hyperlinkCount++;
@@ -795,8 +797,10 @@ if (location.hostname==="webstersdictionary1828.com") {
   async function addWebsterMultiVerseButton() {
     if (!(await isSuiteEnabled())) return;
     if (!document.body || document.getElementById("blb-suite-webster-multiverse")) return;
-    const mount=document.body || document.documentElement;    if (!mount) return;
-    const button=document.createElement("button");    button.id="blb-suite-webster-multiverse";
+    const mount=document.body || document.documentElement;
+    if (!mount) return;
+    const button=document.createElement("button");
+    button.id="blb-suite-webster-multiverse";
     button.type="button";
     button.textContent="Open Bible References in BLB";
     button.title="Collect all Bible-reference links on this Webster's 1828 page and open them together in BLB MultiVerse.";
@@ -1191,11 +1195,13 @@ function normalizeDoubleClickToken(value) {
   return String(value || '').trim().replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '').toLowerCase();
 }
 
-// ---------- Context-aware Bible reference resolver ----------// This resolver is intentionally local and tightly gated. It looks only at a
+// ---------- Context-aware Bible reference resolver ----------
+// This resolver is intentionally local and tightly gated. It looks only at a
 // small text block surrounding the current selection, and only when the
 // selected token is a recognized book/alias or a plausible chapter/verse
 // number. It reuses the same book aliases already used by the Omnibox.
-function getAdjacentBoundaryText(direction, maxChars = 220) {  try {
+function getAdjacentBoundaryText(direction, maxChars = 220) {
+  try {
     const sel = window.getSelection?.();
     if (!sel || !sel.rangeCount || sel.isCollapsed) return '';
     const range = sel.getRangeAt(0);
@@ -1589,12 +1595,14 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         const bounded = Math.max(0, Math.min(rawText.length, offset));
         const prefix = rawText.slice(0, bounded);
         const normalizedPrefix = normalizeSelectionText(prefix).normalize('NFKC');
-        // Prefix normalization trims trailing whitespace; restore one space        // when it separates this prefix from the next visible token.
+        // Prefix normalization trims trailing whitespace; restore one space
+        // when it separates this prefix from the next visible token.
         const separator = normalizedPrefix.length > 0 &&
           bounded < rawText.length &&
           /[\s\u00A0\u2007\u202F]$/.test(prefix) &&
           /\S/.test(rawText.slice(bounded));
-        return normalizedPrefix.length + (separator ? 1 : 0);      };
+        return normalizedPrefix.length + (separator ? 1 : 0);
+      };
       try {
         const contextualTarget = getDoubleClickTargetElement(event) || initialNode;
         if (contextualTarget && candidate.contains(contextualTarget)) {
@@ -1987,13 +1995,15 @@ function getDoubleClickSelection(event) {
 }
 
 function handleDoubleClickBlb(event) {
-  try {    if (!suiteEnabled || isSensitiveSiteHostname(location.hostname) || isDoubleClickExcludedTarget(event.target)) return;
+  try {
+    if (!suiteEnabled || isSensitiveSiteHostname(location.hostname) || isDoubleClickExcludedTarget(event.target)) return;
 
     // Chromium may dispatch dblclick before the new word selection has replaced
     // the previous native selection. Never freeze that early selection/context:
     // a stale selection can make a real chapter-number double-click inherit an
     // unrelated reference from the preceding gesture.
-    if (!doubleClickSettingsReady) {      void ensureDoubleClickSettingsReady().then(() => {
+    if (!doubleClickSettingsReady) {
+      void ensureDoubleClickSettingsReady().then(() => {
         if (doubleClickBlbEnabled) handleDoubleClickBlb(event);
       });
       return;
@@ -2385,14 +2395,16 @@ function addBlbPageSelectionButton() {
   button.addEventListener('click', e => {
     e.preventDefault();
     e.stopPropagation();
-    const text = blbPageButtonSelection || getSelectedPageText();    if (!text || !suiteEnabled) {
+    const text = blbPageButtonSelection || getSelectedPageText();
+    if (!text || !suiteEnabled) {
       pageButtonActionInProgress = false;
       return;
     }
     // Ignore stale content-script contexts if the extension was reloaded.
     safeRuntimeSendMessage({
       type:'blbSuiteOpenSelectionText',
-      text,      contextualReference: blbPageButtonContextualReference || null,
+      text,
+      contextualReference: blbPageButtonContextualReference || null,
       directUrl: blbPageButtonDirectUrl || null,
       tabBehavior:{activeIfNew:true,activateExisting:true}
     });
