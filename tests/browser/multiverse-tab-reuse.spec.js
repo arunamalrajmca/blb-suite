@@ -127,6 +127,33 @@ test('case-sensitive gods search opens and reuses both batches', async ({ contex
   expect(repeated.map(tab => tab.verseCount).sort((a,b) => b-a)).toEqual([200,14]);
 });
 
+test('b v1 reuses its originating tab and leaves no blank command tab', async ({ context, extensionWorker }) => {
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
+  }));
+
+  const result = await extensionWorker.evaluate(async () => {
+    const origin = await chrome.tabs.create({url:'about:blank', active:true});
+    await handleBCommand('v1', 'currentTab');
+    const tabs = await chrome.tabs.query({});
+    const originAfter = await chrome.tabs.get(origin.id).catch(() => null);
+    const data = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
+    const tracked = data.blbSuiteMultiVerseTabSets || {};
+    return {
+      originId:origin.id,
+      originUrl:originAfter?.url || null,
+      blankTabs:tabs.filter(tab => /^about:blank(?:[#?].*)?$/i.test(String(tab.url || ''))).map(tab => tab.id),
+      trackedIds:tabs.filter(tab => tracked[String(tab.id)]?.key).map(tab => tab.id)
+    };
+  });
+
+  expect(result.originUrl).toContain('blueletterbible.org/tools/MultiVerse.cfm');
+  expect(result.blankTabs).not.toContain(result.originId);
+  expect(result.trackedIds).toContain(result.originId);
+});
+
 test('case-sensitive search reuses the originating tab and leaves no blank orphan', async ({ context, extensionWorker }) => {
   await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
     status: 200,
