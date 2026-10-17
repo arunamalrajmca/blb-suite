@@ -1344,8 +1344,16 @@ document.addEventListener('click', event => {
 });
 
 (async () => {
-  render(await getState());
-  document.body.classList.remove('popup-loading');
+  // A failed tabs/storage read must not leave the toolbar popup permanently
+  // hidden. Keep normal rendering unchanged; on initialization failure, expose
+  // the existing UI so the user can recover instead of seeing a blank popup.
+  try {
+    render(await getState());
+  } catch (error) {
+    console.error('BLB Suite popup initialization failed:', error);
+  } finally {
+    document.body.classList.remove('popup-loading');
+  }
   await loadSelectedTopic();
   await refreshStudyState();
   await refreshStudyAutoStop();
