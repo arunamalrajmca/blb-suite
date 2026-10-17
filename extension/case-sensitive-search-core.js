@@ -37,19 +37,18 @@
     const words=normalizeCaseSensitiveWords(query);
     if(!words.length||!Array.isArray(corpus)) return [];
     const allowedBooks=filter&&Array.isArray(filter.bookNumbers)?new Set(filter.bookNumbers.map(Number)):null;
-    let candidateIndexes=null;
-    if(index && typeof index==='object') {
-      const lists=words.map(w=>Array.isArray(index[w])?index[w]:null).filter(Boolean);
-      if(lists.length){ candidateIndexes=lists.sort((a,b)=>a.length-b.length)[0]; }
-    }
+    // Search the full original-case corpus instead of trusting the compact
+    // candidate index. That index is intentionally partial and can omit valid
+    // capitalization spellings or verse candidates; using even one partial
+    // token list can silently drop exact-case matches for single- and
+    // multi-word queries. A full scan makes this behavior generic for every
+    // spelling and capitalization combination in the corpus.
+    void index;
     const out=[];
-    if(candidateIndexes){
-      for(const idx of candidateIndexes){ const entry=corpus[idx]; if(entry && (!allowedBooks || allowedBooks.has(Number(entry[0]))) && containsExactSequence(normalizeCaseSensitiveWords(entry[3]),words)) out.push(entry); }
-      return out;
-    }
     for(const entry of corpus){
+      if(!entry || (allowedBooks && !allowedBooks.has(Number(entry[0])))) continue;
       const tokens=normalizeCaseSensitiveWords(entry[3]);
-      if((!allowedBooks || allowedBooks.has(Number(entry[0]))) && containsExactSequence(tokens,words)) out.push(entry);
+      if(containsExactSequence(tokens,words)) out.push(entry);
     }
     return out;
   }
