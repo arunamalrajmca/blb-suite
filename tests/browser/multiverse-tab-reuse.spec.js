@@ -205,6 +205,7 @@ test('case-sensitive apostrophe search finds all capitalization variants with an
     ).map(entry => entry[2]);
     return {
       lordsUpper: search("LORD'S"),
+      lordsUpperLowerSuffix: search("LORD's"),
       lordsTitle: search("Lord's"),
       lordsLower: search("lord's"),
       childrensLower: search("children's"),
@@ -214,6 +215,9 @@ test('case-sensitive apostrophe search finds all capitalization variants with an
   });
 
   expect(result.lordsUpper).toEqual([1]);
+  // The grammatical possessive suffix's s/S is not a capitalization
+  // distinction; the base word's case remains exact.
+  expect(result.lordsUpperLowerSuffix).toEqual([1]);
   expect(result.lordsTitle).toEqual([2]);
   expect(result.lordsLower).toEqual([3]);
   expect(result.childrensLower).toEqual([4]);
