@@ -6,6 +6,10 @@
       .replace(/[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g,'')
       .replace(/[\u00A0\u2007\u202F]/g,' ')
       .replace(/[\u2018\u2019]/g,"'")
+      // The possessive suffix is grammatical, not a capitalization signal.
+      // Canonicalize only its final s/S so LORD's matches corpus LORD'S,
+      // while preserving the base-word distinction: LORD's, Lord's, lord's.
+      .replace(/'S\b/g, "'s")
       .replace(/[^A-Za-z0-9'\-]+/g,' ')
       .replace(/\s+/g,' ')
       .trim()
@@ -37,19 +41,21 @@
     const words=normalizeCaseSensitiveWords(query);
     if(!words.length||!Array.isArray(corpus)) return [];
     const allowedBooks=filter&&Array.isArray(filter.bookNumbers)?new Set(filter.bookNumbers.map(Number)):null;
-    let candidateIndexes=null;
-    if(index && typeof index==='object') {
-      const lists=words.map(w=>Array.isArray(index[w])?index[w]:null).filter(Boolean);
-      if(lists.length){ candidateIndexes=lists.sort((a,b)=>a.length-b.length)[0]; }
-    }
+    // Possessive/apostrophe spellings are the targeted exception: scan the
+    // original-case corpus so every capitalization variant is covered even
+    // if a compact candidate index is incomplete. Keep the existing indexed
+    // path for ordinary words to avoid imposing a full-corpus scan on them.
+    const needsApostropheScan=words.some(word=>word.includes("'"));
+    const candidates=needsApostropheScan
+      ? corpus
+      : (index && Array.isArray(index[words[0]])
+          ? index[words[0]].map(i=>corpus[i]).filter(Boolean)
+          : []);
     const out=[];
-    if(candidateIndexes){
-      for(const idx of candidateIndexes){ const entry=corpus[idx]; if(entry && (!allowedBooks || allowedBooks.has(Number(entry[0]))) && containsExactSequence(normalizeCaseSensitiveWords(entry[3]),words)) out.push(entry); }
-      return out;
-    }
-    for(const entry of corpus){
+    for(const entry of candidates){
+      if(!entry || (allowedBooks && !allowedBooks.has(Number(entry[0])))) continue;
       const tokens=normalizeCaseSensitiveWords(entry[3]);
-      if((!allowedBooks || allowedBooks.has(Number(entry[0]))) && containsExactSequence(tokens,words)) out.push(entry);
+      if(containsExactSequence(tokens,words)) out.push(entry);
     }
     return out;
   }
