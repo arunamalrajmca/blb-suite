@@ -695,14 +695,56 @@ function compactMultiVerseVerses(verses) {
 // Otherwise two identical selections can both pass the existing-tab check before
 // either request has finished reserving every batch.
 let pendingMultiVerseRequest = Promise.resolve();
+let multiVerseDiagnosticSequence = 0;
+
+function summarizeMultiVerseRefsForDiagnostics(refs) {
+  return (Array.isArray(refs) ? refs : []).map(ref => ({
+    book: String(ref?.book || ''),
+    chapter: Number(ref?.chapter) || null,
+    from: ref?.from == null ? null : Number(ref.from),
+    to: ref?.to == null ? null : Number(ref.to),
+    version: String(ref?.version || 'kjv')
+  }));
+}
 
 function openBlbMultiVerseRefs(refs, active = true, options = {}) {
+  const diagnosticId = ++multiVerseDiagnosticSequence;
+  const stack = String(new Error().stack || '').split('\n').slice(2, 7).map(line => line.trim());
+  console.info('[BLB Suite MultiVerse diagnostic] request-start', {
+    diagnosticId,
+    sourceStack: stack,
+    active: !!active,
+    preferredTabId: options?.preferredTabId ?? null,
+    refs: summarizeMultiVerseRefsForDiagnostics(refs)
+  });
   const run = pendingMultiVerseRequest.then(
     () => openBlbMultiVerseRefsSerialized(refs, active, options),
     () => openBlbMultiVerseRefsSerialized(refs, active, options)
   );
-  pendingMultiVerseRequest = run.then(() => undefined, () => undefined);
-  return run;
+  const diagnosedRun = run.then(result => {
+    console.info('[BLB Suite MultiVerse diagnostic] request-finish', {
+      diagnosticId,
+      ok: !!result?.ok,
+      reason: result?.reason || null,
+      count: result?.count ?? null,
+      batchCount: result?.batchCount ?? null,
+      tabIds: result?.tabIds || (result?.tabId != null ? [result.tabId] : []),
+      batches: (result?.results || []).map(item => ({
+        batch: item.batch ?? null,
+        tabId: item.tabId ?? null,
+        reused: !!item.reused,
+        count: item.count ?? null
+      }))
+    });
+    return result;
+  }, error => {
+    console.warn('[BLB Suite MultiVerse diagnostic] request-error', {
+      diagnosticId, error: String(error)
+    });
+    throw error;
+  });
+  pendingMultiVerseRequest = diagnosedRun.then(() => undefined, () => undefined);
+  return diagnosedRun;
 }
 
 async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}) {
@@ -5700,6 +5742,12 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // Start MultiVerse immediately, derive a corpus-validated residual Criteria
   // term in parallel, then run the full classifier only for reconciliation.
   const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
+  console.info('[BLB Suite PDF selection diagnostic] parsed-selection', {
+    sourceLength: text.length,
+    explicitReferenceCount: selectedRefs.length,
+    refs: summarizeMultiVerseRefsForDiagnostics(selectedRefs),
+    hasContextualReference: !!contextualRef?.url
+  });
   if (selectedRefs.length >= 2) {
     const excludedVerseTexts = selectedRefs
       .map(ref => getKjvVerseTextForSelectionRef(ref))
@@ -5713,6 +5761,12 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       selectedRefs,
       !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
     );
+    console.info('[BLB Suite PDF selection diagnostic] destinations-planned', {
+      explicitReferenceCount: selectedRefs.length,
+      multiVerseRequested: true,
+      criteriaSearchRequested: !!fastCriteriaQuery,
+      criteriaQueryLength: fastCriteriaQuery ? fastCriteriaQuery.length : 0
+    });
     const criteriaOpen = fastCriteriaQuery
       ? openBlbDestination(
           `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(fastCriteriaQuery).replace(/%20/g,'+')}`,
@@ -5725,6 +5779,13 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     // at which the user has both destinations available; the expensive
     // classifier runs afterward while the service worker remains active.
     const [referenceTab, criteriaTab] = await Promise.all([referenceOpen, criteriaOpen, studyCapture]);
+    console.info('[BLB Suite PDF selection diagnostic] destinations-opened', {
+      multiVerseTabIds: referenceTab?.tabIds || (referenceTab?.tabId != null ? [referenceTab.tabId] : []),
+      multiVerseOk: !!referenceTab?.ok,
+      multiVerseBatchCount: referenceTab?.batchCount ?? null,
+      criteriaTabId: criteriaTab?.id ?? criteriaTab?.tab?.id ?? null,
+      criteriaSearchRequested: !!fastCriteriaQuery
+    });
 
     // Return immediately after both destination tabs are created. The full
     // classifier is correctness/reconciliation work, not part of the user's
