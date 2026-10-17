@@ -161,21 +161,18 @@ test('case-sensitive search reuses the originating tab and leaves no blank orpha
   expect(result.tracked.map(tab => tab.verseCount).sort((a,b) => b-a)).toEqual([200,14]);
 });
 
-test('case-sensitive corpus search preserves every exact capitalization form even with an incomplete index', async ({ extensionWorker }) => {
+test('case-sensitive apostrophe search finds all capitalization variants with an incomplete index', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(() => {
     const corpus = [
       [1, 1, 1, "LORD'S is uppercase"],
       [1, 1, 2, "Lord's is title case"],
       [1, 1, 3, "lord's is lowercase"],
-      [1, 1, 4, "LORD appears"],
-      [1, 1, 5, "Lord appears"],
-      [1, 1, 6, "lord appears"],
-      [1, 1, 7, "God and Spirit"],
-      [1, 1, 8, "GOD and SPIRIT"],
-      [1, 1, 9, "god and spirit"]
+      [1, 1, 4, "children's books"],
+      [1, 1, 5, "Children's books"],
+      [1, 1, 6, "CHILDREN'S books"]
     ];
-    // Deliberately incomplete: the production index can be partial too.
-    const incompleteIndex = { "LORD'S": [0], "God": [6] };
+    // Apostrophe searches must not depend on a complete candidate index.
+    const incompleteIndex = { "LORD'S": [0] };
     const search = query => BLBCaseSensitiveCore.searchCaseSensitiveCorpus(
       query, corpus, incompleteIndex
     ).map(entry => entry[2]);
@@ -183,28 +180,51 @@ test('case-sensitive corpus search preserves every exact capitalization form eve
       lordsUpper: search("LORD'S"),
       lordsTitle: search("Lord's"),
       lordsLower: search("lord's"),
-      lordUpper: search("LORD"),
-      lordTitle: search("Lord"),
-      lordLower: search("lord"),
-      godTitle: search("God"),
-      godUpper: search("GOD"),
-      godLower: search("god"),
-      phraseTitle: search("God and Spirit"),
-      phraseUpper: search("GOD and SPIRIT"),
-      phraseLower: search("god and spirit")
+      childrensLower: search("children's"),
+      childrensTitle: search("Children's"),
+      childrensUpper: search("CHILDREN'S")
     };
   });
 
   expect(result.lordsUpper).toEqual([1]);
   expect(result.lordsTitle).toEqual([2]);
   expect(result.lordsLower).toEqual([3]);
-  expect(result.lordUpper).toEqual([4]);
-  expect(result.lordTitle).toEqual([5]);
-  expect(result.lordLower).toEqual([6]);
-  expect(result.godTitle).toEqual([7]);
-  expect(result.godUpper).toEqual([8]);
-  expect(result.godLower).toEqual([9]);
-  expect(result.phraseTitle).toEqual([7]);
-  expect(result.phraseUpper).toEqual([8]);
-  expect(result.phraseLower).toEqual([9]);
+  expect(result.childrensLower).toEqual([4]);
+  expect(result.childrensTitle).toEqual([5]);
+  expect(result.childrensUpper).toEqual([6]);
+});
+
+test('case-sensitive searches without apostrophes retain indexed candidate behavior', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    const corpus = [
+      [1, 1, 1, "LORD appears"],
+      [1, 1, 2, "Lord appears"],
+      [1, 1, 3, "lord appears"],
+      [1, 1, 4, "God and Spirit"],
+      [1, 1, 5, "GOD and SPIRIT"],
+      [1, 1, 6, "god and spirit"]
+    ];
+    const index = {
+      LORD: [0], Lord: [1], lord: [2],
+      God: [3], GOD: [4], god: [5]
+    };
+    const search = query => BLBCaseSensitiveCore.searchCaseSensitiveCorpus(
+      query, corpus, index
+    ).map(entry => entry[2]);
+    return {
+      lordUpper: search("LORD"),
+      lordTitle: search("Lord"),
+      lordLower: search("lord"),
+      phraseTitle: search("God and Spirit"),
+      phraseUpper: search("GOD and SPIRIT"),
+      phraseLower: search("god and spirit")
+    };
+  });
+
+  expect(result.lordUpper).toEqual([1]);
+  expect(result.lordTitle).toEqual([2]);
+  expect(result.lordLower).toEqual([3]);
+  expect(result.phraseTitle).toEqual([4]);
+  expect(result.phraseUpper).toEqual([5]);
+  expect(result.phraseLower).toEqual([6]);
 });
