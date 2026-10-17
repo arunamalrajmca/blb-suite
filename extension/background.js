@@ -2969,6 +2969,7 @@ function recordMultiVerseWebNavigation(eventName, details) {
 if (chrome.webNavigation?.onBeforeNavigate) {
   chrome.webNavigation.onBeforeNavigate.addListener(details => recordMultiVerseWebNavigation('before-navigate', details));
   chrome.webNavigation.onCommitted.addListener(details => recordMultiVerseWebNavigation('committed', details));
+  chrome.webNavigation.onCompleted.addListener(details => recordMultiVerseWebNavigation('completed', details));
   chrome.webNavigation.onHistoryStateUpdated.addListener(details => recordMultiVerseWebNavigation('history-state-updated', details));
 }
 
@@ -3052,7 +3053,14 @@ chrome.runtime.onMessage.addListener((message, sender) => {
     isRevelation22_7_21: !!diagnostic.isRevelation22_7_21,
     expectedAvailable: diagnostic.expectedAvailable !== false,
     documentReadyState: String(diagnostic.documentReadyState || ''),
-    searchParamS: String(diagnostic.searchParamS || '').slice(0, 80)
+    searchParamS: String(diagnostic.searchParamS || '').slice(0, 80),
+    documentId: String(sender?.documentId || '').slice(0, 100),
+    frameId: sender?.frameId ?? null,
+    formActionPath: String(diagnostic.formActionPath || '').slice(0, 200),
+    formMethod: String(diagnostic.formMethod || '').slice(0, 20),
+    submitterLabel: String(diagnostic.submitterLabel || '').slice(0, 40),
+    defaultPreventedAtCapture: !!diagnostic.defaultPreventedAtCapture,
+    navigationType: String(diagnostic.navigationType || '').slice(0, 40)
   });
 });
 
