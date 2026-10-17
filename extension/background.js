@@ -826,10 +826,16 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
     result = await openBlbDestinationByIdentity({
       key:`multiverse|${verseSetKey}`, active:!!active,
       findExisting:async () => {
-        const tabs = await chrome.tabs.query({url:[
-          'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
-          'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
-        ]});
+        const [multiVerseTabs, blankTabs] = await Promise.all([
+          chrome.tabs.query({url:[
+            'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
+            'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
+          ]}),
+          // A tab can be reserved and tracked before its first navigation.
+          // Include those inert tabs so a restarted worker can still reuse it.
+          chrome.tabs.query({url:'about:blank'})
+        ]);
+        const tabs = [...multiVerseTabs, ...blankTabs];
         return findMatchingMultiVerseTab(verseSetKey, tabs);
       },
       create:async () => {
