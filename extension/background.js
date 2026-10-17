@@ -2884,6 +2884,25 @@ chrome.tabs.onCreated.addListener(tab => {
   });
 });
 
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type !== 'blbSuiteMultiVerseTextboxDiagnostic') return;
+  const diagnostic = message.diagnostic && typeof message.diagnostic === 'object' ? message.diagnostic : {};
+  console.info('[BLB Suite MultiVerse textbox diagnostic relay]', {
+    tabId: sender?.tab?.id ?? null,
+    senderUrl: String(sender?.url || '').slice(0, 240),
+    stage: String(diagnostic.stage || ''),
+    elapsedMs: Number(diagnostic.elapsedMs || 0),
+    elementConnected: !!diagnostic.elementConnected,
+    elementChanged: !!diagnostic.elementChanged,
+    valueLength: Number(diagnostic.valueLength || 0),
+    matchesExpected: !!diagnostic.matchesExpected,
+    valueStart: String(diagnostic.valueStart || '').slice(0, 120),
+    valueEnd: String(diagnostic.valueEnd || '').slice(-120),
+    hasProblematicSignature: !!diagnostic.hasProblematicSignature,
+    isRevelation22_7_21: !!diagnostic.isRevelation22_7_21
+  });
+});
+
 chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
   console.info('[BLB Suite MultiVerse tab lifecycle] removed', {
     tabId, windowId:removeInfo?.windowId ?? null,
