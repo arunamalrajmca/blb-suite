@@ -2904,7 +2904,33 @@ chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (!changeInfo.url && !tab?.pendingUrl && !tab?.url) return;
+  if (!changeInfo.url && !tab?.pendingUrl && !tab?.url && !changeInfo.status) return;
+
+  // Diagnostic-only navigation tracing for the PDF-selection incident. Keep
+  // logs in the service-worker console so they remain visible even when the
+  // MultiVerse page console is empty. Do not log Criteria/search query text.
+  const observedUrl = String(changeInfo.url || tab?.pendingUrl || tab?.url || '');
+  const observedIsBlb = /^https?:\\/\\/(?:www\\.)?blueletterbible\\.org\\//i.test(observedUrl);
+  const observedIsMultiVerse = observedIsBlb && /\\/tools\\/MultiVerse\\.cfm/i.test(observedUrl);
+  const observedIsSearchResults = observedIsBlb && /\\/search\\/search\\.cfm/i.test(observedUrl);
+  if ((observedIsMultiVerse || observedIsSearchResults) &&
+      (changeInfo.url || changeInfo.status === 'loading' || changeInfo.status === 'complete')) {
+    let searchParamS = '';
+    try { searchParamS = new URL(observedUrl).searchParams.get('s') || ''; } catch (_) {}
+    console.info('[BLB Suite navigation diagnostic] tab-update', {
+      tabId,
+      status: String(tab?.status || ''),
+      changeStatus: String(changeInfo.status || ''),
+      urlChanged: typeof changeInfo.url === 'string',
+      active: !!tab?.active,
+      pageType: observedIsMultiVerse ? 'MultiVerse' : 'SearchResults',
+      path: (() => { try { return new URL(observedUrl).pathname; } catch (_) { return ''; } })(),
+      searchParamS,
+      hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(observedUrl),
+      isHistoricalSessionUrl: /[?&]s=00LCeE(?:&|$)/i.test(observedUrl),
+      hasHandoffMarker: /[?&]blbSuiteMultiVerse=1(?:&|$)/i.test(observedUrl)
+    });
+  }
 
   // Prefer the URL from this update over tab.url, which can still reflect the
   // previous navigation during redirects. Otherwise a transient about:blank
