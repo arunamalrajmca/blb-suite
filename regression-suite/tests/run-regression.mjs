@@ -608,6 +608,16 @@ test('popup exposes all core feature controls', () => {
     assert(popup.includes("getElementById('" + control + "')") || popup.includes('getElementById("' + control + '")'), 'popup control missing: ' + control);
   }
 });
+test('popup loading indicator is always cleared after initial state-load failure', () => {
+  const popup = read('popup.js');
+  const start = popup.indexOf('(async () => {', popup.lastIndexOf('studyBackupFileInput?.addEventListener'));
+  const end = popup.indexOf('})();', start);
+  assert(start >= 0 && end > start, 'popup initialization block missing');
+  const init = popup.slice(start, end);
+  assert(init.includes('try {') && init.includes('render(await getState())'), 'initial state render must be guarded');
+  assert(init.includes('catch (error)') && init.includes("console.error('BLB Suite popup initialization failed:'"), 'initialization failure must be diagnosable');
+  assert(init.includes('finally {') && init.includes("document.body.classList.remove('popup-loading')"), 'popup must be made visible even when state loading fails');
+});
 section('selection');
 test('reference classification retains all major selection types', () => {
   const bg = read('background.js');
