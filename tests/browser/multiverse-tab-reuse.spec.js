@@ -160,3 +160,51 @@ test('case-sensitive search reuses the originating tab and leaves no blank orpha
   expect(result.tracked.map(tab => tab.id)).toContain(result.originId);
   expect(result.tracked.map(tab => tab.verseCount).sort((a,b) => b-a)).toEqual([200,14]);
 });
+
+test('case-sensitive corpus search preserves every exact capitalization form even with an incomplete index', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    const corpus = [
+      [1, 1, 1, "LORD'S is uppercase"],
+      [1, 1, 2, "Lord's is title case"],
+      [1, 1, 3, "lord's is lowercase"],
+      [1, 1, 4, "LORD appears"],
+      [1, 1, 5, "Lord appears"],
+      [1, 1, 6, "lord appears"],
+      [1, 1, 7, "God and Spirit"],
+      [1, 1, 8, "GOD and SPIRIT"],
+      [1, 1, 9, "god and spirit"]
+    ];
+    // Deliberately incomplete: the production index can be partial too.
+    const incompleteIndex = { "LORD'S": [0], "God": [6] };
+    const search = query => BLBCaseSensitiveCore.searchCaseSensitiveCorpus(
+      query, corpus, incompleteIndex
+    ).map(entry => entry[2]);
+    return {
+      lordsUpper: search("LORD'S"),
+      lordsTitle: search("Lord's"),
+      lordsLower: search("lord's"),
+      lordUpper: search("LORD"),
+      lordTitle: search("Lord"),
+      lordLower: search("lord"),
+      godTitle: search("God"),
+      godUpper: search("GOD"),
+      godLower: search("god"),
+      phraseTitle: search("God and Spirit"),
+      phraseUpper: search("GOD and SPIRIT"),
+      phraseLower: search("god and spirit")
+    };
+  });
+
+  expect(result.lordsUpper).toEqual([1]);
+  expect(result.lordsTitle).toEqual([2]);
+  expect(result.lordsLower).toEqual([3]);
+  expect(result.lordUpper).toEqual([4]);
+  expect(result.lordTitle).toEqual([5]);
+  expect(result.lordLower).toEqual([6]);
+  expect(result.godTitle).toEqual([7]);
+  expect(result.godUpper).toEqual([8]);
+  expect(result.godLower).toEqual([9]);
+  expect(result.phraseTitle).toEqual([7]);
+  expect(result.phraseUpper).toEqual([8]);
+  expect(result.phraseLower).toEqual([9]);
+});
