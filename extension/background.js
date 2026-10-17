@@ -709,7 +709,7 @@ function summarizeMultiVerseRefsForDiagnostics(refs) {
 
 function openBlbMultiVerseRefs(refs, active = true, options = {}) {
   const diagnosticId = ++multiVerseDiagnosticSequence;
-  const stack = String(new Error().stack || '').split('\\n').slice(2, 7).map(line => line.trim());
+  const stack = String(new Error().stack || '').split('\n').slice(2, 7).map(line => line.trim());
   console.info('[BLB Suite MultiVerse diagnostic] request-start', {
     diagnosticId,
     sourceStack: stack,
