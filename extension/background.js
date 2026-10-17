@@ -710,7 +710,7 @@ function summarizeMultiVerseRefsForDiagnostics(refs) {
 function openBlbMultiVerseRefs(refs, active = true, options = {}) {
   const diagnosticId = ++multiVerseDiagnosticSequence;
   const stack = String(new Error().stack || '').split('\n').slice(2, 7).map(line => line.trim());
-  console.info('[BLB Suite MultiVerse diagnostic] request-start', {
+  diagnosticRecord('[BLB Suite MultiVerse diagnostic] request-start', {
     diagnosticId,
     sourceStack: stack,
     active: !!active,
@@ -722,7 +722,7 @@ function openBlbMultiVerseRefs(refs, active = true, options = {}) {
     () => openBlbMultiVerseRefsSerialized(refs, active, options)
   );
   const diagnosedRun = run.then(result => {
-    console.info('[BLB Suite MultiVerse diagnostic] request-finish', {
+    diagnosticRecord('[BLB Suite MultiVerse diagnostic] request-finish', {
       diagnosticId,
       ok: !!result?.ok,
       reason: result?.reason || null,
@@ -738,7 +738,7 @@ function openBlbMultiVerseRefs(refs, active = true, options = {}) {
     });
     return result;
   }, error => {
-    console.warn('[BLB Suite MultiVerse diagnostic] request-error', {
+    diagnosticRecord('[BLB Suite MultiVerse diagnostic] request-error', {
       diagnosticId, error: String(error)
     });
     throw error;
@@ -908,7 +908,7 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         trackedMap[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
         const pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
         pendingMap[String(tab.id)] = canonical.refs;
-        console.info('[BLB Suite pending MultiVerse diagnostic] write', {
+        diagnosticRecord('[BLB Suite pending MultiVerse diagnostic] write', {
           tabId: tab.id,
           setKey: verseSetKey,
           refCount: canonical.refs.length,
@@ -2872,6 +2872,58 @@ async function createBlbTabGeneric(url, active = true, {forceNew = false} = {}) 
 }
 
 
+// Diagnostic report buffer for the MultiVerse navigation incident. This is temporary,
+// bounded, and records metadata only; it never stores full URLs or selected PDF text.
+const BLB_DIAGNOSTIC_REPORT_LIMIT = 2000;
+const blbDiagnosticReportEvents = [];
+const blbDiagnosticReportStartedAt = new Date().toISOString();
+const blbDiagnosticReportExportedTabs = new Set();
+function diagnosticRecord(label, details = {}, level = 'info') {
+  const event = {
+    timestamp: new Date().toISOString(),
+    epochMs: Date.now(),
+    label,
+    details: details && typeof details === 'object' ? {...details} : {value:String(details)}
+  };
+  blbDiagnosticReportEvents.push(event);
+  if (blbDiagnosticReportEvents.length > BLB_DIAGNOSTIC_REPORT_LIMIT) {
+    blbDiagnosticReportEvents.splice(0, blbDiagnosticReportEvents.length - BLB_DIAGNOSTIC_REPORT_LIMIT);
+  }
+  const logger = level === 'warn' ? console.warn : level === 'error' ? console.error : console.info;
+  logger.call(console, label, {...event.details, diagnosticTimestamp:event.timestamp, diagnosticEpochMs:event.epochMs});
+  return event;
+}
+async function exportBlbDiagnosticReport(triggerTabId, triggerReason) {
+  if (blbDiagnosticReportExportedTabs.has(triggerTabId)) return;
+  blbDiagnosticReportExportedTabs.add(triggerTabId);
+  const report = {
+    reportType: 'BLB Suite MultiVerse navigation diagnostics',
+    schemaVersion: 1,
+    generatedAt: new Date().toISOString(),
+    startedAt: blbDiagnosticReportStartedAt,
+    trigger: {tabId:triggerTabId, reason:triggerReason},
+    privacy: 'Metadata-only diagnostic events; selected PDF text and full URLs are not intentionally included.',
+    eventCount: blbDiagnosticReportEvents.length,
+    events: blbDiagnosticReportEvents.slice()
+  };
+  try {
+    const dataUrl = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(report, null, 2));
+    await chrome.downloads.download({
+      url: dataUrl,
+      filename: 'blb-suite-multiverse-diagnostic-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json',
+      saveAs: true
+    });
+    diagnosticRecord('[BLB Suite diagnostic report] download-requested', {
+      tabId:triggerTabId, eventCount:report.eventCount, reason:triggerReason
+    });
+  } catch (error) {
+    blbDiagnosticReportExportedTabs.delete(triggerTabId);
+    diagnosticRecord('[BLB Suite diagnostic report] download-failed', {
+      tabId:triggerTabId, reason:triggerReason, error:String(error)
+    }, 'warn');
+  }
+}
+
 // Diagnostic-only attribution for MultiVerse navigations/removals. This records only
 // MultiVerse-related URL changes and operations targeting tabs observed as MultiVerse.
 const diagnosticMultiVerseTabIds = new Set();
@@ -2896,7 +2948,7 @@ function diagnosticTabOperation(kind, args) {
   if (isMultiVerseUrl || trackedTabIds.length) {
     let parsed = null;
     try { parsed = new URL(targetUrl); } catch (_) {}
-    console.info('[BLB Suite tab operation attribution]', {
+    diagnosticRecord('[BLB Suite tab operation attribution]', {
       operation: kind,
       tabId: typeof first === 'number' ? first : null,
       tabIds: tabIds.length ? tabIds : undefined,
@@ -2926,7 +2978,7 @@ chrome.tabs.onCreated.addListener(tab => {
   const url = String(tab?.pendingUrl || tab?.url || '');
   if (!/blueletterbible\.org/i.test(url) || !/MultiVerse\.cfm|blbSuiteMultiVerse=1/i.test(url)) return;
   if (tab?.id != null) diagnosticMultiVerseTabIds.add(tab.id);
-  console.info('[BLB Suite MultiVerse tab lifecycle] created', {
+  diagnosticRecord('[BLB Suite MultiVerse tab lifecycle] created', {
     tabId: tab.id ?? null, openerTabId: tab.openerTabId ?? null,
     active: !!tab.active, status: String(tab.status || ''),
     hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(url),
@@ -2937,7 +2989,7 @@ chrome.tabs.onCreated.addListener(tab => {
 chrome.runtime.onMessage.addListener((message, sender) => {
   if (message?.type !== 'blbSuiteMultiVerseTextboxDiagnostic') return;
   const diagnostic = message.diagnostic && typeof message.diagnostic === 'object' ? message.diagnostic : {};
-  console.info('[BLB Suite MultiVerse textbox diagnostic relay]', {
+  diagnosticRecord('[BLB Suite MultiVerse textbox diagnostic relay]', {
     tabId: sender?.tab?.id ?? null,
     senderUrl: String(sender?.url || '').slice(0, 240),
     stage: String(diagnostic.stage || ''),
@@ -2954,7 +3006,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
-  console.info('[BLB Suite MultiVerse tab lifecycle] removed', {
+  diagnosticRecord('[BLB Suite MultiVerse tab lifecycle] removed', {
     tabId, wasTrackedMultiVerse:diagnosticMultiVerseTabIds.has(tabId), windowId:removeInfo?.windowId ?? null,
     isWindowClosing:!!removeInfo?.isWindowClosing
   });
@@ -2991,7 +3043,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       (changeInfo.url || changeInfo.status === 'loading' || changeInfo.status === 'complete')) {
     let searchParamS = '';
     try { searchParamS = new URL(observedUrl).searchParams.get('s') || ''; } catch (_) {}
-    console.info('[BLB Suite navigation diagnostic] tab-update', {
+    diagnosticRecord('[BLB Suite navigation diagnostic] tab-update', {
       tabId,
       status: String(tab?.status || ''),
       changeStatus: String(changeInfo.status || ''),
@@ -3004,6 +3056,9 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       isHistoricalSessionUrl: /[?&]s=00LCeE(?:&|$)/i.test(observedUrl),
       hasHandoffMarker: /[?&]blbSuiteMultiVerse=1(?:&|$)/i.test(observedUrl)
     });
+    if (observedIsMultiVerse && /[?&]s=00LCeE(?:&|$)/i.test(observedUrl)) {
+      void exportBlbDiagnosticReport(tabId, 'historical-multiverse-session-url-observed');
+    }
   }
 
   // Prefer the URL from this update over tab.url, which can still reflect the
@@ -3018,7 +3073,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   else if (!isBlank) diagnosticMultiVerseTabIds.delete(tabId);
 
   if (isMultiVerse || isBlank) {
-    console.info('[BLB Suite MultiVerse tab lifecycle] updated', {
+    diagnosticRecord('[BLB Suite MultiVerse tab lifecycle] updated', {
       tabId, status: String(tab?.status || ''),
       changeStatus: String(changeInfo.status || ''),
       isBlank, isMultiVerse,
@@ -3506,7 +3561,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
       const map = data.blbSuitePendingMultiVerseRefsByTab && typeof data.blbSuitePendingMultiVerseRefsByTab === 'object' ? data.blbSuitePendingMultiVerseRefsByTab : {};
       const refs = tabId != null ? map[String(tabId)] : null;
-      console.info('[BLB Suite pending MultiVerse diagnostic] read', {
+      diagnosticRecord('[BLB Suite pending MultiVerse diagnostic] read', {
         tabId: tabId ?? null,
         refCount: Array.isArray(refs) ? refs.length : 0,
         firstRefs: summarizeMultiVerseRefsForDiagnostics(refs).slice(0, 4),
@@ -3524,7 +3579,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
         const map = data.blbSuitePendingMultiVerseRefsByTab && typeof data.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...data.blbSuitePendingMultiVerseRefsByTab} : {};
         const consumed = map[String(tabId)];
-        console.info('[BLB Suite pending MultiVerse diagnostic] consume', {
+        diagnosticRecord('[BLB Suite pending MultiVerse diagnostic] consume', {
           tabId,
           refCount: Array.isArray(consumed) ? consumed.length : 0,
           firstRefs: summarizeMultiVerseRefsForDiagnostics(consumed).slice(0, 4),
@@ -5892,7 +5947,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // Start MultiVerse immediately, derive a corpus-validated residual Criteria
   // term in parallel, then run the full classifier only for reconciliation.
   const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
-  console.info('[BLB Suite PDF selection diagnostic] parsed-selection', {
+  diagnosticRecord('[BLB Suite PDF selection diagnostic] parsed-selection', {
     sourceLength: text.length,
     explicitReferenceCount: selectedRefs.length,
     refs: summarizeMultiVerseRefsForDiagnostics(selectedRefs),
@@ -5911,7 +5966,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       selectedRefs,
       !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
     );
-    console.info('[BLB Suite PDF selection diagnostic] destinations-planned', {
+    diagnosticRecord('[BLB Suite PDF selection diagnostic] destinations-planned', {
       explicitReferenceCount: selectedRefs.length,
       multiVerseRequested: true,
       criteriaSearchRequested: !!fastCriteriaQuery,
@@ -5929,7 +5984,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     // at which the user has both destinations available; the expensive
     // classifier runs afterward while the service worker remains active.
     const [referenceTab, criteriaTab] = await Promise.all([referenceOpen, criteriaOpen, studyCapture]);
-    console.info('[BLB Suite PDF selection diagnostic] destinations-opened', {
+    diagnosticRecord('[BLB Suite PDF selection diagnostic] destinations-opened', {
       multiVerseTabIds: referenceTab?.tabIds || (referenceTab?.tabId != null ? [referenceTab.tabId] : []),
       multiVerseOk: !!referenceTab?.ok,
       multiVerseBatchCount: referenceTab?.batchCount ?? null,
