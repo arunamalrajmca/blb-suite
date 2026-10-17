@@ -757,7 +757,7 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
     if (baselineTabIds.includes(tab.id) || state.some(item => item.id === tab.id)) return false;
     try {
       const url = new URL(tab.url);
-      return url.hostname === 'www.blueletterbible.org' && /^\\/kjv\\/gen\\/(?:42|43|44|45|46|48|49)\\//i.test(url.pathname);
+      return url.hostname === 'www.blueletterbible.org' && /^\/kjv\/gen\/(?:42|43|44|45|46|48|49)\//i.test(url.pathname);
     } catch (_) { return false; }
   });
   expect(unexpectedBibleTabs).toEqual([]);
