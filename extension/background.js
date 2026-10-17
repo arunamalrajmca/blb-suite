@@ -2359,20 +2359,71 @@ async function paceCaseSensitiveTab(tabPromise) {
   return tab;
 }
 
+// Case-sensitive MultiVerse URLs share a pathname, so include their full
+// normalized query in the identity to keep distinct result batches separate.
+function canonicalCaseSensitiveDestinationKey(url) {
+  try {
+    const u = new URL(String(url || ''));
+    const host = u.hostname.toLowerCase().replace(/^www\\./, '');
+    const path = u.pathname.replace(/\\/+$/, '').toLowerCase() || '/';
+    const params = [...u.searchParams.entries()].sort(([ak,av],[bk,bv]) =>
+      ak.localeCompare(bk) || av.localeCompare(bv)
+    );
+    const query = params.map(([k,v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join('&');
+    return `case-sensitive|${host}${path}${query ? `?${query}` : ''}`;
+  } catch (_) {
+    return `case-sensitive|${String(url || '').trim()}`;
+  }
+}
+
+const pendingCaseSensitiveDestinations = new Map();
+
+async function openCaseSensitiveDestination(url, active) {
+  const target = String(url || '');
+  const key = canonicalCaseSensitiveDestinationKey(target);
+  if (pendingCaseSensitiveDestinations.has(key)) {
+    const pending = await pendingCaseSensitiveDestinations.get(key);
+    if (active && pending?.id != null) await chrome.tabs.update(pending.id, {active:true}).catch(()=>{});
+    return pending;
+  }
+
+  const operation = (async () => {
+    const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
+    const existing = tabs.find(tab =>
+      canonicalCaseSensitiveDestinationKey(tab?.pendingUrl || tab?.url || '') === key
+    );
+    if (existing?.id != null) {
+      if (active) {
+        await chrome.tabs.update(existing.id, {active:true}).catch(()=>{});
+        if (existing.windowId != null) await chrome.windows.update(existing.windowId, {focused:true}).catch(()=>{});
+      }
+      return existing;
+    }
+    return chrome.tabs.create({url:target, active:!!active});
+  })();
+
+  pendingCaseSensitiveDestinations.set(key, operation);
+  try {
+    return await operation;
+  } finally {
+    if (pendingCaseSensitiveDestinations.get(key) === operation) pendingCaseSensitiveDestinations.delete(key);
+  }
+}
+
 async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
-  const targets=(urls||[]).filter(Boolean);
+  const targets=[...new Set((urls||[]).filter(Boolean))];
   if (!targets.length) throw new Error('No BLB Multi-Verse destinations');
 
-  const openFirst = disposition === 'newForegroundTab'
-    ? () => chrome.tabs.create({url:targets[0], active:true})
+  const first = disposition === 'newForegroundTab'
+    ? await openCaseSensitiveDestination(targets[0], true)
     : disposition === 'newBackgroundTab'
-      ? () => chrome.tabs.create({url:targets[0], active:false})
-      : () => chrome.tabs.update({url:targets[0]});
+      ? await openCaseSensitiveDestination(targets[0], false)
+      : await chrome.tabs.update({url:targets[0]});
 
-  await paceCaseSensitiveTab(openFirst());
+  await paceCaseSensitiveTab(Promise.resolve(first));
 
   for (let i=1;i<targets.length;i++) {
-    await paceCaseSensitiveTab(chrome.tabs.create({url:targets[i], active:false}));
+    await paceCaseSensitiveTab(openCaseSensitiveDestination(targets[i], false));
   }
 }
 async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab') {
