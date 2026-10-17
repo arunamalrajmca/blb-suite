@@ -398,7 +398,6 @@ html = html.replace(
       link.urlKey === urlKey &&
       link.chapter === Number(chapter) &&
       link.verse === Number(verse)    );
-
     if (!match) return whole;
 
     hyperlinkCount++;
@@ -797,8 +796,7 @@ if (location.hostname==="webstersdictionary1828.com") {
     if (!(await isSuiteEnabled())) return;
     if (!document.body || document.getElementById("blb-suite-webster-multiverse")) return;
     const mount=document.body || document.documentElement;    if (!mount) return;
-    const button=document.createElement("button");
-    button.id="blb-suite-webster-multiverse";
+    const button=document.createElement("button");    button.id="blb-suite-webster-multiverse";
     button.type="button";
     button.textContent="Open Bible References in BLB";
     button.title="Collect all Bible-reference links on this Webster's 1828 page and open them together in BLB MultiVerse.";
@@ -1067,7 +1065,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
           valueStart: String(value || '').slice(0, 120),
           valueEnd: String(value || '').slice(-120),
           hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(String(value || '')),
-          isRevelation22_7_21: /Revelation\\s+22:7-21/i.test(String(value || '')),
+          isRevelation22_7_21: /Revelation\s+22:7-21/i.test(String(value || '')),
           ...extra
         };
         chrome.runtime.sendMessage({type:'blbSuiteMultiVerseTextboxDiagnostic', diagnostic:detail}).catch(()=>{});
@@ -1197,8 +1195,7 @@ function normalizeDoubleClickToken(value) {
 // small text block surrounding the current selection, and only when the
 // selected token is a recognized book/alias or a plausible chapter/verse
 // number. It reuses the same book aliases already used by the Omnibox.
-function getAdjacentBoundaryText(direction, maxChars = 220) {
-  try {
+function getAdjacentBoundaryText(direction, maxChars = 220) {  try {
     const sel = window.getSelection?.();
     if (!sel || !sel.rangeCount || sel.isCollapsed) return '';
     const range = sel.getRangeAt(0);
@@ -1597,8 +1594,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           bounded < rawText.length &&
           /[\s\u00A0\u2007\u202F]$/.test(prefix) &&
           /\S/.test(rawText.slice(bounded));
-        return normalizedPrefix.length + (separator ? 1 : 0);
-      };
+        return normalizedPrefix.length + (separator ? 1 : 0);      };
       try {
         const contextualTarget = getDoubleClickTargetElement(event) || initialNode;
         if (contextualTarget && candidate.contains(contextualTarget)) {
@@ -1997,8 +1993,7 @@ function handleDoubleClickBlb(event) {
     // the previous native selection. Never freeze that early selection/context:
     // a stale selection can make a real chapter-number double-click inherit an
     // unrelated reference from the preceding gesture.
-    if (!doubleClickSettingsReady) {
-      void ensureDoubleClickSettingsReady().then(() => {
+    if (!doubleClickSettingsReady) {      void ensureDoubleClickSettingsReady().then(() => {
         if (doubleClickBlbEnabled) handleDoubleClickBlb(event);
       });
       return;
@@ -2397,8 +2392,7 @@ function addBlbPageSelectionButton() {
     // Ignore stale content-script contexts if the extension was reloaded.
     safeRuntimeSendMessage({
       type:'blbSuiteOpenSelectionText',
-      text,
-      contextualReference: blbPageButtonContextualReference || null,
+      text,      contextualReference: blbPageButtonContextualReference || null,
       directUrl: blbPageButtonDirectUrl || null,
       tabBehavior:{activeIfNew:true,activateExisting:true}
     });
