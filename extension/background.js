@@ -695,14 +695,56 @@ function compactMultiVerseVerses(verses) {
 // Otherwise two identical selections can both pass the existing-tab check before
 // either request has finished reserving every batch.
 let pendingMultiVerseRequest = Promise.resolve();
+let multiVerseDiagnosticSequence = 0;
+
+function summarizeMultiVerseRefsForDiagnostics(refs) {
+  return (Array.isArray(refs) ? refs : []).map(ref => ({
+    book: String(ref?.book || ''),
+    chapter: Number(ref?.chapter) || null,
+    from: ref?.from == null ? null : Number(ref.from),
+    to: ref?.to == null ? null : Number(ref.to),
+    version: String(ref?.version || 'kjv')
+  }));
+}
 
 function openBlbMultiVerseRefs(refs, active = true, options = {}) {
+  const diagnosticId = ++multiVerseDiagnosticSequence;
+  const stack = String(new Error().stack || '').split('\n').slice(2, 7).map(line => line.trim());
+  console.info('[BLB Suite MultiVerse diagnostic] request-start', {
+    diagnosticId,
+    sourceStack: stack,
+    active: !!active,
+    preferredTabId: options?.preferredTabId ?? null,
+    refs: summarizeMultiVerseRefsForDiagnostics(refs)
+  });
   const run = pendingMultiVerseRequest.then(
     () => openBlbMultiVerseRefsSerialized(refs, active, options),
     () => openBlbMultiVerseRefsSerialized(refs, active, options)
   );
-  pendingMultiVerseRequest = run.then(() => undefined, () => undefined);
-  return run;
+  const diagnosedRun = run.then(result => {
+    console.info('[BLB Suite MultiVerse diagnostic] request-finish', {
+      diagnosticId,
+      ok: !!result?.ok,
+      reason: result?.reason || null,
+      count: result?.count ?? null,
+      batchCount: result?.batchCount ?? null,
+      tabIds: result?.tabIds || (result?.tabId != null ? [result.tabId] : []),
+      batches: (result?.results || []).map(item => ({
+        batch: item.batch ?? null,
+        tabId: item.tabId ?? null,
+        reused: !!item.reused,
+        count: item.count ?? null
+      }))
+    });
+    return result;
+  }, error => {
+    console.warn('[BLB Suite MultiVerse diagnostic] request-error', {
+      diagnosticId, error: String(error)
+    });
+    throw error;
+  });
+  pendingMultiVerseRequest = diagnosedRun.then(() => undefined, () => undefined);
+  return diagnosedRun;
 }
 
 async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}) {
@@ -866,6 +908,14 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         trackedMap[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
         const pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
         pendingMap[String(tab.id)] = canonical.refs;
+        console.info('[BLB Suite pending MultiVerse diagnostic] write', {
+          tabId: tab.id,
+          setKey: verseSetKey,
+          refCount: canonical.refs.length,
+          firstRefs: summarizeMultiVerseRefsForDiagnostics(canonical.refs).slice(0, 4),
+          lastRefs: summarizeMultiVerseRefsForDiagnostics(canonical.refs).slice(-4),
+          hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(canonical.refs.map(r => `${r.book} ${r.chapter}:${r.from}${r.to && r.to !== r.from ? "-" + r.to : ""}`).join("; "))
+        });
         await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap});
         try {
           await chrome.tabs.update(tab.id, {url:'https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1', active:reusedOriginTab ? !!active : !!active});
@@ -2822,7 +2872,42 @@ async function createBlbTabGeneric(url, active = true, {forceNew = false} = {}) 
 }
 
 
-chrome.tabs.onRemoved.addListener(tabId => {
+// Diagnostic-only MultiVerse tab lifecycle tracing; never log selected text or full URLs.
+chrome.tabs.onCreated.addListener(tab => {
+  const url = String(tab?.pendingUrl || tab?.url || '');
+  if (!/blueletterbible\.org/i.test(url) || !/MultiVerse\.cfm|blbSuiteMultiVerse=1/i.test(url)) return;
+  console.info('[BLB Suite MultiVerse tab lifecycle] created', {
+    tabId: tab.id ?? null, openerTabId: tab.openerTabId ?? null,
+    active: !!tab.active, status: String(tab.status || ''),
+    hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(url),
+    urlHasHandoffMarker: /blbSuiteMultiVerse=1/i.test(url)
+  });
+});
+
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type !== 'blbSuiteMultiVerseTextboxDiagnostic') return;
+  const diagnostic = message.diagnostic && typeof message.diagnostic === 'object' ? message.diagnostic : {};
+  console.info('[BLB Suite MultiVerse textbox diagnostic relay]', {
+    tabId: sender?.tab?.id ?? null,
+    senderUrl: String(sender?.url || '').slice(0, 240),
+    stage: String(diagnostic.stage || ''),
+    elapsedMs: Number(diagnostic.elapsedMs || 0),
+    elementConnected: !!diagnostic.elementConnected,
+    elementChanged: !!diagnostic.elementChanged,
+    valueLength: Number(diagnostic.valueLength || 0),
+    matchesExpected: !!diagnostic.matchesExpected,
+    valueStart: String(diagnostic.valueStart || '').slice(0, 120),
+    valueEnd: String(diagnostic.valueEnd || '').slice(-120),
+    hasProblematicSignature: !!diagnostic.hasProblematicSignature,
+    isRevelation22_7_21: !!diagnostic.isRevelation22_7_21
+  });
+});
+
+chrome.tabs.onRemoved.addListener((tabId, removeInfo) => {
+  console.info('[BLB Suite MultiVerse tab lifecycle] removed', {
+    tabId, windowId:removeInfo?.windowId ?? null,
+    isWindowClosing:!!removeInfo?.isWindowClosing
+  });
   forgetBlbTab(tabId);
   intentionalNewBlbTabs.delete(tabId);
   for (const [key, id] of scriptTaggerDestinationTabs) {
@@ -2838,7 +2923,37 @@ chrome.tabs.onRemoved.addListener(tabId => {
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (!changeInfo.url && !tab?.pendingUrl && !tab?.url) return;
+  if (!changeInfo.url && !tab?.pendingUrl && !tab?.url && !changeInfo.status) return;
+
+  // Diagnostic-only navigation tracing for the PDF-selection incident. Keep
+  // logs in the service-worker console so they remain visible even when the
+  // MultiVerse page console is empty. Do not log Criteria/search query text.
+  const observedUrl = String(changeInfo.url || tab?.pendingUrl || tab?.url || '');
+  let observedParsedUrl = null;
+  try { observedParsedUrl = new URL(observedUrl); } catch (_) {}
+  const observedHostname = String(observedParsedUrl?.hostname || '').toLowerCase();
+  const observedPathname = String(observedParsedUrl?.pathname || '').toLowerCase();
+  const observedIsBlb = observedHostname === 'blueletterbible.org' || observedHostname === 'www.blueletterbible.org';
+  const observedIsMultiVerse = observedIsBlb && observedPathname.includes('/tools/multiverse.cfm');
+  const observedIsSearchResults = observedIsBlb && observedPathname.includes('/search/search.cfm');
+  if ((observedIsMultiVerse || observedIsSearchResults) &&
+      (changeInfo.url || changeInfo.status === 'loading' || changeInfo.status === 'complete')) {
+    let searchParamS = '';
+    try { searchParamS = new URL(observedUrl).searchParams.get('s') || ''; } catch (_) {}
+    console.info('[BLB Suite navigation diagnostic] tab-update', {
+      tabId,
+      status: String(tab?.status || ''),
+      changeStatus: String(changeInfo.status || ''),
+      urlChanged: typeof changeInfo.url === 'string',
+      active: !!tab?.active,
+      pageType: observedIsMultiVerse ? 'MultiVerse' : 'SearchResults',
+      path: (() => { try { return new URL(observedUrl).pathname; } catch (_) { return ''; } })(),
+      searchParamS,
+      hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(observedUrl),
+      isHistoricalSessionUrl: /[?&]s=00LCeE(?:&|$)/i.test(observedUrl),
+      hasHandoffMarker: /[?&]blbSuiteMultiVerse=1(?:&|$)/i.test(observedUrl)
+    });
+  }
 
   // Prefer the URL from this update over tab.url, which can still reflect the
   // previous navigation during redirects. Otherwise a transient about:blank
@@ -2847,6 +2962,16 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   const isBlank = /^about:blank(?:[#?].*)?$/i.test(url);
   const isMultiVerse = /blueletterbible\.org/i.test(url) &&
     (/\/MultiVerse\.cfm/i.test(url) || /blbSuiteMultiVerse=1/i.test(url));
+
+  if (isMultiVerse || isBlank) {
+    console.info('[BLB Suite MultiVerse tab lifecycle] updated', {
+      tabId, status: String(tab?.status || ''),
+      changeStatus: String(changeInfo.status || ''),
+      isBlank, isMultiVerse,
+      hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(url),
+      urlHasHandoffMarker: /blbSuiteMultiVerse=1/i.test(url)
+    });
+  }
 
   if (!isBlank && !isMultiVerse) {
     clearTrackedMultiVerseTab(tabId).catch(()=>{});
@@ -3327,6 +3452,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
       const map = data.blbSuitePendingMultiVerseRefsByTab && typeof data.blbSuitePendingMultiVerseRefsByTab === 'object' ? data.blbSuitePendingMultiVerseRefsByTab : {};
       const refs = tabId != null ? map[String(tabId)] : null;
+      console.info('[BLB Suite pending MultiVerse diagnostic] read', {
+        tabId: tabId ?? null,
+        refCount: Array.isArray(refs) ? refs.length : 0,
+        firstRefs: summarizeMultiVerseRefsForDiagnostics(refs).slice(0, 4),
+        lastRefs: summarizeMultiVerseRefsForDiagnostics(refs).slice(-4)
+      });
       sendResponse({ok:true, refs:Array.isArray(refs) ? refs : null});
     } catch (error) { sendResponse({ok:false, refs:null, error:String(error)}); }
     return true;
@@ -3338,6 +3469,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (tabId != null) {
         const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
         const map = data.blbSuitePendingMultiVerseRefsByTab && typeof data.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...data.blbSuitePendingMultiVerseRefsByTab} : {};
+        const consumed = map[String(tabId)];
+        console.info('[BLB Suite pending MultiVerse diagnostic] consume', {
+          tabId,
+          refCount: Array.isArray(consumed) ? consumed.length : 0,
+          firstRefs: summarizeMultiVerseRefsForDiagnostics(consumed).slice(0, 4),
+          lastRefs: summarizeMultiVerseRefsForDiagnostics(consumed).slice(-4)
+        });
         delete map[String(tabId)];
         await chrome.storage.local.set({blbSuitePendingMultiVerseRefsByTab:map});
       }
@@ -5700,6 +5838,12 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // Start MultiVerse immediately, derive a corpus-validated residual Criteria
   // term in parallel, then run the full classifier only for reconciliation.
   const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
+  console.info('[BLB Suite PDF selection diagnostic] parsed-selection', {
+    sourceLength: text.length,
+    explicitReferenceCount: selectedRefs.length,
+    refs: summarizeMultiVerseRefsForDiagnostics(selectedRefs),
+    hasContextualReference: !!contextualRef?.url
+  });
   if (selectedRefs.length >= 2) {
     const excludedVerseTexts = selectedRefs
       .map(ref => getKjvVerseTextForSelectionRef(ref))
@@ -5713,6 +5857,12 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       selectedRefs,
       !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
     );
+    console.info('[BLB Suite PDF selection diagnostic] destinations-planned', {
+      explicitReferenceCount: selectedRefs.length,
+      multiVerseRequested: true,
+      criteriaSearchRequested: !!fastCriteriaQuery,
+      criteriaQueryLength: fastCriteriaQuery ? fastCriteriaQuery.length : 0
+    });
     const criteriaOpen = fastCriteriaQuery
       ? openBlbDestination(
           `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(fastCriteriaQuery).replace(/%20/g,'+')}`,
@@ -5725,6 +5875,13 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     // at which the user has both destinations available; the expensive
     // classifier runs afterward while the service worker remains active.
     const [referenceTab, criteriaTab] = await Promise.all([referenceOpen, criteriaOpen, studyCapture]);
+    console.info('[BLB Suite PDF selection diagnostic] destinations-opened', {
+      multiVerseTabIds: referenceTab?.tabIds || (referenceTab?.tabId != null ? [referenceTab.tabId] : []),
+      multiVerseOk: !!referenceTab?.ok,
+      multiVerseBatchCount: referenceTab?.batchCount ?? null,
+      criteriaTabId: criteriaTab?.id ?? criteriaTab?.tab?.id ?? null,
+      criteriaSearchRequested: !!fastCriteriaQuery
+    });
 
     // Return immediately after both destination tabs are created. The full
     // classifier is correctness/reconciliation work, not part of the user's
