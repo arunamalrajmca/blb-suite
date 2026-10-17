@@ -1058,6 +1058,24 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
         isRevelation22_7_21: /Revelation\s+22:7-21/i.test(value)
       });
       console.info('[BLB Suite MultiVerse textbox diagnostic] watch-start', describeValue('before-retrieve', primary, currentBeforeRetrieve));
+      const relayTextboxDiagnostic = (stage, element, value, extra = {}) => {
+        const detail = {
+          stage,
+          page: location.href,
+          elapsedMs: Date.now() - diagnosticStartedAt,
+          elementConnected: !!element?.isConnected,
+          elementChanged: element !== lastObservedElement,
+          valueLength: String(value || '').length,
+          matchesExpected: String(value || '').trim() === combined,
+          valueStart: String(value || '').slice(0, 120),
+          valueEnd: String(value || '').slice(-120),
+          hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(String(value || '')),
+          isRevelation22_7_21: /Revelation\\s+22:7-21/i.test(String(value || '')),
+          ...extra
+        };
+        chrome.runtime.sendMessage({type:'blbSuiteMultiVerseTextboxDiagnostic', diagnostic:detail}).catch(()=>{});
+      };
+      relayTextboxDiagnostic('before-retrieve', primary, currentBeforeRetrieve);
       let previousElement = primary;
       let previousValue = currentBeforeRetrieve;
       const watchTimer = window.setInterval(() => {
@@ -1065,6 +1083,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
         const value = String(element?.value || element?.getAttribute?.("value") || "").trim();
         if (element !== previousElement || value !== previousValue) {
           console.info('[BLB Suite MultiVerse textbox diagnostic] value-change', describeValue('poll', element, value));
+          relayTextboxDiagnostic('value-change', element, value);
           previousElement = element;
           previousValue = value;
           lastObservedElement = element;
@@ -1087,7 +1106,9 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
     retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
     retrieve.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true,view:window}));
+    relayTextboxDiagnostic('immediately-before-retrieve-click', findCurrentPrimary(), String(findCurrentPrimary()?.value || findCurrentPrimary()?.getAttribute?.("value") || "").trim());
     retrieve.click();
+    relayTextboxDiagnostic('immediately-after-retrieve-click', findCurrentPrimary(), String(findCurrentPrimary()?.value || findCurrentPrimary()?.getAttribute?.("value") || "").trim());
 
     // Do not reveal merely because Retrieve was clicked. BLB updates the result
     // area asynchronously; reveal only after the requested references are
