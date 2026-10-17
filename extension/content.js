@@ -397,8 +397,7 @@ html = html.replace(
     const match = verseLinks.find(link =>
       link.urlKey === urlKey &&
       link.chapter === Number(chapter) &&
-      link.verse === Number(verse)
-    );
+      link.verse === Number(verse)    );
 
     if (!match) return whole;
 
@@ -797,8 +796,7 @@ if (location.hostname==="webstersdictionary1828.com") {
   async function addWebsterMultiVerseButton() {
     if (!(await isSuiteEnabled())) return;
     if (!document.body || document.getElementById("blb-suite-webster-multiverse")) return;
-    const mount=document.body || document.documentElement;
-    if (!mount) return;
+    const mount=document.body || document.documentElement;    if (!mount) return;
     const button=document.createElement("button");
     button.id="blb-suite-webster-multiverse";
     button.type="button";
@@ -1030,8 +1028,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
 
     // Diagnostic only: observe the textbox after the initial handoff to catch a later overwrite.
     // Polling is bounded and read-only; it does not dispatch events or change page state.
-    {
-      const diagnosticStartedAt = Date.now();
+    const diagnosticStartedAt = Date.now();
       let lastObservedElement = primary;
       const findCurrentPrimary = () => {
         const currentHeading = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
@@ -1101,7 +1098,6 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
           });
         }
       }, 100);
-    }
 
     await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
     retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
@@ -1197,8 +1193,7 @@ function normalizeDoubleClickToken(value) {
   return String(value || '').trim().replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '').toLowerCase();
 }
 
-// ---------- Context-aware Bible reference resolver ----------
-// This resolver is intentionally local and tightly gated. It looks only at a
+// ---------- Context-aware Bible reference resolver ----------// This resolver is intentionally local and tightly gated. It looks only at a
 // small text block surrounding the current selection, and only when the
 // selected token is a recognized book/alias or a plausible chapter/verse
 // number. It reuses the same book aliases already used by the Omnibox.
@@ -1597,8 +1592,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         const bounded = Math.max(0, Math.min(rawText.length, offset));
         const prefix = rawText.slice(0, bounded);
         const normalizedPrefix = normalizeSelectionText(prefix).normalize('NFKC');
-        // Prefix normalization trims trailing whitespace; restore one space
-        // when it separates this prefix from the next visible token.
+        // Prefix normalization trims trailing whitespace; restore one space        // when it separates this prefix from the next visible token.
         const separator = normalizedPrefix.length > 0 &&
           bounded < rawText.length &&
           /[\s\u00A0\u2007\u202F]$/.test(prefix) &&
@@ -1997,8 +1991,7 @@ function getDoubleClickSelection(event) {
 }
 
 function handleDoubleClickBlb(event) {
-  try {
-    if (!suiteEnabled || isSensitiveSiteHostname(location.hostname) || isDoubleClickExcludedTarget(event.target)) return;
+  try {    if (!suiteEnabled || isSensitiveSiteHostname(location.hostname) || isDoubleClickExcludedTarget(event.target)) return;
 
     // Chromium may dispatch dblclick before the new word selection has replaced
     // the previous native selection. Never freeze that early selection/context:
@@ -2397,8 +2390,7 @@ function addBlbPageSelectionButton() {
   button.addEventListener('click', e => {
     e.preventDefault();
     e.stopPropagation();
-    const text = blbPageButtonSelection || getSelectedPageText();
-    if (!text || !suiteEnabled) {
+    const text = blbPageButtonSelection || getSelectedPageText();    if (!text || !suiteEnabled) {
       pageButtonActionInProgress = false;
       return;
     }
