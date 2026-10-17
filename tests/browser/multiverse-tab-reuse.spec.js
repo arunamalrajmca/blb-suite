@@ -234,11 +234,11 @@ test('case-sensitive Boolean fallback handles possessive apostrophes', async ({ 
   const result = await extensionWorker.evaluate(() => ({
     normalizedPossessive: normalizeBooleanOperatorsOutsideQuotes("LORD'S and God"),
     detectsPossessiveBoolean: hasUnquotedBooleanOperator("LORD'S AND God"),
-    normalizedQuotedPhrase: normalizeBooleanOperatorsOutsideQuotes('"LORD\\'S and God"'),
-    ignoresQuotedBoolean: hasUnquotedBooleanOperator('"LORD\\'S AND God"')
+    normalizedQuotedPhrase: normalizeBooleanOperatorsOutsideQuotes(`"LORD'S and God"`),
+    ignoresQuotedBoolean: hasUnquotedBooleanOperator(`"LORD'S AND God"`)
   }));
   expect(result.normalizedPossessive).toBe("LORD'S AND God");
   expect(result.detectsPossessiveBoolean).toBe(true);
-  expect(result.normalizedQuotedPhrase).toBe('"LORD\\'S and God"');
+  expect(result.normalizedQuotedPhrase).toBe(`"LORD'S and God"`);
   expect(result.ignoresQuotedBoolean).toBe(false);
 });
