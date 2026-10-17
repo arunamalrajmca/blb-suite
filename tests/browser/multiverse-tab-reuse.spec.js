@@ -4,12 +4,12 @@ const { test, expect } = require('./fixtures');
 // producing two batches: the first 200 verses and the remaining verses.
 const SELECTION = [
   { book: 'Genesis', bookNumber: 1, chapter: 42, from: 1, to: 38, version: 'kjv' },
-  { bookNumber: 1, chapter: 43, from: 1, to: 34, version: 'kjv' },
-  { bookNumber: 1, chapter: 44, from: 1, to: 34, version: 'kjv' },
-  { bookNumber: 1, chapter: 45, from: 1, to: 28, version: 'kjv' },
-  { bookNumber: 1, chapter: 46, from: 1, to: 34, version: 'kjv' },
-  { bookNumber: 1, chapter: 48, from: 1, to: 22, version: 'kjv' },
-  { bookNumber: 1, chapter: 49, from: 1, to: 26, version: 'kjv' }
+  { book: 'Genesis', bookNumber: 1, chapter: 43, from: 1, to: 34, version: 'kjv' },
+  { book: 'Genesis', bookNumber: 1, chapter: 44, from: 1, to: 34, version: 'kjv' },
+  { book: 'Genesis', bookNumber: 1, chapter: 45, from: 1, to: 28, version: 'kjv' },
+  { book: 'Genesis', bookNumber: 1, chapter: 46, from: 1, to: 34, version: 'kjv' },
+  { book: 'Genesis', bookNumber: 1, chapter: 48, from: 1, to: 22, version: 'kjv' },
+  { book: 'Genesis', bookNumber: 1, chapter: 49, from: 1, to: 26, version: 'kjv' }
 ];
 
 async function openMultiVerse(extensionWorker, refs) {
