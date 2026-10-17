@@ -2138,7 +2138,7 @@ async function openSingleKjvVerse(entry, disposition = 'currentTab') {
   return true;
 }
 
-async function handleBCommand(text) {
+async function handleBCommand(text, disposition = 'currentTab') {
   if (!(await isSuiteEnabled())) return;
   const t=normalizeBibleInput(text), low=t.toLowerCase();
   if (low === "study") {
@@ -2174,14 +2174,43 @@ async function handleBCommand(text) {
       }
     }
 
+    // Capture the omnibox's originating tab before opening any MultiVerse
+    // batches. Reuse it for batch one when possible, so a new/blank command
+    // tab is not stranded beside the results.
+    let originatingTab = null;
+    if (disposition === 'currentTab') {
+      try {
+        const activeTabs = await chrome.tabs.query({active:true, lastFocusedWindow:true});
+        originatingTab = activeTabs[0] || null;
+      } catch (_) {}
+    }
+
     if (matches.length === 1) {
-      await openSingleKjvVerse([matches[0].bookNumber, matches[0].chapter, matches[0].verse], 'currentTab');
+      await openSingleKjvVerse(
+        [matches[0].bookNumber, matches[0].chapter, matches[0].verse],
+        disposition
+      );
     } else if (matches.length > 1) {
       // This is an ordinary Bible-reference MultiVerse request, not a
       // case-sensitive corpus search. Use the shared verse-aware opener so
       // every entry point observes the same 200-verse batching invariant.
-      const result = await openBlbMultiVerseRefs(matches, true);
-      if (!result?.ok) redirectToHomepage();
+      const result = await openBlbMultiVerseRefs(matches, disposition !== 'newBackgroundTab', {
+        preferredTabId: originatingTab?.id
+      });
+      if (!result?.ok) {
+        redirectToHomepage();
+      } else if (
+        originatingTab &&
+        Number.isInteger(originatingTab.id) &&
+        !((result.tabIds || []).includes(originatingTab.id)) &&
+        /^(?:about:blank|chrome:\/\/newtab\/?|brave:\/\/newtab\/?)(?:[?#].*)?$/i.test(
+          String(originatingTab.url || originatingTab.pendingUrl || '')
+        )
+      ) {
+        // If an already-open matching MultiVerse batch was reused instead of
+        // the origin tab, close only the otherwise-empty command-launcher tab.
+        try { await chrome.tabs.remove(originatingTab.id); } catch (_) {}
+      }
     } else {
       // Keep the omnibox contract consistent: a valid Suite command with no
       // matching result falls back to the Blue Letter Bible home page.
@@ -2609,7 +2638,7 @@ async function handleOmniboxCommand(text, disposition) {
     return;
   }
   // Existing `b ...` path is deliberately untouched.
-  return handleBCommand(text);
+  return handleBCommand(text, disposition || 'currentTab');
 }
 chrome.omnibox.onInputEntered.addListener(handleOmniboxCommand);
 
