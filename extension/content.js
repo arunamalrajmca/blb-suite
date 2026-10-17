@@ -1032,7 +1032,6 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     // Polling is bounded and read-only; it does not dispatch events or change page state.
     {
       const diagnosticStartedAt = Date.now();
-      let lastObservedValue = currentBeforeRetrieve;
       let lastObservedElement = primary;
       const findCurrentPrimary = () => {
         const currentHeading = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
@@ -1069,7 +1068,6 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
           previousElement = element;
           previousValue = value;
           lastObservedElement = element;
-          lastObservedValue = value;
         }
         if (Date.now() - diagnosticStartedAt >= 30000) {
           window.clearInterval(watchTimer);
