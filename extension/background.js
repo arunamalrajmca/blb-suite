@@ -2461,15 +2461,22 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
     await openSingleKjvVerse([refs[0].bookNumber, refs[0].chapter, refs[0].verse], disposition);
     return true;
   }
-  const urls=buildCaseSensitiveMultiVerseUrls(refs,6000,BLB_MULTIVERSE_MAX_VERSES);
-  if (!urls.length) {
-    // A valid case-sensitive query must never fall through to BLB home simply
-    // because the local MultiVerse URL builder could not construct a target.
-    // Preserve the established behavior: use BLB's native search instead.
-    await openCaseSensitiveNativeSearch(parsed.rawQuery, disposition);
-    return true;
+  // Route case-sensitive matches through the same canonical MultiVerse
+  // batch manager used by other reference entry points. URL-only generic
+  // matching collapses every MultiVerse.cfm URL to one tab identity, which
+  // caused duplicate searches to reuse incorrectly and later batches to be
+  // lost. The shared manager keys each batch by its canonical verse set.
+  const multiVerseRefs = refs.map(ref => ({
+    bookNumber:ref.bookNumber,
+    chapter:ref.chapter,
+    from:ref.verse,
+    to:ref.verse,
+    version:'kjv'
+  }));
+  const opened = await openBlbMultiVerseRefs(multiVerseRefs, disposition !== 'newBackgroundTab');
+  if (!opened?.ok) {
+    console.warn('BLB Suite: case-sensitive MultiVerse open failed:', opened?.reason || 'unknown');
   }
-  await openCaseSensitiveDestinations(urls, disposition);
   return true;
 }
 
