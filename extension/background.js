@@ -2549,6 +2549,15 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
   const opened = await openBlbMultiVerseRefs(multiVerseRefs, disposition !== 'newBackgroundTab', {preferredTabId:originatingTabId});
   if (!opened?.ok) {
     console.warn('BLB Suite: case-sensitive MultiVerse open failed:', opened?.reason || 'unknown');
+  } else if (originatingTabId != null && !(opened.tabIds || []).includes(originatingTabId)) {
+    // If an existing batch was reused, discard only the otherwise-empty
+    // omnibox launcher tab; keep any nonblank page the user had open.
+    try {
+      const origin = await chrome.tabs.get(originatingTabId);
+      if (/^(?:about:blank|chrome:\/\/newtab\/?|brave:\/\/newtab\/?)(?:[?#].*)?$/i.test(String(origin.url || origin.pendingUrl || ''))) {
+        await chrome.tabs.remove(originatingTabId);
+      }
+    } catch (_) {}
   }
   return true;
 }
