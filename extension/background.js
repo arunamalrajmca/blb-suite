@@ -908,6 +908,14 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         trackedMap[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
         const pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
         pendingMap[String(tab.id)] = canonical.refs;
+        console.info('[BLB Suite pending MultiVerse diagnostic] write', {
+          tabId: tab.id,
+          setKey: verseSetKey,
+          refCount: canonical.refs.length,
+          firstRefs: summarizeMultiVerseRefsForDiagnostics(canonical.refs).slice(0, 4),
+          lastRefs: summarizeMultiVerseRefsForDiagnostics(canonical.refs).slice(-4),
+          hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(canonical.refs.map(r => `${r.book} ${r.chapter}:${r.from}${r.to && r.to !== r.from ? "-" + r.to : ""}`).join("; "))
+        });
         await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap});
         try {
           await chrome.tabs.update(tab.id, {url:'https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1', active:reusedOriginTab ? !!active : !!active});
@@ -3369,6 +3377,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
       const map = data.blbSuitePendingMultiVerseRefsByTab && typeof data.blbSuitePendingMultiVerseRefsByTab === 'object' ? data.blbSuitePendingMultiVerseRefsByTab : {};
       const refs = tabId != null ? map[String(tabId)] : null;
+      console.info('[BLB Suite pending MultiVerse diagnostic] read', {
+        tabId: tabId ?? null,
+        refCount: Array.isArray(refs) ? refs.length : 0,
+        firstRefs: summarizeMultiVerseRefsForDiagnostics(refs).slice(0, 4),
+        lastRefs: summarizeMultiVerseRefsForDiagnostics(refs).slice(-4)
+      });
       sendResponse({ok:true, refs:Array.isArray(refs) ? refs : null});
     } catch (error) { sendResponse({ok:false, refs:null, error:String(error)}); }
     return true;
@@ -3380,6 +3394,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (tabId != null) {
         const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
         const map = data.blbSuitePendingMultiVerseRefsByTab && typeof data.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...data.blbSuitePendingMultiVerseRefsByTab} : {};
+        const consumed = map[String(tabId)];
+        console.info('[BLB Suite pending MultiVerse diagnostic] consume', {
+          tabId,
+          refCount: Array.isArray(consumed) ? consumed.length : 0,
+          firstRefs: summarizeMultiVerseRefsForDiagnostics(consumed).slice(0, 4),
+          lastRefs: summarizeMultiVerseRefsForDiagnostics(consumed).slice(-4)
+        });
         delete map[String(tabId)];
         await chrome.storage.local.set({blbSuitePendingMultiVerseRefsByTab:map});
       }
