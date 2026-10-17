@@ -868,6 +868,59 @@ if (location.hostname==="webstersdictionary1828.com") {
   else startWebsterObserver();
 }
 
+// ---------- Diagnostic: MultiVerse textbox after every document load ----------
+// This deliberately runs on ordinary MultiVerse documents too, including the
+// post-Retrieve form submission that drops the handoff marker. Read-only and
+// bounded: sample the retrieval textbox at document readiness and a few points
+// afterward; never write to the page or log the full textbox value.
+if (
+  location.hostname.endsWith(BLB_HOSTNAME) &&
+  /\/tools\/MultiVerse\.cfm$/i.test(location.pathname)
+) {
+  const sampleLoadedMultiVerseTextbox = stage => {
+    try {
+      const heading = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
+        .find(el => /^\s*multiverse retrieval\s*$/i.test((el.innerText || el.textContent || "").trim()));
+      const advancedHeading = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
+        .find(el => /^\s*advanced multiverse search options\s*$/i.test((el.innerText || el.textContent || "").trim()));
+      const controls = Array.from(document.querySelectorAll("input[type=text], textarea, input:not([type])"));
+      const afterHeading = el => !heading || !!(heading.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const beforeAdvanced = el => !advancedHeading || !!(el.compareDocumentPosition(advancedHeading) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const textbox = controls.find(el => afterHeading(el) && beforeAdvanced(el)) || controls[0] || null;
+      const value = String(textbox?.value || textbox?.getAttribute?.("value") || "").trim();
+      const url = new URL(location.href);
+      chrome.runtime.sendMessage({
+        type: "blbSuiteMultiVerseTextboxDiagnostic",
+        diagnostic: {
+          stage,
+          expectedAvailable: false,
+          documentReadyState: document.readyState,
+          searchParamS: url.searchParams.get("s") || "",
+          elementConnected: !!textbox?.isConnected,
+          elementChanged: false,
+          valueLength: value.length,
+          matchesExpected: false,
+          valueStart: value.slice(0, 120),
+          valueEnd: value.slice(-120),
+          hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(value),
+          isRevelation22_7_21: /Revelation\s+22:7-21/i.test(value)
+        }
+      }).catch(() => {});
+    } catch (_) {}
+  };
+  const scheduleLoadedTextboxSamples = () => {
+    sampleLoadedMultiVerseTextbox("post-document-load");
+    for (const delay of [250, 1000, 3000, 6000, 9000]) {
+      window.setTimeout(() => sampleLoadedMultiVerseTextbox("post-load-" + delay + "ms"), delay);
+    }
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", scheduleLoadedTextboxSamples, { once: true });
+  } else {
+    scheduleLoadedTextboxSamples();
+  }
+}
+
 // ---------- BLB MultiVerse hand-off ----------
 // Suite-generated MultiVerse tabs must never expose BLB's bootstrap/default
 // result set. Keep the document hidden until the requested reference set is
