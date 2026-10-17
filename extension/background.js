@@ -2912,10 +2912,11 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   const observedUrl = String(changeInfo.url || tab?.pendingUrl || tab?.url || '');
   let observedParsedUrl = null;
   try { observedParsedUrl = new URL(observedUrl); } catch (_) {}
-  const observedIsBlb = !!observedParsedUrl &&
-    /(^|\\.)blueletterbible\\.org$/i.test(observedParsedUrl.hostname);
-  const observedIsMultiVerse = observedIsBlb && /\\/tools\\/MultiVerse\\.cfm/i.test(observedParsedUrl.pathname);
-  const observedIsSearchResults = observedIsBlb && /\\/search\\/search\\.cfm/i.test(observedParsedUrl.pathname);
+  const observedHostname = String(observedParsedUrl?.hostname || '').toLowerCase();
+  const observedPathname = String(observedParsedUrl?.pathname || '').toLowerCase();
+  const observedIsBlb = observedHostname === 'blueletterbible.org' || observedHostname === 'www.blueletterbible.org';
+  const observedIsMultiVerse = observedIsBlb && observedPathname.includes('/tools/multiverse.cfm');
+  const observedIsSearchResults = observedIsBlb && observedPathname.includes('/search/search.cfm');
   if ((observedIsMultiVerse || observedIsSearchResults) &&
       (changeInfo.url || changeInfo.status === 'loading' || changeInfo.status === 'complete')) {
     let searchParamS = '';
