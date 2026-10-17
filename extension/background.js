@@ -2364,8 +2364,8 @@ async function paceCaseSensitiveTab(tabPromise) {
 function canonicalCaseSensitiveDestinationKey(url) {
   try {
     const u = new URL(String(url || ''));
-    const host = u.hostname.toLowerCase().replace(/^www\\./, '');
-    const path = u.pathname.replace(/\\/+$/, '').toLowerCase() || '/';
+    const host = u.hostname.toLowerCase().replace(/^www\./, '');
+    const path = u.pathname.replace(/\/+$/, '').toLowerCase() || '/';
     const params = [...u.searchParams.entries()].sort(([ak,av],[bk,bv]) =>
       ak.localeCompare(bk) || av.localeCompare(bv)
     );
