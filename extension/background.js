@@ -791,13 +791,11 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
     }
     results.push({...result, count:batchVerses.length, batch:index + 1});
 
-    // Wait for the initial document and then BLB's Retrieve POST navigation
-    // before creating the next batch. The initial "complete" event alone is
-    // too early: the content script fills the textbox and submits Retrieve
-    // afterward, which can otherwise overlap the next batch's session setup.
+    // Wait for each destination to finish its initial load before creating
+    // the next background tab. This avoids racing BLB's pending-reference
+    // handoff while keeping only the first requested tab active.
     if (index < batches.length - 1 && result.tabId != null) {
       await waitForTabTerminalLoad(result.tabId);
-      await waitForTabNextNavigationComplete(result.tabId);
       await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
     }
   }
@@ -2489,41 +2487,6 @@ function waitForTabTerminalLoad(tabId, timeout = CASE_SENSITIVE_MULTI_VERSE_TAB_
     }).catch(() => finish());
   });
 }
-
-// MultiVerse Retrieve submits a POST after the initial document load. Waiting
-// only for the first "complete" event lets the next batch start while BLB is
-// still saving the current textbox/session. Wait for that follow-up navigation
-// to finish before creating the next batch. The timeout is a safety valve for
-// BLB versions that process Retrieve without a full navigation.
-function waitForTabNextNavigationComplete(tabId, timeout = CASE_SENSITIVE_MULTI_VERSE_TAB_LOAD_TIMEOUT_MS) {
-  return new Promise(resolve => {
-    let settled = false;
-    let sawLoading = false;
-    let timer = 0;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      chrome.tabs.onUpdated.removeListener(onUpdated);
-      resolve();
-    };
-    const onUpdated = (updatedTabId, changeInfo) => {
-      if (updatedTabId !== tabId) return;
-      if (changeInfo.status === 'loading') {
-        sawLoading = true;
-        return;
-      }
-      if (sawLoading && changeInfo.status === 'complete') finish();
-    };
-    chrome.tabs.onUpdated.addListener(onUpdated);
-    timer = setTimeout(finish, timeout);
-    chrome.tabs.get(tabId).then(tab => {
-      // The follow-up POST may begin before this waiter is installed.
-      if (tab?.status === 'loading') sawLoading = true;
-    }).catch(() => finish());
-  });
-}
-
 async function paceCaseSensitiveTab(tabPromise) {
   const tab = await tabPromise;
   if (tab?.id != null) await waitForTabTerminalLoad(tab.id);
