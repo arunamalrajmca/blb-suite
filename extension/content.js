@@ -919,6 +919,55 @@ if (
   } else {
     scheduleLoadedTextboxSamples();
   }
+
+  // Capture the exact textbox state at Retrieve/form submission, before the
+  // document navigates and the handoff marker disappears. Record only the
+  // form action path and button label, never the full URL or selected page text.
+  const emitMultiVerseSubmitDiagnostic = (stage, submitEvent = null) => {
+    try {
+      const heading = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
+        .find(el => /^\\s*multiverse retrieval\\s*$/i.test((el.innerText || el.textContent || "").trim()));
+      const advancedHeading = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
+        .find(el => /^\\s*advanced multiverse search options\\s*$/i.test((el.innerText || el.textContent || "").trim()));
+      const controls = Array.from(document.querySelectorAll("input[type=text], textarea, input:not([type])"));
+      const afterHeading = el => !heading || !!(heading.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const beforeAdvanced = el => !advancedHeading || !!(el.compareDocumentPosition(advancedHeading) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const textbox = controls.find(el => afterHeading(el) && beforeAdvanced(el)) || controls[0] || null;
+      const value = String(textbox?.value || textbox?.getAttribute?.("value") || "").trim();
+      const url = new URL(location.href);
+      const form = submitEvent?.target instanceof HTMLFormElement ? submitEvent.target : null;
+      let formActionPath = "";
+      try { formActionPath = form ? new URL(form.action || location.href, location.href).pathname : ""; } catch (_) {}
+      const submitter = submitEvent?.submitter;
+      const submitterLabel = String(submitter?.value || submitter?.innerText || submitter?.textContent || "")
+        .trim().replace(/\\s+/g, " ").slice(0, 40);
+      chrome.runtime.sendMessage({
+        type: "blbSuiteMultiVerseTextboxDiagnostic",
+        diagnostic: {
+          stage,
+          expectedAvailable: false,
+          documentReadyState: document.readyState,
+          searchParamS: url.searchParams.get("s") || "",
+          elementConnected: !!textbox?.isConnected,
+          elementChanged: false,
+          valueLength: value.length,
+          matchesExpected: false,
+          valueStart: value.slice(0, 120),
+          valueEnd: value.slice(-120),
+          hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(value),
+          isRevelation22_7_21: /Revelation\\s+22:7-21/i.test(value),
+          formActionPath,
+          formMethod: String(form?.method || "").toUpperCase(),
+          submitterLabel,
+          defaultPreventedAtCapture: !!submitEvent?.defaultPrevented,
+          navigationType: stage
+        }
+      }).catch(() => {});
+    } catch (_) {}
+  };
+  document.addEventListener("submit", event => {
+    emitMultiVerseSubmitDiagnostic("form-submit", event);
+  }, true);
 }
 
 // ---------- BLB MultiVerse hand-off ----------
