@@ -1000,9 +1000,33 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       await new Promise(resolve=>setTimeout(resolve,25));
     }
     if (actual!==combined) {
+      console.warn('[BLB Suite MultiVerse textbox diagnostic] initial-value-mismatch', {
+        page: location.href,
+        refCount: refs.length,
+        expectedLength: combined.length,
+        actualLength: actual.length,
+        expectedStart: combined.slice(0, 120),
+        expectedEnd: combined.slice(-120),
+        actualStart: actual.slice(0, 120),
+        actualEnd: actual.slice(-120)
+      });
       revealPendingMultiVerseView();
       return false;
     }
+
+    const currentBeforeRetrieve = String(primary.value || primary.getAttribute("value") || "").trim();
+    console.info('[BLB Suite MultiVerse textbox diagnostic] before-retrieve', {
+      page: location.href,
+      refCount: refs.length,
+      expectedLength: combined.length,
+      actualLength: currentBeforeRetrieve.length,
+      matchesExpected: currentBeforeRetrieve === combined,
+      expectedStart: combined.slice(0, 120),
+      expectedEnd: combined.slice(-120),
+      actualStart: currentBeforeRetrieve.slice(0, 120),
+      actualEnd: currentBeforeRetrieve.slice(-120),
+      hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(currentBeforeRetrieve)
+    });
 
     await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
     retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
