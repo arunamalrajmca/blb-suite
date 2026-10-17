@@ -6,6 +6,10 @@
       .replace(/[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g,'')
       .replace(/[\u00A0\u2007\u202F]/g,' ')
       .replace(/[\u2018\u2019]/g,"'")
+      // The possessive suffix is grammatical, not a capitalization signal.
+      // Canonicalize only its final s/S so LORD's matches corpus LORD'S,
+      // while preserving the base-word distinction: LORD's, Lord's, lord's.
+      .replace(/(['\u0027])S\b/g, "$1s")
       .replace(/[^A-Za-z0-9'\-]+/g,' ')
       .replace(/\s+/g,' ')
       .trim()
