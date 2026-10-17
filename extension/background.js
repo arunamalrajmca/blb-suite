@@ -749,14 +749,11 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
     }
     results.push({...result, count:batchVerses.length, batch:index + 1});
 
-    // Wait for the initial document and then BLB's Retrieve POST navigation
-    // before creating the next batch. The initial "complete" event alone is
-    // too early: the content script fills the textbox and submits Retrieve
-    // afterward, which can otherwise overlap the next batch's session setup.
+    // Keep one navigation listener across the initial page load and BLB's
+    // delayed Retrieve POST. Separate waiters leave a gap where the POST's
+    // loading event can be missed, allowing the next batch to race the session.
     if (index < batches.length - 1 && result.tabId != null) {
-      await waitForTabTerminalLoad(result.tabId);
-      const initialUrl = await chrome.tabs.get(result.tabId).then(tab => String(tab?.url || '')).catch(() => '');
-      await waitForTabNextNavigationComplete(result.tabId, initialUrl);
+      await waitForTabInitialAndRetrieveNavigationComplete(result.tabId);
       await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
     }
   }
@@ -2441,18 +2438,17 @@ function waitForTabTerminalLoad(tabId, timeout = CASE_SENSITIVE_MULTI_VERSE_TAB_
   });
 }
 
-// MultiVerse Retrieve submits a POST after the initial document load. Waiting
-// only for the first "complete" event lets the next batch start while BLB is
-// still saving the current textbox/session. Wait for that follow-up navigation
-// to finish before creating the next batch. The timeout is a safety valve for
-// BLB versions that process Retrieve without a full navigation.
+// MultiVerse Retrieve submits a POST after the initial document load. Keep
+// one listener installed across both phases so there is no gap between observing
+// the initial "complete" and listening for Retrieve's follow-up navigation.
 const CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_START_TIMEOUT_MS = 2500;
 const CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_COMPLETE_TIMEOUT_MS = 10000;
 
-function waitForTabNextNavigationComplete(tabId, baselineUrl = '') {
+function waitForTabInitialAndRetrieveNavigationComplete(tabId) {
   return new Promise(resolve => {
     let settled = false;
-    let sawLoading = false;
+    let initialLoadComplete = false;
+    let sawRetrieveLoading = false;
     let timer = 0;
     const armTimeout = (timeout) => {
       if (timer) clearTimeout(timer);
@@ -2467,24 +2463,32 @@ function waitForTabNextNavigationComplete(tabId, baselineUrl = '') {
     };
     const onUpdated = (updatedTabId, changeInfo) => {
       if (updatedTabId !== tabId) return;
-      if (changeInfo.status === 'loading') {
-        sawLoading = true;
-        armTimeout(CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_COMPLETE_TIMEOUT_MS);
+      if (changeInfo.status === 'complete') {
+        if (!initialLoadComplete) {
+          initialLoadComplete = true;
+          // Allow the content script to submit Retrieve after the initial load.
+          armTimeout(CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_START_TIMEOUT_MS);
+        } else if (sawRetrieveLoading) {
+          finish();
+        }
         return;
       }
-      if (sawLoading && changeInfo.status === 'complete') finish();
-    };
-    chrome.tabs.onUpdated.addListener(onUpdated);
-    // Most batches should proceed after a short grace period if Retrieve does
-    // not navigate. Once navigation starts, allow more time for its completion.
-    armTimeout(CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_START_TIMEOUT_MS);
-    chrome.tabs.get(tabId).then(tab => {
-      // The follow-up POST may begin or even finish before this waiter is installed.
-      if (tab?.status === 'loading') {
-        sawLoading = true;
+      if (initialLoadComplete && changeInfo.status === 'loading') {
+        sawRetrieveLoading = true;
         armTimeout(CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_COMPLETE_TIMEOUT_MS);
-      } else if (tab?.status === 'complete' && baselineUrl && String(tab.url || '') !== baselineUrl) {
-        finish();
+      }
+    };
+
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    chrome.tabs.get(tabId).then(tab => {
+      if (tab?.status === 'complete' && !initialLoadComplete) {
+        // The initial load may have completed before the listener was installed.
+        initialLoadComplete = true;
+        armTimeout(CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_START_TIMEOUT_MS);
+      } else if (tab?.status === 'loading' && initialLoadComplete) {
+        // Retrieve may have started while the tab state was being read.
+        sawRetrieveLoading = true;
+        armTimeout(CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_COMPLETE_TIMEOUT_MS);
       }
     }).catch(() => finish());
   });
