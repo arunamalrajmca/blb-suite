@@ -2893,7 +2893,7 @@ function diagnosticTabOperation(kind, args) {
       : (typeof first === 'number' ? [first] : []);
   const trackedTabIds = tabIds.filter(id => diagnosticMultiVerseTabIds.has(id));
   const isMultiVerseUrl = /blueletterbible\.org/i.test(targetUrl) && /MultiVerse\.cfm|blbSuiteMultiVerse=1/i.test(targetUrl);
-  if (isMultiVerseUrl || trackedTabIds.length || (kind === 'remove' && tabIds.length)) {
+  if (isMultiVerseUrl || trackedTabIds.length) {
     let parsed = null;
     try { parsed = new URL(targetUrl); } catch (_) {}
     console.info('[BLB Suite tab operation attribution]', {
