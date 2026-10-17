@@ -126,3 +126,37 @@ test('case-sensitive gods search opens and reuses both batches', async ({ contex
   expect(repeated.map(tab => tab.id).sort()).toEqual(first.tabs.map(tab => tab.id).sort());
   expect(repeated.map(tab => tab.verseCount).sort((a,b) => b-a)).toEqual([200,14]);
 });
+
+test('case-sensitive search reuses the originating tab and leaves no blank orphan', async ({ context, extensionWorker }) => {
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
+  }));
+
+  const result = await extensionWorker.evaluate(async () => {
+    const origin = await chrome.tabs.create({url:'about:blank', active:true});
+    const handled = await handleCaseSensitiveBCommand('gods', 'currentTab');
+    await new Promise(resolve => setTimeout(resolve, 100));
+    const allTabs = await chrome.tabs.query({});
+    const data = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}, blbSuitePendingMultiVerseRefsByTab:{}});
+    const tracked = data.blbSuiteMultiVerseTabSets || {};
+    const pending = data.blbSuitePendingMultiVerseRefsByTab || {};
+    return {
+      handled,
+      originId:origin.id,
+      originUrl:(await chrome.tabs.get(origin.id)).url,
+      blankTabs:allTabs.filter(tab => /^about:blank(?:[#?].*)?$/i.test(String(tab.url || ''))).map(tab => tab.id),
+      tracked:allTabs.filter(tab => tracked[String(tab.id)]?.key).map(tab => ({
+        id:tab.id,
+        key:tracked[String(tab.id)].key,
+        verseCount:expandMultiVerseRefsToVerses(pending[String(tab.id)] || []).length
+      }))
+    };
+  });
+  expect(result.handled).toBe(true);
+  expect(result.originUrl).toContain('blueletterbible.org/tools/MultiVerse.cfm');
+  expect(result.blankTabs).not.toContain(result.originId);
+  expect(result.tracked.map(tab => tab.id)).toContain(result.originId);
+  expect(result.tracked.map(tab => tab.verseCount).sort((a,b) => b-a)).toEqual([200,14]);
+});
