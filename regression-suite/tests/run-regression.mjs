@@ -398,11 +398,16 @@ test('case-sensitive MultiVerse destinations are rate-limited by tab load', () =
   assert(fn.includes('await waitForTabTerminalLoad(tab.id)'), 'each created tab must wait for terminal load');
 });
 
-test('case-sensitive URL-builder failure has native fallback', () => {
-  const start=bg.indexOf('const urls=buildCaseSensitiveMultiVerseUrls');
-  const end=bg.indexOf('await openCaseSensitiveDestinations',start);
-  const section=bg.slice(start,end);
-  assert(section.includes('openCaseSensitiveNativeSearch(parsed.rawQuery, disposition)'));
+test('case-sensitive zero-result path preserves native-search fallback', () => {
+  const start=bg.indexOf('async function handleCaseSensitiveBCommand');
+  const end=bg.indexOf('\nasync function handleOmniboxCommand', start);
+  assert(start >= 0 && end > start, 'case-sensitive command handler block missing');
+  const handler=bg.slice(start,end);
+  const zeroResultStart=handler.indexOf('if (!matches.length)');
+  const zeroResultEnd=handler.indexOf('\n  }', zeroResultStart);
+  assert(zeroResultStart >= 0 && zeroResultEnd > zeroResultStart, 'case-sensitive zero-result branch missing');
+  const zeroResultBranch=handler.slice(zeroResultStart,zeroResultEnd);
+  assert(zeroResultBranch.includes('openCaseSensitiveNativeSearch(parsed.rawQuery, disposition)'), 'zero-result path must preserve the original query through native search');
 });
 
 test('expected PDF limitation remains documented by test policy', () => {
