@@ -12,7 +12,8 @@
     "declarativeNetRequest",
     "contextMenus",
     "scripting",
-    "alarms"
+    "alarms",
+    "webNavigation"
   ],
   "host_permissions": [
     "https://www.blueletterbible.org/*",

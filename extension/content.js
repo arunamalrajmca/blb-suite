@@ -868,6 +868,108 @@ if (location.hostname==="webstersdictionary1828.com") {
   else startWebsterObserver();
 }
 
+// ---------- Diagnostic: MultiVerse textbox after every document load ----------
+// This deliberately runs on ordinary MultiVerse documents too, including the
+// post-Retrieve form submission that drops the handoff marker. Read-only and
+// bounded: sample the retrieval textbox at document readiness and a few points
+// afterward; never write to the page or log the full textbox value.
+if (
+  location.hostname.endsWith(BLB_HOSTNAME) &&
+  /\/tools\/MultiVerse\.cfm$/i.test(location.pathname)
+) {
+  const sampleLoadedMultiVerseTextbox = stage => {
+    try {
+      const heading = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
+        .find(el => /^\s*multiverse retrieval\s*$/i.test((el.innerText || el.textContent || "").trim()));
+      const advancedHeading = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
+        .find(el => /^\s*advanced multiverse search options\s*$/i.test((el.innerText || el.textContent || "").trim()));
+      const controls = Array.from(document.querySelectorAll("input[type=text], textarea, input:not([type])"));
+      const afterHeading = el => !heading || !!(heading.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const beforeAdvanced = el => !advancedHeading || !!(el.compareDocumentPosition(advancedHeading) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const textbox = controls.find(el => afterHeading(el) && beforeAdvanced(el)) || controls[0] || null;
+      const value = String(textbox?.value || textbox?.getAttribute?.("value") || "").trim();
+      const url = new URL(location.href);
+      chrome.runtime.sendMessage({
+        type: "blbSuiteMultiVerseTextboxDiagnostic",
+        diagnostic: {
+          stage,
+          expectedAvailable: false,
+          documentReadyState: document.readyState,
+          searchParamS: url.searchParams.get("s") || "",
+          elementConnected: !!textbox?.isConnected,
+          elementChanged: false,
+          valueLength: value.length,
+          matchesExpected: false,
+          valueStart: value.slice(0, 120),
+          valueEnd: value.slice(-120),
+          hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(value),
+          isRevelation22_7_21: /Revelation\s+22:7-21/i.test(value)
+        }
+      }).catch(() => {});
+    } catch (_) {}
+  };
+  const scheduleLoadedTextboxSamples = () => {
+    sampleLoadedMultiVerseTextbox("post-document-load");
+    for (const delay of [250, 1000, 3000, 6000, 9000]) {
+      window.setTimeout(() => sampleLoadedMultiVerseTextbox("post-load-" + delay + "ms"), delay);
+    }
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", scheduleLoadedTextboxSamples, { once: true });
+  } else {
+    scheduleLoadedTextboxSamples();
+  }
+
+  // Capture the exact textbox state at Retrieve/form submission, before the
+  // document navigates and the handoff marker disappears. Record only the
+  // form action path and button label, never the full URL or selected page text.
+  const emitMultiVerseSubmitDiagnostic = (stage, submitEvent = null) => {
+    try {
+      const heading = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
+        .find(el => /^\s*multiverse retrieval\s*$/i.test((el.innerText || el.textContent || "").trim()));
+      const advancedHeading = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
+        .find(el => /^\s*advanced multiverse search options\s*$/i.test((el.innerText || el.textContent || "").trim()));
+      const controls = Array.from(document.querySelectorAll("input[type=text], textarea, input:not([type])"));
+      const afterHeading = el => !heading || !!(heading.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const beforeAdvanced = el => !advancedHeading || !!(el.compareDocumentPosition(advancedHeading) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const textbox = controls.find(el => afterHeading(el) && beforeAdvanced(el)) || controls[0] || null;
+      const value = String(textbox?.value || textbox?.getAttribute?.("value") || "").trim();
+      const url = new URL(location.href);
+      const form = submitEvent?.target instanceof HTMLFormElement ? submitEvent.target : null;
+      let formActionPath = "";
+      try { formActionPath = form ? new URL(form.action || location.href, location.href).pathname : ""; } catch (_) {}
+      const submitter = submitEvent?.submitter;
+      const submitterLabel = String(submitter?.value || submitter?.innerText || submitter?.textContent || "")
+        .trim().replace(/\s+/g, " ").slice(0, 40);
+      chrome.runtime.sendMessage({
+        type: "blbSuiteMultiVerseTextboxDiagnostic",
+        diagnostic: {
+          stage,
+          expectedAvailable: false,
+          documentReadyState: document.readyState,
+          searchParamS: url.searchParams.get("s") || "",
+          elementConnected: !!textbox?.isConnected,
+          elementChanged: false,
+          valueLength: value.length,
+          matchesExpected: false,
+          valueStart: value.slice(0, 120),
+          valueEnd: value.slice(-120),
+          hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(value),
+          isRevelation22_7_21: /Revelation\s+22:7-21/i.test(value),
+          formActionPath,
+          formMethod: String(form?.method || "").toUpperCase(),
+          submitterLabel,
+          defaultPreventedAtCapture: !!submitEvent?.defaultPrevented,
+          navigationType: stage
+        }
+      }).catch(() => {});
+    } catch (_) {}
+  };
+  document.addEventListener("submit", event => {
+    emitMultiVerseSubmitDiagnostic("form-submit", event);
+  }, true);
+}
+
 // ---------- BLB MultiVerse hand-off ----------
 // Suite-generated MultiVerse tabs must never expose BLB's bootstrap/default
 // result set. Keep the document hidden until the requested reference set is
@@ -1000,14 +1102,113 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       await new Promise(resolve=>setTimeout(resolve,25));
     }
     if (actual!==combined) {
+      console.warn('[BLB Suite MultiVerse textbox diagnostic] initial-value-mismatch', {
+        page: location.href,
+        refCount: refs.length,
+        expectedLength: combined.length,
+        actualLength: actual.length,
+        expectedStart: combined.slice(0, 120),
+        expectedEnd: combined.slice(-120),
+        actualStart: actual.slice(0, 120),
+        actualEnd: actual.slice(-120)
+      });
       revealPendingMultiVerseView();
       return false;
     }
 
+    const currentBeforeRetrieve = String(primary.value || primary.getAttribute("value") || "").trim();
+    console.info('[BLB Suite MultiVerse textbox diagnostic] before-retrieve', {
+      page: location.href,
+      refCount: refs.length,
+      expectedLength: combined.length,
+      actualLength: currentBeforeRetrieve.length,
+      matchesExpected: currentBeforeRetrieve === combined,
+      expectedStart: combined.slice(0, 120),
+      expectedEnd: combined.slice(-120),
+      actualStart: currentBeforeRetrieve.slice(0, 120),
+      actualEnd: currentBeforeRetrieve.slice(-120),
+      hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(currentBeforeRetrieve)
+    });
+
+    // Diagnostic only: observe the textbox after the initial handoff to catch a later overwrite.
+    // Polling is bounded and read-only; it does not dispatch events or change page state.
+    const diagnosticStartedAt = Date.now();
+      let lastObservedElement = primary;
+      const findCurrentPrimary = () => {
+        const currentHeading = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
+          .find(el => /^\s*multiverse retrieval\s*$/i.test((el.innerText || el.textContent || "").trim()));
+        if (!currentHeading) return primary.isConnected ? primary : null;
+        const currentAdvancedHeading = Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
+          .find(el => /^\s*advanced multiverse search options\s*$/i.test((el.innerText || el.textContent || "").trim()));
+        const controls = Array.from(document.querySelectorAll("input[type=text], textarea, input:not([type])"));
+        const afterCurrentHeading = el => !!(currentHeading.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+        const beforeCurrentAdvanced = el => !currentAdvancedHeading || !!(currentAdvancedHeading.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_PRECEDING);
+        return controls.find(el => afterCurrentHeading(el) && beforeCurrentAdvanced(el)) || (primary.isConnected ? primary : null);
+      };
+      const describeValue = (stage, element, value) => ({
+        page: location.href,
+        elapsedMs: Date.now() - diagnosticStartedAt,
+        stage,
+        elementConnected: !!element?.isConnected,
+        elementChanged: element !== lastObservedElement,
+        valueLength: value.length,
+        matchesExpected: value === combined,
+        valueStart: value.slice(0, 120),
+        valueEnd: value.slice(-120),
+        hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(value),
+        isRevelation22_7_21: /Revelation\s+22:7-21/i.test(value)
+      });
+      console.info('[BLB Suite MultiVerse textbox diagnostic] watch-start', describeValue('before-retrieve', primary, currentBeforeRetrieve));
+      const relayTextboxDiagnostic = (stage, element, value, extra = {}) => {
+        const detail = {
+          stage,
+          page: location.href,
+          elapsedMs: Date.now() - diagnosticStartedAt,
+          elementConnected: !!element?.isConnected,
+          elementChanged: element !== lastObservedElement,
+          valueLength: String(value || '').length,
+          matchesExpected: String(value || '').trim() === combined,
+          valueStart: String(value || '').slice(0, 120),
+          valueEnd: String(value || '').slice(-120),
+          hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(String(value || '')),
+          isRevelation22_7_21: /Revelation\s+22:7-21/i.test(String(value || '')),
+          ...extra
+        };
+        chrome.runtime.sendMessage({type:'blbSuiteMultiVerseTextboxDiagnostic', diagnostic:detail}).catch(()=>{});
+      };
+      relayTextboxDiagnostic('before-retrieve', primary, currentBeforeRetrieve);
+      let previousElement = primary;
+      let previousValue = currentBeforeRetrieve;
+      const watchTimer = window.setInterval(() => {
+        const element = findCurrentPrimary();
+        const value = String(element?.value || element?.getAttribute?.("value") || "").trim();
+        if (element !== previousElement || value !== previousValue) {
+          console.info('[BLB Suite MultiVerse textbox diagnostic] value-change', describeValue('poll', element, value));
+          relayTextboxDiagnostic('value-change', element, value);
+          previousElement = element;
+          previousValue = value;
+          lastObservedElement = element;
+        }
+        if (Date.now() - diagnosticStartedAt >= 30000) {
+          window.clearInterval(watchTimer);
+          console.info('[BLB Suite MultiVerse textbox diagnostic] watch-end', {
+            page: location.href,
+            elapsedMs: Date.now() - diagnosticStartedAt,
+            finalValueLength: previousValue.length,
+            finalValueStart: previousValue.slice(0, 120),
+            finalValueEnd: previousValue.slice(-120),
+            hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(previousValue),
+            isRevelation22_7_21: /Revelation\s+22:7-21/i.test(previousValue)
+          });
+        }
+      }, 100);
+
     await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
     retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
     retrieve.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true,view:window}));
+    relayTextboxDiagnostic('immediately-before-retrieve-click', findCurrentPrimary(), String(findCurrentPrimary()?.value || findCurrentPrimary()?.getAttribute?.("value") || "").trim());
     retrieve.click();
+    relayTextboxDiagnostic('immediately-after-retrieve-click', findCurrentPrimary(), String(findCurrentPrimary()?.value || findCurrentPrimary()?.getAttribute?.("value") || "").trim());
 
     // Do not reveal merely because Retrieve was clicked. BLB updates the result
     // area asynchronously; reveal only after the requested references are
@@ -1167,9 +1368,9 @@ function getSelectionContextPosition() {
               continue;
             }
             const blockLike = /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DL|DT|FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|LI|MAIN|NAV|OL|P|PRE|SECTION|TABLE|TR|UL)$/.test(tag);
-            if (blockLike && pieces.length && !/\\s$/.test(pieces[pieces.length - 1])) pieces.push(' ');
+            if (blockLike && pieces.length && !/\s$/.test(pieces[pieces.length - 1])) pieces.push(' ');
             walk(child);
-            if (blockLike && pieces.length && !/^\\s/.test(pieces[pieces.length - 1])) pieces.push(' ');
+            if (blockLike && pieces.length && !/^\s/.test(pieces[pieces.length - 1])) pieces.push(' ');
           }
         }
       };
@@ -1670,7 +1871,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const escapeRegex = part => part.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
       const parts = value.split(/\s+/).map(part => escapeRegex(part).replace(/[\u2010-\u2015\u2212]/g, '-').replace(/-/g, '[-\\u2010-\\u2015\\u2212]'));
       if (!parts.length) return [];
-      const pattern = new RegExp(parts.join('\\s+'), 'gi');
+      const pattern = new RegExp(parts.join('\s+'), 'gi');
       const occurrences = [];
       let match;
       while ((match = pattern.exec(normalizedMatchSource))) {
@@ -2131,8 +2332,8 @@ function hasLocalValidBibleReference(text) {
 
   entries.sort((a,b) => b.name.length - a.name.length);
   for (const entry of entries) {
-    const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-    const re = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}\\.?\\s+(-?\\d+)(?:(?::|\\.)\\s*(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?|\\s+(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?)?(?=$|[^A-Za-z0-9])`, 'i');
+    const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\s+');
+    const re = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}\\.?\s+(-?\\d+)(?:(?::|\\.)\s*(-?\\d+)(?:\s*[-–]\s*(-?\\d+))?|\s+(-?\\d+)(?:\s*[-–]\s*(-?\\d+))?)?(?=$|[^A-Za-z0-9])`, 'i');
     const match = re.exec(source);
     if (!match) continue;
 
