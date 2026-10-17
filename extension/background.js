@@ -2910,9 +2910,12 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   // logs in the service-worker console so they remain visible even when the
   // MultiVerse page console is empty. Do not log Criteria/search query text.
   const observedUrl = String(changeInfo.url || tab?.pendingUrl || tab?.url || '');
-  const observedIsBlb = /^https?:\\/\\/(?:www\\.)?blueletterbible\\.org\\//i.test(observedUrl);
-  const observedIsMultiVerse = observedIsBlb && /\\/tools\\/MultiVerse\\.cfm/i.test(observedUrl);
-  const observedIsSearchResults = observedIsBlb && /\\/search\\/search\\.cfm/i.test(observedUrl);
+  let observedParsedUrl = null;
+  try { observedParsedUrl = new URL(observedUrl); } catch (_) {}
+  const observedIsBlb = !!observedParsedUrl &&
+    /(^|\\.)blueletterbible\\.org$/i.test(observedParsedUrl.hostname);
+  const observedIsMultiVerse = observedIsBlb && /\\/tools\\/MultiVerse\\.cfm/i.test(observedParsedUrl.pathname);
+  const observedIsSearchResults = observedIsBlb && /\\/search\\/search\\.cfm/i.test(observedParsedUrl.pathname);
   if ((observedIsMultiVerse || observedIsSearchResults) &&
       (changeInfo.url || changeInfo.status === 'loading' || changeInfo.status === 'complete')) {
     let searchParamS = '';
