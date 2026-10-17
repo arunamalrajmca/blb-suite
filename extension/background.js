@@ -2872,6 +2872,18 @@ async function createBlbTabGeneric(url, active = true, {forceNew = false} = {}) 
 }
 
 
+// Diagnostic-only MultiVerse tab lifecycle tracing; never log selected text or full URLs.
+chrome.tabs.onCreated.addListener(tab => {
+  const url = String(tab?.pendingUrl || tab?.url || '');
+  if (!/blueletterbible\.org/i.test(url) || !/MultiVerse\.cfm|blbSuiteMultiVerse=1/i.test(url)) return;
+  console.info('[BLB Suite MultiVerse tab lifecycle] created', {
+    tabId: tab.id ?? null, openerTabId: tab.openerTabId ?? null,
+    active: !!tab.active, status: String(tab.status || ''),
+    hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(url),
+    urlHasHandoffMarker: /blbSuiteMultiVerse=1/i.test(url)
+  });
+});
+
 chrome.tabs.onRemoved.addListener(tabId => {
   forgetBlbTab(tabId);
   intentionalNewBlbTabs.delete(tabId);
@@ -2897,6 +2909,16 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   const isBlank = /^about:blank(?:[#?].*)?$/i.test(url);
   const isMultiVerse = /blueletterbible\.org/i.test(url) &&
     (/\/MultiVerse\.cfm/i.test(url) || /blbSuiteMultiVerse=1/i.test(url));
+
+  if (isMultiVerse || isBlank) {
+    console.info('[BLB Suite MultiVerse tab lifecycle] updated', {
+      tabId, status: String(tab?.status || ''),
+      changeStatus: String(changeInfo.status || ''),
+      isBlank, isMultiVerse,
+      hasProblematicSignature: /Gen 1:1-15; Rev 3; 4; Jer 21:10/i.test(url),
+      urlHasHandoffMarker: /blbSuiteMultiVerse=1/i.test(url)
+    });
+  }
 
   if (!isBlank && !isMultiVerse) {
     clearTrackedMultiVerseTab(tabId).catch(()=>{});
