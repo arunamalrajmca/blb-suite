@@ -199,6 +199,26 @@ test('case-sensitive search reuses the originating tab and leaves no blank orpha
   expect(result.blankTabs).not.toContain(result.originId);
   expect(result.tracked.map(tab => tab.id)).toContain(result.originId);
   expect(result.tracked.map(tab => tab.verseCount).sort((a,b) => b-a)).toEqual([200,14]);
+
+  // If the same search is launched from another blank command tab, reuse the
+  // existing result batches and close only that empty launcher tab.
+  const repeated = await extensionWorker.evaluate(async () => {
+    const origin = await chrome.tabs.create({url:'about:blank', active:true});
+    await handleCaseSensitiveBCommand('gods', 'currentTab');
+    const originAfter = await chrome.tabs.get(origin.id).catch(() => null);
+    const tabs = await chrome.tabs.query({});
+    const data = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
+    const tracked = data.blbSuiteMultiVerseTabSets || {};
+    return {
+      originId:origin.id,
+      originExists:!!originAfter,
+      blankIds:tabs.filter(tab => /^about:blank(?:[#?].*)?$/i.test(String(tab.url || ''))).map(tab => tab.id),
+      trackedIds:tabs.filter(tab => tracked[String(tab.id)]?.key).map(tab => tab.id)
+    };
+  });
+  expect(repeated.originExists).toBe(false);
+  expect(repeated.blankIds).not.toContain(repeated.originId);
+  expect(new Set(repeated.trackedIds)).toEqual(new Set(result.tracked.map(tab => tab.id)));
 });
 
 test('case-sensitive apostrophe search finds all capitalization variants with an incomplete index', async ({ extensionWorker }) => {
