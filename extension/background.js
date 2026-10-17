@@ -1934,7 +1934,13 @@ function normalizeBooleanOperatorsOutsideQuotes(value) {
       i++;
       continue;
     }
-    if (ch === '"' || ch === "'") {
+    // An apostrophe inside a word (for example LORD'S) is not a
+    // quote delimiter; otherwise it can hide a later Boolean operator.
+    const isWordApostrophe = ch === "'" &&
+      i > 0 && i + 1 < text.length &&
+      /[A-Za-z0-9]/.test(text[i - 1]) &&
+      /[A-Za-z0-9]/.test(text[i + 1]);
+    if ((ch === '"' || ch === "'") && !isWordApostrophe) {
       quote = ch;
       result += ch;
       i++;
@@ -1963,7 +1969,13 @@ function hasUnquotedBooleanOperator(value) {
     if (escaped) { escaped = false; continue; }
     if (ch === '\\') { escaped = true; continue; }
     if (quote) { if (ch === quote) quote = ''; continue; }
-    if (ch === '"' || ch === "'") { quote = ch; continue; }
+    // Do not interpret possessive apostrophes as opening quotes:
+    // LORD'S AND GOD must still detect the unquoted AND operator.
+    const isWordApostrophe = ch === "'" &&
+      i > 0 && i + 1 < text.length &&
+      /[A-Za-z0-9]/.test(text[i - 1]) &&
+      /[A-Za-z0-9]/.test(text[i + 1]);
+    if ((ch === '"' || ch === "'") && !isWordApostrophe) { quote = ch; continue; }
     if (/[A-Za-z]/.test(ch) && (i === 0 || !/[A-Za-z0-9_]/.test(text[i - 1]))) {
       const match = text.slice(i).match(/^(AND|NOT|OR)(?![A-Za-z0-9_])/i);
       if (match) return true;
