@@ -13,10 +13,10 @@ const SELECTION = [
 ];
 
 async function openMultiVerse(extensionWorker, refs) {
-  return extensionWorker.evaluate(async payload => chrome.runtime.sendMessage({
-    type: 'blbSuiteOpenWebsterMultiVerse',
-    refs: payload
-  }), refs);
+  // This code already runs inside the extension service worker. Sending a
+  // runtime message from that worker does not dispatch it back to its own
+  // onMessage listener, so call the shared production entry point directly.
+  return extensionWorker.evaluate(async payload => openBlbMultiVerseRefs(payload, true), refs);
 }
 
 async function getTrackedMultiVerseTabs(extensionWorker) {
