@@ -112,6 +112,8 @@ test('case-sensitive gods search opens and reuses both batches', async ({ contex
   expect(first.handled).toBe(true);
   expect(first.openResults).toHaveLength(1);
   expect(first.openResults[0]?.ok, JSON.stringify(first.openResults)).toBe(true);
+  expect(first.openResults[0]?.batchCount, JSON.stringify(first.openResults)).toBe(2);
+  expect(first.openResults[0]?.tabIds, JSON.stringify(first.openResults)).toHaveLength(2);
   expect(first.tabs).toHaveLength(2);
   expect(first.tabs[0].id).not.toBe(first.tabs[1].id);
   expect(new Set(first.tabs.map(tab => tab.key)).size).toBe(2);
