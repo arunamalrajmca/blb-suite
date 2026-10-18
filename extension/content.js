@@ -1080,9 +1080,15 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     // own requested results. Consuming before native form submission means the
     // destination document cannot recover the request after the browser unloads
     // this document, so it falls back to BLB's saved default result.
-    retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
-    retrieve.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true,view:window}));
-    retrieve.click();
+    // Invoke the form's native submission algorithm explicitly. Synthetic
+    // mouse events plus click() can be intercepted by site button handlers
+    // without reliably dispatching the POST in every tab; requestSubmit()
+    // validates the submitter and dispatches the form submit event.
+    if (typeof multiForm.requestSubmit === "function") {
+      multiForm.requestSubmit(retrieve);
+    } else {
+      retrieve.click();
+    }
 
     // Keep this tab hidden until its own requested verses appear, or until
     // BLB returns a terminal response such as 429.
