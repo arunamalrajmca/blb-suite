@@ -1111,28 +1111,26 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     // area asynchronously; reveal only after the requested references are
     // actually present, so the normal bootstrap/default verses cannot flash.
     // Reveal after submitting rather than holding the entire page blank
-    // for up to ten seconds. Result verification continues asynchronously.
+    // for up to ten seconds. Verify asynchronously; a false-negative must not
+    // cause the bounded retry loop to click Retrieve again.
     revealPendingMultiVerseView();
-    const resultsReady = await waitForExpectedMultiVerseResults(refs);
-    diagnosticStage=resultsReady?'results-detected-after-retrieve':'retrieve-results-timeout';
-    handoffDiagnostic('retrieve-wait-finished',{resultsReady});
-    if (resultsReady) {
-      try { sessionStorage.removeItem(BLB_SUITE_MULTIVERSE_EXPECTED_REFS_KEY); } catch (_) {}
-      await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
-    }
-    await chrome.runtime.sendMessage({
-      type:'blbSuiteMultiVerseHandoffComplete',
-      success:resultsReady,
-      reason:resultsReady ? 'expected-results-visible' : 'expected-results-timeout'
+    void waitForExpectedMultiVerseResults(refs).then(async resultsReady=>{
+      diagnosticStage=resultsReady?'results-detected-after-retrieve':'retrieve-results-timeout';
+      handoffDiagnostic('retrieve-wait-finished',{resultsReady});
+      if (resultsReady) {
+        try {
+          sessionStorage.removeItem(BLB_SUITE_MULTIVERSE_EXPECTED_REFS_KEY);
+          sessionStorage.removeItem(submittedKey);
+        } catch (_) {}
+        await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+      }
+      await chrome.runtime.sendMessage({
+        type:'blbSuiteMultiVerseHandoffComplete',
+        success:resultsReady,
+        reason:resultsReady ? 'expected-results-visible' : 'expected-results-timeout'
+      }).catch(()=>{});
     }).catch(()=>{});
-    // On timeout, retain the session-scoped expected refs and let the outer
-    // bounded retry loop attempt the handoff again. Do not expose stale BLB
-    // results between retries. A successful result is the only early exit.
-    if (resultsReady) {
-      revealPendingMultiVerseView();
-      return true;
-    }
-    return false;
+    return true;
   }
 
   const tryProcess=async()=>{
