@@ -861,18 +861,18 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         }
         if (!reusedOriginTab) tab = await chrome.tabs.create({url:'about:blank', active:!!active});
         if (tab?.id == null) return null;
-        const pending = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}, blbSuitePendingMultiVerseRefsByTab:{}});
+        const pending = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
         const trackedMap = pending.blbSuiteMultiVerseTabSets && typeof pending.blbSuiteMultiVerseTabSets === 'object' ? {...pending.blbSuiteMultiVerseTabSets} : {};
         trackedMap[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
-        const pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
-        pendingMap[String(tab.id)] = canonical.refs;
-        await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap});
+        await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap});
+        const mvText = canonical.refs.map(ref => ref.book + ' ' + ref.chapter + ':' + ref.from + (ref.to != null && ref.to !== ref.from ? '-' + ref.to : '')).join('; ');
+        const handoffUrl = chrome.runtime.getURL('multiverse-post.html') + '?' + new URLSearchParams({mvText}).toString();
         try {
-          await chrome.tabs.update(tab.id, {url:'https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1', active:reusedOriginTab ? !!active : !!active});
+          await chrome.tabs.update(tab.id, {url:handoffUrl, active:!!active});
         } catch (error) {
           navigationError = error;
-          delete trackedMap[String(tab.id)]; delete pendingMap[String(tab.id)];
-          await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap}).catch(()=>{});
+          delete trackedMap[String(tab.id)];
+          await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap}).catch(()=>{});
           if (!reusedOriginTab) { try { await chrome.tabs.remove(tab.id); } catch (_) {} }
           throw error;
         }
