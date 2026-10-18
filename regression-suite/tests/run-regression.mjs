@@ -62,7 +62,11 @@ test('no optional host-permission regression', () => {
 // Syntax checks for all JS source files.
 test('all JavaScript source files parse', () => {
   for (const f of fs.readdirSync(ROOT).filter(x=>x.endsWith('.js'))) {
-    new vm.Script(read(f), {filename:f});
+    try {
+      new vm.Script(read(f), {filename:f});
+    } catch (error) {
+      throw new Error(`${f}: ${error.message}`);
+    }
   }
 });
 
