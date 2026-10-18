@@ -569,22 +569,37 @@ async function getTrackedMultiVerseTabs() {
     ? {...data.blbSuiteMultiVerseTabSets} : {};
 }
 
+// Serialize read-modify-write operations for the shared tab tracking map.
+// Navigation events can fire while a new batch is being reserved; without
+// this queue, an older cleanup snapshot can overwrite a newer batch identity.
+let pendingMultiVerseTrackingUpdate = Promise.resolve();
+
+function updateTrackedMultiVerseTabs(mutator) {
+  const run = pendingMultiVerseTrackingUpdate.then(async () => {
+    const map = await getTrackedMultiVerseTabs();
+    await mutator(map);
+    await chrome.storage.local.set({blbSuiteMultiVerseTabSets:map});
+    return map;
+  });
+  pendingMultiVerseTrackingUpdate = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 async function setTrackedMultiVerseTab(tabId, setKey) {
-  const map = await getTrackedMultiVerseTabs();
-  map[String(tabId)] = {key:setKey, updatedAt:Date.now()};
-  await chrome.storage.local.set({blbSuiteMultiVerseTabSets:map});
+  await updateTrackedMultiVerseTabs(map => {
+    map[String(tabId)] = {key:setKey, updatedAt:Date.now()};
+  });
 }
 
 async function clearTrackedMultiVerseTab(tabId) {
-  const map = await getTrackedMultiVerseTabs();
-  if (!Object.prototype.hasOwnProperty.call(map, String(tabId))) return;
-  delete map[String(tabId)];
-  await chrome.storage.local.set({blbSuiteMultiVerseTabSets:map});
+  await updateTrackedMultiVerseTabs(map => {
+    delete map[String(tabId)];
+  });
 }
 
 async function findMatchingMultiVerseTab(setKey, tabs) {
   const tracked = await getTrackedMultiVerseTabs();
-  let changed = false;
+  const staleTabIds = [];
   let match = null;
   for (const tab of tabs) {
     const entry = tracked[String(tab.id)];
@@ -602,12 +617,16 @@ async function findMatchingMultiVerseTab(setKey, tabs) {
     const handoffUrl = chrome.runtime.getURL('multiverse-post.html');
     const isMultiVerseHandoff = urls.some(url => url.startsWith(handoffUrl));
     const isBlank = urls.length > 0 && urls.every(url => /^about:blank(?:[#?].*)?$/i.test(url));
-    if (!isMultiVerse && !isBlank && !isMultiVerseHandoff) { delete tracked[String(tab.id)]; changed = true; continue; }
+    if (!isMultiVerse && !isBlank && !isMultiVerseHandoff) { staleTabIds.push(String(tab.id)); continue; }
     // A tracked blank or POST-handoff tab is a reserved destination: its
     // payload is already attached to that tab, so reuse it during navigation.
     if (!match && entry.key === setKey && (isMultiVerse || isBlank || isMultiVerseHandoff)) match = tab;
   }
-  if (changed) await chrome.storage.local.set({blbSuiteMultiVerseTabSets:tracked});
+  if (staleTabIds.length) {
+    await updateTrackedMultiVerseTabs(map => {
+      for (const id of staleTabIds) delete map[id];
+    });
+  }
   return match;
 }
 
@@ -865,18 +884,16 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         }
         if (!reusedOriginTab) tab = await chrome.tabs.create({url:'about:blank', active:!!active});
         if (tab?.id == null) return null;
-        const pending = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
-        const trackedMap = pending.blbSuiteMultiVerseTabSets && typeof pending.blbSuiteMultiVerseTabSets === 'object' ? {...pending.blbSuiteMultiVerseTabSets} : {};
-        trackedMap[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
-        await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap});
+        await updateTrackedMultiVerseTabs(map => {
+          map[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
+        });
         const mvText = canonical.refs.map(ref => ref.book + ' ' + ref.chapter + ':' + ref.from + (ref.to != null && ref.to !== ref.from ? '-' + ref.to : '')).join('; ');
         const handoffUrl = chrome.runtime.getURL('multiverse-post.html') + '?' + new URLSearchParams({mvText}).toString();
         try {
           await chrome.tabs.update(tab.id, {url:handoffUrl, active:!!active});
         } catch (error) {
           navigationError = error;
-          delete trackedMap[String(tab.id)];
-          await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap}).catch(()=>{});
+          await clearTrackedMultiVerseTab(tab.id).catch(()=>{});
           if (!reusedOriginTab) { try { await chrome.tabs.remove(tab.id); } catch (_) {} }
           throw error;
         }
