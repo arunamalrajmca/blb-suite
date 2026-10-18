@@ -593,19 +593,14 @@ async function findMatchingMultiVerseTab(setKey, tabs) {
     // already points at MultiVerse. Check both values so a concurrent opener
     // does not discard the tracking record and create a duplicate tab.
     const urls = [tab.url, tab.pendingUrl].map(value => String(value || '')).filter(Boolean);
-    // The stored reference-set key is the identity. If that exact key still
-    // owns a live tab, reuse it regardless of whether Chrome currently reports
-    // the extension handoff URL, a pending POST navigation, or the final BLB
-    // result URL. URL filtering here caused duplicate tabs during transitions.
-    if (entry.key === setKey) {
-      if (!match) match = tab;
-      continue;
-    }
     const isMultiVerse = urls.some(url =>
       /blueletterbible\.org/i.test(url) && (/\/MultiVerse\.cfm/i.test(url) || /blbSuiteMultiVerse=1/i.test(url))
     );
     const isBlank = urls.length > 0 && urls.every(url => /^about:blank(?:[#?].*)?$/i.test(url));
     if (!isMultiVerse && !isBlank) { delete tracked[String(tab.id)]; changed = true; continue; }
+    // A tracked blank tab is a reserved destination: its payload was stored
+    // before navigation, so reuse it if another invocation arrives meanwhile.
+    if (!match && entry.key === setKey && (isMultiVerse || isBlank)) match = tab;
   }
   if (changed) await chrome.storage.local.set({blbSuiteMultiVerseTabSets:tracked});
   return match;
@@ -836,16 +831,17 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
           'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
           'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
         ]});
-        // Chrome URL filters do not return extension handoffs, and a tracked
-        // destination may already be navigating to BLB. Recover every live tab
-        // for this exact reference-set identity directly by tab ID.
+        // about:blank is not reliably matched by Chrome URL filters. Recover
+        // only tracked reservations for this batch by tab ID instead of
+        // querying every unrelated browser tab.
         const tracked = await getTrackedMultiVerseTabs();
         const reservedTabs = [];
         for (const [id, entry] of Object.entries(tracked)) {
           if (entry?.key !== verseSetKey) continue;
           try {
             const tab = await chrome.tabs.get(Number(id));
-            if (tab?.id != null) reservedTabs.push(tab);
+            if (/^about:blank(?:[#?].*)?$/i.test(String(tab?.url || '')) ||
+                /^about:blank(?:[#?].*)?$/i.test(String(tab?.pendingUrl || ''))) reservedTabs.push(tab);
           } catch (_) {}
         }
         return findMatchingMultiVerseTab(verseSetKey, [...multiVerseTabs, ...reservedTabs]);
