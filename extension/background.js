@@ -749,13 +749,8 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
     }
     results.push({...result, count:batchVerses.length, batch:index + 1});
 
-    // Wait for each destination to finish its initial load before creating
-    // the next background tab. This avoids racing BLB's pending-reference
-    // handoff while keeping only the first requested tab active.
-    if (index < batches.length - 1 && result.tabId != null) {
-      await waitForTabInitialAndRetrieveNavigationComplete(result.tabId);
-      await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
-    }
+    // No artificial cooldown between batches. Continue opening the next
+    // destination immediately after the previous tab is reserved.
   }
 
   return {
@@ -2413,7 +2408,6 @@ function buildCaseSensitiveMultiVerseUrls(refs, maxUrlLength = 6000, maxReferenc
   return urls;
 }
 
-const CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS = 1000;
 const CASE_SENSITIVE_MULTI_VERSE_TAB_LOAD_TIMEOUT_MS = 15000;
 
 function waitForTabTerminalLoad(tabId, timeout = CASE_SENSITIVE_MULTI_VERSE_TAB_LOAD_TIMEOUT_MS) {
@@ -2437,61 +2431,6 @@ function waitForTabTerminalLoad(tabId, timeout = CASE_SENSITIVE_MULTI_VERSE_TAB_
     }).catch(() => finish());
   });
 }
-
-// MultiVerse Retrieve submits a POST after the initial document load. Keep
-// one listener installed across both phases so there is no gap between observing
-// the initial "complete" and listening for Retrieve's follow-up navigation.
-// Avoid a long idle pause when Retrieve never starts; if navigation begins, wait for it below.
-const CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_START_TIMEOUT_MS = 2500;
-const CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_COMPLETE_TIMEOUT_MS = 10000;
-
-function waitForTabInitialAndRetrieveNavigationComplete(tabId) {
-  return new Promise(resolve => {
-    let settled = false;
-    let initialLoadComplete = false;
-    let sawRetrieveLoading = false;
-    let timer = 0;
-    const armTimeout = timeout => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(finish, timeout);
-    };
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      chrome.tabs.onUpdated.removeListener(onUpdated);
-      resolve();
-    };
-    const onUpdated = (updatedTabId, changeInfo) => {
-      if (updatedTabId !== tabId) return;
-      if (changeInfo.status === 'complete') {
-        if (!initialLoadComplete) {
-          initialLoadComplete = true;
-          armTimeout(CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_START_TIMEOUT_MS);
-        } else if (sawRetrieveLoading) {
-          finish();
-        }
-        return;
-      }
-      if (initialLoadComplete && changeInfo.status === 'loading') {
-        sawRetrieveLoading = true;
-        armTimeout(CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_COMPLETE_TIMEOUT_MS);
-      }
-    };
-
-    chrome.tabs.onUpdated.addListener(onUpdated);
-    chrome.tabs.get(tabId).then(tab => {
-      if (tab?.status === 'complete' && !initialLoadComplete) {
-        initialLoadComplete = true;
-        armTimeout(CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_START_TIMEOUT_MS);
-      } else if (tab?.status === 'loading' && initialLoadComplete) {
-        sawRetrieveLoading = true;
-        armTimeout(CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_COMPLETE_TIMEOUT_MS);
-      }
-    }).catch(() => finish());
-  });
-}
-
 
 async function paceCaseSensitiveTab(tabPromise) {
   const tab = await tabPromise;
