@@ -3194,6 +3194,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // the preceding tab has produced its expected verses (or reports failure).
 let activeMultiVerseRetrieveTabId = null;
 const queuedMultiVerseRetrieveTabs = [];
+const multiVerseRetrieveNavigationPending = new Set();
+const multiVerseRetrieveNavigationStarted = new Set();
 
 function acquireMultiVerseRetrieveSlot(tabId, sendResponse) {
   if (tabId == null) { sendResponse({ok:false, reason:'missing-tab-id'}); return; }
@@ -3225,13 +3227,29 @@ function releaseMultiVerseRetrieveSlot(tabId) {
   }
 }
 
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (!multiVerseRetrieveNavigationPending.has(tabId)) return;
+  if (changeInfo.status === 'loading') {
+    multiVerseRetrieveNavigationStarted.add(tabId);
+    return;
+  }
+  if (changeInfo.status === 'complete' && multiVerseRetrieveNavigationStarted.has(tabId) &&
+      /\\/tools\\/MultiVerse\\.cfm/i.test(String(tab.url || tab.pendingUrl || ''))) {
+    multiVerseRetrieveNavigationPending.delete(tabId);
+    multiVerseRetrieveNavigationStarted.delete(tabId);
+    releaseMultiVerseRetrieveSlot(tabId);
+  }
+});
+
 chrome.tabs.onRemoved.addListener(tabId => {
+  multiVerseRetrieveNavigationPending.delete(tabId);
+  multiVerseRetrieveNavigationStarted.delete(tabId);
   const index = queuedMultiVerseRetrieveTabs.findIndex(item => item.tabId === tabId);
   if (index >= 0) queuedMultiVerseRetrieveTabs.splice(index, 1);
   if (activeMultiVerseRetrieveTabId === tabId) releaseMultiVerseRetrieveSlot(tabId);
 });
 
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteAcquireMultiVerseRetrieveSlot","blbSuiteReleaseMultiVerseRetrieveSlot","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteAcquireMultiVerseRetrieveSlot","blbSuiteReleaseMultiVerseRetrieveSlot","blbSuiteMarkMultiVerseRetrieveSubmitted","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;
@@ -3352,6 +3370,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'blbSuiteReleaseMultiVerseRetrieveSlot') {
     releaseMultiVerseRetrieveSlot(sender?.tab?.id);
+    sendResponse({ok:true});
+    return true;
+  }
+
+  if (message.type === 'blbSuiteMarkMultiVerseRetrieveSubmitted') {
+    const tabId = sender?.tab?.id;
+    if (tabId != null && activeMultiVerseRetrieveTabId === tabId) {
+      multiVerseRetrieveNavigationPending.add(tabId);
+      multiVerseRetrieveNavigationStarted.delete(tabId);
+    }
     sendResponse({ok:true});
     return true;
   }
