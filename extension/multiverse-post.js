@@ -2,44 +2,19 @@
   'use strict';
 
   const status = document.getElementById('status');
-  const tabId = new URLSearchParams(location.search).get('tabId');
+  const mvTextFromUrl = new URLSearchParams(location.search).get('mvText') || '';
 
   const showFailure = message => {
     status.textContent = message;
   };
 
-  const buildReferenceText = refs => refs.map(ref => {
-    const book = String(ref.book || '').trim();
-    const chapter = Number(ref.chapter);
-    const from = Number(ref.from);
-    const to = ref.to == null ? from : Number(ref.to);
-    if (!book || !Number.isInteger(chapter) || chapter < 1 ||
-        !Number.isInteger(from) || from < 1 ||
-        !Number.isInteger(to) || to < from) {
-      throw new Error('Invalid reference data');
-    }
-    return book + ' ' + chapter + ':' + from + (to !== from ? '-' + to : '');
-  }).join('; ');
-
   async function submitDirectPost() {
-    if (!tabId || !/^\d+$/.test(tabId)) {
-      showFailure('Could not identify this MultiVerse tab. Please retry the selection.');
-      return;
-    }
-
     try {
-      const data = await chrome.storage.local.get({
-        blbSuitePendingMultiVerseRefsByTab: {}
-      });
-      const pending = data.blbSuitePendingMultiVerseRefsByTab;
-      const refs = pending && Array.isArray(pending[tabId]) ? pending[tabId] : null;
-      if (!refs || !refs.length) {
-        showFailure('No references were found for this tab. Please retry the selection.');
+      const mvText = mvTextFromUrl.trim();
+      if (!mvText) {
+        showFailure('No references were supplied for this tab. Please retry the selection.');
         return;
       }
-
-      const mvText = buildReferenceText(refs);
-      if (!mvText) throw new Error('Empty reference list');
 
       const form = document.createElement('form');
       form.method = 'post';
@@ -67,16 +42,6 @@
         form.appendChild(input);
       }
       document.body.appendChild(form);
-
-      // Ask the service worker to consume only this tab's entry. Cleanup is
-      // serialized there so simultaneous tabs cannot overwrite each other's
-      // pending-reference map updates.
-      const cleanup = await chrome.runtime.sendMessage({
-        type: 'blbSuiteConsumePendingMultiVerseRefsForTab',
-        tabId: Number(tabId)
-      });
-      if (!cleanup?.ok) throw new Error('Could not consume pending references for this tab');
-
       form.submit();
     } catch (error) {
       showFailure('Unable to submit the requested references: ' + String(error));
