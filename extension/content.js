@@ -1076,7 +1076,26 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       try {
         if (await processPendingMultiVerseRefs()) return;
       } catch (error) {
-        console.warn("[BLB Suite MultiVerse handoff] attempt failed", {attempt:attempt+1, error:String(error)});
+        // Chrome messaging and page handlers can reject with plain objects;
+        // String(error) collapses those to "[object Object]" and hides the
+        // actual failure. Preserve common fields plus a safe serialized copy.
+        let serializedError=null;
+        try {
+          serializedError=JSON.stringify(error, Object.getOwnPropertyNames(error));
+        } catch (_) {
+          try { serializedError=JSON.stringify(error); } catch (_) {}
+        }
+        console.warn("[BLB Suite MultiVerse handoff] attempt failed", {
+          attempt:attempt+1,
+          url:location.href,
+          errorType:typeof error,
+          errorName:error?.name || null,
+          errorMessage:error?.message || (typeof error==="string" ? error : null),
+          errorStack:error?.stack || null,
+          errorKeys:error && typeof error==="object" ? Object.keys(error) : [],
+          errorSerialized:serializedError,
+          error
+        });
       }
       if (attempt<4) await new Promise(resolve=>setTimeout(resolve,750));
     }
