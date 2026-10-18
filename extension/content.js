@@ -897,7 +897,9 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       document.documentElement.dataset.blbSuiteMultiVersePending='1';
       document.documentElement.style.visibility='hidden';
       multiverseHandoffHidden=true;
-      multiverseRevealTimer=window.setTimeout(revealPendingMultiVerseView,10000);
+      // Allow the complete control-readiness and result-render windows to elapse
+      // even when this handoff starts at document_start.
+      multiverseRevealTimer=window.setTimeout(revealPendingMultiVerseView,15000);
     } catch (_) {}
   };
 
@@ -936,11 +938,13 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
   }
 
   async function processPendingMultiVerseRefs() {
+    // Hide before the first await so BLB's default result cannot paint while
+    // extension settings and this tab's pending references are being read.
+    hidePendingMultiVerseView();
     if (!(await isSuiteEnabled())) {
       revealPendingMultiVerseView();
       return false;
     }
-    hidePendingMultiVerseView();
     const response=await chrome.runtime.sendMessage({type:'blbSuiteGetPendingMultiVerseRefs'});
     const refs=response?.refs;
     if (!Array.isArray(refs) || refs.length<1) {
@@ -1017,9 +1021,11 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     return true;
   }
 
+  // The content script runs at document_start. Start the handoff immediately
+  // instead of waiting for DOMContentLoaded; the existing bounded control
+  // readiness loop handles BLB's asynchronously-created form.
   const tryProcess=()=>processPendingMultiVerseRefs().catch(()=>revealPendingMultiVerseView());
-  if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",tryProcess,{once:true});
-  else void tryProcess();
+  void tryProcess();
 }
 
 
