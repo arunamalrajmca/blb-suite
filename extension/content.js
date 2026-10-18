@@ -958,26 +958,23 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     const combined=values.join("; ");
 
     const started=Date.now();
-    let heading=null, advancedHeading=null, verseControls=[], retrieve=null;
+    let heading=null, primary=null, retrieve=null;
     while (Date.now()-started<4000) {
       heading=Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
         .find(el=>/^\s*multiverse retrieval\s*$/i.test((el.innerText||el.textContent||"").trim()));
       if (heading) {
-        advancedHeading=Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
-          .find(el=>/^\s*advanced multiverse search options\s*$/i.test((el.innerText||el.textContent||"").trim()));
-        const allControls=Array.from(document.querySelectorAll("input[type=text], textarea, input:not([type])"));
-        const beforeAdvanced=el=>!advancedHeading || !!(advancedHeading.compareDocumentPosition(el)&Node.DOCUMENT_POSITION_PRECEDING);
-        const afterHeading=el=>!!(heading.compareDocumentPosition(el)&Node.DOCUMENT_POSITION_FOLLOWING);
-        verseControls=allControls.filter(el=>afterHeading(el)&&beforeAdvanced(el)).slice(0,10);
+        // Target BLB's actual MultiVerse reference field by its stable DOM
+        // identity. Do not infer the field from placeholder text or choose
+        // the first generic textbox: advanced search controls may appear first.
+        primary=document.querySelector('textarea#mvTextWidge[name="mvText"]');
         retrieve=Array.from(document.querySelectorAll("button,input[type=submit],input[type=button],a"))
-          .find(x=>/^\s*retrieve\s*$/i.test((x.innerText||x.value||"").trim()) &&
-            (!advancedHeading || !!(advancedHeading.compareDocumentPosition(x)&Node.DOCUMENT_POSITION_PRECEDING)));
-        if (verseControls.length&&retrieve) break;
+          .find(x=>/^\s*retrieve\s*$/i.test((x.innerText||x.value||"").trim()));
+        if (primary&&retrieve) break;
       }
       await new Promise(resolve=>setTimeout(resolve,50));
     }
 
-    if (!verseControls.length||!retrieve) {
+    if (!primary||!retrieve) {
       revealPendingMultiVerseView();
       return false;
     }
@@ -989,8 +986,6 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       for (const type of ["input","change","keyup","blur"]) el.dispatchEvent(new Event(type,{bubbles:true}));
     };
 
-    verseControls.forEach(c=>setNativeValue(c,""));
-    const primary=verseControls[0];
     if (!combined||!primary) {
       revealPendingMultiVerseView();
       return false;
