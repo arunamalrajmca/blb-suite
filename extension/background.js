@@ -861,18 +861,18 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         }
         if (!reusedOriginTab) tab = await chrome.tabs.create({url:'about:blank', active:!!active});
         if (tab?.id == null) return null;
-        const pending = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}, blbSuitePendingMultiVerseRefsByTab:{}});
+        const pending = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
         const trackedMap = pending.blbSuiteMultiVerseTabSets && typeof pending.blbSuiteMultiVerseTabSets === 'object' ? {...pending.blbSuiteMultiVerseTabSets} : {};
         trackedMap[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
-        const pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
-        pendingMap[String(tab.id)] = canonical.refs;
-        await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap});
+        await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap});
+        const mvText = canonical.refs.map(ref => ref.book + ' ' + ref.chapter + ':' + ref.from + (ref.to != null && ref.to !== ref.from ? '-' + ref.to : '')).join('; ');
+        const handoffUrl = chrome.runtime.getURL('multiverse-post.html') + '?' + new URLSearchParams({mvText}).toString();
         try {
-          await chrome.tabs.update(tab.id, {url:chrome.runtime.getURL('multiverse-post.html') + '?tabId=' + encodeURIComponent(String(tab.id)), active:!!active});
+          await chrome.tabs.update(tab.id, {url:handoffUrl, active:!!active});
         } catch (error) {
           navigationError = error;
-          delete trackedMap[String(tab.id)]; delete pendingMap[String(tab.id)];
-          await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap}).catch(()=>{});
+          delete trackedMap[String(tab.id)];
+          await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap}).catch(()=>{});
           if (!reusedOriginTab) { try { await chrome.tabs.remove(tab.id); } catch (_) {} }
           throw error;
         }
@@ -3207,9 +3207,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-let multiVersePendingRefsCleanupQueue = Promise.resolve();
-
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefsForTab","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;
@@ -3331,30 +3329,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const refs = tabId != null ? map[String(tabId)] : null;
       sendResponse({ok:true, refs:Array.isArray(refs) ? refs : null});
     } catch (error) { sendResponse({ok:false, refs:null, error:String(error)}); }
-    return true;
-  }
-
-  if (message.type === 'blbSuiteConsumePendingMultiVerseRefsForTab') {
-    try {
-      const senderUrl = String(sender?.url || '');
-      const expectedPrefix = chrome.runtime.getURL('multiverse-post.html');
-      const tabId = Number(message.tabId);
-      if (sender?.id !== chrome.runtime.id || !senderUrl.startsWith(expectedPrefix) ||
-          !Number.isInteger(tabId) || tabId < 0) {
-        sendResponse({ok:false, reason:'invalid-sender-or-tab'});
-        return true;
-      }
-      const cleanup = multiVersePendingRefsCleanupQueue.then(async () => {
-        const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
-        const map = data.blbSuitePendingMultiVerseRefsByTab && typeof data.blbSuitePendingMultiVerseRefsByTab === 'object'
-          ? {...data.blbSuitePendingMultiVerseRefsByTab} : {};
-        delete map[String(tabId)];
-        await chrome.storage.local.set({blbSuitePendingMultiVerseRefsByTab:map});
-        return {ok:true};
-      });
-      multiVersePendingRefsCleanupQueue = cleanup.catch(() => {});
-      sendResponse(await cleanup);
-    } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
 
