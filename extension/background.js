@@ -749,13 +749,9 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
     }
     results.push({...result, count:batchVerses.length, batch:index + 1});
 
-    // Wait for each destination to finish its initial load before creating
-    // the next background tab. This avoids racing BLB's pending-reference
-    // handoff while keeping only the first requested tab active.
-    if (index < batches.length - 1 && result.tabId != null) {
-      await waitForTabTerminalLoad(result.tabId);
-      await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
-    }
+    // Open subsequent batches immediately. The extension-owned handoff page
+    // carries each batch's own POST payload, so tab creation must not wait on a
+    // prior page load or introduce an artificial inter-tab delay.
   }
 
   return {
@@ -2845,10 +2841,14 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   // value can erase the batch key before the MultiVerse destination commits.
   const url = String(changeInfo.url || tab?.pendingUrl || tab?.url || '');
   const isBlank = /^about:blank(?:[#?].*)?$/i.test(url);
-  const isMultiVerse = /blueletterbible\.org/i.test(url) &&
-    (/\/MultiVerse\.cfm/i.test(url) || /blbSuiteMultiVerse=1/i.test(url));
+  const isMultiVerse = /blueletterbible\\.org/i.test(url) &&
+    (/\\/MultiVerse\\.cfm/i.test(url) || /blbSuiteMultiVerse=1/i.test(url));
+  // Keep the reservation while the tab is on our extension-owned POST
+  // handoff page. Clearing it here loses the batch identity before the form
+  // navigates to BLB, allowing a repeated request to create duplicate tabs.
+  const isMultiVerseHandoff = url.startsWith(chrome.runtime.getURL('multiverse-post.html'));
 
-  if (!isBlank && !isMultiVerse) {
+  if (!isBlank && !isMultiVerse && !isMultiVerseHandoff) {
     clearTrackedMultiVerseTab(tabId).catch(()=>{});
   }
 });
