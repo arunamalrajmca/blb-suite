@@ -2408,54 +2408,26 @@ function buildCaseSensitiveMultiVerseUrls(refs, maxUrlLength = 6000, maxReferenc
   return urls;
 }
 
-const CASE_SENSITIVE_MULTI_VERSE_TAB_LOAD_TIMEOUT_MS = 15000;
-
-function waitForTabTerminalLoad(tabId, timeout = CASE_SENSITIVE_MULTI_VERSE_TAB_LOAD_TIMEOUT_MS) {
-  return new Promise(resolve => {
-    let settled = false;
-    let timer = 0;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      chrome.tabs.onUpdated.removeListener(onUpdated);
-      resolve();
-    };
-    const onUpdated = (updatedTabId, changeInfo) => {
-      if (updatedTabId === tabId && changeInfo.status === 'complete') finish();
-    };
-    chrome.tabs.onUpdated.addListener(onUpdated);
-    timer = setTimeout(finish, timeout);
-    chrome.tabs.get(tabId).then(tab => {
-      if (tab?.status === 'complete') finish();
-    }).catch(() => finish());
-  });
-}
-
-async function paceCaseSensitiveTab(tabPromise) {
-  const tab = await tabPromise;
-  if (tab?.id != null) await waitForTabTerminalLoad(tab.id);
-  await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
-  return tab;
-}
-
 async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
   const targets=[...new Set((urls||[]).filter(Boolean))];
   if (!targets.length) throw new Error('No BLB Multi-Verse destinations');
 
-  // Use the established generic BLB destination opener. Do not maintain a
-  // separate case-sensitive MultiVerse tab identity or matching path.
+  // Open each destination as soon as the previous tab has been reserved.
+  // Do not wait for page load or add a cooldown: tab readiness must not be
+  // used to serialize independent verse destinations.
   const first = disposition === 'newForegroundTab'
     ? await openBlbDestination(targets[0], true, true)
     : disposition === 'newBackgroundTab'
       ? await openBlbDestination(targets[0], false, false)
       : await chrome.tabs.update({url:targets[0]});
 
-  await paceCaseSensitiveTab(Promise.resolve(first));
-
+  const opened = [first?.tab || first].filter(tab => tab?.id != null);
   for (let i=1;i<targets.length;i++) {
-    await paceCaseSensitiveTab(openBlbDestination(targets[i], false, false));
+    const result = await openBlbDestination(targets[i], false, false);
+    const tab = result?.tab || result;
+    if (tab?.id != null) opened.push(tab);
   }
+  return opened;
 }
 async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab') {
   // Capture the tab in which the omnibox command was entered before async
