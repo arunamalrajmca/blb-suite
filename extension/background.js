@@ -3237,6 +3237,16 @@ function enqueueMultiVersePostSlot(tabId, sendResponse) {
   multiVersePostWaiters.push({tabId, sendResponse});
 }
 
+chrome.tabs.onRemoved.addListener(tabId => {
+  const wasOwner = multiVersePostOwnerTabId === tabId;
+  const remaining = multiVersePostWaiters.filter(waiter => waiter.tabId !== tabId);
+  multiVersePostWaiters.splice(0, multiVersePostWaiters.length, ...remaining);
+  if (wasOwner) {
+    multiVersePostOwnerTabId = null;
+    grantNextMultiVersePostSlot();
+  }
+});
+
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'blbSuiteReopenPopup') {
