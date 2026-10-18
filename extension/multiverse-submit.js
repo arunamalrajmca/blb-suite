@@ -31,8 +31,12 @@
     }
   }
 
+  // Carry this tab's payload in its URL fragment as well as storage. Storage
+  // read/modify/write operations from concurrently created tabs can race; the
+  // fragment gives the destination page an isolated, tab-local copy.
+  const handoff = encodeURIComponent(JSON.stringify(refs));
   await chrome.tabs.update(tabId, {
-    url: "https://www.blueletterbible.org/tools/MultiVerse.cfm"
+    url: "https://www.blueletterbible.org/tools/MultiVerse.cfm#blbSuiteMultiVerseRefs=" + handoff
   });
 })().catch(error => {
   document.body.textContent = "MultiVerse handoff failed: " + String(error);
