@@ -784,20 +784,12 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
     // delayed Retrieve POST. Separate waiters leave a gap where the POST's
     // loading event can be missed, allowing the next batch to race the session.
     if (index < batches.length - 1 && result.tabId != null) {
-      const handoff = await waitForMultiVerseHandoffComplete(result.tabId);
-      if (!handoff.ok) {
-        // A content-script result-link check can fail even after BLB has
-        // accepted Retrieve (for example, if its result markup differs from
-        // the selector). Do not deadlock the remaining batches on that check:
-        // fall back to the navigation-based Retrieve waiter and a cooldown.
-        // Keep the failure visible in diagnostics, but let the sequence proceed
-        // after the bounded fallback rather than opening only the first tab.
-        console.warn('[BLB Suite MultiVerse handoff] content confirmation unavailable; using navigation fallback', {
-          tabId:result.tabId,
-          reason:handoff.reason || 'multiverse-handoff-failed'
-        });
-        await waitForTabInitialAndRetrieveNavigationComplete(result.tabId);
-      }
+      // Do not gate subsequent tabs on a content-script acknowledgement.
+      // That acknowledgement may be missed if the service worker or page
+      // lifecycle races, which would leave the user with only the first batch.
+      // The navigation waiter is bounded and covers the initial load plus a
+      // possible delayed Retrieve POST; then a cooldown spaces out batches.
+      await waitForTabInitialAndRetrieveNavigationComplete(result.tabId);
       await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
     }
   }
