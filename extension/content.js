@@ -953,8 +953,20 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     // Do not depend on the bootstrap query flag surviving BLB redirects.
     // The background associates pending references with sender.tab.id, so
     // the tab's pending payload is the authoritative handoff signal.
-    const response=await chrome.runtime.sendMessage({type:'blbSuiteGetPendingMultiVerseRefs'});
-    const refs=response?.refs;
+    // Prefer the tab-local fragment payload so concurrent storage writes
+    // cannot cause every destination tab to fall back to BLB's saved defaults.
+    let refs = null;
+    try {
+      const match = String(location.hash || '').match(/^#blbSuiteMultiVerseRefs=(.*)$/);
+      if (match) {
+        const parsed = JSON.parse(decodeURIComponent(match[1]));
+        if (Array.isArray(parsed) && parsed.length) refs = parsed;
+      }
+    } catch (_) {}
+    if (!Array.isArray(refs) || refs.length<1) {
+      const response=await chrome.runtime.sendMessage({type:'blbSuiteGetPendingMultiVerseRefs'});
+      refs=response?.refs;
+    }
     if (!Array.isArray(refs) || refs.length<1) return false;
 
     // Hide only a tab that actually has a pending Suite handoff. Ordinary
