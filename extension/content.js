@@ -873,8 +873,7 @@ if (location.hostname==="webstersdictionary1828.com") {
 // result set. Keep the document hidden until the requested reference set is
 // actually visible after Retrieve has completed.
 if (location.hostname===BLBShared.hostnames.blbWww &&
-    /(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)/i.test(location.pathname) &&
-    /[?&]blbSuiteMultiVerse=1(?:&|$)/i.test(location.search)) {
+    /(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)/i.test(location.pathname)) {
   let multiverseHandoffHidden=false;
   let multiverseRevealTimer=0;
 
@@ -940,13 +939,16 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       revealPendingMultiVerseView();
       return false;
     }
-    hidePendingMultiVerseView();
+    // Do not depend on the bootstrap query flag surviving BLB redirects.
+    // The background associates pending references with sender.tab.id, so
+    // the tab's pending payload is the authoritative handoff signal.
     const response=await chrome.runtime.sendMessage({type:'blbSuiteGetPendingMultiVerseRefs'});
     const refs=response?.refs;
-    if (!Array.isArray(refs) || refs.length<1) {
-      revealPendingMultiVerseView();
-      return false;
-    }
+    if (!Array.isArray(refs) || refs.length<1) return false;
+
+    // Hide only a tab that actually has a pending Suite handoff. Ordinary
+    // user-opened MultiVerse pages remain visible and untouched.
+    hidePendingMultiVerseView();
 
     const values=refs.map(r=>`${r.book} ${r.chapter}${r.from == null ? "" : `:${r.from}${r.to != null && r.to!==r.from ? "-"+r.to : ""}`}`);
     const combined=values.join("; ");
