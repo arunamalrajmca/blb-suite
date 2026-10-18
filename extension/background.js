@@ -3213,7 +3213,10 @@ function acquireMultiVerseRetrieveSlot(tabId, sendResponse) {
 }
 
 function releaseMultiVerseRetrieveSlot(tabId) {
-  if (tabId == null || activeMultiVerseRetrieveTabId !== tabId) return;
+  if (tabId == null) return;
+  multiVerseRetrieveNavigationPending.delete(tabId);
+  multiVerseRetrieveNavigationStarted.delete(tabId);
+  if (activeMultiVerseRetrieveTabId !== tabId) return;
   activeMultiVerseRetrieveTabId = null;
   while (queuedMultiVerseRetrieveTabs.length) {
     const next = queuedMultiVerseRetrieveTabs.shift();
@@ -3233,8 +3236,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     multiVerseRetrieveNavigationStarted.add(tabId);
     return;
   }
-  if (changeInfo.status === 'complete' && multiVerseRetrieveNavigationStarted.has(tabId) &&
-      /\/tools\/MultiVerse\.cfm/i.test(String(tab.url || tab.pendingUrl || ''))) {
+  if (changeInfo.status === 'complete' && multiVerseRetrieveNavigationStarted.has(tabId)) {
     multiVerseRetrieveNavigationPending.delete(tabId);
     multiVerseRetrieveNavigationStarted.delete(tabId);
     releaseMultiVerseRetrieveSlot(tabId);
