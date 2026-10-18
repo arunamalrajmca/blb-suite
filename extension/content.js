@@ -948,7 +948,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       return false;
     }
 
-    const values=refs.map(r=>`${r.book} ${r.chapter}:${r.from}${r.to && r.to!==r.from ? "-"+r.to : ""}`);
+    const values=refs.map(r=>`${r.book} ${r.chapter}${r.from == null ? "" : `:${r.from}${r.to != null && r.to!==r.from ? "-"+r.to : ""}`}`);
     const combined=values.join("; ");
 
     const started=Date.now();
