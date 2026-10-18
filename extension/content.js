@@ -1076,7 +1076,10 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       return false;
     }
     await diagnostic('form-ready-before-submit', {expected:combined, actual:String(primary.value || '').trim(), formAction:multiForm.action, formMethod:multiForm.method});
-    await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+    // Keep this tab's payload until the post-navigation document confirms its
+    // own requested results. Consuming before native form submission means the
+    // destination document cannot recover the request after the browser unloads
+    // this document, so it falls back to BLB's saved default result.
     retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
     retrieve.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true,view:window}));
     retrieve.click();
