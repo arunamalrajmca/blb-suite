@@ -3234,7 +3234,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     return;
   }
   if (changeInfo.status === 'complete' && multiVerseRetrieveNavigationStarted.has(tabId) &&
-      /\\/tools\\/MultiVerse\\.cfm/i.test(String(tab.url || tab.pendingUrl || ''))) {
+      /\/tools\/MultiVerse\.cfm/i.test(String(tab.url || tab.pendingUrl || ''))) {
     multiVerseRetrieveNavigationPending.delete(tabId);
     multiVerseRetrieveNavigationStarted.delete(tabId);
     releaseMultiVerseRetrieveSlot(tabId);
