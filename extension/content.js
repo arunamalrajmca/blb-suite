@@ -1010,31 +1010,19 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       return false;
     }
 
-    // All tabs are already open. Serialize only the server-facing Retrieve
-    // action so BLB does not receive a burst of simultaneous result requests.
-    // The next tab is released by actual result completion/failure, not a sleep.
-    const slot=await chrome.runtime.sendMessage({type:'blbSuiteAcquireMultiVerseRetrieveSlot'});
-    if (!slot?.ok) {
-      revealPendingMultiVerseView();
-      return false;
-    }
-    let completed=false;
-    try {
-      await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
-      await chrome.runtime.sendMessage({type:'blbSuiteMarkMultiVerseRetrieveSubmitted'}).catch(()=>{});
-      retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
-      retrieve.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true,view:window}));
-      retrieve.click();
+    // Every tab owns an independent pending reference payload and form.
+    // Submit each tab as soon as its own controls are ready; do not serialize
+    // unrelated tabs behind a global Retrieve queue.
+    await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+    retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
+    retrieve.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true,view:window}));
+    retrieve.click();
 
-      // Do not reveal merely because Retrieve was clicked. Keep the tab hidden
-      // until the requested references are present or BLB reports a terminal
-      // error such as 429, then always release the next queued tab.
-      completed=await waitForExpectedMultiVerseResults(refs);
-      return completed;
-    } finally {
-      revealPendingMultiVerseView();
-      await chrome.runtime.sendMessage({type:'blbSuiteReleaseMultiVerseRetrieveSlot'}).catch(()=>{});
-    }
+    // Keep this tab hidden until its own requested verses appear, or until
+    // BLB returns a terminal response such as 429.
+    await waitForExpectedMultiVerseResults(refs);
+    revealPendingMultiVerseView();
+    return true;
   }
 
   const tryProcess=()=>processPendingMultiVerseRefs().catch(()=>revealPendingMultiVerseView());
