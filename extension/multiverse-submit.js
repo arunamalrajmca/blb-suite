@@ -1,7 +1,11 @@
+// The extension-owned page is only a bootstrap. Chrome does not reliably
+// complete a cross-origin form POST initiated from an extension tab. Navigate
+// this same tab to BLB, where the installed content script can populate BLB's
+// own MultiVerse form and submit it in the site's browsing context.
 (async () => {
   const params = new URLSearchParams(location.search);
-  const tabId = params.get("tabId");
-  if (!tabId || !/^\d+$/.test(tabId)) {
+  const tabId = Number(params.get("tabId"));
+  if (!Number.isSafeInteger(tabId) || tabId < 1) {
     document.body.textContent = "Missing MultiVerse destination tab.";
     return;
   }
@@ -13,49 +17,23 @@
     return;
   }
 
-  const text = refs.map(ref => {
-    const book = String(ref.book || "").trim();
-    const chapter = Number(ref.chapter);
-    const from = ref.from == null ? null : Number(ref.from);
-    const to = ref.to == null ? null : Number(ref.to);
-    if (!book || !Number.isInteger(chapter) || chapter < 1) throw new Error("Invalid stored Bible reference.");
-    return book + " " + chapter + (from == null ? "" : ":" + from + (to != null && to !== from ? "-" + to : ""));
-  }).join("; ");
-
-  const form = document.createElement("form");
-  form.method = "POST";
-  form.action = "https://www.blueletterbible.org/tools/MultiVerse.cfm";
-  form.acceptCharset = "UTF-8";
-
-  const hidden = {
-    refFormat: "4",
-    refDelim: "3",
-    numDelim: "0",
-    abbrev: "0",
-    quoted: "0",
-    sqrbrkt: "0",
-    sblabbrev: "0",
-    endash: "0",
-    sorted: "0",
-    t: "KJV"
-  };
-  for (const [name, value] of Object.entries(hidden)) {
-    const input = document.createElement("input");
-    input.type = "hidden";
-    input.name = name;
-    input.value = value;
-    form.appendChild(input);
+  // Validate the stored payload before leaving the bootstrap page. The BLB
+  // content script remains the single owner of formatting and native submit.
+  for (const ref of refs) {
+    const book = String(ref?.book || "").trim();
+    const chapter = Number(ref?.chapter);
+    const from = ref?.from == null ? null : Number(ref.from);
+    const to = ref?.to == null ? null : Number(ref.to);
+    if (!book || !Number.isInteger(chapter) || chapter < 1 ||
+        (from != null && (!Number.isInteger(from) || from < 1)) ||
+        (to != null && (!Number.isInteger(to) || to < (from ?? 1)))) {
+      throw new Error("Invalid stored Bible reference.");
+    }
   }
-  const textarea = document.createElement("textarea");
-  textarea.name = "mvText";
-  textarea.value = text;
-  form.appendChild(textarea);
-  document.body.replaceChildren(form);
 
-  // Submit immediately. A global cross-tab slot can deadlock every extension
-  // submission page if the prior BLB result does not run the release handler.
-  // Tabs are already opened independently; never hold a POST behind that lock.
-  form.submit();
+  await chrome.tabs.update(tabId, {
+    url: "https://www.blueletterbible.org/tools/MultiVerse.cfm"
+  });
 })().catch(error => {
-  document.body.textContent = "MultiVerse submission failed: " + String(error);
+  document.body.textContent = "MultiVerse handoff failed: " + String(error);
 });
