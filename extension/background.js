@@ -2841,8 +2841,8 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   // value can erase the batch key before the MultiVerse destination commits.
   const url = String(changeInfo.url || tab?.pendingUrl || tab?.url || '');
   const isBlank = /^about:blank(?:[#?].*)?$/i.test(url);
-  const isMultiVerse = /blueletterbible\\.org/i.test(url) &&
-    (/\\/MultiVerse\\.cfm/i.test(url) || /blbSuiteMultiVerse=1/i.test(url));
+  const isMultiVerse = /blueletterbible\.org/i.test(url) &&
+    (/\/MultiVerse\.cfm/i.test(url) || /blbSuiteMultiVerse=1/i.test(url));
   // Keep the reservation while the tab is on our extension-owned POST
   // handoff page. Clearing it here loses the batch identity before the form
   // navigates to BLB, allowing a repeated request to create duplicate tabs.
