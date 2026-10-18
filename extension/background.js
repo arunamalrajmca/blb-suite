@@ -861,18 +861,34 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         }
         if (!reusedOriginTab) tab = await chrome.tabs.create({url:'about:blank', active:!!active});
         if (tab?.id == null) return null;
-        const pending = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}, blbSuitePendingMultiVerseRefsByTab:{}});
-        const trackedMap = pending.blbSuiteMultiVerseTabSets && typeof pending.blbSuiteMultiVerseTabSets === 'object' ? {...pending.blbSuiteMultiVerseTabSets} : {};
-        trackedMap[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
-        const pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
-        pendingMap[String(tab.id)] = canonical.refs;
-        await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap});
+
+        // Treat reservation, pending-reference persistence, and navigation as
+        // one setup transaction. If storage fails before navigation, do not
+        // strand the user on the about:blank tab and silently abort all later
+        // batches.
+        let trackedMap = null;
+        let pendingMap = null;
         try {
-          await chrome.tabs.update(tab.id, {url:'https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1', active:reusedOriginTab ? !!active : !!active});
+          const pending = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}, blbSuitePendingMultiVerseRefsByTab:{}});
+          trackedMap = pending.blbSuiteMultiVerseTabSets && typeof pending.blbSuiteMultiVerseTabSets === 'object' ? {...pending.blbSuiteMultiVerseTabSets} : {};
+          trackedMap[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
+          pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
+          pendingMap[String(tab.id)] = canonical.refs;
+          await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap});
+          await chrome.tabs.update(tab.id, {url:'https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1', active:!!active});
         } catch (error) {
           navigationError = error;
-          delete trackedMap[String(tab.id)]; delete pendingMap[String(tab.id)];
-          await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap}).catch(()=>{});
+          if (trackedMap) delete trackedMap[String(tab.id)];
+          if (pendingMap) delete pendingMap[String(tab.id)];
+          if (trackedMap || pendingMap) {
+            await chrome.storage.local.set({
+              ...(trackedMap ? {blbSuiteMultiVerseTabSets:trackedMap} : {}),
+              ...(pendingMap ? {blbSuitePendingMultiVerseRefsByTab:pendingMap} : {})
+            }).catch(()=>{});
+          }
+          // Do not leave a newly created about:blank tab behind after any
+          // reservation/storage/navigation failure. Preserve a pre-existing
+          // caller-owned tab; only tabs created by this operation are removed.
           if (!reusedOriginTab) { try { await chrome.tabs.remove(tab.id); } catch (_) {} }
           throw error;
         }
