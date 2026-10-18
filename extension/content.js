@@ -989,6 +989,19 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       references: refs.map(r => ({book:String(r?.book || ''), chapter:r?.chapter, from:r?.from ?? null, to:r?.to ?? null}))
     });
 
+    // Native form submission navigates this tab, and browsers may preserve
+    // its URL fragment. A per-tab one-shot guard prevents the next document
+    // from submitting the same payload again and amplifying BLB 429s.
+    const payloadText = JSON.stringify(refs);
+    let payloadHash = 2166136261;
+    for (let i = 0; i < payloadText.length; i++) {
+      payloadHash ^= payloadText.charCodeAt(i);
+      payloadHash = Math.imul(payloadHash, 16777619);
+    }
+    const submissionGuardKey = 'blbSuiteMultiVerseSubmitted:' + (payloadHash >>> 0).toString(36);
+    let alreadySubmitted = false;
+    try { alreadySubmitted = sessionStorage.getItem(submissionGuardKey) === '1'; } catch (_) {}
+
     // Hide only a tab that actually has a pending Suite handoff. Ordinary
     // user-opened MultiVerse pages remain visible and untouched.
     hidePendingMultiVerseView();
@@ -1006,6 +1019,19 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     if (/429\s+Too Many Requests/i.test(initialBodyText) || /nginx\/1\.31\.6/i.test(initialBodyText)) {
       await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
       await releaseMultiVersePostSlot('rate-limited');
+      revealPendingMultiVerseView();
+      return false;
+    }
+
+    if (alreadySubmitted) {
+      // The request was already issued in this tab. If this response is
+      // neither the expected result nor a 429 page, stop rather than loop.
+      await diagnostic('repeat-submission-blocked', {
+        payloadHash:(payloadHash >>> 0).toString(36),
+        bodyStart:String(document.body?.innerText || '').slice(0,240)
+      });
+      await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+      await releaseMultiVersePostSlot('repeat-submission-blocked');
       revealPendingMultiVerseView();
       return false;
     }
@@ -1080,6 +1106,9 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     // own requested results. Consuming before native form submission means the
     // destination document cannot recover the request after the browser unloads
     // this document, so it falls back to BLB's saved default result.
+    // Persist the attempt before navigation so the post-submit document
+    // cannot issue the same POST again.
+    try { sessionStorage.setItem(submissionGuardKey, '1'); } catch (_) {}
     // Invoke the form's native submission algorithm explicitly. Synthetic
     // mouse events plus click() can be intercepted by site button handlers
     // without reliably dispatching the POST in every tab; requestSubmit()
