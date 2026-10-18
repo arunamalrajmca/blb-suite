@@ -948,7 +948,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     return false;
   }
 
-  async function processPendingMultiVerseRefs(overallDeadline = Date.now() + 6000) {
+  async function processPendingMultiVerseRefs() {
     const diagnosticStarted=Date.now();
     let diagnosticStage='checking-suite-enabled';
     const handoffDiagnostic=(event,details={})=>{
@@ -1043,7 +1043,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
 
     const started=Date.now();
     let heading=null, advancedHeading=null, verseControls=[], retrieve=null;
-    while (Date.now()-started<4000 && Date.now()<overallDeadline) {
+    while (Date.now()-started<4000) {
       heading=Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
         .find(el=>/^\s*multiverse retrieval\s*$/i.test((el.innerText||el.textContent||"").trim()));
       if (heading) {
@@ -1134,14 +1134,13 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
   }
 
   const tryProcess=async()=>{
-    // Bound the entire hidden-page handoff, not each retry independently.
-    // The form lookup already polls for up to four seconds; restarting that
-    // poll on all five retries could leave the page blank for ~20 seconds.
-    // Use one shared six-second budget across the initial lookup and retries.
-    const overallDeadline=Date.now()+6000;
-    for (let attempt=0;attempt<5 && Date.now()<overallDeadline;attempt++) {
+    // BLB can finish rendering the MultiVerse form after DOMContentLoaded.
+    // Keep the handoff page hidden and retry while the per-tab payload remains
+    // available, rather than exposing BLB's stale/default textbox on the first
+    // transient form lookup failure.
+    for (let attempt=0;attempt<5;attempt++) {
       try {
-        if (await processPendingMultiVerseRefs(overallDeadline)) return;
+        if (await processPendingMultiVerseRefs()) return;
       } catch (error) {
         // Chrome messaging and page handlers can reject with plain objects;
         // String(error) collapses those to "[object Object]" and hides the
