@@ -3189,69 +3189,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-// Serialize BLB MultiVerse Retrieve submissions across tabs. Tabs themselves
-// still open immediately; only the server-facing result requests are gated until
-// the preceding tab has produced its expected verses (or reports failure).
-let activeMultiVerseRetrieveTabId = null;
-const queuedMultiVerseRetrieveTabs = [];
-const multiVerseRetrieveNavigationPending = new Set();
-const multiVerseRetrieveNavigationStarted = new Set();
-
-function acquireMultiVerseRetrieveSlot(tabId, sendResponse) {
-  if (tabId == null) { sendResponse({ok:false, reason:'missing-tab-id'}); return; }
-  if (activeMultiVerseRetrieveTabId == null) {
-    activeMultiVerseRetrieveTabId = tabId;
-    sendResponse({ok:true});
-    return;
-  }
-  if (activeMultiVerseRetrieveTabId === tabId) {
-    sendResponse({ok:true, alreadyOwner:true});
-    return;
-  }
-  if (queuedMultiVerseRetrieveTabs.some(item => item.tabId === tabId)) return;
-  queuedMultiVerseRetrieveTabs.push({tabId, sendResponse});
-}
-
-function releaseMultiVerseRetrieveSlot(tabId) {
-  if (tabId == null) return;
-  multiVerseRetrieveNavigationPending.delete(tabId);
-  multiVerseRetrieveNavigationStarted.delete(tabId);
-  if (activeMultiVerseRetrieveTabId !== tabId) return;
-  activeMultiVerseRetrieveTabId = null;
-  while (queuedMultiVerseRetrieveTabs.length) {
-    const next = queuedMultiVerseRetrieveTabs.shift();
-    if (next.tabId == null) continue;
-    activeMultiVerseRetrieveTabId = next.tabId;
-    try { next.sendResponse({ok:true}); } catch (_) {
-      activeMultiVerseRetrieveTabId = null;
-      continue;
-    }
-    break;
-  }
-}
-
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (!multiVerseRetrieveNavigationPending.has(tabId)) return;
-  if (changeInfo.status === 'loading') {
-    multiVerseRetrieveNavigationStarted.add(tabId);
-    return;
-  }
-  if (changeInfo.status === 'complete' && multiVerseRetrieveNavigationStarted.has(tabId)) {
-    multiVerseRetrieveNavigationPending.delete(tabId);
-    multiVerseRetrieveNavigationStarted.delete(tabId);
-    releaseMultiVerseRetrieveSlot(tabId);
-  }
-});
-
-chrome.tabs.onRemoved.addListener(tabId => {
-  multiVerseRetrieveNavigationPending.delete(tabId);
-  multiVerseRetrieveNavigationStarted.delete(tabId);
-  const index = queuedMultiVerseRetrieveTabs.findIndex(item => item.tabId === tabId);
-  if (index >= 0) queuedMultiVerseRetrieveTabs.splice(index, 1);
-  if (activeMultiVerseRetrieveTabId === tabId) releaseMultiVerseRetrieveSlot(tabId);
-});
-
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteAcquireMultiVerseRetrieveSlot","blbSuiteReleaseMultiVerseRetrieveSlot","blbSuiteMarkMultiVerseRetrieveSubmitted","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;
@@ -3362,27 +3300,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'blbSuiteStudyTopicMultiVerse') {
     try { sendResponse(await openStudyTopicMultiVerse(message.topic)); } catch (error) { sendResponse({ok:false, error:String(error)}); }
-    return true;
-  }
-
-  if (message.type === 'blbSuiteAcquireMultiVerseRetrieveSlot') {
-    acquireMultiVerseRetrieveSlot(sender?.tab?.id, sendResponse);
-    return true;
-  }
-
-  if (message.type === 'blbSuiteReleaseMultiVerseRetrieveSlot') {
-    releaseMultiVerseRetrieveSlot(sender?.tab?.id);
-    sendResponse({ok:true});
-    return true;
-  }
-
-  if (message.type === 'blbSuiteMarkMultiVerseRetrieveSubmitted') {
-    const tabId = sender?.tab?.id;
-    if (tabId != null && activeMultiVerseRetrieveTabId === tabId) {
-      multiVerseRetrieveNavigationPending.add(tabId);
-      multiVerseRetrieveNavigationStarted.delete(tabId);
-    }
-    sendResponse({ok:true});
     return true;
   }
 
