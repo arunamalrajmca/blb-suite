@@ -929,6 +929,10 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     const started=Date.now();
     while (Date.now()-started<10000) {
       if (hasExpectedMultiVerseResults(refs)) return true;
+      // nginx's 429 page is a terminal result for this request, not a reason
+      // to hold the cross-tab Retrieve queue for the full observation window.
+      const bodyText=String(document.body?.innerText||'');
+      if (/429\\s+Too Many Requests/i.test(bodyText) || /nginx\\/1\\.31\\.6/i.test(bodyText)) return false;
       await new Promise(resolve=>setTimeout(resolve,50));
     }
     return false;
@@ -1006,17 +1010,30 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       return false;
     }
 
-    await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
-    retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
-    retrieve.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true,view:window}));
-    retrieve.click();
+    // All tabs are already open. Serialize only the server-facing Retrieve
+    // action so BLB does not receive a burst of simultaneous result requests.
+    // The next tab is released by actual result completion/failure, not a sleep.
+    const slot=await chrome.runtime.sendMessage({type:'blbSuiteAcquireMultiVerseRetrieveSlot'});
+    if (!slot?.ok) {
+      revealPendingMultiVerseView();
+      return false;
+    }
+    let completed=false;
+    try {
+      await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+      retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
+      retrieve.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true,view:window}));
+      retrieve.click();
 
-    // Do not reveal merely because Retrieve was clicked. BLB updates the result
-    // area asynchronously; reveal only after the requested references are
-    // actually present, so the normal bootstrap/default verses cannot flash.
-    await waitForExpectedMultiVerseResults(refs);
-    revealPendingMultiVerseView();
-    return true;
+      // Do not reveal merely because Retrieve was clicked. Keep the tab hidden
+      // until the requested references are present or BLB reports a terminal
+      // error such as 429, then always release the next queued tab.
+      completed=await waitForExpectedMultiVerseResults(refs);
+      return completed;
+    } finally {
+      revealPendingMultiVerseView();
+      await chrome.runtime.sendMessage({type:'blbSuiteReleaseMultiVerseRetrieveSlot'}).catch(()=>{});
+    }
   }
 
   const tryProcess=()=>processPendingMultiVerseRefs().catch(()=>revealPendingMultiVerseView());
