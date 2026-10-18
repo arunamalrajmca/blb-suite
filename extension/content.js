@@ -937,14 +937,12 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
 
   async function processPendingMultiVerseRefs() {
     if (!(await isSuiteEnabled())) {
-      revealPendingMultiVerseView();
       return false;
     }
     hidePendingMultiVerseView();
     const response=await chrome.runtime.sendMessage({type:'blbSuiteGetPendingMultiVerseRefs'});
     const refs=response?.refs;
     if (!Array.isArray(refs) || refs.length<1) {
-      revealPendingMultiVerseView();
       return false;
     }
 
@@ -972,7 +970,6 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     }
 
     if (!verseControls.length||!retrieve) {
-      revealPendingMultiVerseView();
       return false;
     }
 
@@ -986,7 +983,6 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     verseControls.forEach(c=>setNativeValue(c,""));
     const primary=verseControls[0];
     if (!combined||!primary) {
-      revealPendingMultiVerseView();
       return false;
     }
     setNativeValue(primary,combined);
@@ -1000,7 +996,6 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       await new Promise(resolve=>setTimeout(resolve,25));
     }
     if (actual!==combined) {
-      revealPendingMultiVerseView();
       return false;
     }
 
@@ -1017,8 +1012,22 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     return true;
   }
 
-  const tryProcess=()=>processPendingMultiVerseRefs().catch(()=>revealPendingMultiVerseView());
-  if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",tryProcess,{once:true});
+  const tryProcess=async()=>{
+    // BLB can finish rendering the MultiVerse form after DOMContentLoaded.
+    // Keep the handoff page hidden and retry while the per-tab payload remains
+    // available, rather than exposing BLB's stale/default textbox on the first
+    // transient form lookup failure.
+    for (let attempt=0;attempt<5;attempt++) {
+      try {
+        if (await processPendingMultiVerseRefs()) return;
+      } catch (error) {
+        console.warn("[BLB Suite MultiVerse handoff] attempt failed", {attempt:attempt+1, error:String(error)});
+      }
+      if (attempt<4) await new Promise(resolve=>setTimeout(resolve,750));
+    }
+    revealPendingMultiVerseView();
+  };
+  if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",()=>void tryProcess(),{once:true});
   else void tryProcess();
 }
 
