@@ -16,6 +16,14 @@
         return;
       }
 
+      // Ask the background coordinator for a rate-limited POST slot. All tabs
+      // have already been created/reserved; only network submissions are paced.
+      const slot = await chrome.runtime.sendMessage({type:'blbSuiteAcquireMultiVersePostSlot'}).catch(error => ({ok:false, error:String(error)}));
+      if (!slot?.ok) {
+        showFailure('Unable to queue this Multi-Verse request. Please retry this tab.');
+        return;
+      }
+
       const form = document.createElement('form');
       form.method = 'post';
       form.acceptCharset = 'UTF-8';
