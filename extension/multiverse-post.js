@@ -68,13 +68,14 @@
       }
       document.body.appendChild(form);
 
-      // Consume only this tab's pending handoff before leaving the extension
-      // page. Keep the separate tab-set identity record for duplicate handling.
-      const nextPending = {...pending};
-      delete nextPending[tabId];
-      await chrome.storage.local.set({
-        blbSuitePendingMultiVerseRefsByTab: nextPending
+      // Ask the service worker to consume only this tab's entry. Cleanup is
+      // serialized there so simultaneous tabs cannot overwrite each other's
+      // pending-reference map updates.
+      const cleanup = await chrome.runtime.sendMessage({
+        type: 'blbSuiteConsumePendingMultiVerseRefsForTab',
+        tabId: Number(tabId)
       });
+      if (!cleanup?.ok) throw new Error('Could not consume pending references for this tab');
 
       form.submit();
     } catch (error) {
