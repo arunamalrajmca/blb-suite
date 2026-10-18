@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Submitting MultiVerse references</title>
+</head>
+<body>
+  <p>Submitting requested Bible references to Blue Letter Bible…</p>
+  <script>
+    (async () => {
+      const params = new URLSearchParams(location.search);
+      const tabId = params.get("tabId");
+      if (!tabId || !/^\d+$/.test(tabId)) {
+        document.body.textContent = "Missing MultiVerse destination tab.";
+        return;
+      }
+
+      const storageKey = String(tabId);
+      const pending = await chrome.storage.local.get({ blbSuitePendingMultiVerseRefsByTab: {} });
+      const refs = pending.blbSuitePendingMultiVerseRefsByTab?.[storageKey];
+      if (!Array.isArray(refs) || refs.length < 1) {
+        document.body.textContent = "No pending MultiVerse references were found.";
+        return;
+      }
+
+      const text = refs.map(ref => {
+        const book = String(ref.book || "").trim();
+        const chapter = Number(ref.chapter);
+        const from = ref.from == null ? null : Number(ref.from);
+        const to = ref.to == null ? null : Number(ref.to);
+        if (!book || !Number.isInteger(chapter) || chapter < 1) throw new Error("Invalid stored Bible reference.");
+        return book + " " + chapter + (from == null ? "" : ":" + from + (to != null && to !== from ? "-" + to : ""));
+      }).join("; ");
+
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = "https://www.blueletterbible.org/tools/MultiVerse.cfm";
+      form.acceptCharset = "UTF-8";
+
+      const hidden = {
+        refFormat: "4",
+        refDelim: "3",
+        numDelim: "0",
+        abbrev: "0",
+        quoted: "0",
+        sqrbrkt: "0",
+        sblabbrev: "0",
+        endash: "0",
+        sorted: "0",
+        t: "KJV"
+      };
+      for (const [name, value] of Object.entries(hidden)) {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = name;
+        input.value = value;
+        form.appendChild(input);
+      }
+      const textarea = document.createElement("textarea");
+      textarea.name = "mvText";
+      textarea.value = text;
+      form.appendChild(textarea);
+      document.body.replaceChildren(form);
+      form.submit();
+    })().catch(error => {
+      document.body.textContent = "MultiVerse submission failed: " + String(error);
+    });
+  </script>
+</body>
+</html>
