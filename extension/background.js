@@ -694,6 +694,37 @@ function compactMultiVerseVerses(verses) {
 // Serialize the complete multi-batch operation, not just individual tab creation.
 // Otherwise two identical selections can both pass the existing-tab check before
 // either request has finished reserving every batch.
+// Per-tab completion handshake: a batch is not considered delivered merely
+// because Chrome emitted a navigation event. The content script reports after
+// BLB's requested results are present.
+const multiVerseHandoffStatusByTab = new Map();
+const multiVerseHandoffWaitersByTab = new Map();
+
+function waitForMultiVerseHandoffComplete(tabId, timeoutMs = 30000) {
+  const key = String(tabId);
+  const prior = multiVerseHandoffStatusByTab.get(key);
+  if (prior) {
+    multiVerseHandoffStatusByTab.delete(key);
+    return Promise.resolve(prior);
+  }
+  return new Promise(resolve => {
+    let settled = false;
+    const finish = status => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      const waiters = multiVerseHandoffWaitersByTab.get(key) || [];
+      multiVerseHandoffWaitersByTab.set(key, waiters.filter(fn => fn !== finish));
+      if (!multiVerseHandoffWaitersByTab.get(key).length) multiVerseHandoffWaitersByTab.delete(key);
+      resolve(status || {ok:false, reason:'handoff-timeout'});
+    };
+    const waiters = multiVerseHandoffWaitersByTab.get(key) || [];
+    waiters.push(finish);
+    multiVerseHandoffWaitersByTab.set(key, waiters);
+    const timer = setTimeout(() => finish({ok:false, reason:'handoff-timeout'}), timeoutMs);
+  });
+}
+
 let pendingMultiVerseRequest = Promise.resolve();
 
 function openBlbMultiVerseRefs(refs, active = true, options = {}) {
@@ -753,7 +784,15 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
     // delayed Retrieve POST. Separate waiters leave a gap where the POST's
     // loading event can be missed, allowing the next batch to race the session.
     if (index < batches.length - 1 && result.tabId != null) {
-      await waitForTabInitialAndRetrieveNavigationComplete(result.tabId);
+      const handoff = await waitForMultiVerseHandoffComplete(result.tabId);
+      if (!handoff.ok) {
+        return {
+          ok:false, reason:handoff.reason || 'multiverse-handoff-failed',
+          count:results.reduce((sum, item) => sum + Number(item.count || 0), 0),
+          batchCount:results.length, failedBatch:index + 1, results,
+          handoff
+        };
+      }
       await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
     }
   }
@@ -871,6 +910,7 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         try {
           const pending = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}, blbSuitePendingMultiVerseRefsByTab:{}});
           trackedMap = pending.blbSuiteMultiVerseTabSets && typeof pending.blbSuiteMultiVerseTabSets === 'object' ? {...pending.blbSuiteMultiVerseTabSets} : {};
+          multiVerseHandoffStatusByTab.delete(String(tab.id));
           trackedMap[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
           pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
           pendingMap[String(tab.id)] = canonical.refs;
@@ -3279,7 +3319,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteMultiVerseHandoffComplete","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;
@@ -3390,6 +3430,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'blbSuiteStudyTopicMultiVerse') {
     try { sendResponse(await openStudyTopicMultiVerse(message.topic)); } catch (error) { sendResponse({ok:false, error:String(error)}); }
+    return true;
+  }
+
+  if (message.type === 'blbSuiteMultiVerseHandoffComplete') {
+    const tabId = sender?.tab?.id;
+    if (tabId == null) { sendResponse({ok:false, reason:'missing-sender-tab'}); return true; }
+    const key = String(tabId);
+    const status = {
+      ok:message.success === true,
+      reason:message.success === true ? 'results-confirmed' : String(message.reason || 'results-not-confirmed'),
+      completedAt:Date.now()
+    };
+    multiVerseHandoffStatusByTab.set(key, status);
+    const waiters = multiVerseHandoffWaitersByTab.get(key) || [];
+    multiVerseHandoffWaitersByTab.delete(key);
+    waiters.forEach(resolve => resolve(status));
+    sendResponse({ok:true});
     return true;
   }
 
