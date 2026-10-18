@@ -3040,6 +3040,15 @@ function runtimeContentScriptIdForPattern(pattern) {
 async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCRIPT_FILES) {
   const pattern = originPatternForUrl(tab?.url);
   if (!pattern || !Array.isArray(files) || !files.length || !chrome.scripting?.registerContentScripts) return false;
+
+  // BLB pages already receive these files from manifest.content_scripts.
+  // Registering the same bundle dynamically runs its top-level const/let
+  // declarations a second time and throws SyntaxError before content.js runs.
+  if (normalizeSiteHostname(hostnameFromTabUrl(tab?.url)) === BLB_HOSTNAME) {
+    await unregisterRuntimeContentScriptForPattern(pattern);
+    return true;
+  }
+
   const id = runtimeContentScriptIdForPattern(pattern);
   try {
     const existing = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
@@ -3117,7 +3126,14 @@ async function ensureContentScriptInTab(tabId) {
       }
 
       try {
-        await chrome.scripting.executeScript({target:{tabId}, files});
+        // BLB's shared dependencies are already loaded by manifest.content_scripts.
+        // If the existing content script cannot answer (e.g. after an extension
+        // reload), reinject only the IIFE-wrapped controller, never its global
+        // const/let dependency files.
+        const injectionFiles = normalizeSiteHostname(hostnameFromTabUrl(tab?.url)) === BLB_HOSTNAME
+          ? ['content.js']
+          : files;
+        await chrome.scripting.executeScript({target:{tabId}, files:injectionFiles});
       } catch (_) {
         return false;
       }
