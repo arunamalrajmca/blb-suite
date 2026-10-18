@@ -19,6 +19,16 @@ async function openMultiVerse(extensionWorker, refs) {
   return extensionWorker.evaluate(async payload => openBlbMultiVerseRefs(payload, true), refs);
 }
 
+function countSubmittedVerses(mvText) {
+  let total = 0;
+  for (const match of String(mvText || '').matchAll(/:\s*(\d+)(?:\s*-\s*(\d+))?/g)) {
+    const from = Number(match[1]);
+    const to = match[2] == null ? from : Number(match[2]);
+    total += Math.max(0, to - from + 1);
+  }
+  return total;
+}
+
 async function getTrackedMultiVerseTabs(extensionWorker) {
   return extensionWorker.evaluate(async () => {
     const tabs = await chrome.tabs.query({
@@ -66,11 +76,18 @@ test('MultiVerse reuses both 200-verse batches when the same selection is repeat
 });
 
 test('case-sensitive gods search opens and reuses both batches', async ({ context, extensionWorker }) => {
-  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
-    status: 200,
-    contentType: 'text/html',
-    body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
-  }));
+  const submittedPayloads = [];
+  await context.route('https://www.blueletterbible.org/**', route => {
+    if (route.request().method() === 'POST') {
+      const body = new URLSearchParams(route.request().postData() || '');
+      submittedPayloads.push(body.get('mvText') || '');
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
+    });
+  });
 
   const first = await extensionWorker.evaluate(async () => {
     const originalOpenMultiVerse = openBlbMultiVerseRefs;
@@ -87,20 +104,15 @@ test('case-sensitive gods search opens and reuses both batches', async ({ contex
       openBlbMultiVerseRefs = originalOpenMultiVerse;
     }
     const tabs = await chrome.tabs.query({});
-    const data = await chrome.storage.local.get({
-      blbSuiteMultiVerseTabSets:{},
-      blbSuitePendingMultiVerseRefsByTab:{}
-    });
+    const data = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
     const tracked = data.blbSuiteMultiVerseTabSets || {};
-    const pending = data.blbSuitePendingMultiVerseRefsByTab || {};
     return {
       handled,
       openResults,
       tabs: tabs.map(tab => ({
         id:tab.id,
         url:tab.url || '',
-        trackedKey:tracked[String(tab.id)]?.key || null,
-        verseCount:expandMultiVerseRefsToVerses(pending[String(tab.id)] || []).length
+        trackedKey:tracked[String(tab.id)]?.key || null
       }))
     };
   });
@@ -113,7 +125,8 @@ test('case-sensitive gods search opens and reuses both batches', async ({ contex
   expect(firstTrackedTabs, JSON.stringify({openResults:first.openResults,tabs:first.tabs})).toHaveLength(2);
   expect(firstTrackedTabs[0].id).not.toBe(firstTrackedTabs[1].id);
   expect(new Set(firstTrackedTabs.map(tab => tab.trackedKey)).size).toBe(2);
-  expect(firstTrackedTabs.map(tab => tab.verseCount).sort((a,b) => b-a)).toEqual([200,14]);
+  await expect.poll(() => submittedPayloads.length).toBe(2);
+  expect(submittedPayloads.map(countSubmittedVerses).sort((a,b) => b-a)).toEqual([200,14]);
 
   const repeated = await extensionWorker.evaluate(async () => {
     await handleCaseSensitiveBCommand('gods', 'newForegroundTab');
@@ -123,21 +136,13 @@ test('case-sensitive gods search opens and reuses both batches', async ({ contex
         'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
       ]
     });
-    const data = await chrome.storage.local.get({
-      blbSuiteMultiVerseTabSets:{},
-      blbSuitePendingMultiVerseRefsByTab:{}
-    });
+    const data = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
     const tracked = data.blbSuiteMultiVerseTabSets || {};
-    const pending = data.blbSuitePendingMultiVerseRefsByTab || {};
     return tabs.filter(tab => tracked[String(tab.id)]?.key)
-      .map(tab => ({
-        id:tab.id,
-        key:tracked[String(tab.id)].key,
-        verseCount:expandMultiVerseRefsToVerses(pending[String(tab.id)] || []).length
-      }));
+      .map(tab => ({id:tab.id, key:tracked[String(tab.id)].key}));
   });
   expect(repeated.map(tab => tab.id).sort()).toEqual(firstTrackedTabs.map(tab => tab.id).sort());
-  expect(repeated.map(tab => tab.verseCount).sort((a,b) => b-a)).toEqual([200,14]);
+  expect(submittedPayloads.map(countSubmittedVerses).sort((a,b) => b-a)).toEqual([200,14]);
 });
 
 test('b v1 reuses its originating tab and leaves no blank command tab', async ({ context, extensionWorker }) => {
@@ -168,20 +173,26 @@ test('b v1 reuses its originating tab and leaves no blank command tab', async ({
 });
 
 test('case-sensitive search reuses the originating tab and leaves no blank orphan', async ({ context, extensionWorker }) => {
-  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
-    status: 200,
-    contentType: 'text/html',
-    body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
-  }));
+  const submittedPayloads = [];
+  await context.route('https://www.blueletterbible.org/**', route => {
+    if (route.request().method() === 'POST') {
+      const body = new URLSearchParams(route.request().postData() || '');
+      submittedPayloads.push(body.get('mvText') || '');
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
+    });
+  });
 
   const result = await extensionWorker.evaluate(async () => {
     const origin = await chrome.tabs.create({url:'about:blank', active:true});
     const handled = await handleCaseSensitiveBCommand('gods', 'currentTab');
     await new Promise(resolve => setTimeout(resolve, 100));
     const allTabs = await chrome.tabs.query({});
-    const data = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}, blbSuitePendingMultiVerseRefsByTab:{}});
+    const data = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
     const tracked = data.blbSuiteMultiVerseTabSets || {};
-    const pending = data.blbSuitePendingMultiVerseRefsByTab || {};
     return {
       handled,
       originId:origin.id,
@@ -189,8 +200,7 @@ test('case-sensitive search reuses the originating tab and leaves no blank orpha
       blankTabs:allTabs.filter(tab => /^about:blank(?:[#?].*)?$/i.test(String(tab.url || ''))).map(tab => tab.id),
       tracked:allTabs.filter(tab => tracked[String(tab.id)]?.key).map(tab => ({
         id:tab.id,
-        key:tracked[String(tab.id)].key,
-        verseCount:expandMultiVerseRefsToVerses(pending[String(tab.id)] || []).length
+        key:tracked[String(tab.id)].key
       }))
     };
   });
@@ -198,7 +208,8 @@ test('case-sensitive search reuses the originating tab and leaves no blank orpha
   expect(result.originUrl).toContain('blueletterbible.org/tools/MultiVerse.cfm');
   expect(result.blankTabs).not.toContain(result.originId);
   expect(result.tracked.map(tab => tab.id)).toContain(result.originId);
-  expect(result.tracked.map(tab => tab.verseCount).sort((a,b) => b-a)).toEqual([200,14]);
+  await expect.poll(() => submittedPayloads.length).toBe(2);
+  expect(submittedPayloads.map(countSubmittedVerses).sort((a,b) => b-a)).toEqual([200,14]);
 
   // If the same search is launched from another blank command tab, reuse the
   // existing result batches and close only that empty launcher tab.
