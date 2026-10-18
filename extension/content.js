@@ -902,9 +902,17 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       document.documentElement.dataset.blbSuiteMultiVersePending='1';
       document.documentElement.style.visibility='hidden';
       multiverseHandoffHidden=true;
-      multiverseRevealTimer=window.setTimeout(revealPendingMultiVerseView,10000);
+      // Do not expose BLB's saved/default result set while the expected refs
+      // are still being handed off. The bounded retry loop below is the
+      // recovery/fallback boundary; this timer is only a last-resort failsafe.
+      multiverseRevealTimer=window.setTimeout(revealPendingMultiVerseView,30000);
     } catch (_) {}
   };
+
+  // Hide synchronously during document_start, before awaiting extension state
+  // or waiting for DOMContentLoaded. Otherwise the page can paint the stale
+  // session/default verses before the handoff code gets CPU time.
+  hidePendingMultiVerseView();
 
   const hasExpectedMultiVerseResults=(refs)=>{
     try {
@@ -1069,6 +1077,9 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       }
       if (attempt<4) await new Promise(resolve=>setTimeout(resolve,750));
     }
+    // Only reveal after retries are exhausted. A failed Retrieve must not
+    // expose the stale session result while the requested refs are still
+    // available for another attempt.
     revealPendingMultiVerseView();
   };
   if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",()=>void tryProcess(),{once:true});
