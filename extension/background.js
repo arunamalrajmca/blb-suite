@@ -3205,10 +3205,16 @@ function grantNextMultiVersePostSlot() {
 
 function releaseMultiVersePostSlot(tabId, reason = '') {
   if (!Number.isInteger(tabId) || multiVersePostOwnerTabId !== tabId) return false;
-  multiVersePostOwnerTabId = null;
   if (reason === 'rate-limited') {
-    setTimeout(grantNextMultiVersePostSlot, 2500);
+    // Keep the slot owned during the cooldown so a newly opened submit page
+    // cannot bypass the wait and immediately trigger another 429.
+    setTimeout(() => {
+      if (multiVersePostOwnerTabId !== tabId) return;
+      multiVersePostOwnerTabId = null;
+      grantNextMultiVersePostSlot();
+    }, 2500);
   } else {
+    multiVersePostOwnerTabId = null;
     grantNextMultiVersePostSlot();
   }
   return true;
