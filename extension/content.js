@@ -949,9 +949,24 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
   }
 
   async function processPendingMultiVerseRefs() {
+    const diagnosticStarted=Date.now();
+    let diagnosticStage='checking-suite-enabled';
+    const handoffDiagnostic=(event,details={})=>{
+      try {
+        console.info('[BLB Suite MultiVerse handoff timing]',{
+          event,stage:diagnosticStage,elapsedMs:Date.now()-diagnosticStarted,
+          url:location.href,readyState:document.readyState,
+          visibilityState:document.visibilityState,...details
+        });
+      } catch (_) {}
+    };
+    handoffDiagnostic('attempt-start');
     if (!(await isSuiteEnabled())) {
+      diagnosticStage='suite-disabled';
+      handoffDiagnostic('attempt-exit',{reason:'suite-disabled'});
       return false;
     }
+    diagnosticStage='loading-pending-references';
     hidePendingMultiVerseView();
     let refs=null;
     try {
@@ -969,14 +984,20 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       }
     }
     if (!Array.isArray(refs) || refs.length<1) {
+      diagnosticStage='no-pending-references';
+      handoffDiagnostic('attempt-exit',{reason:'no-pending-references'});
       return false;
     }
+    diagnosticStage='checking-current-results';
+    handoffDiagnostic('references-loaded',{referenceCount:refs.length});
 
     // A Retrieve navigation may reload this tab and drop the extension's
     // bootstrap query parameter. If the results are already correct, finish
     // the per-tab handoff here instead of allowing BLB's saved/default set to
     // replace the requested references later.
     if (hasExpectedMultiVerseResults(refs)) {
+      diagnosticStage='expected-results-already-visible';
+      handoffDiagnostic('results-detected',{source:'current-page'});
       try { sessionStorage.removeItem(BLB_SUITE_MULTIVERSE_EXPECTED_REFS_KEY); } catch (_) {}
       await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
       await chrome.runtime.sendMessage({type:'blbSuiteMultiVerseHandoffComplete',success:true,reason:'expected-results-visible-after-navigation'}).catch(()=>{});
@@ -992,7 +1013,10 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     let submittedRefs=null;
     try { submittedRefs=sessionStorage.getItem(submittedKey); } catch (_) {}
     if (/[?&]s=[^&]+/i.test(location.search) && submittedRefs===JSON.stringify(refs)) {
+      diagnosticStage='waiting-for-results-after-navigation';
+      handoffDiagnostic('result-url-detected',{submittedRefsMatch:true});
       const resultsReady=await waitForExpectedMultiVerseResults(refs);
+      handoffDiagnostic('result-url-wait-finished',{resultsReady});
       if (resultsReady) {
         try {
           sessionStorage.removeItem(BLB_SUITE_MULTIVERSE_EXPECTED_REFS_KEY);
@@ -1034,8 +1058,12 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     }
 
     if (!verseControls.length||!retrieve) {
+      diagnosticStage='retrieve-controls-not-found';
+      handoffDiagnostic('attempt-exit',{reason:'retrieve-controls-not-found'});
       return false;
     }
+    diagnosticStage='filling-retrieve-controls';
+    handoffDiagnostic('retrieve-controls-found',{controlCount:verseControls.length});
 
     const setNativeValue=(el,value)=>{
       const proto=el instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:HTMLInputElement.prototype;
@@ -1060,6 +1088,8 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       await new Promise(resolve=>setTimeout(resolve,25));
     }
     if (actual!==combined) {
+      diagnosticStage='textbox-value-mismatch';
+      handoffDiagnostic('attempt-exit',{reason:'textbox-value-mismatch'});
       return false;
     }
 
@@ -1070,11 +1100,15 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
     retrieve.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true,view:window}));
     retrieve.click();
+    diagnosticStage='waiting-for-retrieve-results';
+    handoffDiagnostic('retrieve-clicked',{referenceCount:refs.length});
 
     // Do not reveal merely because Retrieve was clicked. BLB updates the result
     // area asynchronously; reveal only after the requested references are
     // actually present, so the normal bootstrap/default verses cannot flash.
     const resultsReady = await waitForExpectedMultiVerseResults(refs);
+    diagnosticStage=resultsReady?'results-detected-after-retrieve':'retrieve-results-timeout';
+    handoffDiagnostic('retrieve-wait-finished',{resultsReady});
     if (resultsReady) {
       try { sessionStorage.removeItem(BLB_SUITE_MULTIVERSE_EXPECTED_REFS_KEY); } catch (_) {}
       await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
