@@ -938,8 +938,15 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     return false;
   }
 
+  async function releaseMultiVersePostSlot(reason = '') {
+    try {
+      await chrome.runtime.sendMessage({type:'blbSuiteReleaseMultiVersePostSlot', reason});
+    } catch (_) {}
+  }
+
   async function processPendingMultiVerseRefs() {
     if (!(await isSuiteEnabled())) {
+      await releaseMultiVersePostSlot('suite-disabled');
       revealPendingMultiVerseView();
       return false;
     }
@@ -959,12 +966,14 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     // second time: that creates unnecessary load and can trigger BLB 429s.
     if (hasExpectedMultiVerseResults(refs)) {
       await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+      await releaseMultiVersePostSlot('success');
       revealPendingMultiVerseView();
       return true;
     }
     const initialBodyText=String(document.body?.innerText||'');
     if (/429\s+Too Many Requests/i.test(initialBodyText) || /nginx\/1\.31\.6/i.test(initialBodyText)) {
       await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+      await releaseMultiVersePostSlot('rate-limited');
       revealPendingMultiVerseView();
       return false;
     }
@@ -990,6 +999,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     }
 
     if (!multiForm||!primary||!retrieve) {
+      await releaseMultiVersePostSlot('result-unrecognized');
       revealPendingMultiVerseView();
       return false;
     }
@@ -1002,6 +1012,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     };
 
     if (!combined||!primary||primary.form!==multiForm) {
+      await releaseMultiVersePostSlot('result-unrecognized');
       revealPendingMultiVerseView();
       return false;
     }
@@ -1015,6 +1026,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       await new Promise(resolve=>setTimeout(resolve,25));
     }
     if (actual!==combined) {
+      await releaseMultiVersePostSlot('result-unrecognized');
       revealPendingMultiVerseView();
       return false;
     }
@@ -1025,6 +1037,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     // Re-check the live form value immediately before submission so a page
     // script cannot silently replace the requested references with defaults.
     if (String(primary.value||"").trim()!==combined || primary.form!==multiForm) {
+      await releaseMultiVersePostSlot('result-unrecognized');
       revealPendingMultiVerseView();
       return false;
     }
@@ -1036,6 +1049,11 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     // Keep this tab hidden until its own requested verses appear, or until
     // BLB returns a terminal response such as 429.
     await waitForExpectedMultiVerseResults(refs);
+    const finalBodyText=String(document.body?.innerText||'');
+    await releaseMultiVersePostSlot(
+      /429\s+Too Many Requests/i.test(finalBodyText) || /nginx\/1\.31\.6/i.test(finalBodyText)
+        ? 'rate-limited' : 'result-complete'
+    );
     revealPendingMultiVerseView();
     return true;
   }
