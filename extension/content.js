@@ -872,9 +872,14 @@ if (location.hostname==="webstersdictionary1828.com") {
 // Suite-generated MultiVerse tabs must never expose BLB's bootstrap/default
 // result set. Keep the document hidden until the requested reference set is
 // actually visible after Retrieve has completed.
+const BLB_SUITE_MULTIVERSE_EXPECTED_REFS_KEY='blbSuiteMultiVerseExpectedRefsV1';
+const hasPersistedMultiVerseHandoff=()=>{
+  try { return !!sessionStorage.getItem(BLB_SUITE_MULTIVERSE_EXPECTED_REFS_KEY); }
+  catch (_) { return false; }
+};
 if (location.hostname===BLBShared.hostnames.blbWww &&
     /(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)/i.test(location.pathname) &&
-    /[?&]blbSuiteMultiVerse=1(?:&|$)/i.test(location.search)) {
+    (/[?&]blbSuiteMultiVerse=1(?:&|$)/i.test(location.search) || hasPersistedMultiVerseHandoff())) {
   let multiverseHandoffHidden=false;
   let multiverseRevealTimer=0;
 
@@ -940,10 +945,35 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       return false;
     }
     hidePendingMultiVerseView();
-    const response=await chrome.runtime.sendMessage({type:'blbSuiteGetPendingMultiVerseRefs'});
-    const refs=response?.refs;
+    let refs=null;
+    try {
+      const persisted=sessionStorage.getItem(BLB_SUITE_MULTIVERSE_EXPECTED_REFS_KEY);
+      if (persisted) {
+        const parsed=JSON.parse(persisted);
+        if (Array.isArray(parsed) && parsed.length) refs=parsed;
+      }
+    } catch (_) {}
+    if (!refs) {
+      const response=await chrome.runtime.sendMessage({type:'blbSuiteGetPendingMultiVerseRefs'});
+      refs=response?.refs;
+      if (Array.isArray(refs) && refs.length) {
+        try { sessionStorage.setItem(BLB_SUITE_MULTIVERSE_EXPECTED_REFS_KEY,JSON.stringify(refs)); } catch (_) {}
+      }
+    }
     if (!Array.isArray(refs) || refs.length<1) {
       return false;
+    }
+
+    // A Retrieve navigation may reload this tab and drop the extension's
+    // bootstrap query parameter. If the results are already correct, finish
+    // the per-tab handoff here instead of allowing BLB's saved/default set to
+    // replace the requested references later.
+    if (hasExpectedMultiVerseResults(refs)) {
+      try { sessionStorage.removeItem(BLB_SUITE_MULTIVERSE_EXPECTED_REFS_KEY); } catch (_) {}
+      await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+      await chrome.runtime.sendMessage({type:'blbSuiteMultiVerseHandoffComplete',success:true,reason:'expected-results-visible-after-navigation'}).catch(()=>{});
+      revealPendingMultiVerseView();
+      return true;
     }
 
     const values=refs.map(r=>`${r.book} ${r.chapter}:${r.from}${r.to && r.to!==r.from ? "-"+r.to : ""}`);
@@ -999,7 +1029,9 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       return false;
     }
 
-    await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+    // Keep the payload in tab-scoped sessionStorage until the destination
+    // results are confirmed. Retrieve can navigate/reload this tab, which
+    // destroys this execution context before the acknowledgement is sent.
     retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
     retrieve.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true,view:window}));
     retrieve.click();
@@ -1008,11 +1040,18 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     // area asynchronously; reveal only after the requested references are
     // actually present, so the normal bootstrap/default verses cannot flash.
     const resultsReady = await waitForExpectedMultiVerseResults(refs);
+    if (resultsReady) {
+      try { sessionStorage.removeItem(BLB_SUITE_MULTIVERSE_EXPECTED_REFS_KEY); } catch (_) {}
+      await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+    }
     await chrome.runtime.sendMessage({
       type:'blbSuiteMultiVerseHandoffComplete',
       success:resultsReady,
       reason:resultsReady ? 'expected-results-visible' : 'expected-results-timeout'
     }).catch(()=>{});
+    // On timeout, retain the session-scoped expected refs. If Retrieve causes
+    // a delayed navigation, the next document can repair the result set rather
+    // than exposing the stale BLB default as the final state.
     revealPendingMultiVerseView();
     return true;
   }
