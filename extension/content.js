@@ -905,7 +905,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       // Do not expose BLB's saved/default result set while the expected refs
       // are still being handed off. The bounded retry loop below is the
       // recovery/fallback boundary; this timer is only a last-resort failsafe.
-      multiverseRevealTimer=window.setTimeout(revealPendingMultiVerseView,30000);
+      multiverseRevealTimer=window.setTimeout(revealPendingMultiVerseView,90000);
     } catch (_) {}
   };
 
