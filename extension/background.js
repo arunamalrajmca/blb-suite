@@ -868,7 +868,7 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         pendingMap[String(tab.id)] = canonical.refs;
         await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap});
         try {
-          await chrome.tabs.update(tab.id, {url:'https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1', active:reusedOriginTab ? !!active : !!active});
+          await chrome.tabs.update(tab.id, {url:chrome.runtime.getURL('multiverse-post.html') + '?tabId=' + encodeURIComponent(String(tab.id)), active:!!active});
         } catch (error) {
           navigationError = error;
           delete trackedMap[String(tab.id)]; delete pendingMap[String(tab.id)];
