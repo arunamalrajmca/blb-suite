@@ -8,6 +8,25 @@ const BLB_SEARCH_URL = BLBShared.urls.blbSearch;
 const bookData = BOOKS;
 const DEFAULT_HOMEPAGE_URL = BLB_HOME_URL;
 
+// Serialize read-modify-write operations for the per-tab MultiVerse payload map.
+// Multiple tabs can reach consume/onRemoved/assignment concurrently; without a
+// single queue, an older snapshot can overwrite another tab's newer payload.
+let pendingMultiVerseRefsMutationQueue = Promise.resolve();
+function mutatePendingMultiVerseRefsMap(mutator) {
+  const run = pendingMultiVerseRefsMutationQueue.then(async () => {
+    const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
+    const map = data.blbSuitePendingMultiVerseRefsByTab &&
+      typeof data.blbSuitePendingMultiVerseRefsByTab === 'object'
+      ? {...data.blbSuitePendingMultiVerseRefsByTab} : {};
+    await mutator(map);
+    await chrome.storage.local.set({blbSuitePendingMultiVerseRefsByTab:map});
+    return map;
+  });
+  pendingMultiVerseRefsMutationQueue = run.catch(() => {});
+  return run;
+}
+
+
 // Site-based features are OFF by default on every hostname.
 // Only an explicit saved per-site preference enables them.
 
@@ -856,12 +875,11 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         }
         if (!reusedOriginTab) tab = await chrome.tabs.create({url:'about:blank', active:!!active});
         if (tab?.id == null) return null;
-        const pending = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}, blbSuitePendingMultiVerseRefsByTab:{}});
+        const pending = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
         const trackedMap = pending.blbSuiteMultiVerseTabSets && typeof pending.blbSuiteMultiVerseTabSets === 'object' ? {...pending.blbSuiteMultiVerseTabSets} : {};
         trackedMap[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
-        const pendingMap = pending.blbSuitePendingMultiVerseRefsByTab && typeof pending.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...pending.blbSuitePendingMultiVerseRefsByTab} : {};
-        pendingMap[String(tab.id)] = canonical.refs;
-        await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap});
+        await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap});
+        await mutatePendingMultiVerseRefsMap(map => { map[String(tab.id)] = canonical.refs; });
         try {
           // Start on an extension-owned page and POST the references directly
           // to BLB. Avoid the initial MultiVerse GET, which redirects to the
@@ -872,8 +890,9 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
           await chrome.tabs.update(tab.id, {url:submitUrl.href, active:!!active});
         } catch (error) {
           navigationError = error;
-          delete trackedMap[String(tab.id)]; delete pendingMap[String(tab.id)];
-          await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap}).catch(()=>{});
+          delete trackedMap[String(tab.id)];
+          await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap}).catch(()=>{});
+          await mutatePendingMultiVerseRefsMap(map => { delete map[String(tab.id)]; }).catch(()=>{});
           if (!reusedOriginTab) { try { await chrome.tabs.remove(tab.id); } catch (_) {} }
           throw error;
         }
@@ -2801,12 +2820,7 @@ chrome.tabs.onRemoved.addListener(tabId => {
     if (id === tabId) scriptTaggerDestinationTabs.delete(key);
   }
   clearTrackedMultiVerseTab(tabId).catch(()=>{});
-  chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}}).then(data=>{
-    const map = data.blbSuitePendingMultiVerseRefsByTab && typeof data.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...data.blbSuitePendingMultiVerseRefsByTab} : {};
-    if (!Object.prototype.hasOwnProperty.call(map, String(tabId))) return;
-    delete map[String(tabId)];
-    return chrome.storage.local.set({blbSuitePendingMultiVerseRefsByTab:map});
-  }).catch(()=>{});
+  mutatePendingMultiVerseRefsMap(map => { delete map[String(tabId)]; }).catch(()=>{});
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -3426,10 +3440,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     try {
       const tabId = sender?.tab?.id;
       if (tabId != null) {
-        const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
-        const map = data.blbSuitePendingMultiVerseRefsByTab && typeof data.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...data.blbSuitePendingMultiVerseRefsByTab} : {};
-        delete map[String(tabId)];
-        await chrome.storage.local.set({blbSuitePendingMultiVerseRefsByTab:map});
+        await mutatePendingMultiVerseRefsMap(map => { delete map[String(tabId)]; });
       }
       sendResponse({ok:true});
     } catch (error) { sendResponse({ok:false, error:String(error)}); }
