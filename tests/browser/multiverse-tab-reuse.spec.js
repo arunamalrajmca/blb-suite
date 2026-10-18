@@ -29,20 +29,21 @@ function countSubmittedVerses(mvText) {
   return total;
 }
 
-async function getTrackedMultiVerseTabs(extensionWorker) {
-  return extensionWorker.evaluate(async () => {
-    const tabs = await chrome.tabs.query({
-      url: [
-        'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
-        'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
-      ]
-    });
+async function getTrackedMultiVerseTabs(extensionWorker, tabIds = []) {
+  return extensionWorker.evaluate(async ids => {
+    // A successful opener returns while the tab may still be on the extension
+    // POST handoff page. Inspect the exact returned tab IDs rather than
+    // filtering only committed BLB URLs, which can hide valid reservations.
+    const tabs = await Promise.all(ids.map(id => chrome.tabs.get(id).catch(() => null)));
     const data = await chrome.storage.local.get({ blbSuiteMultiVerseTabSets: {} });
     const tracked = data.blbSuiteMultiVerseTabSets || {};
-    return tabs
-      .filter(tab => tracked[String(tab.id)]?.key)
-      .map(tab => ({ id: tab.id, key: tracked[String(tab.id)].key }));
-  });
+    return tabs.filter(Boolean).map(tab => ({
+      id: tab.id,
+      url: tab.url || '',
+      pendingUrl: tab.pendingUrl || '',
+      key: tracked[String(tab.id)]?.key || null
+    }));
+  }, tabIds);
 }
 
 test('MultiVerse reuses both 200-verse batches when the same selection is repeated or reordered', async ({ context, extensionWorker }) => {
@@ -70,8 +71,9 @@ test('MultiVerse reuses both 200-verse batches when the same selection is repeat
   expect(reversed.batchCount).toBe(2);
   expect(reversed.tabIds).toEqual(first.tabIds);
 
-  const trackedTabs = await getTrackedMultiVerseTabs(extensionWorker);
+  const trackedTabs = await getTrackedMultiVerseTabs(extensionWorker, first.tabIds);
   expect(new Set(trackedTabs.map(tab => tab.id))).toEqual(new Set(first.tabIds));
+  expect(trackedTabs.every(tab => tab.key), JSON.stringify(trackedTabs, null, 2)).toBe(true);
   expect(new Set(trackedTabs.map(tab => tab.key)).size).toBe(2);
 });
 
