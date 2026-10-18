@@ -2441,8 +2441,8 @@ function waitForTabTerminalLoad(tabId, timeout = CASE_SENSITIVE_MULTI_VERSE_TAB_
 // MultiVerse Retrieve submits a POST after the initial document load. Keep
 // one listener installed across both phases so there is no gap between observing
 // the initial "complete" and listening for Retrieve's follow-up navigation.
-// The content script retries form discovery for several seconds when BLB renders late.
-const CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_START_TIMEOUT_MS = 20000;
+// Avoid a long idle pause when Retrieve never starts; if navigation begins, wait for it below.
+const CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_START_TIMEOUT_MS = 2500;
 const CASE_SENSITIVE_MULTI_VERSE_RETRIEVE_COMPLETE_TIMEOUT_MS = 10000;
 
 function waitForTabInitialAndRetrieveNavigationComplete(tabId) {
