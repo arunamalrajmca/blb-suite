@@ -33,6 +33,20 @@ console.log(`Package: ${ROOT}\n`);
 
 section('package');
 // Manifest/package invariants.
+test('MultiVerse handoff preserves whole-chapter references without null verse suffixes', () => {
+  const content = read('content.js');
+  assert(content.includes('r.from == null ? "" : `:${r.from}'), 'whole-chapter refs must omit the verse suffix');
+  assert(content.includes('r.to != null && r.to!==r.from'), 'verse ranges must retain their end verse');
+  const refs = [
+    {book:'Genesis', chapter:1, from:1, to:15},
+    {book:'Revelation', chapter:3, from:null, to:null},
+    {book:'Revelation', chapter:4, from:null, to:null},
+    {book:'Jeremiah', chapter:21, from:10, to:10}
+  ];
+  const formatted = refs.map(r => `${r.book} ${r.chapter}${r.from == null ? '' : `:${r.from}${r.to != null && r.to!==r.from ? '-'+r.to : ''}`}`).join('; ');
+  assert.equal(formatted, 'Genesis 1:1-15; Revelation 3; Revelation 4; Jeremiah 21:10');
+});
+
 test('manifest JSON + MV3 + version', () => {
   const m = JSON.parse(read('manifest.json'));
   assert.equal(m.manifest_version, 3);
