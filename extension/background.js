@@ -3442,8 +3442,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       reason:message.success === true ? 'results-confirmed' : String(message.reason || 'results-not-confirmed'),
       completedAt:Date.now()
     };
-    multiVerseHandoffStatusByTab.set(key, status);
     const waiters = multiVerseHandoffWaitersByTab.get(key) || [];
+    if (!waiters.length) multiVerseHandoffStatusByTab.set(key, status);
+    else multiVerseHandoffStatusByTab.delete(key);
     multiVerseHandoffWaitersByTab.delete(key);
     waiters.forEach(resolve => resolve(status));
     sendResponse({ok:true});
