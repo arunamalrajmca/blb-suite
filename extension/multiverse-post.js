@@ -44,7 +44,7 @@
       const form = document.createElement('form');
       form.method = 'post';
       form.acceptCharset = 'UTF-8';
-      form.action = 'https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteDirectPost=1';
+      form.action = 'https://www.blueletterbible.org/tools/MultiVerse.cfm';
 
       const fields = {
         refFormat: '4',
