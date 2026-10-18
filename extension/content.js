@@ -1007,7 +1007,12 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     // Do not reveal merely because Retrieve was clicked. BLB updates the result
     // area asynchronously; reveal only after the requested references are
     // actually present, so the normal bootstrap/default verses cannot flash.
-    await waitForExpectedMultiVerseResults(refs);
+    const resultsReady = await waitForExpectedMultiVerseResults(refs);
+    await chrome.runtime.sendMessage({
+      type:'blbSuiteMultiVerseHandoffComplete',
+      success:resultsReady,
+      reason:resultsReady ? 'expected-results-visible' : 'expected-results-timeout'
+    }).catch(()=>{});
     revealPendingMultiVerseView();
     return true;
   }
