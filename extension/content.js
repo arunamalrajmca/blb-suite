@@ -954,6 +954,21 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     // user-opened MultiVerse pages remain visible and untouched.
     hidePendingMultiVerseView();
 
+    // Direct POST submission may already have produced the requested results
+    // before this content script starts. Do not submit the same references a
+    // second time: that creates unnecessary load and can trigger BLB 429s.
+    if (hasExpectedMultiVerseResults(refs)) {
+      await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+      revealPendingMultiVerseView();
+      return true;
+    }
+    const initialBodyText=String(document.body?.innerText||'');
+    if (/429\s+Too Many Requests/i.test(initialBodyText) || /nginx\/1\.31\.6/i.test(initialBodyText)) {
+      await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+      revealPendingMultiVerseView();
+      return false;
+    }
+
     const values=refs.map(r=>`${r.book} ${r.chapter}${r.from == null ? "" : `:${r.from}${r.to != null && r.to!==r.from ? "-"+r.to : ""}`}`);
     const combined=values.join("; ");
 
