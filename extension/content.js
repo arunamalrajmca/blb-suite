@@ -1094,7 +1094,21 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     return true;
   }
 
-  const tryProcess=()=>processPendingMultiVerseRefs().catch(()=>revealPendingMultiVerseView());
+  const tryProcess=()=>processPendingMultiVerseRefs().catch(async error=>{
+    const entry={
+      timestamp:new Date().toISOString(),
+      stage:'processing-exception',
+      url:String(location.href||''),
+      hashPresent:Boolean(location.hash&&location.hash.startsWith('#blbSuiteMultiVerseRefs=')),
+      error:String(error),
+      stack:String(error?.stack||'').slice(0,2000)
+    };
+    try {
+      await chrome.runtime.sendMessage({type:'blbSuiteRecordMultiVerseDiagnostic',entry});
+    } catch (_) {}
+    console.error('[BLB Suite MultiVerse diagnostic] processing-exception',entry);
+    revealPendingMultiVerseView();
+  });
   if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",tryProcess,{once:true});
   else void tryProcess();
 }
