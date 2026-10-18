@@ -863,15 +863,13 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         pendingMap[String(tab.id)] = canonical.refs;
         await chrome.storage.local.set({blbSuiteMultiVerseTabSets:trackedMap, blbSuitePendingMultiVerseRefsByTab:pendingMap});
         try {
-          // Pass the intended reference text in the first navigation as well as
-        // the per-tab storage handoff. This tests whether BLB's initial
-        // MultiVerse redirect is dropping the Suite handoff because its URL
-        // has no s parameter. Keep the Suite marker so the content script can
-        // distinguish this navigation from an ordinary user visit.
-        const handoffText = canonical.refs.map(r => `${r.book} ${r.chapter}${r.from == null ? "" : `:${r.from}${r.to != null && r.to !== r.from ? "-" + r.to : ""}`}`).join("; ");
-        const targetUrl = new URL('https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1');
-        targetUrl.searchParams.set('s', handoffText);
-        await chrome.tabs.update(tab.id, {url:targetUrl.href, active:reusedOriginTab ? !!active : !!active});
+          // Start on an extension-owned page and POST the references directly
+          // to BLB. Avoid the initial MultiVerse GET, which redirects to the
+          // server's stale default s identifier before the real references are
+          // submitted. The extension page reads this tab's isolated payload.
+          const submitUrl = new URL(chrome.runtime.getURL('multiverse-submit.html'));
+          submitUrl.searchParams.set('tabId', String(tab.id));
+          await chrome.tabs.update(tab.id, {url:submitUrl.href, active:!!active});
         } catch (error) {
           navigationError = error;
           delete trackedMap[String(tab.id)]; delete pendingMap[String(tab.id)];
