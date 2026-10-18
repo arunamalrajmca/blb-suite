@@ -958,23 +958,23 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     const combined=values.join("; ");
 
     const started=Date.now();
-    let heading=null, primary=null, retrieve=null;
+    let heading=null, multiForm=null, primary=null, retrieve=null;
     while (Date.now()-started<4000) {
       heading=Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
         .find(el=>/^\s*multiverse retrieval\s*$/i.test((el.innerText||el.textContent||"").trim()));
       if (heading) {
-        // Target BLB's actual MultiVerse reference field by its stable DOM
-        // identity. Do not infer the field from placeholder text or choose
-        // the first generic textbox: advanced search controls may appear first.
-        primary=document.querySelector('textarea#mvTextWidge[name="mvText"]');
-        retrieve=Array.from(document.querySelectorAll("button,input[type=submit],input[type=button],a"))
-          .find(x=>/^\s*retrieve\s*$/i.test((x.innerText||x.value||"").trim()));
+        // Bind the reference field and submit control to BLB's actual
+        // MultiVerse form. Never pick a similarly-labelled control elsewhere
+        // on the page or infer the reference field from its placeholder.
+        multiForm=document.querySelector('form#mvFormWidge[name="mvFormWidge"]');
+        primary=multiForm?.querySelector('textarea#mvTextWidge[name="mvText"]')||null;
+        retrieve=multiForm?.querySelector('button[type="submit"]')||null;
         if (primary&&retrieve) break;
       }
       await new Promise(resolve=>setTimeout(resolve,50));
     }
 
-    if (!primary||!retrieve) {
+    if (!multiForm||!primary||!retrieve) {
       revealPendingMultiVerseView();
       return false;
     }
@@ -986,12 +986,11 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       for (const type of ["input","change","keyup","blur"]) el.dispatchEvent(new Event(type,{bubbles:true}));
     };
 
-    if (!combined||!primary) {
+    if (!combined||!primary||primary.form!==multiForm) {
       revealPendingMultiVerseView();
       return false;
     }
     setNativeValue(primary,combined);
-    primary.setAttribute("value",combined);
 
     const valueStarted=Date.now();
     let actual="";
@@ -1008,6 +1007,12 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     // Every tab owns an independent pending reference payload and form.
     // Submit each tab as soon as its own controls are ready; do not serialize
     // unrelated tabs behind a global Retrieve queue.
+    // Re-check the live form value immediately before submission so a page
+    // script cannot silently replace the requested references with defaults.
+    if (String(primary.value||"").trim()!==combined || primary.form!==multiForm) {
+      revealPendingMultiVerseView();
+      return false;
+    }
     await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
     retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
     retrieve.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true,view:window}));
