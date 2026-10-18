@@ -786,12 +786,17 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
     if (index < batches.length - 1 && result.tabId != null) {
       const handoff = await waitForMultiVerseHandoffComplete(result.tabId);
       if (!handoff.ok) {
-        return {
-          ok:false, reason:handoff.reason || 'multiverse-handoff-failed',
-          count:results.reduce((sum, item) => sum + Number(item.count || 0), 0),
-          batchCount:results.length, failedBatch:index + 1, results,
-          handoff
-        };
+        // A content-script result-link check can fail even after BLB has
+        // accepted Retrieve (for example, if its result markup differs from
+        // the selector). Do not deadlock the remaining batches on that check:
+        // fall back to the navigation-based Retrieve waiter and a cooldown.
+        // Keep the failure visible in diagnostics, but let the sequence proceed
+        // after the bounded fallback rather than opening only the first tab.
+        console.warn('[BLB Suite MultiVerse handoff] content confirmation unavailable; using navigation fallback', {
+          tabId:result.tabId,
+          reason:handoff.reason || 'multiverse-handoff-failed'
+        });
+        await waitForTabInitialAndRetrieveNavigationComplete(result.tabId);
       }
       await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
     }
