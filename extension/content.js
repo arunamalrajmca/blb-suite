@@ -1057,11 +1057,14 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       success:resultsReady,
       reason:resultsReady ? 'expected-results-visible' : 'expected-results-timeout'
     }).catch(()=>{});
-    // On timeout, retain the session-scoped expected refs. If Retrieve causes
-    // a delayed navigation, the next document can repair the result set rather
-    // than exposing the stale BLB default as the final state.
-    revealPendingMultiVerseView();
-    return true;
+    // On timeout, retain the session-scoped expected refs and let the outer
+    // bounded retry loop attempt the handoff again. Do not expose stale BLB
+    // results between retries. A successful result is the only early exit.
+    if (resultsReady) {
+      revealPendingMultiVerseView();
+      return true;
+    }
+    return false;
   }
 
   const tryProcess=async()=>{
