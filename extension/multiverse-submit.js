@@ -52,13 +52,10 @@
   form.appendChild(textarea);
   document.body.replaceChildren(form);
 
-  // Keep the tabs themselves opening immediately, but serialize their actual
-  // BLB POST requests. The result page releases this slot once it has either
-  // the requested verses or a terminal response such as HTTP 429.
-  const slot = await chrome.runtime.sendMessage({type:"blbSuiteAcquireMultiVersePostSlot"});
-  if (!slot?.ok) throw new Error("Could not queue the MultiVerse submission: " + String(slot?.reason || "unknown error"));
+  // Submit immediately. A global cross-tab slot can deadlock every extension
+  // submission page if the prior BLB result does not run the release handler.
+  // Tabs are already opened independently; never hold a POST behind that lock.
   form.submit();
-})().catch(async error => {
-  try { await chrome.runtime.sendMessage({type:"blbSuiteReleaseMultiVersePostSlot", reason:"submission-failed"}); } catch (_) {}
+})().catch(error => {
   document.body.textContent = "MultiVerse submission failed: " + String(error);
 });
