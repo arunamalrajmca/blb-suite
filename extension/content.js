@@ -945,6 +945,18 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
   }
 
   async function processPendingMultiVerseRefs() {
+    const diagnostic = async (stage, details = {}) => {
+      const entry = {
+        timestamp: new Date().toISOString(),
+        stage,
+        url: String(location.href || ''),
+        hashPresent: Boolean(location.hash && location.hash.startsWith('#blbSuiteMultiVerseRefs=')),
+        ...details
+      };
+      try { await chrome.runtime.sendMessage({type:'blbSuiteRecordMultiVerseDiagnostic', entry}); } catch (_) {}
+      console.info('[BLB Suite MultiVerse diagnostic]', entry);
+    };
+    await diagnostic('content-script-start');
     if (!(await isSuiteEnabled())) {
       await releaseMultiVersePostSlot('suite-disabled');
       revealPendingMultiVerseView();
@@ -967,7 +979,15 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       const response=await chrome.runtime.sendMessage({type:'blbSuiteGetPendingMultiVerseRefs'});
       refs=response?.refs;
     }
-    if (!Array.isArray(refs) || refs.length<1) return false;
+    if (!Array.isArray(refs) || refs.length<1) {
+      await diagnostic('no-reference-payload', {fragmentPresent:Boolean(location.hash), source:'fragment-or-storage'});
+      return false;
+    }
+    await diagnostic('references-loaded', {
+      source: String(location.hash || '').startsWith('#blbSuiteMultiVerseRefs=') ? 'fragment' : 'storage',
+      referenceCount: refs.length,
+      references: refs.map(r => ({book:String(r?.book || ''), chapter:r?.chapter, from:r?.from ?? null, to:r?.to ?? null}))
+    });
 
     // Hide only a tab that actually has a pending Suite handoff. Ordinary
     // user-opened MultiVerse pages remain visible and untouched.
@@ -1011,6 +1031,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     }
 
     if (!multiForm||!primary||!retrieve) {
+      await diagnostic('native-form-not-found', {headingFound:Boolean(heading), formFound:Boolean(multiForm), textareaFound:Boolean(primary), submitFound:Boolean(retrieve), bodyStart:String(document.body?.innerText || '').slice(0,180)});
       await releaseMultiVersePostSlot('result-unrecognized');
       revealPendingMultiVerseView();
       return false;
@@ -1038,6 +1059,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       await new Promise(resolve=>setTimeout(resolve,25));
     }
     if (actual!==combined) {
+      await diagnostic('textarea-value-mismatch', {expected:combined, actual});
       await releaseMultiVersePostSlot('result-unrecognized');
       revealPendingMultiVerseView();
       return false;
@@ -1053,6 +1075,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       revealPendingMultiVerseView();
       return false;
     }
+    await diagnostic('form-ready-before-submit', {expected:combined, actual:String(primary.value || '').trim(), formAction:multiForm.action, formMethod:multiForm.method});
     await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
     retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
     retrieve.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true,view:window}));
@@ -1060,8 +1083,9 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
 
     // Keep this tab hidden until its own requested verses appear, or until
     // BLB returns a terminal response such as 429.
-    await waitForExpectedMultiVerseResults(refs);
+    const expectedResultsFound = await waitForExpectedMultiVerseResults(refs);
     const finalBodyText=String(document.body?.innerText||'');
+    await diagnostic('submission-finished', {expectedResultsFound, bodyStart:finalBodyText.slice(0,240), currentUrl:String(location.href || '')});
     await releaseMultiVersePostSlot(
       /429\s+Too Many Requests/i.test(finalBodyText) || /nginx\/1\.31\.6/i.test(finalBodyText)
         ? 'rate-limited' : 'result-complete'
