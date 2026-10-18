@@ -596,11 +596,16 @@ async function findMatchingMultiVerseTab(setKey, tabs) {
     const isMultiVerse = urls.some(url =>
       /blueletterbible\.org/i.test(url) && (/\/MultiVerse\.cfm/i.test(url) || /blbSuiteMultiVerse=1/i.test(url))
     );
+    // Keep the reservation valid while the extension-owned direct-POST page
+    // is between the initial tab reservation and BLB's final MultiVerse URL.
+    // This is a real navigation state, not a stale tab identity.
+    const handoffUrl = chrome.runtime.getURL('multiverse-post.html');
+    const isMultiVerseHandoff = urls.some(url => url.startsWith(handoffUrl));
     const isBlank = urls.length > 0 && urls.every(url => /^about:blank(?:[#?].*)?$/i.test(url));
-    if (!isMultiVerse && !isBlank) { delete tracked[String(tab.id)]; changed = true; continue; }
-    // A tracked blank tab is a reserved destination: its payload was stored
-    // before navigation, so reuse it if another invocation arrives meanwhile.
-    if (!match && entry.key === setKey && (isMultiVerse || isBlank)) match = tab;
+    if (!isMultiVerse && !isBlank && !isMultiVerseHandoff) { delete tracked[String(tab.id)]; changed = true; continue; }
+    // A tracked blank or POST-handoff tab is a reserved destination: its
+    // payload is already attached to that tab, so reuse it during navigation.
+    if (!match && entry.key === setKey && (isMultiVerse || isBlank || isMultiVerseHandoff)) match = tab;
   }
   if (changed) await chrome.storage.local.set({blbSuiteMultiVerseTabSets:tracked});
   return match;
@@ -836,8 +841,11 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
           if (entry?.key !== verseSetKey) continue;
           try {
             const tab = await chrome.tabs.get(Number(id));
-            if (/^about:blank(?:[#?].*)?$/i.test(String(tab?.url || '')) ||
-                /^about:blank(?:[#?].*)?$/i.test(String(tab?.pendingUrl || ''))) reservedTabs.push(tab);
+            const urls = [tab?.url, tab?.pendingUrl].map(value => String(value || '')).filter(Boolean);
+            const handoffUrl = chrome.runtime.getURL('multiverse-post.html');
+            if (urls.some(url => /^about:blank(?:[#?].*)?$/i.test(url) || url.startsWith(handoffUrl))) {
+              reservedTabs.push(tab);
+            }
           } catch (_) {}
         }
         return findMatchingMultiVerseTab(verseSetKey, [...multiVerseTabs, ...reservedTabs]);
