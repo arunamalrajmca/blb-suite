@@ -1013,24 +1013,28 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     let submittedRefs=null;
     try { submittedRefs=sessionStorage.getItem(submittedKey); } catch (_) {}
     if (/[?&]s=[^&]+/i.test(location.search) && submittedRefs===JSON.stringify(refs)) {
-      diagnosticStage='waiting-for-results-after-navigation';
+      // The result URL confirms Retrieve navigated. Do not keep the entire
+      // document blank while waiting for a brittle verse-link check: BLB can
+      // render the correct results after this navigation, and false negatives
+      // here made every tab wait through repeated 10-second polling windows.
+      diagnosticStage='result-url-loaded';
       handoffDiagnostic('result-url-detected',{submittedRefsMatch:true});
-      const resultsReady=await waitForExpectedMultiVerseResults(refs);
-      handoffDiagnostic('result-url-wait-finished',{resultsReady});
-      if (resultsReady) {
-        try {
-          sessionStorage.removeItem(BLB_SUITE_MULTIVERSE_EXPECTED_REFS_KEY);
-          sessionStorage.removeItem(submittedKey);
-        } catch (_) {}
-        await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
-        await chrome.runtime.sendMessage({type:'blbSuiteMultiVerseHandoffComplete',success:true,reason:'expected-results-visible-after-retrieve-navigation'}).catch(()=>{});
-      } else {
-        // Stop resubmitting on this result URL. Leave the current page visible
-        // and retain the expected refs for diagnostics/recovery on a fresh load.
-        try { sessionStorage.removeItem(submittedKey); } catch (_) {}
-        await chrome.runtime.sendMessage({type:'blbSuiteMultiVerseHandoffComplete',success:false,reason:'result-url-loaded-but-expected-results-not-detected'}).catch(()=>{});
-      }
       revealPendingMultiVerseView();
+      void waitForExpectedMultiVerseResults(refs).then(async resultsReady=>{
+        handoffDiagnostic('result-url-verification-finished',{resultsReady});
+        if (resultsReady) {
+          try {
+            sessionStorage.removeItem(BLB_SUITE_MULTIVERSE_EXPECTED_REFS_KEY);
+            sessionStorage.removeItem(submittedKey);
+          } catch (_) {}
+          await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+          await chrome.runtime.sendMessage({type:'blbSuiteMultiVerseHandoffComplete',success:true,reason:'expected-results-visible-after-retrieve-navigation'}).catch(()=>{});
+        } else {
+          // Leave the submitted marker so a transient result-link mismatch
+          // cannot trigger another Retrieve/navigation loop on this URL.
+          await chrome.runtime.sendMessage({type:'blbSuiteMultiVerseHandoffComplete',success:false,reason:'result-url-loaded-but-expected-results-not-detected'}).catch(()=>{});
+        }
+      }).catch(()=>{});
       return true;
     }
 
@@ -1106,6 +1110,9 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     // Do not reveal merely because Retrieve was clicked. BLB updates the result
     // area asynchronously; reveal only after the requested references are
     // actually present, so the normal bootstrap/default verses cannot flash.
+    // Reveal after submitting rather than holding the entire page blank
+    // for up to ten seconds. Result verification continues asynchronously.
+    revealPendingMultiVerseView();
     const resultsReady = await waitForExpectedMultiVerseResults(refs);
     diagnosticStage=resultsReady?'results-detected-after-retrieve':'retrieve-results-timeout';
     handoffDiagnostic('retrieve-wait-finished',{resultsReady});
