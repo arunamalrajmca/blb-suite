@@ -932,7 +932,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       // nginx's 429 page is a terminal result for this request, not a reason
       // to hold the cross-tab Retrieve queue for the full observation window.
       const bodyText=String(document.body?.innerText||'');
-      if (/429\\s+Too Many Requests/i.test(bodyText) || /nginx\\/1\\.31\\.6/i.test(bodyText)) return false;
+      if (/429\s+Too Many Requests/i.test(bodyText) || /nginx\/1\.31\.6/i.test(bodyText)) return false;
       await new Promise(resolve=>setTimeout(resolve,50));
     }
     return false;
@@ -1021,6 +1021,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     let completed=false;
     try {
       await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+      await chrome.runtime.sendMessage({type:'blbSuiteMarkMultiVerseRetrieveSubmitted'}).catch(()=>{});
       retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
       retrieve.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true,view:window}));
       retrieve.click();
