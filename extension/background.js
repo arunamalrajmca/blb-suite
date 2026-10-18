@@ -3185,6 +3185,53 @@ function isTrustedExtensionSender(sender) {
   return !!sender && sender.id === chrome.runtime.id;
 }
 
+// Open all MultiVerse tabs immediately, but allow only one BLB form POST at a
+// time. The next POST starts when the current result page reports completion.
+// A 429 response applies a short, rate-limit-aware cooldown; this never delays
+// tab creation or activation.
+let multiVersePostOwnerTabId = null;
+const multiVersePostWaiters = [];
+
+function grantNextMultiVersePostSlot() {
+  if (multiVersePostOwnerTabId != null) return;
+  while (multiVersePostWaiters.length) {
+    const waiter = multiVersePostWaiters.shift();
+    if (!Number.isInteger(waiter.tabId)) continue;
+    multiVersePostOwnerTabId = waiter.tabId;
+    waiter.sendResponse({ok:true, tabId:waiter.tabId});
+    return;
+  }
+}
+
+function releaseMultiVersePostSlot(tabId, reason = '') {
+  if (!Number.isInteger(tabId) || multiVersePostOwnerTabId !== tabId) return false;
+  multiVersePostOwnerTabId = null;
+  if (reason === 'rate-limited') {
+    setTimeout(grantNextMultiVersePostSlot, 2500);
+  } else {
+    grantNextMultiVersePostSlot();
+  }
+  return true;
+}
+
+function enqueueMultiVersePostSlot(tabId, sendResponse) {
+  if (!Number.isInteger(tabId)) {
+    sendResponse({ok:false, reason:'invalid-tab'});
+    return;
+  }
+  if (multiVersePostOwnerTabId === tabId || multiVersePostWaiters.some(waiter => waiter.tabId === tabId)) {
+    sendResponse({ok:false, reason:'already-queued'});
+    return;
+  }
+  if (multiVersePostOwnerTabId == null && multiVersePostWaiters.length === 0) {
+    multiVersePostOwnerTabId = tabId;
+    sendResponse({ok:true, tabId});
+    return;
+  }
+  multiVersePostWaiters.push({tabId, sendResponse});
+}
+
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === 'blbSuiteReopenPopup') {
     const windowId = Number(message.windowId);
@@ -3195,7 +3242,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteAcquireMultiVersePostSlot","blbSuiteReleaseMultiVersePostSlot","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;
@@ -3306,6 +3353,27 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'blbSuiteStudyTopicMultiVerse') {
     try { sendResponse(await openStudyTopicMultiVerse(message.topic)); } catch (error) { sendResponse({ok:false, error:String(error)}); }
+    return true;
+  }
+
+  if (message.type === 'blbSuiteAcquireMultiVersePostSlot') {
+    const tabId = sender?.tab?.id;
+    if (tabId == null || !isTrustedExtensionSender(sender)) {
+      sendResponse({ok:false, reason:'untrusted-sender'});
+      return true;
+    }
+    enqueueMultiVersePostSlot(tabId, sendResponse);
+    return true;
+  }
+
+  if (message.type === 'blbSuiteReleaseMultiVersePostSlot') {
+    const tabId = sender?.tab?.id;
+    if (tabId == null || !isTrustedExtensionSender(sender)) {
+      sendResponse({ok:false, reason:'untrusted-sender'});
+      return true;
+    }
+    const released = releaseMultiVersePostSlot(tabId, String(message.reason || ''));
+    sendResponse({ok:released});
     return true;
   }
 
