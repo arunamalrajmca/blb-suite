@@ -984,6 +984,32 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
       return true;
     }
 
+    // Retrieve commonly navigates to ?s=<result-id>. If the expected-ref
+    // payload survives that navigation, do not click Retrieve again on the
+    // result page: a false-negative result check would otherwise create a
+    // base-URL <-> ?s= navigation loop.
+    const submittedKey='blbSuiteMultiVerseSubmittedRefsV1';
+    let submittedRefs=null;
+    try { submittedRefs=sessionStorage.getItem(submittedKey); } catch (_) {}
+    if (/[?&]s=[^&]+/i.test(location.search) && submittedRefs===JSON.stringify(refs)) {
+      const resultsReady=await waitForExpectedMultiVerseResults(refs);
+      if (resultsReady) {
+        try {
+          sessionStorage.removeItem(BLB_SUITE_MULTIVERSE_EXPECTED_REFS_KEY);
+          sessionStorage.removeItem(submittedKey);
+        } catch (_) {}
+        await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+        await chrome.runtime.sendMessage({type:'blbSuiteMultiVerseHandoffComplete',success:true,reason:'expected-results-visible-after-retrieve-navigation'}).catch(()=>{});
+      } else {
+        // Stop resubmitting on this result URL. Leave the current page visible
+        // and retain the expected refs for diagnostics/recovery on a fresh load.
+        try { sessionStorage.removeItem(submittedKey); } catch (_) {}
+        await chrome.runtime.sendMessage({type:'blbSuiteMultiVerseHandoffComplete',success:false,reason:'result-url-loaded-but-expected-results-not-detected'}).catch(()=>{});
+      }
+      revealPendingMultiVerseView();
+      return true;
+    }
+
     const values=refs.map(r=>`${r.book} ${r.chapter}:${r.from}${r.to && r.to!==r.from ? "-"+r.to : ""}`);
     const combined=values.join("; ");
 
@@ -1040,6 +1066,7 @@ if (location.hostname===BLBShared.hostnames.blbWww &&
     // Keep the payload in tab-scoped sessionStorage until the destination
     // results are confirmed. Retrieve can navigate/reload this tab, which
     // destroys this execution context before the acknowledgement is sent.
+    try { sessionStorage.setItem(submittedKey,JSON.stringify(refs)); } catch (_) {}
     retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
     retrieve.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true,view:window}));
     retrieve.click();
