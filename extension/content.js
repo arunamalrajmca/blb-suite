@@ -2446,6 +2446,10 @@ function enableBlbPageButtonMonitoring() {
   // A fresh page must not inherit a stale right-click item from the previous
   // document. The floating button starts hidden until a valid selection exists.
   setBlbPageButtonVisible(false);
+  // A selection can be made before asynchronous site settings finish loading,
+  // while the page-button listeners are not attached yet. Reconcile the live
+  // selection after monitoring starts so that an early mouseup is not lost.
+  scheduleFinalBlbPageSelectionButtonUpdate();
 }
 
 function disableBlbPageButtonMonitoring() {
