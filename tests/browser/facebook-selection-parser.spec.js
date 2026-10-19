@@ -55,7 +55,7 @@ test('Facebook selection parser preserves numbered books after normalization col
     ['Romans 16:23', '3 John 1:4', 'Jude 1:5']
   ];
   const results = await extensionWorker.evaluate(cases => cases.map(lines => {
-    const normalized = normalizeSelectedScriptureText(lines.join('\\n'));
+    const normalized = normalizeSelectedScriptureText(lines.join('\n'));
     return extractBibleRefsFromSelectedTextUncached(normalized).map(ref => ref.book);
   }), cases);
 
