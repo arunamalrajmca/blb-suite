@@ -222,6 +222,68 @@ test('mixed reference selection keeps the paired Timothy book shorthand visible 
 });
 
 
+
+test('paired 1 & 2 Timothy whole-book shorthand reaches the final MultiVerse POST with every chapter', async ({ context, extensionWorker }) => {
+  const submittedPayloads = [];
+  await context.route('https://www.blueletterbible.org/**', route => {
+    if (route.request().method() === 'POST') {
+      submittedPayloads.push(new URLSearchParams(route.request().postData() || '').get('mvText') || '');
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
+    });
+  });
+
+  const selectedText = [
+    'Acts 16:1-3',
+    'Romans 16:21',
+    '1 Corinthians 4:17',
+    'Philippians 2:19-22',
+    'Colossians 1:1',
+    '1 & 2 Timothy'
+  ].join('\\n');
+
+  const result = await extensionWorker.evaluate(async text => {
+    return await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true});
+  }, selectedText);
+
+  expect(result?.referenceTab, JSON.stringify(result)).toBeTruthy();
+  await expect.poll(() => submittedPayloads.length, { timeout: 15000 }).toBeGreaterThan(0);
+
+  const postedRefs = submittedPayloads
+    .flatMap(payload => payload.split(';'))
+    .map(reference => reference.trim().toLowerCase())
+    .filter(Boolean);
+
+  // Check the actual outbound MultiVerse payload, not just the parser helper:
+  // the five explicit verse references and all ten whole-book chapter ranges
+  // must survive the selection-to-POST path.
+  for (const reference of [
+    'acts 16:1-3',
+    'romans 16:21',
+    '1 corinthians 4:17',
+    'philippians 2:19-22',
+    'colossians 1:1'
+  ]) {
+    expect(postedRefs, 'missing explicit reference: ' + reference).toContain(reference);
+  }
+
+  const chapterVerseCounts = {
+    '1 timothy': [20, 15, 16, 16, 25, 21],
+    '2 timothy': [18, 26, 17, 22]
+  };
+  for (const [book, verseCounts] of Object.entries(chapterVerseCounts)) {
+    for (let index = 0; index < verseCounts.length; index++) {
+      const chapter = index + 1;
+      const lastVerse = verseCounts[index];
+      const expectedRange = `${book} ${chapter}:1-${lastVerse}`;
+      expect(postedRefs, 'missing whole-book chapter range: ' + expectedRange).toContain(expectedRange);
+    }
+  }
+});
+
 test('Facebook reference selections survive canonical MultiVerse expansion through final selected verses', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(() => {
     const facebookText = [
