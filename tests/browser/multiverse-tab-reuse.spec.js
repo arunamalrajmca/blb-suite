@@ -77,6 +77,46 @@ test('MultiVerse reuses both 200-verse batches when the same selection is repeat
   expect(new Set(trackedTabs.map(tab => tab.key)).size).toBe(2);
 });
 
+test('MultiVerse opens every batch for requests exceeding 20 tabs', async ({ context, extensionWorker }) => {
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
+  }));
+
+  // Build 4,201 distinct valid KJV verse references from the bundled canon.
+  // This requires 22 batches at the production limit of 200 verses per tab.
+  const result = await extensionWorker.evaluate(async () => {
+    const refs = [];
+    for (const book of bookData) {
+      for (let chapter = 1; chapter <= book.chapterCount && refs.length < 4201; chapter++) {
+        const verseCount = Number(book.verses[chapter - 1] || 0);
+        for (let verse = 1; verse <= verseCount && refs.length < 4201; verse++) {
+          refs.push({
+            book: book.name,
+            bookNumber: Number(book.bookNumber),
+            chapter,
+            from: verse,
+            to: verse,
+            version: 'kjv'
+          });
+        }
+      }
+      if (refs.length >= 4201) break;
+    }
+    const opened = await openBlbMultiVerseRefs(refs, true);
+    return { requestedVerseCount: refs.length, opened };
+  });
+
+  expect(result.requestedVerseCount).toBe(4201);
+  expect(result.opened?.ok, JSON.stringify(result.opened)).toBe(true);
+  expect(result.opened.count).toBe(4201);
+  expect(result.opened.batchCount).toBe(22);
+  expect(result.opened.tabIds).toHaveLength(22);
+  expect(new Set(result.opened.tabIds).size).toBe(22);
+  expect(result.opened.truncated).toBe(false);
+});
+
 test('case-sensitive gods search opens and reuses both batches', async ({ context, extensionWorker }) => {
   const submittedPayloads = [];
   await context.route('https://www.blueletterbible.org/**', route => {
