@@ -6226,9 +6226,6 @@ let pdfSelectionMenuKnownPresent = false;
 async function ensureWebSelectionContextMenu() {
   if (selectionMenuKnownPresent) return true;
   try {
-    // Context-menu visibility can persist across service-worker restarts.
-    // Start hidden until the active tab's eligibility has been re-evaluated;
-    // otherwise a stale visible=true state can leak onto blueletterbible.org.
     await chrome.contextMenus.update('blb-suite-web-selection', {
       title:'Show on BLB\tAlt+B',
       visible:false
@@ -6253,10 +6250,6 @@ async function ensureWebSelectionContextMenu() {
 }
 
 async function updateSelectionContextMenuVisibility(visible) {
-  // Do not rely on contextMenus.onShown for the initial state: by the time
-  // onShown runs Chromium may already have snapshotted the native menu. The
-  // page content script explicitly asks us to synchronize before exposing
-  // the floating button, so this update must be awaited end-to-end.
   const present = await ensureWebSelectionContextMenu();
   if (!present) return false;
   try {
@@ -6271,31 +6264,34 @@ async function syncWebSelectionContextMenuVisibility(tab) {
   const operation = selectionMenuOperation.then(async () => {
     try {
       const visible = await shouldShowBlbContextMenu(tab, '');
+      if (isPdfViewerTab(tab)) {
+        // A single PDF-specific item is used for the PDF viewer; keep the web
+        // item hidden there to avoid Chromium grouping both into a submenu.
+        await updateSelectionContextMenuVisibility(false);
+        return await syncPdfSelectionContextMenuVisibility(tab);
+      }
+      await syncPdfSelectionContextMenuVisibility(tab);
       return await updateSelectionContextMenuVisibility(visible);
     } catch (_) {
-      return await updateSelectionContextMenuVisibility(false);
+      await updateSelectionContextMenuVisibility(false);
+      await syncPdfSelectionContextMenuVisibility(tab);
+      return false;
     }
   });
   selectionMenuOperation = operation.catch(() => false);
   return operation;
 }
 
-// Keep the web selection menu persistent. Its visibility is synchronized on
-// page activation/navigation/site-setting changes and directly by the content
-// script before the floating Show on BLB button is exposed. Never remove and
-// recreate this item during normal operation.
+// Keep the web selection menu persistent; only visibility changes with the
+// active tab and site preference.
 async function installWebSelectionContextMenu() {
-  const operation = selectionMenuOperation.then(async () => {
-    return await ensureWebSelectionContextMenu();
-  });
+  const operation = selectionMenuOperation.then(async () => await ensureWebSelectionContextMenu());
   selectionMenuOperation = operation.catch(() => false);
   return operation;
 }
 
 async function ensurePdfSelectionContextMenu() {
   if (pdfSelectionMenuKnownPresent) return true;
-  // Like the web menu, keep the PDF item persistent. Service-worker globals
-  // reset on suspension, but the browser-owned menu item can still exist.
   try {
     await chrome.contextMenus.update('blb-suite-pdf-selection', {
       title:'Show on BLB\tAlt+B',
@@ -6309,9 +6305,8 @@ async function ensurePdfSelectionContextMenu() {
       id:'blb-suite-pdf-selection',
       title:'Show on BLB\tAlt+B',
       contexts:['selection'],
-      // Chromium's built-in PDF viewer exposes an internal extension URL,
-      // not the underlying file:// URL, to context-menu matching. Keep this
-      // item unfiltered and gate it through active-tab visibility below.
+      // Chromium's PDF viewer uses an internal extension URL, so no URL
+      // filter is used. The item is shown only for an eligible active PDF tab.
       visible:false
     });
     pdfSelectionMenuKnownPresent = true;
@@ -6323,20 +6318,20 @@ async function ensurePdfSelectionContextMenu() {
 }
 
 async function installPdfSelectionContextMenu() {
-  const operation = selectionMenuOperation.then(async () => {
-    return await ensurePdfSelectionContextMenu();
-  });
+  const operation = selectionMenuOperation.then(async () => await ensurePdfSelectionContextMenu());
   selectionMenuOperation = operation.catch(() => false);
   return operation;
 }
 
 async function syncPdfSelectionContextMenuVisibility(tab) {
-  if (!pdfSelectionMenuKnownPresent) return;
+  if (!pdfSelectionMenuKnownPresent) await ensurePdfSelectionContextMenu();
+  if (!pdfSelectionMenuKnownPresent) return false;
   try {
     const enabled = !!tab && (await isSuiteEnabled()) && isPdfViewerTab(tab) &&
       (await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(tab), tab.title || ''));
     await chrome.contextMenus.update('blb-suite-pdf-selection', {visible: enabled});
-  } catch (_) {}
+    return true;
+  } catch (_) { return false; }
 }
 
 chrome.tabs.onActivated.addListener(() => {
