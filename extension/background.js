@@ -6215,12 +6215,14 @@ async function isPageButtonEnabledForHostname(hostname, title = '') {
 }
 
 async function shouldShowBlbContextMenu(tab, selectionText) {
-  if (!(await isSuiteEnabled())) return false;
+  // Right-click is a global Suite command, not a mirror of the per-site
+  // floating-button preference. The Suite master switch is its sole feature
+  // toggle; retain exclusions for BLB itself and sensitive sites.
+  if (!(await isSuiteEnabled()) || !tab) return false;
   const siteKey = pageSelectionSettingKeyFromTab(tab);
-  // The right-click action is exactly the same site-based feature as the
-  // floating Show on BLB button. Do not require a content-script visibility
-  // signal or a classifier just to expose the menu item.
-  return await isPageButtonEnabledForHostname(siteKey, tab?.title || '');
+  if (!siteKey || siteKey === BLB_HOSTNAME) return false;
+  if (isSensitiveSiteHostname(siteKey)) return false;
+  return true;
 }
 
 async function syncWebSelectionContextMenuVisibility(tab) {
@@ -6329,8 +6331,9 @@ async function installPdfSelectionContextMenu() {
 async function syncPdfSelectionContextMenuVisibility(tab) {
   if (!pdfSelectionMenuKnownPresent) return;
   try {
+    const siteKey = pageSelectionSettingKeyFromTab(tab);
     const enabled = !!tab && (await isSuiteEnabled()) && isPdfViewerTab(tab) &&
-      (await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(tab), tab.title || ''));
+      !!siteKey && !isSensitiveSiteHostname(siteKey);
     await chrome.contextMenus.update('blb-suite-pdf-selection', {visible: enabled});
   } catch (_) {}
 }
@@ -6435,11 +6438,11 @@ async function handleOpenBibleSelectionCommand() {
     const tab = tabs[0];
     if (!tab?.id) return;
 
-    // Alt+B is an entry point for the same Show on BLB feature as the
-    // floating button and right-click menu. Enforce both the BLB-site
-    // exclusion and the effective per-site setting before reading selection.
+    // Alt+B is a global Suite command, independent of the per-site floating
+    // button preference. The master switch is checked above; preserve the
+    // sensitive-site exclusion.
     const siteKey = pageSelectionSettingKeyFromTab(tab);
-    if (!(await isPageButtonEnabledForHostname(siteKey, tab.title || ''))) return;
+    if (!siteKey || isSensitiveSiteHostname(siteKey)) return;
 
     if (siteKey === BLB_HOSTNAME) {
       const selectedText = await getActiveTabSelection(tab.id);
