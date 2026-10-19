@@ -6362,6 +6362,20 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   // distinguishes a browser-selection loss from a reference-parser loss.
   const formatDiagnosticRefs = sourceText => extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(sourceText))
     .map(ref => `${ref.book} ${ref.chapter}:${ref.from}-${ref.to}`);
+  // Log only targeted reference-related tokens and Unicode code points, never the post text.
+  const diagnosticTokenContext = sourceText => {
+    const source = String(sourceText || '');
+    const contexts = [];
+    for (const token of ['corinth', 'timothy', 'acts', 'romans', 'philippians']) {
+      const index = source.toLowerCase().indexOf(token);
+      if (index < 0) continue;
+      const start = Math.max(0, index - 5);
+      const end = Math.min(source.length, index + token.length + 20);
+      const sample = source.slice(start, end);
+      contexts.push({token, sample: sample.replace(/[^\x20-\x7E]/g, ch => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`), codePoints: [...sample].map(ch => ch.codePointAt(0).toString(16))});
+    }
+    return contexts;
+  };
   const nativeDiagnosticRefs = formatDiagnosticRefs(nativeText);
   const liveDiagnosticRefs = formatDiagnosticRefs(liveText);
   const diagnosticRefs = formatDiagnosticRefs(text);
@@ -6375,6 +6389,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     nativeReferences: nativeDiagnosticRefs,
     liveReferences: liveDiagnosticRefs,
     parsedReferences: diagnosticRefs,
+    nativeTokenContext: diagnosticTokenContext(nativeText),
+    liveTokenContext: diagnosticTokenContext(liveText),
+    combinedTokenContext: diagnosticTokenContext(text),
     wholeBookReferenceCount: diagnosticWholeBookRefs.length
   });
   if (!(await shouldShowBlbContextMenu(tab, text))) return;
