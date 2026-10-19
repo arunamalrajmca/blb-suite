@@ -155,7 +155,19 @@ test('Facebook-style multiline reference lists retain every explicitly named ref
     ].join('\n');
     const map = text => extractBibleRefsFromSelectedTextUncached(text)
       .map(ref => [ref.book, ref.chapter, ref.from, ref.to]);
-    return { first: map(first), second: map(second) };
+    const normalizedSecond = normalizeSelectedScriptureText(second);
+    const normalizedSecondRefs = extractBibleRefsFromSelectedTextUncached(normalizedSecond);
+    const expandedSecond = expandMultiVerseRefsToVerses(normalizedSecondRefs)
+      .map(ref => [ref.book, ref.chapter, ref.from, ref.to]);
+    const canonicalSecond = canonicalMultiVerseSet(normalizedSecondRefs).refs
+      .map(ref => [ref.book, ref.chapter, ref.from, ref.to]);
+    return {
+      first: map(first),
+      second: map(second),
+      normalizedSecond: map(normalizedSecond),
+      canonicalSecond,
+      expandedSecond
+    };
   });
 
   expect(cases.first).toEqual([
@@ -165,7 +177,7 @@ test('Facebook-style multiline reference lists retain every explicitly named ref
     ['philippians', 2, 19, 22],
     ['colossians', 1, 1, 1]
   ]);
-  expect(cases.second).toEqual([
+  const expectedSecond = [
     ['romans', 16, 24, 24],
     ['1 corinthians', 16, 23, 23],
     ['2 corinthians', 13, 14, 14],
@@ -179,5 +191,9 @@ test('Facebook-style multiline reference lists retain every explicitly named ref
     ['2 timothy', 4, 22, 22],
     ['titus', 3, 15, 15],
     ['philemon', 1, 25, 25]
-  ]);
+  ];
+  expect(cases.second).toEqual(expectedSecond);
+  expect(cases.normalizedSecond).toEqual(expectedSecond);
+  expect(cases.canonicalSecond).toEqual(expectedSecond);
+  expect(cases.expandedSecond).toEqual(expectedSecond);
 });
