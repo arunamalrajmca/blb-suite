@@ -48,6 +48,22 @@ test('Facebook selection parser retains every reference in a clean multi-book se
   ]);
 });
 
+test('Facebook selection parser preserves numbered books after normalization collapses verse-ending whitespace', async ({ extensionWorker }) => {
+  const cases = [
+    ['Romans 16:21', '1 Corinthians 4:17', 'Philippians 2:19-22'],
+    ['Romans 16:22', '2 Corinthians 13:14', 'Galatians 6:18'],
+    ['Romans 16:23', '3 John 1:4', 'Jude 1:5']
+  ];
+  const results = await extensionWorker.evaluate(cases => cases.map(lines => {
+    const normalized = normalizeSelectedScriptureText(lines.join('\\n'));
+    return extractBibleRefsFromSelectedTextUncached(normalized).map(ref => ref.book);
+  }), cases);
+
+  expect(results[0]).toEqual(['romans', '1 corinthians', 'philippians']);
+  expect(results[1]).toEqual(['romans', '2 corinthians', 'galatians']);
+  expect(results[2]).toEqual(['romans', '3 john', 'jude']);
+});
+
 test('Facebook selection parser preserves references across the reported reordered selection combinations', async ({ extensionWorker }) => {
   const cases = [
     ['Romans 16:21', '1 Corinthians 4:17', 'Philippians 2:19-22'],
