@@ -4240,10 +4240,16 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   const appendCanonical = parsed => {
     const canonical = resolveBibleReference(parsed.book, parsed.chapter, parsed.from, parsed.to);
     if (!canonical) return;
-    const key = `${canonical.book.urlKey}|${canonical.chapter}|${canonical.from}|${canonical.to}`;
+    // The shared resolver normalizes a chapter-only reference to verse 1
+    // for URL construction. Do not let that implementation detail erase the
+    // chapter-only identity when merging parser results: MultiVerse must
+    // expand the entire chapter, and a chapter reference must not collide
+    // with an explicit reference to verse 1.
+    const wholeChapter = parsed.from == null && parsed.to == null;
+    const key = `${canonical.book.urlKey}|${canonical.chapter}|${wholeChapter ? 'chapter' : `${canonical.from}|${canonical.to}`}`;
     if (mergedKeys.has(key)) return;
     mergedKeys.add(key);
-    mergedRefs.push(parsed);
+    mergedRefs.push(wholeChapter ? {...parsed, from:null, to:null} : parsed);
   };
   for (const parsed of sharedRefs) appendCanonical(parsed);
   for (const parsed of lineSeparatedSharedRefs) appendCanonical(parsed);
