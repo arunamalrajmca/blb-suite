@@ -6280,7 +6280,22 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!(await isSuiteEnabled())) return;
   const menuId = String(info?.menuItemId || '');
   if (menuId !== 'blb-suite-web-selection' && menuId !== 'blb-suite-pdf-selection') return;
-  const text = String(info.selectionText || '').trim();
+
+  // Chromium's contextMenus selectionText can be truncated for long selections.
+  // On ordinary web pages, read the live Selection API value while the
+  // context-menu gesture still preserves the range. Keep the browser-provided
+  // text as a fallback, and retain it for PDFs where page scripts cannot read
+  // the selected document text.
+  let text = String(info.selectionText || '').trim();
+  if (menuId === 'blb-suite-web-selection' && tab?.id != null) {
+    try {
+      const liveSelection = String(await getActiveTabSelection(tab.id) || '').trim();
+      if (liveSelection) text = liveSelection;
+    } catch (_) {
+      // The menu-provided selection remains a valid fallback if page access
+      // is unavailable or the site prevents selection retrieval.
+    }
+  }
   if (!text) return;
   if (!(await shouldShowBlbContextMenu(tab, text))) return;
   try {
