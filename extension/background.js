@@ -3970,30 +3970,6 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     }
   }
 
-  // Chapter-only references must retain their omitted verse range. The shared
-  // resolver currently canonicalizes "Romans 8" to verse 1 for URL building,
-  // so detect chapter-only tokens from the original selection before merging
-  // shared-parser output. Exclude chapter ranges and explicit chapter:verse refs.
-  const chapterOnlyRe = /(?<![A-Za-z0-9])((?:[1-3]\\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\\s+(\\d+)(?!\\s*[:.]\\s*\\d)(?!\\s*-\\s*\\d)(?![A-Za-z0-9])/gi;
-  let chapterOnlyMatch;
-  while ((chapterOnlyMatch = chapterOnlyRe.exec(source))) {
-    if (isShadowedBookMatch(chapterOnlyMatch.index)) continue;
-    const book = resolveBook(chapterOnlyMatch[1].trim());
-    if (!book) continue;
-    const chapter = Number(chapterOnlyMatch[2]);
-    if (!Number.isInteger(chapter) || chapter < 1 || chapter > Number(book.chapterCount)) continue;
-    const canonical = resolveBibleReference(book.name, chapter, null, null);
-    if (!canonical) continue;
-    refs.push({
-      book: canonical.book.name,
-      chapter: canonical.chapter,
-      from: null,
-      to: null,
-      text: chapterOnlyMatch[0].trim(),
-      url: canonical.url
-    });
-  }
-
   // Pass 1: references with an explicit chapter:verse separator. The book
   // token may touch the chapter ("prv1:2") or have spaces around the colon.
   // Support both hyphenated ranges (Romans 10:9-12) and comma-separated
@@ -4199,7 +4175,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // verse number is supplied. Open the complete chapter on BLB.
   // Require an explicit book name/alias followed by a valid chapter number;
   // this keeps ordinary prose numbers from being interpreted as references.
-  const chapterOnlyRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)(?!\s*[:.]\s*\d)(?!\s+-?\d+(?!\s+[A-Za-z]))(?=$|[\s,.;:!?\)\]\}])/gi;
+  const chapterOnlyRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)(?!\s*[:.]\s*\d)(?!\s*-\s*\d)(?=$|[\s,.;:!?\)\]\}])/gi;
   while ((m = chapterOnlyRe.exec(source))) {
     if (isShadowedBookMatch(m.index)) continue;
     const book = resolveBook(m[1]);
@@ -4264,11 +4240,6 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   const mergedRefs = [];
   const mergedKeys = new Set();
   const appendCanonical = parsed => {
-    // The shared parser may report a chapter-only token as verse 1. The
-    // dedicated chapter-only scan below preserves the correct null range;
-    // suppress only that lossy duplicate, not an explicitly written ":1".
-    if (parsed.from === 1 && parsed.to === 1 &&
-        /^.+\\s+\\d+\\s*$/.test(String(parsed.text || '').trim())) return;
     const canonical = resolveBibleReference(parsed.book, parsed.chapter, parsed.from, parsed.to);
     if (!canonical) return;
     // The shared resolver normalizes a chapter-only reference to verse 1
