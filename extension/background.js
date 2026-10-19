@@ -6241,13 +6241,13 @@ let pdfSelectionMenuKnownPresent = false;
 async function ensureWebSelectionContextMenu() {
   // Put both page and PDF selection actions under one Suite submenu.
   try {
-    await chrome.contextMenus.update('blb-suite-selection-parent', {title:'Blue Letter Bible Suite', visible:false});
+    await chrome.contextMenus.update('blb-suite-selection-parent', {title:'Blue Letter Bible Suite'});
   } catch (_) {
     try {
-      await chrome.contextMenus.create({id:'blb-suite-selection-parent', title:'Blue Letter Bible Suite', contexts:['selection'], visible:false});
+      await chrome.contextMenus.create({id:'blb-suite-selection-parent', title:'Blue Letter Bible Suite', contexts:['selection']});
     } catch (err) {
       // Another startup path may have created the parent concurrently.
-      try { await chrome.contextMenus.update('blb-suite-selection-parent', {title:'Blue Letter Bible Suite', visible:false}); } catch (_) {}
+      try { await chrome.contextMenus.update('blb-suite-selection-parent', {title:'Blue Letter Bible Suite'}); } catch (_) {}
     }
   }
   if (selectionMenuKnownPresent) return true;
@@ -6296,16 +6296,29 @@ async function updateSelectionContextMenuVisibility(visible) {
 }
 
 async function syncWebSelectionContextMenuVisibility(tab) {
+  // All selection-menu visibility is coordinated in one serialized operation.
+  // Re-read the active tab inside the queue so stale onUpdated callbacks from
+  // tabs opened by a PDF cannot overwrite the current PDF menu state.
   const operation = selectionMenuOperation.then(async () => {
     try {
-      // PDF selections are handled by the dedicated PDF child item only.
-      const visible = !isPdfViewerTab(tab) && await shouldShowBlbContextMenu(tab, '');
-      const updated = await updateSelectionContextMenuVisibility(visible);
-      const pdfVisible = !!tab && isPdfViewerTab(tab) && await isSuiteEnabled();
-      await chrome.contextMenus.update('blb-suite-selection-parent', {visible:visible || pdfVisible});
-      return updated;
+      const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+      const activeTab = tabs[0] || tab;
+      const masterEnabled = await isSuiteEnabled();
+      const pdfActive = !!activeTab && isPdfViewerTab(activeTab);
+      const webVisible = !!activeTab && masterEnabled && !pdfActive &&
+        await shouldShowBlbContextMenu(activeTab, '');
+      const pdfVisible = !!activeTab && masterEnabled && pdfActive;
+      await updateSelectionContextMenuVisibility(webVisible);
+      if (pdfSelectionMenuKnownPresent) {
+        await chrome.contextMenus.update('blb-suite-pdf-selection', {visible:pdfVisible});
+      }
+      await chrome.contextMenus.update('blb-suite-selection-parent', {visible:webVisible || pdfVisible});
+      return true;
     } catch (_) {
-      return await updateSelectionContextMenuVisibility(false);
+      try { await updateSelectionContextMenuVisibility(false); } catch (_) {}
+      try { await chrome.contextMenus.update('blb-suite-pdf-selection', {visible:false}); } catch (_) {}
+      try { await chrome.contextMenus.update('blb-suite-selection-parent', {visible:false}); } catch (_) {}
+      return false;
     }
   });
   selectionMenuOperation = operation.catch(() => false);
@@ -6349,14 +6362,10 @@ async function installPdfSelectionContextMenu() {
 }
 
 async function syncPdfSelectionContextMenuVisibility(tab) {
-  if (!pdfSelectionMenuKnownPresent) return;
-  try {
-    const enabled = !!tab && (await isSuiteEnabled()) && isPdfViewerTab(tab);
-    await chrome.contextMenus.update('blb-suite-pdf-selection', {visible: enabled});
-    // Parent visibility follows whichever single child is eligible on this tab.
-    const webVisible = !isPdfViewerTab(tab) && await shouldShowBlbContextMenu(tab, '');
-    await chrome.contextMenus.update('blb-suite-selection-parent', {visible: enabled || webVisible});
-  } catch (_) {}
+  // Delegate to the same serialized active-tab synchronizer as the web child.
+  // Keeping separate writers caused tab-opening callbacks to race and leave
+  // the shared parent hidden even while the Suite master switch was ON.
+  return syncWebSelectionContextMenuVisibility(tab);
 }
 
 chrome.tabs.onActivated.addListener(() => {
