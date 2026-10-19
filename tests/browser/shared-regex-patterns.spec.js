@@ -127,3 +127,57 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     unrelated: false
   });
 });
+
+
+test('Facebook-style multiline reference lists retain every explicitly named reference', async ({ extensionWorker }) => {
+  const cases = await extensionWorker.evaluate(() => {
+    const first = [
+      'Acts 16:1-3',
+      'Romans 16:21',
+      '1 Corinthians 4:17',
+      'Philippians 2:19-22',
+      'Colossians 1:1'
+    ].join('\\n');
+    const second = [
+      'Romans 16:24',
+      '1 Corinthians 16:23',
+      '2 Corinthians 13:14',
+      'Galatians 6:18',
+      'Ephesians 6:24',
+      'Philippians 4:23',
+      'Colossians 4:18',
+      '1 Thessalonians 5:28',
+      '2 Thessalonians 3:18',
+      '1 Timothy 6:21',
+      '2 Timothy 4:22',
+      'Titus 3:15',
+      'Philemon 25'
+    ].join('\\n');
+    const map = text => extractBibleRefsFromSelectedTextUncached(text)
+      .map(ref => [ref.book, ref.chapter, ref.from, ref.to]);
+    return { first: map(first), second: map(second) };
+  });
+
+  expect(cases.first).toEqual([
+    ['acts', 16, 1, 3],
+    ['romans', 16, 21, 21],
+    ['1 corinthians', 4, 17, 17],
+    ['philippians', 2, 19, 22],
+    ['colossians', 1, 1, 1]
+  ]);
+  expect(cases.second).toEqual([
+    ['romans', 16, 24, 24],
+    ['1 corinthians', 16, 23, 23],
+    ['2 corinthians', 13, 14, 14],
+    ['galatians', 6, 18, 18],
+    ['ephesians', 6, 24, 24],
+    ['philippians', 4, 23, 23],
+    ['colossians', 4, 18, 18],
+    ['1 thessalonians', 5, 28, 28],
+    ['2 thessalonians', 3, 18, 18],
+    ['1 timothy', 6, 21, 21],
+    ['2 timothy', 4, 22, 22],
+    ['titus', 3, 15, 15],
+    ['philemon', 1, 25, 25]
+  ]);
+});
