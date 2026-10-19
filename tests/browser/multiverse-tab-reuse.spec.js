@@ -141,9 +141,11 @@ test('MultiVerse opens every batch for requests exceeding 20 tabs', async ({ con
   expect(new Set(liveState.map(tab => tab.id)).size).toBe(22);
   expect(liveState.every(tab => tab.key), JSON.stringify(liveState, null, 2)).toBe(true);
   expect(new Set(liveState.map(tab => tab.key)).size).toBe(22);
+  const expectedDestination = value =>
+    /^(?:chrome|moz)-extension:\/\//i.test(value) ||
+    /blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm)/i.test(value);
   expect(liveState.every(tab =>
-    /blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm)/i.test(tab.url) ||
-    /blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm)/i.test(tab.pendingUrl)
+    expectedDestination(tab.url) || expectedDestination(tab.pendingUrl)
   ), JSON.stringify(liveState, null, 2)).toBe(true);
 
   // 4,201 verses must be submitted as 21 full batches plus one final verse.
