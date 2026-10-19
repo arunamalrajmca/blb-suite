@@ -6368,12 +6368,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       text = liveText;
     }
   }
-  if (!text) {
-    console.warn('[BLB selection diagnostic] empty selection', {
-      menuId, tabId: tab?.id ?? null, nativeLength: nativeText.length, liveLength: liveText.length
-    });
-    return;
-  }
+  if (!text) return;
   if (!(await shouldShowBlbContextMenu(tab, text))) return;
   try {
     if (normalizeSiteHostname(hostnameFromTabUrl(tab?.url)) === BLB_HOSTNAME) {
