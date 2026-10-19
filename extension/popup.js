@@ -16,6 +16,7 @@ function getSiteKey(url, title = '') {
     if (/^(?:brave|chrome):\/\//i.test(raw) && (urlLooksPdf || titleLooksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
     const u = new URL(raw);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    if (urlLooksPdf || titleLooksPdf) return '__blb_web_pdf__';
     let host = String(u.hostname || '').toLowerCase();
     if (host.startsWith('www.')) host = host.slice(4);
     return host;
@@ -68,7 +69,7 @@ async function getState() {
   const defaultEnabled = await getDefaultSiteEnabled(siteKey, pageTitleForDefaultCheck);
   const isBlbSite = siteKey === BLB_HOSTNAME;
   const isSensitiveSite = isSensitiveSiteHostname(siteKey);
-  const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
+  const isPdfContext = ['__blb_local_pdf__', '__blb_pdf_viewer__', '__blb_web_pdf__'].includes(siteKey);
   let hasCurrentSiteAccess = true;
   let hasSiteSpecificAccess = true;
   if (!isBlbSite && currentSiteOrigin) {
@@ -95,7 +96,8 @@ async function getState() {
     master: data.masterEnabled !== false,
     // Both site-based toggles are OFF by default. An explicit per-site setting
     // wins, but neither can appear ON until Chrome has granted host permission.
-    pageButton: (isBlbSite || !isSensitiveSite) && !!siteKey && effectivePageEnabled,
+    // PDF Show on BLB is a fixed capability, independent of site preferences.
+    pageButton: isPdfContext || ((isBlbSite || !isSensitiveSite) && !!siteKey && effectivePageEnabled),
     doubleClick: !isBlbSite && !isSensitiveSite && !isPdfContext && !!siteKey && effectiveDoubleEnabled,
     redirect: data.redirectEnabled !== false,
     siteKey,
@@ -128,7 +130,7 @@ function render(state) {
   const page = document.getElementById('pageButton');
   const dbl = document.getElementById('doubleClick');
   const redirect = document.getElementById('redirectEnabled');
-  page.disabled = !state.master || !state.siteKey || (state.isSensitiveSite && !state.isBlbSite);
+  page.disabled = state.isPdfContext || !state.master || !state.siteKey || (state.isSensitiveSite && !state.isBlbSite);
   dbl.disabled = !state.master || !state.siteKey || state.isBlbSite || state.isSensitiveSite || state.isPdfContext;
   redirect.disabled = !state.master;
   document.getElementById('pageSetting').classList.toggle('disabled', page.disabled);
@@ -198,7 +200,7 @@ async function pinSiteFeatureChoice(feature, otherFeatureEnabled) {
 
 async function setPageButton(on) {
   const state = await getState();
-  if (!state.siteKey || !state.master || (state.isSensitiveSite && !state.isBlbSite)) return;
+  if (state.isPdfContext || !state.siteKey || !state.master || (state.isSensitiveSite && !state.isBlbSite)) return;
   const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
   const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
   sites[state.siteKey] = !!on;
@@ -1183,7 +1185,7 @@ async function setIndependentSiteFeature(feature, on) {
 
   const state = await getState();
   if (!state.siteKey || !state.master || (state.isBlbSite && feature !== 'pageButton') ||
-      (state.isSensitiveSite && !state.isBlbSite) || (feature === 'doubleClick' && state.isPdfContext)) {
+      (state.isSensitiveSite && !state.isBlbSite) || (state.isPdfContext && (feature === 'pageButton' || feature === 'doubleClick'))) {
     render(state);
     return;
   }
@@ -1364,8 +1366,9 @@ document.addEventListener('click', event => {
       const doubleSites = saved.doubleClickBlbSites && typeof saved.doubleClickBlbSites === 'object' ? saved.doubleClickBlbSites : {};
       document.getElementById('master').checked = saved.masterEnabled !== false;
       document.getElementById('redirectEnabled').checked = saved.redirectEnabled === true;
-      document.getElementById('pageButton').checked = Object.prototype.hasOwnProperty.call(pageSites, siteKey) && pageSites[siteKey] === true;
-      document.getElementById('doubleClick').checked = Object.prototype.hasOwnProperty.call(doubleSites, siteKey) && doubleSites[siteKey] === true;
+      const isPdfContext = ['__blb_local_pdf__', '__blb_pdf_viewer__', '__blb_web_pdf__'].includes(siteKey);
+      document.getElementById('pageButton').checked = isPdfContext || (Object.prototype.hasOwnProperty.call(pageSites, siteKey) && pageSites[siteKey] === true);
+      document.getElementById('doubleClick').checked = !isPdfContext && Object.prototype.hasOwnProperty.call(doubleSites, siteKey) && doubleSites[siteKey] === true;
       for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
     } catch (fallbackError) {
       console.error('BLB Suite popup saved-setting fallback failed:', fallbackError);
