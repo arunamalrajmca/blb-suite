@@ -6239,6 +6239,17 @@ let selectionMenuKnownPresent = false;
 let pdfSelectionMenuKnownPresent = false;
 
 async function ensureWebSelectionContextMenu() {
+  // Put both page and PDF selection actions under one Suite submenu.
+  try {
+    await chrome.contextMenus.update('blb-suite-selection-parent', {title:'Blue Letter Bible Suite', visible:false});
+  } catch (_) {
+    try {
+      await chrome.contextMenus.create({id:'blb-suite-selection-parent', title:'Blue Letter Bible Suite', contexts:['selection'], visible:false});
+    } catch (err) {
+      // Another startup path may have created the parent concurrently.
+      try { await chrome.contextMenus.update('blb-suite-selection-parent', {title:'Blue Letter Bible Suite', visible:false}); } catch (_) {}
+    }
+  }
   if (selectionMenuKnownPresent) return true;
   try {
     // Context-menu visibility can persist across service-worker restarts.
@@ -6246,6 +6257,7 @@ async function ensureWebSelectionContextMenu() {
     // otherwise a stale visible=true state can leak onto blueletterbible.org.
     await chrome.contextMenus.update('blb-suite-web-selection', {
       title:'Show on BLB\tAlt+B',
+      parentId:'blb-suite-selection-parent',
       visible:false
     });
     selectionMenuKnownPresent = true;
@@ -6254,6 +6266,7 @@ async function ensureWebSelectionContextMenu() {
   try {
     await chrome.contextMenus.create({
       id:'blb-suite-web-selection',
+      parentId:'blb-suite-selection-parent',
       title:'Show on BLB\tAlt+B',
       contexts:['selection'],
       documentUrlPatterns:['http://*/*','https://*/*'],
@@ -6285,8 +6298,12 @@ async function updateSelectionContextMenuVisibility(visible) {
 async function syncWebSelectionContextMenuVisibility(tab) {
   const operation = selectionMenuOperation.then(async () => {
     try {
-      const visible = await shouldShowBlbContextMenu(tab, '');
-      return await updateSelectionContextMenuVisibility(visible);
+      // PDF selections are handled by the dedicated PDF child item only.
+      const visible = !isPdfViewerTab(tab) && await shouldShowBlbContextMenu(tab, '');
+      const updated = await updateSelectionContextMenuVisibility(visible);
+      const pdfVisible = !!tab && isPdfViewerTab(tab) && await isSuiteEnabled();
+      await chrome.contextMenus.update('blb-suite-selection-parent', {visible:visible || pdfVisible});
+      return updated;
     } catch (_) {
       return await updateSelectionContextMenuVisibility(false);
     }
@@ -6315,6 +6332,7 @@ async function installPdfSelectionContextMenu() {
     try {
       await chrome.contextMenus.create({
         id:'blb-suite-pdf-selection',
+        parentId:'blb-suite-selection-parent',
         title:'Show on BLB\tAlt+B',
         // Visibility is synchronized against the active tab. Do not bind
         // this item to URL patterns: Chrome's built-in PDF viewer uses an
@@ -6335,6 +6353,9 @@ async function syncPdfSelectionContextMenuVisibility(tab) {
   try {
     const enabled = !!tab && (await isSuiteEnabled()) && isPdfViewerTab(tab);
     await chrome.contextMenus.update('blb-suite-pdf-selection', {visible: enabled});
+    // Parent visibility follows whichever single child is eligible on this tab.
+    const webVisible = !isPdfViewerTab(tab) && await shouldShowBlbContextMenu(tab, '');
+    await chrome.contextMenus.update('blb-suite-selection-parent', {visible: enabled || webVisible});
   } catch (_) {}
 }
 
