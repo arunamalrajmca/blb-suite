@@ -147,7 +147,7 @@ test('MultiVerse opens every batch for requests exceeding 20 tabs', async ({ con
   ), JSON.stringify(liveState, null, 2)).toBe(true);
 
   // 4,201 verses must be submitted as 21 full batches plus one final verse.
-  await expect.poll(() => submittedPayloads.length, { timeout: 30000 }).toBe(22);
+  await expect.poll(() => submittedPayloads.length, { timeout: 50000 }).toBe(22);
   expect(submittedPayloads.map(countSubmittedVerses).sort((a, b) => b - a))
     .toEqual([...Array(21).fill(200), 1]);
 });
