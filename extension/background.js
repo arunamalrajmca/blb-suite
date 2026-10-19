@@ -6227,13 +6227,16 @@ async function removeLegacyPdfSelectionContextMenu() {
 }
 
 async function ensureWebSelectionContextMenu() {
-  // Older versions created a second PDF-only item. Remove it so Chromium
-  // cannot group the two extension actions into a submenu.
+  // Keep a single selection action registered and visible. Chromium can retain
+  // a stale per-item visible=false state across repeated PDF viewer selections,
+  // even when tab activation/storage listeners attempt to restore visibility.
+  // The click handler independently validates the suite and site preference.
   await removeLegacyPdfSelectionContextMenu();
   try {
     await chrome.contextMenus.update('blb-suite-web-selection', {
       title:'Show on BLB\\tAlt+B',
-      contexts:['selection']
+      contexts:['selection'],
+      visible:true
     });
     selectionMenuKnownPresent = true;
     return true;
@@ -6243,7 +6246,7 @@ async function ensureWebSelectionContextMenu() {
       id:'blb-suite-web-selection',
       title:'Show on BLB\\tAlt+B',
       contexts:['selection'],
-      visible:false
+      visible:true
     });
     selectionMenuKnownPresent = true;
     return true;
@@ -6253,33 +6256,17 @@ async function ensureWebSelectionContextMenu() {
   }
 }
 
-async function updateSelectionContextMenuVisibility(visible) {
-  const present = await ensureWebSelectionContextMenu();
-  if (!present) return false;
-  try {
-    await chrome.contextMenus.update('blb-suite-web-selection', {visible:!!visible});
-    return true;
-  } catch (_) {
-    return false;
-  }
+async function updateSelectionContextMenuVisibility(_visible) {
+  // Do not toggle this extension-global menu item off on tab/storage events.
+  // The onClicked handler checks the active tab's actual feature preference.
+  return ensureWebSelectionContextMenu();
 }
 
 async function syncWebSelectionContextMenuVisibility(_tab) {
-  // Context-menu visibility is extension-global. Never trust a tab argument
-  // captured by an older tabs.onUpdated/onActivated event: those events can
-  // complete out of order and hide the item for the currently active page.
-  // Serialize the sync, and resolve the active tab only when this operation
-  // reaches the front of the queue.
   const operation = selectionMenuOperation.then(async () => {
     try {
-      const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
-      const tab = tabs[0];
-      const enabled = !!tab && (await isSuiteEnabled()) &&
-        (await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(tab), tab.title || ''));
-      return await updateSelectionContextMenuVisibility(enabled);
+      return await ensureWebSelectionContextMenu();
     } catch (_) {
-      // Keep the last known visibility on transient API errors; forcing false
-      // here made the menu disappear intermittently on repeated right-clicks.
       return false;
     }
   });
