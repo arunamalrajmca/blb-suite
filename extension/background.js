@@ -6512,7 +6512,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
         }
         await syncWebSelectionContextMenuVisibility();
       })
-      .catch(() => {}));
+      .catch(() => {});
   }
   if (changes.currentStudySessionId || changes.studyAutoStopMinutes) refreshStudyAutoStopAlarm().catch(()=>{});
 });
