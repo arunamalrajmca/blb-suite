@@ -17,7 +17,7 @@ function getSiteKey(url, title = '') {
     const u = new URL(raw);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
     // Keep the Double-click KJV control visible but disabled on web-hosted PDFs.
-    if (/\\.pdf$/i.test(u.pathname) || titleLooksPdf) return '__blb_web_pdf__';
+    if (/\.pdf$/i.test(u.pathname) || titleLooksPdf) return '__blb_web_pdf__';
     let host = String(u.hostname || '').toLowerCase();
     if (host.startsWith('www.')) host = host.slice(4);
     return host;
