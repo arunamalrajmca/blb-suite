@@ -197,7 +197,7 @@ test('Facebook-style DOM range extraction preserves all block-separated referenc
 
 test('mixed reference selection keeps the paired Timothy book shorthand visible for explicit handling', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(() => {
-    const text = 'Acts 16:1-3\\nRomans 16:21\\n1 Corinthians 4:17\\nPhilippians 2:19-22\\nColossians 1:1\\n1 & 2 Timothy';
+    const text = 'Acts 16:1-3\nRomans 16:21\n1 Corinthians 4:17\nPhilippians 2:19-22\nColossians 1:1\n1 & 2 Timothy';
     const wholeBooks = getSelectedWholeBookReferencesFromMixedText(text);
     return {
       verseRefs: extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(text))
@@ -231,7 +231,7 @@ test('Facebook reference selections survive canonical MultiVerse expansion throu
       '1 Timothy 6:21', '2 Timothy 4:22', 'Titus 3:15', 'Philemon 25',
       '3. The Ancient Church Often Accepted Paul as the Author',
       'The Eastern church especially associated Hebrews with Paul.'
-    ].join('\\n');
+    ].join('\n');
     const explicit = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(facebookText));
     const expanded = expandMultiVerseRefsToVerses(explicit);
     const verseKeys = new Set(expanded.map(ref => `${ref.book}|\${ref.chapter}|\${ref.from}`));
@@ -251,7 +251,7 @@ test('Facebook reference selections survive canonical MultiVerse expansion throu
     const caseA = [
       'Acts 16:1-3', 'Romans 16:21', '1 Corinthians 4:17',
       'Philippians 2:19-22', 'Colossians 1:1', '1 & 2 Timothy'
-    ].join('\\n');
+    ].join('\n');
     const caseARefs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(caseA));
     const caseAWholeBooks = getSelectedWholeBookReferencesFromMixedText(caseA);
     const caseAExpanded = expandMultiVerseRefsToVerses([...caseARefs, ...caseAWholeBooks]);
@@ -316,7 +316,7 @@ test('all reference orders preserve the middle selection through parsing and fin
   ];
 
   const parsed = await extensionWorker.evaluate(cases => cases.map(lines => {
-    const refs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(lines.join('\\n')));
+    const refs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(lines.join('\n')));
     const expanded = expandMultiVerseRefsToVerses(refs);
     return {
       refs: refs.map(ref => [ref.book, ref.chapter, ref.from, ref.to]),
@@ -335,7 +335,7 @@ test('all reference orders preserve the middle selection through parsing and fin
 
   const submitted = await extensionWorker.evaluate(async () => {
     const refs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(
-      'Philippians 2:19-22\\nRomans 16:21\\n1 Corinthians 4:17'
+      'Philippians 2:19-22\nRomans 16:21\n1 Corinthians 4:17'
     ));
     return openBlbMultiVerseRefs(refs, true);
   });
