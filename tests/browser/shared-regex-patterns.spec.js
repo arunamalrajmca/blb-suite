@@ -220,3 +220,69 @@ test('mixed reference selection keeps the paired Timothy book shorthand visible 
   expect(result.wholeBooks.filter(ref => ref[0] === '2 Timothy').map(ref => ref[1]))
     .toEqual(Array.from({length: 4}, (_, index) => index + 1));
 });
+
+
+test('Facebook reference selections survive canonical MultiVerse expansion through final selected verses', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    const facebookText = [
+      'Romans 16:24', '1 Corinthians 16:23', '2 Corinthians 13:14',
+      'Galatians 6:18', 'Ephesians 6:24', 'Philippians 4:23',
+      'Colossians 4:18', '1 Thessalonians 5:28', '2 Thessalonians 3:18',
+      '1 Timothy 6:21', '2 Timothy 4:22', 'Titus 3:15', 'Philemon 25',
+      '3. The Ancient Church Often Accepted Paul as the Author',
+      'The Eastern church especially associated Hebrews with Paul.'
+    ].join('\\n');
+    const explicit = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(facebookText));
+    const expanded = expandMultiVerseRefsToVerses(explicit);
+    const verseKeys = new Set(expanded.map(ref => `${ref.book}|\${ref.chapter}|\${ref.from}`));
+    const finalVerseRefs = [
+      ['2 corinthians', 13, 14], ['colossians', 4, 18],
+      ['2 timothy', 4, 22], ['titus', 3, 15]
+    ];
+    const canonicalBooks = Object.fromEntries(BOOKS.map(book => [book.name.toLowerCase(), book]));
+    const finalVerses = finalVerseRefs.map(([bookName, chapter, verse]) => {
+      const book = canonicalBooks[bookName];
+      return {book:book.name, bookNumber:book.bookNumber, chapter, from:verse, to:verse, version:'kjv'};
+    });
+    const explicitRefs = explicit.map(ref => [ref.book, ref.chapter, ref.from, ref.to]);
+    const expandedFinals = finalVerseRefs.map(([bookName, chapter, verse]) =>
+      expanded.some(ref => ref.book.toLowerCase() === bookName && ref.chapter === chapter && ref.from === verse)
+    );
+    const caseA = [
+      'Acts 16:1-3', 'Romans 16:21', '1 Corinthians 4:17',
+      'Philippians 2:19-22', 'Colossians 1:1', '1 & 2 Timothy'
+    ].join('\\n');
+    const caseARefs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(caseA));
+    const caseAWholeBooks = getSelectedWholeBookReferencesFromMixedText(caseA);
+    const caseAExpanded = expandMultiVerseRefsToVerses([...caseARefs, ...caseAWholeBooks]);
+    return {
+      explicitRefs,
+      expandedCount: expanded.length,
+      expandedFinals,
+      finalVerses: finalVerses.map(ref => [ref.book, ref.chapter, ref.from]),
+      caseARefs: caseARefs.map(ref => [ref.book, ref.chapter, ref.from, ref.to]),
+      timothyChapters: {
+        first: [...new Set(caseAExpanded.filter(ref => ref.book.toLowerCase() === '1 timothy').map(ref => ref.chapter))],
+        second: [...new Set(caseAExpanded.filter(ref => ref.book.toLowerCase() === '2 timothy').map(ref => ref.chapter))]
+      },
+      maxBatchCount: Math.ceil(caseAExpanded.length / BLB_MULTIVERSE_MAX_VERSES),
+      hasTrailingProse: facebookText.includes('associated Hebrews with Paul')
+    };
+  });
+  expect(result.explicitRefs).toHaveLength(13);
+  expect(result.explicitRefs.map(ref => ref[0])).toEqual([
+    'romans', '1 corinthians', '2 corinthians', 'galatians', 'ephesians',
+    'philippians', 'colossians', '1 thessalonians', '2 thessalonians',
+    '1 timothy', '2 timothy', 'titus', 'philemon'
+  ]);
+  expect(result.expandedFinals).toEqual([true, true, true, true]);
+  expect(result.hasTrailingProse).toBe(true);
+  expect(result.caseARefs).toEqual([
+    ['acts', 16, 1, 3], ['romans', 16, 21, 21],
+    ['1 corinthians', 4, 17, 17], ['philippians', 2, 19, 22],
+    ['colossians', 1, 1, 1]
+  ]);
+  expect(result.timothyChapters.first).toEqual([1, 2, 3, 4, 5, 6]);
+  expect(result.timothyChapters.second).toEqual([1, 2, 3, 4]);
+  expect(result.maxBatchCount).toBeGreaterThan(1);
+});
