@@ -6233,7 +6233,6 @@ async function ensureWebSelectionContextMenu() {
   try {
     await chrome.contextMenus.update('blb-suite-web-selection', {
       title:'Show on BLB\\tAlt+B',
-      visible:false,
       contexts:['selection']
     });
     selectionMenuKnownPresent = true;
