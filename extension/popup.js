@@ -1349,11 +1349,48 @@ document.addEventListener('click', event => {
   if (!event.target.closest('.backup-wrap')) closeStudyBackupMenu();
 });
 
+async function renderSavedSettingsPreview() {
+  // Render the saved values as soon as storage and the active tab are available.
+  // Site/default/permission checks can be slower, but must not make saved ON
+  // toggles look OFF while the popup waits for those checks.
+  const [saved, tabs] = await Promise.all([
+    chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false}),
+    chrome.tabs.query({active:true, currentWindow:true})
+  ]);
+  const tab = tabs[0] || {};
+  const siteKey = getSiteKey(String(tab.url || ''), tab.title || '');
+  const pageSites = saved.pageSelectionButtonSites && typeof saved.pageSelectionButtonSites === 'object' ? saved.pageSelectionButtonSites : {};
+  const doubleSites = saved.doubleClickBlbSites && typeof saved.doubleClickBlbSites === 'object' ? saved.doubleClickBlbSites : {};
+  const isBlbSite = siteKey === BLB_HOSTNAME;
+  const isSensitiveSite = isSensitiveSiteHostname(siteKey);
+  const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
+  render({
+    master: saved.masterEnabled !== false,
+    pageButton: (isBlbSite || !isSensitiveSite) && !!siteKey && pageSites[siteKey] === true,
+    doubleClick: !isBlbSite && !isSensitiveSite && !isPdfContext && !!siteKey && doubleSites[siteKey] === true,
+    redirect: saved.redirectEnabled !== false,
+    siteKey,
+    pageCaption: deriveSiteCaption(siteKey),
+    isBlbSite,
+    isSensitiveSite,
+    isPdfContext
+  });
+  // Keep controls inert until the authoritative permission-aware state lands.
+  // Their checked values already reflect storage, so this cannot show false OFF.
+  for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) {
+    document.getElementById(id).disabled = true;
+  }
+}
+
 (async () => {
   // A failed tabs/storage read must not leave the toolbar popup permanently
-  // hidden. Keep normal rendering unchanged; on initialization failure, expose
-  // the existing UI so the user can recover instead of seeing a blank popup.
+  // hidden. Render stored values first, then apply permission-aware state.
   try {
+    try {
+      await renderSavedSettingsPreview();
+    } catch (previewError) {
+      console.warn('BLB Suite popup saved-setting preview unavailable:', previewError);
+    }
     render(await getState());
   } catch (error) {
     console.error('BLB Suite popup initialization failed:', error);
