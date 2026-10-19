@@ -6309,7 +6309,9 @@ async function ensurePdfSelectionContextMenu() {
       id:'blb-suite-pdf-selection',
       title:'Show on BLB\tAlt+B',
       contexts:['selection'],
-      documentUrlPatterns:['file:///*.pdf'],
+      // Chromium's built-in PDF viewer exposes an internal extension URL,
+      // not the underlying file:// URL, to context-menu matching. Keep this
+      // item unfiltered and gate it through active-tab visibility below.
       visible:false
     });
     pdfSelectionMenuKnownPresent = true;
