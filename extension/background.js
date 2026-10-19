@@ -6007,7 +6007,33 @@ async function getActiveTabSelection(tabId) {
   try {
     const result = await chrome.scripting.executeScript({
       target: {tabId},
-      func: () => window.getSelection ? window.getSelection().toString() : ''
+      func: () => {
+        const selection = window.getSelection ? window.getSelection() : null;
+        if (!selection || !selection.rangeCount) return '';
+        try {
+          // Facebook renders each line in nested block elements. Reconstruct
+          // the live Range with separators so references cannot run together.
+          const fragment = selection.getRangeAt(0).cloneContents();
+          const blockTags = new Set([
+            'ADDRESS','ARTICLE','ASIDE','BLOCKQUOTE','DD','DIV','DL','DT','FIELDSET',
+            'FIGCAPTION','FIGURE','FOOTER','FORM','H1','H2','H3','H4','H5','H6',
+            'HEADER','HR','LI','MAIN','NAV','OL','P','PRE','SECTION','TABLE','TR','UL'
+          ]);
+          const nodeText = node => {
+            if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || '';
+            if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return '';
+            if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') return '\n';
+            const children = Array.from(node.childNodes || []);
+            const isBlock = node.nodeType === Node.ELEMENT_NODE && blockTags.has(node.tagName);
+            const value = children.map(nodeText).filter(part => part !== '').join(isBlock ? '\n' : '');
+            return isBlock ? `\n${value}\n` : value;
+          };
+          const text = nodeText(fragment).replace(/\n{3,}/g, '\n\n').trim();
+          return text || selection.toString() || '';
+        } catch (_) {
+          return selection.toString() || '';
+        }
+      }
     });
     return String(result?.[0]?.result || '').trim();
   } catch (e) {
