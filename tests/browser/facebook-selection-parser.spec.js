@@ -87,7 +87,7 @@ test('Facebook selection parser preserves chapter-only refs alongside adjacent v
       'Matthew 5:3-12',
       'Romans 8',
       '1 Peter 2:9-10'
-    ].join('\\n');
+    ].join('\n');
     return extractBibleRefsFromSelectedTextUncached(selected).map(ref => ({
       book: ref.book,
       chapter: ref.chapter,
@@ -105,7 +105,7 @@ test('Facebook selection parser preserves chapter-only refs alongside adjacent v
 
 test('Facebook selection parser keeps a chapter ref distinct from explicit verse one', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(() => {
-    return extractBibleRefsFromSelectedTextUncached('Romans 8\\nRomans 8:1').map(ref => ({
+    return extractBibleRefsFromSelectedTextUncached('Romans 8\nRomans 8:1').map(ref => ({
       book: ref.book,
       chapter: ref.chapter,
       from: ref.from ?? null,
