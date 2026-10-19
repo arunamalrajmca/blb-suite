@@ -1210,6 +1210,13 @@ async function setIndependentSiteFeature(feature, on) {
 }
 
 async function handlePageButtonToggle(on) {
+  // PDF support is a fixed capability, not a per-site preference. Ignore
+  // all toggle events in PDF contexts and restore the visible checked state.
+  const state = await getState();
+  if (state.isPdfContext) {
+    render(state);
+    return;
+  }
   await setIndependentSiteFeature('pageButton', on);
 }
 
@@ -1368,9 +1375,11 @@ document.addEventListener('click', event => {
       const doubleSites = saved.doubleClickBlbSites && typeof saved.doubleClickBlbSites === 'object' ? saved.doubleClickBlbSites : {};
       document.getElementById('master').checked = saved.masterEnabled !== false;
       document.getElementById('redirectEnabled').checked = saved.redirectEnabled === true;
-      document.getElementById('pageButton').checked = ['__blb_local_pdf__', '__blb_pdf_viewer__', '__blb_web_pdf__'].includes(siteKey) || (Object.prototype.hasOwnProperty.call(pageSites, siteKey) && pageSites[siteKey] === true);
+      const isPdfContext = ['__blb_local_pdf__', '__blb_pdf_viewer__', '__blb_web_pdf__'].includes(siteKey);
+      document.getElementById('pageButton').checked = isPdfContext || (Object.prototype.hasOwnProperty.call(pageSites, siteKey) && pageSites[siteKey] === true);
       document.getElementById('doubleClick').checked = Object.prototype.hasOwnProperty.call(doubleSites, siteKey) && doubleSites[siteKey] === true;
       for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
+      if (isPdfContext) document.getElementById('doubleClick').checked = false;
     } catch (fallbackError) {
       console.error('BLB Suite popup saved-setting fallback failed:', fallbackError);
       for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
