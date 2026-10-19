@@ -2293,7 +2293,7 @@ function addBlbPageSelectionButton() {
     e.stopPropagation();
     pageButtonActionInProgress = true;
   });
-  button.addEventListener('click', e => {
+  button.addEventListener('click', async e => {
     e.preventDefault();
     e.stopPropagation();
     const text = blbPageButtonSelection || getSelectedPageText();
@@ -2301,16 +2301,19 @@ function addBlbPageSelectionButton() {
       pageButtonActionInProgress = false;
       return;
     }
-    // Ignore stale content-script contexts if the extension was reloaded.
-    safeRuntimeSendMessage({
+    // Keep the cached selection and button intact until the background confirms
+    // that it accepted the action. Clearing optimistically hid failed clicks
+    // and made the floating control appear to do nothing when message delivery
+    // or selection processing failed.
+    const response = await safeRuntimeSendMessage({
       type:'blbSuiteOpenSelectionText',
       text,
       contextualReference: blbPageButtonContextualReference || null,
       directUrl: blbPageButtonDirectUrl || null,
       tabBehavior:{activeIfNew:true,activateExisting:true}
     });
-    clearBlbPageSelectionAfterAction();
-    setTimeout(() => { pageButtonActionInProgress = false; }, 0);
+    if (response?.ok) clearBlbPageSelectionAfterAction();
+    pageButtonActionInProgress = false;
   });
 
   mount.appendChild(button);
