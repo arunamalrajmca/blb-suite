@@ -6191,12 +6191,13 @@ function pageSelectionSettingKeyFromTab(tab) {
   if (/^file:/i.test(raw) && looksPdf) return '__blb_local_pdf__';
   if (/^(?:chrome|brave)-extension:/i.test(raw) && (looksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
   if (/^(?:brave|chrome):\/\//i.test(raw) && (looksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
+  if (/^https?:/i.test(raw) && looksPdf) return '__blb_web_pdf__';
   return hostnameFromTabUrl(raw);
 }
 
 function isPdfViewerTab(tab) {
   const key = pageSelectionSettingKeyFromTab(tab);
-  return key === '__blb_local_pdf__' || key === '__blb_pdf_viewer__';
+  return key === '__blb_local_pdf__' || key === '__blb_pdf_viewer__' || key === '__blb_web_pdf__';
 }
 
 async function isPageButtonEnabledForHostname(hostname, title = '') {
@@ -6217,9 +6218,10 @@ async function isPageButtonEnabledForHostname(hostname, title = '') {
 async function shouldShowBlbContextMenu(tab, selectionText) {
   if (!(await isSuiteEnabled())) return false;
   const siteKey = pageSelectionSettingKeyFromTab(tab);
-  // The right-click action is exactly the same site-based feature as the
-  // floating Show on BLB button. Do not require a content-script visibility
-  // signal or a classifier just to expose the menu item.
+  // PDF selection is a built-in context-menu capability. It follows the Suite
+  // master switch, but is independent of per-site floating-button preferences.
+  if (isPdfViewerTab(tab)) return true;
+  // Web-page selection continues to follow its saved per-site setting.
   return await isPageButtonEnabledForHostname(siteKey, tab?.title || '');
 }
 
@@ -6315,7 +6317,7 @@ async function installPdfSelectionContextMenu() {
         id:'blb-suite-pdf-selection',
         title:'Show on BLB\tAlt+B',
         contexts:['selection'],
-        documentUrlPatterns:['file:///*.pdf'],
+        documentUrlPatterns:['file:///*.pdf','http://*/*.pdf*','https://*/*.pdf*'],
         visible:false
       });
       pdfSelectionMenuKnownPresent = true;
@@ -6329,8 +6331,7 @@ async function installPdfSelectionContextMenu() {
 async function syncPdfSelectionContextMenuVisibility(tab) {
   if (!pdfSelectionMenuKnownPresent) return;
   try {
-    const enabled = !!tab && (await isSuiteEnabled()) && isPdfViewerTab(tab) &&
-      (await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(tab), tab.title || ''));
+    const enabled = !!tab && (await isSuiteEnabled()) && isPdfViewerTab(tab);
     await chrome.contextMenus.update('blb-suite-pdf-selection', {visible: enabled});
   } catch (_) {}
 }
