@@ -2522,14 +2522,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const walk = node => {
         if (node.nodeType === Node.TEXT_NODE) { pieces.push(node.nodeValue || ''); return; }
         if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return;
-        if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') { pieces.push('\\n'); return; }
+        if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') { pieces.push('\n'); return; }
         const isBlock = node.nodeType === Node.ELEMENT_NODE && blockTags.has(node.tagName);
-        if (isBlock && pieces.length && !String(pieces[pieces.length - 1]).endsWith('\\n')) pieces.push('\\n');
+        if (isBlock && pieces.length && !String(pieces[pieces.length - 1]).endsWith('\n')) pieces.push('\n');
         for (const child of node.childNodes) walk(child);
-        if (isBlock && pieces.length && !String(pieces[pieces.length - 1]).endsWith('\\n')) pieces.push('\\n');
+        if (isBlock && pieces.length && !String(pieces[pieces.length - 1]).endsWith('\n')) pieces.push('\n');
       };
       walk(range.cloneContents());
-      const reconstructed = pieces.join('').replace(/\\u00a0/g, ' ').replace(/[ \\t]*\\n[ \\t]*/g, '\\n').replace(/\\n{3,}/g, '\\n\\n').trim();
+      const reconstructed = pieces.join('').replace(/\u00a0/g, ' ').replace(/[ \\t]*\n[ \\t]*/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
       sendResponse({ok:true, text:reconstructed || selection.toString()});
     } catch (_) {
       sendResponse({ok:true, text:window.getSelection ? window.getSelection().toString() : ''});
