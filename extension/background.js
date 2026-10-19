@@ -6230,7 +6230,6 @@ async function ensureWebSelectionContextMenu() {
   // Older versions created a second PDF-only item. Remove it so Chromium
   // cannot group the two extension actions into a submenu.
   await removeLegacyPdfSelectionContextMenu();
-  if (selectionMenuKnownPresent) return true;
   try {
     await chrome.contextMenus.update('blb-suite-web-selection', {
       title:'Show on BLB\\tAlt+B',
