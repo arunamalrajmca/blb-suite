@@ -6316,8 +6316,10 @@ async function installPdfSelectionContextMenu() {
       await chrome.contextMenus.create({
         id:'blb-suite-pdf-selection',
         title:'Show on BLB\tAlt+B',
+        // Visibility is synchronized against the active tab. Do not bind
+        // this item to URL patterns: Chrome's built-in PDF viewer uses an
+        // internal extension URL, which would not match ordinary PDF patterns.
         contexts:['selection'],
-        documentUrlPatterns:['file:///*.pdf','http://*/*.pdf*','https://*/*.pdf*'],
         visible:false
       });
       pdfSelectionMenuKnownPresent = true;
