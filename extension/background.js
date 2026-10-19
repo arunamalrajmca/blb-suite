@@ -6316,11 +6316,14 @@ async function installWebSelectionContextMenu() {
 
 async function installPdfSelectionContextMenu() {
   selectionMenuOperation = selectionMenuOperation.then(async () => {
-    // Context-menu items persist across service-worker restarts/reloads.
-    // Remove our known PDF item first so startup/onChanged/onStartup calls are idempotent.
+    // Migrate menu items created by older builds: remove BOTH children
+    // before removing the obsolete submenu parent, then recreate them as
+    // top-level items during the normal visibility synchronization.
+    try { await chrome.contextMenus.remove('blb-suite-web-selection'); } catch (_) {}
     try { await chrome.contextMenus.remove('blb-suite-pdf-selection'); } catch (_) {}
-    // Remove the obsolete submenu parent left by earlier versions.
     try { await chrome.contextMenus.remove('blb-suite-selection-parent'); } catch (_) {}
+    selectionMenuKnownPresent = false;
+    pdfSelectionMenuKnownPresent = false;
     try {
       await chrome.contextMenus.create({
         id:'blb-suite-pdf-selection',
