@@ -136,13 +136,20 @@ function canonicalStoredRef(item) {
   const resolved = resolveBibleReference(canonicalBook.name, chapter, from, to);
   if (!resolved) return null;
   const version = String(item.version || 'kjv').trim().toLowerCase() || 'kjv';
-  const text = `${resolved.book.name} ${resolved.chapter}${resolved.from != null ? `:${resolved.from}${resolved.to != null && resolved.to !== resolved.from ? `-${resolved.to}` : ''}` : ''}`;
+  const wholeChapter = from == null && to == null;
+  const text = wholeChapter
+    ? `${resolved.book.name} ${resolved.chapter}`
+    : `${resolved.book.name} ${resolved.chapter}${resolved.from != null ? `:${resolved.from}${resolved.to != null && resolved.to !== resolved.from ? `-${resolved.to}` : ''}` : ''}`;
+  // Keep an omitted verse range as a chapter-level reference. The shared
+  // resolver intentionally returns a chapter URL for this case, but its
+  // null range must survive canonicalization so MultiVerse expands every
+  // verse in that chapter rather than collapsing it to verse 1.
   return {
     book: resolved.book.name,
     bookNumber: Number(resolved.book.bookNumber),
     chapter: resolved.chapter,
-    from: resolved.from,
-    to: resolved.to,
+    from: wholeChapter ? null : resolved.from,
+    to: wholeChapter ? null : resolved.to,
     text,
     version
   };
@@ -4168,7 +4175,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // verse number is supplied. Open the complete chapter on BLB.
   // Require an explicit book name/alias followed by a valid chapter number;
   // this keeps ordinary prose numbers from being interpreted as references.
-  const chapterOnlyRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)(?!\s*[:.]\s*\d)(?!\s+-?\d)(?=$|[\s,.;:!?\)\]\}])/gi;
+  const chapterOnlyRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)(?!\s*[:.]\s*\d)(?!\s*-\s*\d)(?=$|[\s,.;:!?\)\]\}])/gi;
   while ((m = chapterOnlyRe.exec(source))) {
     if (isShadowedBookMatch(m.index)) continue;
     const book = resolveBook(m[1]);
@@ -4233,12 +4240,21 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   const mergedRefs = [];
   const mergedKeys = new Set();
   const appendCanonical = parsed => {
+    // Drop the shared parser's verse-one normalization when the source token
+    // is chapter-only; the local chapter-only scan preserves it as null range.
+    if (parsed.from === 1 && parsed.to === 1 && /^.+\s+\d+\s*$/.test(String(parsed.text || '').trim())) return;
     const canonical = resolveBibleReference(parsed.book, parsed.chapter, parsed.from, parsed.to);
     if (!canonical) return;
-    const key = `${canonical.book.urlKey}|${canonical.chapter}|${canonical.from}|${canonical.to}`;
+    // The shared resolver normalizes a chapter-only reference to verse 1
+    // for URL construction. Do not let that implementation detail erase the
+    // chapter-only identity when merging parser results: MultiVerse must
+    // expand the entire chapter, and a chapter reference must not collide
+    // with an explicit reference to verse 1.
+    const wholeChapter = parsed.from == null && parsed.to == null;
+    const key = `${canonical.book.urlKey}|${canonical.chapter}|${wholeChapter ? 'chapter' : `${canonical.from}|${canonical.to}`}`;
     if (mergedKeys.has(key)) return;
     mergedKeys.add(key);
-    mergedRefs.push(parsed);
+    mergedRefs.push(wholeChapter ? {...parsed, from:null, to:null} : parsed);
   };
   for (const parsed of sharedRefs) appendCanonical(parsed);
   for (const parsed of lineSeparatedSharedRefs) appendCanonical(parsed);

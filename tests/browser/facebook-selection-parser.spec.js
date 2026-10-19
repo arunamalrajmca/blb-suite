@@ -80,3 +80,41 @@ test('Facebook selection parser preserves references across the reported reorder
   expect(results[2]).toEqual(['philippians', 'colossians', 'romans', '1 corinthians']);
   expect(results[3]).toEqual(['romans', '1 corinthians', 'philippians', 'colossians', 'acts']);
 });
+
+test('Facebook selection parser preserves chapter-only refs alongside adjacent verse refs', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    const selected = [
+      'Matthew 5:3-12',
+      'Romans 8',
+      '1 Peter 2:9-10'
+    ].join('\n');
+    return extractBibleRefsFromSelectedTextUncached(selected).map(ref => ({
+      book: ref.book,
+      chapter: ref.chapter,
+      from: ref.from ?? null,
+      to: ref.to ?? null
+    }));
+  });
+
+  expect(result).toEqual([
+    { book: 'matthew', chapter: 5, from: 3, to: 12 },
+    { book: 'romans', chapter: 8, from: null, to: null },
+    { book: '1 peter', chapter: 2, from: 9, to: 10 }
+  ]);
+});
+
+test('Facebook selection parser keeps a chapter ref distinct from explicit verse one', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    return extractBibleRefsFromSelectedTextUncached('Romans 8\nRomans 8:1').map(ref => ({
+      book: ref.book,
+      chapter: ref.chapter,
+      from: ref.from ?? null,
+      to: ref.to ?? null
+    }));
+  });
+
+  expect(result).toEqual([
+    { book: 'romans', chapter: 8, from: null, to: null },
+    { book: 'romans', chapter: 8, from: 1, to: 1 }
+  ]);
+});

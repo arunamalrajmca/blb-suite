@@ -439,3 +439,80 @@ test('case-sensitive Boolean fallback handles possessive apostrophes', async ({ 
   expect(result.normalizedQuotedPhrase).toBe(`"LORD'S and God"`);
   expect(result.ignoresQuotedBoolean).toBe(false);
 });
+
+test('MultiVerse submits all verses for a chapter-only ref in a mixed selection', async ({ context, extensionWorker }) => {
+  const submittedPayloads = [];
+  await context.route('https://www.blueletterbible.org/**', route => {
+    if (route.request().method() === 'POST') {
+      const body = new URLSearchParams(route.request().postData() || '');
+      submittedPayloads.push(body.get('mvText') || '');
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><head><title>MultiVerse chapter regression</title></head><body>MultiVerse fixture</body></html>'
+    });
+  });
+
+  const refs = [
+    { book: 'Matthew', bookNumber: 40, chapter: 5, from: 3, to: 12, version: 'kjv' },
+    { book: 'Romans', bookNumber: 45, chapter: 8, from: null, to: null, text: 'Romans 8', version: 'kjv' },
+    { book: '1 Peter', bookNumber: 60, chapter: 2, from: 9, to: 10, version: 'kjv' }
+  ];
+  const result = await openMultiVerse(extensionWorker, refs);
+
+  expect(result?.ok, JSON.stringify(result)).toBe(true);
+  expect(result.count).toBe(10 + 39 + 2);
+  expect(result.batchCount).toBe(1);
+  await expect.poll(() => submittedPayloads.length, { timeout: 15000 }).toBe(1);
+
+  const submitted = submittedPayloads[0].toLowerCase();
+  expect(submitted).toContain('matthew 5:3-12');
+  expect(submitted).toContain('romans 8:1-39');
+  expect(submitted).toContain('1 peter 2:9-10');
+  expect(countSubmittedVerses(submitted)).toBe(51);
+});
+
+
+
+test('mixed chapter-only selection submits all 51 expected verses through the selection entry point', async ({ context, extensionWorker }) => {
+  const submittedPayloads = [];
+  await context.route('https://www.blueletterbible.org/**', route => {
+    if (route.request().method() === 'POST') {
+      const body = new URLSearchParams(route.request().postData() || '');
+      submittedPayloads.push((body.get('mvText') || '').toLowerCase());
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
+    });
+  });
+
+  const result = await extensionWorker.evaluate(async () => {
+    const selection = 'Matthew 5:3-12\nRomans 8\n1 Peter 2:9-10';
+    const refs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(selection));
+    const opened = await openBlbPageSelection(selection, {activeIfNew:true, activateExisting:true});
+    return {
+      refs: refs.map(ref => ({
+        book: ref.book,
+        chapter: ref.chapter,
+        from: ref.from ?? null,
+        to: ref.to ?? null
+      })),
+      opened
+    };
+  });
+
+  expect(result.refs).toEqual([
+    { book: 'matthew', chapter: 5, from: 3, to: 12 },
+    { book: 'romans', chapter: 8, from: null, to: null },
+    { book: '1 peter', chapter: 2, from: 9, to: 10 }
+  ]);
+  expect(result.opened?.ok, JSON.stringify(result.opened)).toBe(true);
+  await expect.poll(() => submittedPayloads.length, { timeout: 10000 }).toBe(1);
+  expect(submittedPayloads[0]).toContain('matthew 5:3-12');
+  expect(submittedPayloads[0]).toContain('romans 8:1-39');
+  expect(submittedPayloads[0]).toContain('1 peter 2:9-10');
+  expect(countSubmittedVerses(submittedPayloads[0])).toBe(51);
+});
