@@ -1368,7 +1368,7 @@ document.addEventListener('click', event => {
       const doubleSites = saved.doubleClickBlbSites && typeof saved.doubleClickBlbSites === 'object' ? saved.doubleClickBlbSites : {};
       document.getElementById('master').checked = saved.masterEnabled !== false;
       document.getElementById('redirectEnabled').checked = saved.redirectEnabled === true;
-      document.getElementById('pageButton').checked = getSiteKey(url, tabs[0]?.title || '').startsWith('__blb_') && /pdf/i.test(getSiteKey(url, tabs[0]?.title || '')) || (Object.prototype.hasOwnProperty.call(pageSites, siteKey) && pageSites[siteKey] === true);
+      document.getElementById('pageButton').checked = ['__blb_local_pdf__', '__blb_pdf_viewer__', '__blb_web_pdf__'].includes(siteKey) || (Object.prototype.hasOwnProperty.call(pageSites, siteKey) && pageSites[siteKey] === true);
       document.getElementById('doubleClick').checked = Object.prototype.hasOwnProperty.call(doubleSites, siteKey) && doubleSites[siteKey] === true;
       for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
     } catch (fallbackError) {
