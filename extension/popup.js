@@ -1351,6 +1351,26 @@ document.addEventListener('click', event => {
     render(await getState());
   } catch (error) {
     console.error('BLB Suite popup initialization failed:', error);
+    // If live tab/permission inspection fails, keep the popup usable without
+    // presenting unchecked HTML defaults as if every saved toggle was turned off.
+    try {
+      const [saved, tabs] = await Promise.all([
+        chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false}),
+        chrome.tabs.query({active:true, currentWindow:true}).catch(() => [])
+      ]);
+      const url = String(tabs[0]?.url || '');
+      const siteKey = getSiteKey(url, tabs[0]?.title || '');
+      const pageSites = saved.pageSelectionButtonSites && typeof saved.pageSelectionButtonSites === 'object' ? saved.pageSelectionButtonSites : {};
+      const doubleSites = saved.doubleClickBlbSites && typeof saved.doubleClickBlbSites === 'object' ? saved.doubleClickBlbSites : {};
+      document.getElementById('master').checked = saved.masterEnabled !== false;
+      document.getElementById('redirectEnabled').checked = saved.redirectEnabled === true;
+      document.getElementById('pageButton').checked = Object.prototype.hasOwnProperty.call(pageSites, siteKey) && pageSites[siteKey] === true;
+      document.getElementById('doubleClick').checked = Object.prototype.hasOwnProperty.call(doubleSites, siteKey) && doubleSites[siteKey] === true;
+      for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
+    } catch (fallbackError) {
+      console.error('BLB Suite popup saved-setting fallback failed:', fallbackError);
+      for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
+    }
   } finally {
     document.body.classList.remove('popup-loading');
   }
