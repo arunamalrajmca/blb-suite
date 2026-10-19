@@ -2761,6 +2761,9 @@ let blbTabCreationQueue = Promise.resolve();
 // Repeating the same action after a short pause is still allowed.
 const recentSelectionOpenRequests = new Map();
 const SELECTION_OPEN_DEDUP_MS = 1200;
+const SELECTION_OPEN_DEDUP_RETENTION_MS = 5000;
+const SELECTION_OPEN_DEDUP_MAX_ENTRIES = 256;
+let lastSelectionOpenDedupPruneAt = 0;
 
 function shouldAcceptSelectionOpenRequest(tabId, text, requestId = '') {
   const normalizedRequestId = String(requestId || '').trim();
@@ -2771,8 +2774,23 @@ function shouldAcceptSelectionOpenRequest(tabId, text, requestId = '') {
   const previous = recentSelectionOpenRequests.get(key) || 0;
   if (now - previous < SELECTION_OPEN_DEDUP_MS) return false;
   recentSelectionOpenRequests.set(key, now);
-  for (const [k, ts] of recentSelectionOpenRequests) {
-    if (now - ts > 5000) recentSelectionOpenRequests.delete(k);
+
+  // Keep the hot path constant-time. Pruning the whole map on every selection
+  // added avoidable work to every Show on BLB request; prune periodically and
+  // enforce a hard bound for bursts of unique selections.
+  if (now - lastSelectionOpenDedupPruneAt >= SELECTION_OPEN_DEDUP_RETENTION_MS
+      || recentSelectionOpenRequests.size > SELECTION_OPEN_DEDUP_MAX_ENTRIES) {
+    lastSelectionOpenDedupPruneAt = now;
+    for (const [entryKey, timestamp] of recentSelectionOpenRequests) {
+      if (now - timestamp > SELECTION_OPEN_DEDUP_RETENTION_MS) {
+        recentSelectionOpenRequests.delete(entryKey);
+      }
+    }
+    while (recentSelectionOpenRequests.size > SELECTION_OPEN_DEDUP_MAX_ENTRIES) {
+      const oldestKey = recentSelectionOpenRequests.keys().next().value;
+      if (oldestKey === undefined) break;
+      recentSelectionOpenRequests.delete(oldestKey);
+    }
   }
   return true;
 }
@@ -3884,9 +3902,22 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     if (index <= 0) return false;
     const lowerSource = source.toLowerCase();
     return ['1 ', '2 ', '3 ', 'i ', 'ii ', 'iii ']
-      .some(prefix => lowerSource.slice(Math.max(0, index - prefix.length), index) === prefix);
+      .some(prefix => {
+        const prefixStart = index - prefix.length;
+        if (prefixStart < 0) return false;
+        if (lowerSource.slice(prefixStart, index) !== prefix) return false;
+        // The apparent prefix must be a standalone token. Without this
+        // boundary check, a preceding verse such as "Romans 16:21 1 Corinthians"
+        // makes the final "1 " of "21 " look like the book-number prefix.
+        return prefixStart === 0 || !/[a-z0-9]/i.test(lowerSource[prefixStart - 1]);
+      });
   };
   const source = String(text || '')
+    // Facebook rich-text selections may contain invisible bidi/formatting
+    // characters inside a book name (for example between "1" and
+    // "Corinthians"). Normalize them here as well as at the UI entry points,
+    // so every parser caller receives the same canonical text.
+    .replace(/[\u061c\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/gi, '')
     .replace(/[\u00a0\u2007\u202f]/g, ' ')
     .replace(/[\u2010\u2011\u2012\u2013\u2014]/g, '-');
 
@@ -4192,6 +4223,13 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // first, so a duplicate canonical reference could suppress the shared
   // parser's better source token and corrupt shorthand-list ordering.
   const sharedRefs = resolveBibleReferenceText(source);
+  // Rich-text pages can flatten adjacent selection blocks so a broad
+  // whole-selection match spans a later reference. Reparse visual lines
+  // independently as a recovery pass, while retaining the whole-selection
+  // pass for shorthand references that legitimately span lines.
+  const lineSeparatedSharedRefs = source
+    .split(/\r?\n|\u2028|\u2029/)
+    .flatMap(line => resolveBibleReferenceText(line));
   const mergedRefs = [];
   const mergedKeys = new Set();
   const appendCanonical = parsed => {
@@ -4203,6 +4241,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     mergedRefs.push(parsed);
   };
   for (const parsed of sharedRefs) appendCanonical(parsed);
+  for (const parsed of lineSeparatedSharedRefs) appendCanonical(parsed);
   for (const parsed of refs) appendCanonical(parsed);
 
   // Preserve source order using occurrence-aware positions. Exact source
@@ -5649,6 +5688,31 @@ function classifySelectionForBlb(selectionText) {
   return {valid:false, type:'INVALID', text:source};
 }
 
+function getSelectedWholeBookReferencesFromMixedText(selectionText) {
+  const source = normalizeSelectedScriptureText(selectionText);
+  // Facebook-style posts sometimes list whole books alongside chapter/verse
+  // references. Expand the paired shorthand as two complete books instead of
+  // letting the verse parser silently discard it.
+  const match = /(?<![A-Za-z0-9])1\s*&\s*2\s+Timothy(?![A-Za-z0-9])/i.exec(source);
+  if (!match) return [];
+  const refs = [];
+  for (const bookName of ['1 Timothy', '2 Timothy']) {
+    const book = bookData.find(item => String(item.name).toLowerCase() === bookName.toLowerCase());
+    if (!book) continue;
+    for (let chapter = 1; chapter <= Number(book.chapterCount); chapter++) {
+      const verseCount = Number(book.verses?.[chapter - 1]);
+      if (!Number.isInteger(verseCount) || verseCount < 1) continue;
+      const resolved = resolveBibleReference(book.name, chapter, 1, verseCount);
+      if (!resolved) continue;
+      refs.push({
+        book: resolved.book.name, chapter: resolved.chapter, from: 1,
+        to: verseCount, text: match[0], url: resolved.url
+      });
+    }
+  }
+  return refs;
+}
+
 function getSelectedBookOnlyReference(selectionText) {
   const source = normalizeSelectedScriptureText(selectionText);
   const resolved = resolveBibleBookOnly(source);
@@ -5743,17 +5807,23 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // Start MultiVerse immediately, derive a corpus-validated residual Criteria
   // term in parallel, then run the full classifier only for reconciliation.
   const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
-  if (selectedRefs.length >= 2) {
-    const excludedVerseTexts = selectedRefs
+  const wholeBookRefs = getSelectedWholeBookReferencesFromMixedText(text);
+  const combinedRefs = [...selectedRefs, ...wholeBookRefs].sort((a, b) => {
+    const aIndex = text.toLowerCase().indexOf(String(a.text || '').toLowerCase());
+    const bIndex = text.toLowerCase().indexOf(String(b.text || '').toLowerCase());
+    return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
+  });
+  if (combinedRefs.length >= 2) {
+    const excludedVerseTexts = combinedRefs
       .map(ref => getKjvVerseTextForSelectionRef(ref))
       .filter(Boolean);
-    let residualText = removeKjvVerseTextFromSelection(text, selectedRefs);
+    let residualText = removeKjvVerseTextFromSelection(text, combinedRefs);
     residualText = removeQuotedTextFromSelection(residualText);
     const fastCriteriaQuery = extractResidualProseShortCriteriaQuery(residualText, excludedVerseTexts);
 
-    const studyCapture = recordStudyRefs(selectedRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
+    const studyCapture = recordStudyRefs(combinedRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
     const referenceOpen = openBlbMultiVerseRefs(
-      selectedRefs,
+      combinedRefs,
       !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
     );
     const criteriaOpen = fastCriteriaQuery
@@ -5807,7 +5877,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // A complete reference explicitly present in the user's selection must win
   // over an adjacent contextual reference. Context is only a fallback when the
   // selected text itself contains no resolvable Bible reference.
-  if (contextualRef?.url && selectedRefs.length === 0) {
+  if (contextualRef?.url && combinedRefs.length === 0) {
     const contextualRefs = [contextualRef];
 
     if (contextualRefs.length < 2) {
@@ -6007,7 +6077,25 @@ async function getActiveTabSelection(tabId) {
   try {
     const result = await chrome.scripting.executeScript({
       target: {tabId},
-      func: () => window.getSelection ? window.getSelection().toString() : ''
+      func: () => {
+        const selection = window.getSelection?.();
+        if (!selection || !selection.rangeCount) return '';
+        const range = selection.getRangeAt(0).cloneRange();
+        const blockTags = new Set(['ADDRESS','ARTICLE','ASIDE','BLOCKQUOTE','DIV','DL','DT','DD','FIELDSET','FIGCAPTION','FIGURE','FOOTER','FORM','H1','H2','H3','H4','H5','H6','HEADER','LI','MAIN','NAV','OL','P','PRE','SECTION','TABLE','TR','UL']);
+        const pieces = [];
+        const walk = node => {
+          if (node.nodeType === Node.TEXT_NODE) { pieces.push(node.nodeValue || ''); return; }
+          if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return;
+          if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') { pieces.push('\n'); return; }
+          const isBlock = node.nodeType === Node.ELEMENT_NODE && blockTags.has(node.tagName);
+          if (isBlock && pieces.length && !String(pieces[pieces.length - 1]).endsWith('\n')) pieces.push('\n');
+          for (const child of node.childNodes) walk(child);
+          if (isBlock && pieces.length && !String(pieces[pieces.length - 1]).endsWith('\n')) pieces.push('\n');
+        };
+        walk(range.cloneContents());
+        const reconstructed = pieces.join('').replace(/\u00a0/g, ' ').replace(/[ \\t]*\n[ \\t]*/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+        return reconstructed || selection.toString();
+      }
     });
     return String(result?.[0]?.result || '').trim();
   } catch (e) {
@@ -6280,7 +6368,24 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!(await isSuiteEnabled())) return;
   const menuId = String(info?.menuItemId || '');
   if (menuId !== 'blb-suite-web-selection' && menuId !== 'blb-suite-pdf-selection') return;
-  const text = String(info.selectionText || '').trim();
+  // Web selections can cross nested block elements (Facebook posts in
+  // particular). Chromium's context-menu selectionText may flatten adjacent
+  // blocks and make references run together. Re-read the live DOM Range for
+  // web pages, preserving block boundaries. Do not discard the browser's
+  // native selection text, though: if the DOM serializer omits a nested or
+  // partially selected block, the native text can still contain its citation.
+  // The reference extractor deduplicates citations found in both sources.
+  const nativeText = String(info.selectionText || '').trim();
+  let liveText = '';
+  let text = nativeText;
+  if (menuId === 'blb-suite-web-selection' && Number.isInteger(tab?.id)) {
+    liveText = await getActiveTabSelection(tab.id);
+    if (liveText && nativeText && liveText !== nativeText) {
+      text = liveText + '\n' + nativeText;
+    } else if (liveText) {
+      text = liveText;
+    }
+  }
   if (!text) return;
   if (!(await shouldShowBlbContextMenu(tab, text))) return;
   try {

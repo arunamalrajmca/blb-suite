@@ -43,6 +43,9 @@ jobs:
         include:
           - group: positional
             grep: 'Double-click resolves any part|positional context|browser token|separate lines|standalone book numbers|ordinary heading words'
+          - group: paired-timothy-post
+            file: tests/browser/shared-regex-patterns.spec.js
+            grep: 'paired 1 & 2 Timothy whole-book shorthand reaches the final MultiVerse POST with every chapter'
           - group: grammar-token-coverage-ot
             grep: 'generic reference grammar — exhaustive token coverage — OT'
           - group: grammar-token-coverage-nt
