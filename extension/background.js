@@ -5654,7 +5654,7 @@ function getSelectedWholeBookReferencesFromMixedText(selectionText) {
   // Facebook-style posts sometimes list whole books alongside chapter/verse
   // references. Expand the paired shorthand as two complete books instead of
   // letting the verse parser silently discard it.
-  const match = /(?<![A-Za-z0-9])1\\s*&\\s*2\\s+Timothy(?![A-Za-z0-9])/i.exec(source);
+  const match = /(?<![A-Za-z0-9])1\s*&\s*2\s+Timothy(?![A-Za-z0-9])/i.exec(source);
   if (!match) return [];
   const refs = [];
   for (const bookName of ['1 Timothy', '2 Timothy']) {
