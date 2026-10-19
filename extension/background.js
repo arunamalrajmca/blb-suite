@@ -2569,7 +2569,7 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
   });
   const opened = await openBlbMultiVerseRefs(multiVerseRefs, disposition !== 'newBackgroundTab', {preferredTabId:originatingTabId});
   if (!opened?.ok) {
-    console.warn('BLB Suite: case-sensitive MultiVerse open failed:', opened?.reason || 'unknown');
+    console.warn('BLB Suite: case-sensitive MultiVerse open failed:', { reason:opened?.reason || 'unknown', matchedVerseCount:multiVerseRefs.length, openedVerseCount:Number(opened?.count || 0), expectedBatchCount:Math.ceil(multiVerseRefs.length / BLB_MULTIVERSE_MAX_VERSES), openedBatchCount:Number(opened?.batchCount || 0), failedBatch:opened?.failedBatch ?? null, result:opened });
   } else if (originatingTabId != null && !(opened.tabIds || []).includes(originatingTabId)) {
     // If an existing batch was reused, discard only the otherwise-empty
     // omnibox launcher tab; keep any nonblank page the user had open.
