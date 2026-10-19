@@ -5700,11 +5700,6 @@ function getSelectedBookOnlyReference(selectionText) {
   const resolved = resolveBibleBookOnly(source);
   if (!resolved) return null;
   return { book: resolved.book, url: resolved.url };
-}function getSelectedBookOnlyReference(selectionText) {
-  const source = normalizeSelectedScriptureText(selectionText);
-  const resolved = resolveBibleBookOnly(source);
-  if (!resolved) return null;
-  return { book: resolved.book, url: resolved.url };
 }
 
 function getDirectSelectedReference(selectionText) {
@@ -6379,60 +6374,6 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     });
     return;
   }
-  // Diagnostic metadata only: never log the selected post's full text. This
-  // distinguishes a browser-selection loss from a reference-parser loss.
-  const formatDiagnosticRefs = sourceText => extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(sourceText))
-    .map(ref => `${ref.book} ${ref.chapter}:${ref.from}-${ref.to}`);
-  // Log targeted token context only (never the selected post text). Include
-  // decimal and hexadecimal code points so invisible marks are unambiguous.
-  const diagnosticTokenContext = sourceText => {
-    const source = String(sourceText || '');
-    const contexts = [];
-    for (const token of ['corinth', 'colossians', 'timothy', 'acts', 'romans', 'philippians']) {
-      const index = source.toLowerCase().indexOf(token);
-      if (index < 0) continue;
-      const start = Math.max(0, index - 8);
-      const end = Math.min(source.length, index + token.length + 24);
-      const sample = source.slice(start, end);
-      contexts.push({
-        token,
-        sample: JSON.stringify(sample),
-        codePoints: [...sample].map(ch => ({
-          char: /[\\x20-\\x7E]/.test(ch) ? ch : '[invisible/non-ASCII]',
-          decimal: ch.codePointAt(0),
-          hex: 'U+' + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')
-        }))
-      });
-    }
-    return contexts;
-  };
-  const nativeDiagnosticRefs = formatDiagnosticRefs(nativeText);
-  const liveDiagnosticRefs = formatDiagnosticRefs(liveText);
-  const diagnosticRefs = formatDiagnosticRefs(text);
-  const diagnosticLineRefs = sourceText => String(sourceText || '').split(/\r?\n|\u2028|\u2029/).map((line, index) => ({
-    line: index + 1,
-    // Preserve only lines that mention the affected book names; don't log unrelated post text.
-    relevant: /corinth|colossians/i.test(line),
-    refs: /corinth|colossians/i.test(line) ? formatDiagnosticRefs(line) : []
-  })).filter(item => item.relevant);
-  const diagnosticWholeBookRefs = getSelectedWholeBookReferencesFromMixedText(text);
-  console.warn('[BLB selection diagnostic] received selection', {
-    menuId,
-    hostname: hostnameFromTabUrl(tab?.url),
-    nativeLength: nativeText.length,
-    liveLength: liveText.length,
-    combinedLength: text.length,
-    nativeReferences: nativeDiagnosticRefs,
-    liveReferences: liveDiagnosticRefs,
-    parsedReferences: diagnosticRefs,
-    nativeTokenContext: diagnosticTokenContext(nativeText),
-    liveTokenContext: diagnosticTokenContext(liveText),
-    combinedTokenContext: diagnosticTokenContext(text),
-    nativeAffectedLineReferences: diagnosticLineRefs(nativeText),
-    liveAffectedLineReferences: diagnosticLineRefs(liveText),
-    combinedAffectedLineReferences: diagnosticLineRefs(text),
-    wholeBookReferenceCount: diagnosticWholeBookRefs.length
-  });
   if (!(await shouldShowBlbContextMenu(tab, text))) return;
   try {
     if (normalizeSiteHostname(hostnameFromTabUrl(tab?.url)) === BLB_HOSTNAME) {
