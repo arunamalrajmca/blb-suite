@@ -127,3 +127,85 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     unrelated: false
   });
 });
+
+test('Facebook-style DOM range extraction preserves all block-separated references before MultiVerse parsing', async ({ context, extensionWorker }) => {
+  const page = await context.newPage();
+  await page.setContent(`
+    <article id="post">
+      <div>Acts 16:1-3</div>
+      <div>Romans 16:21</div>
+      <div>1 Corinthians 4:17</div>
+      <div>Philippians 2:19-22</div>
+      <div>Colossians 1:1</div>
+    </article>
+    <article id="post2">
+      <div>Romans 16:24</div>
+      <div>1 Corinthians 16:23</div>
+      <div>2 Corinthians 13:14</div>
+      <div>Galatians 6:18</div>
+      <div>Ephesians 6:24</div>
+      <div>Philippians 4:23</div>
+      <div>Colossians 4:18</div>
+      <div>1 Thessalonians 5:28</div>
+      <div>2 Thessalonians 3:18</div>
+      <div>1 Timothy 6:21</div>
+      <div>2 Timothy 4:22</div>
+      <div>Titus 3:15</div>
+      <div>Philemon 25</div>
+    </article>`);
+  const selected = await page.evaluate(() => {
+    const blockTags = new Set(['ADDRESS','ARTICLE','ASIDE','BLOCKQUOTE','DIV','DL','DT','DD','FIELDSET','FIGCAPTION','FIGURE','FOOTER','FORM','H1','H2','H3','H4','H5','H6','HEADER','LI','MAIN','NAV','OL','P','PRE','SECTION','TABLE','TR','UL']);
+    const extract = element => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const pieces = [];
+      const walk = node => {
+        if (node.nodeType === Node.TEXT_NODE) { pieces.push(node.nodeValue || ''); return; }
+        if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return;
+        if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') { pieces.push('\\n'); return; }
+        const isBlock = node.nodeType === Node.ELEMENT_NODE && blockTags.has(node.tagName);
+        if (isBlock && pieces.length && !String(pieces[pieces.length - 1]).endsWith('\\n')) pieces.push('\\n');
+        for (const child of node.childNodes) walk(child);
+        if (isBlock && pieces.length && !String(pieces[pieces.length - 1]).endsWith('\\n')) pieces.push('\\n');
+      };
+      walk(range.cloneContents());
+      return pieces.join('').replace(/\\u00a0/g, ' ').replace(/[ \\t]*\\n[ \\t]*/g, '\\n').replace(/\\n{3,}/g, '\\n\\n').trim();
+    };
+    return [extract(document.querySelector('#post')), extract(document.querySelector('#post2'))];
+  });
+  const parsed = await extensionWorker.evaluate(texts => texts.map(text =>
+    extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(text))
+      .map(ref => [ref.book, ref.chapter, ref.from, ref.to])
+  ), selected);
+  expect(parsed[0]).toEqual([
+    ['acts', 16, 1, 3], ['romans', 16, 21, 21],
+    ['1 corinthians', 4, 17, 17], ['philippians', 2, 19, 22],
+    ['colossians', 1, 1, 1]
+  ]);
+  expect(parsed[1]).toEqual([
+    ['romans', 16, 24, 24], ['1 corinthians', 16, 23, 23],
+    ['2 corinthians', 13, 14, 14], ['galatians', 6, 18, 18],
+    ['ephesians', 6, 24, 24], ['philippians', 4, 23, 23],
+    ['colossians', 4, 18, 18], ['1 thessalonians', 5, 28, 28],
+    ['2 thessalonians', 3, 18, 18], ['1 timothy', 6, 21, 21],
+    ['2 timothy', 4, 22, 22], ['titus', 3, 15, 15], ['philemon', 1, 25, 25]
+  ]);
+  await page.close();
+});
+
+test('mixed reference selection keeps the paired Timothy book shorthand visible for explicit handling', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    const text = 'Acts 16:1-3\\nRomans 16:21\\n1 Corinthians 4:17\\nPhilippians 2:19-22\\nColossians 1:1\\n1 & 2 Timothy';
+    return {
+      verseRefs: extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(text))
+        .map(ref => [ref.book, ref.chapter, ref.from, ref.to]),
+      normalized: normalizeSelectedScriptureText(text)
+    };
+  });
+  expect(result.verseRefs).toEqual([
+    ['acts', 16, 1, 3], ['romans', 16, 21, 21],
+    ['1 corinthians', 4, 17, 17], ['philippians', 2, 19, 22],
+    ['colossians', 1, 1, 1]
+  ]);
+  expect(result.normalized).toContain('1 & 2 Timothy');
+});
