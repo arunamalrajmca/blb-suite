@@ -4264,6 +4264,11 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   const mergedRefs = [];
   const mergedKeys = new Set();
   const appendCanonical = parsed => {
+    // The shared parser may report a chapter-only token as verse 1. The
+    // dedicated chapter-only scan below preserves the correct null range;
+    // suppress only that lossy duplicate, not an explicitly written ":1".
+    if (parsed.from === 1 && parsed.to === 1 &&
+        /^.+\\s+\\d+\\s*$/.test(String(parsed.text || '').trim())) return;
     const canonical = resolveBibleReference(parsed.book, parsed.chapter, parsed.from, parsed.to);
     if (!canonical) return;
     // The shared resolver normalizes a chapter-only reference to verse 1
