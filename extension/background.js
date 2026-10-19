@@ -6220,7 +6220,7 @@ async function shouldShowBlbContextMenu(tab, selectionText) {
   // toggle; retain exclusions for BLB itself and sensitive sites.
   if (!(await isSuiteEnabled()) || !tab) return false;
   const siteKey = pageSelectionSettingKeyFromTab(tab);
-  if (!siteKey || siteKey === BLB_HOSTNAME) return false;
+  if (!siteKey) return false;
   if (isSensitiveSiteHostname(siteKey)) return false;
   return true;
 }
