@@ -138,20 +138,22 @@ test('Facebook-style DOM range extraction preserves all block-separated referenc
       <div>Philippians 2:19-22</div>
       <div>Colossians 1:1</div>
     </article>
-    <article id="post2">
-      <div>Romans 16:24</div>
-      <div>1 Corinthians 16:23</div>
-      <div>2 Corinthians 13:14</div>
-      <div>Galatians 6:18</div>
-      <div>Ephesians 6:24</div>
-      <div>Philippians 4:23</div>
-      <div>Colossians 4:18</div>
-      <div>1 Thessalonians 5:28</div>
-      <div>2 Thessalonians 3:18</div>
-      <div>1 Timothy 6:21</div>
-      <div>2 Timothy 4:22</div>
-      <div>Titus 3:15</div>
-      <div>Philemon 25</div>
+    <div class="x14z9mp xat24cr x1lziwak x1vvkbs xtlvy1s x126k92a" id="post2">
+      <div dir="auto" style="text-align:start">Romans 16:24</div>
+      <div dir="auto" style="text-align:start">1 Corinthians 16:23</div>
+      <div dir="auto" style="text-align:start">2 Corinthians 13:14</div>
+      <div dir="auto" style="text-align:start">Galatians 6:18</div>
+      <div dir="auto" style="text-align:start">Ephesians 6:24</div>
+      <div dir="auto" style="text-align:start">Philippians 4:23</div>
+      <div dir="auto" style="text-align:start">Colossians 4:18</div>
+      <div dir="auto" style="text-align:start">1 Thessalonians 5:28</div>
+      <div dir="auto" style="text-align:start">2 Thessalonians 3:18</div>
+      <div dir="auto" style="text-align:start">1 Timothy 6:21</div>
+      <div dir="auto" style="text-align:start">2 Timothy 4:22</div>
+      <div dir="auto" style="text-align:start">Titus 3:15</div>
+      <div dir="auto" style="text-align:start">Philemon 25</div>
+      <div dir="auto" style="text-align:start">3. The Ancient Church Often Accepted Paul as the Author</div>
+      <div dir="auto" style="text-align:start">The Eastern church especially associated Hebrews with Paul.</div>
     </article>`);
   const selected = await page.evaluate(() => {
     const blockTags = new Set(['ADDRESS','ARTICLE','ASIDE','BLOCKQUOTE','DIV','DL','DT','DD','FIELDSET','FIGCAPTION','FIGURE','FOOTER','FORM','H1','H2','H3','H4','H5','H6','HEADER','LI','MAIN','NAV','OL','P','PRE','SECTION','TABLE','TR','UL']);
