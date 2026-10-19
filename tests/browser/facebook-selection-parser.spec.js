@@ -47,3 +47,20 @@ test('Facebook selection parser retains every reference in a clean multi-book se
     { book: 'philippians', chapter: 2, from: 19, to: 22 }
   ]);
 });
+
+test('Facebook selection parser preserves references across the reported reordered selection combinations', async ({ extensionWorker }) => {
+  const cases = [
+    ['Romans 16:21', '1 Corinthians 4:17', 'Philippians 2:19-22'],
+    ['1 Corinthians 4:17', 'Philippians 2:19-22'],
+    ['Philippians 2:19-22', 'Colossians 1:1', 'Romans 16:21', '1 Corinthians 4:17'],
+    ['Romans 16:21', '1 Corinthians 4:17', 'Philippians 2:19-22', 'Colossians 1:1', 'Acts 16:1-3']
+  ];
+  const results = await extensionWorker.evaluate(cases => cases.map(lines =>
+    extractBibleRefsFromSelectedTextUncached(lines.join('\\n')).map(ref => ref.book)
+  ), cases);
+
+  expect(results[0]).toEqual(['romans', '1 corinthians', 'philippians']);
+  expect(results[1]).toEqual(['1 corinthians', 'philippians']);
+  expect(results[2]).toEqual(['philippians', 'colossians', 'romans', '1 corinthians']);
+  expect(results[3]).toEqual(['romans', '1 corinthians', 'philippians', 'colossians', 'acts']);
+});
