@@ -1,6 +1,15 @@
 (async function () {
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
 const BLB_ORIGIN = BLBShared.urls.blbOrigin;
+
+// PDFs are eligible for text selection, but never for Double-click KJV Words.
+// Match local files and direct web PDF URLs, including query/hash suffixes.
+function isPdfDocumentContext() {
+  const raw = String(location.href || '');
+  let decoded = raw;
+  try { decoded = decodeURIComponent(raw); } catch (_) {}
+  return /\.pdf(?:$|[?#&/])/i.test(decoded);
+}
 // Blue Letter Bible Suite 5.2.25 - unified content script
 
 // Access policy:
@@ -2027,7 +2036,7 @@ async function getSiteDefaultEnabled() {
 async function refreshDoubleClickBlb() {
   try {
     const siteKey = getPageSelectionSiteKey();
-    if (siteKey === BLB_HOSTNAME || isSensitiveSiteHostname(siteKey) || !suiteEnabled || !siteKey) {
+    if (isPdfDocumentContext() || siteKey === BLB_HOSTNAME || isSensitiveSiteHostname(siteKey) || !suiteEnabled || !siteKey) {
       doubleClickBlbEnabled = false;
       disableDoubleClickBlb();
       return;
