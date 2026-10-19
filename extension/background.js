@@ -6264,14 +6264,22 @@ async function updateSelectionContextMenuVisibility(visible) {
   }
 }
 
-async function syncWebSelectionContextMenuVisibility(tab) {
+async function syncWebSelectionContextMenuVisibility(_tab) {
+  // Context-menu visibility is extension-global. Never trust a tab argument
+  // captured by an older tabs.onUpdated/onActivated event: those events can
+  // complete out of order and hide the item for the currently active page.
+  // Serialize the sync, and resolve the active tab only when this operation
+  // reaches the front of the queue.
   const operation = selectionMenuOperation.then(async () => {
     try {
+      const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+      const tab = tabs[0];
       const enabled = !!tab && (await isSuiteEnabled()) &&
         (await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(tab), tab.title || ''));
       return await updateSelectionContextMenuVisibility(enabled);
     } catch (_) {
-      await updateSelectionContextMenuVisibility(false);
+      // Keep the last known visibility on transient API errors; forcing false
+      // here made the menu disappear intermittently on repeated right-clicks.
       return false;
     }
   });
@@ -6309,7 +6317,6 @@ chrome.tabs.onActivated.addListener(() => {
     const tab = tabs[0];
     if (!tab) return;
     syncWebSelectionContextMenuVisibility(tab).catch(() => {});
-    syncPdfSelectionContextMenuVisibility(tab).catch(() => {});
   }).catch(() => {});
 });
 async function shouldInjectContentScriptForTab(tab, data) {
@@ -6335,7 +6342,6 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
       const activeTab = tabs[0];
       if (activeTab?.id !== tabId) return;
       syncWebSelectionContextMenuVisibility(activeTab).catch(() => {});
-      syncPdfSelectionContextMenuVisibility(activeTab).catch(() => {});
     }).catch(() => {});
   }
   if (changeInfo.status === 'complete' && tab?.url && isHttpPageUrl(tab.url)) {
