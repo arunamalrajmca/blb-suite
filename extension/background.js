@@ -6360,7 +6360,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
   // Diagnostic metadata only: never log the selected post's full text. This
   // distinguishes a browser-selection loss from a reference-parser loss.
-  const diagnosticRefs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(text));
+  const formatDiagnosticRefs = sourceText => extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(sourceText))
+    .map(ref => `${ref.book} ${ref.chapter}:${ref.from}-${ref.to}`);
+  const nativeDiagnosticRefs = formatDiagnosticRefs(nativeText);
+  const liveDiagnosticRefs = formatDiagnosticRefs(liveText);
+  const diagnosticRefs = formatDiagnosticRefs(text);
   const diagnosticWholeBookRefs = getSelectedWholeBookReferencesFromMixedText(text);
   console.warn('[BLB selection diagnostic] received selection', {
     menuId,
@@ -6368,7 +6372,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     nativeLength: nativeText.length,
     liveLength: liveText.length,
     combinedLength: text.length,
-    parsedReferences: diagnosticRefs.map(ref => `${ref.book} ${ref.chapter}:${ref.from}-${ref.to}`),
+    nativeReferences: nativeDiagnosticRefs,
+    liveReferences: liveDiagnosticRefs,
+    parsedReferences: diagnosticRefs,
     wholeBookReferenceCount: diagnosticWholeBookRefs.length
   });
   if (!(await shouldShowBlbContextMenu(tab, text))) return;
