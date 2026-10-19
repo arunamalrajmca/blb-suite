@@ -3884,7 +3884,15 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     if (index <= 0) return false;
     const lowerSource = source.toLowerCase();
     return ['1 ', '2 ', '3 ', 'i ', 'ii ', 'iii ']
-      .some(prefix => lowerSource.slice(Math.max(0, index - prefix.length), index) === prefix);
+      .some(prefix => {
+        const prefixStart = index - prefix.length;
+        if (prefixStart < 0) return false;
+        if (lowerSource.slice(prefixStart, index) !== prefix) return false;
+        // The apparent prefix must be a standalone token. Without this
+        // boundary check, a preceding verse such as "Romans 16:21 1 Corinthians"
+        // makes the final "1 " of "21 " look like the book-number prefix.
+        return prefixStart === 0 || !/[a-z0-9]/i.test(lowerSource[prefixStart - 1]);
+      });
   };
   const source = String(text || '')
     // Facebook rich-text selections may contain invisible bidi/formatting
