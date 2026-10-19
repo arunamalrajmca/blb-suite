@@ -6367,17 +6367,26 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   // distinguishes a browser-selection loss from a reference-parser loss.
   const formatDiagnosticRefs = sourceText => extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(sourceText))
     .map(ref => `${ref.book} ${ref.chapter}:${ref.from}-${ref.to}`);
-  // Log only targeted reference-related tokens and Unicode code points, never the post text.
+  // Log targeted token context only (never the selected post text). Include
+  // decimal and hexadecimal code points so invisible marks are unambiguous.
   const diagnosticTokenContext = sourceText => {
     const source = String(sourceText || '');
     const contexts = [];
-    for (const token of ['corinth', 'timothy', 'acts', 'romans', 'philippians']) {
+    for (const token of ['corinth', 'colossians', 'timothy', 'acts', 'romans', 'philippians']) {
       const index = source.toLowerCase().indexOf(token);
       if (index < 0) continue;
-      const start = Math.max(0, index - 5);
-      const end = Math.min(source.length, index + token.length + 20);
+      const start = Math.max(0, index - 8);
+      const end = Math.min(source.length, index + token.length + 24);
       const sample = source.slice(start, end);
-      contexts.push({token, sample: sample.replace(/[^\x20-\x7E]/g, ch => `\\u${ch.charCodeAt(0).toString(16).padStart(4, '0')}`), codePoints: [...sample].map(ch => ch.codePointAt(0).toString(16))});
+      contexts.push({
+        token,
+        sample: JSON.stringify(sample),
+        codePoints: [...sample].map(ch => ({
+          char: /[\\x20-\\x7E]/.test(ch) ? ch : '[invisible/non-ASCII]',
+          decimal: ch.codePointAt(0),
+          hex: 'U+' + ch.codePointAt(0).toString(16).toUpperCase().padStart(4, '0')
+        }))
+      });
     }
     return contexts;
   };
