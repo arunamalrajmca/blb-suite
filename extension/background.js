@@ -5830,6 +5830,16 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
   });
   if (combinedRefs.length >= 2) {
+    // Start the MultiVerse handoff before doing any corpus lookups or residual
+    // prose analysis. PDF "select all" can contain many references, and that
+    // synchronous work otherwise delays the first destination tab despite the
+    // fast-path intent above.
+    const studyCapture = recordStudyRefs(combinedRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
+    const referenceOpen = openBlbMultiVerseRefs(
+      combinedRefs,
+      !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
+    );
+
     const excludedVerseTexts = combinedRefs
       .map(ref => getKjvVerseTextForSelectionRef(ref))
       .filter(Boolean);
@@ -5837,11 +5847,6 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     residualText = removeQuotedTextFromSelection(residualText);
     const fastCriteriaQuery = extractResidualProseShortCriteriaQuery(residualText, excludedVerseTexts);
 
-    const studyCapture = recordStudyRefs(combinedRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
-    const referenceOpen = openBlbMultiVerseRefs(
-      combinedRefs,
-      !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
-    );
     const criteriaOpen = fastCriteriaQuery
       ? openBlbDestination(
           `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(fastCriteriaQuery).replace(/%20/g,'+')}`,
