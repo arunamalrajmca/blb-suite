@@ -273,12 +273,31 @@ test('paired 1 & 2 Timothy whole-book shorthand reaches the final MultiVerse POS
     '1 timothy': [20, 15, 16, 16, 25, 21],
     '2 timothy': [18, 26, 17, 22]
   };
+  // The 200-verse MultiVerse cap can split a chapter across two POST batches.
+  // Verify coverage of every verse rather than requiring each chapter to be
+  // serialized as one unsplit range in a single batch.
+  const postedRanges = postedRefs.map(reference => {
+    const match = /^(.*?) (\\d+):(\\d+)-(\\d+)$/.exec(reference);
+    return match && {
+      book: match[1],
+      chapter: Number(match[2]),
+      from: Number(match[3]),
+      to: Number(match[4])
+    };
+  }).filter(Boolean);
   for (const [book, verseCounts] of Object.entries(chapterVerseCounts)) {
     for (let index = 0; index < verseCounts.length; index++) {
       const chapter = index + 1;
       const lastVerse = verseCounts[index];
-      const expectedRange = `${book} ${chapter}:1-${lastVerse}`;
-      expect(postedRefs, 'missing whole-book chapter range: ' + expectedRange).toContain(expectedRange);
+      for (let verse = 1; verse <= lastVerse; verse++) {
+        const covered = postedRanges.some(range =>
+          range.book === book &&
+          range.chapter === chapter &&
+          range.from <= verse &&
+          range.to >= verse
+        );
+        expect(covered, `missing whole-book verse: ${book} ${chapter}:${verse}`).toBe(true);
+      }
     }
   }
 });
