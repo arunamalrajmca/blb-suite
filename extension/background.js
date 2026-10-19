@@ -4197,6 +4197,13 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // first, so a duplicate canonical reference could suppress the shared
   // parser's better source token and corrupt shorthand-list ordering.
   const sharedRefs = resolveBibleReferenceText(source);
+  // Rich-text pages can flatten adjacent selection blocks so a broad
+  // whole-selection match spans a later reference. Reparse visual lines
+  // independently as a recovery pass, while retaining the whole-selection
+  // pass for shorthand references that legitimately span lines.
+  const lineSeparatedSharedRefs = source
+    .split(/\r?\n|\u2028|\u2029/)
+    .flatMap(line => resolveBibleReferenceText(line));
   const mergedRefs = [];
   const mergedKeys = new Set();
   const appendCanonical = parsed => {
@@ -4208,6 +4215,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     mergedRefs.push(parsed);
   };
   for (const parsed of sharedRefs) appendCanonical(parsed);
+  for (const parsed of lineSeparatedSharedRefs) appendCanonical(parsed);
   for (const parsed of refs) appendCanonical(parsed);
 
   // Preserve source order using occurrence-aware positions. Exact source
@@ -6393,7 +6401,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const nativeDiagnosticRefs = formatDiagnosticRefs(nativeText);
   const liveDiagnosticRefs = formatDiagnosticRefs(liveText);
   const diagnosticRefs = formatDiagnosticRefs(text);
-  const diagnosticLineRefs = sourceText => String(sourceText || '').split(/\\r?\\n/).map((line, index) => ({
+  const diagnosticLineRefs = sourceText => String(sourceText || '').split((/\r?\n|\u2028|\u2029/).map((line, index) => ({
     line: index + 1,
     // Preserve only lines that mention the affected book names; don't log unrelated post text.
     relevant: /corinth|colossians/i.test(line),
