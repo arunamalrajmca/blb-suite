@@ -286,3 +286,38 @@ test('Facebook reference selections survive canonical MultiVerse expansion throu
   expect(result.timothyChapters.second).toEqual([1, 2, 3, 4]);
   expect(result.maxBatchCount).toBeGreaterThan(1);
 });
+
+
+test('adding Romans 16:21 does not suppress 1 Corinthians 4:17 or Philippians 2:19-22', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    const parse = text => {
+      const refs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(text));
+      const expanded = expandMultiVerseRefsToVerses(refs);
+      return {
+        refs: refs.map(ref => [ref.book, ref.chapter, ref.from, ref.to]),
+        expanded: expanded.map(ref => [ref.book, ref.chapter, ref.from])
+      };
+    };
+    return {
+      two: parse('1 Corinthians 4:17\\nPhilippians 2:19-22'),
+      three: parse('Romans 16:21\\n1 Corinthians 4:17\\nPhilippians 2:19-22')
+    };
+  });
+  const expectedTwo = [
+    ['1 corinthians', 4, 17, 17],
+    ['philippians', 2, 19, 22]
+  ];
+  const expectedThree = [
+    ['romans', 16, 21, 21],
+    ['1 corinthians', 4, 17, 17],
+    ['philippians', 2, 19, 22]
+  ];
+  expect(result.two.refs).toEqual(expectedTwo);
+  expect(result.three.refs).toEqual(expectedThree);
+  for (const expected of expectedThree) {
+    const [book, chapter, from, to] = expected;
+    for (let verse = from; verse <= to; verse++) {
+      expect(result.three.expanded).toContainEqual([book, chapter, verse]);
+    }
+  }
+});
