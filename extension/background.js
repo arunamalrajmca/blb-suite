@@ -6306,7 +6306,16 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!(await isSuiteEnabled())) return;
   const menuId = String(info?.menuItemId || '');
   if (menuId !== 'blb-suite-web-selection' && menuId !== 'blb-suite-pdf-selection') return;
-  const text = String(info.selectionText || '').trim();
+  let text = String(info.selectionText || '').trim();
+  // Web selections can be flattened or stale in context-menu metadata. Read
+  // the active Range for ordinary pages; preserve Chrome's supplied text for
+  // the protected built-in PDF viewer.
+  if (menuId === 'blb-suite-web-selection' && tab?.id != null) {
+    try {
+      const liveSelection = String(await getActiveTabSelection(tab.id) || '').trim();
+      if (liveSelection) text = liveSelection;
+    } catch (_) {}
+  }
   if (!text) return;
   if (!(await shouldShowBlbContextMenu(tab, text))) return;
   try {
