@@ -243,7 +243,7 @@ test('paired 1 & 2 Timothy whole-book shorthand reaches the final MultiVerse POS
     'Philippians 2:19-22',
     'Colossians 1:1',
     '1 & 2 Timothy'
-  ].join('\\n');
+  ].join('\n');
 
   await extensionWorker.evaluate(async text => {
     await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true});
