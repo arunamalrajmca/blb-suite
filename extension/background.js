@@ -5772,9 +5772,9 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // MultiVerse routing. Do not block tab creation on the full KJV classifier.
   // Start MultiVerse immediately, derive a corpus-validated residual Criteria
   // term in parallel, then run the full classifier only for reconciliation.
-  const combinedRefs = extractBibleRefsFromSelectedTextUncached(text);
+  const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
   const wholeBookRefs = getSelectedWholeBookReferencesFromMixedText(text);
-  const combinedRefs = [...combinedRefs, ...wholeBookRefs].sort((a, b) => {
+  const combinedRefs = [...selectedRefs, ...wholeBookRefs].sort((a, b) => {
     const aIndex = text.toLowerCase().indexOf(String(a.text || '').toLowerCase());
     const bIndex = text.toLowerCase().indexOf(String(b.text || '').toLowerCase());
     return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
