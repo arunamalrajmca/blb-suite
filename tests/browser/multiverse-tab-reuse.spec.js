@@ -462,7 +462,7 @@ test('MultiVerse submits all verses for a chapter-only ref in a mixed selection'
   const result = await openMultiVerse(extensionWorker, refs);
 
   expect(result?.ok, JSON.stringify(result)).toBe(true);
-  expect(result.count).toBe(21 + 39 + 2);
+  expect(result.count).toBe(10 + 39 + 2);
   expect(result.batchCount).toBe(1);
   await expect.poll(() => submittedPayloads.length, { timeout: 15000 }).toBe(1);
 
@@ -470,6 +470,6 @@ test('MultiVerse submits all verses for a chapter-only ref in a mixed selection'
   expect(submitted).toContain('Matthew 5:3-12');
   expect(submitted).toContain('Romans 8:1-39');
   expect(submitted).toContain('1 Peter 2:9-10');
-  expect(countSubmittedVerses(submitted)).toBe(62);
+  expect(countSubmittedVerses(submitted)).toBe(51);
 });
 
