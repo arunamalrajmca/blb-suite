@@ -52,10 +52,17 @@ async function hasSiteFeatureHostAccess(origin) {
 }
 
 async function getState() {
-  const [tabs, data] = await Promise.all([
+  // Popup initialization must survive transient tab-query/storage API failures.
+  // A rejected tabs.query must not force every setting control into a permanently
+  // disabled fallback state.
+  const [tabsResult, dataResult] = await Promise.allSettled([
     chrome.tabs.query({active:true, currentWindow:true}),
     chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false})
   ]);
+  const tabs = tabsResult.status === 'fulfilled' && Array.isArray(tabsResult.value) ? tabsResult.value : [];
+  const data = dataResult.status === 'fulfilled'
+    ? dataResult.value
+    : {masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false};
   const pageTitle = tabs[0]?.title || '';
   const pageTitleForDefaultCheck = pageTitle;
   const activeUrl = String(tabs[0]?.url || '');
@@ -1404,11 +1411,23 @@ async function renderSavedSettingsPreview() {
       const siteKey = getSiteKey(url, tabs[0]?.title || '');
       const pageSites = saved.pageSelectionButtonSites && typeof saved.pageSelectionButtonSites === 'object' ? saved.pageSelectionButtonSites : {};
       const doubleSites = saved.doubleClickBlbSites && typeof saved.doubleClickBlbSites === 'object' ? saved.doubleClickBlbSites : {};
-      document.getElementById('master').checked = saved.masterEnabled !== false;
-      document.getElementById('redirectEnabled').checked = saved.redirectEnabled === true;
-      document.getElementById('pageButton').checked = Object.prototype.hasOwnProperty.call(pageSites, siteKey) && pageSites[siteKey] === true;
-      document.getElementById('doubleClick').checked = Object.prototype.hasOwnProperty.call(doubleSites, siteKey) && doubleSites[siteKey] === true;
-      for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
+      const master = saved.masterEnabled !== false;
+      const isBlbSite = siteKey === BLB_HOSTNAME;
+      const isSensitiveSite = isSensitiveSiteHostname(siteKey);
+      const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
+      render({
+        master,
+        redirect: saved.redirectEnabled !== false,
+        pageButton: (isBlbSite || !isSensitiveSite) && !!siteKey && pageSites[siteKey] === true,
+        doubleClick: !isBlbSite && !isSensitiveSite && !isPdfContext && !!siteKey && doubleSites[siteKey] === true,
+        siteKey,
+        pageCaption: deriveSiteCaption(siteKey),
+        isBlbSite,
+        isSensitiveSite,
+        isPdfContext
+      });
+      // Do not disable every control merely because live permission inspection
+      // failed. render() applies only the structural restrictions that are known.
     } catch (fallbackError) {
       console.error('BLB Suite popup saved-setting fallback failed:', fallbackError);
       for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
