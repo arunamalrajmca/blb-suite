@@ -78,11 +78,18 @@ test('MultiVerse reuses both 200-verse batches when the same selection is repeat
 });
 
 test('MultiVerse opens every batch for requests exceeding 20 tabs', async ({ context, extensionWorker }) => {
-  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+  const submittedPayloads = [];
+  await context.route('https://www.blueletterbible.org/**', route => {
+    if (route.request().method() === 'POST') {
+      const body = new URLSearchParams(route.request().postData() || '');
+      submittedPayloads.push(body.get('mvText') || '');
+    }
+    return route.fulfill({
     status: 200,
     contentType: 'text/html',
     body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
-  }));
+    });
+  });
 
   // Build 4,201 distinct valid KJV verse references from the bundled canon.
   // This requires 22 batches at the production limit of 200 verses per tab.
@@ -115,6 +122,34 @@ test('MultiVerse opens every batch for requests exceeding 20 tabs', async ({ con
   expect(result.opened.tabIds).toHaveLength(22);
   expect(new Set(result.opened.tabIds).size).toBe(22);
   expect(result.opened.truncated).toBe(false);
+
+  // Confirm all returned tabs still exist after the final batch has been
+  // created, are uniquely tracked, and are progressing through the POST
+  // handoff or have reached the mocked BLB destination.
+  const liveState = await extensionWorker.evaluate(async ids => {
+    const tabs = await Promise.all(ids.map(id => chrome.tabs.get(id).catch(() => null)));
+    const data = await chrome.storage.local.get({ blbSuiteMultiVerseTabSets: {} });
+    const tracked = data.blbSuiteMultiVerseTabSets || {};
+    return tabs.map(tab => tab && ({
+      id: tab.id,
+      url: tab.url || '',
+      pendingUrl: tab.pendingUrl || '',
+      key: tracked[String(tab.id)]?.key || null
+    }));
+  }, result.opened.tabIds);
+  expect(liveState.filter(Boolean), JSON.stringify(liveState, null, 2)).toHaveLength(22);
+  expect(new Set(liveState.map(tab => tab.id)).size).toBe(22);
+  expect(liveState.every(tab => tab.key), JSON.stringify(liveState, null, 2)).toBe(true);
+  expect(new Set(liveState.map(tab => tab.key)).size).toBe(22);
+  expect(liveState.every(tab =>
+    /blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm)/i.test(tab.url) ||
+    /blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm)/i.test(tab.pendingUrl)
+  ), JSON.stringify(liveState, null, 2)).toBe(true);
+
+  // 4,201 verses must be submitted as 21 full batches plus one final verse.
+  await expect.poll(() => submittedPayloads.length, { timeout: 30000 }).toBe(22);
+  expect(submittedPayloads.map(countSubmittedVerses).sort((a, b) => b - a))
+    .toEqual([...Array(21).fill(200), 1]);
 });
 
 test('case-sensitive gods search opens and reuses both batches', async ({ context, extensionWorker }) => {
