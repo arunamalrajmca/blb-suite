@@ -2467,10 +2467,9 @@ function waitForTabTerminalLoad(tabId, timeout = CASE_SENSITIVE_MULTI_VERSE_TAB_
 }
 
 async function paceCaseSensitiveTab(tabPromise) {
-  const tab = await tabPromise;
-  if (tab?.id != null) await waitForTabTerminalLoad(tab.id);
-  await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
-  return tab;
+  // Preserve the awaited tab-creation contract without waiting for page load
+  // or applying a cooldown before opening the next MultiVerse destination.
+  return await tabPromise;
 }
 
 async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
@@ -3259,10 +3258,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteAcquireMultiVersePostSlot","blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
-// Serialize MultiVerse POST submissions while still creating all destination tabs immediately.
-// A modest interval between form submissions reduces burst rate-limiting without dropping batches.
-const MULTIVERSE_POST_MIN_INTERVAL_MS = 1500;
-let lastMultiVersePostSlotAt = 0;
+// Keep the slot handshake for compatibility with MultiVerse handoff pages,
+// but do not impose an artificial delay between opening/submitting batches.
 let pendingMultiVersePostSlot = Promise.resolve();
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -3271,12 +3268,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message) return;
 
   if (message.type === 'blbSuiteAcquireMultiVersePostSlot') {
-    const slot = pendingMultiVersePostSlot.then(async () => {
-      const waitMs = Math.max(0, MULTIVERSE_POST_MIN_INTERVAL_MS - (Date.now() - lastMultiVersePostSlotAt));
-      if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
-      lastMultiVersePostSlotAt = Date.now();
-      return {ok:true};
-    });
+    const slot = pendingMultiVersePostSlot.then(() => ({ok:true}));
     pendingMultiVersePostSlot = slot.then(() => undefined, () => undefined);
     try { sendResponse(await slot); } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
