@@ -1,0 +1,52 @@
+name: MultiVerse tab reuse regression
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'extension/**'
+      - 'tests/browser/multiverse-tab-reuse.spec.js'
+      - 'tests/browser/fixtures.js'
+      - 'playwright.config.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/multiverse-tab-reuse.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  multiverse-tab-reuse:
+    name: MultiVerse tab reuse and 22-batch persistence
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium for Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Run MultiVerse tab reuse regression suite
+        run: npx playwright test tests/browser/multiverse-tab-reuse.spec.js --workers=1
+
+      - name: Upload Playwright diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: multiverse-tab-reuse-playwright-diagnostics
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
