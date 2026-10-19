@@ -3887,6 +3887,11 @@ function extractBibleRefsFromSelectedTextUncached(text) {
       .some(prefix => lowerSource.slice(Math.max(0, index - prefix.length), index) === prefix);
   };
   const source = String(text || '')
+    // Facebook rich-text selections may contain invisible bidi/formatting
+    // characters inside a book name (for example between "1" and
+    // "Corinthians"). Normalize them here as well as at the UI entry points,
+    // so every parser caller receives the same canonical text.
+    .replace(/[\u061c\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/gi, '')
     .replace(/[\u00a0\u2007\u202f]/g, ' ')
     .replace(/[\u2010\u2011\u2012\u2013\u2014]/g, '-');
 
