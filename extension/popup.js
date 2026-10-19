@@ -16,6 +16,9 @@ function getSiteKey(url, title = '') {
     if (/^(?:brave|chrome):\/\//i.test(raw) && (urlLooksPdf || titleLooksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
     const u = new URL(raw);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    // PDF pages must never offer Double-click KJV, even when the PDF URL
+    // has query/hash parameters or the server supplies a PDF-style title.
+    if (/\\.pdf$/i.test(u.pathname) || titleLooksPdf) return '__blb_web_pdf__';
     let host = String(u.hostname || '').toLowerCase();
     if (host.startsWith('www.')) host = host.slice(4);
     return host;
@@ -68,7 +71,7 @@ async function getState() {
   const defaultEnabled = await getDefaultSiteEnabled(siteKey, pageTitleForDefaultCheck);
   const isBlbSite = siteKey === BLB_HOSTNAME;
   const isSensitiveSite = isSensitiveSiteHostname(siteKey);
-  const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
+  const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__' || siteKey === '__blb_web_pdf__';
   let hasCurrentSiteAccess = true;
   let hasSiteSpecificAccess = true;
   if (!isBlbSite && currentSiteOrigin) {
@@ -129,7 +132,7 @@ function render(state) {
   const dbl = document.getElementById('doubleClick');
   const redirect = document.getElementById('redirectEnabled');
   page.disabled = !state.master || !state.siteKey || (state.isSensitiveSite && !state.isBlbSite);
-  dbl.disabled = !state.master || !state.siteKey || state.isBlbSite || state.isSensitiveSite || state.isPdfContext;
+  dbl.disabled = state.isPdfContext || !state.master || !state.siteKey || state.isBlbSite || state.isSensitiveSite;
   redirect.disabled = !state.master;
   document.getElementById('pageSetting').classList.toggle('disabled', page.disabled);
   document.getElementById('doubleSetting').classList.toggle('disabled', dbl.disabled);
