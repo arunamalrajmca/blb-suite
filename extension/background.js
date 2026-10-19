@@ -6292,25 +6292,40 @@ async function installWebSelectionContextMenu() {
   return operation;
 }
 
+async function ensurePdfSelectionContextMenu() {
+  if (pdfSelectionMenuKnownPresent) return true;
+  // Like the web menu, keep the PDF item persistent. Service-worker globals
+  // reset on suspension, but the browser-owned menu item can still exist.
+  try {
+    await chrome.contextMenus.update('blb-suite-pdf-selection', {
+      title:'Show on BLB\tAlt+B',
+      visible:false
+    });
+    pdfSelectionMenuKnownPresent = true;
+    return true;
+  } catch (_) {}
+  try {
+    await chrome.contextMenus.create({
+      id:'blb-suite-pdf-selection',
+      title:'Show on BLB\tAlt+B',
+      contexts:['selection'],
+      documentUrlPatterns:['file:///*.pdf'],
+      visible:false
+    });
+    pdfSelectionMenuKnownPresent = true;
+    return true;
+  } catch (_) {
+    pdfSelectionMenuKnownPresent = false;
+    return false;
+  }
+}
+
 async function installPdfSelectionContextMenu() {
-  selectionMenuOperation = selectionMenuOperation.then(async () => {
-    // Context-menu items persist across service-worker restarts/reloads.
-    // Remove our known PDF item first so startup/onChanged/onStartup calls are idempotent.
-    try { await chrome.contextMenus.remove('blb-suite-pdf-selection'); } catch (_) {}
-    try {
-      await chrome.contextMenus.create({
-        id:'blb-suite-pdf-selection',
-        title:'Show on BLB\tAlt+B',
-        contexts:['selection'],
-        documentUrlPatterns:['file:///*.pdf'],
-        visible:false
-      });
-      pdfSelectionMenuKnownPresent = true;
-    } catch (_) {
-      pdfSelectionMenuKnownPresent = false;
-    }
-  }).catch(() => {});
-  return selectionMenuOperation;
+  const operation = selectionMenuOperation.then(async () => {
+    return await ensurePdfSelectionContextMenu();
+  });
+  selectionMenuOperation = operation.catch(() => false);
+  return operation;
 }
 
 async function syncPdfSelectionContextMenuVisibility(tab) {
