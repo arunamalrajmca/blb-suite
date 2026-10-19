@@ -5649,7 +5649,37 @@ function classifySelectionForBlb(selectionText) {
   return {valid:false, type:'INVALID', text:source};
 }
 
+function getSelectedWholeBookReferencesFromMixedText(selectionText) {
+  const source = normalizeSelectedScriptureText(selectionText);
+  // Facebook-style posts sometimes list whole books alongside chapter/verse
+  // references. Expand the paired shorthand as two complete books instead of
+  // letting the verse parser silently discard it.
+  const match = /(?<![A-Za-z0-9])1\\s*&\\s*2\\s+Timothy(?![A-Za-z0-9])/i.exec(source);
+  if (!match) return [];
+  const refs = [];
+  for (const bookName of ['1 Timothy', '2 Timothy']) {
+    const book = bookData.find(item => String(item.name).toLowerCase() === bookName.toLowerCase());
+    if (!book) continue;
+    for (let chapter = 1; chapter <= Number(book.chapterCount); chapter++) {
+      const verseCount = Number(book.verses?.[chapter - 1]);
+      if (!Number.isInteger(verseCount) || verseCount < 1) continue;
+      const resolved = resolveBibleReference(book.name, chapter, 1, verseCount);
+      if (!resolved) continue;
+      refs.push({
+        book: resolved.book.name, chapter: resolved.chapter, from: 1,
+        to: verseCount, text: match[0], url: resolved.url
+      });
+    }
+  }
+  return refs;
+}
+
 function getSelectedBookOnlyReference(selectionText) {
+  const source = normalizeSelectedScriptureText(selectionText);
+  const resolved = resolveBibleBookOnly(source);
+  if (!resolved) return null;
+  return { book: resolved.book, url: resolved.url };
+}function getSelectedBookOnlyReference(selectionText) {
   const source = normalizeSelectedScriptureText(selectionText);
   const resolved = resolveBibleBookOnly(source);
   if (!resolved) return null;
@@ -5742,18 +5772,24 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // MultiVerse routing. Do not block tab creation on the full KJV classifier.
   // Start MultiVerse immediately, derive a corpus-validated residual Criteria
   // term in parallel, then run the full classifier only for reconciliation.
-  const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
-  if (selectedRefs.length >= 2) {
-    const excludedVerseTexts = selectedRefs
+  const combinedRefs = extractBibleRefsFromSelectedTextUncached(text);
+  const wholeBookRefs = getSelectedWholeBookReferencesFromMixedText(text);
+  const combinedRefs = [...combinedRefs, ...wholeBookRefs].sort((a, b) => {
+    const aIndex = text.toLowerCase().indexOf(String(a.text || '').toLowerCase());
+    const bIndex = text.toLowerCase().indexOf(String(b.text || '').toLowerCase());
+    return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
+  });
+  if (combinedRefs.length >= 2) {
+    const excludedVerseTexts = combinedRefs
       .map(ref => getKjvVerseTextForSelectionRef(ref))
       .filter(Boolean);
-    let residualText = removeKjvVerseTextFromSelection(text, selectedRefs);
+    let residualText = removeKjvVerseTextFromSelection(text, combinedRefs);
     residualText = removeQuotedTextFromSelection(residualText);
     const fastCriteriaQuery = extractResidualProseShortCriteriaQuery(residualText, excludedVerseTexts);
 
-    const studyCapture = recordStudyRefs(selectedRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
+    const studyCapture = recordStudyRefs(combinedRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
     const referenceOpen = openBlbMultiVerseRefs(
-      selectedRefs,
+      combinedRefs,
       !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
     );
     const criteriaOpen = fastCriteriaQuery
@@ -5807,7 +5843,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // A complete reference explicitly present in the user's selection must win
   // over an adjacent contextual reference. Context is only a fallback when the
   // selected text itself contains no resolvable Bible reference.
-  if (contextualRef?.url && selectedRefs.length === 0) {
+  if (contextualRef?.url && combinedRefs.length === 0) {
     const contextualRefs = [contextualRef];
 
     if (contextualRefs.length < 2) {
