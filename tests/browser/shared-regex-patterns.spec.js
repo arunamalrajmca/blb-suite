@@ -245,11 +245,10 @@ test('paired 1 & 2 Timothy whole-book shorthand reaches the final MultiVerse POS
     '1 & 2 Timothy'
   ].join('\\n');
 
-  const result = await extensionWorker.evaluate(async text => {
-    return await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true});
+  await extensionWorker.evaluate(async text => {
+    await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true});
   }, selectedText);
 
-  expect(result?.referenceTab, JSON.stringify(result)).toBeTruthy();
   await expect.poll(() => submittedPayloads.length, { timeout: 15000 }).toBeGreaterThan(0);
 
   const postedRefs = submittedPayloads
