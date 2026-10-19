@@ -6342,16 +6342,35 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   // partially selected block, the native text can still contain its citation.
   // The reference extractor deduplicates citations found in both sources.
   const nativeText = String(info.selectionText || '').trim();
+  let liveText = '';
   let text = nativeText;
   if (menuId === 'blb-suite-web-selection' && Number.isInteger(tab?.id)) {
-    const liveText = await getActiveTabSelection(tab.id);
+    liveText = await getActiveTabSelection(tab.id);
     if (liveText && nativeText && liveText !== nativeText) {
       text = liveText + '\n' + nativeText;
     } else if (liveText) {
       text = liveText;
     }
   }
-  if (!text) return;
+  if (!text) {
+    console.warn('[BLB selection diagnostic] empty selection', {
+      menuId, tabId: tab?.id ?? null, nativeLength: nativeText.length, liveLength: liveText.length
+    });
+    return;
+  }
+  // Diagnostic metadata only: never log the selected post's full text. This
+  // distinguishes a browser-selection loss from a reference-parser loss.
+  const diagnosticRefs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(text));
+  const diagnosticWholeBookRefs = getSelectedWholeBookReferencesFromMixedText(text);
+  console.warn('[BLB selection diagnostic] received selection', {
+    menuId,
+    hostname: hostnameFromTabUrl(tab?.url),
+    nativeLength: nativeText.length,
+    liveLength: liveText.length,
+    combinedLength: text.length,
+    parsedReferences: diagnosticRefs.map(ref => `${ref.book} ${ref.chapter}:${ref.from}-${ref.to}`),
+    wholeBookReferenceCount: diagnosticWholeBookRefs.length
+  });
   if (!(await shouldShowBlbContextMenu(tab, text))) return;
   try {
     if (normalizeSiteHostname(hostnameFromTabUrl(tab?.url)) === BLB_HOSTNAME) {
