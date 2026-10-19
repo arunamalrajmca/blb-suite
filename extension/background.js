@@ -136,12 +136,15 @@ function canonicalStoredRef(item) {
   const resolved = resolveBibleReference(canonicalBook.name, chapter, from, to);
   if (!resolved) return null;
   const version = String(item.version || 'kjv').trim().toLowerCase() || 'kjv';
-  const text = `${resolved.book.name} ${resolved.chapter}${resolved.from != null ? `:${resolved.from}${resolved.to != null && resolved.to !== resolved.from ? `-${resolved.to}` : ''}` : ''}`;
+  const version = String(item.version || 'kjv').trim().toLowerCase() || 'kjv';
+  const wholeChapter = from == null && to == null;
+  const text = wholeChapter
+    ? `${resolved.book.name} `${resolved.chapter}`
+    : `${resolved.book.name} `${resolved.chapter}`${resolved.from != null ? `:${resolved.from}${resolved.to != null && resolved.to !== resolved.from ? `-${resolved.to}` : ''}` : ''}`;
   // Keep an omitted verse range as a chapter-level reference. The shared
   // resolver intentionally returns a chapter URL for this case, but its
   // null range must survive canonicalization so MultiVerse expands every
   // verse in that chapter rather than collapsing it to verse 1.
-  const wholeChapter = from == null && to == null;
   return {
     book: resolved.book.name,
     bookNumber: Number(resolved.book.bookNumber),
