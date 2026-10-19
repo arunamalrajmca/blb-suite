@@ -2761,6 +2761,9 @@ let blbTabCreationQueue = Promise.resolve();
 // Repeating the same action after a short pause is still allowed.
 const recentSelectionOpenRequests = new Map();
 const SELECTION_OPEN_DEDUP_MS = 1200;
+const SELECTION_OPEN_DEDUP_RETENTION_MS = 5000;
+const SELECTION_OPEN_DEDUP_MAX_ENTRIES = 256;
+let lastSelectionOpenDedupPruneAt = 0;
 
 function shouldAcceptSelectionOpenRequest(tabId, text, requestId = '') {
   const normalizedRequestId = String(requestId || '').trim();
@@ -2771,8 +2774,23 @@ function shouldAcceptSelectionOpenRequest(tabId, text, requestId = '') {
   const previous = recentSelectionOpenRequests.get(key) || 0;
   if (now - previous < SELECTION_OPEN_DEDUP_MS) return false;
   recentSelectionOpenRequests.set(key, now);
-  for (const [k, ts] of recentSelectionOpenRequests) {
-    if (now - ts > 5000) recentSelectionOpenRequests.delete(k);
+
+  // Keep the hot path constant-time. Pruning the whole map on every selection
+  // added avoidable work to every Show on BLB request; prune periodically and
+  // enforce a hard bound for bursts of unique selections.
+  if (now - lastSelectionOpenDedupPruneAt >= SELECTION_OPEN_DEDUP_RETENTION_MS
+      || recentSelectionOpenRequests.size > SELECTION_OPEN_DEDUP_MAX_ENTRIES) {
+    lastSelectionOpenDedupPruneAt = now;
+    for (const [entryKey, timestamp] of recentSelectionOpenRequests) {
+      if (now - timestamp > SELECTION_OPEN_DEDUP_RETENTION_MS) {
+        recentSelectionOpenRequests.delete(entryKey);
+      }
+    }
+    while (recentSelectionOpenRequests.size > SELECTION_OPEN_DEDUP_MAX_ENTRIES) {
+      const oldestKey = recentSelectionOpenRequests.keys().next().value;
+      if (oldestKey === undefined) break;
+      recentSelectionOpenRequests.delete(oldestKey);
+    }
   }
   return true;
 }
