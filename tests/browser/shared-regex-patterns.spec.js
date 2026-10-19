@@ -288,36 +288,63 @@ test('Facebook reference selections survive canonical MultiVerse expansion throu
 });
 
 
-test('adding Romans 16:21 does not suppress 1 Corinthians 4:17 or Philippians 2:19-22', async ({ extensionWorker }) => {
-  const result = await extensionWorker.evaluate(() => {
-    const parse = text => {
-      const refs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(text));
-      const expanded = expandMultiVerseRefsToVerses(refs);
-      return {
-        refs: refs.map(ref => [ref.book, ref.chapter, ref.from, ref.to]),
-        expanded: expanded.map(ref => [ref.book, ref.chapter, ref.from])
-      };
-    };
-    return {
-      two: parse('1 Corinthians 4:17\\nPhilippians 2:19-22'),
-      three: parse('Romans 16:21\\n1 Corinthians 4:17\\nPhilippians 2:19-22')
-    };
+test('all reference orders preserve the middle selection through parsing and final MultiVerse POST', async ({ context, extensionWorker }) => {
+  const submittedPayloads = [];
+  await context.route('https://www.blueletterbible.org/**', route => {
+    if (route.request().method() === 'POST') {
+      submittedPayloads.push(new URLSearchParams(route.request().postData() || '').get('mvText') || '');
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
+    });
   });
-  const expectedTwo = [
-    ['1 corinthians', 4, 17, 17],
-    ['philippians', 2, 19, 22]
+
+  const permutations = [
+    ['Romans 16:21', '1 Corinthians 4:17', 'Philippians 2:19-22'],
+    ['Romans 16:21', 'Philippians 2:19-22', '1 Corinthians 4:17'],
+    ['1 Corinthians 4:17', 'Romans 16:21', 'Philippians 2:19-22'],
+    ['1 Corinthians 4:17', 'Philippians 2:19-22', 'Romans 16:21'],
+    ['Philippians 2:19-22', 'Romans 16:21', '1 Corinthians 4:17'],
+    ['Philippians 2:19-22', '1 Corinthians 4:17', 'Romans 16:21']
   ];
-  const expectedThree = [
+  const expected = [
     ['romans', 16, 21, 21],
     ['1 corinthians', 4, 17, 17],
     ['philippians', 2, 19, 22]
   ];
-  expect(result.two.refs).toEqual(expectedTwo);
-  expect(result.three.refs).toEqual(expectedThree);
-  for (const expected of expectedThree) {
-    const [book, chapter, from, to] = expected;
-    for (let verse = from; verse <= to; verse++) {
-      expect(result.three.expanded).toContainEqual([book, chapter, verse]);
+
+  const parsed = await extensionWorker.evaluate(cases => cases.map(lines => {
+    const refs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(lines.join('\\n')));
+    const expanded = expandMultiVerseRefsToVerses(refs);
+    return {
+      refs: refs.map(ref => [ref.book, ref.chapter, ref.from, ref.to]),
+      expanded: expanded.map(ref => [ref.book, ref.chapter, ref.from])
+    };
+  }), permutations);
+
+  for (let i = 0; i < parsed.length; i++) {
+    expect(parsed[i].refs, 'parser permutation ' + i).toEqual(expected);
+    for (const [book, chapter, from, to] of expected) {
+      for (let verse = from; verse <= to; verse++) {
+        expect(parsed[i].expanded, 'expanded permutation ' + i).toContainEqual([book, chapter, verse]);
+      }
     }
   }
+
+  const submitted = await extensionWorker.evaluate(async () => {
+    const refs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(
+      'Philippians 2:19-22\\nRomans 16:21\\n1 Corinthians 4:17'
+    ));
+    return openBlbMultiVerseRefs(refs, true);
+  });
+  expect(submitted?.ok, JSON.stringify(submitted)).toBe(true);
+  expect(submitted?.count).toBe(6);
+  await expect.poll(() => submittedPayloads.length, { timeout: 15000 }).toBeGreaterThan(0);
+
+  const postRefs = submittedPayloads.flatMap(payload => payload.split(';').map(item => item.trim().toLowerCase()));
+  expect(postRefs).toContain('romans 16:21');
+  expect(postRefs).toContain('1 corinthians 4:17');
+  expect(postRefs).toContain('philippians 2:19-22');
 });
