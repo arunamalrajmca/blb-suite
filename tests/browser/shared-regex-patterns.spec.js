@@ -137,7 +137,7 @@ test('Facebook-style multiline reference lists retain every explicitly named ref
       '1 Corinthians 4:17',
       'Philippians 2:19-22',
       'Colossians 1:1'
-    ].join('\\n');
+    ].join('\n');
     const second = [
       'Romans 16:24',
       '1 Corinthians 16:23',
@@ -152,7 +152,7 @@ test('Facebook-style multiline reference lists retain every explicitly named ref
       '2 Timothy 4:22',
       'Titus 3:15',
       'Philemon 25'
-    ].join('\\n');
+    ].join('\n');
     const map = text => extractBibleRefsFromSelectedTextUncached(text)
       .map(ref => [ref.book, ref.chapter, ref.from, ref.to]);
     return { first: map(first), second: map(second) };
