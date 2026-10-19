@@ -1895,9 +1895,16 @@ function getDoubleClickSelection(event) {
   return '';
 }
 
+function isPdfDocumentContext() {
+  // Do not run Double-click KJV on PDFs, including direct web URLs with query
+  // strings and documents whose viewer supplies a PDF-style title.
+  return /\\.pdf(?:$|[?#])/i.test(String(location.href || '')) ||
+    /\\.pdf(?:$|\\s)/i.test(String(document.title || ''));
+}
+
 function handleDoubleClickBlb(event) {
   try {
-    if (!suiteEnabled || isSensitiveSiteHostname(location.hostname) || isDoubleClickExcludedTarget(event.target)) return;
+    if (!suiteEnabled || isPdfDocumentContext() || isSensitiveSiteHostname(location.hostname) || isDoubleClickExcludedTarget(event.target)) return;
 
     // Chromium may dispatch dblclick before the new word selection has replaced
     // the previous native selection. Never freeze that early selection/context:
@@ -2027,7 +2034,7 @@ async function getSiteDefaultEnabled() {
 async function refreshDoubleClickBlb() {
   try {
     const siteKey = getPageSelectionSiteKey();
-    if (siteKey === BLB_HOSTNAME || isSensitiveSiteHostname(siteKey) || !suiteEnabled || !siteKey) {
+    if (isPdfDocumentContext() || siteKey === BLB_HOSTNAME || isSensitiveSiteHostname(siteKey) || !suiteEnabled || !siteKey) {
       doubleClickBlbEnabled = false;
       disableDoubleClickBlb();
       return;
