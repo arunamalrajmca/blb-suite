@@ -1899,7 +1899,7 @@ function isPdfDocumentContext() {
   // Do not run Double-click KJV on PDFs, including direct web URLs with query
   // strings and documents whose viewer supplies a PDF-style title.
   return /\.pdf(?:$|[?#])/i.test(String(location.href || '')) ||
-    /\.pdf(?:$|\\s)/i.test(String(document.title || ''));
+    /\.pdf(?:$|\s)/i.test(String(document.title || ''));
 }
 
 function handleDoubleClickBlb(event) {
