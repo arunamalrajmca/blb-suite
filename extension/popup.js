@@ -1375,11 +1375,10 @@ async function renderSavedSettingsPreview() {
     isSensitiveSite,
     isPdfContext
   });
-  // Keep controls inert until the authoritative permission-aware state lands.
-  // Their checked values already reflect storage, so this cannot show false OFF.
-  for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) {
-    document.getElementById(id).disabled = true;
-  }
+  // Keep the saved-state preview interactive. render() already disables
+  // controls that are structurally unavailable (suite OFF, unsupported site,
+  // or PDF context); waiting for optional permission/status checks must not
+  // leave every toggle visibly ON but unusable.
 }
 
 (async () => {
