@@ -2528,13 +2528,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const nodeText = node => {
         if (node.nodeType === Node.TEXT_NODE) return node.nodeValue || '';
         if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return '';
-        if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') return '\\n';
+        if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') return '\n';
         const children = Array.from(node.childNodes || []);
         const isBlock = node.nodeType === Node.ELEMENT_NODE && blockTags.has(node.tagName);
-        const value = children.map(nodeText).filter(part => part !== '').join(isBlock ? '\\n' : '');
-        return isBlock ? `\\n${value}\\n` : value;
+        const value = children.map(nodeText).filter(part => part !== '').join(isBlock ? '\n' : '');
+        return isBlock ? `\n${value}\n` : value;
       };
-      const text = nodeText(fragment).replace(/\\n{3,}/g, '\\n\\n').trim();
+      const text = nodeText(fragment).replace(/\n{3,}/g, '\n\n').trim();
       sendResponse({ok:true, text: text || selection.toString() || ''});
     } catch (_) {
       try { sendResponse({ok:true, text:window.getSelection ? window.getSelection().toString() : ''}); }
