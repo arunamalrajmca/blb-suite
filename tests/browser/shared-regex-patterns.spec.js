@@ -249,7 +249,9 @@ test('paired 1 & 2 Timothy whole-book shorthand reaches the final MultiVerse POS
     await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true});
   }, selectedText);
 
-  await expect.poll(() => submittedPayloads.length, { timeout: 15000 }).toBeGreaterThan(0);
+  // This selection expands to 206 verses, so it must generate two POST batches.
+  // Wait for both handoff pages to submit before asserting cross-batch coverage.
+  await expect.poll(() => submittedPayloads.length, { timeout: 15000 }).toBeGreaterThanOrEqual(2);
 
   const postedRefs = submittedPayloads
     .flatMap(payload => payload.split(';'))
