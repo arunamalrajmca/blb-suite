@@ -6401,7 +6401,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   const nativeDiagnosticRefs = formatDiagnosticRefs(nativeText);
   const liveDiagnosticRefs = formatDiagnosticRefs(liveText);
   const diagnosticRefs = formatDiagnosticRefs(text);
-  const diagnosticLineRefs = sourceText => String(sourceText || '').split((/\r?\n|\u2028|\u2029/).map((line, index) => ({
+  const diagnosticLineRefs = sourceText => String(sourceText || '').split(/\r?\n|\u2028|\u2029/).map((line, index) => ({
     line: index + 1,
     // Preserve only lines that mention the affected book names; don't log unrelated post text.
     relevant: /corinth|colossians/i.test(line),
