@@ -6337,11 +6337,19 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   // Web selections can cross nested block elements (Facebook posts in
   // particular). Chromium's context-menu selectionText may flatten adjacent
   // blocks and make references run together. Re-read the live DOM Range for
-  // web pages, preserving block boundaries; keep PDF's native selection text.
-  let text = String(info.selectionText || '').trim();
+  // web pages, preserving block boundaries. Do not discard the browser's
+  // native selection text, though: if the DOM serializer omits a nested or
+  // partially selected block, the native text can still contain its citation.
+  // The reference extractor deduplicates citations found in both sources.
+  const nativeText = String(info.selectionText || '').trim();
+  let text = nativeText;
   if (menuId === 'blb-suite-web-selection' && Number.isInteger(tab?.id)) {
     const liveText = await getActiveTabSelection(tab.id);
-    if (liveText) text = liveText;
+    if (liveText && nativeText && liveText !== nativeText) {
+      text = liveText + '\n' + nativeText;
+    } else if (liveText) {
+      text = liveText;
+    }
   }
   if (!text) return;
   if (!(await shouldShowBlbContextMenu(tab, text))) return;
