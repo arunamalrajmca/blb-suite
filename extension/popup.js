@@ -97,7 +97,8 @@ async function getState() {
     master: data.masterEnabled !== false,
     // Both site-based toggles are OFF by default. An explicit per-site setting
     // wins, but neither can appear ON until Chrome has granted host permission.
-    pageButton: (isBlbSite || !isSensitiveSite) && !!siteKey && effectivePageEnabled,
+    // PDF selection support must remain enabled: pin the Show on BLB toggle ON.
+    pageButton: isPdfContext || ((isBlbSite || !isSensitiveSite) && !!siteKey && effectivePageEnabled),
     doubleClick: !isBlbSite && !isSensitiveSite && !isPdfContext && !!siteKey && effectiveDoubleEnabled,
     redirect: data.redirectEnabled !== false,
     siteKey,
@@ -130,7 +131,7 @@ function render(state) {
   const page = document.getElementById('pageButton');
   const dbl = document.getElementById('doubleClick');
   const redirect = document.getElementById('redirectEnabled');
-  page.disabled = !state.master || !state.siteKey || (state.isSensitiveSite && !state.isBlbSite);
+  page.disabled = state.isPdfContext || !state.master || !state.siteKey || (state.isSensitiveSite && !state.isBlbSite);
   dbl.disabled = state.isPdfContext || !state.master || !state.siteKey || state.isBlbSite || state.isSensitiveSite;
   redirect.disabled = !state.master;
   document.getElementById('pageSetting').classList.toggle('disabled', page.disabled);
@@ -200,7 +201,7 @@ async function pinSiteFeatureChoice(feature, otherFeatureEnabled) {
 
 async function setPageButton(on) {
   const state = await getState();
-  if (!state.siteKey || !state.master || (state.isSensitiveSite && !state.isBlbSite)) return;
+  if (state.isPdfContext || !state.siteKey || !state.master || (state.isSensitiveSite && !state.isBlbSite)) return;
   const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
   const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
   sites[state.siteKey] = !!on;
@@ -1185,7 +1186,8 @@ async function setIndependentSiteFeature(feature, on) {
 
   const state = await getState();
   if (!state.siteKey || !state.master || (state.isBlbSite && feature !== 'pageButton') ||
-      (state.isSensitiveSite && !state.isBlbSite) || (feature === 'doubleClick' && state.isPdfContext)) {
+      (state.isSensitiveSite && !state.isBlbSite) ||
+      (state.isPdfContext && feature === 'pageButton') || (feature === 'doubleClick' && state.isPdfContext)) {
     render(state);
     return;
   }
