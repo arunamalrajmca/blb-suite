@@ -16,6 +16,8 @@ function getSiteKey(url, title = '') {
     if (/^(?:brave|chrome):\/\//i.test(raw) && (urlLooksPdf || titleLooksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
     const u = new URL(raw);
     if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+    // Direct PDF URLs use a dedicated context just like local/browser-viewer PDFs.
+    if (urlLooksPdf) return '__blb_pdf_viewer__';
     let host = String(u.hostname || '').toLowerCase();
     if (host.startsWith('www.')) host = host.slice(4);
     return host;
@@ -84,6 +86,10 @@ async function getState() {
   // Wildcard HTTP(S) access can authorize an explicitly enabled feature, but
   // must not make the host-based defaults (for example, bible.com) appear ON.
   // There are no hostname-based defaults; only explicit saved per-site choices enable features.
+  if (isPdfContext && doubleSites[siteKey] === true) {
+    doubleSites[siteKey] = false;
+    void chrome.storage.local.set({doubleClickBlbSites:{...doubleSites}});
+  }
   const effectiveDefaultEnabled = defaultEnabled && hasCurrentSiteAccess && hasSiteSpecificAccess;
   const effectivePageEnabled = Object.prototype.hasOwnProperty.call(pageSites, siteKey)
     ? pageSites[siteKey] === true && hasCurrentSiteAccess
@@ -211,7 +217,7 @@ async function setPageButton(on) {
 
 async function setDoubleClick(on) {
   const state = await getState();
-  if (!state.siteKey || !state.master || state.isBlbSite || state.isSensitiveSite) return;
+  if (!state.siteKey || !state.master || state.isBlbSite || state.isSensitiveSite || state.isPdfContext) return;
   const data = await chrome.storage.local.get({doubleClickBlbSites:{}});
   const sites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
   sites[state.siteKey] = !!on;
