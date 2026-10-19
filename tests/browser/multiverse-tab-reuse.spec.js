@@ -490,7 +490,7 @@ test('mixed chapter-only selection submits all 51 expected verses through the se
   });
 
   const result = await extensionWorker.evaluate(async () => {
-    const selection = 'Matthew 5:3-12\\nRomans 8\\n1 Peter 2:9-10';
+    const selection = 'Matthew 5:3-12\nRomans 8\n1 Peter 2:9-10';
     const refs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(selection));
     const opened = await openBlbPageSelection(selection, {activeIfNew:true, activateExisting:true});
     return {
