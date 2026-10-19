@@ -6481,10 +6481,7 @@ chrome.runtime.onInstalled.addListener(async details => {
     if (Object.keys(defaults).length) await chrome.storage.local.set(defaults);
   }
   installRules();
-  installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
-    .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
-    .catch(() => {}));
-  installPdfSelectionContextMenu().catch(() => {});
+  installWebSelectionContextMenu().then(() => syncWebSelectionContextMenuVisibility()).catch(() => {});
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -6503,21 +6500,17 @@ chrome.storage.onChanged.addListener((changes, area) => {
         if (tab) syncWebSelectionContextMenuVisibility(tab).catch(() => {});
       })
       .catch(() => {});
-    installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true})
+    chrome.tabs.query({active:true,lastFocusedWindow:true})
       .then(async tabs => {
-        for (const tab of tabs) {
-          if (tab?.id && (changes.pageSelectionButtonSites || changes.doubleClickBlbSites)) {
-            const key = pageSelectionSettingKeyFromTab(tab);
-            const pageSites = changes.pageSelectionButtonSites?.newValue && typeof changes.pageSelectionButtonSites.newValue === 'object'
-              ? changes.pageSelectionButtonSites.newValue
-              : (await chrome.storage.local.get({pageSelectionButtonSites:{}})).pageSelectionButtonSites;
-            const doubleSites = changes.doubleClickBlbSites?.newValue && typeof changes.doubleClickBlbSites.newValue === 'object'
-              ? changes.doubleClickBlbSites.newValue
-              : (await chrome.storage.local.get({doubleClickBlbSites:{}})).doubleClickBlbSites;
-            if (key && (pageSites?.[key] === true || doubleSites?.[key] === true)) await ensureContentScriptInTab(tab.id);
-          }
-          await syncPdfSelectionContextMenuVisibility(tab);
+        const tab = tabs[0];
+        if (tab?.id && (changes.pageSelectionButtonSites || changes.doubleClickBlbSites)) {
+          const key = pageSelectionSettingKeyFromTab(tab);
+          const stored = await chrome.storage.local.get({pageSelectionButtonSites:{},doubleClickBlbSites:{}});
+          const pageSites = changes.pageSelectionButtonSites?.newValue ?? stored.pageSelectionButtonSites;
+          const doubleSites = changes.doubleClickBlbSites?.newValue ?? stored.doubleClickBlbSites;
+          if (key && (pageSites?.[key] === true || doubleSites?.[key] === true)) await ensureContentScriptInTab(tab.id);
         }
+        await syncWebSelectionContextMenuVisibility();
       })
       .catch(() => {}));
   }
@@ -6545,18 +6538,8 @@ chrome.alarms.onAlarm.addListener(alarm => {
 });
 
 chrome.runtime.onStartup.addListener(installRules);
-chrome.runtime.onStartup.addListener(() => installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
-  .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
-  .catch(() => {})));
-chrome.runtime.onStartup.addListener(() => installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
-  .then(tabs => syncPdfSelectionContextMenuVisibility(tabs[0]))
-  .catch(() => {})));
+chrome.runtime.onStartup.addListener(() => installWebSelectionContextMenu().then(() => syncWebSelectionContextMenuVisibility()).catch(() => {}));
 chrome.runtime.onStartup.addListener(() => refreshStudyAutoStopAlarm().catch(()=>{}));
 
-installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
-  .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
-  .catch(() => {}));
-installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
-  .then(tabs => syncPdfSelectionContextMenuVisibility(tabs[0]))
-  .catch(() => {}));
+installWebSelectionContextMenu().then(() => syncWebSelectionContextMenuVisibility()).catch(() => {});
 refreshStudyAutoStopAlarm().catch(()=>{});
