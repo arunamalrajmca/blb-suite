@@ -196,9 +196,11 @@ test('Facebook-style DOM range extraction preserves all block-separated referenc
 test('mixed reference selection keeps the paired Timothy book shorthand visible for explicit handling', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(() => {
     const text = 'Acts 16:1-3\\nRomans 16:21\\n1 Corinthians 4:17\\nPhilippians 2:19-22\\nColossians 1:1\\n1 & 2 Timothy';
+    const wholeBooks = getSelectedWholeBookReferencesFromMixedText(text);
     return {
       verseRefs: extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(text))
         .map(ref => [ref.book, ref.chapter, ref.from, ref.to]),
+      wholeBooks: wholeBooks.map(ref => [ref.book, ref.chapter, ref.from, ref.to]),
       normalized: normalizeSelectedScriptureText(text)
     };
   });
@@ -208,4 +210,11 @@ test('mixed reference selection keeps the paired Timothy book shorthand visible 
     ['colossians', 1, 1, 1]
   ]);
   expect(result.normalized).toContain('1 & 2 Timothy');
+  expect(result.wholeBooks.length).toBeGreaterThan(0);
+  expect(result.wholeBooks[0][0]).toBe('1 Timothy');
+  expect(result.wholeBooks.some(ref => ref[0] === '2 Timothy')).toBe(true);
+  expect(result.wholeBooks.filter(ref => ref[0] === '1 Timothy').map(ref => ref[1]))
+    .toEqual(Array.from({length: 6}, (_, index) => index + 1));
+  expect(result.wholeBooks.filter(ref => ref[0] === '2 Timothy').map(ref => ref[1]))
+    .toEqual(Array.from({length: 4}, (_, index) => index + 1));
 });
