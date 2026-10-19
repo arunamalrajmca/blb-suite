@@ -277,7 +277,7 @@ test('paired 1 & 2 Timothy whole-book shorthand reaches the final MultiVerse POS
   // Verify coverage of every verse rather than requiring each chapter to be
   // serialized as one unsplit range in a single batch.
   const postedRanges = postedRefs.map(reference => {
-    const match = /^(.*?) (\\d+):(\\d+)-(\\d+)$/.exec(reference);
+    const match = /^(.*?) (\d+):(\d+)-(\d+)$/.exec(reference);
     return match && {
       book: match[1],
       chapter: Number(match[2]),
