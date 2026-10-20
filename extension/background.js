@@ -6230,6 +6230,7 @@ async function shouldShowBlbContextMenu(tab, selectionText) {
 
 // Serialize native context-menu operations across async tab/storage events.
 let selectionMenuOperation = Promise.resolve();
+let pdfSelectionMenuKnownPresent = false;
 
 async function ensurePdfSelectionContextMenu() {
   if (pdfSelectionMenuKnownPresent) return true;
