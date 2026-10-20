@@ -761,25 +761,48 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
     batches.push(allVerses.slice(offset, offset + BLB_MULTIVERSE_MAX_VERSES));
   }
 
-  // Prepare each batch's destination tab concurrently. The global request
-  // queue above still serializes separate user requests, while each batch keeps
-  // its own identity lock and POST submission slot. This avoids making batch
-  // N wait for batch N-1's tab query/reservation/navigation to finish.
-  const batchResults = await Promise.all(batches.map(async (batchVerses, index) => {
-    const compactRefs = compactMultiVerseVerses(batchVerses);
-    const result = await openBlbMultiVerseRefsSingleBatch(
-      compactRefs,
-      index === 0 ? !!active : false,
-      allVerses.length > 1 && batchVerses.length === 1,
-      index === 0 ? options.preferredTabId : null,
-      batchVerses,
-      !!options.pdfFastSubmit,
-      options.pdfTraceId || ''
-    );
-    return result?.ok
-      ? {...result, count:batchVerses.length, batch:index + 1}
-      : {ok:false, reason:result?.reason || 'batch-open-failed', batch:index + 1, result};
-  }));
+  // PDF handoff pages must be created in reference order. Concurrent tab
+  // creation lets later handoff documents finish loading first and request the
+  // shared POST slot before earlier batches; that can make the final KJV
+  // result appear first even when its tab was requested last. Keep the existing
+  // concurrent preparation for other callers, but sequence PDF tab handoffs.
+  let batchResults;
+  if (options.pdfFastSubmit) {
+    batchResults = [];
+    for (let index = 0; index < batches.length; index++) {
+      const batchVerses = batches[index];
+      const compactRefs = compactMultiVerseVerses(batchVerses);
+      const result = await openBlbMultiVerseRefsSingleBatch(
+        compactRefs,
+        index === 0 ? !!active : false,
+        allVerses.length > 1 && batchVerses.length === 1,
+        index === 0 ? options.preferredTabId : null,
+        batchVerses,
+        true,
+        options.pdfTraceId || ''
+      );
+      batchResults.push(result?.ok
+        ? {...result, count:batchVerses.length, batch:index + 1}
+        : {ok:false, reason:result?.reason || 'batch-open-failed', batch:index + 1, result});
+      if (!result?.ok) break;
+    }
+  } else {
+    batchResults = await Promise.all(batches.map(async (batchVerses, index) => {
+      const compactRefs = compactMultiVerseVerses(batchVerses);
+      const result = await openBlbMultiVerseRefsSingleBatch(
+        compactRefs,
+        index === 0 ? !!active : false,
+        allVerses.length > 1 && batchVerses.length === 1,
+        index === 0 ? options.preferredTabId : null,
+        batchVerses,
+        false,
+        options.pdfTraceId || ''
+      );
+      return result?.ok
+        ? {...result, count:batchVerses.length, batch:index + 1}
+        : {ok:false, reason:result?.reason || 'batch-open-failed', batch:index + 1, result};
+    }));
+  }
   const failed = batchResults.find(item => !item.ok);
   const results = batchResults.filter(item => item.ok);
   if (failed) {
