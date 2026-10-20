@@ -3294,10 +3294,32 @@ let pendingMultiVersePostSlot = Promise.resolve();
 function grantMultiVersePostSlot(minimumIntervalMs, tabId = null, queuedAt = Date.now()) {
   const slot = pendingMultiVersePostSlot.then(async () => {
     const queueStartedAt = Date.now();
-    const waitMs = Math.max(0, minimumIntervalMs - (Date.now() - lastMultiVersePostSlotAt));
-    if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
-    lastMultiVersePostSlotAt = Date.now();
-    console.info('[BLB MV timing]', {stage:'queue-slot-granted', tabId, queuedAt, queueStartedAt, grantedAt:lastMultiVersePostSlotAt, totalQueueWaitMs:lastMultiVersePostSlotAt-queuedAt, intervalWaitMs:waitMs});
+    const waitMs = Math.max(0, minimumIntervalMs - (queueStartedAt - lastMultiVersePostSlotAt));
+    const timerScheduledAt = waitMs ? Date.now() : null;
+    let timerWakeAt = null;
+    if (waitMs) {
+      await new Promise(resolve => setTimeout(() => {
+        timerWakeAt = Date.now();
+        resolve();
+      }, waitMs));
+    }
+    const grantedAt = Date.now();
+    const timerDelayMs = timerWakeAt === null ? 0 : timerWakeAt - timerScheduledAt - waitMs;
+    const postTimerDelayMs = timerWakeAt === null ? 0 : grantedAt - timerWakeAt;
+    lastMultiVersePostSlotAt = grantedAt;
+    console.info('[BLB MV timing]', {
+      stage:'queue-slot-granted',
+      tabId,
+      queuedAt,
+      queueStartedAt,
+      timerScheduledAt,
+      timerWakeAt,
+      grantedAt,
+      totalQueueWaitMs:grantedAt-queuedAt,
+      intervalWaitMs:waitMs,
+      timerDelayMs,
+      postTimerDelayMs
+    });
     return {ok:true};
   });
   pendingMultiVersePostSlot = slot.then(() => undefined, () => undefined);
