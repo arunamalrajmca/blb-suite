@@ -944,13 +944,14 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
   // never request a POST slot. Explicitly retire its sequence position so later
   // PDF batches do not wait forever for an index that cannot arrive. A reused
   // extension handoff is deliberately not skipped; it will submit normally.
-  const reusedUrl = String(result.tab.url || result.tab.pendingUrl || '');
-  const isHandoffTab = reusedUrl.startsWith(chrome.runtime.getURL('multiverse-post.html'));
+  const reusedUrls = [result.tab.url, result.tab.pendingUrl].map(value => String(value || ''));
+  const handoffPrefix = chrome.runtime.getURL('multiverse-post.html');
+  const isHandoffTab = reusedUrls.some(url => url.startsWith(handoffPrefix));
   if (pdfFastSubmit && result.reused && !isHandoffTab) {
     skipPdfPostQueueIndex(pdfTraceId, pdfBatchIndex, pdfBatchCount);
     console.info('[BLB PDF MultiVerse timing]', JSON.stringify({
       id:pdfTraceId || 'untracked', stage:'post-queue-index-skipped',
-      batchIndex:pdfBatchIndex, batchCount:pdfBatchCount, tabId:result.tab.id, reusedUrl
+      batchIndex:pdfBatchIndex, batchCount:pdfBatchCount, tabId:result.tab.id, reusedUrls
     }));
   }
   return {ok:true, count:canonical.refs.length, reused:!!result.reused, tabId:result.tab.id};
