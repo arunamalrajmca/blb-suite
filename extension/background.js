@@ -6592,23 +6592,26 @@ chrome.storage.onChanged.addListener((changes, area) => {
         if (tab) syncWebSelectionContextMenuVisibility(tab).catch(() => {});
       })
       .catch(() => {});
-    installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true})
+    // Preference changes must not remove/recreate the global PDF menu item.
+    // Reinstalling it here creates a window where the action disappears, then
+    // returns after asynchronous installation/visibility synchronization.
+    chrome.tabs.query({active:true,lastFocusedWindow:true})
       .then(async tabs => {
-        for (const tab of tabs) {
-          if (tab?.id && (changes.pageSelectionButtonSites || changes.doubleClickBlbSites)) {
-            const key = pageSelectionSettingKeyFromTab(tab);
-            const pageSites = changes.pageSelectionButtonSites?.newValue && typeof changes.pageSelectionButtonSites.newValue === 'object'
-              ? changes.pageSelectionButtonSites.newValue
-              : (await chrome.storage.local.get({pageSelectionButtonSites:{}})).pageSelectionButtonSites;
-            const doubleSites = changes.doubleClickBlbSites?.newValue && typeof changes.doubleClickBlbSites.newValue === 'object'
-              ? changes.doubleClickBlbSites.newValue
-              : (await chrome.storage.local.get({doubleClickBlbSites:{}})).doubleClickBlbSites;
-            if (key && (pageSites?.[key] === true || doubleSites?.[key] === true)) await ensureContentScriptInTab(tab.id);
-          }
-          await syncPdfSelectionContextMenuVisibility(tab);
+        const tab = tabs[0];
+        if (!tab) return;
+        if (tab.id && (changes.pageSelectionButtonSites || changes.doubleClickBlbSites)) {
+          const key = pageSelectionSettingKeyFromTab(tab);
+          const pageSites = changes.pageSelectionButtonSites?.newValue && typeof changes.pageSelectionButtonSites.newValue === 'object'
+            ? changes.pageSelectionButtonSites.newValue
+            : (await chrome.storage.local.get({pageSelectionButtonSites:{}})).pageSelectionButtonSites;
+          const doubleSites = changes.doubleClickBlbSites?.newValue && typeof changes.doubleClickBlbSites.newValue === 'object'
+            ? changes.doubleClickBlbSites.newValue
+            : (await chrome.storage.local.get({doubleClickBlbSites:{}})).doubleClickBlbSites;
+          if (key && (pageSites?.[key] === true || doubleSites?.[key] === true)) await ensureContentScriptInTab(tab.id);
         }
+        await syncPdfSelectionContextMenuVisibility(tab);
       })
-      .catch(() => {}));
+      .catch(() => {});
   }
   if (changes.currentStudySessionId || changes.studyAutoStopMinutes) refreshStudyAutoStopAlarm().catch(()=>{});
 });
