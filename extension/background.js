@@ -6283,12 +6283,24 @@ async function isPageButtonEnabledForHostname(hostname, title = '') {
 }
 
 async function shouldShowBlbContextMenu(tab, selectionText) {
-  if (!(await isSuiteEnabled())) return false;
-  const siteKey = pageSelectionSettingKeyFromTab(tab);
-  // The right-click action is exactly the same site-based feature as the
-  // floating Show on BLB button. Do not require a content-script visibility
-  // signal or a classifier just to expose the menu item.
-  return await isPageButtonEnabledForHostname(siteKey, tab?.title || '');
+  const siteKey = normalizeSiteHostname(pageSelectionSettingKeyFromTab(tab));
+  if (!siteKey || (siteKey !== BLB_HOSTNAME && siteKey.endsWith('.blueletterbible.org'))) return false;
+  // Read the global gate and site preference together. The context-menu
+  // handler previously checked the global gate once before validating the
+  // menu ID, then this function read it again, then the site helper performed
+  // another storage read. That serialized storage latency sits directly on
+  // the click-to-first-tab path, so use one authoritative snapshot here.
+  if (isSensitiveSiteHostname(siteKey)) return false;
+  const data = await chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{}
+  });
+  if (data.masterEnabled === false) return false;
+  const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
+    ? data.pageSelectionButtonSites : {};
+  if (siteKey === BLB_HOSTNAME) return sites[siteKey] === true;
+  if (Object.prototype.hasOwnProperty.call(sites, siteKey)) return sites[siteKey] === true;
+  return isSiteEnabledByDefault(siteKey, tab?.title || '');
 }
 
 // Serialize native context-menu operations across async tab/storage events.
@@ -6416,7 +6428,6 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (!(await isSuiteEnabled())) return;
   const menuId = String(info?.menuItemId || '');
   if (menuId !== 'blb-suite-web-selection' && menuId !== 'blb-suite-pdf-selection') return;
   // Web selections can cross nested block elements (Facebook posts in
