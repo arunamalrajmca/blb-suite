@@ -3287,11 +3287,13 @@ let pendingMultiVersePostSlot = Promise.resolve();
 // handles many unrelated operations; isolating this timing-sensitive response
 // avoids coupling queue delivery to that router's async dispatch path.
 // All MultiVerse submissions use one shared FIFO queue and one interval, regardless of source.
-function grantMultiVersePostSlot(minimumIntervalMs) {
+function grantMultiVersePostSlot(minimumIntervalMs, tabId = null, queuedAt = Date.now()) {
   const slot = pendingMultiVersePostSlot.then(async () => {
+    const queueStartedAt = Date.now();
     const waitMs = Math.max(0, minimumIntervalMs - (Date.now() - lastMultiVersePostSlotAt));
     if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
     lastMultiVersePostSlotAt = Date.now();
+    console.info('[BLB MV timing]', {stage:'queue-slot-granted', tabId, queuedAt, queueStartedAt, grantedAt:lastMultiVersePostSlotAt, totalQueueWaitMs:lastMultiVersePostSlotAt-queuedAt, intervalWaitMs:waitMs});
     return {ok:true};
   });
   pendingMultiVersePostSlot = slot.then(() => undefined, () => undefined);
@@ -3299,7 +3301,10 @@ function grantMultiVersePostSlot(minimumIntervalMs) {
 }
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type !== 'blbSuiteAcquireMultiVersePostSlot') return false;
-  grantMultiVersePostSlot(MULTIVERSE_POST_MIN_INTERVAL_MS).then(
+  const queuedAt = Date.now();
+  const tabId = sender?.tab?.id ?? null;
+  console.info('[BLB MV timing]', {stage:'queue-request-received', tabId, queuedAt});
+  grantMultiVersePostSlot(MULTIVERSE_POST_MIN_INTERVAL_MS, tabId, queuedAt).then(
     response => sendResponse(response),
     error => sendResponse({ok:false, error:String(error)})
   );
