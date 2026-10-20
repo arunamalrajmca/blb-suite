@@ -40,9 +40,10 @@
           slot = await chrome.runtime.sendMessage({
             type:'blbSuiteAcquireMultiVersePostSlot',
             pdfFastSubmit:isPdfFastSubmit,
-            pdfTraceId,
-            pdfBatchIndex,
-            pdfBatchCount
+            // Trace IDs stay local to diagnostics. Do not activate the
+            // index-ordered PDF queue: a slow earlier handoff must not block
+            // later handoffs that are already ready to submit.
+            pdfTraceId: isPdfFastSubmit ? '' : pdfTraceId
           });
           queueError = null;
           break;
