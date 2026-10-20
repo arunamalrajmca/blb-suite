@@ -26,6 +26,7 @@
         return;
       }
 
+      status.textContent = 'Submitting the requested Bible references…';
       const form = document.createElement('form');
       form.method = 'post';
       form.acceptCharset = 'UTF-8';
