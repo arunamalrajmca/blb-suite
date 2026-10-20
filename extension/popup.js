@@ -69,10 +69,26 @@ async function getState() {
   const siteKey = getSiteKey(activeUrl, pageTitle);
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
-  const defaultEnabled = await getDefaultSiteEnabled(siteKey, pageTitleForDefaultCheck);
   const isBlbSite = siteKey === BLB_HOSTNAME;
   const isSensitiveSite = isSensitiveSiteHostname(siteKey);
   const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
+  // PDF context is deterministic from the active tab URL/title. Render it
+  // without waiting for background default-status messaging or host-permission
+  // checks; those checks are only relevant to ordinary website contexts.
+  if (isPdfContext) {
+    return {
+      master: data.masterEnabled !== false,
+      pageButton: false,
+      doubleClick: false,
+      redirect: data.redirectEnabled !== false,
+      siteKey,
+      pageCaption: deriveSiteCaption(siteKey),
+      isBlbSite: false,
+      isSensitiveSite: false,
+      isPdfContext: true
+    };
+  }
+  const defaultEnabled = await getDefaultSiteEnabled(siteKey, pageTitleForDefaultCheck);
   let hasCurrentSiteAccess = true;
   let hasSiteSpecificAccess = true;
   if (!isBlbSite && currentSiteOrigin) {
