@@ -12,6 +12,10 @@ function getSiteKey(url, title = '') {
     const titleLooksPdf = /\.pdf(?:$|\s|[?#[\]])/i.test(String(title || ''));
     const urlLooksPdf = /\.pdf(?:$|[?#&\/])/i.test(decoded);
     if (/^file:/i.test(raw) && (urlLooksPdf || titleLooksPdf)) return '__blb_local_pdf__';
+    // Treat direct PDF documents hosted on websites as PDF contexts too, not
+    // as ordinary host pages. This keeps Double-click KJV disabled for both
+    // local PDFs and PDFs opened from HTTP(S) URLs.
+    if (/^https?:/i.test(raw) && (urlLooksPdf || titleLooksPdf)) return '__blb_pdf_viewer__';
     if (/^(?:chrome|brave)-extension:/i.test(raw) && (urlLooksPdf || titleLooksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
     if (/^(?:brave|chrome):\/\//i.test(raw) && (urlLooksPdf || titleLooksPdf || /pdf/i.test(raw))) return '__blb_pdf_viewer__';
     const u = new URL(raw);
