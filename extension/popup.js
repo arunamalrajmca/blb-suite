@@ -72,7 +72,8 @@ async function getState() {
   const defaultEnabled = await getDefaultSiteEnabled(siteKey, pageTitleForDefaultCheck);
   const isBlbSite = siteKey === BLB_HOSTNAME;
   const isSensitiveSite = isSensitiveSiteHostname(siteKey);
-  const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
+  // Keep recognized PDF-viewer contexts and also catch direct URLs ending in .pdf.
+  const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__' || activeUrl.split(/[?#]/, 1)[0].toLowerCase().endsWith('.pdf');
   let hasCurrentSiteAccess = true;
   let hasSiteSpecificAccess = true;
   if (!isBlbSite && currentSiteOrigin) {
