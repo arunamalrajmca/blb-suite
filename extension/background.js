@@ -756,23 +756,41 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
     batches.push(allVerses.slice(offset, offset + BLB_MULTIVERSE_MAX_VERSES));
   }
 
-  // Reserve/navigate all batch tabs concurrently. The old loop awaited each
-  // batch's complete lookup, storage tracking update, tab creation, and
-  // navigation before beginning the next one. For PDF selections that expand
-  // into many 200-verse batches, this serialized browser work delayed the
-  // later handoff pages before they could even request their POST slots.
-  // Actual MultiVerse POSTs remain independently rate-limited by the shared
-  // 1.5-second coordinator in multiverse-post.js.
-  const batchResults = await Promise.all(batches.map(async (batchVerses, index) => {
+  // Start the first batch all the way through tab reservation/navigation
+  // before doing more CPU-heavy batch preparation. The previous Promise.all
+  // eagerly ran every callback synchronously, repeatedly expanding/canonicalizing
+  // batches before Chrome could resume its first tab lookup/create operation.
+  // That work was especially visible for large PDF text selections: no tab
+  // appeared until all batches had been prepared. After the first tab exists,
+  // remaining batches can be opened concurrently as before. The shared 1.5s
+  // MultiVerse POST coordinator in multiverse-post.js is intentionally unchanged.
+  const firstBatchVerses = batches[0];
+  const firstBatchResult = await openBlbMultiVerseRefsSingleBatch(
+    compactMultiVerseVerses(firstBatchVerses),
+    !!active,
+    allVerses.length > 1 && firstBatchVerses.length === 1,
+    options.preferredTabId
+  );
+  if (!firstBatchResult?.ok) {
+    return {
+      ok:false, reason:firstBatchResult?.reason || 'batch-open-failed',
+      count:0, batchCount:0, failedBatch:1, results:[]
+    };
+  }
+
+  const batchResults = [{index:0, batchVerses:firstBatchVerses, result:firstBatchResult}];
+  const remainingBatchResults = await Promise.all(batches.slice(1).map(async (batchVerses, offset) => {
+    const index = offset + 1;
     const compactRefs = compactMultiVerseVerses(batchVerses);
     const result = await openBlbMultiVerseRefsSingleBatch(
       compactRefs,
-      index === 0 ? !!active : false,
+      false,
       allVerses.length > 1 && batchVerses.length === 1,
-      index === 0 ? options.preferredTabId : null
+      null
     );
     return {index, batchVerses, result};
   }));
+  batchResults.push(...remainingBatchResults);
 
   const results = [];
   for (const {index, batchVerses, result} of batchResults) {
