@@ -58,6 +58,25 @@
         return;
       }
 
+      const submitAt = Number(slot.submitAt);
+      if (Number.isFinite(submitAt) && submitAt > Date.now()) {
+        logTiming({
+          stage:'scheduled-wait-start',
+          queueRequestedAt,
+          submitAt,
+          scheduledWaitMs:submitAt-Date.now(),
+          sinceHandoffStartMs:Date.now()-handoffStartedAt
+        });
+        await new Promise(resolve => setTimeout(resolve, submitAt - Date.now()));
+        logTiming({
+          stage:'scheduled-wait-finished',
+          queueRequestedAt,
+          submitAt,
+          scheduleLatenessMs:Date.now()-submitAt,
+          sinceHandoffStartMs:Date.now()-handoffStartedAt
+        });
+      }
+
       const form = document.createElement('form');
       form.method = 'post';
       form.acceptCharset = 'UTF-8';
