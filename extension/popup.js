@@ -1347,6 +1347,32 @@ document.addEventListener('click', event => {
   if (!event.target.closest('.backup-wrap')) closeStudyBackupMenu();
 });
 
+
+let popupStateRefreshGeneration = 0;
+async function refreshPopupState() {
+  const generation = ++popupStateRefreshGeneration;
+  try {
+    const state = await getState();
+    // Tab activation/navigation can trigger overlapping refreshes. Never let
+    // an older snapshot overwrite the state for the currently active tab.
+    if (generation === popupStateRefreshGeneration) render(state);
+  } catch (error) {
+    console.error('BLB Suite popup state refresh failed:', error);
+  }
+}
+
+// The popup can remain open while PDF-triggered background tabs are created.
+// Re-evaluate the active tab context as Chrome activates/navigates tabs, so
+// PDF-only restrictions do not remain stale in the popup.
+chrome.tabs.onActivated.addListener(() => { void refreshPopupState(); });
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.url || changeInfo.title || changeInfo.status === 'complete') {
+    void chrome.tabs.query({active:true, currentWindow:true}).then(tabs => {
+      if (tabs[0]?.id === tabId) return refreshPopupState();
+    }).catch(() => {});
+  }
+});
+
 (async () => {
   // A failed tabs/storage read must not leave the toolbar popup permanently
   // hidden. Keep normal rendering unchanged; on initialization failure, expose
