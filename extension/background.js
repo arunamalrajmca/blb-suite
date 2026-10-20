@@ -887,6 +887,11 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         // tab instead of creating an about:blank orphan. Additional batches
         // still reserve their own background tabs. Only use this preference
         // when no existing matching batch tab was found above.
+        const mvText = canonical.refs.map(ref => ref.book + ' ' + ref.chapter + ':' + ref.from + (ref.to != null && ref.to !== ref.from ? '-' + ref.to : '')).join('; ');
+        const handoffParams = new URLSearchParams({mvText});
+        if (pdfFastSubmit) handoffParams.set('mvPdfFast', '1');
+        const handoffUrl = chrome.runtime.getURL('multiverse-post.html') + '?' + handoffParams.toString();
+
         let tab = null;
         let reusedOriginTab = false;
         if (preferredTabId != null) {
@@ -895,23 +900,26 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
             reusedOriginTab = tab?.id != null;
           } catch (_) {}
         }
-        if (!reusedOriginTab) tab = await chrome.tabs.create({url:'about:blank', active:!!active});
+
+        // New handoff tabs should start at the actual extension page rather
+        // than opening about:blank and navigating a second time. The extra
+        // blank-tab creation/update round trip was on the critical path for
+        // every PDF batch and could leave the first invocation visibly idle.
+        if (!reusedOriginTab) {
+          tab = await chrome.tabs.create({url:handoffUrl, active:!!active});
+        } else {
+          try {
+            await chrome.tabs.update(tab.id, {url:handoffUrl, active:!!active});
+          } catch (error) {
+            navigationError = error;
+            await clearTrackedMultiVerseTab(tab.id).catch(()=>{});
+            throw error;
+          }
+        }
         if (tab?.id == null) return null;
         await updateTrackedMultiVerseTabs(map => {
           map[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
         });
-        const mvText = canonical.refs.map(ref => ref.book + ' ' + ref.chapter + ':' + ref.from + (ref.to != null && ref.to !== ref.from ? '-' + ref.to : '')).join('; ');
-        const handoffParams = new URLSearchParams({mvText});
-        if (pdfFastSubmit) handoffParams.set('mvPdfFast', '1');
-        const handoffUrl = chrome.runtime.getURL('multiverse-post.html') + '?' + handoffParams.toString();
-        try {
-          await chrome.tabs.update(tab.id, {url:handoffUrl, active:!!active});
-        } catch (error) {
-          navigationError = error;
-          await clearTrackedMultiVerseTab(tab.id).catch(()=>{});
-          if (!reusedOriginTab) { try { await chrome.tabs.remove(tab.id); } catch (_) {} }
-          throw error;
-        }
         return tab;
       }
     });
