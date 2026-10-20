@@ -3279,6 +3279,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type !== 'blbSuiteMultiVerseHandoffTiming') return false;
+  const entry = message.entry && typeof message.entry === 'object' ? message.entry : {};
+  console.info('[BLB MV timing]', 'handoff' +
+    ' tabId=' + (sender?.tab?.id ?? 'null') +
+    ' stage=' + String(entry.stage || 'unknown') +
+    ' at=' + (entry.at ?? Date.now()) +
+    ' handoffStartedAt=' + (entry.handoffStartedAt ?? '') +
+    ' queueRequestedAt=' + (entry.queueRequestedAt ?? '') +
+    ' sinceHandoffStartMs=' + (entry.sinceHandoffStartMs ?? '') +
+    ' sinceQueueRequestMs=' + (entry.sinceQueueRequestMs ?? '') +
+    ' refChars=' + (entry.refChars ?? '') +
+    ' ok=' + (entry.ok ?? '')
+  );
+  return false;
+});
+
 const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
 // Serialize MultiVerse POST submissions while still creating all destination tabs immediately.
