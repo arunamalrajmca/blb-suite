@@ -2,7 +2,17 @@
   'use strict';
 
   const status = document.getElementById('status');
-  const mvTextFromUrl = new URLSearchParams(location.search).get('mvText') || '';
+  const handoffParams = new URLSearchParams(location.search);
+  const mvTextFromUrl = handoffParams.get('mvText') || '';
+  const handoffStartedAt = Date.now();
+  const logTiming = details => {
+    const entry = {...details, pageUrl:location.href, at:Date.now()};
+    console.info('[BLB MV timing]', JSON.stringify(entry));
+    // Mirror handoff milestones into the service-worker console so all tabs
+    // can be diagnosed from the single Inspect target.
+    try { void chrome.runtime.sendMessage({type:'blbSuiteMultiVerseHandoffTiming', entry}); } catch (_) {}
+  };
+  logTiming({stage:'handoff-script-start', handoffStartedAt, refChars:mvTextFromUrl.length});
 
   const showFailure = message => {
     status.textContent = message;
@@ -16,12 +26,55 @@
         return;
       }
 
-      // Ask the background coordinator for a rate-limited POST slot. All tabs
-      // have already been created/reserved; only network submissions are paced.
-      const slot = await chrome.runtime.sendMessage({type:'blbSuiteAcquireMultiVersePostSlot'}).catch(error => ({ok:false, error:String(error)}));
-      if (!slot?.ok) {
-        showFailure('Unable to queue this Multi-Verse request. Please retry this tab.');
+      // Keep all submissions in the background's shared FIFO queue. The
+      // queue response includes diagnostic detail if admission fails.
+      const queueRequestedAt = Date.now();
+      logTiming({stage:'queue-request-sent', queueRequestedAt, sinceHandoffStartMs:queueRequestedAt-handoffStartedAt, refChars:mvText.length});
+      let slot;
+      let queueError = null;
+      // Extension service workers can occasionally drop a long-lived message
+      // response while a queued timer is pending. Retry once on a fresh message
+      // channel; do not bypass the shared queue or submit twice after a success.
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          slot = await chrome.runtime.sendMessage({
+            type:'blbSuiteAcquireMultiVersePostSlot',
+          });
+          queueError = null;
+          break;
+        } catch (error) {
+          queueError = error;
+          if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 150));
+        }
+      }
+      if (queueError) {
+        showFailure('Multi-Verse queue connection failed after retry: ' + String(queueError));
         return;
+      }
+      logTiming({stage:'queue-response-received', queueRequestedAt, sinceQueueRequestMs:Date.now()-queueRequestedAt, sinceHandoffStartMs:Date.now()-handoffStartedAt, ok:!!slot?.ok});
+      if (!slot?.ok) {
+        const detail = slot?.error ? ' Details: ' + String(slot.error) : ' The background queue did not return a successful response.';
+        showFailure('Unable to queue this Multi-Verse request.' + detail + ' Please retry this tab.');
+        return;
+      }
+
+      const submitAt = Number(slot.submitAt);
+      if (Number.isFinite(submitAt) && submitAt > Date.now()) {
+        logTiming({
+          stage:'scheduled-wait-start',
+          queueRequestedAt,
+          submitAt,
+          scheduledWaitMs:submitAt-Date.now(),
+          sinceHandoffStartMs:Date.now()-handoffStartedAt
+        });
+        await new Promise(resolve => setTimeout(resolve, submitAt - Date.now()));
+        logTiming({
+          stage:'scheduled-wait-finished',
+          queueRequestedAt,
+          submitAt,
+          scheduleLatenessMs:Date.now()-submitAt,
+          sinceHandoffStartMs:Date.now()-handoffStartedAt
+        });
       }
 
       const form = document.createElement('form');
@@ -50,6 +103,7 @@
         form.appendChild(input);
       }
       document.body.appendChild(form);
+      logTiming({stage:'form-submit', queueRequestedAt, sinceHandoffStartMs:Date.now()-handoffStartedAt, sinceQueueRequestMs:Date.now()-queueRequestedAt});
       form.submit();
     } catch (error) {
       showFailure('Unable to submit the requested references: ' + String(error));
