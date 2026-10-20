@@ -884,26 +884,30 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
     result = await openBlbDestinationByIdentity({
       key:`multiverse|${verseSetKey}`, active:!!active,
       findExisting:async () => {
-        const multiVerseTabs = await chrome.tabs.query({url:[
-          'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
-          'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
-        ]});
+        // These independent lookups used to run serially before any handoff
+        // tab could be created. Start both immediately to keep the first PDF
+        // result off the storage/query critical path.
+        const [multiVerseTabs, tracked] = await Promise.all([
+          chrome.tabs.query({url:[
+            'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
+            'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
+          ]}),
+          getTrackedMultiVerseTabs()
+        ]);
         // about:blank is not reliably matched by Chrome URL filters. Recover
         // only tracked reservations for this batch by tab ID instead of
         // querying every unrelated browser tab.
-        const tracked = await getTrackedMultiVerseTabs();
-        const reservedTabs = [];
-        for (const [id, entry] of Object.entries(tracked)) {
-          if (entry?.key !== verseSetKey) continue;
-          try {
-            const tab = await chrome.tabs.get(Number(id));
-            const urls = [tab?.url, tab?.pendingUrl].map(value => String(value || '')).filter(Boolean);
-            const handoffUrl = chrome.runtime.getURL('multiverse-post.html');
-            if (urls.some(url => /^about:blank(?:[#?].*)?$/i.test(url) || url.startsWith(handoffUrl))) {
-              reservedTabs.push(tab);
-            }
-          } catch (_) {}
-        }
+        const handoffUrl = chrome.runtime.getURL('multiverse-post.html');
+        const reservedTabs = (await Promise.all(Object.entries(tracked)
+          .filter(([, entry]) => entry?.key === verseSetKey)
+          .map(async ([id]) => {
+            try {
+              const tab = await chrome.tabs.get(Number(id));
+              const urls = [tab?.url, tab?.pendingUrl].map(value => String(value || '')).filter(Boolean);
+              return urls.some(url => /^about:blank(?:[#?].*)?$/i.test(url) || url.startsWith(handoffUrl))
+                ? tab : null;
+            } catch (_) { return null; }
+          }))).filter(Boolean);
         return findMatchingMultiVerseTab(verseSetKey, [...multiVerseTabs, ...reservedTabs]);
       },
       create:async () => {
