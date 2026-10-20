@@ -28,14 +28,27 @@
       // Keep all submissions in the background's shared FIFO queue. The
       // queue response includes diagnostic detail if admission fails.
       let slot;
-      try {
-        trace('queue-request-start');
-        slot = await chrome.runtime.sendMessage({
-          type:'blbSuiteAcquireMultiVersePostSlot',
-          pdfFastSubmit:isPdfFastSubmit
-        });
-      } catch (error) {
-        showFailure('Multi-Verse queue connection failed: ' + String(error));
+      let queueError = null;
+      // Extension service workers can occasionally drop a long-lived message
+      // response while a queued timer is pending. Retry once on a fresh message
+      // channel; do not bypass the shared queue or submit twice after a success.
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          trace('queue-request-start', {attempt});
+          slot = await chrome.runtime.sendMessage({
+            type:'blbSuiteAcquireMultiVersePostSlot',
+            pdfFastSubmit:isPdfFastSubmit
+          });
+          queueError = null;
+          break;
+        } catch (error) {
+          queueError = error;
+          trace('queue-request-error', {attempt, error:String(error)});
+          if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 150));
+        }
+      }
+      if (queueError) {
+        showFailure('Multi-Verse queue connection failed after retry: ' + String(queueError));
         return;
       }
       trace('queue-response', {ok:!!slot?.ok});
