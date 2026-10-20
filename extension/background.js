@@ -2889,20 +2889,26 @@ chrome.tabs.onRemoved.addListener(tabId => {
   }).catch(()=>{});
 });
 
-// Visibility is global for extension context-menu items. Re-sync whenever
-// the active tab changes; otherwise a BLB result tab can leave the PDF item
-// hidden when the user returns to the PDF, until the popup happens to refresh it.
-chrome.tabs.onActivated.addListener(({tabId, windowId}) => {
-  chrome.tabs.get(tabId).then(tab => {
-    if (tab?.windowId !== windowId) return;
-    syncSelectionContextMenus(tab).catch(() => {});
+// Context-menu visibility is global across browser windows. Never derive it
+// from the tab-activation event alone: opening or focusing a destination tab
+// in a background window can otherwise hide the menu for the user's PDF/web
+// tab while a MultiVerse request is still being processed. Always synchronize
+// from the active tab in the last-focused window.
+chrome.tabs.onActivated.addListener(() => {
+  chrome.tabs.query({active:true, lastFocusedWindow:true}).then(tabs => {
+    if (tabs[0]) syncSelectionContextMenus(tabs[0]).catch(() => {});
   }).catch(() => {});
 });
 
 chrome.windows.onFocusChanged.addListener(windowId => {
   if (windowId === chrome.windows.WINDOW_ID_NONE) return;
   chrome.tabs.query({active:true, windowId}).then(tabs => {
-    syncSelectionContextMenus(tabs[0]).catch(() => {});
+    // Ignore a background window's stale activation; only synchronize once
+    // it is actually the focused window.
+    chrome.windows.getLastFocused().then(focused => {
+      if (focused?.id !== windowId) return;
+      if (tabs[0]) syncSelectionContextMenus(tabs[0]).catch(() => {});
+    }).catch(() => {});
   }).catch(() => {});
 });
 
