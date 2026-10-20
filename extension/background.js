@@ -773,7 +773,8 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
       allVerses.length > 1 && batchVerses.length === 1,
       index === 0 ? options.preferredTabId : null,
       batchVerses,
-      !!options.pdfFastSubmit
+      !!options.pdfFastSubmit,
+      options.pdfTraceId || ''
     );
     return result?.ok
       ? {...result, count:batchVerses.length, batch:index + 1}
@@ -834,7 +835,7 @@ async function openBlbDestinationByIdentity({key, active = false, findExisting, 
   }
 }
 
-async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false, preferredTabId = null, preparedVerses = null, pdfFastSubmit = false) {
+async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false, preferredTabId = null, preparedVerses = null, pdfFastSubmit = false, pdfTraceId = '') {
   // Enforce the cap again at the final handoff boundary. This ensures the
   // references actually stored for the MultiVerse textbox cannot expand to
   // more than 200 individual verses after canonicalization.
@@ -890,6 +891,7 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         const mvText = canonical.refs.map(ref => ref.book + ' ' + ref.chapter + ':' + ref.from + (ref.to != null && ref.to !== ref.from ? '-' + ref.to : '')).join('; ');
         const handoffParams = new URLSearchParams({mvText});
         if (pdfFastSubmit) handoffParams.set('mvPdfFast', '1');
+        if (pdfTraceId) handoffParams.set('mvPdfTrace', pdfTraceId);
         const handoffUrl = chrome.runtime.getURL('multiverse-post.html') + '?' + handoffParams.toString();
 
         let tab = null;
@@ -905,6 +907,7 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         // than opening about:blank and navigating a second time. The extra
         // blank-tab creation/update round trip was on the critical path for
         // every PDF batch and could leave the first invocation visibly idle.
+        if (pdfFastSubmit) console.info('[BLB PDF MultiVerse timing]', JSON.stringify({id:pdfTraceId || 'untracked', stage:'tab-create-start', at:Date.now(), active:!!active, reusedOriginTab}));
         if (!reusedOriginTab) {
           tab = await chrome.tabs.create({url:handoffUrl, active:!!active});
         } else {
@@ -916,6 +919,7 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
             throw error;
           }
         }
+        if (pdfFastSubmit) console.info('[BLB PDF MultiVerse timing]', JSON.stringify({id:pdfTraceId || 'untracked', stage:'tab-create-complete', at:Date.now(), tabId:tab?.id, reusedOriginTab}));
         if (tab?.id == null) return null;
         await updateTrackedMultiVerseTabs(map => {
           map[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
