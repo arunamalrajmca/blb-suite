@@ -6230,7 +6230,34 @@ async function shouldShowBlbContextMenu(tab, selectionText) {
 
 // Serialize native context-menu operations across async tab/storage events.
 let selectionMenuOperation = Promise.resolve();
+let selectionMenuKnownPresent = false;
 let pdfSelectionMenuKnownPresent = false;
+
+async function ensureWebSelectionContextMenu() {
+  if (selectionMenuKnownPresent) return true;
+  try {
+    await chrome.contextMenus.update('blb-suite-web-selection', {
+      title:'Show on BLB\tAlt+B',
+      visible:false
+    });
+    selectionMenuKnownPresent = true;
+    return true;
+  } catch (_) {}
+  try {
+    await chrome.contextMenus.create({
+      id:'blb-suite-web-selection',
+      title:'Show on BLB\tAlt+B',
+      contexts:['selection'],
+      documentUrlPatterns:['http://*/*','https://*/*'],
+      visible:false
+    });
+    selectionMenuKnownPresent = true;
+    return true;
+  } catch (_) {
+    selectionMenuKnownPresent = false;
+    return false;
+  }
+}
 
 async function ensurePdfSelectionContextMenu() {
   if (pdfSelectionMenuKnownPresent) return true;
