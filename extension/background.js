@@ -6478,6 +6478,13 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   }
   if (!text) return;
   if (!(await shouldShowBlbContextMenu(tab, text))) return;
+  // The PDF action opens/activates BLB tabs immediately, so the popup may no
+  // longer see the originating PDF as the active tab. Preserve that context
+  // briefly for the popup to disable Double-click KJV during and just after
+  // the tab-opening workflow.
+  if (menuId === 'blb-suite-pdf-selection') {
+    try { await chrome.storage.local.set({pdfSelectionContextUntil:Date.now() + 15000}); } catch (_) {}
+  }
   try {
     if (normalizeSiteHostname(hostnameFromTabUrl(tab?.url)) === BLB_HOSTNAME) {
       await openBlbPageSelection(text, {activeIfNew:true, activateExisting:true});
