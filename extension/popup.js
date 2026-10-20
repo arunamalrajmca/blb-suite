@@ -1,5 +1,6 @@
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
 let currentSiteOrigin = '';
+let currentIsPdfContext = false;
 
 function isSensitiveSiteHostname(value) {
   return BLBShared.isSensitiveSiteHostname(value);
@@ -72,13 +73,14 @@ async function getState() {
   const isBlbSite = siteKey === BLB_HOSTNAME;
   const isSensitiveSite = isSensitiveSiteHostname(siteKey);
   const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
+  currentIsPdfContext = isPdfContext;
   // PDF context is deterministic from the active tab URL/title. Render it
   // without waiting for background default-status messaging or host-permission
   // checks; those checks are only relevant to ordinary website contexts.
   if (isPdfContext) {
     return {
       master: data.masterEnabled !== false,
-      pageButton: false,
+      pageButton: Object.prototype.hasOwnProperty.call(pageSites, siteKey) && pageSites[siteKey] === true,
       doubleClick: false,
       redirect: data.redirectEnabled !== false,
       siteKey,
@@ -1184,14 +1186,14 @@ async function setIndependentSiteFeature(feature, on) {
   // Start pinning the explicit choice immediately. The popup can be closed by
   // Chrome while its permission prompt is open; waiting for getState() first
   // delayed this durable write until after that interruption.
-  const pinPromise = on
+  const pinPromise = on && !currentIsPdfContext
     ? pinSiteFeatureChoice(feature, otherFeatureEnabled)
-    : Promise.resolve();
+    : Promise.resolve({ok:true});
 
   // permissions.request must still be invoked synchronously in the original
   // change-handler call stack (before any await).
   let accessPromise = Promise.resolve(true);
-  if (on && currentSiteOrigin) {
+  if (on && currentSiteOrigin && !currentIsPdfContext) {
     try {
       accessPromise = chrome.permissions.request({origins:[currentSiteOrigin]})
         .then(granted => granted === true)
@@ -1209,7 +1211,8 @@ async function setIndependentSiteFeature(feature, on) {
   }
 
   if (on) {
-    const [granted] = await Promise.all([accessPromise, pinPromise]);
+    const [accessGranted, pinResult] = await Promise.all([accessPromise, pinPromise]);
+    const granted = accessGranted && (currentIsPdfContext || pinResult?.ok === true);
     if (!granted) {
       if (feature === 'pageButton') await setPageButton(false);
       else if (feature === 'doubleClick') await setDoubleClick(false);
