@@ -1347,32 +1347,6 @@ document.addEventListener('click', event => {
   if (!event.target.closest('.backup-wrap')) closeStudyBackupMenu();
 });
 
-
-let popupStateRefreshGeneration = 0;
-async function refreshPopupState() {
-  const generation = ++popupStateRefreshGeneration;
-  try {
-    const state = await getState();
-    // Tab activation/navigation can trigger overlapping refreshes. Never let
-    // an older snapshot overwrite the state for the currently active tab.
-    if (generation === popupStateRefreshGeneration) render(state);
-  } catch (error) {
-    console.error('BLB Suite popup state refresh failed:', error);
-  }
-}
-
-// The popup can remain open while PDF-triggered background tabs are created.
-// Re-evaluate the active tab context as Chrome activates/navigates tabs, so
-// PDF-only restrictions do not remain stale in the popup.
-chrome.tabs.onActivated.addListener(() => { void refreshPopupState(); });
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.url || changeInfo.title || changeInfo.status === 'complete') {
-    void chrome.tabs.query({active:true, currentWindow:true}).then(tabs => {
-      if (tabs[0]?.id === tabId) return refreshPopupState();
-    }).catch(() => {});
-  }
-});
-
 (async () => {
   // A failed tabs/storage read must not leave the toolbar popup permanently
   // hidden. Keep normal rendering unchanged; on initialization failure, expose
@@ -1390,17 +1364,13 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
       ]);
       const url = String(tabs[0]?.url || '');
       const siteKey = getSiteKey(url, tabs[0]?.title || '');
-      const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
       const pageSites = saved.pageSelectionButtonSites && typeof saved.pageSelectionButtonSites === 'object' ? saved.pageSelectionButtonSites : {};
       const doubleSites = saved.doubleClickBlbSites && typeof saved.doubleClickBlbSites === 'object' ? saved.doubleClickBlbSites : {};
       document.getElementById('master').checked = saved.masterEnabled !== false;
       document.getElementById('redirectEnabled').checked = saved.redirectEnabled === true;
       document.getElementById('pageButton').checked = Object.prototype.hasOwnProperty.call(pageSites, siteKey) && pageSites[siteKey] === true;
-      // Even when live permission inspection fails, never show Double Click KJV
-      // as enabled in a detected PDF context.
-      document.getElementById('doubleClick').checked = !isPdfContext && Object.prototype.hasOwnProperty.call(doubleSites, siteKey) && doubleSites[siteKey] === true;
-      document.getElementById('doubleClick').disabled = true;
-      for (const id of ['master', 'pageButton', 'redirectEnabled']) document.getElementById(id).disabled = true;
+      document.getElementById('doubleClick').checked = Object.prototype.hasOwnProperty.call(doubleSites, siteKey) && doubleSites[siteKey] === true;
+      for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
     } catch (fallbackError) {
       console.error('BLB Suite popup saved-setting fallback failed:', fallbackError);
       for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
