@@ -246,7 +246,12 @@ test('b v1 reuses its originating tab and leaves no blank command tab', async ({
     };
   });
 
-  expect(result.originUrl).toContain('blueletterbible.org/tools/MultiVerse.cfm');
+  // The originating tab first loads multiverse-post.html to submit the form.
+  // Wait for the POST navigation instead of asserting the intermediate URL.
+  await expect.poll(() => extensionWorker.evaluate(async id =>
+    (await chrome.tabs.get(id).catch(() => null))?.url || '', result.originId),
+    {timeout:15000}
+  ).toContain('blueletterbible.org/tools/MultiVerse.cfm');
   expect(result.blankTabs).not.toContain(result.originId);
   expect(result.trackedIds).toContain(result.originId);
 });
@@ -284,7 +289,13 @@ test('case-sensitive search reuses the originating tab and leaves no blank orpha
     };
   });
   expect(result.handled).toBe(true);
-  expect(result.originUrl).toContain('blueletterbible.org/tools/MultiVerse.cfm');
+  // The first batch uses the handoff page before its POST reaches BLB. The
+  // queue intentionally spaces submissions, so 100 ms is not enough to
+  // observe the final URL reliably.
+  await expect.poll(() => extensionWorker.evaluate(async id =>
+    (await chrome.tabs.get(id).catch(() => null))?.url || '', result.originId),
+    {timeout:15000}
+  ).toContain('blueletterbible.org/tools/MultiVerse.cfm');
   expect(result.blankTabs).not.toContain(result.originId);
   expect(result.tracked.map(tab => tab.id)).toContain(result.originId);
   await expect.poll(() => submittedPayloads.length).toBe(2);
