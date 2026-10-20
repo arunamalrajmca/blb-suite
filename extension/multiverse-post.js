@@ -5,6 +5,12 @@
   const handoffParams = new URLSearchParams(location.search);
   const mvTextFromUrl = handoffParams.get('mvText') || '';
   const isPdfFastSubmit = handoffParams.get('mvPdfFast') === '1';
+  const pdfTraceId = handoffParams.get('mvPdfTrace') || 'untracked';
+  const pdfTraceStart = Date.now();
+  const trace = (stage, details = {}) => {
+    if (isPdfFastSubmit) console.info('[BLB PDF MultiVerse timing]', JSON.stringify({id:pdfTraceId, stage, elapsedMs:Date.now()-pdfTraceStart, at:Date.now(), ...details}));
+  };
+  trace('handoff-page-start', {readyState:document.readyState, textChars:mvTextFromUrl.length});
 
   const showFailure = message => {
     status.textContent = message;
@@ -13,6 +19,7 @@
   async function submitDirectPost() {
     try {
       const mvText = mvTextFromUrl.trim();
+      trace('submit-handler-start', {textChars:mvText.length});
       if (!mvText) {
         showFailure('No references were supplied for this tab. Please retry the selection.');
         return;
@@ -22,6 +29,7 @@
       // queue response includes diagnostic detail if admission fails.
       let slot;
       try {
+        trace('queue-request-start');
         slot = await chrome.runtime.sendMessage({
           type:'blbSuiteAcquireMultiVersePostSlot',
           pdfFastSubmit:isPdfFastSubmit
@@ -30,6 +38,7 @@
         showFailure('Multi-Verse queue connection failed: ' + String(error));
         return;
       }
+      trace('queue-response', {ok:!!slot?.ok});
       if (!slot?.ok) {
         const detail = slot?.error ? ' Details: ' + String(slot.error) : ' The background queue did not return a successful response.';
         showFailure('Unable to queue this Multi-Verse request.' + detail + ' Please retry this tab.');
@@ -62,6 +71,7 @@
         form.appendChild(input);
       }
       document.body.appendChild(form);
+      trace('form-submit', {action:form.action, fields:Object.keys(fields).length});
       form.submit();
     } catch (error) {
       showFailure('Unable to submit the requested references: ' + String(error));
