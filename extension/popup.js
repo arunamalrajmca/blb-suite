@@ -1344,6 +1344,31 @@ document.addEventListener('click', event => {
 });
 
 (async () => {
+  // Hydrate global switches from storage before site-specific checks complete.
+  // getState() also waits for the active tab, default-site lookup, and host
+  // permission checks; rendering only after all of those finish made the
+  // persisted Suite switch look temporarily OFF while destination tabs loaded.
+  // Global settings do not depend on the active tab, so render them directly
+  // from the first storage read and let the full render reconcile site toggles.
+  try {
+    const savedGlobal = await chrome.storage.local.get({
+      masterEnabled:true,
+      redirectEnabled:false
+    });
+    const masterOn = savedGlobal.masterEnabled !== false;
+    const master = document.getElementById('master');
+    const masterSetting = document.getElementById('masterSetting');
+    const masterState = document.getElementById('masterState');
+    const redirect = document.getElementById('redirectEnabled');
+    if (master) master.checked = masterOn;
+    if (masterSetting) masterSetting.classList.toggle('on', masterOn);
+    if (masterState) masterState.textContent = masterOn ? 'On' : 'Off';
+    if (redirect) redirect.checked = savedGlobal.redirectEnabled !== false;
+    if (redirect) redirect.disabled = !masterOn;
+  } catch (error) {
+    console.warn('BLB Suite could not hydrate global switches immediately:', error);
+  }
+
   // A failed tabs/storage read must not leave the toolbar popup permanently
   // hidden. Keep normal rendering unchanged; on initialization failure, expose
   // the existing UI so the user can recover instead of seeing a blank popup.
