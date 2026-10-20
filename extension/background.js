@@ -769,7 +769,8 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
       compactRefs,
       index === 0 ? !!active : false,
       allVerses.length > 1 && batchVerses.length === 1,
-      index === 0 ? options.preferredTabId : null
+      index === 0 ? options.preferredTabId : null,
+      batchVerses
     );
     if (!result?.ok) {
       return {
@@ -830,11 +831,14 @@ async function openBlbDestinationByIdentity({key, active = false, findExisting, 
   }
 }
 
-async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false, preferredTabId = null) {
-  // Enforce the cap again at the final handoff boundary. This ensures the
-  // references actually stored for the MultiVerse textbox cannot expand to
-  // more than 200 individual verses after canonicalization.
-  const finalVerses = expandMultiVerseRefsToVerses(refs).slice(0, BLB_MULTIVERSE_MAX_VERSES);
+async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false, preferredTabId = null, preparedVerses = null) {
+  // The serialized caller has already expanded and deduplicated the complete
+  // request, then sliced this batch to the 200-verse limit. Reuse that prepared
+  // batch rather than expanding the same verses again at every handoff.
+  // Keep the defensive expansion for any future/direct caller that omits it.
+  const finalVerses = (Array.isArray(preparedVerses)
+    ? preparedVerses
+    : expandMultiVerseRefsToVerses(refs)).slice(0, BLB_MULTIVERSE_MAX_VERSES);
   const finalRefs = compactMultiVerseVerses(finalVerses);
   const canonical = canonicalMultiVerseSet(finalRefs);
   if (!canonical.key || (finalVerses.length < 2 && !allowSingleVerseBatch) || !canonical.refs.length) {
@@ -847,7 +851,7 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
   // Restrict the lookup to BLB MultiVerse handoff tabs rather than every
   // browser tab. This keeps MultiVerse selection latency independent of the
   // user's total tab count.
-  const verseSetKey = canonicalMultiVerseSet(finalVerses).key;
+  const verseSetKey = canonical.key;
   let navigationError = null;
   let result;
   try {
