@@ -6195,8 +6195,13 @@ function pageSelectionSettingKeyFromTab(tab) {
 }
 
 function isPdfViewerTab(tab) {
+  const rawUrl = String(tab?.url || tab?.pendingUrl || '');
+  let decodedUrl = rawUrl;
+  try { decodedUrl = decodeURIComponent(rawUrl); } catch (_) {}
+  const title = String(tab?.title || '');
+  const isPdfUrl = /\.pdf(?:$|[?#&\/])/i.test(decodedUrl) || /\.pdf(?:$|\s)/i.test(title);
   const key = pageSelectionSettingKeyFromTab(tab);
-  return key === '__blb_local_pdf__' || key === '__blb_pdf_viewer__';
+  return isPdfUrl || key === '__blb_local_pdf__' || key === '__blb_pdf_viewer__';
 }
 
 async function isPageButtonEnabledForHostname(hostname, title = '') {
@@ -6240,7 +6245,7 @@ async function ensurePdfSelectionContextMenu() {
       id:'blb-suite-pdf-selection',
       title:'Show on BLB\tAlt+B',
       contexts:['selection'],
-      documentUrlPatterns:['file:///*.pdf'],
+      documentUrlPatterns:['file:///*.pdf','http://*/*.pdf','https://*/*.pdf'],
       visible:false
     });
     pdfSelectionMenuKnownPresent = true;
