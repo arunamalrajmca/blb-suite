@@ -3318,7 +3318,11 @@ const pendingPdfPostQueues = new Map();
 function getPdfPostQueue(traceId, count) {
   let queue = pendingPdfPostQueues.get(traceId);
   if (!queue) {
-    queue = {nextIndex:0, count:Math.max(1, Number(count) || 1), waiting:new Map(), skipped:new Set(), running:false};
+    // PDF batch 0 is opened through the direct, fast MultiVerse URL and does
+    // not participate in the extension handoff POST-slot queue. Start ordered
+    // queue admission at batch 1 so later batches never wait for a slot that
+    // batch 0 will not request.
+    queue = {nextIndex:1, count:Math.max(1, Number(count) || 1), waiting:new Map(), skipped:new Set(), running:false};
     pendingPdfPostQueues.set(traceId, queue);
   } else {
     queue.count = Math.max(queue.count, Math.max(1, Number(count) || 1));
