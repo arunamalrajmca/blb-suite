@@ -6,6 +6,8 @@
   const mvTextFromUrl = handoffParams.get('mvText') || '';
   const isPdfFastSubmit = handoffParams.get('mvPdfFast') === '1';
   const pdfTraceId = handoffParams.get('mvPdfTrace') || 'untracked';
+  const pdfBatchIndex = Number(handoffParams.get('mvPdfBatchIndex') || 0);
+  const pdfBatchCount = Number(handoffParams.get('mvPdfBatchCount') || 1);
   const pdfTraceStart = Date.now();
   const trace = (stage, details = {}) => {
     if (isPdfFastSubmit) console.info('[BLB PDF MultiVerse timing]', JSON.stringify({id:pdfTraceId, stage, elapsedMs:Date.now()-pdfTraceStart, at:Date.now(), ...details}));
@@ -37,7 +39,10 @@
           trace('queue-request-start', {attempt});
           slot = await chrome.runtime.sendMessage({
             type:'blbSuiteAcquireMultiVersePostSlot',
-            pdfFastSubmit:isPdfFastSubmit
+            pdfFastSubmit:isPdfFastSubmit,
+            pdfTraceId,
+            pdfBatchIndex,
+            pdfBatchCount
           });
           queueError = null;
           break;
