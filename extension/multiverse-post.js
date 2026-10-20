@@ -5,7 +5,14 @@
   const handoffParams = new URLSearchParams(location.search);
   const mvTextFromUrl = handoffParams.get('mvText') || '';
   const handoffStartedAt = Date.now();
-  console.info('[BLB MV timing]', {stage:'handoff-script-start', at:handoffStartedAt, refChars:mvTextFromUrl.length});
+  const logTiming = details => {
+    const entry = {...details, pageUrl:location.href, at:Date.now()};
+    console.info('[BLB MV timing]', JSON.stringify(entry));
+    // Mirror handoff milestones into the service-worker console so all tabs
+    // can be diagnosed from the single Inspect target.
+    try { void chrome.runtime.sendMessage({type:'blbSuiteMultiVerseHandoffTiming', entry}); } catch (_) {}
+  };
+  logTiming({stage:'handoff-script-start', handoffStartedAt, refChars:mvTextFromUrl.length});
 
   const showFailure = message => {
     status.textContent = message;
@@ -22,7 +29,7 @@
       // Keep all submissions in the background's shared FIFO queue. The
       // queue response includes diagnostic detail if admission fails.
       const queueRequestedAt = Date.now();
-      console.info('[BLB MV timing]', {stage:'queue-request-sent', at:queueRequestedAt, sinceHandoffStartMs:queueRequestedAt-handoffStartedAt, refChars:mvText.length});
+      logTiming({stage:'queue-request-sent', queueRequestedAt, sinceHandoffStartMs:queueRequestedAt-handoffStartedAt, refChars:mvText.length});
       let slot;
       let queueError = null;
       // Extension service workers can occasionally drop a long-lived message
@@ -44,7 +51,7 @@
         showFailure('Multi-Verse queue connection failed after retry: ' + String(queueError));
         return;
       }
-      console.info('[BLB MV timing]', {stage:'queue-response-received', at:Date.now(), sinceQueueRequestMs:Date.now()-queueRequestedAt, sinceHandoffStartMs:Date.now()-handoffStartedAt, ok:!!slot?.ok});
+      logTiming({stage:'queue-response-received', queueRequestedAt, sinceQueueRequestMs:Date.now()-queueRequestedAt, sinceHandoffStartMs:Date.now()-handoffStartedAt, ok:!!slot?.ok});
       if (!slot?.ok) {
         const detail = slot?.error ? ' Details: ' + String(slot.error) : ' The background queue did not return a successful response.';
         showFailure('Unable to queue this Multi-Verse request.' + detail + ' Please retry this tab.');
@@ -77,7 +84,7 @@
         form.appendChild(input);
       }
       document.body.appendChild(form);
-      console.info('[BLB MV timing]', {stage:'form-submit', at:Date.now(), sinceHandoffStartMs:Date.now()-handoffStartedAt, sinceQueueRequestMs:Date.now()-queueRequestedAt});
+      logTiming({stage:'form-submit', queueRequestedAt, sinceHandoffStartMs:Date.now()-handoffStartedAt, sinceQueueRequestMs:Date.now()-queueRequestedAt});
       form.submit();
     } catch (error) {
       showFailure('Unable to submit the requested references: ' + String(error));
