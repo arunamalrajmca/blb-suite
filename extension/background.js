@@ -761,10 +761,9 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
     batches.push(allVerses.slice(offset, offset + BLB_MULTIVERSE_MAX_VERSES));
   }
 
-  // Prepare each batch's destination tab concurrently. The global request
-  // queue above still serializes separate user requests, while each batch keeps
-  // its own identity lock and POST submission slot. This avoids making batch
-  // N wait for batch N-1's tab query/reservation/navigation to finish.
+  // Create all handoff tabs concurrently so every requested batch starts
+  // loading immediately. Every ready handoff uses the same shared FIFO POST
+  // queue and normal submission interval, regardless of where it originated.
   const batchResults = await Promise.all(batches.map(async (batchVerses, index) => {
     const compactRefs = compactMultiVerseVerses(batchVerses);
     const result = await openBlbMultiVerseRefsSingleBatch(
@@ -772,7 +771,7 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
       index === 0 ? !!active : false,
       allVerses.length > 1 && batchVerses.length === 1,
       index === 0 ? options.preferredTabId : null,
-      batchVerses
+      batchVerses,
     );
     return result?.ok
       ? {...result, count:batchVerses.length, batch:index + 1}
@@ -859,26 +858,30 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
     result = await openBlbDestinationByIdentity({
       key:`multiverse|${verseSetKey}`, active:!!active,
       findExisting:async () => {
-        const multiVerseTabs = await chrome.tabs.query({url:[
-          'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
-          'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
-        ]});
+        // These independent lookups used to run serially before any handoff
+        // tab could be created. Start both immediately to keep the first PDF
+        // result off the storage/query critical path.
+        const [multiVerseTabs, tracked] = await Promise.all([
+          chrome.tabs.query({url:[
+            'https://www.blueletterbible.org/tools/MultiVerse.cfm*',
+            'https://www.blueletterbible.org/search/search.cfm?*blbSuiteMultiVerse=1*'
+          ]}),
+          getTrackedMultiVerseTabs()
+        ]);
         // about:blank is not reliably matched by Chrome URL filters. Recover
         // only tracked reservations for this batch by tab ID instead of
         // querying every unrelated browser tab.
-        const tracked = await getTrackedMultiVerseTabs();
-        const reservedTabs = [];
-        for (const [id, entry] of Object.entries(tracked)) {
-          if (entry?.key !== verseSetKey) continue;
-          try {
-            const tab = await chrome.tabs.get(Number(id));
-            const urls = [tab?.url, tab?.pendingUrl].map(value => String(value || '')).filter(Boolean);
-            const handoffUrl = chrome.runtime.getURL('multiverse-post.html');
-            if (urls.some(url => /^about:blank(?:[#?].*)?$/i.test(url) || url.startsWith(handoffUrl))) {
-              reservedTabs.push(tab);
-            }
-          } catch (_) {}
-        }
+        const handoffUrl = chrome.runtime.getURL('multiverse-post.html');
+        const reservedTabs = (await Promise.all(Object.entries(tracked)
+          .filter(([, entry]) => entry?.key === verseSetKey)
+          .map(async ([id]) => {
+            try {
+              const tab = await chrome.tabs.get(Number(id));
+              const urls = [tab?.url, tab?.pendingUrl].map(value => String(value || '')).filter(Boolean);
+              return urls.some(url => /^about:blank(?:[#?].*)?$/i.test(url) || url.startsWith(handoffUrl))
+                ? tab : null;
+            } catch (_) { return null; }
+          }))).filter(Boolean);
         return findMatchingMultiVerseTab(verseSetKey, [...multiVerseTabs, ...reservedTabs]);
       },
       create:async () => {
@@ -886,6 +889,13 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         // tab instead of creating an about:blank orphan. Additional batches
         // still reserve their own background tabs. Only use this preference
         // when no existing matching batch tab was found above.
+        const mvText = canonical.refs.map(ref => ref.book + ' ' + ref.chapter + ':' + ref.from + (ref.to != null && ref.to !== ref.from ? '-' + ref.to : '')).join('; ');
+        const handoffParams = new URLSearchParams({mvText});
+        // Keep the handoff URL limited to the requested reference text.
+        const handoffUrl = chrome.runtime.getURL('multiverse-post.html') + '?' + handoffParams.toString();
+
+        const tabCreateStartedAt = Date.now();
+        console.info('[BLB MV timing]', {stage:'tab-create-start', at:tabCreateStartedAt, active:!!active, preferredTabId:preferredTabId ?? null, refCount:canonical.refs.length, refChars:mvText.length});
         let tab = null;
         let reusedOriginTab = false;
         if (preferredTabId != null) {
@@ -894,21 +904,28 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
             reusedOriginTab = tab?.id != null;
           } catch (_) {}
         }
-        if (!reusedOriginTab) tab = await chrome.tabs.create({url:'about:blank', active:!!active});
+
+        // New handoff tabs should start at the actual extension page rather
+        // than opening about:blank and navigating a second time. The extra
+        // blank-tab creation/update round trip was on the critical path for
+        // every PDF batch and could leave the first invocation visibly idle.
+        if (!reusedOriginTab) {
+          tab = await chrome.tabs.create({url:handoffUrl, active:!!active});
+        } else {
+          try {
+            await chrome.tabs.update(tab.id, {url:handoffUrl, active:!!active});
+          } catch (error) {
+            navigationError = error;
+            await clearTrackedMultiVerseTab(tab.id).catch(()=>{});
+            throw error;
+          }
+        }
         if (tab?.id == null) return null;
+        console.info('[BLB MV timing]', {stage:'tab-created', at:Date.now(), tabId:tab.id, tabCreateDurationMs:Date.now()-tabCreateStartedAt, reusedOriginTab});
         await updateTrackedMultiVerseTabs(map => {
           map[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
         });
-        const mvText = canonical.refs.map(ref => ref.book + ' ' + ref.chapter + ':' + ref.from + (ref.to != null && ref.to !== ref.from ? '-' + ref.to : '')).join('; ');
-        const handoffUrl = chrome.runtime.getURL('multiverse-post.html') + '?' + new URLSearchParams({mvText}).toString();
-        try {
-          await chrome.tabs.update(tab.id, {url:handoffUrl, active:!!active});
-        } catch (error) {
-          navigationError = error;
-          await clearTrackedMultiVerseTab(tab.id).catch(()=>{});
-          if (!reusedOriginTab) { try { await chrome.tabs.remove(tab.id); } catch (_) {} }
-          throw error;
-        }
+        console.info('[BLB MV timing]', {stage:'tab-tracking-finished', at:Date.now(), tabId:tab.id, totalTabSetupDurationMs:Date.now()-tabCreateStartedAt});
         return tab;
       }
     });
@@ -3262,30 +3279,73 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteAcquireMultiVersePostSlot","blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
+chrome.runtime.onMessage.addListener((message, sender) => {
+  if (message?.type !== 'blbSuiteMultiVerseHandoffTiming') return false;
+  const entry = message.entry && typeof message.entry === 'object' ? message.entry : {};
+  console.info('[BLB MV timing]', 'handoff' +
+    ' tabId=' + (sender?.tab?.id ?? 'null') +
+    ' stage=' + String(entry.stage || 'unknown') +
+    ' at=' + (entry.at ?? Date.now()) +
+    ' handoffStartedAt=' + (entry.handoffStartedAt ?? '') +
+    ' queueRequestedAt=' + (entry.queueRequestedAt ?? '') +
+    ' sinceHandoffStartMs=' + (entry.sinceHandoffStartMs ?? '') +
+    ' sinceQueueRequestMs=' + (entry.sinceQueueRequestMs ?? '') +
+    ' refChars=' + (entry.refChars ?? '') +
+    ' ok=' + (entry.ok ?? '')
+  );
+  return false;
+});
 
-// Serialize MultiVerse POST submissions while still creating all destination tabs immediately.
-// A modest interval between form submissions reduces burst rate-limiting without dropping batches.
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
+
+// Serialize MultiVerse POST scheduling while creating all destination tabs immediately.
+// Reserve submission timestamps in one shared FIFO queue, but never sleep inside the
+// extension service worker: Chrome can delay worker timers dramatically under load.
+// Each handoff page waits until its reserved timestamp before submitting its POST.
 const MULTIVERSE_POST_MIN_INTERVAL_MS = 1500;
-let lastMultiVersePostSlotAt = 0;
+let lastMultiVersePostScheduledAt = 0;
 let pendingMultiVersePostSlot = Promise.resolve();
+
+// Keep queue admission in its own message listener. The general async router
+// handles many unrelated operations; isolating this timing-sensitive response
+// avoids coupling queue delivery to that router's async dispatch path.
+// All MultiVerse submissions use one shared FIFO schedule and one interval, regardless of source.
+function grantMultiVersePostSlot(minimumIntervalMs, tabId = null, queuedAt = Date.now()) {
+  const slot = pendingMultiVersePostSlot.then(() => {
+    const queueStartedAt = Date.now();
+    const scheduledAt = Math.max(queueStartedAt, lastMultiVersePostScheduledAt + minimumIntervalMs);
+    const intervalWaitMs = scheduledAt - queueStartedAt;
+    lastMultiVersePostScheduledAt = scheduledAt;
+    console.info(
+      '[BLB MV timing] stage=queue-slot-reserved' +
+      ' tabId=' + tabId +
+      ' queuedAt=' + queuedAt +
+      ' queueStartedAt=' + queueStartedAt +
+      ' scheduledAt=' + scheduledAt +
+      ' totalQueueAdmissionMs=' + (queueStartedAt - queuedAt) +
+      ' intervalWaitMs=' + intervalWaitMs
+    );
+    return {ok:true, submitAt:scheduledAt};
+  });
+  pendingMultiVersePostSlot = slot.then(() => undefined, () => undefined);
+  return slot;
+}
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type !== 'blbSuiteAcquireMultiVersePostSlot') return false;
+  const queuedAt = Date.now();
+  const tabId = sender?.tab?.id ?? null;
+  console.info('[BLB MV timing]', {stage:'queue-request-received', tabId, queuedAt});
+  grantMultiVersePostSlot(MULTIVERSE_POST_MIN_INTERVAL_MS, tabId, queuedAt).then(
+    response => sendResponse(response),
+    error => sendResponse({ok:false, error:String(error)})
+  );
+  return true;
+});
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;
   (async () => {
   if (!message) return;
-
-  if (message.type === 'blbSuiteAcquireMultiVersePostSlot') {
-    const slot = pendingMultiVersePostSlot.then(async () => {
-      const waitMs = Math.max(0, MULTIVERSE_POST_MIN_INTERVAL_MS - (Date.now() - lastMultiVersePostSlotAt));
-      if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
-      lastMultiVersePostSlotAt = Date.now();
-      return {ok:true};
-    });
-    pendingMultiVersePostSlot = slot.then(() => undefined, () => undefined);
-    try { sendResponse(await slot); } catch (error) { sendResponse({ok:false, error:String(error)}); }
-    return true;
-  }
 
   if (message.type === 'blbSuiteOpenMultiVerseVerse') {
     const url = String(message.url || '').trim();
@@ -5835,30 +5895,35 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
   });
   if (combinedRefs.length >= 2) {
+    // Start the MultiVerse tab-opening path before doing any Criteria-query
+    // extraction. The latter performs corpus lookups and scans the selected
+    // text synchronously; on PDF selections it must not sit in front of the
+    // first visible reference tab.
+    const referenceOpen = openBlbMultiVerseRefs(
+      combinedRefs,
+      !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting,
+    );
+    const studyCapture = recordStudyRefs(combinedRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
+
+    // Give the destination-tab path its first asynchronous turn before
+    // running residual-text / Criteria work. Keep that work after the
+    // reference tab is opened, since it is optional to the primary action.
+    const referenceTab = await referenceOpen;
+    await studyCapture;
+
     const excludedVerseTexts = combinedRefs
       .map(ref => getKjvVerseTextForSelectionRef(ref))
       .filter(Boolean);
     let residualText = removeKjvVerseTextFromSelection(text, combinedRefs);
     residualText = removeQuotedTextFromSelection(residualText);
     const fastCriteriaQuery = extractResidualProseShortCriteriaQuery(residualText, excludedVerseTexts);
-
-    const studyCapture = recordStudyRefs(combinedRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
-    const referenceOpen = openBlbMultiVerseRefs(
-      combinedRefs,
-      !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
-    );
-    const criteriaOpen = fastCriteriaQuery
-      ? openBlbDestination(
+    const criteriaTab = fastCriteriaQuery
+      ? await openBlbDestination(
           `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(fastCriteriaQuery).replace(/%20/g,'+')}`,
           false,
           false
         )
-      : Promise.resolve(null);
-
-    // Await only the actual tab creation/storage handoff. This is the point
-    // at which the user has both destinations available; the expensive
-    // classifier runs afterward while the service worker remains active.
-    const [referenceTab, criteriaTab] = await Promise.all([referenceOpen, criteriaOpen, studyCapture]);
+      : null;
 
     // Return immediately after both destination tabs are created. The full
     // classifier is correctness/reconciliation work, not part of the user's
@@ -5971,7 +6036,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       const studyCapture = recordStudyRefs(parsedRefs);
       const referenceOpen = openBlbMultiVerseRefs(
         decision.refs,
-        !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
+        !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting,
       );
       const criteriaOpen = decision.kjvPassageQuery
         ? openBlbDestination(
@@ -6396,7 +6461,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   // native selection text, though: if the DOM serializer omits a nested or
   // partially selected block, the native text can still contain its citation.
   // The reference extractor deduplicates citations found in both sources.
+  const pdfClickTraceStart = Date.now();
+  const pdfClickTraceId = 'pdfclick-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+  const pdfClickTrace = (stage, details = {}) => console.info('[BLB PDF MultiVerse timing]', JSON.stringify({id:pdfClickTraceId, stage, elapsedMs:Date.now()-pdfClickTraceStart, at:Date.now(), ...details}));
   const nativeText = String(info.selectionText || '').trim();
+  if (menuId === 'blb-suite-pdf-selection') pdfClickTrace('context-menu-click', {tabId:tab?.id, selectionChars:nativeText.length});
   let liveText = '';
   let text = nativeText;
   if (menuId === 'blb-suite-web-selection' && Number.isInteger(tab?.id)) {
@@ -6413,7 +6482,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     if (normalizeSiteHostname(hostnameFromTabUrl(tab?.url)) === BLB_HOSTNAME) {
       await openBlbPageSelection(text, {activeIfNew:true, activateExisting:true});
     } else {
-      const contextualRef = await getContextualSelectionReference(tab?.id, text);
+      // PDF right-click selections already provide the selected text directly.
+      // Do not wait for a content-script contextual-reference lookup on PDF
+      // viewer tabs: that message is unsupported or slow on many PDF viewers
+      // and was delaying the first visible MultiVerse tab. Context lookup stays
+      // available for ordinary webpages, where partial selections need it.
+      const contextualRef = menuId === 'blb-suite-pdf-selection'
+        ? null
+        : await getContextualSelectionReference(tab?.id, text);
+      if (menuId === 'blb-suite-pdf-selection') pdfClickTrace('selection-checks-complete', {combinedTextChars:text.length});
       await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true}, contextualRef || null);
     }
     await clearPageSelectionAfterBlbAction(tab?.id);
