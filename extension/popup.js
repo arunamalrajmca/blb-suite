@@ -1370,7 +1370,7 @@ document.addEventListener('click', event => {
       document.getElementById('master').checked = saved.masterEnabled !== false;
       document.getElementById('redirectEnabled').checked = saved.redirectEnabled === true;
       document.getElementById('pageButton').checked = Object.prototype.hasOwnProperty.call(pageSites, siteKey) && pageSites[siteKey] === true;
-      document.getElementById('doubleClick').checked = Object.prototype.hasOwnProperty.call(doubleSites, siteKey) && doubleSites[siteKey] === true;
+      document.getElementById('doubleClick').checked = !url.split(/[?#]/, 1)[0].toLowerCase().endsWith('.pdf') && Object.prototype.hasOwnProperty.call(doubleSites, siteKey) && doubleSites[siteKey] === true;
       for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
     } catch (fallbackError) {
       console.error('BLB Suite popup saved-setting fallback failed:', fallbackError);
