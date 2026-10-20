@@ -6272,18 +6272,13 @@ async function shouldShowBlbContextMenu(tab, selectionText) {
   return await isPageButtonEnabledForHostname(siteKey, tab?.title || '');
 }
 
-async function syncWebSelectionContextMenuVisibility(tab) {
-  try {
-    const visible = await shouldShowBlbContextMenu(tab, '');
-    await updateSelectionContextMenuVisibility(visible);
-  } catch (_) {
-    await updateSelectionContextMenuVisibility(false);
-  }
-}
-
 let selectionMenuOperation = Promise.resolve();
 let selectionMenuKnownPresent = false;
 let pdfSelectionMenuKnownPresent = false;
+// Keep only the newest visibility request. Opening a MultiVerse batch can
+// produce many tab events; serializing each stale snapshot delays the menu
+// update on the page the user is actually viewing.
+let webSelectionVisibilitySyncGeneration = 0;
 
 async function ensureWebSelectionContextMenu() {
   if (selectionMenuKnownPresent) return true;
@@ -6330,16 +6325,27 @@ async function updateSelectionContextMenuVisibility(visible) {
 }
 
 async function syncWebSelectionContextMenuVisibility(tab) {
-  const operation = selectionMenuOperation.then(async () => {
-    try {
-      const visible = await shouldShowBlbContextMenu(tab, '');
-      return await updateSelectionContextMenuVisibility(visible);
-    } catch (_) {
-      return await updateSelectionContextMenuVisibility(false);
+  const generation = ++webSelectionVisibilitySyncGeneration;
+  try {
+    // Resolve the actual active tab at execution time instead of waiting in
+    // the shared PDF/web menu-operation queue behind stale tab snapshots.
+    const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+    const activeTab = tabs[0] || tab;
+    if (!activeTab) {
+      if (generation === webSelectionVisibilitySyncGeneration) {
+        await updateSelectionContextMenuVisibility(false);
+      }
+      return false;
     }
-  });
-  selectionMenuOperation = operation.catch(() => false);
-  return operation;
+    const visible = await shouldShowBlbContextMenu(activeTab, '');
+    // A newer activation/navigation may have started while eligibility was
+    // being read. Never let an older result overwrite the latest tab state.
+    if (generation !== webSelectionVisibilitySyncGeneration) return false;
+    return await updateSelectionContextMenuVisibility(visible);
+  } catch (_) {
+    if (generation !== webSelectionVisibilitySyncGeneration) return false;
+    return await updateSelectionContextMenuVisibility(false);
+  }
 }
 
 // Keep the web selection menu persistent. Its visibility is synchronized on
