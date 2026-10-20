@@ -772,10 +772,6 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
       allVerses.length > 1 && batchVerses.length === 1,
       index === 0 ? options.preferredTabId : null,
       batchVerses,
-      !!options.pdfFastSubmit,
-      options.pdfTraceId || '',
-      index,
-      batches.length
     );
     return result?.ok
       ? {...result, count:batchVerses.length, batch:index + 1}
@@ -836,7 +832,7 @@ async function openBlbDestinationByIdentity({key, active = false, findExisting, 
   }
 }
 
-async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false, preferredTabId = null, preparedVerses = null, pdfFastSubmit = false, pdfTraceId = '', pdfBatchIndex = 0, pdfBatchCount = 1) {
+async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false, preferredTabId = null, preparedVerses = null) {
   // Enforce the cap again at the final handoff boundary. This ensures the
   // references actually stored for the MultiVerse textbox cannot expand to
   // more than 200 individual verses after canonicalization.
@@ -911,7 +907,6 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         // than opening about:blank and navigating a second time. The extra
         // blank-tab creation/update round trip was on the critical path for
         // every PDF batch and could leave the first invocation visibly idle.
-        if (pdfFastSubmit) console.info('[BLB PDF MultiVerse timing]', JSON.stringify({id:pdfTraceId || 'untracked', stage:'tab-create-start', at:Date.now(), active:!!active, reusedOriginTab}));
         if (!reusedOriginTab) {
           tab = await chrome.tabs.create({url:handoffUrl, active:!!active});
         } else {
@@ -923,7 +918,6 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
             throw error;
           }
         }
-        if (pdfFastSubmit) console.info('[BLB PDF MultiVerse timing]', JSON.stringify({id:pdfTraceId || 'untracked', stage:'tab-create-complete', at:Date.now(), tabId:tab?.id, reusedOriginTab}));
         if (tab?.id == null) return null;
         await updateTrackedMultiVerseTabs(map => {
           map[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
@@ -3286,68 +3280,13 @@ const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuit
 // Serialize MultiVerse POST submissions while still creating all destination tabs immediately.
 // A modest interval between form submissions reduces burst rate-limiting without dropping batches.
 const MULTIVERSE_POST_MIN_INTERVAL_MS = 1500;
-const PDF_MULTIVERSE_POST_MIN_INTERVAL_MS = 750;
 let lastMultiVersePostSlotAt = 0;
 let pendingMultiVersePostSlot = Promise.resolve();
 
 // Keep queue admission in its own message listener. The general async router
 // handles many unrelated operations; isolating this timing-sensitive response
 // avoids coupling queue delivery to that router's async dispatch path.
-// Preserve global FIFO and normal submission spacing. PDF batches carry an
-// explicit index so tab-load races cannot reorder their MultiVerse POSTs.
-const pendingPdfPostQueues = new Map();
-function getPdfPostQueue(traceId, count) {
-  let queue = pendingPdfPostQueues.get(traceId);
-  if (!queue) {
-    // PDF batch 0 is opened through the direct, fast MultiVerse URL and does
-    // not participate in the extension handoff POST-slot queue. Start ordered
-    // queue admission at batch 1 so later batches never wait for a slot that
-    // batch 0 will not request.
-    queue = {nextIndex:1, count:Math.max(1, Number(count) || 1), waiting:new Map(), skipped:new Set(), running:false};
-    pendingPdfPostQueues.set(traceId, queue);
-  } else {
-    queue.count = Math.max(queue.count, Math.max(1, Number(count) || 1));
-  }
-  return queue;
-}
-function drainPdfPostQueue(traceId, queue) {
-  const drain = async () => {
-    if (queue.running) return;
-    queue.running = true;
-    try {
-      while (true) {
-        if (queue.skipped.has(queue.nextIndex)) {
-          queue.skipped.delete(queue.nextIndex++);
-          continue;
-        }
-        if (!queue.waiting.has(queue.nextIndex)) break;
-        const item = queue.waiting.get(queue.nextIndex);
-        queue.waiting.delete(queue.nextIndex);
-        try {
-          const response = await grantMultiVersePostSlot(item.minimumIntervalMs);
-          item.sendResponse(response);
-        } catch (error) {
-          item.sendResponse({ok:false, error:String(error)});
-        }
-        queue.nextIndex++;
-      }
-    } finally {
-      queue.running = false;
-      if (queue.nextIndex >= queue.count && queue.waiting.size === 0) {
-        pendingPdfPostQueues.delete(traceId);
-      } else if (queue.skipped.has(queue.nextIndex) || queue.waiting.has(queue.nextIndex)) {
-        void drain();
-      }
-    }
-  };
-  void drain();
-}
-function skipPdfPostQueueIndex(traceId, index, count) {
-  if (!traceId) return;
-  const queue = getPdfPostQueue(String(traceId), count);
-  if (index >= queue.nextIndex) queue.skipped.add(index);
-  drainPdfPostQueue(String(traceId), queue);
-}
+// All MultiVerse submissions use one shared FIFO queue and one interval, regardless of source.
 function grantMultiVersePostSlot(minimumIntervalMs) {
   const slot = pendingMultiVersePostSlot.then(async () => {
     const waitMs = Math.max(0, minimumIntervalMs - (Date.now() - lastMultiVersePostSlotAt));
@@ -3360,23 +3299,10 @@ function grantMultiVersePostSlot(minimumIntervalMs) {
 }
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type !== 'blbSuiteAcquireMultiVersePostSlot') return false;
-  const minimumIntervalMs = message.pdfFastSubmit === true
-    ? PDF_MULTIVERSE_POST_MIN_INTERVAL_MS
-    : MULTIVERSE_POST_MIN_INTERVAL_MS;
-  if (message.pdfFastSubmit !== true || !message.pdfTraceId) {
-    grantMultiVersePostSlot(minimumIntervalMs).then(
-      response => sendResponse(response),
-      error => sendResponse({ok:false, error:String(error)})
-    );
-    return true;
-  }
-
-  const traceId = String(message.pdfTraceId);
-  const index = Math.max(0, Number(message.pdfBatchIndex) || 0);
-  const count = Math.max(1, Number(message.pdfBatchCount) || 1);
-  const queue = getPdfPostQueue(traceId, count);
-  queue.waiting.set(index, {sendResponse, minimumIntervalMs});
-  drainPdfPostQueue(traceId, queue);
+  grantMultiVersePostSlot(MULTIVERSE_POST_MIN_INTERVAL_MS).then(
+    response => sendResponse(response),
+    error => sendResponse({ok:false, error:String(error)})
+  );
   return true;
 });
 
@@ -5918,12 +5844,7 @@ async function getContextualSelectionReference(tabId, selectionText) {
 }
 
 async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNew:true, activateExisting:true}, contextualRef = null) {
-  const pdfTraceId = 'pdfmv-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
-  const pdfTraceStart = Date.now();
-  const pdfTrace = (stage, details = {}) => console.info('[BLB PDF MultiVerse timing]', JSON.stringify({id:pdfTraceId, stage, elapsedMs:Date.now()-pdfTraceStart, at:Date.now(), ...details}));
-  pdfTrace('handler-enter', {selectionChars:String(selectionText || '').length});
   const text = normalizeSelectedScriptureText(selectionText);
-  pdfTrace('text-normalized', {normalizedChars:text.length});
 
   // FAST MULTI-REFERENCE PATH:
   // The explicit-reference parser is already the authoritative source for
@@ -5937,17 +5858,14 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     const bIndex = text.toLowerCase().indexOf(String(b.text || '').toLowerCase());
     return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
   });
-  pdfTrace('reference-parse-complete', {selectedRefs:selectedRefs.length, wholeBookRefs:wholeBookRefs.length, combinedRefs:combinedRefs.length});
   if (combinedRefs.length >= 2) {
     // Start the MultiVerse tab-opening path before doing any Criteria-query
     // extraction. The latter performs corpus lookups and scans the selected
     // text synchronously; on PDF selections it must not sit in front of the
     // first visible reference tab.
-    pdfTrace('multiverse-open-requested', {refs:combinedRefs.length});
     const referenceOpen = openBlbMultiVerseRefs(
       combinedRefs,
       !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting,
-      {pdfFastSubmit:true, pdfTraceId, pdfTraceStart}
     );
     const studyCapture = recordStudyRefs(combinedRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
 
@@ -5955,7 +5873,6 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     // running residual-text / Criteria work. Keep that work after the
     // reference tab is opened, since it is optional to the primary action.
     const referenceTab = await referenceOpen;
-    pdfTrace('first-tab-open-result', {ok:referenceTab?.ok, tabId:referenceTab?.tabId, batchCount:referenceTab?.batchCount, reason:referenceTab?.reason});
     await studyCapture;
 
     const excludedVerseTexts = combinedRefs
@@ -6084,7 +6001,6 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       const referenceOpen = openBlbMultiVerseRefs(
         decision.refs,
         !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting,
-        {pdfFastSubmit:true}
       );
       const criteriaOpen = decision.kjvPassageQuery
         ? openBlbDestination(
