@@ -6432,7 +6432,14 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     if (normalizeSiteHostname(hostnameFromTabUrl(tab?.url)) === BLB_HOSTNAME) {
       await openBlbPageSelection(text, {activeIfNew:true, activateExisting:true});
     } else {
-      const contextualRef = await getContextualSelectionReference(tab?.id, text);
+      // PDF right-click selections already provide the selected text directly.
+      // Do not wait for a content-script contextual-reference lookup on PDF
+      // viewer tabs: that message is unsupported or slow on many PDF viewers
+      // and was delaying the first visible MultiVerse tab. Context lookup stays
+      // available for ordinary webpages, where partial selections need it.
+      const contextualRef = menuId === 'blb-suite-pdf-selection'
+        ? null
+        : await getContextualSelectionReference(tab?.id, text);
       await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true}, contextualRef || null);
     }
     await clearPageSelectionAfterBlbAction(tab?.id);
