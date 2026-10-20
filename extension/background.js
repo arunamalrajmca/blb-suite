@@ -5880,7 +5880,15 @@ async function getContextualSelectionReference(tabId, selectionText) {
 }
 
 async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNew:true, activateExisting:true}, contextualRef = null) {
+  const operationStartedAt = performance.now();
   const text = normalizeSelectedScriptureText(selectionText);
+  const logPdfPhase = (stage, details = {}) => console.info('[BLB PDF profile]', {
+    stage,
+    elapsedMs: Math.round(performance.now() - operationStartedAt),
+    selectedChars: text.length,
+    ...details
+  });
+  logPdfPhase('selection-normalized');
 
   // FAST MULTI-REFERENCE PATH:
   // The explicit-reference parser is already the authoritative source for
@@ -5909,14 +5917,19 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     // running residual-text / Criteria work. Keep that work after the
     // reference tab is opened, since it is optional to the primary action.
     const referenceTab = await referenceOpen;
+    logPdfPhase('reference-tabs-opened', {referenceCount: combinedRefs.length, referenceTabId: referenceTab?.id ?? null});
     await studyCapture;
+    logPdfPhase('study-capture-finished', {referenceCount: combinedRefs.length});
 
     const excludedVerseTexts = combinedRefs
       .map(ref => getKjvVerseTextForSelectionRef(ref))
       .filter(Boolean);
     let residualText = removeKjvVerseTextFromSelection(text, combinedRefs);
     residualText = removeQuotedTextFromSelection(residualText);
+    logPdfPhase('before-fast-criteria', {residualChars: residualText.length, referenceCount: combinedRefs.length});
+    const criteriaStartedAt = performance.now();
     const fastCriteriaQuery = extractResidualProseShortCriteriaQuery(residualText, excludedVerseTexts);
+    logPdfPhase('fast-criteria-finished', {criteriaMs: Math.round(performance.now() - criteriaStartedAt), hasCriteria: !!fastCriteriaQuery});
     const criteriaTab = fastCriteriaQuery
       ? await openBlbDestination(
           `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(fastCriteriaQuery).replace(/%20/g,'+')}`,
@@ -5931,8 +5944,12 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     // Criteria query, update the already-open Criteria tab in the background.
     void (async () => {
       try {
+        logPdfPhase('before-authoritative-classifier', {referenceCount: combinedRefs.length, hasFastCriteria: !!fastCriteriaQuery});
+        const classifierStartedAt = performance.now();
         const authoritativeDecision = classifySelectionForBlb(text);
+        const classifierMs = Math.round(performance.now() - classifierStartedAt);
         const authoritativeQuery = authoritativeDecision?.kjvPassageQuery || '';
+        logPdfPhase('authoritative-classifier-finished', {classifierMs, decisionType: authoritativeDecision?.type || 'none', hasAuthoritativeQuery: !!authoritativeQuery});
         if (authoritativeQuery === fastCriteriaQuery) return;
 
         if (criteriaTab?.id != null && authoritativeQuery) {
