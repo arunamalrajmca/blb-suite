@@ -3298,46 +3298,34 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 
 const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
-// Serialize MultiVerse POST submissions while still creating all destination tabs immediately.
-// A modest interval between form submissions reduces burst rate-limiting without dropping batches.
+// Serialize MultiVerse POST scheduling while creating all destination tabs immediately.
+// Reserve submission timestamps in one shared FIFO queue, but never sleep inside the
+// extension service worker: Chrome can delay worker timers dramatically under load.
+// Each handoff page waits until its reserved timestamp before submitting its POST.
 const MULTIVERSE_POST_MIN_INTERVAL_MS = 1500;
-let lastMultiVersePostSlotAt = 0;
+let lastMultiVersePostScheduledAt = 0;
 let pendingMultiVersePostSlot = Promise.resolve();
 
 // Keep queue admission in its own message listener. The general async router
 // handles many unrelated operations; isolating this timing-sensitive response
 // avoids coupling queue delivery to that router's async dispatch path.
-// All MultiVerse submissions use one shared FIFO queue and one interval, regardless of source.
+// All MultiVerse submissions use one shared FIFO schedule and one interval, regardless of source.
 function grantMultiVersePostSlot(minimumIntervalMs, tabId = null, queuedAt = Date.now()) {
-  const slot = pendingMultiVersePostSlot.then(async () => {
+  const slot = pendingMultiVersePostSlot.then(() => {
     const queueStartedAt = Date.now();
-    const waitMs = Math.max(0, minimumIntervalMs - (queueStartedAt - lastMultiVersePostSlotAt));
-    const timerScheduledAt = waitMs ? Date.now() : null;
-    let timerWakeAt = null;
-    if (waitMs) {
-      await new Promise(resolve => setTimeout(() => {
-        timerWakeAt = Date.now();
-        resolve();
-      }, waitMs));
-    }
-    const grantedAt = Date.now();
-    const timerDelayMs = timerWakeAt === null ? 0 : timerWakeAt - timerScheduledAt - waitMs;
-    const postTimerDelayMs = timerWakeAt === null ? 0 : grantedAt - timerWakeAt;
-    lastMultiVersePostSlotAt = grantedAt;
+    const scheduledAt = Math.max(queueStartedAt, lastMultiVersePostScheduledAt + minimumIntervalMs);
+    const intervalWaitMs = scheduledAt - queueStartedAt;
+    lastMultiVersePostScheduledAt = scheduledAt;
     console.info(
-      '[BLB MV timing] stage=queue-slot-granted' +
+      '[BLB MV timing] stage=queue-slot-reserved' +
       ' tabId=' + tabId +
       ' queuedAt=' + queuedAt +
       ' queueStartedAt=' + queueStartedAt +
-      ' timerScheduledAt=' + timerScheduledAt +
-      ' timerWakeAt=' + timerWakeAt +
-      ' grantedAt=' + grantedAt +
-      ' totalQueueWaitMs=' + (grantedAt - queuedAt) +
-      ' intervalWaitMs=' + waitMs +
-      ' timerDelayMs=' + timerDelayMs +
-      ' postTimerDelayMs=' + postTimerDelayMs
+      ' scheduledAt=' + scheduledAt +
+      ' totalQueueAdmissionMs=' + (queueStartedAt - queuedAt) +
+      ' intervalWaitMs=' + intervalWaitMs
     );
-    return {ok:true};
+    return {ok:true, submitAt:scheduledAt};
   });
   pendingMultiVersePostSlot = slot.then(() => undefined, () => undefined);
   return slot;
