@@ -1390,13 +1390,17 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
       ]);
       const url = String(tabs[0]?.url || '');
       const siteKey = getSiteKey(url, tabs[0]?.title || '');
+      const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
       const pageSites = saved.pageSelectionButtonSites && typeof saved.pageSelectionButtonSites === 'object' ? saved.pageSelectionButtonSites : {};
       const doubleSites = saved.doubleClickBlbSites && typeof saved.doubleClickBlbSites === 'object' ? saved.doubleClickBlbSites : {};
       document.getElementById('master').checked = saved.masterEnabled !== false;
       document.getElementById('redirectEnabled').checked = saved.redirectEnabled === true;
       document.getElementById('pageButton').checked = Object.prototype.hasOwnProperty.call(pageSites, siteKey) && pageSites[siteKey] === true;
-      document.getElementById('doubleClick').checked = Object.prototype.hasOwnProperty.call(doubleSites, siteKey) && doubleSites[siteKey] === true;
-      for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
+      // Even when live permission inspection fails, never show Double Click KJV
+      // as enabled in a detected PDF context.
+      document.getElementById('doubleClick').checked = !isPdfContext && Object.prototype.hasOwnProperty.call(doubleSites, siteKey) && doubleSites[siteKey] === true;
+      document.getElementById('doubleClick').disabled = true;
+      for (const id of ['master', 'pageButton', 'redirectEnabled']) document.getElementById(id).disabled = true;
     } catch (fallbackError) {
       console.error('BLB Suite popup saved-setting fallback failed:', fallbackError);
       for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
