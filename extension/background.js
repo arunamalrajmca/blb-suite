@@ -3301,15 +3301,14 @@ let pendingMultiVersePostSlot = Promise.resolve();
 // Preserve global FIFO and normal submission spacing. PDF batches carry an
 // explicit index so tab-load races cannot reorder their MultiVerse POSTs.
 const pendingPdfPostQueues = new Map();
-let pendingNonPdfMultiVersePostSlot = Promise.resolve();
 function grantMultiVersePostSlot(minimumIntervalMs) {
-  const slot = pendingNonPdfMultiVersePostSlot.then(async () => {
+  const slot = pendingMultiVersePostSlot.then(async () => {
     const waitMs = Math.max(0, minimumIntervalMs - (Date.now() - lastMultiVersePostSlotAt));
     if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
     lastMultiVersePostSlotAt = Date.now();
     return {ok:true};
   });
-  pendingNonPdfMultiVersePostSlot = slot.then(() => undefined, () => undefined);
+  pendingMultiVersePostSlot = slot.then(() => undefined, () => undefined);
   return slot;
 }
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
