@@ -6248,7 +6248,7 @@ async function ensureWebSelectionContextMenu() {
       id:'blb-suite-web-selection',
       title:'Show on BLB\tAlt+B',
       contexts:['selection'],
-      documentUrlPatterns:['http://*/*','https://*/*'],
+      documentUrlPatterns:['http://*/*','https://*/*','file:///*.pdf'],
       visible:false
     });
     selectionMenuKnownPresent = true;
@@ -6259,65 +6259,40 @@ async function ensureWebSelectionContextMenu() {
   }
 }
 
-async function ensurePdfSelectionContextMenu() {
-  if (pdfSelectionMenuKnownPresent) return true;
-  // Context-menu entries persist across service-worker restarts. Adopt an
-  // existing entry first; create only if it truly does not exist.
+// Keep a single native item: Chrome groups multiple visible items from the
+// same extension into a submenu. Remove the old duplicate PDF item once and
+// let the single web-selection item cover web pages and PDF documents.
+async function removeLegacyPdfSelectionContextMenu() {
   try {
-    await chrome.contextMenus.update('blb-suite-pdf-selection', {
-      title:'Show on BLB\tAlt+B',
-      visible:false
-    });
-    pdfSelectionMenuKnownPresent = true;
-    return true;
+    await chrome.contextMenus.remove('blb-suite-pdf-selection');
   } catch (_) {}
-  try {
-    await chrome.contextMenus.create({
-      id:'blb-suite-pdf-selection',
-      title:'Show on BLB\tAlt+B',
-      contexts:['selection'],
-      documentUrlPatterns:['file:///*.pdf','http://*/*.pdf','https://*/*.pdf'],
-      visible:false
-    });
-    pdfSelectionMenuKnownPresent = true;
-    return true;
-  } catch (_) {
-    pdfSelectionMenuKnownPresent = false;
-    return false;
-  }
+  pdfSelectionMenuKnownPresent = false;
+  return true;
 }
 
 async function installPdfSelectionContextMenu() {
-  const operation = selectionMenuOperation.then(async () => ensurePdfSelectionContextMenu());
+  const operation = selectionMenuOperation.then(async () => {
+    await removeLegacyPdfSelectionContextMenu();
+    return ensureWebSelectionContextMenu();
+  });
   selectionMenuOperation = operation.catch(() => false);
   return operation;
 }
 
-// Native context-menu visibility is global. Compute and update both entries
-// from one active-tab snapshot in a serialized operation to avoid stale races.
+// Native context-menu visibility is global. Compute visibility from one
+// active-tab snapshot in a serialized operation, updating the single item.
 async function syncSelectionContextMenus(tab) {
   const operation = selectionMenuOperation.then(async () => {
-    const [webPresent, pdfPresent] = await Promise.all([
-      ensureWebSelectionContextMenu(),
-      ensurePdfSelectionContextMenu()
-    ]);
+    const present = await ensureWebSelectionContextMenu();
     const enabled = !!tab && await isSuiteEnabled();
     const siteKey = tab ? pageSelectionSettingKeyFromTab(tab) : '';
     const siteAllowed = enabled && !!siteKey
       ? await isPageButtonEnabledForHostname(siteKey, tab?.title || '')
       : false;
-    const pdfTab = !!tab && isPdfViewerTab(tab);
-    if (webPresent) {
+    if (present) {
       try {
         await chrome.contextMenus.update('blb-suite-web-selection', {
-          visible: !!siteAllowed && !pdfTab
-        });
-      } catch (_) {}
-    }
-    if (pdfPresent) {
-      try {
-        await chrome.contextMenus.update('blb-suite-pdf-selection', {
-          visible: !!siteAllowed && pdfTab
+          visible: !!siteAllowed
         });
       } catch (_) {}
     }
@@ -6336,7 +6311,10 @@ async function syncPdfSelectionContextMenuVisibility(tab) {
 }
 
 async function installWebSelectionContextMenu() {
-  const operation = selectionMenuOperation.then(async () => ensureWebSelectionContextMenu());
+  const operation = selectionMenuOperation.then(async () => {
+    await removeLegacyPdfSelectionContextMenu();
+    return ensureWebSelectionContextMenu();
+  });
   selectionMenuOperation = operation.catch(() => false);
   return operation;
 }
