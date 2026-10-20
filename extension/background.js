@@ -895,11 +895,10 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         // when no existing matching batch tab was found above.
         const mvText = canonical.refs.map(ref => ref.book + ' ' + ref.chapter + ':' + ref.from + (ref.to != null && ref.to !== ref.from ? '-' + ref.to : '')).join('; ');
         const handoffParams = new URLSearchParams({mvText});
-        if (pdfFastSubmit) {
-          handoffParams.set('mvPdfFast', '1');
-          handoffParams.set('mvPdfBatchIndex', String(pdfBatchIndex));
-          handoffParams.set('mvPdfBatchCount', String(pdfBatchCount));
-        }
+        if (pdfFastSubmit) handoffParams.set('mvPdfFast', '1');
+        // Keep trace IDs for diagnostics only. PDF batches now enter the shared
+        // POST queue as soon as each handoff page is ready; they no longer wait
+        // for an earlier batch index to become ready.
         if (pdfTraceId) handoffParams.set('mvPdfTrace', pdfTraceId);
         const handoffUrl = chrome.runtime.getURL('multiverse-post.html') + '?' + handoffParams.toString();
 
@@ -940,20 +939,6 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
     return {ok:false, reason:navigationError ? 'tab-navigation-failed' : 'tab-open-failed', error:String(error)};
   }
   if (result?.tab?.id == null) return {ok:false, reason:'tab-create-failed'};
-  // A reused, already-rendered MultiVerse result has no handoff page and will
-  // never request a POST slot. Explicitly retire its sequence position so later
-  // PDF batches do not wait forever for an index that cannot arrive. A reused
-  // extension handoff is deliberately not skipped; it will submit normally.
-  const reusedUrls = [result.tab.url, result.tab.pendingUrl].map(value => String(value || ''));
-  const handoffPrefix = chrome.runtime.getURL('multiverse-post.html');
-  const isHandoffTab = reusedUrls.some(url => url.startsWith(handoffPrefix));
-  if (pdfFastSubmit && result.reused && !isHandoffTab) {
-    skipPdfPostQueueIndex(pdfTraceId, pdfBatchIndex, pdfBatchCount);
-    console.info('[BLB PDF MultiVerse timing]', JSON.stringify({
-      id:pdfTraceId || 'untracked', stage:'post-queue-index-skipped',
-      batchIndex:pdfBatchIndex, batchCount:pdfBatchCount, tabId:result.tab.id, reusedUrls
-    }));
-  }
   return {ok:true, count:canonical.refs.length, reused:!!result.reused, tabId:result.tab.id};
 }
 
