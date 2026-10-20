@@ -940,6 +940,19 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
     return {ok:false, reason:navigationError ? 'tab-navigation-failed' : 'tab-open-failed', error:String(error)};
   }
   if (result?.tab?.id == null) return {ok:false, reason:'tab-create-failed'};
+  // A reused, already-rendered MultiVerse result has no handoff page and will
+  // never request a POST slot. Explicitly retire its sequence position so later
+  // PDF batches do not wait forever for an index that cannot arrive. A reused
+  // extension handoff is deliberately not skipped; it will submit normally.
+  const reusedUrl = String(result.tab.url || result.tab.pendingUrl || '');
+  const isHandoffTab = reusedUrl.startsWith(chrome.runtime.getURL('multiverse-post.html'));
+  if (pdfFastSubmit && result.reused && !isHandoffTab) {
+    skipPdfPostQueueIndex(pdfTraceId, pdfBatchIndex, pdfBatchCount);
+    console.info('[BLB PDF MultiVerse timing]', JSON.stringify({
+      id:pdfTraceId || 'untracked', stage:'post-queue-index-skipped',
+      batchIndex:pdfBatchIndex, batchCount:pdfBatchCount, tabId:result.tab.id, reusedUrl
+    }));
+  }
   return {ok:true, count:canonical.refs.length, reused:!!result.reused, tabId:result.tab.id};
 }
 
@@ -3301,6 +3314,54 @@ let pendingMultiVersePostSlot = Promise.resolve();
 // Preserve global FIFO and normal submission spacing. PDF batches carry an
 // explicit index so tab-load races cannot reorder their MultiVerse POSTs.
 const pendingPdfPostQueues = new Map();
+function getPdfPostQueue(traceId, count) {
+  let queue = pendingPdfPostQueues.get(traceId);
+  if (!queue) {
+    queue = {nextIndex:0, count:Math.max(1, Number(count) || 1), waiting:new Map(), skipped:new Set(), running:false};
+    pendingPdfPostQueues.set(traceId, queue);
+  } else {
+    queue.count = Math.max(queue.count, Math.max(1, Number(count) || 1));
+  }
+  return queue;
+}
+function drainPdfPostQueue(traceId, queue) {
+  const drain = async () => {
+    if (queue.running) return;
+    queue.running = true;
+    try {
+      while (true) {
+        if (queue.skipped.has(queue.nextIndex)) {
+          queue.skipped.delete(queue.nextIndex++);
+          continue;
+        }
+        if (!queue.waiting.has(queue.nextIndex)) break;
+        const item = queue.waiting.get(queue.nextIndex);
+        queue.waiting.delete(queue.nextIndex);
+        try {
+          const response = await grantMultiVersePostSlot(item.minimumIntervalMs);
+          item.sendResponse(response);
+        } catch (error) {
+          item.sendResponse({ok:false, error:String(error)});
+        }
+        queue.nextIndex++;
+      }
+    } finally {
+      queue.running = false;
+      if (queue.nextIndex >= queue.count && queue.waiting.size === 0) {
+        pendingPdfPostQueues.delete(traceId);
+      } else if (queue.skipped.has(queue.nextIndex) || queue.waiting.has(queue.nextIndex)) {
+        void drain();
+      }
+    }
+  };
+  void drain();
+}
+function skipPdfPostQueueIndex(traceId, index, count) {
+  if (!traceId) return;
+  const queue = getPdfPostQueue(String(traceId), count);
+  if (index >= queue.nextIndex) queue.skipped.add(index);
+  drainPdfPostQueue(String(traceId), queue);
+}
 function grantMultiVersePostSlot(minimumIntervalMs) {
   const slot = pendingMultiVersePostSlot.then(async () => {
     const waitMs = Math.max(0, minimumIntervalMs - (Date.now() - lastMultiVersePostSlotAt));
@@ -3327,39 +3388,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const traceId = String(message.pdfTraceId);
   const index = Math.max(0, Number(message.pdfBatchIndex) || 0);
   const count = Math.max(1, Number(message.pdfBatchCount) || 1);
-  let queue = pendingPdfPostQueues.get(traceId);
-  if (!queue) {
-    queue = {nextIndex:0, count, waiting:new Map(), running:false};
-    pendingPdfPostQueues.set(traceId, queue);
-  } else {
-    queue.count = Math.max(queue.count, count);
-  }
+  const queue = getPdfPostQueue(traceId, count);
   queue.waiting.set(index, {sendResponse, minimumIntervalMs});
-  const drain = async () => {
-    if (queue.running) return;
-    queue.running = true;
-    try {
-      while (queue.waiting.has(queue.nextIndex)) {
-        const item = queue.waiting.get(queue.nextIndex);
-        queue.waiting.delete(queue.nextIndex);
-        try {
-          const response = await grantMultiVersePostSlot(item.minimumIntervalMs);
-          item.sendResponse(response);
-        } catch (error) {
-          item.sendResponse({ok:false, error:String(error)});
-        }
-        queue.nextIndex++;
-      }
-    } finally {
-      queue.running = false;
-      if (queue.nextIndex >= queue.count && queue.waiting.size === 0) {
-        pendingPdfPostQueues.delete(traceId);
-      } else if (queue.waiting.has(queue.nextIndex)) {
-        void drain();
-      }
-    }
-  };
-  void drain();
+  drainPdfPostQueue(traceId, queue);
   return true;
 });
 
