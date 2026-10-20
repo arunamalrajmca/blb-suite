@@ -72,7 +72,8 @@ async function getState() {
   const defaultEnabled = await getDefaultSiteEnabled(siteKey, pageTitleForDefaultCheck);
   const isBlbSite = siteKey === BLB_HOSTNAME;
   const isSensitiveSite = isSensitiveSiteHostname(siteKey);
-  const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
+  // Direct PDF URLs always disable Double-click KJV, regardless of saved site settings.
+  const isPdfUrl = activeUrl.split(/[?#]/, 1)[0].toLowerCase().endsWith('.pdf');
   let hasCurrentSiteAccess = true;
   let hasSiteSpecificAccess = true;
   if (!isBlbSite && currentSiteOrigin) {
@@ -100,13 +101,13 @@ async function getState() {
     // Both site-based toggles are OFF by default. An explicit per-site setting
     // wins, but neither can appear ON until Chrome has granted host permission.
     pageButton: (isBlbSite || !isSensitiveSite) && !!siteKey && effectivePageEnabled,
-    doubleClick: !isBlbSite && !isSensitiveSite && !isPdfContext && !!siteKey && effectiveDoubleEnabled,
+    doubleClick: !isBlbSite && !isSensitiveSite && !isPdfUrl && !!siteKey && effectiveDoubleEnabled,
     redirect: data.redirectEnabled !== false,
     siteKey,
     pageCaption: deriveSiteCaption(siteKey),
     isBlbSite,
     isSensitiveSite,
-    isPdfContext
+    isPdfUrl
   };
 }
 
@@ -133,7 +134,7 @@ function render(state) {
   const dbl = document.getElementById('doubleClick');
   const redirect = document.getElementById('redirectEnabled');
   page.disabled = !state.master || !state.siteKey || (state.isSensitiveSite && !state.isBlbSite);
-  dbl.disabled = !state.master || !state.siteKey || state.isBlbSite || state.isSensitiveSite || state.isPdfContext;
+  dbl.disabled = !state.master || !state.siteKey || state.isBlbSite || state.isSensitiveSite || state.isPdfUrl;
   redirect.disabled = !state.master;
   document.getElementById('pageSetting').classList.toggle('disabled', page.disabled);
   document.getElementById('doubleSetting').classList.toggle('disabled', dbl.disabled);
@@ -1187,7 +1188,7 @@ async function setIndependentSiteFeature(feature, on) {
 
   const state = await getState();
   if (!state.siteKey || !state.master || (state.isBlbSite && feature !== 'pageButton') ||
-      (state.isSensitiveSite && !state.isBlbSite) || (feature === 'doubleClick' && state.isPdfContext)) {
+      (state.isSensitiveSite && !state.isBlbSite) || (feature === 'doubleClick' && state.isPdfUrl)) {
     render(state);
     return;
   }
