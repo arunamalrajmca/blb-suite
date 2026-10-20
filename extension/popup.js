@@ -1348,30 +1348,12 @@ document.addEventListener('click', event => {
 });
 
 (async () => {
-  // Diagnostic only: record popup initialization outcome without logging page URLs
-  // or changing popup state, saved preferences, or tab-opening behavior.
-  const popupInitStartedAt = performance.now();
-  const logPopupInit = (outcome, siteKey = '') => {
-    const context = siteKey === '__blb_local_pdf__' ? 'local-pdf'
-      : siteKey === '__blb_pdf_viewer__' ? 'pdf-viewer'
-      : siteKey === BLB_HOSTNAME ? 'blb'
-      : siteKey ? 'website' : 'unknown';
-    console.info('[BLB Suite popup-init]', {
-      outcome,
-      context,
-      durationMs: Math.round(performance.now() - popupInitStartedAt)
-    });
-  };
-
   // A failed tabs/storage read must not leave the toolbar popup permanently
   // hidden. Keep normal rendering unchanged; on initialization failure, expose
   // the existing UI so the user can recover instead of seeing a blank popup.
   try {
-    const state = await getState();
-    render(state);
-    logPopupInit('success', state.siteKey);
+    render(await getState());
   } catch (error) {
-    logPopupInit('fallback');
     console.error('BLB Suite popup initialization failed:', error);
     // If live tab/permission inspection fails, keep the popup usable without
     // presenting unchecked HTML defaults as if every saved toggle was turned off.
@@ -1382,7 +1364,6 @@ document.addEventListener('click', event => {
       ]);
       const url = String(tabs[0]?.url || '');
       const siteKey = getSiteKey(url, tabs[0]?.title || '');
-      logPopupInit('fallback-state-loaded', siteKey);
       const pageSites = saved.pageSelectionButtonSites && typeof saved.pageSelectionButtonSites === 'object' ? saved.pageSelectionButtonSites : {};
       const doubleSites = saved.doubleClickBlbSites && typeof saved.doubleClickBlbSites === 'object' ? saved.doubleClickBlbSites : {};
       document.getElementById('master').checked = saved.masterEnabled !== false;
