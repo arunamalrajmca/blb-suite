@@ -894,6 +894,8 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         // Keep the handoff URL limited to the requested reference text.
         const handoffUrl = chrome.runtime.getURL('multiverse-post.html') + '?' + handoffParams.toString();
 
+        const tabCreateStartedAt = Date.now();
+        console.info('[BLB MV timing]', {stage:'tab-create-start', at:tabCreateStartedAt, active:!!active, preferredTabId:preferredTabId ?? null, refCount:canonical.refs.length, refChars:mvText.length});
         let tab = null;
         let reusedOriginTab = false;
         if (preferredTabId != null) {
@@ -919,9 +921,11 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
           }
         }
         if (tab?.id == null) return null;
+        console.info('[BLB MV timing]', {stage:'tab-created', at:Date.now(), tabId:tab.id, tabCreateDurationMs:Date.now()-tabCreateStartedAt, reusedOriginTab});
         await updateTrackedMultiVerseTabs(map => {
           map[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
         });
+        console.info('[BLB MV timing]', {stage:'tab-tracking-finished', at:Date.now(), tabId:tab.id, totalTabSetupDurationMs:Date.now()-tabCreateStartedAt});
         return tab;
       }
     });
