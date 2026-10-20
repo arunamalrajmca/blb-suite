@@ -6228,6 +6228,9 @@ async function shouldShowBlbContextMenu(tab, selectionText) {
   return await isPageButtonEnabledForHostname(siteKey, tab?.title || '');
 }
 
+// Serialize native context-menu operations across async tab/storage events.
+let selectionMenuOperation = Promise.resolve();
+
 async function ensurePdfSelectionContextMenu() {
   if (pdfSelectionMenuKnownPresent) return true;
   // Context-menu entries persist across service-worker restarts. Adopt an
