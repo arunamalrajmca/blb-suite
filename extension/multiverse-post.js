@@ -16,8 +16,10 @@
         return;
       }
 
-      // Ask the background coordinator for a rate-limited POST slot. All tabs
-      // have already been created/reserved; only network submissions are paced.
+      // All destination tabs are created/reserved up front, but POSTs are paced.
+      // Update the status before requesting a slot so queued tabs do not appear
+      // frozen on the generic opening message while waiting for their turn.
+      status.textContent = 'Waiting for its turn to submit the requested Bible references…';
       const slot = await chrome.runtime.sendMessage({type:'blbSuiteAcquireMultiVersePostSlot'}).catch(error => ({ok:false, error:String(error)}));
       if (!slot?.ok) {
         showFailure('Unable to queue this Multi-Verse request. Please retry this tab.');
