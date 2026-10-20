@@ -18,14 +18,21 @@
         return;
       }
 
-      // PDF-originated batches use a dedicated queue. The standard MultiVerse
-      // queue keeps its existing 1500 ms spacing; PDF batches use 750 ms.
-      const slot = await chrome.runtime.sendMessage({
-        type:'blbSuiteAcquireMultiVersePostSlot',
-        pdfFastSubmit:isPdfFastSubmit
-      }).catch(error => ({ok:false, error:String(error)}));
+      // Keep all submissions in the background's shared FIFO queue. The
+      // queue response includes diagnostic detail if admission fails.
+      let slot;
+      try {
+        slot = await chrome.runtime.sendMessage({
+          type:'blbSuiteAcquireMultiVersePostSlot',
+          pdfFastSubmit:isPdfFastSubmit
+        });
+      } catch (error) {
+        showFailure('Multi-Verse queue connection failed: ' + String(error));
+        return;
+      }
       if (!slot?.ok) {
-        showFailure('Unable to queue this Multi-Verse request. Please retry this tab.');
+        const detail = slot?.error ? ' Details: ' + String(slot.error) : ' The background queue did not return a successful response.';
+        showFailure('Unable to queue this Multi-Verse request.' + detail + ' Please retry this tab.');
         return;
       }
 
