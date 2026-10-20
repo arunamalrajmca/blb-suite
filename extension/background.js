@@ -6491,7 +6491,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         ? null
         : await getContextualSelectionReference(tab?.id, text);
       if (menuId === 'blb-suite-pdf-selection') pdfClickTrace('selection-checks-complete', {combinedTextChars:text.length});
-      await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true}, contextualRef || null);
+      await openSelectedPdfBibleRefs(text, {activeIfNew:false, activateExisting:false}, contextualRef || null);
     }
     await clearPageSelectionAfterBlbAction(tab?.id);
   } catch (err) {
