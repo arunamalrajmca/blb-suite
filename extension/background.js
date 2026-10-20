@@ -5925,33 +5925,12 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
         )
       : null;
 
-    // Return immediately after both destination tabs are created. The full
-    // classifier is correctness/reconciliation work, not part of the user's
-    // tab-opening critical path. If it produces a different authoritative
-    // Criteria query, update the already-open Criteria tab in the background.
-    void (async () => {
-      try {
-        const authoritativeDecision = classifySelectionForBlb(text);
-        const authoritativeQuery = authoritativeDecision?.kjvPassageQuery || '';
-        if (authoritativeQuery === fastCriteriaQuery) return;
-
-        if (criteriaTab?.id != null && authoritativeQuery) {
-          try {
-            await chrome.tabs.update(criteriaTab.id, {
-              url: `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(authoritativeQuery).replace(/%20/g,'+')}`
-            });
-          } catch (_) {}
-        } else if (authoritativeQuery) {
-          await openBlbDestination(
-            `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(authoritativeQuery).replace(/%20/g,'+')}`,
-            false,
-            false
-          );
-        }
-      } catch (err) {
-        console.warn('BLB Suite paragraph Criteria reconciliation:', err);
-      }
-    })();
+    // The fast residual-prose query above is intentionally the only Criteria
+    // work in this multi-reference path. Running classifySelectionForBlb here
+    // performs synchronous corpus matching on the service worker thread even
+    // inside an async IIFE, which can stall unrelated handlers after tabs open.
+    // Do not run optional full-classifier reconciliation for multi-reference
+    // PDF selections; keep the reference-opening path responsive.
     return;
   }
 
