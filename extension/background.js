@@ -772,7 +772,8 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
       index === 0 ? !!active : false,
       allVerses.length > 1 && batchVerses.length === 1,
       index === 0 ? options.preferredTabId : null,
-      batchVerses
+      batchVerses,
+      !!options.pdfFastSubmit
     );
     return result?.ok
       ? {...result, count:batchVerses.length, batch:index + 1}
@@ -833,7 +834,7 @@ async function openBlbDestinationByIdentity({key, active = false, findExisting, 
   }
 }
 
-async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false, preferredTabId = null, preparedVerses = null) {
+async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false, preferredTabId = null, preparedVerses = null, pdfFastSubmit = false) {
   // Enforce the cap again at the final handoff boundary. This ensures the
   // references actually stored for the MultiVerse textbox cannot expand to
   // more than 200 individual verses after canonicalization.
@@ -900,7 +901,9 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
           map[String(tab.id)] = {key:verseSetKey, updatedAt:Date.now()};
         });
         const mvText = canonical.refs.map(ref => ref.book + ' ' + ref.chapter + ':' + ref.from + (ref.to != null && ref.to !== ref.from ? '-' + ref.to : '')).join('; ');
-        const handoffUrl = chrome.runtime.getURL('multiverse-post.html') + '?' + new URLSearchParams({mvText}).toString();
+        const handoffParams = new URLSearchParams({mvText});
+        if (pdfFastSubmit) handoffParams.set('mvPdfFast', '1');
+        const handoffUrl = chrome.runtime.getURL('multiverse-post.html') + '?' + handoffParams.toString();
         try {
           await chrome.tabs.update(tab.id, {url:handoffUrl, active:!!active});
         } catch (error) {
@@ -5845,7 +5848,8 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     const studyCapture = recordStudyRefs(combinedRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
     const referenceOpen = openBlbMultiVerseRefs(
       combinedRefs,
-      !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
+      !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting,
+      {pdfFastSubmit:true}
     );
     const criteriaOpen = fastCriteriaQuery
       ? openBlbDestination(
@@ -5971,7 +5975,8 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       const studyCapture = recordStudyRefs(parsedRefs);
       const referenceOpen = openBlbMultiVerseRefs(
         decision.refs,
-        !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
+        !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting,
+        {pdfFastSubmit:true}
       );
       const criteriaOpen = decision.kjvPassageQuery
         ? openBlbDestination(
