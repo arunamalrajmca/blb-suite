@@ -895,11 +895,7 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         // when no existing matching batch tab was found above.
         const mvText = canonical.refs.map(ref => ref.book + ' ' + ref.chapter + ':' + ref.from + (ref.to != null && ref.to !== ref.from ? '-' + ref.to : '')).join('; ');
         const handoffParams = new URLSearchParams({mvText});
-        if (pdfFastSubmit) handoffParams.set('mvPdfFast', '1');
-        // Keep trace IDs for diagnostics only. PDF batches now enter the shared
-        // POST queue as soon as each handoff page is ready; they no longer wait
-        // for an earlier batch index to become ready.
-        if (pdfTraceId) handoffParams.set('mvPdfTrace', pdfTraceId);
+        // Keep the handoff URL limited to the requested reference text.
         const handoffUrl = chrome.runtime.getURL('multiverse-post.html') + '?' + handoffParams.toString();
 
         let tab = null;
