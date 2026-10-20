@@ -761,9 +761,9 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
     batches.push(allVerses.slice(offset, offset + BLB_MULTIVERSE_MAX_VERSES));
   }
 
-  // Create all PDF handoff tabs concurrently so every requested batch starts
-  // loading immediately. Submission order is enforced independently by the
-  // shared POST queue using the explicit PDF batch index, not tab load timing.
+  // Create all handoff tabs concurrently so every requested batch starts
+  // loading immediately. Every ready handoff uses the same shared FIFO POST
+  // queue and normal submission interval, regardless of where it originated.
   const batchResults = await Promise.all(batches.map(async (batchVerses, index) => {
     const compactRefs = compactMultiVerseVerses(batchVerses);
     const result = await openBlbMultiVerseRefsSingleBatch(
