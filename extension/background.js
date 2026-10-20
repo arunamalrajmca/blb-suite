@@ -5852,31 +5852,36 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
   });
   if (combinedRefs.length >= 2) {
+    // Start the MultiVerse tab-opening path before doing any Criteria-query
+    // extraction. The latter performs corpus lookups and scans the selected
+    // text synchronously; on PDF selections it must not sit in front of the
+    // first visible reference tab.
+    const referenceOpen = openBlbMultiVerseRefs(
+      combinedRefs,
+      !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting,
+      {pdfFastSubmit:true}
+    );
+    const studyCapture = recordStudyRefs(combinedRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
+
+    // Give the destination-tab path its first asynchronous turn before
+    // running residual-text / Criteria work. Keep that work after the
+    // reference tab is opened, since it is optional to the primary action.
+    const referenceTab = await referenceOpen;
+    await studyCapture;
+
     const excludedVerseTexts = combinedRefs
       .map(ref => getKjvVerseTextForSelectionRef(ref))
       .filter(Boolean);
     let residualText = removeKjvVerseTextFromSelection(text, combinedRefs);
     residualText = removeQuotedTextFromSelection(residualText);
     const fastCriteriaQuery = extractResidualProseShortCriteriaQuery(residualText, excludedVerseTexts);
-
-    const studyCapture = recordStudyRefs(combinedRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
-    const referenceOpen = openBlbMultiVerseRefs(
-      combinedRefs,
-      !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting,
-      {pdfFastSubmit:true}
-    );
-    const criteriaOpen = fastCriteriaQuery
-      ? openBlbDestination(
+    const criteriaTab = fastCriteriaQuery
+      ? await openBlbDestination(
           `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(fastCriteriaQuery).replace(/%20/g,'+')}`,
           false,
           false
         )
-      : Promise.resolve(null);
-
-    // Await only the actual tab creation/storage handoff. This is the point
-    // at which the user has both destinations available; the expensive
-    // classifier runs afterward while the service worker remains active.
-    const [referenceTab, criteriaTab] = await Promise.all([referenceOpen, criteriaOpen, studyCapture]);
+      : null;
 
     // Return immediately after both destination tabs are created. The full
     // classifier is correctness/reconciliation work, not part of the user's
