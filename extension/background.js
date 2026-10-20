@@ -3307,19 +3307,19 @@ function grantMultiVersePostSlot(minimumIntervalMs, tabId = null, queuedAt = Dat
     const timerDelayMs = timerWakeAt === null ? 0 : timerWakeAt - timerScheduledAt - waitMs;
     const postTimerDelayMs = timerWakeAt === null ? 0 : grantedAt - timerWakeAt;
     lastMultiVersePostSlotAt = grantedAt;
-    console.info('[BLB MV timing]', {
-      stage:'queue-slot-granted',
-      tabId,
-      queuedAt,
-      queueStartedAt,
-      timerScheduledAt,
-      timerWakeAt,
-      grantedAt,
-      totalQueueWaitMs:grantedAt-queuedAt,
-      intervalWaitMs:waitMs,
-      timerDelayMs,
-      postTimerDelayMs
-    });
+    console.info(
+      '[BLB MV timing] stage=queue-slot-granted' +
+      ' tabId=' + tabId +
+      ' queuedAt=' + queuedAt +
+      ' queueStartedAt=' + queueStartedAt +
+      ' timerScheduledAt=' + timerScheduledAt +
+      ' timerWakeAt=' + timerWakeAt +
+      ' grantedAt=' + grantedAt +
+      ' totalQueueWaitMs=' + (grantedAt - queuedAt) +
+      ' intervalWaitMs=' + waitMs +
+      ' timerDelayMs=' + timerDelayMs +
+      ' postTimerDelayMs=' + postTimerDelayMs
+    );
     return {ok:true};
   });
   pendingMultiVersePostSlot = slot.then(() => undefined, () => undefined);
