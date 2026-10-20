@@ -722,18 +722,13 @@ function compactMultiVerseVerses(verses) {
   return compact;
 }
 
-// Serialize the complete multi-batch operation, not just individual tab creation.
-// Otherwise two identical selections can both pass the existing-tab check before
-// either request has finished reserving every batch.
-let pendingMultiVerseRequest = Promise.resolve();
-
+// Do not serialize whole MultiVerse requests globally. A prior request may
+// still be completing tab bookkeeping while the next user action is ready; a
+// global promise queue makes the new click wait before its first tab can open.
+// Per-batch identity locks in openBlbDestinationByIdentity coalesce duplicate
+// batches, while each request still reserves its own distinct batch tabs.
 function openBlbMultiVerseRefs(refs, active = true, options = {}) {
-  const run = pendingMultiVerseRequest.then(
-    () => openBlbMultiVerseRefsSerialized(refs, active, options),
-    () => openBlbMultiVerseRefsSerialized(refs, active, options)
-  );
-  pendingMultiVerseRequest = run.then(() => undefined, () => undefined);
-  return run;
+  return openBlbMultiVerseRefsSerialized(refs, active, options);
 }
 
 async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}) {
