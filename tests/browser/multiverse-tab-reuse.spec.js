@@ -284,7 +284,13 @@ test('case-sensitive search reuses the originating tab and leaves no blank orpha
     };
   });
   expect(result.handled).toBe(true);
-  expect(result.originUrl).toContain('blueletterbible.org/tools/MultiVerse.cfm');
+  // The extension handoff page must load before it POSTs to BLB. A fixed
+  // 100 ms observation can capture the legitimate intermediate URL and make
+  // this a flaky timing assertion rather than a tab-reuse regression.
+  await expect.poll(async () => extensionWorker.evaluate(async originId => {
+    try { return (await chrome.tabs.get(originId)).url || ''; }
+    catch (_) { return ''; }
+  }, result.originId), {timeout:10000}).toContain('blueletterbible.org/tools/MultiVerse.cfm');
   expect(result.blankTabs).not.toContain(result.originId);
   expect(result.tracked.map(tab => tab.id)).toContain(result.originId);
   await expect.poll(() => submittedPayloads.length).toBe(2);
