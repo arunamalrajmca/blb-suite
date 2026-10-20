@@ -4170,7 +4170,17 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // book name (for example "... says, Hebrews 10:7") and then fail book
   // resolution. Scan the authoritative book forms directly as a final safety
   // net. Also accept conventional Roman-numeral forms such as "I Timothy".
-  for (const item of cachedPatterns) {
+  //
+  // PDF selections can contain hundreds of thousands of characters. Running
+  // every alias regex over the entire selection made this final pass scale
+  // with (selection length × every book alias), even when most book names
+  // were absent. Use a normalized, cheap substring prefilter so only forms
+  // actually present in the selected text get a full reference-regex scan.
+  const compactSourceLower = source.toLowerCase().replace(/\s+/g, ' ');
+  const candidatePatterns = cachedPatterns.filter(item =>
+    compactSourceLower.includes(String(item.form || '').toLowerCase().replace(/\s+/g, ' ').trim())
+  );
+  for (const item of candidatePatterns) {
     item.re.lastIndex = 0;
     while ((m = item.re.exec(source))) {
       // Never allow a suffix book form to become a second reference when it
@@ -5846,9 +5856,18 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // term in parallel, then run the full classifier only for reconciliation.
   const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
   const wholeBookRefs = getSelectedWholeBookReferencesFromMixedText(text);
+  const sourceLower = text.toLowerCase();
+  const referenceTextPositions = new Map();
+  const getReferenceTextPosition = ref => {
+    const refText = String(ref.text || '').toLowerCase();
+    if (!referenceTextPositions.has(refText)) {
+      referenceTextPositions.set(refText, sourceLower.indexOf(refText));
+    }
+    return referenceTextPositions.get(refText);
+  };
   const combinedRefs = [...selectedRefs, ...wholeBookRefs].sort((a, b) => {
-    const aIndex = text.toLowerCase().indexOf(String(a.text || '').toLowerCase());
-    const bIndex = text.toLowerCase().indexOf(String(b.text || '').toLowerCase());
+    const aIndex = getReferenceTextPosition(a);
+    const bIndex = getReferenceTextPosition(b);
     return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
   });
   if (combinedRefs.length >= 2) {
