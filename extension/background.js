@@ -5837,7 +5837,12 @@ async function getContextualSelectionReference(tabId, selectionText) {
 }
 
 async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNew:true, activateExisting:true}, contextualRef = null) {
+  const pdfTraceId = 'pdfmv-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+  const pdfTraceStart = Date.now();
+  const pdfTrace = (stage, details = {}) => console.info('[BLB PDF MultiVerse timing]', JSON.stringify({id:pdfTraceId, stage, elapsedMs:Date.now()-pdfTraceStart, at:Date.now(), ...details}));
+  pdfTrace('handler-enter', {selectionChars:String(selectionText || '').length});
   const text = normalizeSelectedScriptureText(selectionText);
+  pdfTrace('text-normalized', {normalizedChars:text.length});
 
   // FAST MULTI-REFERENCE PATH:
   // The explicit-reference parser is already the authoritative source for
@@ -5851,15 +5856,17 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     const bIndex = text.toLowerCase().indexOf(String(b.text || '').toLowerCase());
     return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
   });
+  pdfTrace('reference-parse-complete', {selectedRefs:selectedRefs.length, wholeBookRefs:wholeBookRefs.length, combinedRefs:combinedRefs.length});
   if (combinedRefs.length >= 2) {
     // Start the MultiVerse tab-opening path before doing any Criteria-query
     // extraction. The latter performs corpus lookups and scans the selected
     // text synchronously; on PDF selections it must not sit in front of the
     // first visible reference tab.
+    pdfTrace('multiverse-open-requested', {refs:combinedRefs.length});
     const referenceOpen = openBlbMultiVerseRefs(
       combinedRefs,
       !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting,
-      {pdfFastSubmit:true}
+      {pdfFastSubmit:true, pdfTraceId, pdfTraceStart}
     );
     const studyCapture = recordStudyRefs(combinedRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
 
@@ -5867,6 +5874,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     // running residual-text / Criteria work. Keep that work after the
     // reference tab is opened, since it is optional to the primary action.
     const referenceTab = await referenceOpen;
+    pdfTrace('first-tab-open-result', {ok:referenceTab?.ok, tabId:referenceTab?.tabId, batchCount:referenceTab?.batchCount, reason:referenceTab?.reason});
     await studyCapture;
 
     const excludedVerseTexts = combinedRefs
@@ -6420,7 +6428,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   // native selection text, though: if the DOM serializer omits a nested or
   // partially selected block, the native text can still contain its citation.
   // The reference extractor deduplicates citations found in both sources.
+  const pdfClickTraceStart = Date.now();
+  const pdfClickTraceId = 'pdfclick-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+  const pdfClickTrace = (stage, details = {}) => console.info('[BLB PDF MultiVerse timing]', JSON.stringify({id:pdfClickTraceId, stage, elapsedMs:Date.now()-pdfClickTraceStart, at:Date.now(), ...details}));
   const nativeText = String(info.selectionText || '').trim();
+  if (menuId === 'blb-suite-pdf-selection') pdfClickTrace('context-menu-click', {tabId:tab?.id, selectionChars:nativeText.length});
   let liveText = '';
   let text = nativeText;
   if (menuId === 'blb-suite-web-selection' && Number.isInteger(tab?.id)) {
@@ -6445,6 +6457,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       const contextualRef = menuId === 'blb-suite-pdf-selection'
         ? null
         : await getContextualSelectionReference(tab?.id, text);
+      if (menuId === 'blb-suite-pdf-selection') pdfClickTrace('selection-checks-complete', {combinedTextChars:text.length});
       await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true}, contextualRef || null);
     }
     await clearPageSelectionAfterBlbAction(tab?.id);
