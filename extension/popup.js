@@ -56,7 +56,7 @@ async function hasSiteFeatureHostAccess(origin) {
 async function getState() {
   const [tabs, data] = await Promise.all([
     chrome.tabs.query({active:true, currentWindow:true}),
-    chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false})
+    chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false, pdfSelectionContextUntil:0})
   ]);
   const pageTitle = tabs[0]?.title || '';
   const pageTitleForDefaultCheck = pageTitle;
@@ -72,7 +72,7 @@ async function getState() {
   const defaultEnabled = await getDefaultSiteEnabled(siteKey, pageTitleForDefaultCheck);
   const isBlbSite = siteKey === BLB_HOSTNAME;
   const isSensitiveSite = isSensitiveSiteHostname(siteKey);
-  const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
+  const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__' || Number(data.pdfSelectionContextUntil || 0) > Date.now();
   let hasCurrentSiteAccess = true;
   let hasSiteSpecificAccess = true;
   if (!isBlbSite && currentSiteOrigin) {
