@@ -761,28 +761,31 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
     batches.push(allVerses.slice(offset, offset + BLB_MULTIVERSE_MAX_VERSES));
   }
 
-  const results = [];
-  for (let index = 0; index < batches.length; index++) {
-    const batchVerses = batches[index];
+  // Prepare each batch's destination tab concurrently. The global request
+  // queue above still serializes separate user requests, while each batch keeps
+  // its own identity lock and POST submission slot. This avoids making batch
+  // N wait for batch N-1's tab query/reservation/navigation to finish.
+  const batchResults = await Promise.all(batches.map(async (batchVerses, index) => {
     const compactRefs = compactMultiVerseVerses(batchVerses);
     const result = await openBlbMultiVerseRefsSingleBatch(
       compactRefs,
       index === 0 ? !!active : false,
       allVerses.length > 1 && batchVerses.length === 1,
-      index === 0 ? options.preferredTabId : null
+      index === 0 ? options.preferredTabId : null,
+      batchVerses
     );
-    if (!result?.ok) {
-      return {
-        ok:false, reason:result?.reason || 'batch-open-failed',
-        count:results.reduce((sum, item) => sum + Number(item.count || 0), 0),
-        batchCount:results.length, failedBatch:index + 1, results
-      };
-    }
-    results.push({...result, count:batchVerses.length, batch:index + 1});
-
-    // Open subsequent batches immediately. The extension-owned handoff page
-    // carries each batch's own POST payload, so tab creation must not wait on a
-    // prior page load or introduce an artificial inter-tab delay.
+    return result?.ok
+      ? {...result, count:batchVerses.length, batch:index + 1}
+      : {ok:false, reason:result?.reason || 'batch-open-failed', batch:index + 1, result};
+  }));
+  const failed = batchResults.find(item => !item.ok);
+  const results = batchResults.filter(item => item.ok);
+  if (failed) {
+    return {
+      ok:false, reason:failed.reason,
+      count:results.reduce((sum, item) => sum + Number(item.count || 0), 0),
+      batchCount:results.length, failedBatch:failed.batch, results
+    };
   }
 
   return {
@@ -830,11 +833,13 @@ async function openBlbDestinationByIdentity({key, active = false, findExisting, 
   }
 }
 
-async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false, preferredTabId = null) {
+async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false, preferredTabId = null, preparedVerses = null) {
   // Enforce the cap again at the final handoff boundary. This ensures the
   // references actually stored for the MultiVerse textbox cannot expand to
   // more than 200 individual verses after canonicalization.
-  const finalVerses = expandMultiVerseRefsToVerses(refs).slice(0, BLB_MULTIVERSE_MAX_VERSES);
+  const finalVerses = (Array.isArray(preparedVerses)
+    ? preparedVerses
+    : expandMultiVerseRefsToVerses(refs)).slice(0, BLB_MULTIVERSE_MAX_VERSES);
   const finalRefs = compactMultiVerseVerses(finalVerses);
   const canonical = canonicalMultiVerseSet(finalRefs);
   if (!canonical.key || (finalVerses.length < 2 && !allowSingleVerseBatch) || !canonical.refs.length) {
@@ -847,7 +852,7 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
   // Restrict the lookup to BLB MultiVerse handoff tabs rather than every
   // browser tab. This keeps MultiVerse selection latency independent of the
   // user's total tab count.
-  const verseSetKey = canonicalMultiVerseSet(finalVerses).key;
+  const verseSetKey = canonical.key;
   let navigationError = null;
   let result;
   try {
