@@ -5852,35 +5852,38 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
   });
   if (combinedRefs.length >= 2) {
+    // Start the reference-tab workflow before expensive verse-text removal,
+    // residual Criteria extraction, and study-history storage. Those tasks
+    // used to run synchronously first, so right-click appeared unresponsive
+    // and no tabs began opening until all selection analysis had finished.
+    const referenceOpen = openBlbMultiVerseRefs(
+      combinedRefs,
+      !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
+    );
+
+    // Yield to the tab-opening pipeline first. POST pacing remains in each
+    // handoff page; this only removes CPU/storage work from the click-to-tab
+    // critical path.
+    const referenceResult = await referenceOpen;
+
     const excludedVerseTexts = combinedRefs
       .map(ref => getKjvVerseTextForSelectionRef(ref))
       .filter(Boolean);
     let residualText = removeKjvVerseTextFromSelection(text, combinedRefs);
     residualText = removeQuotedTextFromSelection(residualText);
     const fastCriteriaQuery = extractResidualProseShortCriteriaQuery(residualText, excludedVerseTexts);
-
     const studyCapture = recordStudyRefs(combinedRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean));
-    const referenceOpen = openBlbMultiVerseRefs(
-      combinedRefs,
-      !!tabBehavior.activeIfNew || !!tabBehavior.activateExisting
-    );
-    const criteriaOpen = fastCriteriaQuery
-      ? openBlbDestination(
+    const criteriaTab = fastCriteriaQuery
+      ? await openBlbDestination(
           `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(fastCriteriaQuery).replace(/%20/g,'+')}`,
           false,
           false
         )
-      : Promise.resolve(null);
+      : null;
+    await studyCapture;
 
-    // Await only the actual tab creation/storage handoff. This is the point
-    // at which the user has both destinations available; the expensive
-    // classifier runs afterward while the service worker remains active.
-    const [referenceTab, criteriaTab] = await Promise.all([referenceOpen, criteriaOpen, studyCapture]);
-
-    // Return immediately after both destination tabs are created. The full
-    // classifier is correctness/reconciliation work, not part of the user's
-    // tab-opening critical path. If it produces a different authoritative
-    // Criteria query, update the already-open Criteria tab in the background.
+    // Reconciliation is background correctness work; it must not delay the
+    // initial MultiVerse tabs from being reserved and navigated.
     void (async () => {
       try {
         const authoritativeDecision = classifySelectionForBlb(text);
@@ -5904,7 +5907,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
         console.warn('BLB Suite paragraph Criteria reconciliation:', err);
       }
     })();
-    return;
+    return referenceResult;
   }
 
   // A validated adjacent citation is authoritative for the reference tab.
@@ -6402,7 +6405,12 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     if (normalizeSiteHostname(hostnameFromTabUrl(tab?.url)) === BLB_HOSTNAME) {
       await openBlbPageSelection(text, {activeIfNew:true, activateExisting:true});
     } else {
-      const contextualRef = await getContextualSelectionReference(tab?.id, text);
+      // Built-in PDF viewers do not expose a reliable content-script endpoint.
+      // Avoid a messaging round-trip that can stall the right-click action;
+      // selected text itself remains the authoritative input for PDF routing.
+      const contextualRef = isPdfViewerTab(tab)
+        ? null
+        : await getContextualSelectionReference(tab?.id, text);
       await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true}, contextualRef || null);
     }
     await clearPageSelectionAfterBlbAction(tab?.id);
