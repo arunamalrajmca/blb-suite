@@ -761,48 +761,26 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
     batches.push(allVerses.slice(offset, offset + BLB_MULTIVERSE_MAX_VERSES));
   }
 
-  // PDF handoff pages must be created in reference order. Concurrent tab
-  // creation lets later handoff documents finish loading first and request the
-  // shared POST slot before earlier batches; that can make the final KJV
-  // result appear first even when its tab was requested last. Keep the existing
-  // concurrent preparation for other callers, but sequence PDF tab handoffs.
-  let batchResults;
-  if (options.pdfFastSubmit) {
-    batchResults = [];
-    for (let index = 0; index < batches.length; index++) {
-      const batchVerses = batches[index];
-      const compactRefs = compactMultiVerseVerses(batchVerses);
-      const result = await openBlbMultiVerseRefsSingleBatch(
-        compactRefs,
-        index === 0 ? !!active : false,
-        allVerses.length > 1 && batchVerses.length === 1,
-        index === 0 ? options.preferredTabId : null,
-        batchVerses,
-        true,
-        options.pdfTraceId || ''
-      );
-      batchResults.push(result?.ok
-        ? {...result, count:batchVerses.length, batch:index + 1}
-        : {ok:false, reason:result?.reason || 'batch-open-failed', batch:index + 1, result});
-      if (!result?.ok) break;
-    }
-  } else {
-    batchResults = await Promise.all(batches.map(async (batchVerses, index) => {
-      const compactRefs = compactMultiVerseVerses(batchVerses);
-      const result = await openBlbMultiVerseRefsSingleBatch(
-        compactRefs,
-        index === 0 ? !!active : false,
-        allVerses.length > 1 && batchVerses.length === 1,
-        index === 0 ? options.preferredTabId : null,
-        batchVerses,
-        false,
-        options.pdfTraceId || ''
-      );
-      return result?.ok
-        ? {...result, count:batchVerses.length, batch:index + 1}
-        : {ok:false, reason:result?.reason || 'batch-open-failed', batch:index + 1, result};
-    }));
-  }
+  // Create all PDF handoff tabs concurrently so every requested batch starts
+  // loading immediately. Submission order is enforced independently by the
+  // shared POST queue using the explicit PDF batch index, not tab load timing.
+  const batchResults = await Promise.all(batches.map(async (batchVerses, index) => {
+    const compactRefs = compactMultiVerseVerses(batchVerses);
+    const result = await openBlbMultiVerseRefsSingleBatch(
+      compactRefs,
+      index === 0 ? !!active : false,
+      allVerses.length > 1 && batchVerses.length === 1,
+      index === 0 ? options.preferredTabId : null,
+      batchVerses,
+      !!options.pdfFastSubmit,
+      options.pdfTraceId || '',
+      index,
+      batches.length
+    );
+    return result?.ok
+      ? {...result, count:batchVerses.length, batch:index + 1}
+      : {ok:false, reason:result?.reason || 'batch-open-failed', batch:index + 1, result};
+  }));
   const failed = batchResults.find(item => !item.ok);
   const results = batchResults.filter(item => item.ok);
   if (failed) {
@@ -858,7 +836,7 @@ async function openBlbDestinationByIdentity({key, active = false, findExisting, 
   }
 }
 
-async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false, preferredTabId = null, preparedVerses = null, pdfFastSubmit = false, pdfTraceId = '') {
+async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false, preferredTabId = null, preparedVerses = null, pdfFastSubmit = false, pdfTraceId = '', pdfBatchIndex = 0, pdfBatchCount = 1) {
   // Enforce the cap again at the final handoff boundary. This ensures the
   // references actually stored for the MultiVerse textbox cannot expand to
   // more than 200 individual verses after canonicalization.
@@ -917,7 +895,11 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
         // when no existing matching batch tab was found above.
         const mvText = canonical.refs.map(ref => ref.book + ' ' + ref.chapter + ':' + ref.from + (ref.to != null && ref.to !== ref.from ? '-' + ref.to : '')).join('; ');
         const handoffParams = new URLSearchParams({mvText});
-        if (pdfFastSubmit) handoffParams.set('mvPdfFast', '1');
+        if (pdfFastSubmit) {
+          handoffParams.set('mvPdfFast', '1');
+          handoffParams.set('mvPdfBatchIndex', String(pdfBatchIndex));
+          handoffParams.set('mvPdfBatchCount', String(pdfBatchCount));
+        }
         if (pdfTraceId) handoffParams.set('mvPdfTrace', pdfTraceId);
         const handoffUrl = chrome.runtime.getURL('multiverse-post.html') + '?' + handoffParams.toString();
 
@@ -3316,22 +3298,69 @@ let pendingMultiVersePostSlot = Promise.resolve();
 // Keep queue admission in its own message listener. The general async router
 // handles many unrelated operations; isolating this timing-sensitive response
 // avoids coupling queue delivery to that router's async dispatch path.
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type !== 'blbSuiteAcquireMultiVersePostSlot') return false;
-  const minimumIntervalMs = message.pdfFastSubmit === true
-    ? PDF_MULTIVERSE_POST_MIN_INTERVAL_MS
-    : MULTIVERSE_POST_MIN_INTERVAL_MS;
-  const slot = pendingMultiVersePostSlot.then(async () => {
+// Preserve global FIFO and normal submission spacing. PDF batches carry an
+// explicit index so tab-load races cannot reorder their MultiVerse POSTs.
+const pendingPdfPostQueues = new Map();
+let pendingNonPdfMultiVersePostSlot = Promise.resolve();
+function grantMultiVersePostSlot(minimumIntervalMs) {
+  const slot = pendingNonPdfMultiVersePostSlot.then(async () => {
     const waitMs = Math.max(0, minimumIntervalMs - (Date.now() - lastMultiVersePostSlotAt));
     if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
     lastMultiVersePostSlotAt = Date.now();
     return {ok:true};
   });
-  pendingMultiVersePostSlot = slot.then(() => undefined, () => undefined);
-  slot.then(
-    response => sendResponse(response),
-    error => sendResponse({ok:false, error:String(error)})
-  );
+  pendingNonPdfMultiVersePostSlot = slot.then(() => undefined, () => undefined);
+  return slot;
+}
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type !== 'blbSuiteAcquireMultiVersePostSlot') return false;
+  const minimumIntervalMs = message.pdfFastSubmit === true
+    ? PDF_MULTIVERSE_POST_MIN_INTERVAL_MS
+    : MULTIVERSE_POST_MIN_INTERVAL_MS;
+  if (message.pdfFastSubmit !== true || !message.pdfTraceId) {
+    grantMultiVersePostSlot(minimumIntervalMs).then(
+      response => sendResponse(response),
+      error => sendResponse({ok:false, error:String(error)})
+    );
+    return true;
+  }
+
+  const traceId = String(message.pdfTraceId);
+  const index = Math.max(0, Number(message.pdfBatchIndex) || 0);
+  const count = Math.max(1, Number(message.pdfBatchCount) || 1);
+  let queue = pendingPdfPostQueues.get(traceId);
+  if (!queue) {
+    queue = {nextIndex:0, count, waiting:new Map(), running:false};
+    pendingPdfPostQueues.set(traceId, queue);
+  } else {
+    queue.count = Math.max(queue.count, count);
+  }
+  queue.waiting.set(index, {sendResponse, minimumIntervalMs});
+  const drain = async () => {
+    if (queue.running) return;
+    queue.running = true;
+    try {
+      while (queue.waiting.has(queue.nextIndex)) {
+        const item = queue.waiting.get(queue.nextIndex);
+        queue.waiting.delete(queue.nextIndex);
+        try {
+          const response = await grantMultiVersePostSlot(item.minimumIntervalMs);
+          item.sendResponse(response);
+        } catch (error) {
+          item.sendResponse({ok:false, error:String(error)});
+        }
+        queue.nextIndex++;
+      }
+    } finally {
+      queue.running = false;
+      if (queue.nextIndex >= queue.count && queue.waiting.size === 0) {
+        pendingPdfPostQueues.delete(traceId);
+      } else if (queue.waiting.has(queue.nextIndex)) {
+        void drain();
+      }
+    }
+  };
+  void drain();
   return true;
 });
 
