@@ -2,7 +2,9 @@
   'use strict';
 
   const status = document.getElementById('status');
-  const mvTextFromUrl = new URLSearchParams(location.search).get('mvText') || '';
+  const handoffParams = new URLSearchParams(location.search);
+  const mvTextFromUrl = handoffParams.get('mvText') || '';
+  const isPdfFastSubmit = handoffParams.get('mvPdfFast') === '1';
 
   const showFailure = message => {
     status.textContent = message;
@@ -16,9 +18,12 @@
         return;
       }
 
-      // Ask the background coordinator for a rate-limited POST slot. All tabs
-      // have already been created/reserved; only network submissions are paced.
-      const slot = await chrome.runtime.sendMessage({type:'blbSuiteAcquireMultiVersePostSlot'}).catch(error => ({ok:false, error:String(error)}));
+      // PDF-originated batches use a dedicated queue. The standard MultiVerse
+      // queue keeps its existing 1500 ms spacing; PDF batches use 750 ms.
+      const slot = await chrome.runtime.sendMessage({
+        type:'blbSuiteAcquireMultiVersePostSlot',
+        pdfFastSubmit:isPdfFastSubmit
+      }).catch(error => ({ok:false, error:String(error)}));
       if (!slot?.ok) {
         showFailure('Unable to queue this Multi-Verse request. Please retry this tab.');
         return;
