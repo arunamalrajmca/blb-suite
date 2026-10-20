@@ -24,6 +24,11 @@
         return;
       }
 
+      const submitAt = Number(slot.submitAt);
+      if (Number.isFinite(submitAt) && submitAt > Date.now()) {
+        await new Promise(resolve => setTimeout(resolve, submitAt - Date.now()));
+      }
+
       const form = document.createElement('form');
       form.method = 'post';
       form.acceptCharset = 'UTF-8';
