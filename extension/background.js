@@ -6385,7 +6385,7 @@ async function installPdfSelectionContextMenu() {
         id:'blb-suite-pdf-selection',
         title:'Show on BLB\tAlt+B',
         contexts:['selection'],
-        documentUrlPatterns:['file:///*.pdf','http://*/*.pdf*','https://*/*.pdf*'],
+        documentUrlPatterns:['file:///*.pdf'],
         visible:false
       });
       pdfSelectionMenuKnownPresent = true;
