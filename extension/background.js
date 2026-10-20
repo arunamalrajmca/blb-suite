@@ -761,9 +761,14 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
     batches.push(allVerses.slice(offset, offset + BLB_MULTIVERSE_MAX_VERSES));
   }
 
-  const results = [];
-  for (let index = 0; index < batches.length; index++) {
-    const batchVerses = batches[index];
+  // Reserve/navigate all batch tabs concurrently. The old loop awaited each
+  // batch's complete lookup, storage tracking update, tab creation, and
+  // navigation before beginning the next one. For PDF selections that expand
+  // into many 200-verse batches, this serialized browser work delayed the
+  // later handoff pages before they could even request their POST slots.
+  // Actual MultiVerse POSTs remain independently rate-limited by the shared
+  // 1.5-second coordinator in multiverse-post.js.
+  const batchResults = await Promise.all(batches.map(async (batchVerses, index) => {
     const compactRefs = compactMultiVerseVerses(batchVerses);
     const result = await openBlbMultiVerseRefsSingleBatch(
       compactRefs,
@@ -771,6 +776,11 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
       allVerses.length > 1 && batchVerses.length === 1,
       index === 0 ? options.preferredTabId : null
     );
+    return {index, batchVerses, result};
+  }));
+
+  const results = [];
+  for (const {index, batchVerses, result} of batchResults) {
     if (!result?.ok) {
       return {
         ok:false, reason:result?.reason || 'batch-open-failed',
@@ -779,10 +789,6 @@ async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}
       };
     }
     results.push({...result, count:batchVerses.length, batch:index + 1});
-
-    // Open subsequent batches immediately. The extension-owned handoff page
-    // carries each batch's own POST payload, so tab creation must not wait on a
-    // prior page load or introduce an artificial inter-tab delay.
   }
 
   return {
