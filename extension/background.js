@@ -3276,7 +3276,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 const ASYNC_MESSAGE_TYPES = new Set(["blbSuiteAcquireMultiVersePostSlot","blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
-// Serialize MultiVerse POST submissions to preserve order, but do not add an artificial delay.
+// Pace MultiVerse POST submissions to reduce server-side 429 responses while preserving order.
+const MULTIVERSE_POST_MIN_INTERVAL_MS = 1500;
 let lastMultiVersePostSlotAt = 0;
 let pendingMultiVersePostSlot = Promise.resolve();
 
@@ -3287,6 +3288,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'blbSuiteAcquireMultiVersePostSlot') {
     const slot = pendingMultiVersePostSlot.then(async () => {
+      const waitMs = Math.max(0, MULTIVERSE_POST_MIN_INTERVAL_MS - (Date.now() - lastMultiVersePostSlotAt));
+      if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
       lastMultiVersePostSlotAt = Date.now();
       return {ok:true};
     });
