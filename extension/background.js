@@ -5917,13 +5917,13 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     let residualText = removeKjvVerseTextFromSelection(text, combinedRefs);
     residualText = removeQuotedTextFromSelection(residualText);
     const fastCriteriaQuery = extractResidualProseShortCriteriaQuery(residualText, excludedVerseTexts);
-    const criteriaTab = fastCriteriaQuery
-      ? await openBlbDestination(
-          `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(fastCriteriaQuery).replace(/%20/g,'+')}`,
-          false,
-          false
-        )
-      : null;
+    if (fastCriteriaQuery) {
+      await openBlbDestination(
+        `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(fastCriteriaQuery).replace(/%20/g,'+')}`,
+        false,
+        false
+      );
+    }
 
     // The fast residual-prose query above is intentionally the only Criteria
     // work in this multi-reference path. Running classifySelectionForBlb here
