@@ -1504,7 +1504,10 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // maps to one code unit, so DOM selection offsets remain unchanged.
       const candidateMatchSource = candidateSource.replace(/[\u2010-\u2015\u2212]/g, '-');
       if (!candidateSource) continue;
-      const candidateRefs = resolveBibleReferenceText(candidateSource);
+      // Parse the same dash-normalized text used for positional matching;
+      // otherwise Unicode ranges such as 46–47 are located correctly but
+      // rejected by the reference parser before matching can begin.
+      const candidateRefs = resolveBibleReferenceText(candidateMatchSource);
       if (!candidateRefs.length) continue;
 
       let start = null;
@@ -1567,7 +1570,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     const rawSource = domText(block);
     const source = normalizeSelectionText(rawSource).normalize('NFKC');
     if (!source) return null;
-    const refs = resolveBibleReferenceText(source);
+    const refs = resolveBibleReferenceText(source.replace(/[\u2010-\u2015\u2212]/g, '-'));
     // Reference parsing removes invisible directional marks and collapses
     // whitespace. Occurrence matching must use that same normalized text,
     // while Range-derived offsets must be translated from the original DOM
@@ -1982,7 +1985,8 @@ function handleDoubleClickBlb(event) {
         // DOM/context scanning. BLB's word lookup is English KJV; these tokens
         // cannot be valid KJV word searches. Keep multiword/reference selections
         // on the normal path so contextual Bible references still work.
-        if (!/\s/.test(selection) && /[^\x00-\x7F]/.test(selection)) return true;
+        const isReferenceDashGesture=/^[\u2010-\u2015\u2212-]+$/.test(selection);
+        if (!/\s/.test(selection) && /[^\x00-\x7F]/.test(selection) && !isReferenceDashGesture) return true;
 
         // Bible-version abbreviations are reference-context tokens, not word
         // searches. If one is double-clicked beside a reference, resolve that
@@ -2000,7 +2004,12 @@ function handleDoubleClickBlb(event) {
           const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
             && KJV_CORPUS_WORD_INDEX.has(token);
           const isBookName = !!resolveBibleBook(selection);
-          if (!isBibleVersionCode && !isKjvWord && !isBookName) return true;
+          // Roman numeral tokens can be the prefix of a numbered Bible book
+          // (II Samuel, III John). Let them reach the tightly gated nearby-
+          // reference check below; without a valid nearby prefix they remain
+          // inert and are not sent to ordinary word lookup.
+          const isRomanBookPrefixToken = /^(?:I|II|III)$/i.test(selection);
+          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isRomanBookPrefixToken) return true;
         }
 
         // DOM context is useful only when the clicked token can identify a
@@ -2015,29 +2024,41 @@ function handleDoubleClickBlb(event) {
         // back to resolving the suffix alone: "4 John" and "2 Genesis" must
         // not trigger DOM-context analysis.
         const hasNumericPrefix=/^[1-9]\s+/.test(selection);
-        const isPrefixedBookName=hasNumericPrefix && !!resolveBibleBook(selection);
-        const isBookName=!hasNumericPrefix && !!resolveBibleBook(selection);
+        const selectionKey=normalizeDoubleClickToken(selection).toLowerCase();
+        const isKnownBookAlias=Object.keys(BOOK_ALIASES||{}).some(alias =>
+          normalizeDoubleClickToken(alias).toLowerCase()===selectionKey
+        );
+        const isPrefixedBookName=hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
+        const isBookName=!hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
         const contextualTarget=getDoubleClickTargetElement(event)||event.target;
 
-        // A suffix such as "Peter" may be part of a numbered book name.
-        // Check the nearest text block for a valid 1/2/3 prefix before
-        // invoking the full DOM reference parser. Invalid/missing prefixes
-        // therefore do not trigger the expensive contextual scan.
-        const possibleNumberedBookSuffix=/^(?:Samuel|Kings|Chronicles|Corinthians|Thessalonians|Timothy|Peter|John)$/i.test(selection);
+        // A suffix such as "Peter" or "Sam" can be part of a numbered book
+        // name. Only enter contextual matching when the complete nearby prefix
+        // resolves to a real Bible book; arbitrary words remain fast-rejected.
+        const possibleNumberedBookSuffix=/^(?:Sam(?:uel)?|Kings|Kgs?|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)$/i.test(selection);
+        const isRomanBookPrefix=/^(?:I|II|III)$/i.test(selection);
         let hasValidNearbyBookPrefix=false;
-        if (possibleNumberedBookSuffix && !hasNumericPrefix) {
+        let hasValidNearbyRomanBookPrefix=false;
+        if ((possibleNumberedBookSuffix||isRomanBookPrefix) && !hasNumericPrefix) {
           try {
             const contextNode=contextualTarget instanceof Element
               ? (contextualTarget.closest('p,li,td,th,blockquote,article,section,div')||contextualTarget.parentElement||contextualTarget)
               : (event.target?.parentElement||event.target);
             const contextText=normalizeSelectionText(contextNode?.textContent||'');
-            const match=contextText.match(/(?:^|[^A-Za-z0-9])([1-3])\s+(Samuel|Kings|Chronicles|Corinthians|Thessalonians|Timothy|Peter|John)\b/i);
-            hasValidNearbyBookPrefix=!!(match
+            const match=contextText.match(/(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\s+(Samuel|Sam|Kings|Kgs|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)\b/i);
+            const prefixNumber=match
+              ? (/^[1-3]$/.test(match[1]) ? match[1] : ({I:'1',II:'2',III:'3'}[match[1].toUpperCase()]||''))
+              : '';
+            const completeBook=!!(match && prefixNumber && resolveBibleBook(prefixNumber+' '+match[2]));
+            hasValidNearbyBookPrefix=!!(completeBook
               && match[2].toLowerCase()===selection.toLowerCase()
-              && resolveBibleBook(match[1]+' '+match[2]));
+              && /^[1-3]$/.test(match[1]));
+            hasValidNearbyRomanBookPrefix=!!(completeBook
+              && isRomanBookPrefix
+              && match[1].toUpperCase()===selection.toUpperCase());
           } catch (_) {}
         }
-        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||isBibleVersionCode;
+        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture;
         const blockContext=needsDomContext
           ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
           : null;
