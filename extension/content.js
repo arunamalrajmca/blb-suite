@@ -2143,7 +2143,10 @@ function handleDoubleClickBlb(event) {
         );
         const isPrefixedBookName=hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
         const isBookName=!hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
-        const contextualTarget=getDoubleClickTargetElement(event)||event.target;
+        // For explicit verse cues, preserve the physical event target. The generic caret-target helper can return a nearby/stale element, which prevents the post-level resolver from finding the containing message. Other gestures retain the existing target selection behavior.
+        const contextualTarget=isVerseContextWord
+          ? (event.target instanceof Element ? event.target : (event.target?.parentElement || event.target))
+          : (getDoubleClickTargetElement(event)||event.target);
 
         // A suffix such as "Peter" or "Sam" can be part of a numbered book
         // name. Only enter contextual matching when the complete nearby prefix
