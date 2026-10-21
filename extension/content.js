@@ -2120,11 +2120,17 @@ function handleDoubleClickBlb(event) {
         // gesture, the physical event target is authoritative: use its exact
         // token before classifying the gesture, or the post-level resolver
         // never runs when Selection is stale.
-        const physicalTarget = event.target instanceof Element
+        const eventTarget = event.target instanceof Element
           ? event.target
           : (event.target?.parentElement || null);
-        const physicalToken = normalizeSelectionText(physicalTarget?.textContent || '').normalize('NFKC');
-        if (/^(?:v|verse|verses)$/i.test(physicalToken)) selection = physicalToken;
+        const caretTarget = getDoubleClickTargetElement(event);
+        const cueTarget = [eventTarget, caretTarget].find(candidate =>
+          /^(?:v|verse|verses)$/i.test(
+            normalizeSelectionText(candidate?.textContent || '').normalize('NFKC')
+          )
+        );
+        const physicalToken = normalizeSelectionText(cueTarget?.textContent || '').normalize('NFKC');
+        if (cueTarget && /^(?:v|verse|verses)$/i.test(physicalToken)) selection = physicalToken;
         if (!selection) {
           if (Date.now()-started<1500) requestAnimationFrame(dispatch);
           return true;
@@ -2185,8 +2191,12 @@ function handleDoubleClickBlb(event) {
         const isPrefixedBookName=hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
         const isBookName=!hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
         // For explicit verse cues, preserve the physical event target. The generic caret-target helper can return a nearby/stale element, which prevents the post-level resolver from finding the containing message. Other gestures retain the existing target selection behavior.
+        const cueElement = [event.target instanceof Element ? event.target : event.target?.parentElement,
+          getDoubleClickTargetElement(event)].find(candidate =>
+            /^(?:v|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
+          );
         const contextualTarget=isVerseContextWord
-          ? (event.target instanceof Element ? event.target : (event.target?.parentElement || event.target))
+          ? (cueElement || (event.target instanceof Element ? event.target : (event.target?.parentElement || event.target)))
           : (getDoubleClickTargetElement(event)||event.target);
 
         // A suffix such as "Peter" or "Sam" can be part of a numbered book
