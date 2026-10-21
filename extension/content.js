@@ -58,6 +58,37 @@ const suiteSettingsReadyPromise = chrome.storage.local.get({masterEnabled:true, 
   return suiteEnabled;
 });
 
+
+// Lightweight language gate. English pages keep current behavior; on other or
+// unlabelled pages, only confidently English selections are allowed through.
+// Short tokens and Bible references remain eligible because they cannot be
+// reliably language-classified in isolation.
+const BLB_ENGLISH_COMMON_WORDS = new Set((
+  'a about after again all also am an and any are as at back be because been before being between both but by can come could did do does doing down each even every few first for from get give go good had has have he her here him his how i if in into is it its just know like little long made make many may me more most much must my name never new no not now of off on once one only or other our out over people said same see she should so some take than that the their them then there these they thing think this those through time to two under up us use very was way we well were what when where which while who why will with work would you your'
+).split(/\\s+/));
+function blbSelectedTextLooksEnglish(value) {
+  const text = normalizeSelectionText(String(value || '')).normalize('NFKC').trim();
+  if (!text) return true;
+  // References, Strong's numbers, and short labels are not useful language samples.
+  if (text.length < 24 || /\\b(?:Gen|Exod?|Lev|Num|Deut|Josh|Judg|Ruth|Sam|Kings?|Chron|Ezra|Neh|Esth|Job|Ps(?:alm)?s?|Prov|Eccl|Song|Isa|Jer|Lam|Ezek|Dan|Hos|Joel|Amos|Obad|Jonah|Mic|Nah|Hab|Zeph|Hag|Zech|Mal|Matt?|Mark|Luke|John|Acts|Rom|Cor|Gal|Eph|Phil|Col|Thess|Tim|Titus|Philem|Heb|James|Pet|Jude|Rev)\\s+\\d+/i.test(text)) return true;
+  // Non-Latin scripts are strong evidence that the selected passage is not English.
+  if (/[\\u0400-\\u052F\\u0590-\\u08FF\\u0900-\\u0DFF\\u0E00-\\u0E7F\\u3040-\\u30FF\\u3400-\\u9FFF\\uAC00-\\uD7AF]/u.test(text)) return false;
+  const words = (text.toLowerCase().match(/[a-z]+(?:['’][a-z]+)?/g) || []);
+  if (words.length < 4) return true;
+  const common = words.filter(word => BLB_ENGLISH_COMMON_WORDS.has(word)).length;
+  // Require a modest function-word signal rather than assuming Latin text is English.
+  return common >= 2 && common / words.length >= 0.12;
+}
+function blbSelectionLanguageAllowed(value) {
+  const pageLang = String(
+    document.documentElement?.getAttribute('lang') ||
+    document.querySelector('meta[http-equiv="content-language" i]')?.content ||
+    document.querySelector('meta[name="language" i]')?.content || ''
+  ).trim().toLowerCase().split(/[-_]/)[0];
+  if (pageLang === 'en') return true;
+  return blbSelectedTextLooksEnglish(value);
+}
+
 async function isSuiteEnabled() {
   if (!suiteSettingsReady) await suiteSettingsReadyPromise;
   return suiteEnabled;
@@ -1924,6 +1955,8 @@ function handleDoubleClickBlb(event) {
           return true;
         }
 
+        if (!blbSelectionLanguageAllowed(selection)) return true;
+
         const contextualTarget=getDoubleClickTargetElement(event)||event.target;
         const blockContext=getDoubleClickBlockContextReference(selection,contextualTarget,event);
 
@@ -2362,7 +2395,7 @@ async function updateBlbPageSelectionButtonFromSelection() {
     }
   }
   setBlbPageButtonVisible(false);
-  if (!text || !suiteEnabled) return;
+  if (!text || !suiteEnabled || !blbSelectionLanguageAllowed(text)) return;
 
   // The floating control is a UI entry point, not a classifier. Always show
   // it for a non-empty text selection and let the shared background resolver
