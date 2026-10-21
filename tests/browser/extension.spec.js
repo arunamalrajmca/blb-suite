@@ -122,12 +122,11 @@ test.describe('core user-visible E2E', () => {
         } catch (error) {
           messageError = String(error);
         }
-        // If declarative injection missed this already-loaded document, inject
-        // the exact manifest-declared files and keep injection errors separate
-        // from readiness-message errors so one cannot mask the other.
+        // Diagnose whether scripting works independently of the extension files.
         let explicitInjection = null;
         let postInjectionProbe = null;
         let injectedFiles = [];
+        let directProbe = null;
         if (!response?.ok && contentScripts.length) {
           injectedFiles = [...new Set(contentScripts.flatMap(script => script.js || []))];
           try {
@@ -139,13 +138,27 @@ test.describe('core user-visible E2E', () => {
             explicitInjection = { error: String(error) };
           }
           try {
+            const [marker] = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              world: 'ISOLATED',
+              func: () => {
+                window.__blbSuiteDiagnosticInjectionProbe = 'injected';
+                return { href: location.href, marker: window.__blbSuiteDiagnosticInjectionProbe };
+              }
+            });
+            directProbe = marker?.result || null;
+          } catch (error) {
+            directProbe = { error: String(error) };
+          }
+          try {
             const [probe] = await chrome.scripting.executeScript({
               target: { tabId: tab.id },
               world: 'ISOLATED',
               func: () => ({
                 href: location.href,
                 contentScriptLoaded: window.__blbSuiteContentScriptLoadedV2 === true,
-                doubleClickBound: window.__blbSuiteDoubleClickBoundV2 === true
+                doubleClickBound: window.__blbSuiteDoubleClickBoundV2 === true,
+                diagnosticMarker: window.__blbSuiteDiagnosticInjectionProbe || null
               })
             });
             postInjectionProbe = probe?.result || null;
@@ -159,7 +172,7 @@ test.describe('core user-visible E2E', () => {
             messageError = String(error);
           }
         }
-        diagnostics.push({ id: tab.id, url: tab.url, isolatedWorld, injectedFiles, explicitInjection, postInjectionProbe, response, messageError });
+        diagnostics.push({ id: tab.id, url: tab.url, isolatedWorld, injectedFiles, explicitInjection, directProbe, postInjectionProbe, response, messageError });
       }
       const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
       return {
