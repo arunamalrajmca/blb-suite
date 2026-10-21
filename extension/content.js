@@ -1570,7 +1570,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     const rawSource = domText(block);
     const source = normalizeSelectionText(rawSource).normalize('NFKC');
     if (!source) return null;
-    const refs = resolveBibleReferenceText(source);
+    const refs = resolveBibleReferenceText(source.replace(/[\u2010-\u2015\u2212]/g, '-'));
     // Reference parsing removes invisible directional marks and collapses
     // whitespace. Occurrence matching must use that same normalized text,
     // while Range-derived offsets must be translated from the original DOM
