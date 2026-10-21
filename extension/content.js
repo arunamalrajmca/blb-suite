@@ -1495,17 +1495,19 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const range = liveSelection.getRangeAt(0);
           return messageRoot.contains(range.startContainer) ? range : null;
         })();
-      if (clickRange && messageRoot.contains(clickRange.startContainer)) {
-        // Use the physical inline element as the boundary when it is the
-        // actual clicked token. Range-derived caret offsets can be stale or
-        // land on an adjacent node in Chromium's dblclick event.
-        const clickedElementText = normalizeSelectionText(initialNode?.textContent || '').normalize('NFKC');
-        const clickedElementToken = clickedElementText && !/\s/.test(clickedElementText) ? clickedElementText : '';
-        const clickToken = normalizeSelectionText(clickedWordText || clickedElementToken || selected).toLowerCase();
-        const numericClick = /^\d{1,3}$/.test(clickToken);
-        const verseWordClick = /^(?:v|verse|verses)$/i.test(clickToken);
-        const tokenElementIsExact = !!(initialNode && messageRoot.contains(initialNode) &&
-          clickedElementToken.toLowerCase() === clickToken);
+      // Facebook may expose a stale or out-of-message Selection after a
+      // double-click. If the physical target is the exact verse token, its
+      // element boundary is sufficient to resolve the adjacent number and
+      // earlier chapter context; do not require a caret range in that case.
+      const hasClickRange = !!(clickRange && messageRoot.contains(clickRange.startContainer));
+      const clickedElementText = normalizeSelectionText(initialNode?.textContent || '').normalize('NFKC');
+      const clickedElementToken = clickedElementText && !/\s/.test(clickedElementText) ? clickedElementText : '';
+      const clickToken = normalizeSelectionText(clickedWordText || clickedElementToken || selected).toLowerCase();
+      const numericClick = /^\d{1,3}$/.test(clickToken);
+      const verseWordClick = /^(?:v|verse|verses)$/i.test(clickToken);
+      const tokenElementIsExact = !!(initialNode && messageRoot.contains(initialNode) &&
+        clickedElementToken.toLowerCase() === clickToken);
+      if (hasClickRange || tokenElementIsExact) {
         const beforeRange = document.createRange();
         beforeRange.selectNodeContents(messageRoot);
         if (tokenElementIsExact) beforeRange.setEndBefore(initialNode);
