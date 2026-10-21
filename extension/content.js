@@ -1526,6 +1526,14 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const around = beforeText.match(/\b(?:v|verse|verses)\s*$/i);
           if (around) associatedVerse = Number(clickToken);
         }
+        if (verseWordClick || numericClick) {
+          console.warn('[BLB Facebook verse-context diagnostic]', {
+            clickToken, verseWordClick, numericClick, associatedVerse,
+            tokenElementIsExact, hasClickRange,
+            beforeText: beforeText.slice(-500),
+            afterText: typeof afterText === 'string' ? afterText.slice(0, 120) : null
+          });
+        }
         if ((verseWordClick && associatedVerse) || (numericClick && associatedVerse)) {
           // Use the shared Bible-reference parser rather than a second,
           // looser book-name regex. The latter can greedily consume prose
