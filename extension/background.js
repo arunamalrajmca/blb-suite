@@ -3302,7 +3302,8 @@ const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuit
 // Reserve submission timestamps in one shared FIFO queue, but never sleep inside the
 // extension service worker: Chrome can delay worker timers dramatically under load.
 // Each handoff page waits until its reserved timestamp before submitting its POST.
-const MULTIVERSE_POST_MIN_INTERVAL_MS = 1500;
+// Do not serialize POST start times: tabs should submit as soon as each handoff is ready.
+const MULTIVERSE_POST_MIN_INTERVAL_MS = 0;
 let lastMultiVersePostScheduledAt = 0;
 let pendingMultiVersePostSlot = Promise.resolve();
 
