@@ -75,10 +75,10 @@ test.describe('core user-visible E2E', () => {
 
   test('Facebook post-level verse gestures follow the latest explicit chapter context', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.goto('https://www.blueletterbible.org/', { waitUntil: 'domcontentloaded' });
     // Grant the site feature after the content script has loaded, then reload
     // to ensure the new document initializes with the explicit preference.
-    await extensionStorage.set({ doubleClickBlbSites: { 'example.com': true } });
+    await extensionStorage.set({ doubleClickBlbSites: { 'www.blueletterbible.org': true, 'blueletterbible.org': true } });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => document.readyState === 'complete' || document.readyState === 'interactive');
     // Distinguish content-script injection from per-site listener activation.
