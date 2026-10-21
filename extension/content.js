@@ -1886,12 +1886,59 @@ function getDoubleClickSelection(event) {
   const selection = normalizeSelectionText(window.getSelection ? window.getSelection().toString() : '');
   if (selection) return selection;
 
-  // Chromium can deliver dblclick before the native Range is populated. Use
-  // the exact token under the physical gesture rather than trusting a
-  // transient whitespace-only Selection.
-  const targetElement = getDoubleClickTargetElement(event);
-  const targetText = normalizeSelectionText(targetElement?.textContent || '');
-  if (targetText) return targetText;
+  // Chromium can dispatch dblclick before the native Selection is populated.
+  // Recover only the word under the pointer from the caret position. Returning
+  // an entire parent element's text here is dangerous on large titles/captions:
+  // it turns a one-word gesture into a page-sized selection and triggers the
+  // expensive contextual-reference scan.
+  try {
+    let node = null;
+    let offset = -1;
+    if (typeof document.caretRangeFromPoint === 'function' &&
+        Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+      const range = document.caretRangeFromPoint(event.clientX, event.clientY);
+      if (range) {
+        node = range.startContainer;
+        offset = range.startOffset;
+      }
+    } else if (typeof document.caretPositionFromPoint === 'function' &&
+               Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+      const position = document.caretPositionFromPoint(event.clientX, event.clientY);
+      if (position) {
+        node = position.offsetNode;
+        offset = position.offset;
+      }
+    }
+    if (node?.nodeType === Node.ELEMENT_NODE) {
+      const child = node.childNodes?.[Math.min(offset, Math.max(0, node.childNodes.length - 1))];
+      if (child?.nodeType === Node.TEXT_NODE) {
+        node = child;
+        offset = 0;
+      } else if (child) {
+        const walker = document.createTreeWalker(child, NodeFilter.SHOW_TEXT);
+        const firstText = walker.nextNode();
+        if (firstText) {
+          node = firstText;
+          offset = 0;
+        }
+      }
+    }
+    if (node?.nodeType === Node.TEXT_NODE) {
+      const text = String(node.nodeValue || '');
+      const point = Math.max(0, Math.min(text.length, offset));
+      const wordPattern = /[\\p{L}\\p{N}][\\p{L}\\p{N}'’.-]*/gu;
+      let match;
+      while ((match = wordPattern.exec(text))) {
+        if (point >= match.index && point <= match.index + match[0].length) {
+          return normalizeSelectionText(match[0]);
+        }
+      }
+    }
+  } catch (_) {}
+
+  // Never substitute the whole title, paragraph, or caption for a missing
+  // native selection. The dispatcher may retry briefly for Chromium's
+  // selection timing, but it will not process unrelated surrounding text.
   return '';
 }
 
