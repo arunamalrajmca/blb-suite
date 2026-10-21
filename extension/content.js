@@ -1941,6 +1941,37 @@ function handleDoubleClickBlb(event) {
           if (!isKjvWord && !isBookName) return true;
         }
 
+        // On ordinary non-Bible pages (notably YouTube), a single KJV
+        // word is a word search, not a reference-context lookup. Avoid scanning
+        // large page containers before dispatching the search.
+        const singleWordToken = /^[A-Za-z][A-Za-z'’-]*$/.test(selection)
+          ? normalizeDoubleClickToken(selection).replace(/’/g, "'")
+          : '';
+        const singleWordIsKjv = !!singleWordToken
+          && typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
+          && KJV_CORPUS_WORD_INDEX.has(singleWordToken);
+        const isBibleRelatedHost = location.hostname.toLowerCase().includes('bible')
+          || location.hostname.toLowerCase().endsWith(BLB_HOSTNAME);
+        if (singleWordIsKjv && !resolveBibleBook(selection) && !isBibleRelatedHost) {
+          const now = Date.now();
+          const gestureTarget = event?.target && (typeof event.target === 'object' || typeof event.target === 'function')
+            ? event.target : null;
+          if (gestureTarget) {
+            const previous = recentDoubleClickDestinations.get(gestureTarget) || 0;
+            if (now - previous < 1200) return true;
+            recentDoubleClickDestinations.set(gestureTarget, now);
+          }
+          safeRuntimeSendMessage({
+            type:'blbSuiteOpenSelectionText',
+            text:selection,
+            contextualReference:null,
+            contextualReferenceResolved:true,
+            requestId,
+            tabBehavior:{activeIfNew:false,activateExisting:true}
+          });
+          return true;
+        }
+
         const contextualTarget=getDoubleClickTargetElement(event)||event.target;
         const blockContext=getDoubleClickBlockContextReference(selection,contextualTarget,event);
 
@@ -2365,6 +2396,22 @@ async function updateBlbPageSelectionButtonFromSelection() {
       blbPageButtonSelection = '';
       return;
     }
+  }
+
+  // A single KJV word on a non-Bible page needs no contextual-reference
+  // scan. Show the floating control immediately; its click can use the shared
+  // word resolver without traversing a large host-page DOM (e.g. YouTube).
+  const singleWordToken = /^[A-Za-z][A-Za-z'’-]*$/.test(text)
+    ? normalizeDoubleClickToken(text).replace(/’/g, "'")
+    : '';
+  const singleWordIsKjv = !!singleWordToken
+    && typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
+    && KJV_CORPUS_WORD_INDEX.has(singleWordToken);
+  const isBibleRelatedHost = location.hostname.toLowerCase().includes('bible')
+    || location.hostname.toLowerCase().endsWith(BLB_HOSTNAME);
+  if (singleWordIsKjv && !resolveBibleBook(text) && !isBibleRelatedHost) {
+    setBlbPageButtonVisible(true);
+    return;
   }
 
   if (text) {
