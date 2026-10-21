@@ -1491,7 +1491,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         // from a previous double-click. Prefer the physical caret token, then
         // the actual clicked leaf element, before consulting that stale value.
         const clickedElementText = normalizeSelectionText(initialNode?.textContent || '').normalize('NFKC');
-        const clickedElementToken = clickedElementText && !/\\s/.test(clickedElementText) ? clickedElementText : '';
+        const clickedElementToken = clickedElementText && !/\s/.test(clickedElementText) ? clickedElementText : '';
         const clickToken = normalizeSelectionText(clickedWordText || clickedElementToken || selected).toLowerCase();
         const numericClick = /^\d{1,3}$/.test(clickToken);
         const verseWordClick = /^verse$/i.test(clickToken);
