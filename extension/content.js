@@ -2352,11 +2352,11 @@ async function updateBlbPageSelectionButtonFromSelection() {
   // Match the Double-Click BLB fast-reject rule for single-word selections.
   // Hide the floating button for non-ASCII tokens and English words absent
   // from the local KJV vocabulary, while allowing KJV words and book names.
-  if (!/\\s/.test(text) && /[^\\x00-\\x7F]/.test(text)) {
+  if (!/\s/.test(text) && /[^\x00-\x7F]/.test(text)) {
     blbPageButtonSelection = '';
     return;
   }
-  if (/^[A-Za-z][A-Za-z'’\\\\-]*$/.test(text)) {
+  if (/^[A-Za-z][A-Za-z'’\\-]*$/.test(text)) {
     const token = normalizeDoubleClickToken(text).replace(/’/g, "'");
     const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
       && KJV_CORPUS_WORD_INDEX.has(token);
