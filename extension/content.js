@@ -1926,7 +1926,7 @@ function getDoubleClickSelection(event) {
     if (node?.nodeType === Node.TEXT_NODE) {
       const text = String(node.nodeValue || '');
       const point = Math.max(0, Math.min(text.length, offset));
-      const wordPattern = /[\\p{L}\\p{N}][\\p{L}\\p{N}'’.-]*/gu;
+      const wordPattern = /[\p{L}\p{N}][\p{L}\p{N}'’.-]*/gu;
       let match;
       while ((match = wordPattern.exec(text))) {
         if (point >= match.index && point <= match.index + match[0].length) {
