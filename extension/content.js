@@ -1551,8 +1551,14 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             const validated = resolveBibleReference(book.name, chapter, 1, 1);
             if (validated) context = {book: book.name, chapter};
           }
+          const resolved = context
+            ? resolveBibleReference(context.book, context.chapter, associatedVerse, associatedVerse)
+            : null;
+          console.warn('[BLB Facebook verse-context resolution]', {
+            associatedVerse, context, priorReferences,
+            resolvedUrl: resolved?.url || null
+          });
           if (context) {
-            const resolved = resolveBibleReference(context.book, context.chapter, associatedVerse, associatedVerse);
             if (resolved) return {
               book: resolved.book,
               chapter: resolved.chapter,
