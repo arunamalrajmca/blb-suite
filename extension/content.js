@@ -1530,8 +1530,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           console.warn('[BLB Facebook verse-context diagnostic]', {
             clickToken, verseWordClick, numericClick, associatedVerse,
             tokenElementIsExact, hasClickRange,
-            beforeText: beforeText.slice(-500),
-            afterText: typeof afterText === 'string' ? afterText.slice(0, 120) : null
+            beforeText: beforeText.slice(-500)
           });
         }
         if ((verseWordClick && associatedVerse) || (numericClick && associatedVerse)) {
