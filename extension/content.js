@@ -2377,14 +2377,17 @@ async function updateBlbPageSelectionButtonFromSelection() {
   setBlbPageButtonVisible(false);
   if (!text || !suiteEnabled) return;
 
-  // The floating control is a UI entry point, not a classifier. Always show
-  // it for a non-empty text selection and let the shared background resolver
-  // decide what the selection means when the user clicks it. This is important
-  // for commentary text, partial references, adjacent references, OCR/PDF text,
-  // and selections containing words that are not present in the local KJV index.
-  // Previously the button was hidden whenever any of several local/background
-  // eligibility checks failed, making the control appear to be broken even
-  // though Alt+B/right-click could still resolve the same selection.
+  // Filter only unrelated single-word selections. Multiword commentary,
+  // partial/adjacent references, OCR/PDF text, and longer selections remain
+  // available to the shared resolver. Book names and corpus words (including
+  // ordinary words such as "The") stay eligible on every site/language.
+  if (!blbPageButtonContextualReference && !/\\s/.test(text) && !/^\\d+$/.test(text)) {
+    const token = normalizeDoubleClickToken(text).replace(/’/g, "'");
+    const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
+      && KJV_CORPUS_WORD_INDEX.has(token);
+    const isBookName = !!resolveBibleBook(text);
+    if (typeof KJV_CORPUS_WORD_INDEX !== 'undefined' && !isKjvWord && !isBookName) return;
+  }
   setBlbPageButtonVisible(true);
 }
 
