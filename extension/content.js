@@ -2094,7 +2094,10 @@ function handleDoubleClickBlb(event) {
           // reference check below; without a valid nearby prefix they remain
           // inert and are not sent to ordinary word lookup.
           const isRomanBookPrefixToken = /^(?:I|II|III)$/i.test(selection);
-          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isRomanBookPrefixToken) return true;
+          // Verse cues must reach the narrowly scoped Facebook post resolver
+          // even when "verse" is absent from the generated KJV word index.
+          const isVerseContextWord = /^(?:v|verse|verses)$/i.test(selection);
+          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isRomanBookPrefixToken && !isVerseContextWord) return true;
         }
 
         // DOM context is useful only when the clicked token can identify a
@@ -2146,7 +2149,6 @@ function handleDoubleClickBlb(event) {
         // "verse" is not guaranteed to be in the local KJV word index on
         // every build, but in a Facebook post it is the explicit cue for a
         // nearby verse number. Let the tightly gated post resolver inspect it.
-        const isVerseContextWord=/^verse$/i.test(selection);
         const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord;
         const blockContext=needsDomContext
           ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
