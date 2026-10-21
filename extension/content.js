@@ -1544,7 +1544,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
 
       if (start != null && end != null) {
         const containsReference = candidateRefs.some(ref => {
-          const refText = normalizeSelectionText(ref.text || '').normalize('NFKC').replace(/[\\u2010-\\u2015\\u2212]/g, '-');
+          const refText = normalizeSelectionText(ref.text || '').normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-');
           if (!refText) return false;
           let from = candidateMatchSource.indexOf(refText);
           while (from >= 0) {
