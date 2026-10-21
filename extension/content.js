@@ -1,4 +1,7 @@
 (async function () {
+// Lightweight test/diagnostic marker: content-script injection is distinct from
+// whether the user's per-site double-click preference enables the listener.
+try { window.__blbSuiteContentScriptLoadedV2 = true; } catch (_) {}
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
 const BLB_ORIGIN = BLBShared.urls.blbOrigin;
 // Blue Letter Bible Suite 5.2.25 - unified content script
