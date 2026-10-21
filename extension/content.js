@@ -1546,7 +1546,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           // verse. Do not search for other verse numbers in the post. Resolve
           // chapter context by walking backward from the cue and stop at the
           // nearest valid explicit reference (including chapter-only forms).
-          const contextText = beforeText.replace(/[\\u2010-\\u2015\\u2212]/g, '-');
+          const contextText = beforeText.replace(/[\u2010-\u2015\u2212]/g, '-');
           const entries = [];
           const seenNames = new Set();
           const addBookName = (name, book) => {
@@ -1561,28 +1561,26 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             addBookName(book.urlKey, book);
           }
           for (const [alias, target] of Object.entries(BOOK_ALIASES)) {
-            addBookName(alias, BOOKS.find(book => book.name === target));
+            const book = BOOKS.find(candidate => candidate.name === target);
+            if (book) addBookName(alias, book);
           }
           entries.sort((a, b) => b.name.length - a.name.length);
           const candidates = [];
           for (const entry of entries) {
-            const escaped = entry.name.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&').replace(/\\s+/g, '\\s+');
+            const escaped = entry.name.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
             const pattern = new RegExp(
-              `(?:^|[^A-Za-z0-9])${escaped}\\.?\\s+(\\d{1,3})(?:(?::|\\.)\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])`,
+              \`(?:^|[^A-Za-z0-9])\${escaped}\\.?\\s+(\\d{1,3})(?:(?::|\\.)\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])\`,
               'gi'
             );
             let match;
             while ((match = pattern.exec(contextText)) !== null) {
               const chapter = Number(match[1]);
-              const book = entry.book;
               if (!Number.isInteger(chapter) || chapter < 1) continue;
-              if (!resolveBibleReference(book.name, chapter, 1, 1)) continue;
-              candidates.push({index: match.index, book: book.name, chapter});
+              if (!resolveBibleReference(entry.book.name, chapter, 1, 1)) continue;
+              candidates.push({index: match.index, book: entry.book.name, chapter});
             }
           }
-          // Nearest valid book/chapter before the clicked cue wins. We only
-          // inspect that single candidate; later verse numbers in the post
-          // are never scanned or used to alter the selected context.
+          // Use only the closest valid book/chapter match before the cue.
           candidates.sort((a, b) => b.index - a.index);
           const context = candidates.length
             ? {book: candidates[0].book, chapter: candidates[0].chapter}
