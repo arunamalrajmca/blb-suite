@@ -1956,11 +1956,10 @@ function handleDoubleClickBlb(event) {
         const isBookName=!hasNumericPrefix && !!resolveBibleBook(selection);
         const contextualTarget=getDoubleClickTargetElement(event)||event.target;
 
-        // A click on the suffix of a numbered book (e.g. "Peter" in
-        // "1 Peter 2:25") is eligible for contextual parsing only when the
-        // nearby text proves that a valid numbered book name is present.
-        // This cheap local check avoids a full DOM reference scan for an
-        // orphan suffix or an invalid prefix such as "4 Peter".
+        // A suffix such as "Peter" may be part of a numbered book name.
+        // Check the nearest text block for a valid 1/2/3 prefix before
+        // invoking the full DOM reference parser. Invalid/missing prefixes
+        // therefore do not trigger the expensive contextual scan.
         const possibleNumberedBookSuffix=/^(?:Samuel|Kings|Chronicles|Corinthians|Thessalonians|Timothy|Peter|John)$/i.test(selection);
         let hasValidNearbyBookPrefix=false;
         if (possibleNumberedBookSuffix && !hasNumericPrefix) {
@@ -1969,13 +1968,13 @@ function handleDoubleClickBlb(event) {
               ? (contextualTarget.closest('p,li,td,th,blockquote,article,section,div')||contextualTarget.parentElement||contextualTarget)
               : (event.target?.parentElement||event.target);
             const contextText=normalizeSelectionText(contextNode?.textContent||'');
-            const escapedSuffix=selection.replace(/[.*+?^${}()|[\]\\]/g,'\\        const hasNumericPrefix=/^[1-9]\s+/.test(selection);
-        const isPrefixedBookName=hasNumericPrefix && !!resolveBibleBook(selection);
-        const isBookName=!hasNumericPrefix && !!resolveBibleBook(selection);
-        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName;
-        const contextualTarget=needsDomContext
-          ? (getDoubleClickTargetElement(event)||event.target)
-          : null;
+            const match=contextText.match(/(?:^|[^A-Za-z0-9])([1-3])\s+(Samuel|Kings|Chronicles|Corinthians|Thessalonians|Timothy|Peter|John)\b/i);
+            hasValidNearbyBookPrefix=!!(match
+              && match[2].toLowerCase()===selection.toLowerCase()
+              && resolveBibleBook(match[1]+' '+match[2]));
+          } catch (_) {}
+        }
+        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix;
         const blockContext=needsDomContext
           ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
           : null;');
