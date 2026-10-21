@@ -6272,6 +6272,66 @@ async function shouldShowBlbContextMenu(tab, selectionText) {
   return await isPageButtonEnabledForHostname(siteKey, tab?.title || '');
 }
 
+const COPY_PLAIN_TEXT_MENU_ID = 'blb-suite-copy-plain-text';
+let copyPlainTextDocumentPromise = null;
+
+async function ensureCopyPlainTextOffscreenDocument() {
+  if (!chrome.offscreen?.createDocument) {
+    throw new Error('Offscreen clipboard support is unavailable');
+  }
+  const existingContexts = await chrome.runtime.getContexts({
+    contextTypes:['OFFSCREEN_DOCUMENT'],
+    documentUrls:[chrome.runtime.getURL('offscreen-copy.html')]
+  });
+  if (existingContexts.length) return;
+  if (copyPlainTextDocumentPromise) return copyPlainTextDocumentPromise;
+  copyPlainTextDocumentPromise = chrome.offscreen.createDocument({
+    url:'offscreen-copy.html',
+    reasons:['CLIPBOARD'],
+    justification:'Copy the selected text as plain text when the user chooses the context-menu action.'
+  }).catch(async error => {
+    // Another concurrent click may have created the document first.
+    const contexts = await chrome.runtime.getContexts({
+      contextTypes:['OFFSCREEN_DOCUMENT'],
+      documentUrls:[chrome.runtime.getURL('offscreen-copy.html')]
+    });
+    if (!contexts.length) throw error;
+  }).finally(() => {
+    copyPlainTextDocumentPromise = null;
+  });
+  return copyPlainTextDocumentPromise;
+}
+
+async function copySelectionAsPlainText(text) {
+  const value = String(text || '');
+  if (!value) return false;
+  await ensureCopyPlainTextOffscreenDocument();
+  const response = await chrome.runtime.sendMessage({
+    type:'blbSuiteCopyPlainText',
+    text:value
+  });
+  if (!response?.ok) throw new Error(response?.error || 'Clipboard copy failed');
+  return true;
+}
+
+async function installCopyPlainTextContextMenu() {
+  try {
+    await chrome.contextMenus.remove(COPY_PLAIN_TEXT_MENU_ID);
+  } catch (_) {}
+  try {
+    await chrome.contextMenus.create({
+      id:COPY_PLAIN_TEXT_MENU_ID,
+      title:'Copy as plain text',
+      contexts:['selection'],
+      documentUrlPatterns:['http://*/*','https://*/*','file:///*.pdf']
+    });
+    return true;
+  } catch (error) {
+    console.error('BLB Suite: could not install Copy as plain text menu', error);
+    return false;
+  }
+}
+
 let selectionMenuOperation = Promise.resolve();
 let selectionMenuKnownPresent = false;
 let pdfSelectionMenuKnownPresent = false;
@@ -6436,8 +6496,16 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
 });
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (!(await isSuiteEnabled())) return;
   const menuId = String(info?.menuItemId || '');
+  if (menuId === COPY_PLAIN_TEXT_MENU_ID) {
+    try {
+      await copySelectionAsPlainText(info.selectionText || '');
+    } catch (error) {
+      console.error('BLB Suite Copy as plain text:', error);
+    }
+    return;
+  }
+  if (!(await isSuiteEnabled())) return;
   if (menuId !== 'blb-suite-web-selection' && menuId !== 'blb-suite-pdf-selection') return;
   // Web selections can cross nested block elements (Facebook posts in
   // particular). Chromium's context-menu selectionText may flatten adjacent
