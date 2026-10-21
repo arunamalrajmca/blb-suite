@@ -90,15 +90,13 @@ test.describe('core user-visible E2E', () => {
       document.body.appendChild(fixture);
     });
 
+    // Only cue-word clicks trigger post-level chapter/verse discovery.
+    // Number clicks deliberately do not run this context-search path.
     const gestures = [
       ['#fb-verse-word-42', '/kjv/1ki/18/42/'],
-      ['#fb-verse-number-42', '/kjv/1ki/18/42/'],
       ['#fb-verse-word-44', '/kjv/1ki/18/44/'],
-      ['#fb-verse-number-44', '/kjv/1ki/18/44/'],
       ['#fb-verse-word-46', '/kjv/1ki/18/46/'],
-      ['#fb-verse-number-46', '/kjv/1ki/18/46/'],
-      ['#fb-verse-word-19-18', '/kjv/1ki/19/18/'],
-      ['#fb-verse-number-19-18', '/kjv/1ki/19/18/']
+      ['#fb-verse-word-19-18', '/kjv/1ki/19/18/']
     ];
 
     for (const [selector, expectedPath] of gestures) {
