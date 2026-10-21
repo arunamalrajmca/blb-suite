@@ -85,7 +85,8 @@ test.describe('core user-visible E2E', () => {
     // extension are intentionally invisible to page.evaluate(). Probe readiness
     // through the extension message channel instead of checking window markers.
     await expect.poll(async () => extensionWorker.evaluate(async () => {
-      const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      const tabs = await chrome.tabs.query({ url: ['https://www.facebook.com/*'] });
+      const tab = tabs.find(candidate => candidate.url?.includes('facebook.com/ellisenobun/posts/'));
       if (!tab?.id) return false;
       try {
         const response = await chrome.tabs.sendMessage(tab.id, { type: 'blbSuiteRefreshSiteFeatures' });
