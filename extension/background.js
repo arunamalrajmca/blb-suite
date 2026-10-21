@@ -6644,6 +6644,7 @@ chrome.runtime.onInstalled.addListener(async details => {
     if (Object.keys(defaults).length) await chrome.storage.local.set(defaults);
   }
   installRules();
+  installCopyPlainTextContextMenu().catch(() => {});
   installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
     .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
     .catch(() => {}));
