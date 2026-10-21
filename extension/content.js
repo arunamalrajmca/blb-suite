@@ -2019,29 +2019,41 @@ function handleDoubleClickBlb(event) {
         // back to resolving the suffix alone: "4 John" and "2 Genesis" must
         // not trigger DOM-context analysis.
         const hasNumericPrefix=/^[1-9]\s+/.test(selection);
-        const isPrefixedBookName=hasNumericPrefix && !!resolveBibleBook(selection);
-        const isBookName=!hasNumericPrefix && !!resolveBibleBook(selection);
+        const selectionKey=normalizeDoubleClickToken(selection).toLowerCase();
+        const isKnownBookAlias=Object.keys(BOOK_ALIASES||{}).some(alias =>
+          normalizeDoubleClickToken(alias).toLowerCase()===selectionKey
+        );
+        const isPrefixedBookName=hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
+        const isBookName=!hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
         const contextualTarget=getDoubleClickTargetElement(event)||event.target;
 
-        // A suffix such as "Peter" may be part of a numbered book name.
-        // Check the nearest text block for a valid 1/2/3 prefix before
-        // invoking the full DOM reference parser. Invalid/missing prefixes
-        // therefore do not trigger the expensive contextual scan.
-        const possibleNumberedBookSuffix=/^(?:Samuel|Kings|Chronicles|Corinthians|Thessalonians|Timothy|Peter|John)$/i.test(selection);
+        // A suffix such as "Peter" or "Sam" can be part of a numbered book
+        // name. Only enter contextual matching when the complete nearby prefix
+        // resolves to a real Bible book; arbitrary words remain fast-rejected.
+        const possibleNumberedBookSuffix=/^(?:Sam(?:uel)?|Kings|Kgs?|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)$/i.test(selection);
+        const isRomanBookPrefix=/^(?:I|II|III)$/i.test(selection);
         let hasValidNearbyBookPrefix=false;
-        if (possibleNumberedBookSuffix && !hasNumericPrefix) {
+        let hasValidNearbyRomanBookPrefix=false;
+        if ((possibleNumberedBookSuffix||isRomanBookPrefix) && !hasNumericPrefix) {
           try {
             const contextNode=contextualTarget instanceof Element
               ? (contextualTarget.closest('p,li,td,th,blockquote,article,section,div')||contextualTarget.parentElement||contextualTarget)
               : (event.target?.parentElement||event.target);
             const contextText=normalizeSelectionText(contextNode?.textContent||'');
-            const match=contextText.match(/(?:^|[^A-Za-z0-9])([1-3])\s+(Samuel|Kings|Chronicles|Corinthians|Thessalonians|Timothy|Peter|John)\b/i);
-            hasValidNearbyBookPrefix=!!(match
+            const match=contextText.match(/(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\s+(Samuel|Sam|Kings|Kgs|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)\b/i);
+            const prefixNumber=match
+              ? (/^[1-3]$/.test(match[1]) ? match[1] : ({I:'1',II:'2',III:'3'}[match[1].toUpperCase()]||''))
+              : '';
+            const completeBook=!!(match && prefixNumber && resolveBibleBook(prefixNumber+' '+match[2]));
+            hasValidNearbyBookPrefix=!!(completeBook
               && match[2].toLowerCase()===selection.toLowerCase()
-              && resolveBibleBook(match[1]+' '+match[2]));
+              && /^[1-3]$/.test(match[1]));
+            hasValidNearbyRomanBookPrefix=!!(completeBook
+              && isRomanBookPrefix
+              && match[1].toUpperCase()===selection.toUpperCase());
           } catch (_) {}
         }
-        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||isBibleVersionCode||isReferenceDashGesture;
+        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture;
         const blockContext=needsDomContext
           ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
           : null;
