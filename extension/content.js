@@ -1542,48 +1542,50 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           console.warn('[BLB Facebook verse-context diagnostic]', JSON.stringify(diagnostic));
         }
         if (verseWordClick && associatedVerse) {
-          // Use the shared Bible-reference parser rather than a second,
-          // looser book-name regex. The latter can greedily consume prose
-          // ("Read 1 Kings") and miss the actual numbered-book reference.
-          // Because beforeText ends at the clicked verse cue/number, the last
-          // parsed explicit reference is the latest chapter context in this
-          // post and cannot be polluted by a later reference section.
+          // The first number immediately following the clicked cue is the
+          // verse. Do not search for other verse numbers in the post. Resolve
+          // chapter context by walking backward from the cue and stop at the
+          // nearest valid explicit reference (including chapter-only forms).
           let context = null;
-          const priorReferences = resolveBibleReferenceText(
-            beforeText.replace(/[\u2010-\u2015\u2212]/g, '-')
-          );
-          for (const prior of priorReferences) {
-            const chapter = Number(prior.chapter);
-            const book = resolveBibleBook(prior.book);
-            if (!book || !Number.isInteger(chapter) || chapter < 1) continue;
-            const validated = resolveBibleReference(book.name, chapter, 1, 1);
-            if (validated) context = {book: book.name, chapter};
-          }
-          // Chapter-only references (for example, "1 Kings 19") are valid
-          // context too, but the shared parser intentionally returns only
-          // fully specified references. Scan known book aliases in the text
-          // before the clicked cue and let the latest valid book+chapter win.
-          // This source is strictly before the clicked word, so later post
-          // references can never override the context.
+          const contextText = beforeText.replace(/[\\u2010-\\u2015\\u2212]/g, '-');
+          const priorReferences = resolveBibleReferenceText(contextText);
           const bookNames = [...new Set([
             ...(Array.isArray(BOOKS) ? BOOKS.map(book => book.name) : []),
             ...Object.keys(BOOK_ALIASES || {})
           ])].sort((a, b) => b.length - a.length);
-          if (bookNames.length) {
-            const escapedNames = bookNames.map(name =>
-              String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-            );
-            const chapterPattern = new RegExp(
-              `(?:^|[^A-Za-z0-9])(${escapedNames.join('|')})\\s+(\\d{1,3})(?!\\s*[:/])`,
-              'gi'
-            );
-            let chapterMatch;
-            while ((chapterMatch = chapterPattern.exec(beforeText)) !== null) {
-              const book = resolveBibleBook(chapterMatch[1]);
-              const chapter = Number(chapterMatch[2]);
-              if (!book || !Number.isInteger(chapter) || chapter < 1) continue;
-              const validated = resolveBibleReference(book.name, chapter, 1, 1);
-              if (validated) context = {book: book.name, chapter};
+          const escapedNames = bookNames.map(name =>
+            String(name).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')
+          );
+          const chapterPattern = escapedNames.length
+            ? new RegExp(
+                `(?:^|[^A-Za-z0-9])(${escapedNames.join('|')})\\s+(\\d{1,3})(?!\\s*[:/])`,
+                'gi'
+              )
+            : null;
+          const chapterMatches = [];
+          if (chapterPattern) {
+            let match;
+            while ((match = chapterPattern.exec(contextText)) !== null) {
+              chapterMatches.push({index: match.index, bookText: match[1], chapter: Number(match[2])});
+            }
+          }
+          // Fully specified references and chapter-only references compete
+          // by text position; the nearest one before the cue wins. Stop at
+          // that first valid context rather than continuing through the post.
+          const candidates = [
+            ...priorReferences.map(ref => ({
+              index: contextText.toLowerCase().lastIndexOf(String(ref.text || '').toLowerCase()),
+              bookText: ref.book,
+              chapter: Number(ref.chapter)
+            })),
+            ...chapterMatches
+          ].sort((a, b) => b.index - a.index);
+          for (const candidate of candidates) {
+            const book = resolveBibleBook(candidate.bookText);
+            if (!book || !Number.isInteger(candidate.chapter) || candidate.chapter < 1) continue;
+            if (resolveBibleReference(book.name, candidate.chapter, 1, 1)) {
+              context = {book: book.name, chapter: candidate.chapter};
+              break;
             }
           }
           const resolved = context
