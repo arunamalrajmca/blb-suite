@@ -2346,6 +2346,27 @@ async function updateBlbPageSelectionButtonFromSelection() {
   blbPageButtonSelection = text;
   blbPageButtonContextualReference = null;
   blbPageButtonDirectUrl = null;
+  setBlbPageButtonVisible(false);
+  if (!text || !suiteEnabled) return;
+
+  // Match the Double-Click BLB fast-reject rule for single-word selections.
+  // Hide the floating button for non-ASCII tokens and English words absent
+  // from the local KJV vocabulary, while allowing KJV words and book names.
+  if (!/\\s/.test(text) && /[^\\x00-\\x7F]/.test(text)) {
+    blbPageButtonSelection = '';
+    return;
+  }
+  if (/^[A-Za-z][A-Za-z'’\\\\-]*$/.test(text)) {
+    const token = normalizeDoubleClickToken(text).replace(/’/g, "'");
+    const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
+      && KJV_CORPUS_WORD_INDEX.has(token);
+    const isBookName = !!resolveBibleBook(text);
+    if (!isKjvWord && !isBookName) {
+      blbPageButtonSelection = '';
+      return;
+    }
+  }
+
   if (text) {
     // Fast path: an exact single reference can be resolved locally once while
     // the selection is being classified. Retain its validated BLB URL so the
@@ -2378,17 +2399,8 @@ async function updateBlbPageSelectionButtonFromSelection() {
       }
     }
   }
-  setBlbPageButtonVisible(false);
-  if (!text || !suiteEnabled) return;
-
-  // The floating control is a UI entry point, not a classifier. Always show
-  // it for a non-empty text selection and let the shared background resolver
-  // decide what the selection means when the user clicks it. This is important
-  // for commentary text, partial references, adjacent references, OCR/PDF text,
-  // and selections containing words that are not present in the local KJV index.
-  // Previously the button was hidden whenever any of several local/background
-  // eligibility checks failed, making the control appear to be broken even
-  // though Alt+B/right-click could still resolve the same selection.
+  // Show the floating control for accepted selections, including multiword
+  // text and partial references that need the shared background resolver.
   setBlbPageButtonVisible(true);
 }
 
