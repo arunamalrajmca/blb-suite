@@ -1548,46 +1548,47 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           // nearest valid explicit reference (including chapter-only forms).
           let context = null;
           const contextText = beforeText.replace(/[\\u2010-\\u2015\\u2212]/g, '-');
-          const priorReferences = resolveBibleReferenceText(contextText);
-          const bookNames = [...new Set([
-            ...(Array.isArray(BOOKS) ? BOOKS.map(book => book.name) : []),
-            ...Object.keys(BOOK_ALIASES || {})
-          ])].sort((a, b) => b.length - a.length);
-          const escapedNames = bookNames.map(name =>
-            String(name).replace(/[.*+?^${}()|[\\]\\\\]/g, '\\$&')
-          );
-          const chapterPattern = escapedNames.length
-            ? new RegExp(
-                `(?:^|[^A-Za-z0-9])(${escapedNames.join('|')})\\s+(\\d{1,3})(?!\\s*[:/])`,
-                'gi'
-              )
-            : null;
-          const chapterMatches = [];
-          if (chapterPattern) {
+          const entries = [];
+          const seenNames = new Set();
+          const addBookName = (name, book) => {
+            const value = String(name || '').trim();
+            const key = value.toLowerCase();
+            if (!value || !book || seenNames.has(key)) return;
+            seenNames.add(key);
+            entries.push({name: value, book});
+          };
+          for (const book of BOOKS) {
+            addBookName(book.name, book);
+            addBookName(book.urlKey, book);
+          }
+          for (const [alias, target] of Object.entries(BOOK_ALIASES)) {
+            addBookName(alias, BOOKS.find(book => book.name === target));
+          }
+          entries.sort((a, b) => b.name.length - a.name.length);
+          const candidates = [];
+          for (const entry of entries) {
+            const escaped = entry.name.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&').replace(/\\s+/g, '\\s+');
+            const pattern = new RegExp(
+              `(?:^|[^A-Za-z0-9])${escaped}\\.?\\s+(\\d{1,3})(?:(?::|\\.)\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])`,
+              'gi'
+            );
             let match;
-            while ((match = chapterPattern.exec(contextText)) !== null) {
-              chapterMatches.push({index: match.index, bookText: match[1], chapter: Number(match[2])});
+            while ((match = pattern.exec(contextText)) !== null) {
+              const chapter = Number(match[1]);
+              const book = entry.book;
+              if (!Number.isInteger(chapter) || chapter < 1) continue;
+              if (!resolveBibleReference(book.name, chapter, 1, 1)) continue;
+              candidates.push({index: match.index, book: book.name, chapter});
             }
           }
-          // Fully specified references and chapter-only references compete
-          // by text position; the nearest one before the cue wins. Stop at
-          // that first valid context rather than continuing through the post.
-          const candidates = [
-            ...priorReferences.map(ref => ({
-              index: contextText.toLowerCase().lastIndexOf(String(ref.text || '').toLowerCase()),
-              bookText: ref.book,
-              chapter: Number(ref.chapter)
-            })),
-            ...chapterMatches
-          ].sort((a, b) => b.index - a.index);
-          for (const candidate of candidates) {
-            const book = resolveBibleBook(candidate.bookText);
-            if (!book || !Number.isInteger(candidate.chapter) || candidate.chapter < 1) continue;
-            if (resolveBibleReference(book.name, candidate.chapter, 1, 1)) {
-              context = {book: book.name, chapter: candidate.chapter};
-              break;
-            }
-          }
+          // Nearest valid book/chapter before the clicked cue wins. We only
+          // inspect that single candidate; later verse numbers in the post
+          // are never scanned or used to alter the selected context.
+          candidates.sort((a, b) => b.index - a.index);
+          const context = candidates.length
+            ? {book: candidates[0].book, chapter: candidates[0].chapter}
+            : null;
+          const priorReferences = [];
           const resolved = context
             ? resolveBibleReference(context.book, context.chapter, associatedVerse, associatedVerse)
             : null;
