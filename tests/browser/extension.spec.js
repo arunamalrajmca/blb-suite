@@ -117,8 +117,15 @@ test.describe('core user-visible E2E', () => {
       await page.locator(selector).dblclick();
       await page.waitForTimeout(250);
       const cueDiagnostic = await page.locator('#blb-e2e-facebook-post-verse-context').evaluate(root => {
-        const message = [...root.querySelectorAll('[data-ad-comet-preview="message"], [role="article"]')]
-          .find(el => el.hasAttribute('data-blb-verse-context-diagnostic') || el.hasAttribute('data-blb-verse-context-resolution'));
+        // The resolver attaches diagnostics to the closest message root, which
+        // may be the root element itself; querySelectorAll() excludes that root.
+        const candidates = [
+          ...(root.matches('[data-ad-comet-preview="message"], [role="article"]') ? [root] : []),
+          ...root.querySelectorAll('[data-ad-comet-preview="message"], [role="article"]')
+        ];
+        const message = candidates.find(el =>
+          el.hasAttribute('data-blb-verse-context-diagnostic') ||
+          el.hasAttribute('data-blb-verse-context-resolution'));
         return message ? {
           extraction: message.getAttribute('data-blb-verse-context-diagnostic'),
           resolution: message.getAttribute('data-blb-verse-context-resolution')
