@@ -85,40 +85,40 @@ test.describe('core user-visible E2E', () => {
     // extension are intentionally invisible to page.evaluate(). Probe readiness
     // through the extension message channel instead of checking window markers.
     const readiness = await expect.poll(async () => extensionWorker.evaluate(async () => {
-      // Query all tabs: Facebook can redirect the post to a different host
-      // (for example login or mobile) while the Playwright page remains open.
+      // The permalink can be displayed as a modal in the Facebook feed. It
+      // remains in the same tab; probe every Facebook tab because Chrome's
+      // tab order is not guaranteed to match Playwright's page order.
       const tabs = await chrome.tabs.query({});
       const candidates = tabs.filter(candidate => {
-        try { return /(^|\\.)facebook\\.com$/i.test(new URL(candidate.url || '').hostname); }
+        try { return /(^|\\.)facebook\\.com$/i.test(new URL(candidate.url || '').hostname) && candidate.id != null; }
         catch (_) { return false; }
       });
-      // Facebook's post permalink is an in-page modal, not a separate tab.
-      // Select the actual post tab rather than an arbitrary Facebook tab.
-      const postTab = candidates.find(candidate => /pfbid0K5jBq3Wh8ySRnQTFTbVhcvzrxJDv4c1ByXCDh9NRefTHWzHFPisNFNeUXWUB3iPxl/i.test(candidate.url || ''));
-      const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-      const tab = postTab || (candidates.some(candidate => candidate.id === activeTab?.id) ? activeTab : null);
-      if (!tab?.id) return { ok: false, reason: 'no-matching-facebook-post-tab', tabs: candidates.map(t => ({ url: t.url, id: t.id })), activeTab: activeTab ? { url: activeTab.url, id: activeTab.id } : null };
-      let isolatedWorld;
-      try {
-        const [probe] = await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          world: 'ISOLATED',
-          func: () => ({
-            href: location.href,
-            contentScriptLoaded: window.__blbSuiteContentScriptLoadedV2 === true,
-            doubleClickBound: window.__blbSuiteDoubleClickBoundV2 === true
-          })
-        });
-        isolatedWorld = probe?.result || null;
-      } catch (error) {
-        isolatedWorld = { error: String(error) };
+      const diagnostics = [];
+      for (const tab of candidates) {
+        let isolatedWorld = null;
+        try {
+          const [probe] = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            world: 'ISOLATED',
+            func: () => ({
+              href: location.href,
+              contentScriptLoaded: window.__blbSuiteContentScriptLoadedV2 === true,
+              doubleClickBound: window.__blbSuiteDoubleClickBoundV2 === true
+            })
+          });
+          isolatedWorld = probe?.result || null;
+        } catch (error) {
+          isolatedWorld = { error: String(error) };
+        }
+        try {
+          const response = await chrome.tabs.sendMessage(tab.id, { type: 'blbSuiteRefreshSiteFeatures' });
+          diagnostics.push({ id: tab.id, url: tab.url, isolatedWorld, response });
+          if (response?.ok === true) return { ok: true, tabUrl: tab.url, isolatedWorld, response, diagnostics };
+        } catch (error) {
+          diagnostics.push({ id: tab.id, url: tab.url, isolatedWorld, reason: String(error) });
+        }
       }
-      try {
-        const response = await chrome.tabs.sendMessage(tab.id, { type: 'blbSuiteRefreshSiteFeatures' });
-        return { ok: response?.ok === true, tabUrl: tab.url, isolatedWorld, response };
-      } catch (error) {
-        return { ok: false, reason: String(error), tabUrl: tab.url, isolatedWorld };
-      }
+      return { ok: false, reason: candidates.length ? 'no-facebook-tab-responded' : 'no-facebook-tab', diagnostics };
     }), { timeout: 15000, intervals: [100, 200, 300, 500] }).toMatchObject({ ok: true });
     // Operate on the supplied Facebook post's real rendered text. Do not add
     // a synthetic post or synthetic verse/chapter context to the page.
