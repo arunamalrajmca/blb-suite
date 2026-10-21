@@ -31,10 +31,56 @@ jobs:
             echo "browser_e2e_required=false" >> "$GITHUB_OUTPUT"
           fi
 
-  browser-e2e:
-    name: BROWSER E2E — References — ${{ matrix.group }}
+  facebook-verse-context:
+    name: BROWSER E2E — Facebook verse-context gate
     needs: change-detection
     if: ${{ needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Cache npm downloads
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+      - name: Install dependencies
+        run: npm install --prefer-offline
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Grant test-only generic host access
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
+      - name: Read manifest version
+        id: version
+        run: echo "version=$(node -p 'require(\"./extension/manifest.json\").version')" >> "$GITHUB_OUTPUT"
+      - name: Run Facebook verse-context regression first
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+        run: npx playwright test tests/browser/extension.spec.js --grep 'Facebook post-level verse gestures follow the latest explicit chapter context'
+      - name: Upload Facebook verse-context diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blb-suite-facebook-verse-context-gate
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
+
+  browser-e2e:
+    name: BROWSER E2E — References — ${{ matrix.group }}
+    needs: [change-detection, facebook-verse-context]
+    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && needs.facebook-verse-context.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -43,7 +89,7 @@ jobs:
       matrix:
         include:
           - group: positional
-            grep: 'Double-click resolves any part|positional context|browser token|separate lines|standalone book numbers|ordinary heading words|Facebook post-level verse gestures'
+            grep: 'Double-click resolves any part|positional context|browser token|separate lines|standalone book numbers|ordinary heading words'
           - group: paired-timothy-post
             file: tests/browser/shared-regex-patterns.spec.js
             grep: 'paired 1 & 2 Timothy whole-book shorthand reaches the final MultiVerse POST with every chapter'
