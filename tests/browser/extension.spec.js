@@ -80,7 +80,9 @@ test.describe('core user-visible E2E', () => {
     // the enabled site setting deterministically before the synthetic post is added.
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => document.readyState === 'complete' || document.readyState === 'interactive');
-    await page.waitForTimeout(250);
+    // Match the established extension E2E startup allowance; the service worker and
+    // content-script storage listener can lag behind document readiness.
+    await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const fixture = document.createElement('div');
       fixture.id = 'blb-e2e-facebook-post-verse-context';
