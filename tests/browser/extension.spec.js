@@ -1039,6 +1039,7 @@ test.describe('core user-visible E2E', () => {
     // DOM context is intentionally limited to book names/aliases and standalone
     // numbers 1–176. Do not assert that stopwords or punctuation trigger a scan.
     if (!isContextCandidate) return;
+    console.log(`[numbered-reference-debug] token=${JSON.stringify(token)} selector=${selector} expected=${expectedPath}`);
     await runDoubleClickReferenceToken(page, context, extensionWorker, selector, token, expectedPath);
   }
 
