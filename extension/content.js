@@ -1941,22 +1941,35 @@ function handleDoubleClickBlb(event) {
           if (!isKjvWord && !isBookName) return true;
         }
 
-        const contextualTarget=getDoubleClickTargetElement(event)||event.target;
-        const blockContext=getDoubleClickBlockContextReference(selection,contextualTarget,event);
+        // DOM context is useful only when the clicked token can identify a
+        // Bible reference: a standalone number in the supported 1-176 range,
+        // or a recognized Bible book name. Ordinary KJV words still proceed
+        // to word lookup without scanning the surrounding DOM.
+        const isNumericBookCandidate=/^\d+$/.test(selection)
+          && Number(selection)>=1 && Number(selection)<=176;
+        const isBookName=!!resolveBibleBook(selection);
+        const needsDomContext=isNumericBookCandidate||isBookName;
+        const contextualTarget=needsDomContext
+          ? (getDoubleClickTargetElement(event)||event.target)
+          : null;
+        const blockContext=needsDomContext
+          ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
+          : null;
 
-        // Numeric tokens are ambiguous: 3/17/etc. are valid standalone book
-        // numbers, but inside a nearby Book + Chapter reference they belong to
-        // that positional reference. Keep waiting while context is unsettled.
-        if (!blockContext && /^\d+$/.test(selection) && Date.now()-started<1500) {
+        // Wait for the native selection/context to settle only for a number
+        // that could be a standalone book number or part of a Bible reference.
+        if (isNumericBookCandidate && !blockContext && Date.now()-started<1500) {
           requestAnimationFrame(dispatch);
           return true;
         }
 
-        const standaloneBook=getStandaloneBookReference(selection);
-        const blockText=normalizeSelectionText(
+        const standaloneBook=isNumericBookCandidate
+          ? getStandaloneBookReference(selection)
+          : null;
+        const blockText=isNumericBookCandidate ? normalizeSelectionText(
           event?.target?.closest?.('p,li,td,th,blockquote,article,section,div')?.textContent||''
-        );
-        const isStandaloneNumericBook=standaloneBook && /^\d+$/.test(selection) && blockText===selection;
+        ) : '';
+        const isStandaloneNumericBook=isNumericBookCandidate && standaloneBook && blockText===selection;
         const contextualReference=isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook);
         if (!contextualReference) {
           if (/^[A-Za-z][A-Za-z'’-]*$/.test(selection) && !/^(?:i|ii|iii)$/i.test(selection)) {
@@ -1977,7 +1990,7 @@ function handleDoubleClickBlb(event) {
             });
             return true;
           }
-          if (Date.now()-started<1500) requestAnimationFrame(dispatch);
+          if (isNumericBookCandidate && Date.now()-started<1500) requestAnimationFrame(dispatch);
           return true;
         }
 
