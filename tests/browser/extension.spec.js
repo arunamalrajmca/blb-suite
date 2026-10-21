@@ -76,7 +76,11 @@ test.describe('core user-visible E2E', () => {
   test('Facebook post-level verse gestures follow the latest explicit chapter context', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(1000);
+    // Reload after the preference write so MV3 content-script startup reads
+    // the enabled site setting deterministically before the synthetic post is added.
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForFunction(() => document.readyState === 'complete' || document.readyState === 'interactive');
+    await page.waitForTimeout(250);
     await page.evaluate(() => {
       const fixture = document.createElement('div');
       fixture.id = 'blb-e2e-facebook-post-verse-context';
