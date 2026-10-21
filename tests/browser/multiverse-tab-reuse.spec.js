@@ -19,6 +19,25 @@ async function openMultiVerse(extensionWorker, refs) {
   return extensionWorker.evaluate(async payload => openBlbMultiVerseRefs(payload, true), refs);
 }
 
+test('MultiVerse POST slots are admitted without artificial per-tab staggering', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const slots = await Promise.all(Array.from({length:8}, (_, index) =>
+      grantMultiVersePostSlot(MULTIVERSE_POST_MIN_INTERVAL_MS, index + 1, Date.now())
+    ));
+    return {
+      interval: MULTIVERSE_POST_MIN_INTERVAL_MS,
+      scheduledAt: slots.map(slot => slot.submitAt),
+      waits: slots.map(slot => slot.submitAt - Date.now())
+    };
+  });
+
+  expect(result.interval).toBe(0);
+  expect(result.scheduledAt).toHaveLength(8);
+  // Queue admission may take a few milliseconds, but must not reserve a
+  // fixed delay between submissions. Page navigation/load remains independent.
+  expect(Math.max(...result.scheduledAt) - Math.min(...result.scheduledAt)).toBeLessThan(100);
+});
+
 function countSubmittedVerses(mvText) {
   let total = 0;
   for (const match of String(mvText || '').matchAll(/:\s*(\d+)(?:\s*-\s*(\d+))?/g)) {
