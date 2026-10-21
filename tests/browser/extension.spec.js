@@ -101,13 +101,13 @@ test.describe('core user-visible E2E', () => {
     // Operate on the supplied Facebook post's real rendered text. Do not add
     // a synthetic post or synthetic verse/chapter context to the page.
     const realPost = page.locator('[data-ad-comet-preview="message"]').filter({
-      hasText: /verse\\s+42/i
+      hasText: /verse\s+42/i
     }).filter({ hasText: /1 Kings 18/i }).first();
     await expect(realPost, 'Facebook post containing the real "verse 42" and 1 Kings 18 context must render')
       .toBeVisible({ timeout: 20000 });
     await page.evaluate(() => {
       const messages = [...document.querySelectorAll('[data-ad-comet-preview="message"]')];
-      const root = messages.find(el => /verse\\s+42/i.test(el.innerText || el.textContent || '') &&
+      const root = messages.find(el => /verse\s+42/i.test(el.innerText || el.textContent || '') &&
         /1 Kings 18/i.test(el.innerText || el.textContent || ''));
       if (!root) throw new Error('Actual Facebook post text with verse 42 and 1 Kings 18 was not found');
       const wrapCue = (wantedNumber, id) => {
@@ -116,12 +116,12 @@ test.describe('core user-visible E2E', () => {
         while (walker.nextNode()) nodes.push(walker.currentNode);
         for (const node of nodes) {
           const value = node.nodeValue || '';
-          const match = /\\bverses?\\b/i.exec(value);
+          const match = /\bverses?\b/i.exec(value);
           if (!match) continue;
           const after = value.slice(match.index + match[0].length);
           const nextSiblingText = node.nextSibling?.nodeType === Node.TEXT_NODE ? node.nextSibling.nodeValue : '';
           const combined = after + (nextSiblingText || '');
-          const numberMatch = /^\\s*(\\d+)\\b/.exec(combined);
+          const numberMatch = /^\s*(\d+)\b/.exec(combined);
           if (!numberMatch || Number(numberMatch[1]) !== wantedNumber) continue;
           const cue = document.createElement('span');
           cue.id = id;
@@ -150,15 +150,15 @@ test.describe('core user-visible E2E', () => {
           if (number === 18) {
             const allMessages = [...document.querySelectorAll('[data-ad-comet-preview="message"]')];
             const later = allMessages.find(el => /1 Kings 19/i.test(el.innerText || el.textContent || '') &&
-              /verses?\\s+18/i.test(el.innerText || el.textContent || ''));
+              /verses?\s+18/i.test(el.innerText || el.textContent || ''));
             if (later) {
               const walker = document.createTreeWalker(later, NodeFilter.SHOW_TEXT);
               while (walker.nextNode()) {
                 const node = walker.currentNode;
-                const match = /\\bverse\\b/i.exec(node.nodeValue || '');
+                const match = /\bverse\b/i.exec(node.nodeValue || '');
                 if (!match) continue;
                 const rest = (node.nodeValue || '').slice(match.index + match[0].length);
-                if (!/^\\s*18\\b/.test(rest)) continue;
+                if (!/^\s*18\b/.test(rest)) continue;
                 const cue = document.createElement('span'); cue.id = id;
                 const parent = node.parentNode;
                 parent.insertBefore(document.createTextNode((node.nodeValue || '').slice(0, match.index)), node);
@@ -204,7 +204,7 @@ test.describe('core user-visible E2E', () => {
       // settle after dblclick; poll diagnostics instead of sampling too early.
       let cueDiagnostic = null;
       await expect.poll(async () => {
-        cueDiagnostic = await page.locator('#blb-e2e-facebook-post-verse-context').evaluate(root => {
+        cueDiagnostic = await page.locator('[data-ad-comet-preview="message"]').filter({ hasText: /1 Kings 18/i }).first().evaluate(root => {
         // The resolver attaches diagnostics to the closest message root, which
         // may be the root element itself; querySelectorAll() excludes that root.
         const candidates = [
@@ -227,7 +227,7 @@ test.describe('core user-visible E2E', () => {
       expect(extraction.associatedVerse, selector + ': verse number was not extracted').toBe(Number(expectedPath.match(/\/(\d+)\/$/)?.[1]));
       await activateBlbTabForPath(extensionWorker, expectedPath, {
         fragment: selector,
-        selector: '#blb-e2e-facebook-post-verse-context',
+        selector: '[data-ad-comet-preview="message"]',
         selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
       });
       const openedPaths = await extensionWorker.evaluate((beforeIds) => chrome.tabs.query({}).then(tabs =>
