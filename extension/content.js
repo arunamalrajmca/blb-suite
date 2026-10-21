@@ -1,3 +1,6 @@
+// Top-level execution marker lets the browser E2E distinguish file execution
+// from failures inside the async initializer below.
+try { window.__blbSuiteContentScriptFileExecutedV3 = true; } catch (_) {}
 (async function () {
 // Lightweight test/diagnostic marker: content-script injection is distinct from
 // whether the user's per-site double-click preference enables the listener.
