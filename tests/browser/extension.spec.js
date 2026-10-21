@@ -95,6 +95,11 @@ test.describe('core user-visible E2E', () => {
       });
       const diagnostics = [];
       for (const tab of candidates) {
+        const contentScripts = (loadedManifest.content_scripts || []).filter(script =>
+          (script.matches || []).some(match => {
+            try { return new URL(tab.url).hostname === new URL(match.replace(/\\*.*$/, '')).hostname; }
+            catch (_) { return match.includes('facebook.com') && /(^|\\.)facebook\\.com$/i.test(new URL(tab.url).hostname); }
+          }));
         let isolatedWorld = null;
         try {
           const [probe] = await chrome.scripting.executeScript({
@@ -110,12 +115,34 @@ test.describe('core user-visible E2E', () => {
         } catch (error) {
           isolatedWorld = { error: String(error) };
         }
+        let response = null;
+        let messageError = null;
         try {
-          const response = await chrome.tabs.sendMessage(tab.id, { type: 'blbSuiteRefreshSiteFeatures' });
-          diagnostics.push({ id: tab.id, url: tab.url, isolatedWorld, response });
+          response = await chrome.tabs.sendMessage(tab.id, { type: 'blbSuiteRefreshSiteFeatures' });
         } catch (error) {
-          diagnostics.push({ id: tab.id, url: tab.url, isolatedWorld, messageError: String(error) });
+          messageError = String(error);
         }
+        // If declarative injection missed this already-loaded document, explicitly
+        // inject the exact manifest-declared files once to distinguish timing from
+        // a script-load/runtime failure. This is a diagnostic fallback, not a pass
+        // unless the real readiness message subsequently responds.
+        let explicitInjection = null;
+        if (!response?.ok && contentScripts.length) {
+          try {
+            const files = [...new Set(contentScripts.flatMap(script => script.js || []))];
+            explicitInjection = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              files
+            });
+            response = await chrome.tabs.sendMessage(tab.id, { type: 'blbSuiteRefreshSiteFeatures' });
+            messageError = null;
+          } catch (error) {
+            explicitInjection = { error: String(error) };
+            try { await chrome.tabs.sendMessage(tab.id, { type: 'blbSuiteRefreshSiteFeatures' }); }
+            catch (retryError) { messageError = String(retryError); }
+          }
+        }
+        diagnostics.push({ id: tab.id, url: tab.url, isolatedWorld, explicitInjection, response, messageError });
       }
       const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
       return {
