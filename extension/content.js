@@ -1471,6 +1471,63 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       }
     }
     if (!selected) return null;
+
+    // Facebook post-level "verse N" context: these references can be in
+    // separate dir=auto paragraphs inside one message container. Only apply
+    // this fallback to the word "verse" or its immediately associated number.
+    const messageRoot = initialNode?.closest?.('[data-ad-comet-preview="message"], [role="article"]');
+    if (messageRoot) {
+      const clickRange = clickedWordRange || (() => {
+        const liveSelection = window.getSelection?.();
+        return liveSelection?.rangeCount && !liveSelection.isCollapsed
+          ? liveSelection.getRangeAt(0) : null;
+      })();
+      if (clickRange && messageRoot.contains(clickRange.startContainer)) {
+        const beforeRange = document.createRange();
+        beforeRange.selectNodeContents(messageRoot);
+        beforeRange.setEnd(clickRange.startContainer, clickRange.startOffset);
+        const beforeText = normalizeSelectionText(beforeRange.cloneContents().textContent || '').normalize('NFKC');
+        const clickToken = normalizeSelectionText(clickedWordText || selected).toLowerCase();
+        const numericClick = /^\d{1,3}$/.test(clickToken);
+        const verseWordClick = /^verse$/i.test(clickToken);
+        let associatedVerse = null;
+        if (verseWordClick) {
+          const afterRange = document.createRange();
+          afterRange.selectNodeContents(messageRoot);
+          afterRange.setStart(clickRange.endContainer, clickRange.endOffset);
+          const afterText = normalizeSelectionText(afterRange.cloneContents().textContent || '').normalize('NFKC');
+          const following = afterText.match(/^\s*(\d{1,3})\b/);
+          if (following) associatedVerse = Number(following[1]);
+        } else if (numericClick) {
+          const around = beforeText.match(/\bverse\s*$/i);
+          if (around) associatedVerse = Number(clickToken);
+        }
+        if ((verseWordClick && associatedVerse) || (numericClick && associatedVerse)) {
+          const explicitRefPattern = /((?:[1-3]\s+)?[A-Za-z][A-Za-z.'-]*(?:\s+[A-Za-z][A-Za-z.'-]*){0,2})\s+(\d+)(?:\s*:\s*(\d+)(?:\s*[-–—]\s*\d+)?)?/gi;
+          let context = null;
+          let match;
+          while ((match = explicitRefPattern.exec(beforeText))) {
+            const book = resolveBibleBook(match[1]);
+            if (!book) continue;
+            const chapter = Number(match[2]);
+            const verse = match[3] ? Number(match[3]) : 1;
+            const validated = resolveBibleReference(book.name, chapter, verse, verse);
+            if (validated) context = {book: book.name, chapter};
+          }
+          if (context) {
+            const resolved = resolveBibleReference(context.book, context.chapter, associatedVerse, associatedVerse);
+            if (resolved) return {
+              book: resolved.book,
+              chapter: resolved.chapter,
+              from: resolved.from,
+              to: resolved.to,
+              url: resolved.url
+            };
+          }
+        }
+      }
+    }
+
     const node = initialNode || document.documentElement;
 
     // Version-code clicks must resolve only inside the clicked word's nearest
