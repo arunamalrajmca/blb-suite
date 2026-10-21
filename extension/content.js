@@ -1509,6 +1509,13 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const verseWordClick = /^(?:v|verse|verses)$/i.test(clickToken);
       const tokenElementIsExact = !!(initialNode && messageRoot.contains(initialNode) &&
         clickedElementToken.toLowerCase() === clickToken);
+      if (verseWordClick) {
+        messageRoot.setAttribute('data-blb-verse-context-diagnostic', JSON.stringify({
+          clickToken, verseWordClick, associatedVerse: null,
+          tokenElementIsExact, hasClickRange,
+          stage: 'cue-detected-before-range-check'
+        }));
+      }
       if (hasClickRange || tokenElementIsExact) {
         const beforeRange = document.createRange();
         beforeRange.selectNodeContents(messageRoot);
