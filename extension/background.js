@@ -722,21 +722,10 @@ function compactMultiVerseVerses(verses) {
   return compact;
 }
 
-// Serialize the complete multi-batch operation, not just individual tab creation.
-// Otherwise two identical selections can both pass the existing-tab check before
-// either request has finished reserving every batch.
-let pendingMultiVerseRequest = Promise.resolve();
-
-function openBlbMultiVerseRefs(refs, active = true, options = {}) {
-  const run = pendingMultiVerseRequest.then(
-    () => openBlbMultiVerseRefsSerialized(refs, active, options),
-    () => openBlbMultiVerseRefsSerialized(refs, active, options)
-  );
-  pendingMultiVerseRequest = run.then(() => undefined, () => undefined);
-  return run;
-}
-
-async function openBlbMultiVerseRefsSerialized(refs, active = true, options = {}) {
+// Keep independent MultiVerse commands concurrent. Per-destination identity locks
+// below prevent duplicate tabs for overlapping requests without making a new
+// command wait for every batch of an unrelated request to finish opening.
+async function openBlbMultiVerseRefs(refs, active = true, options = {}) {
   // Universal MultiVerse policy: BLB renders at most 200 verses per view.
   // Expand, canonicalize, and deduplicate once, then deliver every verse in
   // ordered batches. No caller may silently lose verses after the first 200.

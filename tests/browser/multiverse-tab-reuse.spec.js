@@ -46,6 +46,61 @@ async function getTrackedMultiVerseTabs(extensionWorker, tabIds = []) {
   }, tabIds);
 }
 
+test('independent MultiVerse commands start opening tabs without waiting for earlier command completion', async ({ context, extensionWorker }) => {
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>MultiVerse concurrency fixture</title></head><body>MultiVerse fixture</body></html>'
+  }));
+
+  const outcome = await extensionWorker.evaluate(async () => {
+    const original = openBlbMultiVerseRefsSingleBatch;
+    let calls = 0;
+    let firstEnteredResolve;
+    let secondEnteredResolve;
+    let releaseFirstResolve;
+    const firstEntered = new Promise(resolve => { firstEnteredResolve = resolve; });
+    const secondEntered = new Promise(resolve => { secondEnteredResolve = resolve; });
+    const firstGate = new Promise(resolve => { releaseFirstResolve = resolve; });
+
+    openBlbMultiVerseRefsSingleBatch = async (...args) => {
+      calls++;
+      if (calls === 1) {
+        firstEnteredResolve();
+        await firstGate;
+      } else if (calls === 2) {
+        secondEnteredResolve();
+      }
+      return original(...args);
+    };
+
+    const refsA = [{ book:'Genesis', bookNumber:1, chapter:1, from:1, to:1, version:'kjv' },
+                   { book:'Genesis', bookNumber:1, chapter:1, from:2, to:2, version:'kjv' }];
+    const refsB = [{ book:'John', bookNumber:43, chapter:1, from:1, to:1, version:'niv' },
+                   { book:'John', bookNumber:43, chapter:1, from:2, to:2, version:'niv' }];
+
+    try {
+      const first = openBlbMultiVerseRefs(refsA, false);
+      await firstEntered;
+      const second = openBlbMultiVerseRefs(refsB, false);
+      const secondStarted = await Promise.race([
+        secondEntered.then(() => true),
+        new Promise(resolve => setTimeout(() => resolve(false), 250))
+      ]);
+      releaseFirstResolve();
+      const results = await Promise.all([first, second]);
+      return { secondStarted, firstOk:results[0]?.ok, secondOk:results[1]?.ok };
+    } finally {
+      releaseFirstResolve();
+      openBlbMultiVerseRefsSingleBatch = original;
+    }
+  });
+
+  expect(outcome.secondStarted, 'the second request must enter batch opening before the first request is released').toBe(true);
+  expect(outcome.firstOk).toBe(true);
+  expect(outcome.secondOk).toBe(true);
+});
+
 test('MultiVerse reuses both 200-verse batches when the same selection is repeated or reordered', async ({ context, extensionWorker }) => {
   await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
     status: 200,
