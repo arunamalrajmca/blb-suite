@@ -1334,6 +1334,10 @@ function getStandaloneBookReference(selectionText) {
   }
 }
 
+function isBibleVersionCodeToken(value) {
+  return /^(?:KJV|NKJV|NIV|NIVUK|ESV|NASB|NASB95|NASB2020|LSB|NLT|CSB|HCSB|RSV|NRSV|NRSVUE|ASV|AMP|AMPC|NET|WEB|YLT|DARBY|BBE|WYC|TLB|MSG|GNT|NIRV|CEV|ISV|LEB|ERV|GW|ICB|NCV|NABRE|NJB|JPS|MEV|KJ21|AKJV|VOICE|PHILLIPS|TPT)$/i.test(normalizeSelectionText(value));
+}
+
 function getDoubleClickBlockContextReference(selectionText, target, event = null) {
   try {
     // textContent and Range.toString() omit <br> boundaries. Instagram captions
@@ -1527,12 +1531,14 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
 
       if (start != null && end != null) {
         const containsReference = candidateRefs.some(ref => {
-          const refText = normalizeSelectionText(ref.text || '').normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-');
+          const refText = normalizeSelectionText(ref.text || '').normalize('NFKC').replace(/[\\u2010-\\u2015\\u2212]/g, '-');
           if (!refText) return false;
           let from = candidateMatchSource.indexOf(refText);
           while (from >= 0) {
             const to = from + refText.length;
             if (start < to && end > from) return true;
+            // Version labels often sit adjacent to a citation, outside its text.
+            if (isBibleVersionCodeToken(selected) && Math.min(Math.abs(start - to), Math.abs(end - from)) <= 80) return true;
             from = candidateMatchSource.indexOf(refText, from + 1);
           }
           return false;
@@ -1794,6 +1800,28 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         selectedBookPositions[0])
       : null;
 
+    // Version codes are adjacent metadata, not part of the citation itself.
+    // Select the nearest parsed reference in the same local DOM block, regardless
+    // of parentheses or punctuation, and return its canonical KJV reference URL.
+    if (isBibleVersionCodeToken(selected)) {
+      const nearby = [];
+      for (const ref of refs) {
+        if (!ref || ref.chapter == null || !ref.text) continue;
+        for (const occurrence of findOccurrences(ref.text)) {
+          const distance = selectionEnd <= occurrence.start
+            ? occurrence.start - selectionEnd
+            : selectionStart >= occurrence.end
+              ? selectionStart - occurrence.end
+              : 0;
+          if (distance <= 80) nearby.push({ref, distance, start: occurrence.start});
+        }
+      }
+      nearby.sort((a, b) => a.distance - b.distance || a.start - b.start);
+      const closest = nearby[0]?.ref;
+      if (closest) return {book:closest.book,chapter:closest.chapter,from:closest.from,to:closest.to,url:closest.url};
+      return null;
+    }
+
     for (const ref of refs) {
       if (!ref || ref.chapter == null || !ref.text) continue;
       const occurrences = findOccurrences(ref.text);
@@ -1934,7 +1962,7 @@ function handleDoubleClickBlb(event) {
         // searches. If one is double-clicked beside a reference, resolve that
         // reference and open it in BLB's default KJV view regardless of the
         // clicked version code.
-        const isBibleVersionCode = /^(?:KJV|NKJV|NIV|NIVUK|ESV|NASB|NASB95|NASB2020|LSB|NLT|CSB|HCSB|RSV|NRSV|NRSVUE|ASV|AMP|AMPC|NET|WEB|YLT|DARBY|BBE|WYC|TLB|MSG|GNT|NIRV|CEV|ISV|LEB|ERV|GW|ICB|NCV|NABRE|NJB|JPS|MEV|KJ21|AKJV|VOICE|PHILLIPS|TPT)$/i.test(selection);
+        const isBibleVersionCode = isBibleVersionCodeToken(selection);
 
         // Reject unrelated English single words before building DOM context or
         // entering the background selection resolver. This is an exact local
