@@ -74,10 +74,11 @@ test.describe('core user-visible E2E', () => {
   test.describe.configure({ mode: 'serial' });
 
   test('Facebook post-level verse gestures follow the latest explicit chapter context', async ({ page, extensionStorage, extensionWorker }) => {
-    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await extensionStorage.set({ masterEnabled: true });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    // Reload after the preference write so MV3 content-script startup reads
-    // the enabled site setting deterministically before the synthetic post is added.
+    // Grant the site feature after the content script has loaded, then reload
+    // to ensure the new document initializes with the explicit preference.
+    await extensionStorage.set({ doubleClickBlbSites: { 'example.com': true } });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => document.readyState === 'complete' || document.readyState === 'interactive');
     // Match the established extension E2E startup allowance; the service worker and
