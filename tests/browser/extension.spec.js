@@ -68,6 +68,11 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
 });
 
 test.describe('core user-visible E2E', () => {
+  // Run the new Facebook verse-context regression first. In serial mode, any
+  // failure skips the legacy tests in this suite for a faster feedback loop;
+  // once the regression passes, all existing coverage runs unchanged.
+  test.describe.configure({ mode: 'serial' });
+
   test('Facebook post-level verse gestures follow the latest explicit chapter context', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
