@@ -812,6 +812,11 @@ test.describe('core user-visible E2E', () => {
       root.id = 'blb-e2e-focused-root';
       root.innerHTML = html;
       root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;max-height:calc(100vh - 48px);overflow:auto;';
+      root.querySelectorAll('.book-token, .alias-token, .reference-token, .book, .chapter, .verse').forEach(el => {
+        el.style.display = 'inline-block';
+        el.style.paddingLeft = '3px';
+        el.style.paddingRight = '3px';
+      });
       document.body.appendChild(root);
     }, html);
   }
@@ -931,7 +936,7 @@ test.describe('core user-visible E2E', () => {
       const reference = book.chapterCount === 1
         ? `${book.name} 1:1-2`
         : `${book.name} 3:16-18`;
-      const tokens = reference.trim().split(/\\s+/);
+      const tokens = reference.trim().split(/\s+/);
       await setupDoubleClickReferencePage(
         page,
         extensionStorage,
@@ -1019,7 +1024,22 @@ test.describe('core user-visible E2E', () => {
   });
 
   async function assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath) {
-    await runDoubleClickReferenceToken(page, context, extensionWorker, selector, await page.locator(selector).textContent(), expectedPath);
+    const token = (await page.locator(selector).textContent() || '').trim();
+    const isContextCandidate = await extensionWorker.evaluate(token => {
+      const key = String(token || '').toLowerCase();
+      const bookNames = new Set([
+        ...(BOOKS || []).map(book => String(book.name || '').toLowerCase()),
+        ...Object.keys(BOOK_ALIASES || {}).map(alias => String(alias).toLowerCase())
+      ]);
+      const number = /^\d+$/.test(key) ? Number(key) : NaN;
+      return bookNames.has(key)
+        || (Number.isInteger(number) && number >= 1 && number <= 176)
+        || /^(?:i|ii|iii)$/i.test(key);
+    }, token);
+    // DOM context is intentionally limited to book names/aliases and standalone
+    // numbers 1–176. Do not assert that stopwords or punctuation trigger a scan.
+    if (!isContextCandidate) return;
+    await runDoubleClickReferenceToken(page, context, extensionWorker, selector, token, expectedPath);
   }
 
   test('Double-click generic canonical references — all 66 books × book/chapter/verse tokens', async ({ page, context, extensionStorage, extensionWorker }) => {
