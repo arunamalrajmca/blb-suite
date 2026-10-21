@@ -1527,23 +1527,22 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           if (around) associatedVerse = Number(clickToken);
         }
         if ((verseWordClick && associatedVerse) || (numericClick && associatedVerse)) {
-          const explicitRefPattern = /((?:[1-3]\s+)?[A-Za-z][A-Za-z.'-]*(?:\s+[A-Za-z][A-Za-z.'-]*){0,2})\s+(\d+)(?:\s*:\s*(\d+)(?:\s*[-–—]\s*\d+)?)?/gi;
+          // Use the shared Bible-reference parser rather than a second,
+          // looser book-name regex. The latter can greedily consume prose
+          // ("Read 1 Kings") and miss the actual numbered-book reference.
+          // Because beforeText ends at the clicked verse cue/number, the last
+          // parsed explicit reference is the latest chapter context in this
+          // post and cannot be polluted by a later reference section.
           let context = null;
-          let match;
-          while ((match = explicitRefPattern.exec(beforeText))) {
-            const book = resolveBibleBook(match[1]);
-            const chapter = Number(match[2]);
-            const verse = match[3] ? Number(match[3]) : 1;
-            const validated = book && resolveBibleReference(book.name, chapter, verse, verse);
-            if (validated) {
-              context = {book: book.name, chapter};
-            } else {
-              // A prose lead-in such as "Read 1 Kings 18:1" can make the
-              // broad book-name pattern first consume "Read 1 Kings".
-              // Retry from the next character so the valid "1 Kings" suffix
-              // is still considered instead of skipping the entire reference.
-              explicitRefPattern.lastIndex = match.index + 1;
-            }
+          const priorReferences = resolveBibleReferenceText(
+            beforeText.replace(/[\\u2010-\\u2015\\u2212]/g, '-')
+          );
+          for (const prior of priorReferences) {
+            const chapter = Number(prior.chapter);
+            const book = resolveBibleBook(prior.book);
+            if (!book || !Number.isInteger(chapter) || chapter < 1) continue;
+            const validated = resolveBibleReference(book.name, chapter, 1, 1);
+            if (validated) context = {book: book.name, chapter};
           }
           if (context) {
             const resolved = resolveBibleReference(context.book, context.chapter, associatedVerse, associatedVerse);
