@@ -1335,7 +1335,12 @@ function getStandaloneBookReference(selectionText) {
 }
 
 function isBibleVersionCodeToken(value) {
-  return /^(?:KJV|NKJV|NIV|NIVUK|ESV|NASB|NASB95|NASB2020|LSB|NLT|CSB|HCSB|RSV|NRSV|NRSVUE|ASV|AMP|AMPC|NET|WEB|YLT|DARBY|BBE|WYC|TLB|MSG|GNT|NIRV|CEV|ISV|LEB|ERV|GW|ICB|NCV|NABRE|NJB|JPS|MEV|KJ21|AKJV|VOICE|PHILLIPS|TPT)$/i.test(normalizeSelectionText(value));
+  // Double-click selection may include surrounding punctuation when the
+  // version label is wrapped in parentheses/brackets or followed by a comma,
+  // dash, or sentence punctuation. Normalize only the token edges so the
+  // version-code boundary guard still applies to those common forms.
+  const token = normalizeSelectionText(value).replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '');
+  return /^(?:KJV|NKJV|NIV|NIVUK|ESV|NASB|NASB95|NASB2020|LSB|NLT|CSB|HCSB|RSV|NRSV|NRSVUE|ASV|AMP|AMPC|NET|WEB|YLT|DARBY|BBE|WYC|TLB|MSG|GNT|NIRV|CEV|ISV|LEB|ERV|GW|ICB|NCV|NABRE|NJB|JPS|MEV|KJ21|AKJV|VOICE|PHILLIPS|TPT)$/i.test(token);
 }
 
 function getDoubleClickBlockContextReference(selectionText, target, event = null) {
