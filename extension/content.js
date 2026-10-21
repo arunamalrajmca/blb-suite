@@ -1535,7 +1535,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           // post and cannot be polluted by a later reference section.
           let context = null;
           const priorReferences = resolveBibleReferenceText(
-            beforeText.replace(/[\\u2010-\\u2015\\u2212]/g, '-')
+            beforeText.replace(/[\u2010-\u2015\u2212]/g, '-')
           );
           for (const prior of priorReferences) {
             const chapter = Number(prior.chapter);
