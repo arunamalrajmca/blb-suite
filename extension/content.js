@@ -1484,7 +1484,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         const targetText = normalizeSelectionText(clickedWordText || initialNode?.textContent || '').normalize('NFKC').toLowerCase();
         // Never use a non-empty selection left behind by a prior double-click
         // as the location of the current gesture.
-        if (targetText && !/\\s/.test(targetText) && liveText !== targetText) return null;
+        if (targetText && !/\s/.test(targetText) && liveText !== targetText) return null;
         return liveSelection.getRangeAt(0);
       })();
       if (clickRange && messageRoot.contains(clickRange.startContainer)) {
