@@ -84,10 +84,9 @@ test.describe('core user-visible E2E', () => {
     // Content scripts run in Chrome's isolated world: globals assigned by the
     // extension are intentionally invisible to page.evaluate(). Probe readiness
     // through the extension message channel instead of checking window markers.
-    const readiness = await expect.poll(async () => extensionWorker.evaluate(async () => {
-      // The permalink can be displayed as a modal in the Facebook feed. It
-      // remains in the same tab; probe every Facebook tab because Chrome's
-      // tab order is not guaranteed to match Playwright's page order.
+    // One diagnostic probe first: avoid retrying away the evidence about
+    // which Facebook tabs exist and whether their isolated worlds/listeners work.
+    const readiness = await extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({});
       const candidates = tabs.filter(candidate => {
         try { return /(^|\\.)facebook\\.com$/i.test(new URL(candidate.url || '').hostname) && candidate.id != null; }
@@ -113,13 +112,22 @@ test.describe('core user-visible E2E', () => {
         try {
           const response = await chrome.tabs.sendMessage(tab.id, { type: 'blbSuiteRefreshSiteFeatures' });
           diagnostics.push({ id: tab.id, url: tab.url, isolatedWorld, response });
-          if (response?.ok === true) return { ok: true, tabUrl: tab.url, isolatedWorld, response, diagnostics };
         } catch (error) {
-          diagnostics.push({ id: tab.id, url: tab.url, isolatedWorld, reason: String(error) });
+          diagnostics.push({ id: tab.id, url: tab.url, isolatedWorld, messageError: String(error) });
         }
       }
-      return { ok: false, reason: candidates.length ? 'no-facebook-tab-responded' : 'no-facebook-tab', diagnostics };
-    }), { timeout: 15000, intervals: [100, 200, 300, 500] }).toMatchObject({ ok: true });
+      const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      return {
+        candidateCount: candidates.length,
+        candidates: candidates.map(tab => ({ id: tab.id, url: tab.url, status: tab.status, active: tab.active })),
+        activeTab: activeTab ? { id: activeTab.id, url: activeTab.url, status: activeTab.status } : null,
+        diagnostics
+      };
+    });
+    console.log('FACEBOOK_READINESS_DIAGNOSTIC ' + JSON.stringify(readiness));
+    expect(readiness.diagnostics.some(item => item.response?.ok === true),
+      'At least one Facebook tab must answer the extension readiness message; see FACEBOOK_READINESS_DIAGNOSTIC above')
+      .toBe(true);
     // Operate on the supplied Facebook post's real rendered text. Do not add
     // a synthetic post or synthetic verse/chapter context to the page.
     // Facebook can render the permalink as a modal over the feed. Prefer
