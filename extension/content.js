@@ -1546,7 +1546,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           // verse. Do not search for other verse numbers in the post. Resolve
           // chapter context by walking backward from the cue and stop at the
           // nearest valid explicit reference (including chapter-only forms).
-          let context = null;
           const contextText = beforeText.replace(/[\\u2010-\\u2015\\u2212]/g, '-');
           const entries = [];
           const seenNames = new Set();
