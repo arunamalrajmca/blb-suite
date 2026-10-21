@@ -84,17 +84,38 @@ test.describe('core user-visible E2E', () => {
     // Content scripts run in Chrome's isolated world: globals assigned by the
     // extension are intentionally invisible to page.evaluate(). Probe readiness
     // through the extension message channel instead of checking window markers.
-    await expect.poll(async () => extensionWorker.evaluate(async () => {
-      const tabs = await chrome.tabs.query({ url: ['https://www.facebook.com/*'] });
-      const tab = tabs.find(candidate => { try { return new URL(candidate.url || '').hostname === 'www.facebook.com'; } catch (_) { return false; } });
-      if (!tab?.id) return false;
+    const readiness = await expect.poll(async () => extensionWorker.evaluate(async () => {
+      // Query all tabs: Facebook can redirect the post to a different host
+      // (for example login or mobile) while the Playwright page remains open.
+      const tabs = await chrome.tabs.query({});
+      const candidates = tabs.filter(candidate => {
+        try { return /(^|\\.)facebook\\.com$/i.test(new URL(candidate.url || '').hostname); }
+        catch (_) { return false; }
+      });
+      const tab = candidates[candidates.length - 1];
+      if (!tab?.id) return { ok: false, reason: 'no-facebook-tab', tabs: candidates.map(t => ({ url: t.url, id: t.id })) };
+      let isolatedWorld;
+      try {
+        const [probe] = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          world: 'ISOLATED',
+          func: () => ({
+            href: location.href,
+            contentScriptLoaded: window.__blbSuiteContentScriptLoadedV2 === true,
+            doubleClickBound: window.__blbSuiteDoubleClickBoundV2 === true
+          })
+        });
+        isolatedWorld = probe?.result || null;
+      } catch (error) {
+        isolatedWorld = { error: String(error) };
+      }
       try {
         const response = await chrome.tabs.sendMessage(tab.id, { type: 'blbSuiteRefreshSiteFeatures' });
-        return response?.ok === true;
-      } catch (_) {
-        return false;
+        return { ok: response?.ok === true, tabUrl: tab.url, isolatedWorld, response };
+      } catch (error) {
+        return { ok: false, reason: String(error), tabUrl: tab.url, isolatedWorld };
       }
-    }), { timeout: 15000, intervals: [100, 200, 300, 500] }).toBeTruthy();
+    }), { timeout: 15000, intervals: [100, 200, 300, 500] }).toMatchObject({ ok: true });
     // Operate on the supplied Facebook post's real rendered text. Do not add
     // a synthetic post or synthetic verse/chapter context to the page.
     const realPost = page.locator('[data-ad-comet-preview="message"]').filter({
