@@ -1502,7 +1502,9 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const hasClickRange = !!(clickRange && messageRoot.contains(clickRange.startContainer));
       const clickedElementText = normalizeSelectionText(initialNode?.textContent || '').normalize('NFKC');
       const clickedElementToken = clickedElementText && !/\s/.test(clickedElementText) ? clickedElementText : '';
-      const clickToken = normalizeSelectionText(clickedWordText || clickedElementToken || selected).toLowerCase();
+      const clickToken = /^(?:v|verse|verses)$/i.test(clickedElementToken)
+        ? clickedElementToken.toLowerCase()
+        : normalizeSelectionText(clickedWordText || clickedElementToken || selected).toLowerCase();
       // Only an explicit verse cue may trigger post-level context scanning.
       // Numeric clicks stay on the normal resolver path to avoid expensive
       // book/chapter searches for ordinary numbers.
@@ -1567,7 +1569,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           entries.sort((a, b) => b.name.length - a.name.length);
           const candidates = [];
           for (const entry of entries) {
-            const escaped = entry.name.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+            const escaped = entry.name.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
             const pattern = new RegExp(
               \`(?:^|[^A-Za-z0-9])\${escaped}\\.?\\s+(\\d{1,3})(?:(?::|\\.)\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])\`,
               'gi'
