@@ -129,14 +129,28 @@ test.describe('core user-visible E2E', () => {
         let directProbe = null;
         if (!response?.ok && contentScripts.length) {
           injectedFiles = [...new Set(contentScripts.flatMap(script => script.js || []))];
-          try {
-            explicitInjection = await chrome.scripting.executeScript({
-              target: { tabId: tab.id },
-              files: injectedFiles
-            });
-          } catch (error) {
-            explicitInjection = { error: String(error) };
+          const perFileInjection = [];
+          for (const file of injectedFiles) {
+            try {
+              const result = await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                files: [file]
+              });
+              const [probe] = await chrome.scripting.executeScript({
+                target: { tabId: tab.id },
+                world: 'ISOLATED',
+                func: () => ({
+                  contentScriptLoaded: window.__blbSuiteContentScriptLoadedV2 === true,
+                  doubleClickBound: window.__blbSuiteDoubleClickBoundV2 === true,
+                  diagnosticMarker: window.__blbSuiteDiagnosticInjectionProbe || null
+                })
+              });
+              perFileInjection.push({ file, result, probe: probe?.result || null });
+            } catch (error) {
+              perFileInjection.push({ file, error: String(error) });
+            }
           }
+          explicitInjection = perFileInjection;
           try {
             const [marker] = await chrome.scripting.executeScript({
               target: { tabId: tab.id },
