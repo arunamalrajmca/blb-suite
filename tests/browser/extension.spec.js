@@ -81,23 +81,19 @@ test.describe('core user-visible E2E', () => {
     await extensionStorage.set({ doubleClickBlbSites: { 'www.facebook.com': true, 'facebook.com': true } });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => document.readyState === 'complete' || document.readyState === 'interactive');
-    // Distinguish content-script injection from per-site listener activation.
-    await expect.poll(() => page.evaluate(() =>
-      window.__blbSuiteContentScriptLoadedV2 === true
-    ), { timeout: 10000, intervals: [100, 200, 300] })
-      .toBeTruthy();
-    // Explicitly refresh site features after writing the preference. This avoids
-    // depending on the timing of the storage.onChanged notification in MV3.
-    await extensionWorker.evaluate(async () => {
+    // Content scripts run in Chrome's isolated world: globals assigned by the
+    // extension are intentionally invisible to page.evaluate(). Probe readiness
+    // through the extension message channel instead of checking window markers.
+    await expect.poll(async () => extensionWorker.evaluate(async () => {
       const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
-      if (!tab?.id) throw new Error('No active test tab for feature refresh');
-      const response = await chrome.tabs.sendMessage(tab.id, { type: 'blbSuiteRefreshSiteFeatures' });
-      if (!response?.ok) throw new Error('Content script did not refresh site features');
-    });
-    await expect.poll(() => page.evaluate(() =>
-      typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
-    ), { timeout: 10000, intervals: [100, 200, 300] })
-      .toBeTruthy();
+      if (!tab?.id) return false;
+      try {
+        const response = await chrome.tabs.sendMessage(tab.id, { type: 'blbSuiteRefreshSiteFeatures' });
+        return response?.ok === true;
+      } catch (_) {
+        return false;
+      }
+    }), { timeout: 15000, intervals: [100, 200, 300, 500] }).toBeTruthy();
     // Operate on the supplied Facebook post's real rendered text. Do not add
     // a synthetic post or synthetic verse/chapter context to the page.
     const realPost = page.locator('[data-ad-comet-preview="message"]').filter({
