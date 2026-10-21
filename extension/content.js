@@ -1930,21 +1930,30 @@ function handleDoubleClickBlb(event) {
         // on the normal path so contextual Bible references still work.
         if (!/\s/.test(selection) && /[^\x00-\x7F]/.test(selection)) return true;
 
+        // Bible-version abbreviations are reference-context tokens, not word
+        // searches. If one is double-clicked beside a reference, resolve that
+        // reference and open it in BLB's default KJV view regardless of the
+        // clicked version code.
+        const isBibleVersionCode = /^(?:KJV|NKJV|NIV|NIVUK|ESV|NASB|NASB95|NASB2020|LSB|NLT|CSB|HCSB|RSV|NRSV|NRSVUE|ASV|AMP|AMPC|NET|WEB|YLT|DARBY|BBE|WYC|TLB|MSG|GNT|NIRV|CEV|ISV|LEB|ERV|GW|ICB|NCV|NABRE|NJB|JPS|MEV|KJ21|AKJV|VOICE|PHILLIPS|TPT)$/i.test(selection);
+
         // Reject unrelated English single words before building DOM context or
         // entering the background selection resolver. This is an exact local
         // membership check against the corpus-derived KJV vocabulary index.
+        // Known Bible-version codes are the exception: scan their surrounding
+        // text for a reference, but never send the code itself for word lookup.
         if (/^[A-Za-z][A-Za-z'’\\-]*$/.test(selection)) {
           const token = normalizeDoubleClickToken(selection).replace(/’/g, "'");
           const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
             && KJV_CORPUS_WORD_INDEX.has(token);
           const isBookName = !!resolveBibleBook(selection);
-          if (!isKjvWord && !isBookName) return true;
+          if (!isBibleVersionCode && !isKjvWord && !isBookName) return true;
         }
 
         // DOM context is useful only when the clicked token can identify a
         // Bible reference: a standalone number in the supported 1-176 range,
-        // or a recognized Bible book name. Ordinary KJV words still proceed
-        // to word lookup without scanning the surrounding DOM.
+        // a recognized Bible book name, or a known Bible-version code.
+        // Ordinary KJV words still proceed to word lookup without scanning
+        // the surrounding DOM.
         const isNumericBookCandidate=/^\d+$/.test(selection)
           && Number(selection)>=1 && Number(selection)<=176;
         // A numeric prefix is valid only when the complete prefixed book
@@ -1974,7 +1983,7 @@ function handleDoubleClickBlb(event) {
               && resolveBibleBook(match[1]+' '+match[2]));
           } catch (_) {}
         }
-        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix;
+        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||isBibleVersionCode;
         const blockContext=needsDomContext
           ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
           : null;
@@ -1995,6 +2004,8 @@ function handleDoubleClickBlb(event) {
         const isStandaloneNumericBook=isNumericBookCandidate && standaloneBook && blockText===selection;
         const contextualReference=isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook);
         if (!contextualReference) {
+          // A version abbreviation alone is not a KJV word-search request.
+          if (isBibleVersionCode) return true;
           if (/^[A-Za-z][A-Za-z'’-]*$/.test(selection) && !/^(?:i|ii|iii)$/i.test(selection)) {
             const now=Date.now();
             const gestureTarget=event?.target && (typeof event.target==='object'||typeof event.target==='function') ? event.target : null;
