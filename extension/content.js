@@ -1571,14 +1571,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           ])].sort((a, b) => b.length - a.length);
           if (bookNames.length) {
             const escapedNames = bookNames.map(name =>
-              String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\          for (const prior of priorReferences) {
-            const chapter = Number(prior.chapter);
-            const book = resolveBibleBook(prior.book);
-            if (!book || !Number.isInteger(chapter) || chapter < 1) continue;
-            const validated = resolveBibleReference(book.name, chapter, 1, 1);
-            if (validated) context = {book: book.name, chapter};
-          }
-          const resolved = context')
+              String(name).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
             );
             const chapterPattern = new RegExp(
               `(?:^|[^A-Za-z0-9])(${escapedNames.join('|')})\\s+(\\d{1,3})(?!\\s*[:/])`,
