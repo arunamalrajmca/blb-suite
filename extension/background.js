@@ -3311,7 +3311,7 @@ let pendingMultiVersePostSlot = Promise.resolve();
 // avoids coupling queue delivery to that router's async dispatch path.
 // All MultiVerse submissions use one shared FIFO schedule and one interval, regardless of source.
 function grantMultiVersePostSlot(minimumIntervalMs, tabId = null, queuedAt = Date.now()) {
-  const slot = pendingMultiVersePostSlot.then(() => {
+  const slot = pendingMultiVersePostSlot.then(async () => {
     const queueStartedAt = Date.now();
     const scheduledAt = Math.max(queueStartedAt, lastMultiVersePostScheduledAt + minimumIntervalMs);
     const intervalWaitMs = scheduledAt - queueStartedAt;
@@ -3325,7 +3325,22 @@ function grantMultiVersePostSlot(minimumIntervalMs, tabId = null, queuedAt = Dat
       ' totalQueueAdmissionMs=' + (queueStartedAt - queuedAt) +
       ' intervalWaitMs=' + intervalWaitMs
     );
-    return {ok:true, submitAt:scheduledAt};
+
+    // Wait for the shared interval in the service worker, not in each hidden
+    // handoff tab. Background-tab timers can be heavily throttled, causing
+    // ready POSTs from later requests to wait until an earlier destination
+    // finishes loading. Keep the response channel open until this slot is due.
+    const waitMs = scheduledAt - Date.now();
+    if (waitMs > 0) await new Promise(resolve => setTimeout(resolve, waitMs));
+    const releasedAt = Date.now();
+    console.info(
+      '[BLB MV timing] stage=queue-slot-released' +
+      ' tabId=' + tabId +
+      ' scheduledAt=' + scheduledAt +
+      ' releasedAt=' + releasedAt +
+      ' releaseLatenessMs=' + (releasedAt - scheduledAt)
+    );
+    return {ok:true, submitAt:releasedAt, waitedInBackground:true};
   });
   pendingMultiVersePostSlot = slot.then(() => undefined, () => undefined);
   return slot;
