@@ -1950,9 +1950,12 @@ function handleDoubleClickBlb(event) {
         const singleWordIsKjv = !!singleWordToken
           && typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
           && KJV_CORPUS_WORD_INDEX.has(singleWordToken);
-        const isBibleRelatedHost = location.hostname.toLowerCase().includes('bible')
-          || location.hostname.toLowerCase().endsWith(BLB_HOSTNAME);
-        if (singleWordIsKjv && !resolveBibleBook(selection) && !isBibleRelatedHost) {
+        // Keep this optimization limited to YouTube, where the delay was
+        // observed. Other hosts (including Facebook) retain their existing
+        // host-specific/contextual DOM handling.
+        const isYouTubeHost = /(^|\.)youtube\.com$/i.test(location.hostname)
+          || /(^|\.)youtube-nocookie\.com$/i.test(location.hostname);
+        if (singleWordIsKjv && !resolveBibleBook(selection) && isYouTubeHost) {
           const now = Date.now();
           const gestureTarget = event?.target && (typeof event.target === 'object' || typeof event.target === 'function')
             ? event.target : null;
@@ -2407,9 +2410,11 @@ async function updateBlbPageSelectionButtonFromSelection() {
   const singleWordIsKjv = !!singleWordToken
     && typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
     && KJV_CORPUS_WORD_INDEX.has(singleWordToken);
-  const isBibleRelatedHost = location.hostname.toLowerCase().includes('bible')
-    || location.hostname.toLowerCase().endsWith(BLB_HOSTNAME);
-  if (singleWordIsKjv && !resolveBibleBook(text) && !isBibleRelatedHost) {
+  // Limit the no-context-scan button path to YouTube; preserve existing
+  // selection/context handling on other hosts such as Facebook.
+  const isYouTubeHost = /(^|\.)youtube\.com$/i.test(location.hostname)
+    || /(^|\.)youtube-nocookie\.com$/i.test(location.hostname);
+  if (singleWordIsKjv && !resolveBibleBook(text) && isYouTubeHost) {
     setBlbPageButtonVisible(true);
     return;
   }
