@@ -1334,6 +1334,15 @@ function getStandaloneBookReference(selectionText) {
   }
 }
 
+function isBibleVersionCodeToken(value) {
+  // Double-click selection may include surrounding punctuation when the
+  // version label is wrapped in parentheses/brackets or followed by a comma,
+  // dash, or sentence punctuation. Normalize only the token edges so the
+  // version-code boundary guard still applies to those common forms.
+  const token = normalizeSelectionText(value).replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '');
+  return /^(?:KJV|NKJV|NIV|NIVUK|ESV|NASB|NASB95|NASB2020|LSB|NLT|CSB|HCSB|RSV|NRSV|NRSVUE|ASV|AMP|AMPC|NET|WEB|YLT|DARBY|BBE|WYC|TLB|MSG|GNT|NIRV|CEV|ISV|LEB|ERV|GW|ICB|NCV|NABRE|NJB|JPS|MEV|KJ21|AKJV|VOICE|PHILLIPS|TPT)$/i.test(token);
+}
+
 function getDoubleClickBlockContextReference(selectionText, target, event = null) {
   try {
     // textContent and Range.toString() omit <br> boundaries. Instagram captions
@@ -1464,19 +1473,27 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     if (!selected) return null;
     const node = initialNode || document.documentElement;
 
-    // Walk every real ancestor rather than only a fixed list of HTML block
-    // tags. Modern sites frequently put article text inside custom elements,
-    // links, spans, role-based containers, or framework-generated wrappers.
-    // The candidate must still pass the positional reference-overlap test
-    // below, so broadening the ancestor set does not permit an unrelated
-    // reference elsewhere in the page to leak into the gesture.
+    // Version-code clicks must resolve only inside the clicked word's nearest
+    // content block. The event target can be a broad wrapper (for example, a
+    // DIV containing multiple paragraphs), so do not begin the search from that
+    // wrapper or inspect its ancestors. Prefer the actual clicked text range.
+    const isVersionCodeClick = isBibleVersionCodeToken(selected);
     const blockCandidates = [];
-    let candidateNode = node;
-    let candidateDepth = 0;
-    while (candidateNode && candidateDepth < 32) {
-      if (candidateNode instanceof Element) blockCandidates.push(candidateNode);
-      candidateNode = candidateNode.parentElement;
-      candidateDepth++;
+    if (isVersionCodeClick) {
+      const clickAnchor = clickedWordRange?.startContainer?.parentElement || initialNode;
+      const localBlock = clickAnchor?.closest?.('p,li,td,th,blockquote,article,section,main')
+        || clickAnchor?.closest?.('div')
+        || (clickAnchor instanceof Element ? clickAnchor : null);
+      if (localBlock) blockCandidates.push(localBlock);
+    } else {
+      // Preserve the established ancestor search for other contextual tokens.
+      let candidateNode = node;
+      let candidateDepth = 0;
+      while (candidateNode && candidateDepth < 32) {
+        if (candidateNode instanceof Element) blockCandidates.push(candidateNode);
+        candidateNode = candidateNode.parentElement;
+        candidateDepth++;
+      }
     }
 
     let block = null;
@@ -1527,12 +1544,14 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
 
       if (start != null && end != null) {
         const containsReference = candidateRefs.some(ref => {
-          const refText = normalizeSelectionText(ref.text || '').normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-');
+          const refText = normalizeSelectionText(ref.text || '').normalize('NFKC').replace(/[\\u2010-\\u2015\\u2212]/g, '-');
           if (!refText) return false;
           let from = candidateMatchSource.indexOf(refText);
           while (from >= 0) {
             const to = from + refText.length;
             if (start < to && end > from) return true;
+            // Version labels often sit adjacent to a citation, outside its text.
+            if (isBibleVersionCodeToken(selected) && Math.min(Math.abs(start - to), Math.abs(end - from)) <= 80) return true;
             from = candidateMatchSource.indexOf(refText, from + 1);
           }
           return false;
@@ -1794,6 +1813,41 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         selectedBookPositions[0])
       : null;
 
+    // Version codes are adjacent metadata, not part of the citation itself.
+    // Select the nearest parsed reference in the same local DOM block, regardless
+    // of parentheses or punctuation, and return its canonical KJV reference URL.
+    if (isBibleVersionCodeToken(selected)) {
+      const nearby = [];
+      for (const ref of refs) {
+        if (!ref || ref.chapter == null || !ref.text) continue;
+        for (const occurrence of findOccurrences(ref.text)) {
+          const isBeforeVersion = occurrence.end <= selectionStart;
+          const isAfterVersion = occurrence.start >= selectionEnd;
+          const distance = isBeforeVersion
+            ? selectionStart - occurrence.end
+            : isAfterVersion
+              ? occurrence.start - selectionEnd
+              : 0;
+          if (distance <= 80) {
+            nearby.push({ref, distance, start: occurrence.start, isBeforeVersion});
+          }
+        }
+      }
+      // Most citations are written before the version label (e.g. "John 3:16 NIV").
+      // Prefer a nearby reference to the left of the clicked code. Only use a
+      // reference to the right when no preceding citation is within the context
+      // window, as in "NIV — John 3:16".
+      const preceding = nearby.filter(item => item.isBeforeVersion)
+        .sort((a, b) => a.distance - b.distance || b.start - a.start);
+      const candidates = preceding.length
+        ? preceding
+        : nearby.filter(item => !item.isBeforeVersion)
+          .sort((a, b) => a.distance - b.distance || a.start - b.start);
+      const closest = candidates[0]?.ref;
+      if (closest) return {book:closest.book,chapter:closest.chapter,from:closest.from,to:closest.to,url:closest.url};
+      return null;
+    }
+
     for (const ref of refs) {
       if (!ref || ref.chapter == null || !ref.text) continue;
       const occurrences = findOccurrences(ref.text);
@@ -1930,35 +1984,82 @@ function handleDoubleClickBlb(event) {
         // on the normal path so contextual Bible references still work.
         if (!/\s/.test(selection) && /[^\x00-\x7F]/.test(selection)) return true;
 
+        // Bible-version abbreviations are reference-context tokens, not word
+        // searches. If one is double-clicked beside a reference, resolve that
+        // reference and open it in BLB's default KJV view regardless of the
+        // clicked version code.
+        const isBibleVersionCode = isBibleVersionCodeToken(selection);
+
         // Reject unrelated English single words before building DOM context or
         // entering the background selection resolver. This is an exact local
         // membership check against the corpus-derived KJV vocabulary index.
+        // Known Bible-version codes are the exception: scan their surrounding
+        // text for a reference, but never send the code itself for word lookup.
         if (/^[A-Za-z][A-Za-z'’\\-]*$/.test(selection)) {
           const token = normalizeDoubleClickToken(selection).replace(/’/g, "'");
           const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
             && KJV_CORPUS_WORD_INDEX.has(token);
           const isBookName = !!resolveBibleBook(selection);
-          if (!isKjvWord && !isBookName) return true;
+          if (!isBibleVersionCode && !isKjvWord && !isBookName) return true;
         }
 
+        // DOM context is useful only when the clicked token can identify a
+        // Bible reference: a standalone number in the supported 1-176 range,
+        // a recognized Bible book name, or a known Bible-version code.
+        // Ordinary KJV words still proceed to word lookup without scanning
+        // the surrounding DOM.
+        const isNumericBookCandidate=/^\d+$/.test(selection)
+          && Number(selection)>=1 && Number(selection)<=176;
+        // A numeric prefix is valid only when the complete prefixed book
+        // name resolves (for example, "1 Samuel" or "3 John"). Do not fall
+        // back to resolving the suffix alone: "4 John" and "2 Genesis" must
+        // not trigger DOM-context analysis.
+        const hasNumericPrefix=/^[1-9]\s+/.test(selection);
+        const isPrefixedBookName=hasNumericPrefix && !!resolveBibleBook(selection);
+        const isBookName=!hasNumericPrefix && !!resolveBibleBook(selection);
         const contextualTarget=getDoubleClickTargetElement(event)||event.target;
-        const blockContext=getDoubleClickBlockContextReference(selection,contextualTarget,event);
 
-        // Numeric tokens are ambiguous: 3/17/etc. are valid standalone book
-        // numbers, but inside a nearby Book + Chapter reference they belong to
-        // that positional reference. Keep waiting while context is unsettled.
-        if (!blockContext && /^\d+$/.test(selection) && Date.now()-started<1500) {
+        // A suffix such as "Peter" may be part of a numbered book name.
+        // Check the nearest text block for a valid 1/2/3 prefix before
+        // invoking the full DOM reference parser. Invalid/missing prefixes
+        // therefore do not trigger the expensive contextual scan.
+        const possibleNumberedBookSuffix=/^(?:Samuel|Kings|Chronicles|Corinthians|Thessalonians|Timothy|Peter|John)$/i.test(selection);
+        let hasValidNearbyBookPrefix=false;
+        if (possibleNumberedBookSuffix && !hasNumericPrefix) {
+          try {
+            const contextNode=contextualTarget instanceof Element
+              ? (contextualTarget.closest('p,li,td,th,blockquote,article,section,div')||contextualTarget.parentElement||contextualTarget)
+              : (event.target?.parentElement||event.target);
+            const contextText=normalizeSelectionText(contextNode?.textContent||'');
+            const match=contextText.match(/(?:^|[^A-Za-z0-9])([1-3])\s+(Samuel|Kings|Chronicles|Corinthians|Thessalonians|Timothy|Peter|John)\b/i);
+            hasValidNearbyBookPrefix=!!(match
+              && match[2].toLowerCase()===selection.toLowerCase()
+              && resolveBibleBook(match[1]+' '+match[2]));
+          } catch (_) {}
+        }
+        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||isBibleVersionCode;
+        const blockContext=needsDomContext
+          ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
+          : null;
+
+        // Wait for the native selection/context to settle only for a number
+        // that could be a standalone book number or part of a Bible reference.
+        if (isNumericBookCandidate && !blockContext && Date.now()-started<1500) {
           requestAnimationFrame(dispatch);
           return true;
         }
 
-        const standaloneBook=getStandaloneBookReference(selection);
-        const blockText=normalizeSelectionText(
+        const standaloneBook=isNumericBookCandidate
+          ? getStandaloneBookReference(selection)
+          : null;
+        const blockText=isNumericBookCandidate ? normalizeSelectionText(
           event?.target?.closest?.('p,li,td,th,blockquote,article,section,div')?.textContent||''
-        );
-        const isStandaloneNumericBook=standaloneBook && /^\d+$/.test(selection) && blockText===selection;
+        ) : '';
+        const isStandaloneNumericBook=isNumericBookCandidate && standaloneBook && blockText===selection;
         const contextualReference=isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook);
         if (!contextualReference) {
+          // A version abbreviation alone is not a KJV word-search request.
+          if (isBibleVersionCode) return true;
           if (/^[A-Za-z][A-Za-z'’-]*$/.test(selection) && !/^(?:i|ii|iii)$/i.test(selection)) {
             const now=Date.now();
             const gestureTarget=event?.target && (typeof event.target==='object'||typeof event.target==='function') ? event.target : null;
@@ -1977,7 +2078,7 @@ function handleDoubleClickBlb(event) {
             });
             return true;
           }
-          if (Date.now()-started<1500) requestAnimationFrame(dispatch);
+          if (isNumericBookCandidate && Date.now()-started<1500) requestAnimationFrame(dispatch);
           return true;
         }
 
@@ -2324,6 +2425,11 @@ function addBlbPageSelectionButton() {
       text,
       contextualReference: blbPageButtonContextualReference || null,
       directUrl: blbPageButtonDirectUrl || null,
+      // A single-token floating-button action should follow the same fast path
+      // as double-click: do not re-scan page context after the selection has
+      // already been accepted as a word. Multi-word selections still resolve
+      // adjacent references through the normal background path.
+      contextualReferenceResolved: !blbPageButtonContextualReference && !/\\s/.test(text),
       tabBehavior:{activeIfNew:true,activateExisting:true}
     });
     clearBlbPageSelectionAfterAction();
