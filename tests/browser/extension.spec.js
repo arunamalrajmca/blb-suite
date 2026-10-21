@@ -83,6 +83,13 @@ test.describe('core user-visible E2E', () => {
     // Match the established extension E2E startup allowance; the service worker and
     // content-script storage listener can lag behind document readiness.
     await page.waitForTimeout(1000);
+    // Verify the content script actually bound its double-click listener before
+    // adding/clicking the synthetic post. This separates extension startup or
+    // site-preference failures from cue extraction/context-resolution failures.
+    await expect.poll(() => page.evaluate(() =>
+      typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+    ), { timeout: 5000, intervals: [100, 200, 300] })
+      .toBeTruthy();
     await page.evaluate(() => {
       const fixture = document.createElement('div');
       fixture.id = 'blb-e2e-facebook-post-verse-context';
