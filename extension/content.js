@@ -1924,6 +1924,18 @@ function handleDoubleClickBlb(event) {
           return true;
         }
 
+        // Reject unrelated single words before building DOM context or entering
+        // the background selection resolver. The injected Suite bundle includes
+        // the corpus-derived KJV vocabulary index, so this is an exact local
+        // membership check rather than a language heuristic.
+        if (/^[A-Za-z][A-Za-z'’\\-]*$/.test(selection)) {
+          const token = normalizeDoubleClickToken(selection).replace(/’/g, "'");
+          const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
+            && KJV_CORPUS_WORD_INDEX.has(token);
+          const isBookName = !!resolveBibleBook(selection);
+          if (!isKjvWord && !isBookName) return true;
+        }
+
         const contextualTarget=getDoubleClickTargetElement(event)||event.target;
         const blockContext=getDoubleClickBlockContextReference(selection,contextualTarget,event);
 
