@@ -87,6 +87,7 @@ test.describe('core user-visible E2E', () => {
     // One diagnostic probe first: avoid retrying away the evidence about
     // which Facebook tabs exist and whether their isolated worlds/listeners work.
     const readiness = await extensionWorker.evaluate(async () => {
+      const loadedManifest = chrome.runtime.getManifest();
       const tabs = await chrome.tabs.query({});
       const candidates = tabs.filter(candidate => {
         try { return /(^|\.)facebook\.com$/i.test(new URL(candidate.url || '').hostname) && candidate.id != null; }
@@ -118,6 +119,9 @@ test.describe('core user-visible E2E', () => {
       }
       const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
       return {
+        loadedManifestFacebookMatches: (loadedManifest.content_scripts || []).flatMap(script => script.matches || []).filter(match => /facebook/i.test(match)),
+        loadedManifestHostPermissions: (loadedManifest.host_permissions || []).filter(match => /facebook/i.test(match)),
+        loadedManifestOptionalHostPermissions: (loadedManifest.optional_host_permissions || []).filter(match => /facebook/i.test(match)),
         candidateCount: candidates.length,
         candidates: candidates.map(tab => ({ id: tab.id, url: tab.url, status: tab.status, active: tab.active })),
         activeTab: activeTab ? { id: activeTab.id, url: activeTab.url, status: activeTab.status } : null,
