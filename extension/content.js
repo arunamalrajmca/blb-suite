@@ -1518,11 +1518,18 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           let match;
           while ((match = explicitRefPattern.exec(beforeText))) {
             const book = resolveBibleBook(match[1]);
-            if (!book) continue;
             const chapter = Number(match[2]);
             const verse = match[3] ? Number(match[3]) : 1;
-            const validated = resolveBibleReference(book.name, chapter, verse, verse);
-            if (validated) context = {book: book.name, chapter};
+            const validated = book && resolveBibleReference(book.name, chapter, verse, verse);
+            if (validated) {
+              context = {book: book.name, chapter};
+            } else {
+              // A prose lead-in such as "Read 1 Kings 18:1" can make the
+              // broad book-name pattern first consume "Read 1 Kings".
+              // Retry from the next character so the valid "1 Kings" suffix
+              // is still considered instead of skipping the entire reference.
+              explicitRefPattern.lastIndex = match.index + 1;
+            }
           }
           if (context) {
             const resolved = resolveBibleReference(context.book, context.chapter, associatedVerse, associatedVerse);
