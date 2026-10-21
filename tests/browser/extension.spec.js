@@ -90,6 +90,14 @@ test.describe('core user-visible E2E', () => {
       document.body.appendChild(fixture);
     });
 
+    // Surface content-script diagnostics in CI so we can distinguish cue-number
+    // extraction failures from later book/chapter-context resolution failures.
+    page.on('console', message => {
+      if (message.text().includes('BLB Facebook verse-context')) {
+        console.log(message.text());
+      }
+    });
+
     // Only cue-word clicks trigger post-level chapter/verse discovery.
     // Number clicks deliberately do not run this context-search path.
     const gestures = [
