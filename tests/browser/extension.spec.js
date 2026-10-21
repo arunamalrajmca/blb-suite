@@ -115,8 +115,11 @@ test.describe('core user-visible E2E', () => {
         }).map(tab => tab.id)
       ));
       await page.locator(selector).dblclick();
-      await page.waitForTimeout(250);
-      const cueDiagnostic = await page.locator('#blb-e2e-facebook-post-verse-context').evaluate(root => {
+      // The extension deliberately waits for Chromium's native Selection to
+      // settle after dblclick; poll diagnostics instead of sampling too early.
+      let cueDiagnostic = null;
+      await expect.poll(async () => {
+        cueDiagnostic = await page.locator('#blb-e2e-facebook-post-verse-context').evaluate(root => {
         // The resolver attaches diagnostics to the closest message root, which
         // may be the root element itself; querySelectorAll() excludes that root.
         const candidates = [
@@ -130,7 +133,9 @@ test.describe('core user-visible E2E', () => {
           extraction: message.getAttribute('data-blb-verse-context-diagnostic'),
           resolution: message.getAttribute('data-blb-verse-context-resolution')
         } : null;
-      });
+        });
+        return !!cueDiagnostic?.extraction;
+      }, { timeout: 2500, intervals: [100, 200, 300] }).toBeTruthy();
       console.log('[BLB Facebook verse-number extraction]', selector, cueDiagnostic?.extraction ?? 'NO_EXTRACTION_DIAGNOSTIC');
       expect(cueDiagnostic?.extraction, selector + ': cue extraction diagnostic missing').toBeTruthy();
       const extraction = JSON.parse(cueDiagnostic.extraction);
