@@ -19,25 +19,6 @@ async function openMultiVerse(extensionWorker, refs) {
   return extensionWorker.evaluate(async payload => openBlbMultiVerseRefs(payload, true), refs);
 }
 
-test('MultiVerse POST slots are admitted without artificial per-tab staggering', async ({ extensionWorker }) => {
-  const result = await extensionWorker.evaluate(async () => {
-    const slots = await Promise.all(Array.from({length:8}, (_, index) =>
-      grantMultiVersePostSlot(MULTIVERSE_POST_MIN_INTERVAL_MS, index + 1, Date.now())
-    ));
-    return {
-      interval: MULTIVERSE_POST_MIN_INTERVAL_MS,
-      scheduledAt: slots.map(slot => slot.submitAt),
-      waits: slots.map(slot => slot.submitAt - Date.now())
-    };
-  });
-
-  expect(result.interval).toBe(0);
-  expect(result.scheduledAt).toHaveLength(8);
-  // Queue admission may take a few milliseconds, but must not reserve a
-  // fixed delay between submissions. Page navigation/load remains independent.
-  expect(Math.max(...result.scheduledAt) - Math.min(...result.scheduledAt)).toBeLessThan(100);
-});
-
 function countSubmittedVerses(mvText) {
   let total = 0;
   for (const match of String(mvText || '').matchAll(/:\s*(\d+)(?:\s*-\s*(\d+))?/g)) {
@@ -308,8 +289,9 @@ test('case-sensitive search reuses the originating tab and leaves no blank orpha
     };
   });
   expect(result.handled).toBe(true);
-  // The first batch uses the handoff page before its POST reaches BLB. Tab
-  // navigation can still take time, but queue admission must not add a delay.
+  // The first batch uses the handoff page before its POST reaches BLB. The
+  // queue intentionally spaces submissions, so 100 ms is not enough to
+  // observe the final URL reliably.
   await expect.poll(() => extensionWorker.evaluate(async id =>
     (await chrome.tabs.get(id).catch(() => null))?.url || '', result.originId),
     {timeout:15000}
