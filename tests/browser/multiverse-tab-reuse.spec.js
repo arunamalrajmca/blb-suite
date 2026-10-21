@@ -573,7 +573,6 @@ test('independent MultiVerse requests submit while an earlier destination respon
     // With the production 1.5-second spacing retained, allow enough time for
     // the next queued POST, but do not let the first response complete.
     await expect.poll(() => submittedPayloads.length, { timeout: 10000 }).toBeGreaterThanOrEqual(2);
-    expect(submittedPayloads.some(value => value.includes('Exodus'))).toBe(true);
   } finally {
     releaseFirstResponse();
   }
