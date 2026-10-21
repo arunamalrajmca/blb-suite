@@ -2103,6 +2103,11 @@ function handleDoubleClickBlb(event) {
         // reference and open it in BLB's default KJV view regardless of the
         // clicked version code.
         const isBibleVersionCode = isBibleVersionCodeToken(selection);
+        // Verse cues must reach the narrowly scoped Facebook post resolver
+        // even when "verse" is absent from the generated KJV word index.
+        // Declare this outside the fast-rejection block because target selection
+        // and the DOM-context resolver also need the same cue classification.
+        const isVerseContextWord = /^(?:v|verse|verses)$/i.test(selection);
 
         // Reject unrelated English single words before building DOM context or
         // entering the background selection resolver. This is an exact local
@@ -2119,9 +2124,6 @@ function handleDoubleClickBlb(event) {
           // reference check below; without a valid nearby prefix they remain
           // inert and are not sent to ordinary word lookup.
           const isRomanBookPrefixToken = /^(?:I|II|III)$/i.test(selection);
-          // Verse cues must reach the narrowly scoped Facebook post resolver
-          // even when "verse" is absent from the generated KJV word index.
-          const isVerseContextWord = /^(?:v|verse|verses)$/i.test(selection);
           if (!isBibleVersionCode && !isKjvWord && !isBookName && !isRomanBookPrefixToken && !isVerseContextWord) return true;
         }
 
