@@ -2132,7 +2132,11 @@ function handleDoubleClickBlb(event) {
               && match[1].toUpperCase()===selection.toUpperCase());
           } catch (_) {}
         }
-        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture;
+        // "verse" is not guaranteed to be in the local KJV word index on
+        // every build, but in a Facebook post it is the explicit cue for a
+        // nearby verse number. Let the tightly gated post resolver inspect it.
+        const isVerseContextWord=/^verse$/i.test(selection);
+        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord;
         const blockContext=needsDomContext
           ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
           : null;
