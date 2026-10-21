@@ -1522,7 +1522,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           if (tokenElementIsExact) afterRange.setStartAfter(initialNode);
           else afterRange.setStart(clickRange.endContainer, clickRange.endOffset);
           const afterText = normalizeSelectionText(domText(afterRange.cloneContents())).normalize('NFKC');
-          const following = afterText.match(/^[\\s,.:;()\\[\\]{}–—-]*(\\d{1,3})\\b/);
+          const following = afterText.match(/^[\s,.:;()\[\]{}–—-]*(\d{1,3})\b/);
           if (following) associatedVerse = Number(following[1]);
         }
         if (verseWordClick) {
