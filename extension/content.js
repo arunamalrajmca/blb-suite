@@ -1947,7 +1947,13 @@ function handleDoubleClickBlb(event) {
         // to word lookup without scanning the surrounding DOM.
         const isNumericBookCandidate=/^\d+$/.test(selection)
           && Number(selection)>=1 && Number(selection)<=176;
-        const isBookName=!!resolveBibleBook(selection);
+        // Some book names have numeric prefixes (1/2 Samuel, 1/2 Kings,
+        // 1/2 Chronicles, 1/2 Corinthians, 1/2 Thessalonians, 1/2 Timothy,
+        // 1/2 Peter, 1/2/3 John). Treat a full prefixed name as a book-name
+        // candidate even if the resolver recognizes only its unprefixed name.
+        const prefixedBookMatch=selection.match(/^[1-3]\s+(.+)$/);
+        const isBookName=!!resolveBibleBook(selection)
+          || !!(prefixedBookMatch && resolveBibleBook(prefixedBookMatch[1]));
         const needsDomContext=isNumericBookCandidate||isBookName;
         const contextualTarget=needsDomContext
           ? (getDoubleClickTargetElement(event)||event.target)
