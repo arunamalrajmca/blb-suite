@@ -81,15 +81,22 @@ test.describe('core user-visible E2E', () => {
     await extensionStorage.set({ doubleClickBlbSites: { 'example.com': true } });
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForFunction(() => document.readyState === 'complete' || document.readyState === 'interactive');
-    // Match the established extension E2E startup allowance; the service worker and
-    // content-script storage listener can lag behind document readiness.
-    await page.waitForTimeout(1000);
-    // Verify the content script actually bound its double-click listener before
-    // adding/clicking the synthetic post. This separates extension startup or
-    // site-preference failures from cue extraction/context-resolution failures.
+    // Distinguish content-script injection from per-site listener activation.
+    await expect.poll(() => page.evaluate(() =>
+      window.__blbSuiteContentScriptLoadedV2 === true
+    ), { timeout: 10000, intervals: [100, 200, 300] })
+      .toBeTruthy();
+    // Explicitly refresh site features after writing the preference. This avoids
+    // depending on the timing of the storage.onChanged notification in MV3.
+    await extensionWorker.evaluate(async () => {
+      const [tab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      if (!tab?.id) throw new Error('No active test tab for feature refresh');
+      const response = await chrome.tabs.sendMessage(tab.id, { type: 'blbSuiteRefreshSiteFeatures' });
+      if (!response?.ok) throw new Error('Content script did not refresh site features');
+    });
     await expect.poll(() => page.evaluate(() =>
       typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
-    ), { timeout: 5000, intervals: [100, 200, 300] })
+    ), { timeout: 10000, intervals: [100, 200, 300] })
       .toBeTruthy();
     await page.evaluate(() => {
       const fixture = document.createElement('div');
