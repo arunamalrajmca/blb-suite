@@ -98,17 +98,81 @@ test.describe('core user-visible E2E', () => {
       typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
     ), { timeout: 10000, intervals: [100, 200, 300] })
       .toBeTruthy();
+    // Operate on the supplied Facebook post's real rendered text. Do not add
+    // a synthetic post or synthetic verse/chapter context to the page.
+    const realPost = page.locator('[data-ad-comet-preview="message"]').filter({
+      hasText: /verse\\s+42/i
+    }).filter({ hasText: /1 Kings 18/i }).first();
+    await expect(realPost, 'Facebook post containing the real "verse 42" and 1 Kings 18 context must render')
+      .toBeVisible({ timeout: 20000 });
     await page.evaluate(() => {
-      const fixture = document.createElement('div');
-      fixture.id = 'blb-e2e-facebook-post-verse-context';
-      fixture.innerHTML = '<div role="article"><div data-ad-comet-preview="message">' +
-        '<div dir="auto">Read 1 Kings 18:1 before you look at the prayer.</div>' +
-        '<div dir="auto">In <span id="fb-verse-word-42">verse</span> <span id="fb-verse-number-42">42</span>, Elijah climbed Mount Carmel.</div>' +
-        '<div dir="auto"><span id="fb-verse-word-44">Verse</span> <span id="fb-verse-number-44">44</span> shows a cloud.</div>' +
-        '<div dir="auto"><span id="fb-verse-word-46">Verse</span> <span id="fb-verse-number-46">46</span> says the LORD\'s hand was on Elijah.</div>' +
-        '<div dir="auto">In 1 Kings 19, Elijah was corrected in <span id="fb-verse-word-19-18">verse</span> <span id="fb-verse-number-19-18">18</span>.</div>' +
-        '</div></div>';
-      document.body.appendChild(fixture);
+      const messages = [...document.querySelectorAll('[data-ad-comet-preview="message"]')];
+      const root = messages.find(el => /verse\\s+42/i.test(el.innerText || el.textContent || '') &&
+        /1 Kings 18/i.test(el.innerText || el.textContent || ''));
+      if (!root) throw new Error('Actual Facebook post text with verse 42 and 1 Kings 18 was not found');
+      const wrapCue = (wantedNumber, id) => {
+        const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+        const nodes = [];
+        while (walker.nextNode()) nodes.push(walker.currentNode);
+        for (const node of nodes) {
+          const value = node.nodeValue || '';
+          const match = /\\bverses?\\b/i.exec(value);
+          if (!match) continue;
+          const after = value.slice(match.index + match[0].length);
+          const nextSiblingText = node.nextSibling?.nodeType === Node.TEXT_NODE ? node.nextSibling.nodeValue : '';
+          const combined = after + (nextSiblingText || '');
+          const numberMatch = /^\\s*(\\d+)\\b/.exec(combined);
+          if (!numberMatch || Number(numberMatch[1]) !== wantedNumber) continue;
+          const cue = document.createElement('span');
+          cue.id = id;
+          const before = document.createTextNode(value.slice(0, match.index));
+          const token = document.createTextNode(match[0]);
+          const afterNode = document.createTextNode(value.slice(match.index + match[0].length));
+          const parent = node.parentNode;
+          parent.insertBefore(before, node);
+          cue.appendChild(token);
+          parent.insertBefore(cue, node);
+          parent.insertBefore(afterNode, node);
+          parent.removeChild(node);
+          return true;
+        }
+        return false;
+      };
+      for (const [number, id] of [
+        [42, 'fb-verse-word-42'],
+        [44, 'fb-verse-word-44'],
+        [46, 'fb-verse-word-46'],
+        [18, 'fb-verse-word-19-18']
+      ]) {
+        if (!wrapCue(number, id)) {
+          // Later verse 18 must be associated with the later explicit 1 Kings 19
+          // context, not any earlier occurrence.
+          if (number === 18) {
+            const allMessages = [...document.querySelectorAll('[data-ad-comet-preview="message"]')];
+            const later = allMessages.find(el => /1 Kings 19/i.test(el.innerText || el.textContent || '') &&
+              /verses?\\s+18/i.test(el.innerText || el.textContent || ''));
+            if (later) {
+              const walker = document.createTreeWalker(later, NodeFilter.SHOW_TEXT);
+              while (walker.nextNode()) {
+                const node = walker.currentNode;
+                const match = /\\bverse\\b/i.exec(node.nodeValue || '');
+                if (!match) continue;
+                const rest = (node.nodeValue || '').slice(match.index + match[0].length);
+                if (!/^\\s*18\\b/.test(rest)) continue;
+                const cue = document.createElement('span'); cue.id = id;
+                const parent = node.parentNode;
+                parent.insertBefore(document.createTextNode((node.nodeValue || '').slice(0, match.index)), node);
+                cue.textContent = match[0];
+                parent.insertBefore(cue, node);
+                parent.insertBefore(document.createTextNode(rest), node);
+                parent.removeChild(node);
+                return;
+              }
+            }
+          }
+          throw new Error('Could not mark actual Facebook verse cue for number ' + number);
+        }
+      }
     });
 
     // Surface content-script diagnostics in CI so we can distinguish cue-number
