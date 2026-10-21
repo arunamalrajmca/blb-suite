@@ -1504,7 +1504,10 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // maps to one code unit, so DOM selection offsets remain unchanged.
       const candidateMatchSource = candidateSource.replace(/[\u2010-\u2015\u2212]/g, '-');
       if (!candidateSource) continue;
-      const candidateRefs = resolveBibleReferenceText(candidateSource);
+      // Parse the same dash-normalized text used for positional matching;
+      // otherwise Unicode ranges such as 46–47 are located correctly but
+      // rejected by the reference parser before matching can begin.
+      const candidateRefs = resolveBibleReferenceText(candidateMatchSource);
       if (!candidateRefs.length) continue;
 
       let start = null;
