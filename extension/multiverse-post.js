@@ -59,7 +59,10 @@
       }
 
       const submitAt = Number(slot.submitAt);
-      if (Number.isFinite(submitAt) && submitAt > Date.now()) {
+      // The background queue now holds this message until the shared POST
+      // interval has elapsed. Avoid another timer in this hidden handoff tab:
+      // Chrome may throttle it until an earlier destination finishes loading.
+      if (!slot.waitedInBackground && Number.isFinite(submitAt) && submitAt > Date.now()) {
         logTiming({
           stage:'scheduled-wait-start',
           queueRequestedAt,
