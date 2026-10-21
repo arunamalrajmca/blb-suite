@@ -1808,16 +1808,29 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       for (const ref of refs) {
         if (!ref || ref.chapter == null || !ref.text) continue;
         for (const occurrence of findOccurrences(ref.text)) {
-          const distance = selectionEnd <= occurrence.start
-            ? occurrence.start - selectionEnd
-            : selectionStart >= occurrence.end
-              ? selectionStart - occurrence.end
+          const isBeforeVersion = occurrence.end <= selectionStart;
+          const isAfterVersion = occurrence.start >= selectionEnd;
+          const distance = isBeforeVersion
+            ? selectionStart - occurrence.end
+            : isAfterVersion
+              ? occurrence.start - selectionEnd
               : 0;
-          if (distance <= 80) nearby.push({ref, distance, start: occurrence.start});
+          if (distance <= 80) {
+            nearby.push({ref, distance, start: occurrence.start, isBeforeVersion});
+          }
         }
       }
-      nearby.sort((a, b) => a.distance - b.distance || a.start - b.start);
-      const closest = nearby[0]?.ref;
+      // Most citations are written before the version label (e.g. "John 3:16 NIV").
+      // Prefer a nearby reference to the left of the clicked code. Only use a
+      // reference to the right when no preceding citation is within the context
+      // window, as in "NIV — John 3:16".
+      const preceding = nearby.filter(item => item.isBeforeVersion)
+        .sort((a, b) => a.distance - b.distance || b.start - a.start);
+      const candidates = preceding.length
+        ? preceding
+        : nearby.filter(item => !item.isBeforeVersion)
+          .sort((a, b) => a.distance - b.distance || a.start - b.start);
+      const closest = candidates[0]?.ref;
       if (closest) return {book:closest.book,chapter:closest.chapter,from:closest.from,to:closest.to,url:closest.url};
       return null;
     }
