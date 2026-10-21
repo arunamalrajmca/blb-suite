@@ -2004,7 +2004,12 @@ function handleDoubleClickBlb(event) {
           const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
             && KJV_CORPUS_WORD_INDEX.has(token);
           const isBookName = !!resolveBibleBook(selection);
-          if (!isBibleVersionCode && !isKjvWord && !isBookName) return true;
+          // Roman numeral tokens can be the prefix of a numbered Bible book
+          // (II Samuel, III John). Let them reach the tightly gated nearby-
+          // reference check below; without a valid nearby prefix they remain
+          // inert and are not sent to ordinary word lookup.
+          const isRomanBookPrefixToken = /^(?:I|II|III)$/i.test(selection);
+          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isRomanBookPrefixToken) return true;
         }
 
         // DOM context is useful only when the clicked token can identify a
