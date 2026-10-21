@@ -115,6 +115,12 @@ test.describe('core user-visible E2E', () => {
         }).map(tab => tab.id)
       ));
       await page.locator(selector).dblclick();
+      await page.waitForTimeout(250);
+      const cueDiagnostic = await page.locator('#blb-e2e-facebook-post-verse-context [data-ad-comet-preview="message"]').evaluate(el => ({
+        extraction: el.getAttribute('data-blb-verse-context-diagnostic'),
+        resolution: el.getAttribute('data-blb-verse-context-resolution')
+      }));
+      console.log('[BLB Facebook verse-context test observation]', selector, JSON.stringify(cueDiagnostic));
       await activateBlbTabForPath(extensionWorker, expectedPath, {
         fragment: selector,
         selector: '#blb-e2e-facebook-post-verse-context',
