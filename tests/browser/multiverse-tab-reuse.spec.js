@@ -289,9 +289,8 @@ test('case-sensitive search reuses the originating tab and leaves no blank orpha
     };
   });
   expect(result.handled).toBe(true);
-  // The first batch uses the handoff page before its POST reaches BLB. The
-  // queue intentionally spaces submissions, so 100 ms is not enough to
-  // observe the final URL reliably.
+  // The first batch uses the handoff page before its POST reaches BLB. Tab
+  // navigation can still take time, but queue admission must not add a delay.
   await expect.poll(() => extensionWorker.evaluate(async id =>
     (await chrome.tabs.get(id).catch(() => null))?.url || '', result.originId),
     {timeout:15000}
