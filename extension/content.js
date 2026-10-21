@@ -1526,11 +1526,13 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           if (following) associatedVerse = Number(following[1]);
         }
         if (verseWordClick) {
-          console.warn('[BLB Facebook verse-context diagnostic]', JSON.stringify({
+          const diagnostic = {
             clickToken, verseWordClick, associatedVerse,
             tokenElementIsExact, hasClickRange,
             beforeText: beforeText.slice(-500)
-          }));
+          };
+          messageRoot.setAttribute('data-blb-verse-context-diagnostic', JSON.stringify(diagnostic));
+          console.warn('[BLB Facebook verse-context diagnostic]', JSON.stringify(diagnostic));
         }
         if (verseWordClick && associatedVerse) {
           // Use the shared Bible-reference parser rather than a second,
@@ -1553,10 +1555,12 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const resolved = context
             ? resolveBibleReference(context.book, context.chapter, associatedVerse, associatedVerse)
             : null;
-          console.warn('[BLB Facebook verse-context resolution]', JSON.stringify({
+          const resolutionDiagnostic = {
             associatedVerse, context, priorReferences,
             resolvedUrl: resolved?.url || null
-          }));
+          };
+          messageRoot.setAttribute('data-blb-verse-context-resolution', JSON.stringify(resolutionDiagnostic));
+          console.warn('[BLB Facebook verse-context resolution]', JSON.stringify(resolutionDiagnostic));
           if (context) {
             if (resolved) return {
               book: resolved.book,
