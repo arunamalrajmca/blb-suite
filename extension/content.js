@@ -1924,6 +1924,18 @@ function handleDoubleClickBlb(event) {
           return true;
         }
 
+        // Non-Latin single tokens cannot be KJV corpus words or English book
+        // aliases. Reject them before scanning nearby DOM for Bible-reference
+        // context; this matters on large YouTube title/caption DOM.
+        if (!/\s/.test(selection) && !/^\d+$/.test(selection) &&
+            /[^\x00-\x7F]/.test(selection)) {
+          const token = normalizeDoubleClickToken(selection).replace(/’/g, "'");
+          const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
+            && KJV_CORPUS_WORD_INDEX.has(token);
+          const isBookName = !!resolveBibleBook(selection);
+          if (!isKjvWord && !isBookName) return true;
+        }
+
         const contextualTarget=getDoubleClickTargetElement(event)||event.target;
         const blockContext=getDoubleClickBlockContextReference(selection,contextualTarget,event);
 
@@ -2381,7 +2393,7 @@ async function updateBlbPageSelectionButtonFromSelection() {
   // partial/adjacent references, OCR/PDF text, and longer selections remain
   // available to the shared resolver. Book names and corpus words (including
   // ordinary words such as "The") stay eligible on every site/language.
-  if (!blbPageButtonContextualReference && !/\\s/.test(text) && !/^\\d+$/.test(text)) {
+  if (!blbPageButtonContextualReference && !/\s/.test(text) && !/^\d+$/.test(text)) {
     const token = normalizeDoubleClickToken(text).replace(/’/g, "'");
     const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
       && KJV_CORPUS_WORD_INDEX.has(token);
