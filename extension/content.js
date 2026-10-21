@@ -1928,7 +1928,7 @@ function handleDoubleClickBlb(event) {
         // DOM/context scanning. BLB's word lookup is English KJV; these tokens
         // cannot be valid KJV word searches. Keep multiword/reference selections
         // on the normal path so contextual Bible references still work.
-        if (!/\\s/.test(selection) && /[^\\x00-\\x7F]/.test(selection)) return true;
+        if (!/\s/.test(selection) && /[^\x00-\x7F]/.test(selection)) return true;
 
         // Reject unrelated English single words before building DOM context or
         // entering the background selection resolver. This is an exact local
