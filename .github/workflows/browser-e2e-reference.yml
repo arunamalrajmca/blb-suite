@@ -42,7 +42,7 @@ jobs:
       matrix:
         include:
           - group: positional
-            grep: 'Double-click resolves any part|positional context|browser token|separate lines|standalone book numbers|ordinary heading words'
+            grep: 'Double-click resolves any part|positional context|browser token|separate lines|standalone book numbers|ordinary heading words|Facebook post-level verse gestures'
           - group: paired-timothy-post
             file: tests/browser/shared-regex-patterns.spec.js
             grep: 'paired 1 & 2 Timothy whole-book shorthand reaches the final MultiVerse POST with every chapter'
