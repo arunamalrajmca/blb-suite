@@ -1928,7 +1928,7 @@ function handleDoubleClickBlb(event) {
         // the background selection resolver. The injected Suite bundle includes
         // the corpus-derived KJV vocabulary index, so this is an exact local
         // membership check rather than a language heuristic.
-        if (!/\\s/.test(selection) && !/^\\d+$/.test(selection)) {
+        if (!/\s/.test(selection) && !/^\d+$/.test(selection)) {
           const token = normalizeDoubleClickToken(selection).replace(/’/g, "'");
           const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
             && KJV_CORPUS_WORD_INDEX.has(token);
