@@ -1496,26 +1496,27 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           return messageRoot.contains(range.startContainer) ? range : null;
         })();
       if (clickRange && messageRoot.contains(clickRange.startContainer)) {
-        const beforeRange = document.createRange();
-        beforeRange.selectNodeContents(messageRoot);
-        beforeRange.setEnd(clickRange.startContainer, clickRange.startOffset);
-        const beforeText = normalizeSelectionText(domText(beforeRange.cloneContents())).normalize('NFKC');
-        // On rich-text pages the browser Selection may still contain the word
-        // from a previous double-click. Prefer the physical caret token, then
-        // the actual clicked leaf element, before consulting that stale value.
+        // Use the physical inline element as the boundary when it is the
+        // actual clicked token. Range-derived caret offsets can be stale or
+        // land on an adjacent node in Chromium's dblclick event.
         const clickedElementText = normalizeSelectionText(initialNode?.textContent || '').normalize('NFKC');
         const clickedElementToken = clickedElementText && !/\s/.test(clickedElementText) ? clickedElementText : '';
         const clickToken = normalizeSelectionText(clickedWordText || clickedElementToken || selected).toLowerCase();
         const numericClick = /^\d{1,3}$/.test(clickToken);
-        // This path is intentionally token-local: "v", "verse", and "verses"
-        // identify a verse cue; the adjacent number may be a separate inline
-        // element with no whitespace node between the two tokens.
         const verseWordClick = /^(?:v|verse|verses)$/i.test(clickToken);
+        const tokenElementIsExact = !!(initialNode && messageRoot.contains(initialNode) &&
+          clickedElementToken.toLowerCase() === clickToken);
+        const beforeRange = document.createRange();
+        beforeRange.selectNodeContents(messageRoot);
+        if (tokenElementIsExact) beforeRange.setEndBefore(initialNode);
+        else beforeRange.setEnd(clickRange.startContainer, clickRange.startOffset);
+        const beforeText = normalizeSelectionText(domText(beforeRange.cloneContents())).normalize('NFKC');
         let associatedVerse = null;
         if (verseWordClick) {
           const afterRange = document.createRange();
           afterRange.selectNodeContents(messageRoot);
-          afterRange.setStart(clickRange.endContainer, clickRange.endOffset);
+          if (tokenElementIsExact) afterRange.setStartAfter(initialNode);
+          else afterRange.setStart(clickRange.endContainer, clickRange.endOffset);
           const afterText = normalizeSelectionText(domText(afterRange.cloneContents())).normalize('NFKC');
           const following = afterText.match(/^[\s,.:;()\[\]{}–—-]*(\d{1,3})\b/);
           if (following) associatedVerse = Number(following[1]);
