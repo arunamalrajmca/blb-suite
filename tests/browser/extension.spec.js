@@ -86,7 +86,7 @@ test.describe('core user-visible E2E', () => {
     // through the extension message channel instead of checking window markers.
     await expect.poll(async () => extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({ url: ['https://www.facebook.com/*'] });
-      const tab = tabs.find(candidate => candidate.url?.includes('facebook.com/ellisenobun/posts/'));
+      const tab = tabs.find(candidate => { try { return new URL(candidate.url || '').hostname === 'www.facebook.com'; } catch (_) { return false; } });
       if (!tab?.id) return false;
       try {
         const response = await chrome.tabs.sendMessage(tab.id, { type: 'blbSuiteRefreshSiteFeatures' });
