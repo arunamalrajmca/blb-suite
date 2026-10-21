@@ -116,11 +116,18 @@ test.describe('core user-visible E2E', () => {
       ));
       await page.locator(selector).dblclick();
       await page.waitForTimeout(250);
-      const cueDiagnostic = await page.locator('#blb-e2e-facebook-post-verse-context [data-ad-comet-preview="message"]').evaluate(el => ({
-        extraction: el.getAttribute('data-blb-verse-context-diagnostic'),
-        resolution: el.getAttribute('data-blb-verse-context-resolution')
-      }));
-      console.log('[BLB Facebook verse-context test observation]', selector, JSON.stringify(cueDiagnostic));
+      const cueDiagnostic = await page.locator('#blb-e2e-facebook-post-verse-context').evaluate(root => {
+        const message = [...root.querySelectorAll('[data-ad-comet-preview="message"], [role="article"]')]
+          .find(el => el.hasAttribute('data-blb-verse-context-diagnostic') || el.hasAttribute('data-blb-verse-context-resolution'));
+        return message ? {
+          extraction: message.getAttribute('data-blb-verse-context-diagnostic'),
+          resolution: message.getAttribute('data-blb-verse-context-resolution')
+        } : null;
+      });
+      console.log('[BLB Facebook verse-number extraction]', selector, cueDiagnostic?.extraction ?? 'NO_EXTRACTION_DIAGNOSTIC');
+      expect(cueDiagnostic?.extraction, selector + ': cue extraction diagnostic missing').toBeTruthy();
+      const extraction = JSON.parse(cueDiagnostic.extraction);
+      expect(extraction.associatedVerse, selector + ': verse number was not extracted').toBe(Number(expectedPath.match(/\/(\d+)\/$/)?.[1]));
       await activateBlbTabForPath(extensionWorker, expectedPath, {
         fragment: selector,
         selector: '#blb-e2e-facebook-post-verse-context',
