@@ -5,6 +5,7 @@
   "description": "Send Bible references and searches to Blue Letter Bible with selection tools and local KJV case-sensitive search.",
   "permissions": [
     "clipboardWrite",
+    "offscreen",
     "tabs",
     "omnibox",
     "storage",
