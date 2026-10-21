@@ -92,8 +92,12 @@ test.describe('core user-visible E2E', () => {
         try { return /(^|\\.)facebook\\.com$/i.test(new URL(candidate.url || '').hostname); }
         catch (_) { return false; }
       });
-      const tab = candidates[candidates.length - 1];
-      if (!tab?.id) return { ok: false, reason: 'no-facebook-tab', tabs: candidates.map(t => ({ url: t.url, id: t.id })) };
+      // Facebook's post permalink is an in-page modal, not a separate tab.
+      // Select the actual post tab rather than an arbitrary Facebook tab.
+      const postTab = candidates.find(candidate => /pfbid0K5jBq3Wh8ySRnQTFTbVhcvzrxJDv4c1ByXCDh9NRefTHWzHFPisNFNeUXWUB3iPxl/i.test(candidate.url || ''));
+      const [activeTab] = await chrome.tabs.query({ active: true, lastFocusedWindow: true });
+      const tab = postTab || (candidates.some(candidate => candidate.id === activeTab?.id) ? activeTab : null);
+      if (!tab?.id) return { ok: false, reason: 'no-matching-facebook-post-tab', tabs: candidates.map(t => ({ url: t.url, id: t.id })), activeTab: activeTab ? { url: activeTab.url, id: activeTab.id } : null };
       let isolatedWorld;
       try {
         const [probe] = await chrome.scripting.executeScript({
@@ -118,9 +122,12 @@ test.describe('core user-visible E2E', () => {
     }), { timeout: 15000, intervals: [100, 200, 300, 500] }).toMatchObject({ ok: true });
     // Operate on the supplied Facebook post's real rendered text. Do not add
     // a synthetic post or synthetic verse/chapter context to the page.
-    const realPost = page.locator('[data-ad-comet-preview="message"]').filter({
-      hasText: /verse\s+42/i
-    }).filter({ hasText: /1 Kings 18/i }).first();
+    // Facebook can render the permalink as a modal over the feed. Prefer
+    // that real dialog, with a text-based fallback for layout variations.
+    const postScope = page.getByRole('dialog').filter({ hasText: /verse\\s+42/i }).filter({ hasText: /1 Kings 18/i }).first();
+    const realPost = (await postScope.count()) ? postScope : page.locator('div').filter({
+      hasText: /verse\\s+42/i
+    }).filter({ hasText: /1 Kings 18/i }).last();
     await expect(realPost, 'Facebook post containing the real "verse 42" and 1 Kings 18 context must render')
       .toBeVisible({ timeout: 20000 });
     await page.evaluate(() => {
