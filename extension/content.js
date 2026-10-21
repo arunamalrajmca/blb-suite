@@ -1477,16 +1477,24 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // this fallback to the word "verse" or its immediately associated number.
     const messageRoot = initialNode?.closest?.('[data-ad-comet-preview="message"], [role="article"]');
     if (messageRoot) {
-      const clickRange = clickedWordRange || (() => {
-        const liveSelection = window.getSelection?.();
-        if (!liveSelection?.rangeCount || liveSelection.isCollapsed) return null;
-        const liveText = normalizeSelectionText(liveSelection.toString()).normalize('NFKC').toLowerCase();
-        const targetText = normalizeSelectionText(clickedWordText || initialNode?.textContent || '').normalize('NFKC').toLowerCase();
-        // Never use a non-empty selection left behind by a prior double-click
-        // as the location of the current gesture.
-        if (targetText && !/\s/.test(targetText) && liveText !== targetText) return null;
-        return liveSelection.getRangeAt(0);
-      })();
+      // Coordinate-based caret APIs can occasionally resolve against a nearby
+      // overlay or a stale layout position. Accept that range only when it is
+      // actually inside this message; otherwise fall back to a matching live
+      // selection rooted in the same message instead of letting an unrelated
+      // range suppress the Facebook context resolver.
+      const clickRange = (clickedWordRange && messageRoot.contains(clickedWordRange.startContainer))
+        ? clickedWordRange
+        : (() => {
+          const liveSelection = window.getSelection?.();
+          if (!liveSelection?.rangeCount || liveSelection.isCollapsed) return null;
+          const liveText = normalizeSelectionText(liveSelection.toString()).normalize('NFKC').toLowerCase();
+          const targetText = normalizeSelectionText(clickedWordText || initialNode?.textContent || '').normalize('NFKC').toLowerCase();
+          // Never use a non-empty selection left behind by a prior double-click
+          // as the location of the current gesture.
+          if (targetText && !/\s/.test(targetText) && liveText !== targetText) return null;
+          const range = liveSelection.getRangeAt(0);
+          return messageRoot.contains(range.startContainer) ? range : null;
+        })();
       if (clickRange && messageRoot.contains(clickRange.startContainer)) {
         const beforeRange = document.createRange();
         beforeRange.selectNodeContents(messageRoot);
