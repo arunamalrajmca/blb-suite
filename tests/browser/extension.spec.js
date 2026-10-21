@@ -528,6 +528,90 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  test('Facebook post-level verse gestures follow the latest explicit chapter context', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const fixture = document.createElement('div');
+      fixture.id = 'blb-e2e-facebook-post-verse-context';
+      fixture.innerHTML = '<div role="article"><div data-ad-comet-preview="message">' +
+        '<div dir="auto">Read 1 Kings 18:1 before you look at the prayer.</div>' +
+        '<div dir="auto">In <span id="fb-verse-word-42">verse</span> <span id="fb-verse-number-42">42</span>, Elijah climbed Mount Carmel.</div>' +
+        '<div dir="auto"><span id="fb-verse-word-44">Verse</span> <span id="fb-verse-number-44">44</span> shows a cloud.</div>' +
+        '<div dir="auto"><span id="fb-verse-word-46">Verse</span> <span id="fb-verse-number-46">46</span> says the LORD\'s hand was on Elijah.</div>' +
+        '<div dir="auto">In 1 Kings 19, Elijah was corrected in <span id="fb-verse-word-19-18">verse</span> <span id="fb-verse-number-19-18">18</span>.</div>' +
+        '</div></div>';
+      document.body.appendChild(fixture);
+    });
+
+    const gestures = [
+      ['#fb-verse-word-42', '/kjv/1ki/18/42/'],
+      ['#fb-verse-number-42', '/kjv/1ki/18/42/'],
+      ['#fb-verse-word-44', '/kjv/1ki/18/44/'],
+      ['#fb-verse-number-44', '/kjv/1ki/18/44/'],
+      ['#fb-verse-word-46', '/kjv/1ki/18/46/'],
+      ['#fb-verse-number-46', '/kjv/1ki/18/46/'],
+      ['#fb-verse-word-19-18', '/kjv/1ki/19/18/'],
+      ['#fb-verse-number-19-18', '/kjv/1ki/19/18/']
+    ];
+
+    for (const [selector, expectedPath] of gestures) {
+      const before = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+        tabs.filter(tab => {
+          try { return new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org'); }
+          catch (_) { return false; }
+        }).map(tab => tab.id)
+      ));
+      await page.locator(selector).dblclick();
+      await activateBlbTabForPath(extensionWorker, expectedPath, {
+        fragment: selector,
+        selector: '#blb-e2e-facebook-post-verse-context',
+        selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
+      });
+      const openedPaths = await extensionWorker.evaluate((beforeIds) => chrome.tabs.query({}).then(tabs =>
+        tabs.filter(tab => !beforeIds.includes(tab.id)).map(tab => {
+          try { return new URL(String(tab.url || tab.pendingUrl || '')).pathname; }
+          catch (_) { return ''; }
+        }).filter(Boolean)
+      ), before);
+      expect(openedPaths, selector + ': missing intended passage').toContain(expectedPath);
+      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+        for (const tab of tabs) {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            if (url.hostname.endsWith('blueletterbible.org') && url.pathname === path && tab.id != null) {
+              await chrome.tabs.remove(tab.id);
+            }
+          } catch (_) {}
+        }
+      }), expectedPath);
+    }
+
+    // A number without the word "verse" must not inherit the post's context.
+    await page.evaluate(() => {
+      const unrelated = document.createElement('div');
+      unrelated.id = 'fb-unrelated-number';
+      unrelated.textContent = '7000';
+      document.querySelector('[data-ad-comet-preview="message"]').appendChild(unrelated);
+    });
+    const before = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+      tabs.filter(tab => {
+        try { return new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org'); }
+        catch (_) { return false; }
+      }).map(tab => tab.id)
+    ));
+    await page.locator('#fb-unrelated-number').dblclick();
+    await page.waitForTimeout(500);
+    const after = await extensionWorker.evaluate((beforeIds) => chrome.tabs.query({}).then(tabs =>
+      tabs.filter(tab => !beforeIds.includes(tab.id)).map(tab => {
+        try { return new URL(String(tab.url || tab.pendingUrl || '')).pathname; }
+        catch (_) { return ''; }
+      }).filter(Boolean)
+    ), before);
+    expect(after, 'unrelated number must not inherit chapter context').toEqual([]);
+  });
+
   test('Double-click standalone book numbers do not borrow context across lines', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
