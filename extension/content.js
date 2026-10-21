@@ -1468,17 +1468,21 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     if (!selected) return null;
     const node = initialNode || document.documentElement;
 
-    // Walk every real ancestor rather than only a fixed list of HTML block
-    // tags. Modern sites frequently put article text inside custom elements,
-    // links, spans, role-based containers, or framework-generated wrappers.
-    // The candidate must still pass the positional reference-overlap test
-    // below, so broadening the ancestor set does not permit an unrelated
-    // reference elsewhere in the page to leak into the gesture.
+    // Version-code clicks need only shallow, local context: inspect the
+    // clicked node and a few ancestors, never climb deep into the page looking
+    // for a citation. Keep the established ancestor search unchanged for other
+    // contextual tokens to avoid changing their existing behavior.
+    const isVersionCodeClick = isBibleVersionCodeToken(selected);
+    const maxAncestorDepth = isVersionCodeClick ? 5 : 32;
     const blockCandidates = [];
     let candidateNode = node;
     let candidateDepth = 0;
-    while (candidateNode && candidateDepth < 32) {
+    while (candidateNode && candidateDepth < maxAncestorDepth) {
       if (candidateNode instanceof Element) blockCandidates.push(candidateNode);
+      // A version-code search must not cross a clear content boundary into an
+      // unrelated paragraph, list item, table cell, or article section.
+      if (isVersionCodeClick && candidateDepth > 0 &&
+          candidateNode.matches('p,li,td,th,blockquote,article,section,main')) break;
       candidateNode = candidateNode.parentElement;
       candidateDepth++;
     }
