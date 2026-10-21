@@ -1526,11 +1526,11 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           if (following) associatedVerse = Number(following[1]);
         }
         if (verseWordClick) {
-          console.warn('[BLB Facebook verse-context diagnostic]', {
+          console.warn('[BLB Facebook verse-context diagnostic]', JSON.stringify({
             clickToken, verseWordClick, associatedVerse,
             tokenElementIsExact, hasClickRange,
             beforeText: beforeText.slice(-500)
-          });
+          }));
         }
         if (verseWordClick && associatedVerse) {
           // Use the shared Bible-reference parser rather than a second,
@@ -1553,10 +1553,10 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const resolved = context
             ? resolveBibleReference(context.book, context.chapter, associatedVerse, associatedVerse)
             : null;
-          console.warn('[BLB Facebook verse-context resolution]', {
+          console.warn('[BLB Facebook verse-context resolution]', JSON.stringify({
             associatedVerse, context, priorReferences,
             resolvedUrl: resolved?.url || null
-          });
+          }));
           if (context) {
             if (resolved) return {
               book: resolved.book,
