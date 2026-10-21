@@ -527,3 +527,54 @@ test('mixed chapter-only selection submits all 51 expected verses through the se
   expect(submittedPayloads[0]).toContain('1 peter 2:9-10');
   expect(countSubmittedVerses(submittedPayloads[0])).toBe(51);
 });
+
+
+test('independent MultiVerse requests submit while an earlier destination response is still pending', async ({ context, extensionWorker }) => {
+  let firstPostStarted = false;
+  let releaseFirstResponse;
+  const firstResponseGate = new Promise(resolve => { releaseFirstResponse = resolve; });
+  const submittedPayloads = [];
+
+  await context.route('https://www.blueletterbible.org/tools/MultiVerse.cfm', async route => {
+    if (route.request().method() !== 'POST') {
+      await route.fulfill({ status: 200, contentType: 'text/html', body: '<html><body>fixture</body></html>' });
+      return;
+    }
+    const body = new URLSearchParams(route.request().postData() || '');
+    submittedPayloads.push(body.get('mvText') || '');
+    if (!firstPostStarted) {
+      firstPostStarted = true;
+      // Keep the first destination navigation pending. A separate invocation
+      // must still be able to submit through the shared rate-limited queue.
+      await firstResponseGate;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
+    });
+  });
+
+  const requestA = [
+    { book: 'Genesis', bookNumber: 1, chapter: 1, from: 1, to: 3, version: 'kjv' },
+    { book: 'Genesis', bookNumber: 1, chapter: 2, from: 1, to: 3, version: 'kjv' }
+  ];
+  const requestB = [
+    { book: 'Exodus', bookNumber: 2, chapter: 1, from: 1, to: 3, version: 'kjv' },
+    { book: 'Exodus', bookNumber: 2, chapter: 2, from: 1, to: 3, version: 'kjv' }
+  ];
+
+  try {
+    const first = await openMultiVerse(extensionWorker, requestA);
+    expect(first?.ok).toBe(true);
+    const second = await openMultiVerse(extensionWorker, requestB);
+    expect(second?.ok).toBe(true);
+
+    // With the production 1.5-second spacing retained, allow enough time for
+    // the next queued POST, but do not let the first response complete.
+    await expect.poll(() => submittedPayloads.length, { timeout: 10000 }).toBeGreaterThanOrEqual(2);
+    expect(submittedPayloads.some(value => value.includes('Exodus'))).toBe(true);
+  } finally {
+    releaseFirstResponse();
+  }
+});
