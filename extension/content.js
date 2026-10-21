@@ -1924,18 +1924,6 @@ function handleDoubleClickBlb(event) {
           return true;
         }
 
-        // Reject unrelated single words before building DOM context or entering
-        // the background selection resolver. The injected Suite bundle includes
-        // the corpus-derived KJV vocabulary index, so this is an exact local
-        // membership check rather than a language heuristic.
-        if (!/\s/.test(selection) && !/^\d+$/.test(selection)) {
-          const token = normalizeDoubleClickToken(selection).replace(/’/g, "'");
-          const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
-            && KJV_CORPUS_WORD_INDEX.has(token);
-          const isBookName = !!resolveBibleBook(selection);
-          if (!isKjvWord && !isBookName) return true;
-        }
-
         const contextualTarget=getDoubleClickTargetElement(event)||event.target;
         const blockContext=getDoubleClickBlockContextReference(selection,contextualTarget,event);
 
@@ -1953,6 +1941,19 @@ function handleDoubleClickBlb(event) {
         );
         const isStandaloneNumericBook=standaloneBook && /^\d+$/.test(selection) && blockText===selection;
         const contextualReference=isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook);
+
+        // Preserve every token that participates in a detected Bible reference
+        // (including aliases and verse ranges), but avoid sending unrelated
+        // single words to the background resolver. The local corpus index is an
+        // exact membership check, not a page-language heuristic.
+        if (!contextualReference && !/\s/.test(selection) && !/^\d+$/.test(selection)) {
+          const token = normalizeDoubleClickToken(selection).replace(/’/g, "'");
+          const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
+            && KJV_CORPUS_WORD_INDEX.has(token);
+          const isBookName = !!resolveBibleBook(selection);
+          if (!isKjvWord && !isBookName) return true;
+        }
+
         if (!contextualReference) {
           if (/^[A-Za-z][A-Za-z'’-]*$/.test(selection) && !/^(?:i|ii|iii)$/i.test(selection)) {
             const now=Date.now();
