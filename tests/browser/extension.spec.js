@@ -68,6 +68,40 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
 });
 
 test.describe('core user-visible E2E', () => {
+  test('Show on BLB hides non-KJV single words but preserves KJV words and phrases', async ({ page, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const fixture = document.createElement('p');
+      fixture.id = 'blb-page-button-word-gate';
+      fixture.innerHTML = '<span id="page-button-computer">computer</span> <span id="page-button-grace">grace</span> <span id="page-button-phrase">in the beginning</span> <span id="page-button-reference">John 3:16</span>';
+      document.body.appendChild(fixture);
+      window.__blbSelectForPageButtonTest = id => {
+        const el = document.getElementById(id);
+        const range = document.createRange();
+        range.selectNodeContents(el);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      };
+    });
+    const button = page.locator('#blb-suite-page-selection-button');
+
+    await page.evaluate(() => window.__blbSelectForPageButtonTest('page-button-computer'));
+    await expect(button).toBeHidden({ timeout: 5000 });
+
+    await page.evaluate(() => window.__blbSelectForPageButtonTest('page-button-grace'));
+    await expect(button).toBeVisible({ timeout: 5000 });
+
+    await page.evaluate(() => window.__blbSelectForPageButtonTest('page-button-phrase'));
+    await expect(button).toBeVisible({ timeout: 5000 });
+
+    await page.evaluate(() => window.__blbSelectForPageButtonTest('page-button-reference'));
+    await expect(button).toBeVisible({ timeout: 5000 });
+  });
+
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
