@@ -1486,8 +1486,13 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         const beforeRange = document.createRange();
         beforeRange.selectNodeContents(messageRoot);
         beforeRange.setEnd(clickRange.startContainer, clickRange.startOffset);
-        const beforeText = normalizeSelectionText(beforeRange.cloneContents().textContent || '').normalize('NFKC');
-        const clickToken = normalizeSelectionText(clickedWordText || selected).toLowerCase();
+        const beforeText = normalizeSelectionText(domText(beforeRange.cloneContents())).normalize('NFKC');
+        // On rich-text pages the browser Selection may still contain the word
+        // from a previous double-click. Prefer the physical caret token, then
+        // the actual clicked leaf element, before consulting that stale value.
+        const clickedElementText = normalizeSelectionText(initialNode?.textContent || '').normalize('NFKC');
+        const clickedElementToken = clickedElementText && !/\\s/.test(clickedElementText) ? clickedElementText : '';
+        const clickToken = normalizeSelectionText(clickedWordText || clickedElementToken || selected).toLowerCase();
         const numericClick = /^\d{1,3}$/.test(clickToken);
         const verseWordClick = /^verse$/i.test(clickToken);
         let associatedVerse = null;
@@ -1495,7 +1500,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const afterRange = document.createRange();
           afterRange.selectNodeContents(messageRoot);
           afterRange.setStart(clickRange.endContainer, clickRange.endOffset);
-          const afterText = normalizeSelectionText(afterRange.cloneContents().textContent || '').normalize('NFKC');
+          const afterText = normalizeSelectionText(domText(afterRange.cloneContents())).normalize('NFKC');
           const following = afterText.match(/^\s*(\d{1,3})\b/);
           if (following) associatedVerse = Number(following[1]);
         } else if (numericClick) {
