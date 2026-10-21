@@ -1507,17 +1507,20 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         const clickedElementToken = clickedElementText && !/\s/.test(clickedElementText) ? clickedElementText : '';
         const clickToken = normalizeSelectionText(clickedWordText || clickedElementToken || selected).toLowerCase();
         const numericClick = /^\d{1,3}$/.test(clickToken);
-        const verseWordClick = /^verse$/i.test(clickToken);
+        // This path is intentionally token-local: "v", "verse", and "verses"
+        // identify a verse cue; the adjacent number may be a separate inline
+        // element with no whitespace node between the two tokens.
+        const verseWordClick = /^(?:v|verse|verses)$/i.test(clickToken);
         let associatedVerse = null;
         if (verseWordClick) {
           const afterRange = document.createRange();
           afterRange.selectNodeContents(messageRoot);
           afterRange.setStart(clickRange.endContainer, clickRange.endOffset);
           const afterText = normalizeSelectionText(domText(afterRange.cloneContents())).normalize('NFKC');
-          const following = afterText.match(/^\s*(\d{1,3})\b/);
+          const following = afterText.match(/^[\s,.:;()\[\]{}–—-]*(\d{1,3})\b/);
           if (following) associatedVerse = Number(following[1]);
         } else if (numericClick) {
-          const around = beforeText.match(/\bverse\s*$/i);
+          const around = beforeText.match(/\b(?:v|verse|verses)\s*$/i);
           if (around) associatedVerse = Number(clickToken);
         }
         if ((verseWordClick && associatedVerse) || (numericClick && associatedVerse)) {
