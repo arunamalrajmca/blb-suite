@@ -95,11 +95,11 @@ test.describe('core user-visible E2E', () => {
       });
       const diagnostics = [];
       for (const tab of candidates) {
+        const tabHostname = new URL(tab.url).hostname;
         const contentScripts = (loadedManifest.content_scripts || []).filter(script =>
-          (script.matches || []).some(match => {
-            try { return new URL(tab.url).hostname === new URL(match.replace(/\\*.*$/, '')).hostname; }
-            catch (_) { return match.includes('facebook.com') && /(^|\\.)facebook\\.com$/i.test(new URL(tab.url).hostname); }
-          }));
+          (script.matches || []).some(match =>
+            match.includes('facebook.com') && /(^|\.)facebook\.com$/i.test(tabHostname)
+          ));
         let isolatedWorld = null;
         try {
           const [probe] = await chrome.scripting.executeScript({
