@@ -1481,7 +1481,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       if (candidateNode instanceof Element) blockCandidates.push(candidateNode);
       // A version-code search must not cross a clear content boundary into an
       // unrelated paragraph, list item, table cell, or article section.
-      if (isVersionCodeClick && candidateDepth > 0 &&
+      if (isVersionCodeClick &&
           candidateNode.matches('p,li,td,th,blockquote,article,section,main')) break;
       candidateNode = candidateNode.parentElement;
       candidateDepth++;
