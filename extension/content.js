@@ -1985,8 +1985,8 @@ function handleDoubleClickBlb(event) {
         // DOM/context scanning. BLB's word lookup is English KJV; these tokens
         // cannot be valid KJV word searches. Keep multiword/reference selections
         // on the normal path so contextual Bible references still work.
-        const isReferenceDashGesture=/^[\\u2010-\\u2015\\u2212-]+$/.test(selection);
-        if (!/\\s/.test(selection) && /[^\\x00-\\x7F]/.test(selection) && !isReferenceDashGesture) return true;
+        const isReferenceDashGesture=/^[\u2010-\u2015\u2212-]+$/.test(selection);
+        if (!/\s/.test(selection) && /[^\x00-\x7F]/.test(selection) && !isReferenceDashGesture) return true;
 
         // Bible-version abbreviations are reference-context tokens, not word
         // searches. If one is double-clicked beside a reference, resolve that
