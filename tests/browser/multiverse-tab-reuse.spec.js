@@ -46,7 +46,13 @@ async function getTrackedMultiVerseTabs(extensionWorker, tabIds = []) {
   }, tabIds);
 }
 
-test('independent MultiVerse commands start opening tabs without waiting for earlier command completion', async ({ extensionWorker }) => {
+test('independent MultiVerse commands start opening tabs without waiting for earlier command completion', async ({ context, extensionWorker }) => {
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>MultiVerse concurrency fixture</title></head><body>MultiVerse fixture</body></html>'
+  }));
+
   const outcome = await extensionWorker.evaluate(async () => {
     const original = openBlbMultiVerseRefsSingleBatch;
     let calls = 0;
