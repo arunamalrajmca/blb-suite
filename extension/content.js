@@ -2416,6 +2416,11 @@ function addBlbPageSelectionButton() {
       text,
       contextualReference: blbPageButtonContextualReference || null,
       directUrl: blbPageButtonDirectUrl || null,
+      // A single-token floating-button action should follow the same fast path
+      // as double-click: do not re-scan page context after the selection has
+      // already been accepted as a word. Multi-word selections still resolve
+      // adjacent references through the normal background path.
+      contextualReferenceResolved: !blbPageButtonContextualReference && !/\\s/.test(text),
       tabBehavior:{activeIfNew:true,activateExisting:true}
     });
     clearBlbPageSelectionAfterAction();
