@@ -67,6 +67,16 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
   await expect(page.locator('body')).toBeVisible();
 });
 
+
+test('standalone Copy as plain text context-menu action is installed', async ({ extensionWorker }) => {
+  const items = await extensionWorker.evaluate(() => chrome.contextMenus.getAll());
+  const item = items.find(entry => entry.id === 'blb-suite-copy-plain-text');
+  expect(item).toBeTruthy();
+  expect(item.title).toBe('Copy as plain text');
+  expect(item.contexts).toContain('selection');
+  expect(item.parentId).toBeUndefined();
+});
+
 test.describe('core user-visible E2E', () => {
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
