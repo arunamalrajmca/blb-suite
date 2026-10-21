@@ -1977,15 +1977,6 @@ function handleDoubleClickBlb(event) {
         const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix;
         const blockContext=needsDomContext
           ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
-          : null;');
-            const prefixPattern=new RegExp('(?:^|[^A-Za-z0-9])([1-3])\\s+'+escapedSuffix+'(?=\\s+\\d|\\b)','i');
-            const match=contextText.match(prefixPattern);
-            hasValidNearbyBookPrefix=!!(match && resolveBibleBook(match[1]+' '+selection));
-          } catch (_) {}
-        }
-        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix;
-        const blockContext=needsDomContext
-          ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
           : null;
 
         // Wait for the native selection/context to settle only for a number
