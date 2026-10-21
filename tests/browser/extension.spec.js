@@ -89,7 +89,7 @@ test.describe('core user-visible E2E', () => {
     const readiness = await extensionWorker.evaluate(async () => {
       const tabs = await chrome.tabs.query({});
       const candidates = tabs.filter(candidate => {
-        try { return /(^|\\.)facebook\\.com$/i.test(new URL(candidate.url || '').hostname) && candidate.id != null; }
+        try { return /(^|\.)facebook\.com$/i.test(new URL(candidate.url || '').hostname) && candidate.id != null; }
         catch (_) { return false; }
       });
       const diagnostics = [];
