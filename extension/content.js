@@ -1924,6 +1924,23 @@ function handleDoubleClickBlb(event) {
           return true;
         }
 
+        // Fast-reject a single non-ASCII token (including Tamil) before
+        // DOM/context scanning. BLB's word lookup is English KJV; these tokens
+        // cannot be valid KJV word searches. Keep multiword/reference selections
+        // on the normal path so contextual Bible references still work.
+        if (!/\s/.test(selection) && /[^\x00-\x7F]/.test(selection)) return true;
+
+        // Reject unrelated English single words before building DOM context or
+        // entering the background selection resolver. This is an exact local
+        // membership check against the corpus-derived KJV vocabulary index.
+        if (/^[A-Za-z][A-Za-z'’\\-]*$/.test(selection)) {
+          const token = normalizeDoubleClickToken(selection).replace(/’/g, "'");
+          const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
+            && KJV_CORPUS_WORD_INDEX.has(token);
+          const isBookName = !!resolveBibleBook(selection);
+          if (!isKjvWord && !isBookName) return true;
+        }
+
         const contextualTarget=getDoubleClickTargetElement(event)||event.target;
         const blockContext=getDoubleClickBlockContextReference(selection,contextualTarget,event);
 
