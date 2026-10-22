@@ -60,26 +60,24 @@ test('no optional host-permission regression', () => {
   assert.deepEqual(m.optional_host_permissions, ['http://*/*','https://*/*','https://chatgpt.com/*']);
 });
 
-test('Ask AI requests ChatGPT access only when a query is entered and preserves a no-permission handoff', () => {
+test('Ask AI requests ChatGPT access in the omnibox gesture and does nothing when denied', () => {
   const m = JSON.parse(read('manifest.json'));
   const source = read('background.js');
   assert(m.optional_host_permissions.includes('https://chatgpt.com/*'), 'ChatGPT origin must be optional');
-  // Request must run synchronously in the omnibox gesture. Chrome resolves
-  // already-granted origins without showing another prompt, including broad
-  // site access, so an async contains() preflight is both unnecessary and unsafe.
-  assert(source.includes("chrome.permissions.request({origins:['https://chatgpt.com/*']}"), 'Ask AI must request the ChatGPT origin in the omnibox gesture');
-  const askAiHandlerStart = source.lastIndexOf('const askAiMatch', source.indexOf("chrome.permissions.request({origins:['https://chatgpt.com/*']}"));
-  const permissionRequestIndex = source.indexOf("chrome.permissions.request({origins:['https://chatgpt.com/*']}");
-  const tabUpdateIndex = source.indexOf("await chrome.tabs.update({", permissionRequestIndex);
-  assert(askAiHandlerStart >= 0 && permissionRequestIndex > askAiHandlerStart && tabUpdateIndex > permissionRequestIndex, 'Ask AI permission request must precede asynchronous tab operations within the Ask AI handler');
-  assert(source.includes(String.raw`normalized.match(/^askai(?:\s+(.*))?$/i)`), 'Ask AI command parser must recognize a query after whitespace');
-  assert(source.includes("const handoffUrl = 'https://chatgpt.com/?q=' + encodeURIComponent(query)"), 'Ask AI must preserve the query for fallback submission');
-  assert(source.includes("chrome.runtime.getURL('askai-permission.html')"), 'Ask AI must show guidance when access is denied');
-  const fallback = read('askai-permission.html');
-  assert(fallback.includes('ChatGPT access wasn’t granted'), 'Denied fallback must explain why automatic submission did not occur');
-  assert(fallback.includes("new URLSearchParams(location.search).get('q')"), 'Denied fallback must recover the original query');
-  assert(fallback.includes("'https://chatgpt.com/?q=' + encodeURIComponent(query)"), 'Denied fallback must provide a manual ChatGPT handoff');
-  assert(source.includes("await chrome.tabs.update(tabId, {url:handoffUrl})"), 'Ask AI must fall back if script injection fails');
+  // Chrome resolves already-granted origins without an extra prompt. Keep the
+  // request in the user gesture and stop without navigation if access is denied.
+  const requestText = "chrome.permissions.request({origins:['https://chatgpt.com/*']}";
+  assert(source.includes(requestText), 'Ask AI must request the ChatGPT origin in the omnibox gesture');
+  const askAiHandlerStart = source.lastIndexOf('const askAiMatch', source.indexOf(requestText));
+  const permissionRequestIndex = source.indexOf(requestText);
+  const deniedReturnIndex = source.indexOf('if (query && !hostAccessGranted)', permissionRequestIndex);
+  const tabUpdateIndex = source.indexOf('await chrome.tabs.update({url:', permissionRequestIndex);
+  assert(askAiHandlerStart >= 0 && permissionRequestIndex > askAiHandlerStart, 'Ask AI permission request must be inside its handler');
+  assert(deniedReturnIndex > permissionRequestIndex && tabUpdateIndex > deniedReturnIndex, 'Denied access must return before tab navigation');
+  assert(source.includes('normalized.match(/^askai(?:\\\\s+(.*))?$/i)'), 'Ask AI command parser must recognize a query after whitespace');
+  assert(!source.includes("chrome.runtime.getURL('askai-permission.html')"), 'Denied access must not open an extension fallback page');
+  assert(source.includes("const handoffUrl = 'https://chatgpt.com/?q=' + encodeURIComponent(query)"), 'Ask AI must preserve query handoff for permitted-access fallback');
+  assert(source.includes("await chrome.tabs.update(tabId, {url:handoffUrl})"), 'Ask AI must fall back if script injection fails after access is granted');
 });
 
 // Syntax checks for all JS source files.
