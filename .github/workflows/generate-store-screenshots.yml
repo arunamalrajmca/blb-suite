@@ -29,12 +29,6 @@ jobs:
           ref: chore/chrome-web-store-screenshots
           token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Check out current default-branch asset auditor
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.repository.default_branch }}
-          path: .asset-audit-source
-
       - name: Set up Python and Chromium
         uses: actions/setup-python@v5
         with:
@@ -86,18 +80,13 @@ jobs:
               page.screenshot(path="/tmp/popup.png", full_page=True)
               browser.close()
           popup = Image.open("/tmp/popup.png").convert("RGB")
-          # Keep the real popup UI; enlarge it proportionally so controls remain legible.
           popup.thumbnail((680, 650))
           im = base("KJV Scripture Tools", "Study tools, right in your browser", "Quick access to Bible study controls, topics, and notes.")
-          d = ImageDraw.Draw(im)
-          x, y = 300, 244
           scale = min(680 / popup.width, 650 / popup.height)
           popup = popup.resize((int(popup.width*scale), int(popup.height*scale)), Image.Resampling.LANCZOS)
-          im.paste(popup, (x, y))
+          im.paste(popup, (300, 244))
           im.save(out / "extension-popup.png", optimize=True)
 
-          # Create focused guide-derived screens: real tutorial content in Chromium,
-          # framed consistently and focused on one task rather than the table of contents.
           with sync_playwright() as p:
               browser = p.chromium.launch()
               page = browser.new_page(viewport={"width": 1080, "height": 640}, device_scale_factor=1)
@@ -108,7 +97,6 @@ jobs:
                 ("tutorial-study.png", "STUDY AND QUICK LOOKUPS", "Use study sessions and quick word lookups as you read.", "Study Sessions and History"),
               ]
               for filename, title, subtitle, section in tasks:
-                  # Capture the actual source guide, scrolled to the matching section where possible.
                   target = page.get_by_text(section, exact=False).first
                   try:
                       target.scroll_into_view_if_needed(timeout=2500)
@@ -123,8 +111,6 @@ jobs:
                   im.save(out / filename, optimize=True)
               browser.close()
 
-          # Only the four focused PNGs are listing candidates; remove old PDF-page captures
-          # so outdated, low-legibility documentation screenshots are not mistaken for final assets.
           for old in out.glob("tutorial-pdf-page-*.png"):
               old.unlink()
           for image_path in sorted(out.glob("*.png")):
