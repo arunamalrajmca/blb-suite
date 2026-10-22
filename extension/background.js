@@ -2636,11 +2636,29 @@ async function handleOmniboxCommand(text, disposition) {
 
   // A dedicated prefix routes to ChatGPT without intercepting Bible searches
   // that begin with ordinary words such as "ask". A bare `askai` opens home.
-  const askAiMatch = normalized.match(/^askai(?:\s+(.*))?$/i);
+  const askAiMatch = normalized.match(/^askai(?:\\s+(.*))?$/i);
   if (askAiMatch) {
     const query = String(askAiMatch[1] || '').trim();
-    const tab = await chrome.tabs.update({url:'https://chatgpt.com/'});
-    if (query && Number.isInteger(tab?.id)) {
+    let hostAccessGranted = false;
+
+    // Request only ChatGPT access, and only for a user-entered Ask AI query.
+    // Call request before any other asynchronous work so the omnibox action
+    // retains its user gesture. If declined/unavailable, preserve a URL handoff.
+    if (query) {
+      hostAccessGranted = await new Promise(resolve => {
+        try {
+          chrome.permissions.request({origins:['https://chatgpt.com/*']}, granted => resolve(Boolean(granted)));
+        } catch (_) {
+          resolve(false);
+        }
+      });
+    }
+
+    const handoffUrl = 'https://chatgpt.com/?q=' + encodeURIComponent(query);
+    const tab = await chrome.tabs.update({
+      url: query && !hostAccessGranted ? handoffUrl : 'https://chatgpt.com/'
+    });
+    if (query && hostAccessGranted && Number.isInteger(tab?.id)) {
       const tabId = tab.id;
       const submitAskAi = (rawQuery) => new Promise(resolve => {
         const startedAt = Date.now();
@@ -2692,6 +2710,9 @@ async function handleOmniboxCommand(text, disposition) {
         await chrome.scripting.executeScript({target:{tabId}, func:submitAskAi, args:[query]});
       } catch (error) {
         console.warn('BLB Suite: unable to submit askai prompt in ChatGPT:', error);
+        // Permission may have been granted but scripting can still fail.
+        // Fall back to a user-visible ChatGPT handoff rather than dropping input.
+        try { await chrome.tabs.update(tabId, {url:handoffUrl}); } catch (_) {}
       }
     }
     return;
