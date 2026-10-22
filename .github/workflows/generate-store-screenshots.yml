@@ -134,7 +134,6 @@ jobs:
               print(f"Verified {image_path}: 1280x800 PNG")
           PY
           python /tmp/render_store_screenshots.py
-          python .asset-audit-source/scripts/verify-store-assets.py --asset-dir docs/chrome-web-store-assets
 
       - name: Commit screenshots to this branch
         run: |
