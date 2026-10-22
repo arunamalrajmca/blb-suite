@@ -64,10 +64,18 @@ test('Ask AI requests ChatGPT access only when a query is entered and preserves 
   const m = JSON.parse(read('manifest.json'));
   const source = read('background.js');
   assert(m.optional_host_permissions.includes('https://chatgpt.com/*'), 'ChatGPT origin must be optional');
-  assert(source.includes("chrome.permissions.contains({origins:['https://chatgpt.com/*']}"), 'Ask AI must detect access already granted through broad site permissions');
-  assert(source.includes("chrome.permissions.request({origins:['https://chatgpt.com/*']}"), 'Ask AI must request only the ChatGPT origin when access is not already granted');
+  // Request must run synchronously in the omnibox gesture. Chrome resolves
+  // already-granted origins without showing another prompt, including broad
+  // site access, so an async contains() preflight is both unnecessary and unsafe.
+  assert(source.includes("chrome.permissions.request({origins:['https://chatgpt.com/*']}"), 'Ask AI must request the ChatGPT origin in the omnibox gesture');
+  assert(source.indexOf("chrome.permissions.request({origins:['https://chatgpt.com/*']}") < source.indexOf("await chrome.tabs.update({"), 'Ask AI permission request must precede asynchronous tab operations');
   assert(source.includes(String.raw`normalized.match(/^askai(?:\s+(.*))?$/i)`), 'Ask AI command parser must recognize a query after whitespace');
-  assert(source.includes("const handoffUrl = 'https://chatgpt.com/?q=' + encodeURIComponent(query)"), 'Ask AI must preserve the query when access is declined');
+  assert(source.includes("const handoffUrl = 'https://chatgpt.com/?q=' + encodeURIComponent(query)"), 'Ask AI must preserve the query for fallback submission');
+  assert(source.includes("chrome.runtime.getURL('askai-permission.html')"), 'Ask AI must show guidance when access is denied');
+  const fallback = read('askai-permission.html');
+  assert(fallback.includes('ChatGPT access wasn’t granted'), 'Denied fallback must explain why automatic submission did not occur');
+  assert(fallback.includes("new URLSearchParams(location.search).get('q')"), 'Denied fallback must recover the original query');
+  assert(fallback.includes("'https://chatgpt.com/?q=' + encodeURIComponent(query)"), 'Denied fallback must provide a manual ChatGPT handoff');
   assert(source.includes("await chrome.tabs.update(tabId, {url:handoffUrl})"), 'Ask AI must fall back if script injection fails');
 });
 
