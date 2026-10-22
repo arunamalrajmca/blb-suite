@@ -29,7 +29,7 @@ Features include:
 - Open multiple Bible references together in BLB MultiVerse.
 - Copy Bible text with clickable links where supported by BLB.
 - Run case-sensitive matching against the bundled KJV corpus locally and send matching references to BLB.
-- Use the optional Ask AI address-bar command to hand a user-entered study query to ChatGPT. ChatGPT access is requested only for that command; if declined, the extension opens ChatGPT with the query handoff URL.
+- Use the optional Ask AI address-bar command to submit a user-entered study query to ChatGPT when the user grants ChatGPT host access. If access is declined or unavailable, the command stops without opening ChatGPT or another window and does not hand off the query.
 - Optionally keep local study-session notes and export them to PDF.
 - Optionally enable Bible-link redirects and supported page features on websites for which you grant access.
 
@@ -52,14 +52,14 @@ Use these explanations as drafts when completing the Store listing's permission 
 | `contextMenus` | Adds the user-enabled right-click “Show on BLB” action. |
 | `scripting` | Registers or updates the feature content script for a website after the user grants the relevant optional site access and enables a feature. |
 | `alarms` | Runs the study-session auto-stop timer so recording can stop at the user's configured interval. |
-| Optional host access: `https://chatgpt.com/*` | Requested only when the user enters an Ask AI query. If granted, it enables the extension to interact with the ChatGPT composer to submit that query. If declined, the extension still opens ChatGPT with the query handoff URL. |
+| Optional host access: `https://chatgpt.com/*` | Requested only when the user enters an Ask AI query. If granted, it enables the extension to interact with the ChatGPT composer to submit that query. If declined or unavailable, the command stops without opening ChatGPT or another window and does not hand off the query. |
 
 ### Website access
 
 The following bullets describe the implementation reviewed for this document; verify all of them against the exact candidate manifest and code before submission.
 
 - Required host access is limited to `https://www.blueletterbible.org/*`.
-- `https://chatgpt.com/*` is an **optional** host permission, requested only after the user enters an Ask AI query. Granting it enables composer interaction; declining it preserves a URL-based handoff to ChatGPT. Do not describe this as guaranteed automatic submission when access is declined.
+- `https://chatgpt.com/*` is an **optional** host permission, requested only after the user enters an Ask AI query. Granting it enables composer interaction and submission. If access is declined or unavailable, Ask AI stops without opening ChatGPT or another window and does not hand off the query. Do not describe a URL fallback or query handoff on the denied-access path.
 - Broad HTTP/HTTPS host access is declared as **optional**. The extension should request access only when the user enables a feature for a site.
 - The `dict` omnibox command only opens Webster's 1828 Dictionary in a tab; it does not inject scripts there and does not require a dedicated Webster's host permission.
 - Local PDF/HTML support uses the declared `file://` content-script matches. Chrome users must separately allow access to file URLs in the extension settings for those local files.
@@ -75,7 +75,7 @@ Use the following as a review guide, not as preselected answers. For each candid
 
 - **Website/page content:** determine whether enabled features inspect selected text or page text locally to identify Bible references, Strong's values, or Bible words.
 - **User-provided or generated study data:** determine which study titles, notes, references, dates, preferences, and search history are stored in Chrome local extension storage.
-- **User-triggered navigation and AI handoff:** identify the data included in destination URLs or transferred to third-party services. For this implementation, an Ask AI query is handed to ChatGPT through its URL and, if optional ChatGPT access is granted, may be entered and submitted by the extension. Verify the current behavior and disclose the destination's own privacy policy.
+- **User-triggered navigation and AI handoff:** identify the data included in destination URLs or transferred to third-party services. For this implementation, an Ask AI query is entered and submitted by the extension only if optional ChatGPT access is granted. If access is declined or unavailable, no ChatGPT navigation or query handoff occurs. Verify the current behavior and disclose the destination's own privacy policy.
 - **Clipboard and downloads:** verify when clipboard writes occur and what data user-requested exports contain.
 - **Developer/third-party transfer:** verify whether any page text, stored study data, telemetry, diagnostics, or other information is sent to the developer or third parties. Do not carry forward an earlier no-transfer statement without checking the candidate.
 
