@@ -63,7 +63,7 @@ test('MV3 service worker starts', async ({ context, extensionId }) => {
 
 test('popup loads from extension package', async ({ page, extensionId }) => {
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await expect(page).toHaveTitle(/BLB|Blue Letter Bible/i);
+  await expect(page).toHaveTitle('KJV Scripture Tools');
   await expect(page.locator('body')).toBeVisible();
 });
 
