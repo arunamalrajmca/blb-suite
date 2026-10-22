@@ -1508,15 +1508,19 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const hasClickRange = !!(clickRange && messageRoot.contains(clickRange.startContainer));
       const clickedElementText = normalizeSelectionText(initialNode?.textContent || '').normalize('NFKC');
       const clickedElementToken = clickedElementText && !/\s/.test(clickedElementText) ? clickedElementText : '';
-      const clickToken = /^(?:v|verse|verses)$/i.test(clickedElementToken)
-        ? clickedElementToken.toLowerCase()
-        : normalizeSelectionText(clickedWordText || clickedElementToken || selected).toLowerCase();
+      // Treat the common abbreviated cue "v." like "v", while keeping the
+      // context scan restricted to an exact standalone cue token.
+      const normalizedElementToken = normalizeDoubleClickToken(clickedElementToken);
+      const normalizedSelectedToken = normalizeDoubleClickToken(clickedWordText || clickedElementToken || selected);
+      const clickToken = /^(?:v|verse|verses)$/i.test(normalizedElementToken)
+        ? normalizedElementToken
+        : normalizedSelectedToken;
       // Only an explicit verse cue may trigger post-level context scanning.
       // Numeric clicks stay on the normal resolver path to avoid expensive
       // book/chapter searches for ordinary numbers.
       const verseWordClick = /^(?:v|verse|verses)$/i.test(clickToken);
       const tokenElementIsExact = !!(initialNode && messageRoot.contains(initialNode) &&
-        clickedElementToken.toLowerCase() === clickToken);
+        normalizedElementToken === clickToken);
       if (verseWordClick) {
         messageRoot.setAttribute('data-blb-verse-context-diagnostic', JSON.stringify({
           clickToken, verseWordClick, associatedVerse: null,
