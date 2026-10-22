@@ -1155,7 +1155,7 @@ document.addEventListener('click', e => {
 });
 
 
-guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
+guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'KJV-Scripture-Tools-User-Guide.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
 async function setIndependentSiteFeature(feature, on) {
   // Do not request host permissions or persist feature opt-ins on sensitive sites.
