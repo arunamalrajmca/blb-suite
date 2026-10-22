@@ -1,4 +1,4 @@
-# BLB Suite Pre-Merge Checklist
+# KJV Scripture Tools Pre-Merge Checklist
 
 ## Automatic gates
 - [ ] Deterministic regression suite passes.
