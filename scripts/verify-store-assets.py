@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Validate the technical requirements of Chrome Web Store listing images.
+"""Validate technical requirements for Chrome Web Store listing images.
 
-This checks file integrity, supported listing dimensions, and the required small
-promotional tile. It deliberately does not claim to verify visible branding,
-legibility, rights, or whether screenshots truthfully depict the product; those
-still require human review.
+This validates image integrity and classifies known Store asset types by filename
+and dimensions. It does not verify visible branding, legibility, rights, or
+whether screenshots truthfully depict the product; those still require review.
 """
 from pathlib import Path
 import argparse
@@ -20,7 +19,18 @@ DEFAULT_ASSET_DIR = ROOT / "docs" / "chrome-web-store-assets"
 PROMO_TILE = "KJV-Scripture-Tools-Promo-Tile-440x280.png"
 PROMO_SIZE = (440, 280)
 SCREENSHOT_SIZES = {(1280, 800), (640, 400)}
+ICON_SIZES = {(16, 16), (48, 48), (128, 128)}
 SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg"}
+
+
+def classify(path: Path, size: tuple[int, int]) -> str | None:
+    if path.name == PROMO_TILE:
+        return "promo"
+    if "icon" in path.stem.lower() and size in ICON_SIZES:
+        return "icon"
+    if size in SCREENSHOT_SIZES:
+        return "screenshot"
+    return None
 
 
 def main() -> int:
@@ -43,8 +53,7 @@ def main() -> int:
         return 1
 
     errors = []
-    names = {path.name for path in assets}
-    if PROMO_TILE not in names:
+    if PROMO_TILE not in {path.name for path in assets}:
         errors.append(f"required promotional tile missing: {PROMO_TILE}")
 
     for path in assets:
@@ -52,25 +61,29 @@ def main() -> int:
             with Image.open(path) as image:
                 image.verify()
             with Image.open(path) as image:
-                size = image.size
-                fmt = image.format
+                size, fmt = image.size, image.format
         except Exception as exc:
             errors.append(f"{path.name}: image cannot be decoded ({exc})")
             continue
 
-        if path.name == PROMO_TILE:
+        kind = classify(path, size)
+        if kind is None:
+            errors.append(
+                f"{path.name}: unclassified dimensions {size[0]}x{size[1]}; "
+                "use 1280x800/640x400 for screenshots, 440x280 for the promo tile, "
+                "or name an icon file with 'icon' and use 16x16, 48x48, or 128x128"
+            )
+            continue
+
+        if kind == "promo":
             if size != PROMO_SIZE:
-                errors.append(
-                    f"{path.name}: expected {PROMO_SIZE[0]}x{PROMO_SIZE[1]}, got {size[0]}x{size[1]}"
-                )
+                errors.append(f"{path.name}: expected 440x280, got {size[0]}x{size[1]}")
             if fmt != "PNG":
                 errors.append(f"{path.name}: expected PNG format, got {fmt}")
-        elif size not in SCREENSHOT_SIZES:
-            errors.append(
-                f"{path.name}: expected screenshot size 1280x800 or 640x400, got {size[0]}x{size[1]}"
-            )
+        elif kind == "icon" and fmt != "PNG":
+            errors.append(f"{path.name}: extension icon assets must be PNG")
         else:
-            print(f"OK: {path.name} — {size[0]}x{size[1]} {fmt}")
+            print(f"OK: {path.name} — {kind}, {size[0]}x{size[1]} {fmt}")
 
     if errors:
         for error in errors:
