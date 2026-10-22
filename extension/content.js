@@ -1540,6 +1540,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         else beforeRange.setEnd(clickRange.startContainer, clickRange.startOffset);
         const beforeText = normalizeSelectionText(domText(beforeRange.cloneContents())).normalize('NFKC');
         let associatedVerse = null;
+        let followingVerse = null;
         if (verseWordClick) {
           const afterRange = document.createRange();
           afterRange.selectNodeContents(messageRoot);
@@ -1547,7 +1548,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           else afterRange.setStart(clickRange.endContainer, clickRange.endOffset);
           const afterText = normalizeSelectionText(domText(afterRange.cloneContents())).normalize('NFKC');
           const following = afterText.match(/^[\s,.:;()\[\]{}–—-]*(\d{1,3})\b/);
-          const followingVerse = following ? Number(following[1]) : null;
+          followingVerse = following ? Number(following[1]) : null;
           // Never classify an out-of-range number as an extracted verse.
           // Preserve it separately only so the gesture can be explicitly
           // rejected instead of falling through to ordinary word lookup.
@@ -1558,7 +1559,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         if (verseWordClick) {
           const diagnostic = {
             clickToken, verseWordClick, associatedVerse,
-            followingVerse: following ? Number(following[1]) : null,
+            followingVerse,
             tokenElementIsExact, hasClickRange,
             beforeText: beforeText.slice(-500)
           };
