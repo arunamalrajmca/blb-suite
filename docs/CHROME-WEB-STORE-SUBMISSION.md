@@ -46,8 +46,10 @@ Use these explanations when completing the Store listing's permission justificat
 
 ### Website access
 
-- Required host access is limited to `https://www.blueletterbible.org/*`.
+- The source manifest retains `https://chatgpt.com/*` for the developer's locally installed/unpacked build. The release packaging script removes this entry from the Chrome Web Store ZIP.
+- The Chrome Web Store package must require only `https://www.blueletterbible.org/*` as a specific website host. The ZIP integrity gate explicitly fails if `https://chatgpt.com/*` appears in the packaged `host_permissions`.
 - Broad HTTP/HTTPS host access is declared as **optional**. The extension should request access only when the user enables a feature for a site.
+- The ChatGPT handoff may not be able to programmatically submit prompts in the Chrome Web Store build because that build does not request ChatGPT host access. Verify the user experience and ensure the listing does not imply otherwise.
 - Local PDF/HTML support uses the declared `file://` content-script matches. Chrome users must separately allow access to file URLs in the extension settings for those local files.
 - Do not describe Webster's 1828 as an allowed-site redirect destination. Its presence in the code's redirect-host/source handling is not a reason to broaden or describe the set of allowed destination sites.
 
@@ -59,7 +61,7 @@ Review the Dashboard's available categories and describe at least these behavior
 
 - **Website/page content:** enabled features inspect selected text or page text locally to identify Bible references, Strong's values, or Bible words.
 - **User-provided or generated study data:** study titles, notes, references, dates, preferences, and search history are stored in Chrome local extension storage.
-- **User-triggered navigation:** when a user requests a search or opens references, the relevant query/reference may be sent in the destination URL to BLB or another selected Bible website. The destination's own privacy policy applies.
+- **User-triggered navigation:** when a user requests a search or opens references, the relevant query/reference may be sent in the destination URL to BLB or another selected Bible website. The destination's own privacy policy applies. The source/local build also contains an Ask AI handoff to ChatGPT; the store ZIP omits the required ChatGPT host permission, so verify and describe the store-build behavior accurately.
 - **Clipboard and downloads:** clipboard writes occur in response to copy actions; PDF export is user-requested.
 - **Developer/third-party transfer:** the policy states that the extension does not send page text or stored study data to the developer, analytics providers, advertising services, or data brokers.
 
@@ -81,7 +83,8 @@ The policy is present in the public repository. The Dashboard's saved URL field 
 
 Verified in the repository source:
 - Manifest declares extension icons at 16×16, 48×48, and 128×128.
-- The release workflow builds the upload ZIP from the **contents** of `extension/`, so `manifest.json` is at the ZIP root.
+- The release workflow builds the upload ZIP from the **contents** of a staging copy of `extension/`, so `manifest.json` is at the ZIP root.
+- The staging copy removes `https://chatgpt.com/*` from required host permissions; the source manifest keeps it for the developer's local unpacked installation.
 - Before upload, verify that the selected package's manifest version matches the intended release and is higher than the version currently published in the Chrome Web Store.
 
 Still requires a Developer Dashboard check:
