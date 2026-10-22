@@ -7,6 +7,7 @@ legibility, rights, or whether screenshots truthfully depict the product; those
 still require human review.
 """
 from pathlib import Path
+import argparse
 import sys
 
 try:
@@ -15,7 +16,7 @@ except ImportError as exc:
     raise SystemExit("Pillow is required: python -m pip install pillow") from exc
 
 ROOT = Path(__file__).resolve().parents[1]
-ASSET_DIR = ROOT / "docs" / "chrome-web-store-assets"
+DEFAULT_ASSET_DIR = ROOT / "docs" / "chrome-web-store-assets"
 PROMO_TILE = "KJV-Scripture-Tools-Promo-Tile-440x280.png"
 PROMO_SIZE = (440, 280)
 SCREENSHOT_SIZES = {(1280, 800), (640, 400)}
@@ -23,12 +24,18 @@ SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
 
 def main() -> int:
-    if not ASSET_DIR.is_dir():
-        print(f"ERROR: asset directory not found: {ASSET_DIR}", file=sys.stderr)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--asset-dir", type=Path, default=DEFAULT_ASSET_DIR,
+                        help="directory containing the listing image files")
+    args = parser.parse_args()
+    asset_dir = args.asset_dir.resolve()
+
+    if not asset_dir.is_dir():
+        print(f"ERROR: asset directory not found: {asset_dir}", file=sys.stderr)
         return 1
 
     assets = sorted(
-        path for path in ASSET_DIR.iterdir()
+        path for path in asset_dir.iterdir()
         if path.is_file() and path.suffix.lower() in SUPPORTED_EXTENSIONS
     )
     if not assets:
