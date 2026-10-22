@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Blue Letter Bible Suite",
+  "name": "KJV Scripture Tools",
   "version": "5.2.51.99",
   "description": "Send Bible references and searches to Blue Letter Bible with selection tools and local KJV case-sensitive search.",
   "permissions": [
@@ -39,7 +39,7 @@
     }
   },
   "action": {
-    "default_title": "BLB Suite",
+    "default_title": "KJV Scripture Tools",
     "default_icon": {
       "16": "icons/icon16.png",
       "48": "icons/icon48.png",
