@@ -16,7 +16,8 @@ if (!base || !/^[0-9a-f]{7,40}$/i.test(base)) {
 }
 
 const run = (args) => execFileSync("git", args, { encoding: "utf8" }).trimEnd();
-const changed = run(["diff", "--name-only", "--diff-filter=ACMR", `${base}...HEAD`])
+// Include deletions and type changes: removing runtime code can change behavior too.
+const changed = run(["diff", "--name-only", "--diff-filter=ACDMRT", `${base}...${"HEAD"}`])
   .split("\n").filter(Boolean);
 
 if (!changed.length) {
