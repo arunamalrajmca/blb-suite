@@ -604,6 +604,13 @@ async function clearTrackedMultiVerseTab(tabId) {
   });
 }
 
+function isReservedMultiVerseTabCandidate(tab, handoffUrl) {
+  const urls = [tab?.url, tab?.pendingUrl].map(value => String(value || '')).filter(Boolean);
+  return urls.some(url =>
+    /^about:blank(?:[#?].*)?$/i.test(url) || url.startsWith(handoffUrl)
+  ) || tab?.status === 'loading';
+}
+
 async function findMatchingMultiVerseTab(setKey, tabs) {
   const tracked = await getTrackedMultiVerseTabs();
   const staleTabIds = [];
@@ -624,10 +631,20 @@ async function findMatchingMultiVerseTab(setKey, tabs) {
     const handoffUrl = chrome.runtime.getURL('multiverse-post.html');
     const isMultiVerseHandoff = urls.some(url => url.startsWith(handoffUrl));
     const isBlank = urls.length > 0 && urls.every(url => /^about:blank(?:[#?].*)?$/i.test(url));
-    if (!isMultiVerse && !isBlank && !isMultiVerseHandoff) { staleTabIds.push(String(tab.id)); continue; }
-    // A tracked blank or POST-handoff tab is a reserved destination: its
-    // payload is already attached to that tab, so reuse it during navigation.
-    if (!match && entry.key === setKey && (isMultiVerse || isBlank || isMultiVerseHandoff)) match = tab;
+    // A tracked tab can briefly report an intermediate URL while the POST
+    // handoff navigates to BLB. Keep its reservation while Chrome reports the
+    // tab as loading; the navigation listener clears it only after an unrelated
+    // destination finishes loading. Otherwise a repeated request can race that
+    // transient URL and create a duplicate batch tab.
+    const transientNavigation = tab.status === 'loading';
+    if (!isMultiVerse && !isBlank && !isMultiVerseHandoff && !transientNavigation) {
+      staleTabIds.push(String(tab.id));
+      continue;
+    }
+    // A tracked blank, handoff, or still-loading transition remains reserved
+    // for this batch until the final destination is known.
+    if (!match && entry.key === setKey &&
+        (isMultiVerse || isBlank || isMultiVerseHandoff || transientNavigation)) match = tab;
   }
   if (staleTabIds.length) {
     await updateTrackedMultiVerseTabs(map => {
@@ -866,9 +883,10 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
           .map(async ([id]) => {
             try {
               const tab = await chrome.tabs.get(Number(id));
-              const urls = [tab?.url, tab?.pendingUrl].map(value => String(value || '')).filter(Boolean);
-              return urls.some(url => /^about:blank(?:[#?].*)?$/i.test(url) || url.startsWith(handoffUrl))
-                ? tab : null;
+              // During redirect/navigation the tracked tab may expose an
+              // intermediate URL that matches neither BLB nor the handoff page.
+              // Keep loading reservations discoverable until the final URL is known.
+              return isReservedMultiVerseTabCandidate(tab, handoffUrl) ? tab : null;
             } catch (_) { return null; }
           }))).filter(Boolean);
         return findMatchingMultiVerseTab(verseSetKey, [...multiVerseTabs, ...reservedTabs]);
@@ -2909,7 +2927,10 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   // navigates to BLB, allowing a repeated request to create duplicate tabs.
   const isMultiVerseHandoff = url.startsWith(chrome.runtime.getURL('multiverse-post.html'));
 
-  if (!isBlank && !isMultiVerse && !isMultiVerseHandoff) {
+  // URL-change events can expose an intermediate redirect URL while the
+  // POST handoff is still navigating. Clear a reservation only when an
+  // unrelated destination has actually finished loading.
+  if (!isBlank && !isMultiVerse && !isMultiVerseHandoff && changeInfo.status === 'complete') {
     clearTrackedMultiVerseTab(tabId).catch(()=>{});
   }
 });

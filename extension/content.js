@@ -1,4 +1,10 @@
+// Top-level execution marker lets the browser E2E distinguish file execution
+// from failures inside the async initializer below.
+try { window.__blbSuiteContentScriptFileExecutedV3 = true; } catch (_) {}
 (async function () {
+// Lightweight test/diagnostic marker: content-script injection is distinct from
+// whether the user's per-site double-click preference enables the listener.
+try { window.__blbSuiteContentScriptLoadedV2 = true; } catch (_) {}
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
 const BLB_ORIGIN = BLBShared.urls.blbOrigin;
 // Blue Letter Bible Suite 5.2.25 - unified content script
@@ -1471,6 +1477,160 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       }
     }
     if (!selected) return null;
+
+    // Cross-site article/post-level "verse N" context. Keep the scan inside
+    // the nearest recognizable content root instead of depending on Facebook's
+    // private DOM attributes; this supports articles, Substack posts, and other
+    // sites while avoiding a whole-document scan on pages with unrelated refs.
+    const messageRoot = initialNode?.closest?.(
+      '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
+      '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
+      '.entry-content, .article-body, .article-content, .content-body'
+    ) || initialNode?.closest?.('article, main, [role="main"]');
+    if (messageRoot) {
+      // Coordinate-based caret APIs can occasionally resolve against a nearby
+      // overlay or a stale layout position. Accept that range only when it is
+      // actually inside this message; otherwise fall back to a matching live
+      // selection rooted in the same message instead of letting an unrelated
+      // range suppress the Facebook context resolver.
+      const clickRange = (clickedWordRange && messageRoot.contains(clickedWordRange.startContainer))
+        ? clickedWordRange
+        : (() => {
+          const liveSelection = window.getSelection?.();
+          if (!liveSelection?.rangeCount || liveSelection.isCollapsed) return null;
+          const liveText = normalizeSelectionText(liveSelection.toString()).normalize('NFKC').toLowerCase();
+          const targetText = normalizeSelectionText(clickedWordText || initialNode?.textContent || '').normalize('NFKC').toLowerCase();
+          // Never use a non-empty selection left behind by a prior double-click
+          // as the location of the current gesture.
+          if (targetText && !/\s/.test(targetText) && liveText !== targetText) return null;
+          const range = liveSelection.getRangeAt(0);
+          return messageRoot.contains(range.startContainer) ? range : null;
+        })();
+      // Facebook may expose a stale or out-of-message Selection after a
+      // double-click. If the physical target is the exact verse token, its
+      // element boundary is sufficient to resolve the adjacent number and
+      // earlier chapter context; do not require a caret range in that case.
+      const hasClickRange = !!(clickRange && messageRoot.contains(clickRange.startContainer));
+      const clickedElementText = normalizeSelectionText(initialNode?.textContent || '').normalize('NFKC');
+      const clickedElementToken = clickedElementText && !/\s/.test(clickedElementText) ? clickedElementText : '';
+      // Treat the common abbreviated cue "v." like "v", while keeping the
+      // context scan restricted to an exact standalone cue token.
+      const normalizedElementToken = normalizeDoubleClickToken(clickedElementToken);
+      const normalizedSelectedToken = normalizeDoubleClickToken(clickedWordText || clickedElementToken || selected);
+      const clickToken = /^(?:v|verse|verses)$/i.test(normalizedElementToken)
+        ? normalizedElementToken
+        : normalizedSelectedToken;
+      // Only an explicit verse cue may trigger post-level context scanning.
+      // Numeric clicks stay on the normal resolver path to avoid expensive
+      // book/chapter searches for ordinary numbers.
+      const verseWordClick = /^(?:v|verse|verses)$/i.test(clickToken);
+      const tokenElementIsExact = !!(initialNode && messageRoot.contains(initialNode) &&
+        normalizedElementToken === clickToken);
+      if (verseWordClick) {
+        messageRoot.setAttribute('data-blb-verse-context-diagnostic', JSON.stringify({
+          clickToken, verseWordClick, associatedVerse: null,
+          tokenElementIsExact, hasClickRange,
+          stage: 'cue-detected-before-range-check'
+        }));
+      }
+      if (hasClickRange || tokenElementIsExact) {
+        const beforeRange = document.createRange();
+        beforeRange.selectNodeContents(messageRoot);
+        if (tokenElementIsExact) beforeRange.setEndBefore(initialNode);
+        else beforeRange.setEnd(clickRange.startContainer, clickRange.startOffset);
+        const beforeText = normalizeSelectionText(domText(beforeRange.cloneContents())).normalize('NFKC');
+        let associatedVerse = null;
+        let followingVerse = null;
+        if (verseWordClick) {
+          const afterRange = document.createRange();
+          afterRange.selectNodeContents(messageRoot);
+          if (tokenElementIsExact) afterRange.setStartAfter(initialNode);
+          else afterRange.setStart(clickRange.endContainer, clickRange.endOffset);
+          const afterText = normalizeSelectionText(domText(afterRange.cloneContents())).normalize('NFKC');
+          const following = afterText.match(/^[\s,.:;()\[\]{}–—-]*(\d{1,3})\b/);
+          followingVerse = following ? Number(following[1]) : null;
+          // Never classify an out-of-range number as an extracted verse.
+          // Preserve it separately only so the gesture can be explicitly
+          // rejected instead of falling through to ordinary word lookup.
+          if (Number.isInteger(followingVerse) && followingVerse >= 1 && followingVerse <= 176) {
+            associatedVerse = followingVerse;
+          }
+        }
+        if (verseWordClick) {
+          const diagnostic = {
+            clickToken, verseWordClick, associatedVerse,
+            followingVerse,
+            tokenElementIsExact, hasClickRange,
+            beforeText: beforeText.slice(-500)
+          };
+          messageRoot.setAttribute('data-blb-verse-context-diagnostic', JSON.stringify(diagnostic));
+        }
+        if (verseWordClick && associatedVerse) {
+          // The first number immediately following the clicked cue is the
+          // verse. Do not search for other verse numbers in the post. Resolve
+          // chapter context by walking backward from the cue and stop at the
+          // nearest valid explicit reference (including chapter-only forms).
+          const contextText = beforeText.replace(/[\u2010-\u2015\u2212]/g, '-');
+          const entries = [];
+          const seenNames = new Set();
+          const addBookName = (name, book) => {
+            const value = String(name || '').trim();
+            const key = value.toLowerCase();
+            if (!value || !book || seenNames.has(key)) return;
+            seenNames.add(key);
+            entries.push({name: value, book});
+          };
+          for (const book of BOOKS) {
+            addBookName(book.name, book);
+            addBookName(book.urlKey, book);
+          }
+          for (const [alias, target] of Object.entries(BOOK_ALIASES)) {
+            const book = BOOKS.find(candidate => candidate.name === target);
+            if (book) addBookName(alias, book);
+          }
+          entries.sort((a, b) => b.name.length - a.name.length);
+          const candidates = [];
+          for (const entry of entries) {
+            const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+            const pattern = new RegExp(
+              `(?:^|[^A-Za-z0-9])${escaped}\\.?\\s+(\\d{1,3})(?:(?::|\\.)\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])`,
+              'gi'
+            );
+            let match;
+            while ((match = pattern.exec(contextText)) !== null) {
+              const chapter = Number(match[1]);
+              if (!Number.isInteger(chapter) || chapter < 1) continue;
+              if (!resolveBibleReference(entry.book.name, chapter, 1, 1)) continue;
+              candidates.push({index: match.index, book: entry.book.name, chapter});
+            }
+          }
+          // Use only the closest valid book/chapter match before the cue.
+          candidates.sort((a, b) => b.index - a.index);
+          const context = candidates.length
+            ? {book: candidates[0].book, chapter: candidates[0].chapter}
+            : null;
+          const priorReferences = [];
+          const resolved = context
+            ? resolveBibleReference(context.book, context.chapter, associatedVerse, associatedVerse)
+            : null;
+          const resolutionDiagnostic = {
+            associatedVerse, context, priorReferences,
+            resolvedUrl: resolved?.url || null
+          };
+          messageRoot.setAttribute('data-blb-verse-context-resolution', JSON.stringify(resolutionDiagnostic));
+          if (context) {
+            if (resolved) return {
+              book: resolved.book,
+              chapter: resolved.chapter,
+              from: resolved.from,
+              to: resolved.to,
+              url: resolved.url
+            };
+          }
+        }
+      }
+    }
+
     const node = initialNode || document.documentElement;
 
     // Version-code clicks must resolve only inside the clicked word's nearest
@@ -1975,7 +2135,23 @@ function handleDoubleClickBlb(event) {
         // Re-read the native selection on every frame until Chromium commits
         // the current double-click. The physical event coordinates remain the
         // authoritative target while the Selection is settling.
-        const selection=getDoubleClickSelection(event);
+        let selection=getDoubleClickSelection(event);
+        // On double-click, Chromium may still expose the previous word's
+        // non-empty Selection. For the narrowly supported verse-context
+        // gesture, the physical event target is authoritative: use its exact
+        // token before classifying the gesture, or the post-level resolver
+        // never runs when Selection is stale.
+        const eventTarget = event.target instanceof Element
+          ? event.target
+          : (event.target?.parentElement || null);
+        const caretTarget = getDoubleClickTargetElement(event);
+        const cueTarget = [eventTarget, caretTarget].find(candidate =>
+          /^(?:v|verse|verses)$/i.test(
+            normalizeSelectionText(candidate?.textContent || '').normalize('NFKC')
+          )
+        );
+        const physicalToken = normalizeSelectionText(cueTarget?.textContent || '').normalize('NFKC');
+        if (cueTarget && /^(?:v|verse|verses)$/i.test(physicalToken)) selection = physicalToken;
         if (!selection) {
           if (Date.now()-started<1500) requestAnimationFrame(dispatch);
           return true;
@@ -1993,6 +2169,11 @@ function handleDoubleClickBlb(event) {
         // reference and open it in BLB's default KJV view regardless of the
         // clicked version code.
         const isBibleVersionCode = isBibleVersionCodeToken(selection);
+        // Verse cues must reach the narrowly scoped Facebook post resolver
+        // even when "verse" is absent from the generated KJV word index.
+        // Declare this outside the fast-rejection block because target selection
+        // and the DOM-context resolver also need the same cue classification.
+        const isVerseContextWord = /^(?:v|verse|verses)$/i.test(selection);
 
         // Reject unrelated English single words before building DOM context or
         // entering the background selection resolver. This is an exact local
@@ -2009,7 +2190,7 @@ function handleDoubleClickBlb(event) {
           // reference check below; without a valid nearby prefix they remain
           // inert and are not sent to ordinary word lookup.
           const isRomanBookPrefixToken = /^(?:I|II|III)$/i.test(selection);
-          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isRomanBookPrefixToken) return true;
+          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isRomanBookPrefixToken && !isVerseContextWord) return true;
         }
 
         // DOM context is useful only when the clicked token can identify a
@@ -2030,7 +2211,14 @@ function handleDoubleClickBlb(event) {
         );
         const isPrefixedBookName=hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
         const isBookName=!hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
-        const contextualTarget=getDoubleClickTargetElement(event)||event.target;
+        // For explicit verse cues, preserve the physical event target. The generic caret-target helper can return a nearby/stale element, which prevents the post-level resolver from finding the containing message. Other gestures retain the existing target selection behavior.
+        const cueElement = [event.target instanceof Element ? event.target : event.target?.parentElement,
+          getDoubleClickTargetElement(event)].find(candidate =>
+            /^(?:v|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
+          );
+        const contextualTarget=isVerseContextWord
+          ? (cueElement || (event.target instanceof Element ? event.target : (event.target?.parentElement || event.target)))
+          : (getDoubleClickTargetElement(event)||event.target);
 
         // A suffix such as "Peter" or "Sam" can be part of a numbered book
         // name. Only enter contextual matching when the complete nearby prefix
@@ -2058,10 +2246,32 @@ function handleDoubleClickBlb(event) {
               && match[1].toUpperCase()===selection.toUpperCase());
           } catch (_) {}
         }
-        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture;
+        // "verse" is not guaranteed to be in the local KJV word index on
+        // every build, but in a Facebook post it is the explicit cue for a
+        // nearby verse number. Let the tightly gated post resolver inspect it.
+        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord;
         const blockContext=needsDomContext
           ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
           : null;
+
+        // A verse cue is allowed to associate only with a valid verse number
+        // (1–176). Psalm 119 is the maximum KJV chapter length; larger adjacent
+        // numbers must not fall through to ordinary word lookup or inherit the
+        // chapter context as if they were verses.
+        if (isVerseContextWord) {
+          const cueRoot = contextualTarget instanceof Element
+            ? contextualTarget.closest(
+              '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
+              '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
+              '.entry-content, .article-body, .article-content, .content-body'
+            )
+            : null;
+          try {
+            const cueDiagnostic = JSON.parse(cueRoot?.getAttribute('data-blb-verse-context-diagnostic') || '{}');
+            if (Number.isInteger(cueDiagnostic.followingVerse) &&
+                (cueDiagnostic.followingVerse < 1 || cueDiagnostic.followingVerse > 176)) return true;
+          } catch (_) {}
+        }
 
         // Wait for the native selection/context to settle only for a number
         // that could be a standalone book number or part of a Bible reference.

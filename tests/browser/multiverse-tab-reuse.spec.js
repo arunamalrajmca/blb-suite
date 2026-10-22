@@ -102,11 +102,18 @@ test('independent MultiVerse commands start opening tabs without waiting for ear
 });
 
 test('MultiVerse reuses both 200-verse batches when the same selection is repeated or reordered', async ({ context, extensionWorker }) => {
-  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
-    status: 200,
-    contentType: 'text/html',
-    body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
-  }));
+  const submittedPayloads = [];
+  await context.route('https://www.blueletterbible.org/**', route => {
+    if (route.request().method() === 'POST') {
+      const body = new URLSearchParams(route.request().postData() || '');
+      submittedPayloads.push(body.get('mvText') || '');
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
+    });
+  });
 
   const first = await openMultiVerse(extensionWorker, SELECTION);
   expect(first?.ok).toBe(true);
@@ -126,10 +133,41 @@ test('MultiVerse reuses both 200-verse batches when the same selection is repeat
   expect(reversed.batchCount).toBe(2);
   expect(reversed.tabIds).toEqual(first.tabIds);
 
+  // The same and reordered selections must reuse their reservations even if
+  // the initial POST handoffs have not both completed. Waiting here would mask
+  // a race that can create duplicate tabs during the handoff navigation.
+  await expect.poll(() => submittedPayloads.length, { timeout: 20000 }).toBe(2);
+
   const trackedTabs = await getTrackedMultiVerseTabs(extensionWorker, first.tabIds);
   expect(new Set(trackedTabs.map(tab => tab.id))).toEqual(new Set(first.tabIds));
   expect(trackedTabs.every(tab => tab.key), JSON.stringify(trackedTabs, null, 2)).toBe(true);
   expect(new Set(trackedTabs.map(tab => tab.key)).size).toBe(2);
+});
+
+test('tracked MultiVerse reservations survive an intermediate loading URL', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    const handoffUrl = chrome.runtime.getURL('multiverse-post.html');
+    return {
+      intermediateLoading: isReservedMultiVerseTabCandidate({
+        status: 'loading',
+        url: 'https://redirect.example/intermediate',
+        pendingUrl: 'https://redirect.example/intermediate'
+      }, handoffUrl),
+      unrelatedComplete: isReservedMultiVerseTabCandidate({
+        status: 'complete',
+        url: 'https://redirect.example/final',
+        pendingUrl: 'https://redirect.example/final'
+      }, handoffUrl),
+      handoffComplete: isReservedMultiVerseTabCandidate({
+        status: 'complete',
+        url: handoffUrl,
+        pendingUrl: handoffUrl
+      }, handoffUrl)
+    };
+  });
+  expect(result.intermediateLoading, 'a redirecting reservation must remain discoverable').toBe(true);
+  expect(result.unrelatedComplete, 'a completed unrelated destination must be treated as stale').toBe(false);
+  expect(result.handoffComplete, 'the extension POST handoff remains a valid reservation').toBe(true);
 });
 
 test('MultiVerse opens every batch for requests exceeding 20 tabs', async ({ context, extensionWorker }) => {

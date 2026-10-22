@@ -7,7 +7,10 @@ module.exports = defineConfig({
   expect: { timeout: 10000 },
   fullyParallel: false,
   workers: 1,
-  retries: process.env.CI ? 1 : 0,
+  // Stop the entire Playwright run on the first failed test. Do not retry
+  // failures first: a failure should immediately gate the remaining suite.
+  maxFailures: 1,
+  retries: 0,
   reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }], ['json', { outputFile: 'test-results/results.json' }]],
   use: {
     trace: 'retain-on-failure',

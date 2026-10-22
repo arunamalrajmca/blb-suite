@@ -68,6 +68,196 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
 });
 
 test.describe('core user-visible E2E', () => {
+  // Run the generic article verse-context regression first. In serial mode, any
+  // failure skips the legacy tests in this suite for a faster feedback loop;
+  // once the regression passes, all existing coverage runs unchanged.
+  test.describe.configure({ mode: 'serial' });
+
+  test('Generic article verse cues follow the latest explicit chapter context', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({
+      masterEnabled: true,
+      doubleClickBlbSites: { 'example.com': true }
+    });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('body')).toBeVisible();
+
+    // Use a normal article DOM on example.com, not Facebook markup or a live
+    // social-media post. The fixture reproduces only the relevant text pattern.
+    await page.evaluate(() => {
+      document.body.innerHTML = `
+        <main>
+          <article id="generic-verse-context-article" class="article-content">
+            <p>Chapter reference: 1 Kings 18.</p>
+            <p><span id="generic-verse-42">verse</span> 42.</p>
+            <p><span id="generic-verse-44">Verse</span> 44.</p>
+            <p><span id="generic-verse-46">verses</span> 46.</p>
+            <p>The next chapter is 1 Kings 19.</p>
+            <p><span id="generic-verse-19-18">verse</span> 18.</p>
+            <p>Psalm 119.</p>
+            <p><span id="generic-verse-176">v</span> 176.</p>
+            <p><span id="generic-verse-177">verses</span> 177.</p>
+            <p>An unrelated number: <span id="generic-unrelated-number">7000</span>.</p>
+          </article>
+        </main>`;
+    });
+
+    const article = page.locator('#generic-verse-context-article');
+    await expect(article).toBeVisible();
+    const gestures = [
+      ['#generic-verse-42', 42, 18, '/kjv/1ki/18/42/'],
+      ['#generic-verse-44', 44, 18, '/kjv/1ki/18/44/'],
+      ['#generic-verse-46', 46, 18, '/kjv/1ki/18/46/'],
+      ['#generic-verse-19-18', 18, 19, '/kjv/1ki/19/18/']
+    ];
+
+    for (const [selector, verse, chapter, expectedPath] of gestures) {
+      await article.evaluate(root => {
+        root.removeAttribute('data-blb-verse-context-diagnostic');
+        root.removeAttribute('data-blb-verse-context-resolution');
+      });
+      const beforeIds = await extensionWorker.evaluate(() =>
+        chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+      );
+
+      // This is a real browser double-click on a cue in ordinary article DOM.
+      await page.locator(selector).dblclick();
+
+      await expect.poll(async () => {
+        const value = await article.getAttribute('data-blb-verse-context-diagnostic');
+        try { return JSON.parse(value || '{}').associatedVerse; } catch (_) { return null; }
+      }, { timeout: 3000, intervals: [100, 200, 300] }).toBe(verse);
+
+      const resolutionText = await article.getAttribute('data-blb-verse-context-resolution');
+      const resolution = JSON.parse(resolutionText || '{}');
+      expect(resolution.associatedVerse, selector + ': wrong adjacent verse number').toBe(verse);
+      expect(resolution.context, selector + ': chapter context was not resolved').toEqual({
+        book: '1 kings',
+        chapter
+      });
+      expect(resolution.resolvedUrl, selector + ': wrong resolved URL').toBe('https://www.blueletterbible.org' + expectedPath);
+
+      await activateBlbTabForPath(extensionWorker, expectedPath, {
+        fragment: selector,
+        selector: '#generic-verse-context-article',
+        selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
+      });
+      const newPassagePaths = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+        tabs.filter(tab => !before.includes(tab.id)).map(tab => {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            return url.hostname.endsWith('blueletterbible.org') ? url.pathname : '';
+          } catch (_) { return ''; }
+        }).filter(Boolean)
+      ), beforeIds);
+      expect(newPassagePaths, selector + ': expected passage tab was not opened').toContain(expectedPath);
+
+      await extensionWorker.evaluate(path => chrome.tabs.query({}).then(async tabs => {
+        for (const tab of tabs) {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            if (url.hostname.endsWith('blueletterbible.org') && url.pathname === path && tab.id != null) {
+              await chrome.tabs.remove(tab.id);
+            }
+          } catch (_) {}
+        }
+      }), expectedPath);
+    }
+
+    // The verse cue accepts the KJV maximum chapter verse number (176),
+    // but must reject 177 instead of treating it as a verse or word lookup.
+    await article.evaluate(root => {
+      root.removeAttribute('data-blb-verse-context-diagnostic');
+      root.removeAttribute('data-blb-verse-context-resolution');
+    });
+    await page.locator('#generic-verse-176').dblclick();
+    await expect.poll(async () => {
+      const value = await article.getAttribute('data-blb-verse-context-resolution');
+      try { return JSON.parse(value || '{}').resolvedUrl; } catch (_) { return null; }
+    }, { timeout: 3000, intervals: [100, 200, 300] }).toBe('https://www.blueletterbible.org/kjv/psa/119/176/');
+
+    const beforeInvalidVerse = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+    );
+    await page.locator('#generic-verse-177').dblclick();
+    await expect.poll(async () => {
+      const value = await article.getAttribute('data-blb-verse-context-diagnostic');
+      try { return JSON.parse(value || '{}').associatedVerse; } catch (_) { return null; }
+    }, { timeout: 3000, intervals: [100, 200, 300] }).toBe(null);
+    await expect.poll(async () => {
+      const value = await article.getAttribute('data-blb-verse-context-diagnostic');
+      try { return JSON.parse(value || '{}').followingVerse; } catch (_) { return null; }
+    }, { timeout: 3000, intervals: [100, 200, 300] }).toBe(177);
+    await page.waitForTimeout(300);
+    const afterInvalidVerse = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+      tabs.filter(tab => !before.includes(tab.id)).map(tab => String(tab.url || tab.pendingUrl || ''))
+    ), beforeInvalidVerse);
+    expect(afterInvalidVerse, 'verse cue followed by 177 must not open a passage or fall through to word lookup').toEqual([]);
+
+    // A bare number must not trigger post/article-wide context scanning or open
+    // a passage merely because explicit chapter references precede it.
+    const beforeBareNumber = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+    );
+    await page.locator('#generic-unrelated-number').dblclick();
+    await page.waitForTimeout(500);
+    const afterBareNumber = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+      tabs.filter(tab => !before.includes(tab.id)).map(tab => String(tab.url || tab.pendingUrl || ''))
+    ), beforeBareNumber);
+    expect(afterBareNumber, 'unrelated number must not create a tab or inherit article context').toEqual([]);
+  });
+
+  test('Article verse cues resolve context outside Facebook', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({
+      masterEnabled: true,
+      doubleClickBlbSites: { 'www.supplyofgrace.com': true, 'supplyofgrace.com': true }
+    });
+    await page.goto('https://www.supplyofgrace.com/p/psalms-hymns-and-spiritual-songs', {
+      waitUntil: 'domcontentloaded'
+    });
+    await page.waitForLoadState('load').catch(() => {});
+    // Ensure the actual article content is present before marking its real cue.
+    const article = page.locator('.dt-post-body').first();
+    await expect(article, 'Supply of Grace article body must render').toBeVisible({ timeout: 20000 });
+    await page.evaluate(() => {
+      const root = document.querySelector('.dt-post-body');
+      if (!root) throw new Error('Actual Supply of Grace article body not found');
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        const value = node.nodeValue || '';
+        const match = /\bVerse\b/i.exec(value);
+        if (!match || !/^\s+1\b/.test(value.slice(match.index + match[0].length))) continue;
+        const parent = node.parentNode;
+        const before = document.createTextNode(value.slice(0, match.index));
+        const cue = document.createElement('span');
+        cue.id = 'sog-verse-cue';
+        cue.textContent = match[0];
+        // Keep the adjacent verse number outside the cue, as on the live page.
+        const after = document.createTextNode(value.slice(match.index + match[0].length));
+        parent.insertBefore(before, node);
+        parent.insertBefore(cue, node);
+        parent.insertBefore(after, node);
+        parent.removeChild(node);
+        return;
+      }
+      throw new Error('Actual article did not contain the expected Verse 1 cue');
+    });
+
+    await page.locator('#sog-verse-cue').dblclick();
+    await expect.poll(async () => page.locator('[data-blb-verse-context-diagnostic]').count(), {
+      timeout: 3000, intervals: [100, 200, 300]
+    }).toBeGreaterThan(0);
+    const diagnosticText = await page.locator('[data-blb-verse-context-diagnostic]').first()
+      .getAttribute('data-blb-verse-context-diagnostic');
+    const diagnostic = JSON.parse(diagnosticText || '{}');
+    expect(diagnostic.associatedVerse, 'generic article cue must extract verse 1').toBe(1);
+    await activateBlbTabForPath(extensionWorker, '/kjv/psa/136/1/', {
+      fragment: '#sog-verse-cue',
+      selector: '.dt-post-body',
+      selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
+    });
+  });
+
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
