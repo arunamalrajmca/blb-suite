@@ -1575,9 +1575,9 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           entries.sort((a, b) => b.name.length - a.name.length);
           const candidates = [];
           for (const entry of entries) {
-            const escaped = entry.name.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+            const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
             const pattern = new RegExp(
-              \`(?:^|[^A-Za-z0-9])\${escaped}\\.?\\s+(\\d{1,3})(?:(?::|\\.)\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])\`,
+              `(?:^|[^A-Za-z0-9])${escaped}\\.?\\s+(\\d{1,3})(?:(?::|\\.)\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])`,
               'gi'
             );
             let match;
