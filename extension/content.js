@@ -1478,10 +1478,15 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     }
     if (!selected) return null;
 
-    // Facebook post-level "verse N" context: these references can be in
-    // separate dir=auto paragraphs inside one message container. Only apply
-    // this fallback to the word "verse" or its immediately associated number.
-    const messageRoot = initialNode?.closest?.('[data-ad-comet-preview="message"], [role="article"]');
+    // Cross-site article/post-level "verse N" context. Keep the scan inside
+    // the nearest recognizable content root instead of depending on Facebook's
+    // private DOM attributes; this supports articles, Substack posts, and other
+    // sites while avoiding a whole-document scan on pages with unrelated refs.
+    const messageRoot = initialNode?.closest?.(
+      '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
+      '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
+      '.entry-content, .article-body, .article-content, .content-body'
+    ) || initialNode?.closest?.('article, main, [role="main"]');
     if (messageRoot) {
       // Coordinate-based caret APIs can occasionally resolve against a nearby
       // overlay or a stale layout position. Accept that range only when it is
