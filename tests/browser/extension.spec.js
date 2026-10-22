@@ -384,6 +384,57 @@ test.describe('core user-visible E2E', () => {
     expect(after, 'unrelated number must not inherit chapter context').toEqual([]);
   });
 
+  test('Article verse cues resolve context outside Facebook', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({
+      masterEnabled: true,
+      doubleClickBlbSites: { 'www.supplyofgrace.com': true, 'supplyofgrace.com': true }
+    });
+    await page.goto('https://www.supplyofgrace.com/p/psalms-hymns-and-spiritual-songs', {
+      waitUntil: 'domcontentloaded'
+    });
+    await page.waitForLoadState('load').catch(() => {});
+    // Ensure the actual article content is present before marking its real cue.
+    const article = page.locator('.dt-post-body').first();
+    await expect(article, 'Supply of Grace article body must render').toBeVisible({ timeout: 20000 });
+    await page.evaluate(() => {
+      const root = document.querySelector('.dt-post-body');
+      if (!root) throw new Error('Actual Supply of Grace article body not found');
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      while (walker.nextNode()) {
+        const node = walker.currentNode;
+        const value = node.nodeValue || '';
+        const match = /\\bVerse\\s+1\\b/i.exec(value);
+        if (!match) continue;
+        const parent = node.parentNode;
+        const before = document.createTextNode(value.slice(0, match.index));
+        const cue = document.createElement('span');
+        cue.id = 'sog-verse-cue';
+        cue.textContent = match[0].replace(/\\s+1$/i, '');
+        const after = document.createTextNode(value.slice(match.index + match[0].length));
+        parent.insertBefore(before, node);
+        parent.insertBefore(cue, node);
+        parent.insertBefore(after, node);
+        parent.removeChild(node);
+        return;
+      }
+      throw new Error('Actual article did not contain the expected Verse 1 cue');
+    });
+
+    await page.locator('#sog-verse-cue').dblclick();
+    await expect.poll(async () => page.locator('[data-blb-verse-context-diagnostic]').count(), {
+      timeout: 3000, intervals: [100, 200, 300]
+    }).toBeGreaterThan(0);
+    const diagnosticText = await page.locator('[data-blb-verse-context-diagnostic]').first()
+      .getAttribute('data-blb-verse-context-diagnostic');
+    const diagnostic = JSON.parse(diagnosticText || '{}');
+    expect(diagnostic.associatedVerse, 'generic article cue must extract verse 1').toBe(1);
+    await activateBlbTabForPath(extensionWorker, '/kjv/psa/136/1/', {
+      fragment: '#sog-verse-cue',
+      selector: '.dt-post-body',
+      selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
+    });
+  });
+
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
