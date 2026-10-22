@@ -5,6 +5,7 @@ on:
     paths:
       - 'scripts/verify-store-package.py'
       - 'scripts/verify-store-submission-assets.py'
+      - 'tests/test_verify_store_package.py'
       - '.github/workflows/verify-store-submission-tools.yml'
   push:
     branches:
@@ -12,6 +13,7 @@ on:
     paths:
       - 'scripts/verify-store-package.py'
       - 'scripts/verify-store-submission-assets.py'
+      - 'tests/test_verify_store_package.py'
       - '.github/workflows/verify-store-submission-tools.yml'
   workflow_dispatch:
 
@@ -30,9 +32,11 @@ jobs:
           python-version: '3.12'
       - name: Install image validation dependency
         run: python -m pip install pillow
-      - name: Compile verification scripts
-        run: python -m py_compile scripts/verify-store-package.py scripts/verify-store-submission-assets.py
+      - name: Compile verification scripts and tests
+        run: python -m py_compile scripts/verify-store-package.py scripts/verify-store-submission-assets.py tests/test_verify_store_package.py
       - name: Verify command-line interfaces
         run: |
           python scripts/verify-store-package.py --help
           python scripts/verify-store-submission-assets.py --help
+      - name: Run exact-package auditor tests
+        run: python -m unittest discover -s tests -p 'test_verify_store_package.py' -v
