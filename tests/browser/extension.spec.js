@@ -210,9 +210,9 @@ test.describe('core user-visible E2E', () => {
     // a synthetic post or synthetic verse/chapter context to the page.
     // Facebook can render the permalink as a modal over the feed. Prefer
     // that real dialog, with a text-based fallback for layout variations.
-    const postScope = page.getByRole('dialog').filter({ hasText: /verse\\s+42/i }).filter({ hasText: /1 Kings 18/i }).first();
+    const postScope = page.getByRole('dialog').filter({ hasText: /verse\s+42/i }).filter({ hasText: /1 Kings 18/i }).first();
     const realPost = (await postScope.count()) ? postScope : page.locator('div').filter({
-      hasText: /verse\\s+42/i
+      hasText: /verse\s+42/i
     }).filter({ hasText: /1 Kings 18/i }).last();
     await expect(realPost, 'Facebook post containing the real "verse 42" and 1 Kings 18 context must render')
       .toBeVisible({ timeout: 20000 });
