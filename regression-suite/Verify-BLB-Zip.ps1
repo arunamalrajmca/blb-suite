@@ -110,11 +110,17 @@ try {
   if ($hostPermissions -notcontains 'https://www.blueletterbible.org/*') {
     throw 'ZIP host_permissions must include https://www.blueletterbible.org/*'
   }
+  if ($hostPermissions -contains 'https://chatgpt.com/*') {
+    throw 'ChatGPT host access must be optional, not required at install time'
+  }
   if (($hostPermissions -contains 'http://*/*') -or ($hostPermissions -contains 'https://*/*')) {
     throw 'Broad website access must remain optional, not in required host_permissions'
   }
 
   $optionalHostPermissions = @($manifest.optional_host_permissions)
+  if ($optionalHostPermissions -notcontains 'https://chatgpt.com/*') {
+    throw 'ZIP optional_host_permissions must include https://chatgpt.com/* for the user-triggered Ask AI feature'
+  }
   foreach ($permission in @('http://*/*', 'https://*/*')) {
     if ($optionalHostPermissions -notcontains $permission) {
       throw "ZIP optional_host_permissions must include $permission"
