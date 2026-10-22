@@ -121,10 +121,6 @@ test('MultiVerse reuses both 200-verse batches when the same selection is repeat
   expect(first.tabIds).toHaveLength(2);
   expect(first.tabIds[0]).not.toBe(first.tabIds[1]);
 
-  // Check stable reuse after both initial handoffs have reached BLB. The
-  // separate concurrency test covers overlapping in-flight requests.
-  await expect.poll(() => submittedPayloads.length, { timeout: 20000 }).toBe(2);
-
   const repeated = await openMultiVerse(extensionWorker, SELECTION);
   expect(repeated?.ok).toBe(true);
   expect(repeated.batchCount).toBe(2);
@@ -136,6 +132,11 @@ test('MultiVerse reuses both 200-verse batches when the same selection is repeat
   expect(reversed?.ok).toBe(true);
   expect(reversed.batchCount).toBe(2);
   expect(reversed.tabIds).toEqual(first.tabIds);
+
+  // The same and reordered selections must reuse their reservations even if
+  // the initial POST handoffs have not both completed. Waiting here would mask
+  // a race that can create duplicate tabs during the handoff navigation.
+  await expect.poll(() => submittedPayloads.length, { timeout: 20000 }).toBe(2);
 
   const trackedTabs = await getTrackedMultiVerseTabs(extensionWorker, first.tabIds);
   expect(new Set(trackedTabs.map(tab => tab.id))).toEqual(new Set(first.tabIds));
