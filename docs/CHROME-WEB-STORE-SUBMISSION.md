@@ -2,6 +2,8 @@
 
 **Purpose:** Prepare accurate listing and Privacy practices information. This document does not claim that the Chrome Web Store Developer Dashboard has been completed or inspected.
 
+For the end-to-end pre-registration checklist and remaining blockers, see [CHROME-WEB-STORE-PRE-REGISTRATION-CHECKLIST.md](./CHROME-WEB-STORE-PRE-REGISTRATION-CHECKLIST.md).
+
 ## Single purpose
 
 Blue Letter Bible Suite helps users send Bible references and searches to Blue Letter Bible. Selection tools, linked verse copying, study-session records, and local KJV case-sensitive matching support that Bible-study workflow.
@@ -10,7 +12,7 @@ Blue Letter Bible Suite helps users send Bible references and searches to Blue L
 
 > Send Bible references and searches to Blue Letter Bible with selection tools and local KJV case-sensitive search.
 
-The same wording is proposed for the manifest description in a separate PR.
+This wording currently matches the manifest description.
 
 ## Suggested detailed listing copy
 
@@ -23,6 +25,7 @@ Features include:
 - Open multiple Bible references together in BLB MultiVerse.
 - Copy Bible text with clickable links where supported by BLB.
 - Run case-sensitive matching against the bundled KJV corpus locally and send matching references to BLB.
+- Use the optional Ask AI address-bar command to hand a user-entered study query to ChatGPT. ChatGPT access is requested only for that command; if declined, the extension opens ChatGPT with the query handoff URL.
 - Optionally keep local study-session notes and export them to PDF.
 - Optionally enable Bible-link redirects and supported page features on websites for which you grant access.
 
@@ -43,11 +46,14 @@ Use these explanations when completing the Store listing's permission justificat
 | `contextMenus` | Adds the user-enabled right-click “Show on BLB” action. |
 | `scripting` | Registers or updates the feature content script for a website after the user grants the relevant optional site access and enables a feature. |
 | `alarms` | Runs the study-session auto-stop timer so recording can stop at the user's configured interval. |
+| Optional host access: `https://chatgpt.com/*` | Requested only when the user enters an Ask AI query. If granted, it enables the extension to interact with the ChatGPT composer to submit that query. If declined, the extension still opens ChatGPT with the query handoff URL. |
 
 ### Website access
 
 - Required host access is limited to `https://www.blueletterbible.org/*`.
+- `https://chatgpt.com/*` is an **optional** host permission, requested only after the user enters an Ask AI query. Granting it enables composer interaction; declining it preserves a URL-based handoff to ChatGPT. Do not describe this as guaranteed automatic submission when access is declined.
 - Broad HTTP/HTTPS host access is declared as **optional**. The extension should request access only when the user enables a feature for a site.
+- The `dict` omnibox command only opens Webster's 1828 Dictionary in a tab; it does not inject scripts there and does not require a dedicated Webster's host permission.
 - Local PDF/HTML support uses the declared `file://` content-script matches. Chrome users must separately allow access to file URLs in the extension settings for those local files.
 - Do not describe Webster's 1828 as an allowed-site redirect destination. Its presence in the code's redirect-host/source handling is not a reason to broaden or describe the set of allowed destination sites.
 
@@ -59,7 +65,7 @@ Review the Dashboard's available categories and describe at least these behavior
 
 - **Website/page content:** enabled features inspect selected text or page text locally to identify Bible references, Strong's values, or Bible words.
 - **User-provided or generated study data:** study titles, notes, references, dates, preferences, and search history are stored in Chrome local extension storage.
-- **User-triggered navigation:** when a user requests a search or opens references, the relevant query/reference may be sent in the destination URL to BLB or another selected Bible website. The destination's own privacy policy applies.
+- **User-triggered navigation and AI handoff:** when a user requests a search or opens references, the relevant query/reference may be sent in the destination URL to BLB or another selected Bible website. When the user enters an Ask AI query, that query is handed to ChatGPT through its URL and, if optional ChatGPT access is granted, may be entered and submitted by the extension. The destination's own privacy policy applies.
 - **Clipboard and downloads:** clipboard writes occur in response to copy actions; PDF export is user-requested.
 - **Developer/third-party transfer:** the policy states that the extension does not send page text or stored study data to the developer, analytics providers, advertising services, or data brokers.
 

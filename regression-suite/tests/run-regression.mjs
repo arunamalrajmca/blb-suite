@@ -41,7 +41,8 @@ test('manifest JSON + MV3 + version', () => {
 });
 test('required HTTP/HTTPS host permissions', () => {
   const m = JSON.parse(read('manifest.json'));
-  assert.deepEqual(m.host_permissions, ['https://www.blueletterbible.org/*', 'https://chatgpt.com/*']);
+  assert.deepEqual(m.host_permissions, ['https://www.blueletterbible.org/*']);
+  assert(!m.host_permissions.includes('https://chatgpt.com/*'), 'ChatGPT access must not be required at install time');
 });
 test('content-script coverage includes web + local HTML/PDF', () => {
   const m = JSON.parse(read('manifest.json'));
@@ -56,7 +57,18 @@ test('manifest-referenced files exist', () => {
 });
 test('no optional host-permission regression', () => {
   const m = JSON.parse(read('manifest.json'));
-  assert.deepEqual(m.optional_host_permissions, ['http://*/*','https://*/*']);
+  assert.deepEqual(m.optional_host_permissions, ['http://*/*','https://*/*','https://chatgpt.com/*']);
+});
+
+test('Ask AI requests ChatGPT access only when a query is entered and preserves a no-permission handoff', () => {
+  const m = JSON.parse(read('manifest.json'));
+  const source = read('background.js');
+  assert(m.optional_host_permissions.includes('https://chatgpt.com/*'), 'ChatGPT origin must be optional');
+  assert(source.includes("chrome.permissions.contains({origins:['https://chatgpt.com/*']}"), 'Ask AI must detect access already granted through broad site permissions');
+  assert(source.includes("chrome.permissions.request({origins:['https://chatgpt.com/*']}"), 'Ask AI must request only the ChatGPT origin when access is not already granted');
+  assert(source.includes(String.raw`normalized.match(/^askai(?:\s+(.*))?$/i)`), 'Ask AI command parser must recognize a query after whitespace');
+  assert(source.includes("const handoffUrl = 'https://chatgpt.com/?q=' + encodeURIComponent(query)"), 'Ask AI must preserve the query when access is declined');
+  assert(source.includes("await chrome.tabs.update(tabId, {url:handoffUrl})"), 'Ask AI must fall back if script injection fails');
 });
 
 // Syntax checks for all JS source files.
