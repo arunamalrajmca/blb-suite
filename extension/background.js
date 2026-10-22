@@ -2658,10 +2658,13 @@ async function handleOmniboxCommand(text, disposition) {
       });
     }
 
+    if (query && !hostAccessGranted) {
+      // Respect the user's denial: do not navigate or open any fallback window.
+      return;
+    }
+
     const handoffUrl = 'https://chatgpt.com/?q=' + encodeURIComponent(query);
-    const tab = await chrome.tabs.update({
-      url: query && !hostAccessGranted ? handoffUrl : 'https://chatgpt.com/'
-    });
+    const tab = await chrome.tabs.update({url:'https://chatgpt.com/'});
     if (query && hostAccessGranted && Number.isInteger(tab?.id)) {
       const tabId = tab.id;
       const submitAskAi = (rawQuery) => new Promise(resolve => {
