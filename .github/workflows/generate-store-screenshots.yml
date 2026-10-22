@@ -82,7 +82,7 @@ jobs:
           popup = Image.open("/tmp/popup.png").convert("RGB")
           # Keep the real popup UI; enlarge it proportionally so controls remain legible.
           popup.thumbnail((680, 650))
-          im = base("Blue Letter Bible Suite", "Study tools, right in your browser", "Quick access to Bible study controls, topics, and notes.")
+          im = base("KJV Scripture Tools", "Study tools, right in your browser", "Quick access to Bible study controls, topics, and notes.")
           d = ImageDraw.Draw(im)
           x, y = 300, 244
           scale = min(680 / popup.width, 650 / popup.height)
@@ -111,8 +111,8 @@ jobs:
                   page.screenshot(path=f"/tmp/{filename}", full_page=False)
                   content = Image.open(f"/tmp/{filename}").convert("RGB")
                   content.thumbnail((1040, 420))
-                  im = base("Blue Letter Bible Suite", title, subtitle)
-                  browser_frame(im, "Blue Letter Bible Suite — User Guide")
+                  im = base("KJV Scripture Tools", title, subtitle)
+                  browser_frame(im, "KJV Scripture Tools — User Guide")
                   im.paste(content, ((W-content.width)//2, 280))
                   im.save(out / filename, optimize=True)
               browser.close()
