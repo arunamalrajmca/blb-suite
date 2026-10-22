@@ -33,6 +33,8 @@ The extension does not send user data to the developer or to advertising, analyt
 
 When the user requests a search or opens a Bible destination, the extension may navigate the browser to the requested third-party website, including Blue Letter Bible and other supported Bible websites. A query, selected reference, or reference list included in such a navigation is therefore received by that destination website under that website's own privacy policy.
 
+The optional Ask AI command lets the user hand a study query to ChatGPT. The query is included in the ChatGPT handoff URL. If the user grants the optional `https://chatgpt.com/*` host permission, the extension may also place the query in the ChatGPT composer and submit it. If permission is declined or unavailable, the extension opens ChatGPT with the query handoff URL instead. The query is processed by ChatGPT under OpenAI's applicable terms and privacy policy. ChatGPT access is not required to install or use the extension's other features.
+
 The extension's `b cs` case-sensitive KJV matching uses the bundled verified original-case KJV corpus locally. Matching itself is performed inside the extension.
 
 When the extension creates or updates clipboard content for its copy-as-link feature, that clipboard write is initiated by the user's requested copy action. When resulting references are opened in BLB MultiVerse, those references are included in the destination URL sent to BLB.
