@@ -1655,7 +1655,7 @@ async function exportStudySessions(filterText='') {
   const url = `data:application/pdf;base64,${buildStudySessionsPdf(content)}`;
   return new Promise(resolve => {
     chrome.downloads.download({url, filename, saveAs:false}, downloadId => {
-      if (chrome.runtime.lastError || downloadId == null) { console.error('BLB Suite: study-session export failed', chrome.runtime.lastError?.message || 'unknown error'); resolve(false); return; }
+      if (chrome.runtime.lastError || downloadId == null) { console.error('KJV Scripture Tools: study-session export failed', chrome.runtime.lastError?.message || 'unknown error'); resolve(false); return; }
       resolve(true);
     });
   });
@@ -2202,7 +2202,7 @@ async function handleBCommand(text, disposition = 'currentTab') {
     try {
       await chrome.action.openPopup();
     } catch (error) {
-      console.warn("BLB Suite: unable to open popup from omnibox:", error);
+      console.warn("KJV Scripture Tools: unable to open popup from omnibox:", error);
     }
     return;
   }
@@ -2605,7 +2605,7 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
   });
   const opened = await openBlbMultiVerseRefs(multiVerseRefs, disposition !== 'newBackgroundTab', {preferredTabId:originatingTabId});
   if (!opened?.ok) {
-    console.warn('BLB Suite: case-sensitive MultiVerse open failed:', { reason:opened?.reason || 'unknown', matchedVerseCount:multiVerseRefs.length, openedVerseCount:Number(opened?.count || 0), expectedBatchCount:Math.ceil(multiVerseRefs.length / BLB_MULTIVERSE_MAX_VERSES), openedBatchCount:Number(opened?.batchCount || 0), failedBatch:opened?.failedBatch ?? null, result:opened });
+    console.warn('KJV Scripture Tools: case-sensitive MultiVerse open failed:', { reason:opened?.reason || 'unknown', matchedVerseCount:multiVerseRefs.length, openedVerseCount:Number(opened?.count || 0), expectedBatchCount:Math.ceil(multiVerseRefs.length / BLB_MULTIVERSE_MAX_VERSES), openedBatchCount:Number(opened?.batchCount || 0), failedBatch:opened?.failedBatch ?? null, result:opened });
   } else if (originatingTabId != null && !(opened.tabIds || []).includes(originatingTabId)) {
     // If an existing batch was reused, discard only the otherwise-empty
     // omnibox launcher tab; keep any nonblank page the user had open.
@@ -2716,7 +2716,7 @@ async function handleOmniboxCommand(text, disposition) {
         await waitForComplete();
         await chrome.scripting.executeScript({target:{tabId}, func:submitAskAi, args:[query]});
       } catch (error) {
-        console.warn('BLB Suite: unable to submit askai prompt in ChatGPT:', error);
+        console.warn('KJV Scripture Tools: unable to submit askai prompt in ChatGPT:', error);
         // Permission may have been granted but scripting can still fail.
         // Fall back to a user-visible ChatGPT handoff rather than dropping input.
         try { await chrome.tabs.update(tabId, {url:handoffUrl}); } catch (_) {}
@@ -3583,7 +3583,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const added = await seedStudyTestData();
       sendResponse({ok:true, added});
     } catch (error) {
-      console.error('BLB Suite: unable to import study test data:', error);
+      console.error('KJV Scripture Tools: unable to import study test data:', error);
       sendResponse({ok:false, error:String(error)});
     }
     return true;
@@ -3608,7 +3608,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const decision = classifySelectionForBlb(String(message.text || ''));
       sendResponse({ok:true, ...decision});
     } catch (error) {
-      console.error('BLB Suite selection classification:', error);
+      console.error('KJV Scripture Tools selection classification:', error);
       sendResponse({ok:true, valid:false, type:'INVALID'});
     }
     return true;
@@ -3719,7 +3719,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       await openSelectedPdfBibleRefs(text, behavior, null);
       sendResponse({ok:true});
     } catch (error) {
-      console.error('BLB Suite page selection button:', error);
+      console.error('KJV Scripture Tools page selection button:', error);
       sendResponse({ok:false});
     }
     return true;
@@ -3860,7 +3860,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // stricter keyed find-or-create path while sharing the serialized creation
     // queue. Identical clicks coalesce; different verse keys cannot share tabs.
     openScriptTaggerDestination(url).then(() => sendResponse({ok:true})).catch(error => {
-      console.error('BLB Suite ScriptTagger destination:', error);
+      console.error('KJV Scripture Tools ScriptTagger destination:', error);
       sendResponse({ok:false, error:String(error)});
     });
     return true;
@@ -3895,7 +3895,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       openBlbDestination(target, !!message.activeIfNew, !!message.activateExisting)
         .then(() => sendResponse({ok:true}))
         .catch(error => {
-          console.error('BLB Suite BibleRef range destination:', error);
+          console.error('KJV Scripture Tools BibleRef range destination:', error);
           sendResponse({ok:false, error:String(error)});
         });
     } catch (error) {
@@ -3909,7 +3909,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     const url = String(message.url || '');
     if (!/^https:\/\/www\.blueletterbible\.org\//i.test(url)) { sendResponse({ok:false}); return true; }
     openBlbDestination(url, !!message.activeIfNew, !!message.activateExisting).then(() => sendResponse({ok:true})).catch(error => {
-      console.error('BLB Suite Background BLB URL:', error);
+      console.error('KJV Scripture Tools Background BLB URL:', error);
       sendResponse({ok:false, error:String(error)});
     });
     return true;
@@ -3923,7 +3923,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return;
     }
     chrome.tabs.create({url}).then(() => sendResponse({ok:true})).catch(error => {
-      console.error('BLB Suite browser URL:', error);
+      console.error('KJV Scripture Tools browser URL:', error);
       sendResponse({ok:false});
     });
     return true;
@@ -3931,7 +3931,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type !== 'blbSuiteRunBCommand') return;
   handleBCommand(String(message.text || '')).then(() => sendResponse({ok:true})).catch(error => {
-    console.error('BLB Suite tutorial command:', error);
+    console.error('KJV Scripture Tools tutorial command:', error);
     sendResponse({ok:false});
   });
   return true;
@@ -3955,7 +3955,7 @@ async function installRules() {
       removeRuleIds: dynamicRules.map(x=>x.id),
       addRules: data.masterEnabled !== false && data.redirectEnabled ? dynamicRules : []
     });
-  } catch(e) { console.error("BLB Suite DNR setup:",e); }
+  } catch(e) { console.error("KJV Scripture Tools DNR setup:",e); }
 }
 
 // ---------- PDF selected-text Bible-reference helper ----------
@@ -6518,7 +6518,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     }
     await clearPageSelectionAfterBlbAction(tab?.id);
   } catch (err) {
-    console.error('BLB Suite selection:',err);
+    console.error('KJV Scripture Tools selection:',err);
   }
 });
 
@@ -6557,7 +6557,7 @@ async function handleOpenBibleSelectionCommand() {
     await openCurrentSelectionInBlb(tab.id);
     await clearPageSelectionAfterBlbAction(tab.id);
   } catch (err) {
-    console.error('BLB Suite Alt+B:', err);
+    console.error('KJV Scripture Tools Alt+B:', err);
   }
 }
 
