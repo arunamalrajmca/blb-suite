@@ -20,12 +20,16 @@ PROMO_TILE = "KJV-Scripture-Tools-Promo-Tile-440x280.png"
 PROMO_SIZE = (440, 280)
 SCREENSHOT_SIZES = {(1280, 800), (640, 400)}
 ICON_SIZES = {(16, 16), (48, 48), (128, 128)}
+SOURCE_CAPTURE_NAMES = {"Extension Popup.JPG", "KJV-Scripture-Tools-Home-Page.JPG"}
+SOURCE_CAPTURE_SIZE = (1920, 1042)
 SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
 
 def classify(path: Path, size: tuple[int, int]) -> str | None:
     if path.name == PROMO_TILE:
         return "promo"
+    if path.name in SOURCE_CAPTURE_NAMES and size == SOURCE_CAPTURE_SIZE:
+        return "source capture (not Store-ready screenshot)"
     if "icon" in path.stem.lower() and size in ICON_SIZES:
         return "icon"
     if size in SCREENSHOT_SIZES:
@@ -82,6 +86,8 @@ def main() -> int:
                 errors.append(f"{path.name}: expected PNG format, got {fmt}")
         elif kind == "icon" and fmt != "PNG":
             errors.append(f"{path.name}: extension icon assets must be PNG")
+        elif kind.startswith("source capture"):
+            print(f"WARNING: {path.name} — {kind}; prepare a compliant 1280x800 or 640x400 listing screenshot before submission")
         else:
             print(f"OK: {path.name} — {kind}, {size[0]}x{size[1]} {fmt}")
 
