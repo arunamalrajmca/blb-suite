@@ -624,10 +624,20 @@ async function findMatchingMultiVerseTab(setKey, tabs) {
     const handoffUrl = chrome.runtime.getURL('multiverse-post.html');
     const isMultiVerseHandoff = urls.some(url => url.startsWith(handoffUrl));
     const isBlank = urls.length > 0 && urls.every(url => /^about:blank(?:[#?].*)?$/i.test(url));
-    if (!isMultiVerse && !isBlank && !isMultiVerseHandoff) { staleTabIds.push(String(tab.id)); continue; }
-    // A tracked blank or POST-handoff tab is a reserved destination: its
-    // payload is already attached to that tab, so reuse it during navigation.
-    if (!match && entry.key === setKey && (isMultiVerse || isBlank || isMultiVerseHandoff)) match = tab;
+    // A tracked tab can briefly report an intermediate URL while the POST
+    // handoff navigates to BLB. Keep its reservation while Chrome reports the
+    // tab as loading; the navigation listener clears it only after an unrelated
+    // destination finishes loading. Otherwise a repeated request can race that
+    // transient URL and create a duplicate batch tab.
+    const transientNavigation = tab.status === 'loading';
+    if (!isMultiVerse && !isBlank && !isMultiVerseHandoff && !transientNavigation) {
+      staleTabIds.push(String(tab.id));
+      continue;
+    }
+    // A tracked blank, handoff, or still-loading transition remains reserved
+    // for this batch until the final destination is known.
+    if (!match && entry.key === setKey &&
+        (isMultiVerse || isBlank || isMultiVerseHandoff || transientNavigation)) match = tab;
   }
   if (staleTabIds.length) {
     await updateTrackedMultiVerseTabs(map => {
@@ -2909,7 +2919,10 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   // navigates to BLB, allowing a repeated request to create duplicate tabs.
   const isMultiVerseHandoff = url.startsWith(chrome.runtime.getURL('multiverse-post.html'));
 
-  if (!isBlank && !isMultiVerse && !isMultiVerseHandoff) {
+  // URL-change events can expose an intermediate redirect URL while the
+  // POST handoff is still navigating. Clear a reservation only when an
+  // unrelated destination has actually finished loading.
+  if (!isBlank && !isMultiVerse && !isMultiVerseHandoff && changeInfo.status === 'complete') {
     clearTrackedMultiVerseTab(tabId).catch(()=>{});
   }
 });
