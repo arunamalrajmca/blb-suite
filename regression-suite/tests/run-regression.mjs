@@ -74,7 +74,7 @@ test('Ask AI requests ChatGPT access in the omnibox gesture and does nothing whe
   const tabUpdateIndex = source.indexOf('await chrome.tabs.update({url:', permissionRequestIndex);
   assert(askAiHandlerStart >= 0 && permissionRequestIndex > askAiHandlerStart, 'Ask AI permission request must be inside its handler');
   assert(deniedReturnIndex > permissionRequestIndex && tabUpdateIndex > deniedReturnIndex, 'Denied access must return before tab navigation');
-  assert(source.includes(String.raw`normalized.match(/^askai(?:\\s+(.*))?$/i)`), 'Ask AI command parser must recognize a query after whitespace');
+  assert(source.includes(String.raw`normalized.match(/^askai(?:\s+(.*))?$/i)`), 'Ask AI command parser must recognize a query after whitespace');
   assert(!source.includes("chrome.runtime.getURL('askai-permission.html')"), 'Denied access must not open an extension fallback page');
   assert(source.includes("const handoffUrl = 'https://chatgpt.com/?q=' + encodeURIComponent(query)"), 'Ask AI must preserve query handoff for permitted-access fallback');
   assert(source.includes("await chrome.tabs.update(tabId, {url:handoffUrl})"), 'Ask AI must fall back if script injection fails after access is granted');
