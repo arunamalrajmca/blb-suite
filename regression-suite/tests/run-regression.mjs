@@ -68,8 +68,10 @@ test('Ask AI requests ChatGPT access only when a query is entered and preserves 
   // already-granted origins without showing another prompt, including broad
   // site access, so an async contains() preflight is both unnecessary and unsafe.
   assert(source.includes("chrome.permissions.request({origins:['https://chatgpt.com/*']}"), 'Ask AI must request the ChatGPT origin in the omnibox gesture');
-  const askAiHandler = source.slice(source.indexOf('async function handleOmniboxCommand'));
-  assert(askAiHandler.indexOf("chrome.permissions.request({origins:['https://chatgpt.com/*']}") < askAiHandler.indexOf("await chrome.tabs.update({"), 'Ask AI permission request must precede asynchronous tab operations');
+  const askAiHandlerStart = source.lastIndexOf('const askAiMatch', source.indexOf("chrome.permissions.request({origins:['https://chatgpt.com/*']}"));
+  const permissionRequestIndex = source.indexOf("chrome.permissions.request({origins:['https://chatgpt.com/*']}");
+  const tabUpdateIndex = source.indexOf("await chrome.tabs.update({", permissionRequestIndex);
+  assert(askAiHandlerStart >= 0 && permissionRequestIndex > askAiHandlerStart && tabUpdateIndex > permissionRequestIndex, 'Ask AI permission request must precede asynchronous tab operations within the Ask AI handler');
   assert(source.includes(String.raw`normalized.match(/^askai(?:\s+(.*))?$/i)`), 'Ask AI command parser must recognize a query after whitespace');
   assert(source.includes("const handoffUrl = 'https://chatgpt.com/?q=' + encodeURIComponent(query)"), 'Ask AI must preserve the query for fallback submission');
   assert(source.includes("chrome.runtime.getURL('askai-permission.html')"), 'Ask AI must show guidance when access is denied');
