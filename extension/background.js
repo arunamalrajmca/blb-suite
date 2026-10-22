@@ -2641,29 +2641,21 @@ async function handleOmniboxCommand(text, disposition) {
     const query = String(askAiMatch[1] || '').trim();
     let hostAccessGranted = false;
 
-    // Request only ChatGPT access, and only for a user-entered Ask AI query.
-    // Call request before any other asynchronous work so the omnibox action
-    // retains its user gesture. If declined/unavailable, preserve a URL handoff.
+    // Request ChatGPT access as the first operation for a user-entered Ask AI
+    // query. permissions.request must be invoked synchronously within the
+    // omnibox user gesture; awaiting permissions.contains first loses that
+    // gesture and causes "This function must be called during a user gesture".
+    // Chrome only prompts for permissions that are not already granted, so
+    // existing broad HTTPS site access is reused without a redundant prompt.
+    // If declined/unavailable, preserve a URL handoff.
     if (query) {
-      // A previously granted broad HTTPS site-access permission already covers
-      // ChatGPT. In that case no new prompt is expected or needed.
-      const hasChatGptAccess = await new Promise(resolve => {
+      hostAccessGranted = await new Promise(resolve => {
         try {
-          chrome.permissions.contains({origins:['https://chatgpt.com/*']}, granted => resolve(Boolean(granted)));
+          chrome.permissions.request({origins:['https://chatgpt.com/*']}, granted => resolve(Boolean(granted)));
         } catch (_) {
           resolve(false);
         }
       });
-      hostAccessGranted = hasChatGptAccess;
-      if (!hostAccessGranted) {
-        hostAccessGranted = await new Promise(resolve => {
-          try {
-            chrome.permissions.request({origins:['https://chatgpt.com/*']}, granted => resolve(Boolean(granted)));
-          } catch (_) {
-            resolve(false);
-          }
-        });
-      }
     }
 
     const handoffUrl = 'https://chatgpt.com/?q=' + encodeURIComponent(query);
