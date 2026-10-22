@@ -1,0 +1,109 @@
+name: Generate Chrome Web Store screenshots
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - chore/chrome-web-store-screenshots
+    paths:
+      - '.github/workflows/generate-store-screenshots.yml'
+      - 'extension/Tutorial.html'
+      - 'extension/Tutorial.js'
+      - 'extension/Tutorial.pdf'
+      - 'extension/popup.html'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: chrome-web-store-screenshots
+  cancel-in-progress: true
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out this branch
+        uses: actions/checkout@v4
+        with:
+          ref: chore/chrome-web-store-screenshots
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install rendering dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install playwright pymupdf pillow
+          python -m playwright install --with-deps chromium
+
+      - name: Render source-based screenshots
+        run: |
+          mkdir -p docs/chrome-web-store-assets
+          cat > /tmp/render_store_screenshots.py <<'PY'
+          from pathlib import Path
+          import fitz
+          from PIL import Image, ImageOps
+          from playwright.sync_api import sync_playwright
+
+          root = Path.cwd()
+          out = root / "docs/chrome-web-store-assets"
+          out.mkdir(parents=True, exist_ok=True)
+          size = (1280, 800)
+
+          # Render the real tutorial HTML using Chromium at Store screenshot dimensions.
+          with sync_playwright() as p:
+              browser = p.chromium.launch()
+              page = browser.new_page(viewport={"width": 1280, "height": 800}, device_scale_factor=1)
+              page.goto((root / "extension/Tutorial.html").resolve().as_uri(), wait_until="networkidle")
+              page.screenshot(path=str(out / "tutorial-html.png"), type="png", full_page=False)
+              # The popup is a compact extension panel. Capture its actual content and
+              # present it centered on a neutral canvas at the required 1280x800 size.
+              page.set_viewport_size({"width": 480, "height": 800})
+              page.goto((root / "extension/popup.html").resolve().as_uri(), wait_until="networkidle")
+              page.screenshot(path="/tmp/popup-capture.png", type="png", full_page=True)
+              browser.close()
+
+          canvas = Image.new("RGB", size, "#f4f6f8")
+          popup = Image.open("/tmp/popup-capture.png").convert("RGB")
+          popup.thumbnail((480, 760))
+          x = (size[0] - popup.width) // 2
+          y = (size[1] - popup.height) // 2
+          canvas.paste(popup, (x, y))
+          canvas.save(out / "extension-popup.png", optimize=True)
+
+          # Use the actual PDF tutorial pages; fit each page onto a 1280x800 canvas
+          # without cropping any source content.
+          pdf = fitz.open(root / "extension/Tutorial.pdf")
+          for i in range(min(3, len(pdf))):
+              pix = pdf[i].get_pixmap(matrix=fitz.Matrix(2, 2), alpha=False)
+              import io
+              page_image = Image.open(io.BytesIO(pix.tobytes("png"))).convert("RGB")
+              page_image.thumbnail((1200, 720))
+              frame = Image.new("RGB", size, "white")
+              frame.paste(page_image, ((size[0] - page_image.width)//2, (size[1] - page_image.height)//2))
+              frame.save(out / f"tutorial-pdf-page-{i+1}.png", optimize=True)
+
+          # Verify all delivered assets are valid PNGs at exact Store dimensions.
+          for image_path in sorted(out.glob("*.png")):
+              with Image.open(image_path) as im:
+                  if im.size != size or im.format != "PNG":
+                      raise SystemExit(f"Invalid screenshot: {image_path} {im.size} {im.format}")
+              print(f"Verified {image_path}: 1280x800 PNG")
+          PY
+          python /tmp/render_store_screenshots.py
+
+      - name: Commit rendered assets to this branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/chrome-web-store-assets/*.png
+          if git diff --cached --quiet; then
+            echo "No screenshot changes to commit."
+          else
+            git commit -m "Add Chrome Web Store screenshots rendered from source"
+            git push origin HEAD:chore/chrome-web-store-screenshots
+          fi
