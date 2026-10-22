@@ -182,6 +182,10 @@ test.describe('core user-visible E2E', () => {
     await expect.poll(async () => {
       const value = await article.getAttribute('data-blb-verse-context-diagnostic');
       try { return JSON.parse(value || '{}').associatedVerse; } catch (_) { return null; }
+    }, { timeout: 3000, intervals: [100, 200, 300] }).toBe(null);
+    await expect.poll(async () => {
+      const value = await article.getAttribute('data-blb-verse-context-diagnostic');
+      try { return JSON.parse(value || '{}').followingVerse; } catch (_) { return null; }
     }, { timeout: 3000, intervals: [100, 200, 300] }).toBe(177);
     await page.waitForTimeout(300);
     const afterInvalidVerse = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>

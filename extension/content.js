@@ -1547,11 +1547,18 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           else afterRange.setStart(clickRange.endContainer, clickRange.endOffset);
           const afterText = normalizeSelectionText(domText(afterRange.cloneContents())).normalize('NFKC');
           const following = afterText.match(/^[\s,.:;()\[\]{}–—-]*(\d{1,3})\b/);
-          if (following) associatedVerse = Number(following[1]);
+          const followingVerse = following ? Number(following[1]) : null;
+          // Never classify an out-of-range number as an extracted verse.
+          // Preserve it separately only so the gesture can be explicitly
+          // rejected instead of falling through to ordinary word lookup.
+          if (Number.isInteger(followingVerse) && followingVerse >= 1 && followingVerse <= 176) {
+            associatedVerse = followingVerse;
+          }
         }
         if (verseWordClick) {
           const diagnostic = {
             clickToken, verseWordClick, associatedVerse,
+            followingVerse: following ? Number(following[1]) : null,
             tokenElementIsExact, hasClickRange,
             beforeText: beforeText.slice(-500)
           };
@@ -2260,8 +2267,8 @@ function handleDoubleClickBlb(event) {
             : null;
           try {
             const cueDiagnostic = JSON.parse(cueRoot?.getAttribute('data-blb-verse-context-diagnostic') || '{}');
-            if (Number.isInteger(cueDiagnostic.associatedVerse) &&
-                (cueDiagnostic.associatedVerse < 1 || cueDiagnostic.associatedVerse > 176)) return true;
+            if (Number.isInteger(cueDiagnostic.followingVerse) &&
+                (cueDiagnostic.followingVerse < 1 || cueDiagnostic.followingVerse > 176)) return true;
           } catch (_) {}
         }
 
