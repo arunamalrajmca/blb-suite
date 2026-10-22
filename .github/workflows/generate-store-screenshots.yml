@@ -128,6 +128,7 @@ jobs:
               print(f"Verified {image_path}: 1280x800 PNG")
           PY
           python /tmp/render_store_screenshots.py
+          python scripts/verify-store-assets.py
 
       - name: Commit screenshots to this branch
         run: |
