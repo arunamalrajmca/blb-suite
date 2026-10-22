@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Validate technical requirements for Chrome Web Store listing images.
 
-Checks image integrity, required listing candidates, dimensions, and the icon files
-referenced by the extension manifest. It does not verify visible branding,
-legibility, rights, or screenshot authenticity; those still require human review.
+Checks image integrity, dimensions, the promotional tile, and manifest-referenced
+icons. Missing final screenshot candidates and known source captures are warnings
+because screenshot rendering writes to a separate branch. This audit does not
+declare a listing submission-ready; human review remains required.
 """
 from pathlib import Path
 import argparse
@@ -28,14 +29,13 @@ EXPECTED_SCREENSHOTS = {
     "tutorial-study.png",
 }
 SOURCE_CAPTURE_NAMES = {"Extension Popup.JPG", "KJV-Scripture-Tools-Home-Page.JPG"}
-SOURCE_CAPTURE_SIZE = (1920, 1042)
 SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg"}
 
 
 def classify(path: Path, size: tuple[int, int]) -> str | None:
     if path.name == PROMO_TILE:
         return "promo"
-    if path.name in SOURCE_CAPTURE_NAMES and size == SOURCE_CAPTURE_SIZE:
+    if path.name in SOURCE_CAPTURE_NAMES:
         return "source capture (not Store-ready screenshot)"
     if size in SCREENSHOT_SIZES:
         return "screenshot"
@@ -53,10 +53,9 @@ def check_manifest_icons(manifest_path: Path, errors: list[str]) -> None:
         return
 
     icon_paths = set()
-    for section in ("icons",):
-        value = manifest.get(section, {})
-        if isinstance(value, dict):
-            icon_paths.update(str(path) for path in value.values() if path)
+    value = manifest.get("icons", {})
+    if isinstance(value, dict):
+        icon_paths.update(str(path) for path in value.values() if path)
     action = manifest.get("action", {})
     if isinstance(action, dict) and isinstance(action.get("default_icon"), dict):
         icon_paths.update(str(path) for path in action["default_icon"].values() if path)
@@ -65,7 +64,7 @@ def check_manifest_icons(manifest_path: Path, errors: list[str]) -> None:
         errors.append("manifest does not define any extension icon files")
         return
 
-    expected_by_size = {"16": (16, 16), "48": (48, 48), "128": (128, 128)}
+    expected_by_size = {"icon16": (16, 16), "icon48": (48, 48), "icon128": (128, 128)}
     for icon_path in sorted(icon_paths):
         path = manifest_path.parent / icon_path
         if not path.is_file():
@@ -81,12 +80,15 @@ def check_manifest_icons(manifest_path: Path, errors: list[str]) -> None:
             continue
         if fmt != "PNG":
             errors.append(f"manifest icon {icon_path} must be PNG, got {fmt}")
-        for key, expected_size in expected_by_size.items():
-            if key in icon_path.lower() and size != expected_size:
-                errors.append(
-                    f"manifest icon {icon_path}: expected {expected_size[0]}x{expected_size[1]}, "
-                    f"got {size[0]}x{size[1]}"
-                )
+        expected_size = next(
+            (dims for marker, dims in expected_by_size.items() if marker in Path(icon_path).stem.lower()),
+            None,
+        )
+        if expected_size and size != expected_size:
+            errors.append(
+                f"manifest icon {icon_path}: expected {expected_size[0]}x{expected_size[1]}, "
+                f"got {size[0]}x{size[1]}"
+            )
         print(f"OK: manifest icon {icon_path} — {size[0]}x{size[1]} {fmt}")
 
 
@@ -112,15 +114,17 @@ def main() -> int:
         return 1
 
     errors = []
+    warnings = []
     names = {path.name for path in assets}
     if PROMO_TILE not in names:
         errors.append(f"required promotional tile missing: {PROMO_TILE}")
     missing_screenshots = EXPECTED_SCREENSHOTS - names
     for name in sorted(missing_screenshots):
-        errors.append(f"expected generated listing screenshot missing: {name}")
+        warnings.append(f"expected generated listing screenshot not present on this branch: {name}")
 
     check_manifest_icons(args.manifest.resolve(), errors)
 
+    compliant_screenshot_count = 0
     for path in assets:
         try:
             with Image.open(path) as image:
@@ -145,19 +149,26 @@ def main() -> int:
             if fmt != "PNG":
                 errors.append(f"{path.name}: expected PNG format, got {fmt}")
         elif kind.startswith("source capture"):
-            print(
-                f"WARNING: {path.name} — {kind}; prepare a compliant 1280x800 or "
-                "640x400 listing screenshot before submission"
+            warnings.append(
+                f"{path.name} is a source capture, not a Store-ready screenshot; "
+                "prepare a compliant 1280x800 or 640x400 listing screenshot"
             )
         else:
+            compliant_screenshot_count += 1
             print(f"OK: {path.name} — {kind}, {size[0]}x{size[1]} {fmt}")
 
+    if compliant_screenshot_count == 0:
+        warnings.append("no compliant 1280x800 or 640x400 listing screenshots found")
+
+    for warning in warnings:
+        print(f"WARNING: {warning}")
     if errors:
         for error in errors:
             print(f"ERROR: {error}", file=sys.stderr)
         return 1
 
-    print(f"Store asset technical audit passed ({len(assets)} image files).")
+    print(f"Store asset technical audit passed ({len(assets)} image files; warnings: {len(warnings)}).")
+    print("Warnings mean Store listing assets are not yet submission-ready.")
     print("Visual branding, legibility, authenticity, and rights still require manual review.")
     return 0
 
