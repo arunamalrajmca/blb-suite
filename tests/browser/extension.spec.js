@@ -172,6 +172,7 @@ test.describe('core user-visible E2E', () => {
               world: 'ISOLATED',
               func: () => ({
                 href: location.href,
+                contentScriptFileExecuted: window.__blbSuiteContentScriptFileExecutedV3 === true,
                 contentScriptLoaded: window.__blbSuiteContentScriptLoadedV2 === true,
                 doubleClickBound: window.__blbSuiteDoubleClickBoundV2 === true,
                 diagnosticMarker: window.__blbSuiteDiagnosticInjectionProbe || null
