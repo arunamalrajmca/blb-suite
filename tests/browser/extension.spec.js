@@ -93,6 +93,9 @@ test.describe('core user-visible E2E', () => {
             <p><span id="generic-verse-46">verses</span> 46.</p>
             <p>The next chapter is 1 Kings 19.</p>
             <p><span id="generic-verse-19-18">verse</span> 18.</p>
+            <p>Psalm 119.</p>
+            <p><span id="generic-verse-176">v</span> 176.</p>
+            <p><span id="generic-verse-177">verses</span> 177.</p>
             <p>An unrelated number: <span id="generic-unrelated-number">7000</span>.</p>
           </article>
         </main>`;
@@ -159,6 +162,32 @@ test.describe('core user-visible E2E', () => {
         }
       }), expectedPath);
     }
+
+    // The verse cue accepts the KJV maximum chapter verse number (176),
+    // but must reject 177 instead of treating it as a verse or word lookup.
+    await article.evaluate(root => {
+      root.removeAttribute('data-blb-verse-context-diagnostic');
+      root.removeAttribute('data-blb-verse-context-resolution');
+    });
+    await page.locator('#generic-verse-176').dblclick();
+    await expect.poll(async () => {
+      const value = await article.getAttribute('data-blb-verse-context-resolution');
+      try { return JSON.parse(value || '{}').resolvedUrl; } catch (_) { return null; }
+    }, { timeout: 3000, intervals: [100, 200, 300] }).toBe('https://www.blueletterbible.org/kjv/psa/119/176/');
+
+    const beforeInvalidVerse = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+    );
+    await page.locator('#generic-verse-177').dblclick();
+    await expect.poll(async () => {
+      const value = await article.getAttribute('data-blb-verse-context-diagnostic');
+      try { return JSON.parse(value || '{}').associatedVerse; } catch (_) { return null; }
+    }, { timeout: 3000, intervals: [100, 200, 300] }).toBe(177);
+    await page.waitForTimeout(300);
+    const afterInvalidVerse = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+      tabs.filter(tab => !before.includes(tab.id)).map(tab => String(tab.url || tab.pendingUrl || ''))
+    ), beforeInvalidVerse);
+    expect(afterInvalidVerse, 'verse cue followed by 177 must not open a passage or fall through to word lookup').toEqual([]);
 
     // A bare number must not trigger post/article-wide context scanning or open
     // a passage merely because explicit chapter references precede it.
