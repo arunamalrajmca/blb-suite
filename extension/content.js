@@ -2246,6 +2246,25 @@ function handleDoubleClickBlb(event) {
           ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
           : null;
 
+        // A verse cue is allowed to associate only with a valid verse number
+        // (1–176). Psalm 119 is the maximum KJV chapter length; larger adjacent
+        // numbers must not fall through to ordinary word lookup or inherit the
+        // chapter context as if they were verses.
+        if (isVerseContextWord) {
+          const cueRoot = contextualTarget instanceof Element
+            ? contextualTarget.closest(
+              '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
+              '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
+              '.entry-content, .article-body, .article-content, .content-body'
+            )
+            : null;
+          try {
+            const cueDiagnostic = JSON.parse(cueRoot?.getAttribute('data-blb-verse-context-diagnostic') || '{}');
+            if (Number.isInteger(cueDiagnostic.associatedVerse) &&
+                (cueDiagnostic.associatedVerse < 1 || cueDiagnostic.associatedVerse > 176)) return true;
+          } catch (_) {}
+        }
+
         // Wait for the native selection/context to settle only for a number
         // that could be a standalone book number or part of a Bible reference.
         if (isNumericBookCandidate && !blockContext && Date.now()-started<1500) {
