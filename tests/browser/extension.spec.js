@@ -310,7 +310,23 @@ test.describe('core user-visible E2E', () => {
           catch (_) { return false; }
         }).map(tab => tab.id)
       ));
-      await page.locator(selector).dblclick();
+      // Facebook's modal/backdrop can intercept Playwright's coordinate-based
+      // dblclick even though the synthetic cue is in the rendered post. Select
+      // the exact cue and dispatch the bubbling dblclick on that node so this
+      // regression exercises the extension's document-level gesture handler
+      // without depending on Facebook's unrelated overlay hit-testing.
+      await page.locator(selector).evaluate(element => {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        selection?.addRange(range);
+        element.dispatchEvent(new MouseEvent('dblclick', {
+          bubbles: true,
+          cancelable: true,
+          view: window
+        }));
+      });
       // The extension deliberately waits for Chromium's native Selection to
       // settle after dblclick; poll diagnostics instead of sampling too early.
       let cueDiagnostic = null;
