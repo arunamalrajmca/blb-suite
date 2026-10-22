@@ -144,6 +144,32 @@ test('MultiVerse reuses both 200-verse batches when the same selection is repeat
   expect(new Set(trackedTabs.map(tab => tab.key)).size).toBe(2);
 });
 
+test('tracked MultiVerse reservations survive an intermediate loading URL', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    const handoffUrl = chrome.runtime.getURL('multiverse-post.html');
+    return {
+      intermediateLoading: isReservedMultiVerseTabCandidate({
+        status: 'loading',
+        url: 'https://redirect.example/intermediate',
+        pendingUrl: 'https://redirect.example/intermediate'
+      }, handoffUrl),
+      unrelatedComplete: isReservedMultiVerseTabCandidate({
+        status: 'complete',
+        url: 'https://redirect.example/final',
+        pendingUrl: 'https://redirect.example/final'
+      }, handoffUrl),
+      handoffComplete: isReservedMultiVerseTabCandidate({
+        status: 'complete',
+        url: handoffUrl,
+        pendingUrl: handoffUrl
+      }, handoffUrl)
+    };
+  });
+  expect(result.intermediateLoading, 'a redirecting reservation must remain discoverable').toBe(true);
+  expect(result.unrelatedComplete, 'a completed unrelated destination must be treated as stale').toBe(false);
+  expect(result.handoffComplete, 'the extension POST handoff remains a valid reservation').toBe(true);
+});
+
 test('MultiVerse opens every batch for requests exceeding 20 tabs', async ({ context, extensionWorker }) => {
   const submittedPayloads = [];
   await context.route('https://www.blueletterbible.org/**', route => {

@@ -604,6 +604,13 @@ async function clearTrackedMultiVerseTab(tabId) {
   });
 }
 
+function isReservedMultiVerseTabCandidate(tab, handoffUrl) {
+  const urls = [tab?.url, tab?.pendingUrl].map(value => String(value || '')).filter(Boolean);
+  return urls.some(url =>
+    /^about:blank(?:[#?].*)?$/i.test(url) || url.startsWith(handoffUrl)
+  ) || tab?.status === 'loading';
+}
+
 async function findMatchingMultiVerseTab(setKey, tabs) {
   const tracked = await getTrackedMultiVerseTabs();
   const staleTabIds = [];
@@ -876,9 +883,10 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
           .map(async ([id]) => {
             try {
               const tab = await chrome.tabs.get(Number(id));
-              const urls = [tab?.url, tab?.pendingUrl].map(value => String(value || '')).filter(Boolean);
-              return urls.some(url => /^about:blank(?:[#?].*)?$/i.test(url) || url.startsWith(handoffUrl))
-                ? tab : null;
+              // During redirect/navigation the tracked tab may expose an
+              // intermediate URL that matches neither BLB nor the handoff page.
+              // Keep loading reservations discoverable until the final URL is known.
+              return isReservedMultiVerseTabCandidate(tab, handoffUrl) ? tab : null;
             } catch (_) { return null; }
           }))).filter(Boolean);
         return findMatchingMultiVerseTab(verseSetKey, [...multiVerseTabs, ...reservedTabs]);
