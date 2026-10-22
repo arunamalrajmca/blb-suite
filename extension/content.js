@@ -7,7 +7,7 @@ try { window.__blbSuiteContentScriptFileExecutedV3 = true; } catch (_) {}
 try { window.__blbSuiteContentScriptLoadedV2 = true; } catch (_) {}
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
 const BLB_ORIGIN = BLBShared.urls.blbOrigin;
-// Blue Letter Bible Suite 5.2.25 - unified content script
+// Unified content script.
 
 // Access policy:
 //   * Local files: only PDF, HTML, and HTM files are supported.
