@@ -14,24 +14,28 @@ jobs:
     name: Select requested CI suite
     runs-on: ubuntu-latest
     outputs:
-      runtime_changed: ${{ steps.select.outputs.runtime_changed }}
+      runtime_changed: ${{ steps.classify.outputs.runtime_changed }}
     steps:
-      - name: Read explicit CI selection
-        id: select
+      - name: Checkout for change classification
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Classify changed files
+        id: classify
         env:
-          LABELS: ${{ toJSON(github.event.pull_request.labels) }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "${{ github.event_name }}" == "push" ]] || jq -e 'any(.[]; .name == "ci-run-all" or .name == "ci-run-hard-gate")' <<< "$LABELS" >/dev/null; then
+          BASE="$BASE_SHA"
+          if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then
             echo "runtime_changed=true" >> "$GITHUB_OUTPUT"
           else
-            echo "runtime_changed=false" >> "$GITHUB_OUTPUT"
+            node scripts/classify-ci-changes.mjs "$BASE"
           fi
 
   regression-package:
     name: Regression — package
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-hard-gate') }}
     needs: change-detection
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -68,7 +72,7 @@ jobs:
     # The hard gate always runs behavioral groups on PRs/main. Runtime-change
     # detection remains useful to other workflows, but a hard gate must never
     # report green while behavioral coverage was silently skipped.
-    if: ${{ needs.change-detection.result == 'success' && (needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch') }}
+    if: ${{ needs.change-detection.result == 'success' && (needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-hard-gate')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
