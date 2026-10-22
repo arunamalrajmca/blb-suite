@@ -110,6 +110,9 @@ try {
   if ($hostPermissions -notcontains 'https://www.blueletterbible.org/*') {
     throw 'ZIP host_permissions must include https://www.blueletterbible.org/*'
   }
+  if ($hostPermissions -contains 'https://chatgpt.com/*') {
+    throw 'Chrome Web Store ZIP must not require chatgpt.com host access; that permission is local-install-only'
+  }
   if (($hostPermissions -contains 'http://*/*') -or ($hostPermissions -contains 'https://*/*')) {
     throw 'Broad website access must remain optional, not in required host_permissions'
   }
@@ -121,7 +124,7 @@ try {
     }
   }
 
-  Write-Host "PASS: ZIP integrity, manifest entry points, tutorial assets, icons, MV3, version $($manifest.version), and host-permission model"
+  Write-Host "PASS: ZIP integrity, manifest entry points, tutorial assets, icons, MV3, version $($manifest.version), and host-permission model (ChatGPT host access excluded)"
   exit 0
 }
 catch {
