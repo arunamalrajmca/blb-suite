@@ -2645,13 +2645,25 @@ async function handleOmniboxCommand(text, disposition) {
     // Call request before any other asynchronous work so the omnibox action
     // retains its user gesture. If declined/unavailable, preserve a URL handoff.
     if (query) {
-      hostAccessGranted = await new Promise(resolve => {
+      // A previously granted broad HTTPS site-access permission already covers
+      // ChatGPT. In that case no new prompt is expected or needed.
+      const hasChatGptAccess = await new Promise(resolve => {
         try {
-          chrome.permissions.request({origins:['https://chatgpt.com/*']}, granted => resolve(Boolean(granted)));
+          chrome.permissions.contains({origins:['https://chatgpt.com/*']}, granted => resolve(Boolean(granted)));
         } catch (_) {
           resolve(false);
         }
       });
+      hostAccessGranted = hasChatGptAccess;
+      if (!hostAccessGranted) {
+        hostAccessGranted = await new Promise(resolve => {
+          try {
+            chrome.permissions.request({origins:['https://chatgpt.com/*']}, granted => resolve(Boolean(granted)));
+          } catch (_) {
+            resolve(false);
+          }
+        });
+      }
     }
 
     const handoffUrl = 'https://chatgpt.com/?q=' + encodeURIComponent(query);
