@@ -2,6 +2,8 @@
 
 **Purpose:** Prepare accurate listing and Privacy practices information. This document does not claim that the Chrome Web Store Developer Dashboard has been completed or inspected.
 
+For the end-to-end pre-registration checklist and remaining blockers, see [CHROME-WEB-STORE-PRE-REGISTRATION-CHECKLIST.md](./CHROME-WEB-STORE-PRE-REGISTRATION-CHECKLIST.md).
+
 ## Single purpose
 
 Blue Letter Bible Suite helps users send Bible references and searches to Blue Letter Bible. Selection tools, linked verse copying, study-session records, and local KJV case-sensitive matching support that Bible-study workflow.
