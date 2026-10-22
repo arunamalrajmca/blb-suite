@@ -64,7 +64,8 @@ test('Ask AI requests ChatGPT access only when a query is entered and preserves 
   const m = JSON.parse(read('manifest.json'));
   const source = read('background.js');
   assert(m.optional_host_permissions.includes('https://chatgpt.com/*'), 'ChatGPT origin must be optional');
-  assert(source.includes("chrome.permissions.request({origins:['https://chatgpt.com/*']}"), 'Ask AI must request only the ChatGPT origin');
+  assert(source.includes("chrome.permissions.contains({origins:['https://chatgpt.com/*']}"), 'Ask AI must detect access already granted through broad site permissions');
+  assert(source.includes("chrome.permissions.request({origins:['https://chatgpt.com/*']}"), 'Ask AI must request only the ChatGPT origin when access is not already granted');
   assert(source.includes(String.raw`normalized.match(/^askai(?:\s+(.*))?$/i)`), 'Ask AI command parser must recognize a query after whitespace');
   assert(source.includes("const handoffUrl = 'https://chatgpt.com/?q=' + encodeURIComponent(query)"), 'Ask AI must preserve the query when access is declined');
   assert(source.includes("await chrome.tabs.update(tabId, {url:handoffUrl})"), 'Ask AI must fall back if script injection fails');
