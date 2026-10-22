@@ -25,6 +25,9 @@ This is a version-independent checklist for preparing a KJV Scripture Tools buil
 - [ ] **Install and test the exact candidate ZIP**, including its core Bible reference/search flows, commands, optional site-access behavior, and relevant permission-granted/permission-denied paths.
 - [ ] **Capture at least one genuine product screenshot** (preferably five) at 1280×800 or 640×400. Use the current candidate's real UI; do not use mockups that imply behavior not present in the build.
 - [ ] **Prepare the required small promotional tile** as PNG or JPEG, 440×280. It should communicate the extension brand and not merely be a screenshot.
+- [ ] **Audit every store-facing visual asset** (icon, promotional tiles, screenshots, and any preview images) for the current product name, consistent branding, legibility at submission size, and misleading affiliation. Remove or replace obsolete branding before submission.
+- [ ] **Review screenshots for third-party content and personal information.** Capture the current extension UI and supported-site context only where necessary; avoid exposing account names, login state, unrelated third-party promotional content, or content for which distribution rights are unclear.
+- [ ] **Keep downloadable documentation current.** Check bundled PDFs and other static exports for obsolete product names and hardcoded release numbers; prefer a build-time or runtime source for version labels, or omit the version from static documents.
 - [ ] Confirm the listing description is accurate, non-misleading, and within the manifest description limit of 132 characters.
 - [ ] Confirm the support/privacy contact is monitored and the privacy-policy URL is public and stable.
 - [ ] Decide whether to supply the optional 1400×560 marquee tile and a product demo video.
