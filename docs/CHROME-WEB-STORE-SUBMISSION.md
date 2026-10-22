@@ -12,7 +12,7 @@ Blue Letter Bible Suite helps users send Bible references and searches to Blue L
 
 > Send Bible references and searches to Blue Letter Bible with selection tools and local KJV case-sensitive search.
 
-The same wording is proposed for the manifest description in a separate PR.
+This wording currently matches the manifest description.
 
 ## Suggested detailed listing copy
 
