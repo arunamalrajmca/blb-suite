@@ -2,17 +2,21 @@
 
 **Purpose:** Prepare accurate listing and Privacy practices information. This document does not claim that the Chrome Web Store Developer Dashboard has been completed or inspected.
 
+**Important:** The listing copy, permission explanations, website-access statements, and privacy-practice descriptions below describe the implementation observed when this document was last reviewed. They are candidate-specific, not permanent guarantees. Before every submission, compare each claim with the exact source revision and ZIP intended for upload. Update or remove any statement that no longer matches the candidate. A passing test, prior release, or previously approved listing does not automatically validate a newer build.
+
 For the end-to-end pre-registration checklist and remaining blockers, see [CHROME-WEB-STORE-PRE-REGISTRATION-CHECKLIST.md](./CHROME-WEB-STORE-PRE-REGISTRATION-CHECKLIST.md).
 
 ## Single purpose
 
 Blue Letter Bible Suite helps users send Bible references and searches to Blue Letter Bible. Selection tools, linked verse copying, study-session records, and local KJV case-sensitive matching support that Bible-study workflow.
 
+Before each submission, confirm this purpose still accurately describes the candidate's primary functionality and that all listed features support it.
+
 ## Suggested short description
 
 > Send Bible references and searches to Blue Letter Bible with selection tools and local KJV case-sensitive search.
 
-This wording currently matches the manifest description.
+Before each submission, compare this proposed text with the candidate manifest's `description`, enforce the current Chrome Web Store limits, and ensure both accurately describe the build. Do not assume the wording below still matches the manifest after a feature or version change.
 
 ## Suggested detailed listing copy
 
@@ -29,11 +33,13 @@ Features include:
 - Optionally keep local study-session notes and export them to PDF.
 - Optionally enable Bible-link redirects and supported page features on websites for which you grant access.
 
+Treat the list above as draft copy. For every candidate, verify that each feature exists, the described trigger and permission behavior are accurate, and no important data flow or limitation has changed. Remove unavailable features and add material new ones without overstating behavior.
+
 Blue Letter Bible Suite is an independent, unofficial extension and is not affiliated with, endorsed by, or sponsored by Blue Letter Bible.
 
 ## Permission justifications
 
-Use these explanations when completing the Store listing's permission justification fields, if shown, or include them in the detailed description/about information.
+Use these explanations as drafts when completing the Store listing's permission justification fields, if shown, or include them in the detailed description/about information. For every candidate, compare each declared permission and host permission in the candidate manifest with actual code paths and user-visible behavior. Remove entries for permissions no longer used; add and justify any new permissions; revise explanations when behavior changes.
 
 | Permission | User-facing reason |
 |---|---|
@@ -50,6 +56,8 @@ Use these explanations when completing the Store listing's permission justificat
 
 ### Website access
 
+The following bullets describe the implementation reviewed for this document; verify all of them against the exact candidate manifest and code before submission.
+
 - Required host access is limited to `https://www.blueletterbible.org/*`.
 - `https://chatgpt.com/*` is an **optional** host permission, requested only after the user enters an Ask AI query. Granting it enables composer interaction; declining it preserves a URL-based handoff to ChatGPT. Do not describe this as guaranteed automatic submission when access is declined.
 - Broad HTTP/HTTPS host access is declared as **optional**. The extension should request access only when the user enables a feature for a site.
@@ -57,19 +65,21 @@ Use these explanations when completing the Store listing's permission justificat
 - Local PDF/HTML support uses the declared `file://` content-script matches. Chrome users must separately allow access to file URLs in the extension settings for those local files.
 - Do not describe Webster's 1828 as an allowed-site redirect destination. Its presence in the code's redirect-host/source handling is not a reason to broaden or describe the set of allowed destination sites.
 
+If the candidate changes any host permission, optional permission request, fallback, redirect destination, supported file type, or injection behavior, revise the relevant listing and permission text before submission.
+
 ## Privacy practices: suggested Dashboard review
 
-The extension handles information even when it remains on the user's device. The Dashboard declarations must match the code and the privacy policy; do not mark the extension as handling no data merely because processing is local.
+The extension may handle information even when it remains on the user's device. Dashboard declarations must match the exact candidate code and the privacy policy; do not mark the extension as handling no data merely because processing is local.
 
-Review the Dashboard's available categories and describe at least these behaviors accurately:
+Use the following as a review guide, not as preselected answers. For each candidate, inspect all relevant data flows and then review the Dashboard's currently available categories and exact wording:
 
-- **Website/page content:** enabled features inspect selected text or page text locally to identify Bible references, Strong's values, or Bible words.
-- **User-provided or generated study data:** study titles, notes, references, dates, preferences, and search history are stored in Chrome local extension storage.
-- **User-triggered navigation and AI handoff:** when a user requests a search or opens references, the relevant query/reference may be sent in the destination URL to BLB or another selected Bible website. When the user enters an Ask AI query, that query is handed to ChatGPT through its URL and, if optional ChatGPT access is granted, may be entered and submitted by the extension. The destination's own privacy policy applies.
-- **Clipboard and downloads:** clipboard writes occur in response to copy actions; PDF export is user-requested.
-- **Developer/third-party transfer:** the policy states that the extension does not send page text or stored study data to the developer, analytics providers, advertising services, or data brokers.
+- **Website/page content:** determine whether enabled features inspect selected text or page text locally to identify Bible references, Strong's values, or Bible words.
+- **User-provided or generated study data:** determine which study titles, notes, references, dates, preferences, and search history are stored in Chrome local extension storage.
+- **User-triggered navigation and AI handoff:** identify the data included in destination URLs or transferred to third-party services. For this implementation, an Ask AI query is handed to ChatGPT through its URL and, if optional ChatGPT access is granted, may be entered and submitted by the extension. Verify the current behavior and disclose the destination's own privacy policy.
+- **Clipboard and downloads:** verify when clipboard writes occur and what data user-requested exports contain.
+- **Developer/third-party transfer:** verify whether any page text, stored study data, telemetry, diagnostics, or other information is sent to the developer or third parties. Do not carry forward an earlier no-transfer statement without checking the candidate.
 
-Do not claim that user data is never processed. The extension does not send it to the developer, but local processing and user-requested third-party navigation still need to be described. Check each Dashboard checkbox against the current form's exact wording before saving and certify Limited Use only if it remains consistent with the released behavior and policy.
+Do not claim that user data is never processed. Check each Dashboard checkbox against the current form's exact wording before saving, and certify Limited Use only if it remains consistent with the exact candidate's behavior and policy.
 
 ## Privacy policy URL
 
@@ -81,22 +91,24 @@ Raw Markdown alternative:
 
 https://raw.githubusercontent.com/arunamalrajmca/blb-suite/main/docs/PRIVACY-POLICY.md
 
-The policy is present in the public repository. The Dashboard's saved URL field itself cannot be verified from this repository.
+Verify that the published policy is accessible, stable, and consistent with the candidate's data practices. The Dashboard's saved URL field itself cannot be verified from this repository.
 
 ## Listing assets and package
 
-Verified in the repository source:
-- Manifest declares extension icons at 16×16, 48×48, and 128×128.
-- The release workflow builds the upload ZIP from the **contents** of `extension/`, so `manifest.json` is at the ZIP root.
-- Before upload, verify that the selected package's manifest version matches the intended release and is higher than the version currently published in the Chrome Web Store.
+The following are repository/build expectations to re-verify for each candidate, not proof that a particular upload ZIP has been validated:
+
+- Confirm the candidate manifest declares the intended extension icons and that the icon files exist and are valid.
+- Confirm the release workflow or packaging script builds the upload ZIP from the intended extension package contents, with `manifest.json` at the ZIP root.
+- Verify that the selected package's manifest version matches the intended candidate and is higher than the version currently published in the Chrome Web Store.
+- Independently inspect the exact ZIP to upload, including its checksum, root layout, manifest, permissions, and required files.
 
 Still requires a Developer Dashboard check:
-- Confirm the 128×128 icon and current listing screenshots/promotional images are uploaded and legible at the Dashboard's requested sizes.
+
+- Confirm the current icon and listing screenshots/promotional images are uploaded and legible at the Dashboard's requested sizes.
 - Confirm the listing name, detailed description, category, support contact, and privacy-policy URL are saved.
-- Confirm the Privacy practices form and Limited Use certification are saved and match the policy.
+- Confirm the Privacy practices form and Limited Use certification are saved and match the candidate.
 - Confirm the current draft package/version and its review status in the Dashboard. A GitHub release does not prove that the package has been uploaded or submitted to the Chrome Web Store.
 
 ## Official policy reference
 
 Chrome Web Store User Data FAQ and minimum-permission guidance: https://developer.chrome.com/docs/webstore/program-policies/user-data-faq
-
