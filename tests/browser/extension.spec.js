@@ -192,13 +192,13 @@ test.describe('core user-visible E2E', () => {
       while (walker.nextNode()) {
         const node = walker.currentNode;
         const value = node.nodeValue || '';
-        const match = /\\bVerse\\s+1\\b/i.exec(value);
+        const match = /\bVerse\s+1\b/i.exec(value);
         if (!match) continue;
         const parent = node.parentNode;
         const before = document.createTextNode(value.slice(0, match.index));
         const cue = document.createElement('span');
         cue.id = 'sog-verse-cue';
-        cue.textContent = match[0].replace(/\\s+1$/i, '');
+        cue.textContent = match[0].replace(/\s+1$/i, '');
         const after = document.createTextNode(value.slice(match.index + match[0].length));
         parent.insertBefore(before, node);
         parent.insertBefore(cue, node);
