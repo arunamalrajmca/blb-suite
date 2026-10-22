@@ -1556,7 +1556,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             beforeText: beforeText.slice(-500)
           };
           messageRoot.setAttribute('data-blb-verse-context-diagnostic', JSON.stringify(diagnostic));
-          console.warn('[BLB Facebook verse-context diagnostic]', JSON.stringify(diagnostic));
         }
         if (verseWordClick && associatedVerse) {
           // The first number immediately following the clicked cue is the
@@ -1611,7 +1610,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             resolvedUrl: resolved?.url || null
           };
           messageRoot.setAttribute('data-blb-verse-context-resolution', JSON.stringify(resolutionDiagnostic));
-          console.warn('[BLB Facebook verse-context resolution]', JSON.stringify(resolutionDiagnostic));
           if (context) {
             if (resolved) return {
               book: resolved.book,
