@@ -128,7 +128,7 @@ test.describe('core user-visible E2E', () => {
       const resolution = JSON.parse(resolutionText || '{}');
       expect(resolution.associatedVerse, selector + ': wrong adjacent verse number').toBe(verse);
       expect(resolution.context, selector + ': chapter context was not resolved').toEqual({
-        book: '1 kings',
+        book: '1 Kings',
         chapter
       });
       expect(resolution.resolvedUrl, selector + ': wrong resolved URL').toBe('https://www.blueletterbible.org' + expectedPath);
