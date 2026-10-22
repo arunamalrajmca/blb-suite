@@ -1,8 +1,8 @@
-# Blue Letter Bible Suite — Privacy Policy
+# KJV Scripture Tools — Privacy Policy
 
-This policy applies to the current publicly distributed version of the Blue Letter Bible Suite extension and remains applicable across releases unless the extension's privacy practices change.
+This policy applies to the current publicly distributed version of the KJV Scripture Tools extension and remains applicable across releases unless the extension's privacy practices change.
 
-Blue Letter Bible Suite is an independent, unofficial Chrome extension that provides Bible-study tools around supported Bible websites, including Blue Letter Bible (BLB), Bible-reference handling, Show on BLB, Double-Click BLB, study sessions, and KJV case-sensitive search.
+KJV Scripture Tools is an independent Chrome extension that provides Bible-study tools around supported Bible websites, including Blue Letter Bible (BLB), Bible-reference handling, Show on BLB, Double-Click BLB, study sessions, and KJV case-sensitive search.
 
 ## Information processed by the extension
 
@@ -41,7 +41,7 @@ When the extension creates or updates clipboard content for its copy-as-link fea
 
 ## Chrome Web Store Limited Use
 
-Blue Letter Bible Suite uses information received through Chrome extension APIs only to provide and improve its disclosed Bible-study features and related operational functionality.
+KJV Scripture Tools uses information received through Chrome extension APIs only to provide and improve its disclosed Bible-study features and related operational functionality.
 
 The extension does not sell user data, use user data for personalized advertising, or transfer user data to advertising platforms, data brokers, or other information resellers. The developer does not permit humans to read user data except where required by applicable law or necessary for security or abuse prevention.
 
@@ -51,7 +51,7 @@ The use of information received through Chrome APIs adheres to the Chrome Web St
 
 The extension does not sell personal information. It does not include advertising or third-party analytics code.
 
-Blue Letter Bible Suite is not affiliated with, endorsed by, or sponsored by Blue Letter Bible.
+KJV Scripture Tools is not affiliated with, endorsed by, or sponsored by Blue Letter Bible.
 
 ## Changes
 

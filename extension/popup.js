@@ -1155,7 +1155,7 @@ document.addEventListener('click', e => {
 });
 
 
-guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'Blue-Letter-Bible-Suite-5.2.44-Feature-Guide-Tutorial.pdf'));
+guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'KJV-Scripture-Tools-User-Guide.pdf'));
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
 async function setIndependentSiteFeature(feature, on) {
   // Do not request host permissions or persist feature opt-ins on sensitive sites.
@@ -1258,7 +1258,7 @@ async function exportStudyBackup() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
     setStatus('Study backup exported. Keep the JSON file somewhere safe.');
   } catch (error) {
-    console.error('BLB Suite Study backup export failed:', error);
+    console.error('KJV Scripture Tools study backup export failed:', error);
     setStatus('Unable to export Study backup.');
   } finally {
     exportStudyBackupButton.disabled = !(studyState.topics || []).length;
@@ -1292,7 +1292,7 @@ async function importStudyBackupFile(file) {
     }
     const backup = JSON.parse(await file.text());
     if (!isValidStudyBackup(backup)) {
-      setStatus('This is not a valid BLB Suite Study backup.');
+      setStatus('This is not a valid KJV Scripture Tools study backup.');
       return;
     }
     const summary = backup.study;
@@ -1312,7 +1312,7 @@ async function importStudyBackupFile(file) {
     await refreshStudyState();
     setStatus(`Study backup restored (${sessionCount} session(s)).`);
   } catch (error) {
-    console.error('BLB Suite Study backup import failed:', error);
+    console.error('KJV Scripture Tools study backup import failed:', error);
     setStatus('Unable to read or restore this backup file.');
   } finally {
     importStudyBackupButton.disabled = false;
@@ -1354,7 +1354,7 @@ document.addEventListener('click', event => {
   try {
     render(await getState());
   } catch (error) {
-    console.error('BLB Suite popup initialization failed:', error);
+    console.error('KJV Scripture Tools popup initialization failed:', error);
     // If live tab/permission inspection fails, keep the popup usable without
     // presenting unchecked HTML defaults as if every saved toggle was turned off.
     try {
@@ -1372,7 +1372,7 @@ document.addEventListener('click', event => {
       document.getElementById('doubleClick').checked = Object.prototype.hasOwnProperty.call(doubleSites, siteKey) && doubleSites[siteKey] === true;
       for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
     } catch (fallbackError) {
-      console.error('BLB Suite popup saved-setting fallback failed:', fallbackError);
+      console.error('KJV Scripture Tools popup saved-setting fallback failed:', fallbackError);
       for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
     }
   } finally {
