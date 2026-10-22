@@ -28,16 +28,30 @@ if (!fs.existsSync(manifestPath)) {
   if (!(m.permissions || []).includes('tabs')) fail('tabs permission missing');
   else pass('tabs permission present');
 
+  // Broad website access and ChatGPT access are intentionally optional.
+  // Keep only BLB as a required host; site features request optional access
+  // after the user enables them, and Ask AI requests ChatGPT access on demand.
   const hosts = m.host_permissions || [];
-  if (!(hosts.includes('http://*/*') && hosts.includes('https://*/*'))) fail('required wildcard host permissions missing');
-  else pass('required wildcard host permissions present');
+  if (hosts.includes('http://*/*') || hosts.includes('https://*/*')) {
+    fail('broad wildcard host access must remain optional');
+  } else if (!hosts.includes('https://www.blueletterbible.org/*')) {
+    fail('required Blue Letter Bible host permission missing');
+  } else {
+    pass('required host access is limited to Blue Letter Bible');
+  }
 
-  if (m.optional_host_permissions) fail('optional_host_permissions must not replace required host access');
-  else pass('optional host permissions absent');
+  const optionalHosts = m.optional_host_permissions || [];
+  for (const pattern of ['http://*/*', 'https://*/*', 'https://chatgpt.com/*']) {
+    if (optionalHosts.includes(pattern)) pass(`optional host permission present: ${pattern}`);
+    else fail(`optional host permission missing: ${pattern}`);
+  }
 
   const matches = (m.content_scripts || []).flatMap(x => x.matches || []);
-  if (matches.some(x => x === 'http://*/*' || x === 'https://*/*')) pass('wildcard declarative content-script matches present');
-  else fail('wildcard declarative content-script matches missing');
+  if (matches.some(x => x === 'http://*/*' || x === 'https://*/*')) {
+    fail('broad wildcard content-script matches must not bypass the optional-site access model');
+  } else {
+    pass('no broad wildcard declarative content-script matches');
+  }
 }
 
 const jsFiles = [];
@@ -53,15 +67,15 @@ walk(ext);
 
 for (const file of jsFiles) {
   const r = cp.spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
-  if (r.status !== 0) fail(`syntax: ${path.relative(root, file)}\n${r.stderr}`);
+  if (r.status !== 0) fail('syntax: ' + path.relative(root, file) + '\n' + r.stderr);
 }
-if (!process.exitCode) pass(`${jsFiles.length} JavaScript files parse successfully`);
+if (!process.exitCode) pass(jsFiles.length + ' JavaScript files parse successfully');
 
 const source = jsFiles.map(f => fs.readFileSync(f, 'utf8')).join('\n');
 for (const s of ['chrome.permissions.request', 'chrome.permissions.contains', 'chrome.permissions.onAdded', 'chrome.scripting.executeScript']) {
   const present = s === 'chrome.permissions.onAdded'
-    ? /chrome\.permissions\?\.onAdded\?\.addListener|chrome\.permissions\.onAdded\.addListener/.test(source)
+    ? source.includes('chrome.permissions?.onAdded?.addListener') || source.includes('chrome.permissions.onAdded.addListener')
     : source.includes(s);
-  if (present) pass(`architecture API present: ${s}`);
-  else fail(`architecture API missing: ${s}`);
+  if (present) pass('architecture API present: ' + s);
+  else fail('architecture API missing: ' + s);
 }
