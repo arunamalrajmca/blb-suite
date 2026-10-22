@@ -67,15 +67,15 @@ walk(ext);
 
 for (const file of jsFiles) {
   const r = cp.spawnSync(process.execPath, ['--check', file], { encoding: 'utf8' });
-  if (r.status !== 0) fail(`syntax: ${path.relative(root, file)}\\n${r.stderr}`);
+  if (r.status !== 0) fail(\`syntax: \${path.relative(root, file)}\n\${r.stderr}\`);
 }
-if (!process.exitCode) pass(`${jsFiles.length} JavaScript files parse successfully`);
+if (!process.exitCode) pass(\`\${jsFiles.length} JavaScript files parse successfully\`);
 
-const source = jsFiles.map(f => fs.readFileSync(f, 'utf8')).join('\\n');
+const source = jsFiles.map(f => fs.readFileSync(f, 'utf8')).join('\n');
 for (const s of ['chrome.permissions.request', 'chrome.permissions.contains', 'chrome.permissions.onAdded', 'chrome.scripting.executeScript']) {
   const present = s === 'chrome.permissions.onAdded'
-    ? /chrome\\.permissions\\?\\.onAdded\\?\\.addListener|chrome\\.permissions\\.onAdded\\.addListener/.test(source)
+    ? source.includes('chrome.permissions?.onAdded?.addListener') || source.includes('chrome.permissions.onAdded.addListener')
     : source.includes(s);
-  if (present) pass(`architecture API present: ${s}`);
-  else fail(`architecture API missing: ${s}`);
+  if (present) pass(\`architecture API present: \${s}\`);
+  else fail(\`architecture API missing: \${s}\`);
 }
