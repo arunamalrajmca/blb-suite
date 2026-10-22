@@ -1,4 +1,4 @@
-# BLB Suite — Pre-Merge Regression Checklist
+# KJV Scripture Tools — Pre-Merge Regression Checklist
 
 Baseline: **current extension/manifest.json version**
 
