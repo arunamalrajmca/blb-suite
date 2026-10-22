@@ -33,8 +33,8 @@ jobs:
           if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then
             RUNTIME_CHANGED=true
           else
-            node scripts/classify-ci-changes.mjs "$BASE"
-            RUNTIME_CHANGED="$(node scripts/classify-ci-changes.mjs "$BASE" | sed -n 's/^runtime_changed=//p' | head -n1)"
+            CLASSIFY_OUTPUT="$(node scripts/classify-ci-changes.mjs "$BASE")"
+            RUNTIME_CHANGED="$(sed -n 's/^runtime_changed=//p' <<< "$CLASSIFY_OUTPUT" | head -n1)"
           fi
           echo "runtime_changed=$RUNTIME_CHANGED" >> "$GITHUB_OUTPUT"
           if [[ "$RUNTIME_CHANGED" == "true" || "${{ github.event_name }}" == "workflow_dispatch" ]] || jq -e 'any(.[]; .name == "ci-run-all" or .name == "ci-run-references")' <<< "$LABELS" >/dev/null; then
