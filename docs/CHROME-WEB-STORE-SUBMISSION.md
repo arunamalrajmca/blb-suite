@@ -8,7 +8,7 @@ For the end-to-end pre-registration checklist and remaining blockers, see [CHROM
 
 ## Single purpose
 
-Blue Letter Bible Suite helps users send Bible references and searches to Blue Letter Bible. Selection tools, linked verse copying, study-session records, and local KJV case-sensitive matching support that Bible-study workflow.
+KJV Scripture Tools helps users work with King James Version Scripture by sending Bible references and searches to supported Bible websites, including Blue Letter Bible. Selection tools, linked verse copying, study-session records, and local KJV case-sensitive matching support that Bible-study workflow.
 
 Before each submission, confirm this purpose still accurately describes the candidate's primary functionality and that all listed features support it.
 
@@ -20,7 +20,7 @@ Before each submission, compare this proposed text with the candidate manifest's
 
 ## Suggested detailed listing copy
 
-Blue Letter Bible Suite adds convenient ways to send Bible references, selected Bible text, words, phrases, and search queries to Blue Letter Bible (BLB).
+KJV Scripture Tools adds convenient ways to work with King James Version Scripture and send Bible references, selected Bible text, words, phrases, and search queries to supported Bible websites, including Blue Letter Bible (BLB).
 
 Features include:
 - Search from the address bar using the `b` keyword.
@@ -35,7 +35,7 @@ Features include:
 
 Treat the list above as draft copy. For every candidate, verify that each feature exists, the described trigger and permission behavior are accurate, and no important data flow or limitation has changed. Remove unavailable features and add material new ones without overstating behavior.
 
-Blue Letter Bible Suite is an independent, unofficial extension and is not affiliated with, endorsed by, or sponsored by Blue Letter Bible.
+KJV Scripture Tools is an independent extension and is not affiliated with, endorsed by, or sponsored by Blue Letter Bible.
 
 ## Permission justifications
 
