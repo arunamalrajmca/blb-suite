@@ -1,5 +1,5 @@
 importScripts('regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js');
-// Blue Letter Bible Suite 5.2.18 - Shared Reference Core
+// Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
 const BLB_ORIGIN = BLBShared.urls.blbOrigin;
@@ -1564,10 +1564,10 @@ function buildStudySessionsPdf(content, options = {}) {
   const addTopicFooter = topicIndex => {
     commands.push(`${lightLine} RG`,'0.55 w',`${left} 55 m ${right} 55 l S`);
     commands.push(`${muted} rg`);
-    commands.push('BT','/F3 8 Tf',`${left} 41 Td`,'(BLB SUITE - BIBLE STUDY) Tj','ET');
+    commands.push('BT','/F3 8 Tf',`${left} 41 Td`,'(KJV SCRIPTURE TOOLS - BIBLE STUDY) Tj','ET');
     commands.push('BT','/F1 7.6 Tf',`${left} 29 Td`,'(Select text as needed, then right-click and choose "Show on BLB".) Tj','ET');
     commands.push(`${blue} rg`);
-    commands.push('BT','/F4 8.5 Tf',`${right-92} 29 Td`,'(Install BLB Suite ->) Tj','ET');
+    commands.push('BT','/F4 8.5 Tf',`${right-92} 29 Td`,'(KJV Scripture Tools user guide) Tj','ET');
     commands.push(`${muted} rg`);
     commands.push('BT','/F1 7.4 Tf',`${right-34} 41 Td`,`(${topicIndex}) Tj`,'ET');
   };
@@ -1648,9 +1648,9 @@ async function exportStudySessions(filterText='') {
     content = [`TITLE: Bible Study - ${displayDate(dateFilter)}`, '', ...blocks].join('\n');
   } else {
     const topics = studySessionTopics(sessions);
-    const intro = ['TITLE: BLB Suite - Bible Study Sessions', '', 'TOPICS', ...topics.map(t=>`- ${t}`), ''];
+    const intro = ['TITLE: KJV Scripture Tools - Bible Study Sessions', '', 'TOPICS', ...topics.map(t=>`- ${t}`), ''];
     content = intro.concat(sessions.map(studySessionText)).join('\n');
-    filename = 'BLB Suite All Notes.pdf';
+    filename = 'KJV Scripture Tools All Notes.pdf';
   }
   const url = `data:application/pdf;base64,${buildStudySessionsPdf(content)}`;
   return new Promise(resolve => {
@@ -5182,7 +5182,7 @@ function extractKjvPassageSearchQuery(selectionText, excludedVerseTexts = [], op
     }
   };
 
-  // Temporary 5.2.45 experiment: for selections longer than 8 words,
+  // Temporary experiment: for selections longer than 8 words,
   // skip the legacy full-corpus pass because the static word→verse scanner
   // below reproduces its relevant matches. Keep the original path for <=8.
   if (words.length <= 8) {
@@ -5223,7 +5223,7 @@ function extractKjvPassageSearchQuery(selectionText, excludedVerseTexts = [], op
 
     // The static word→verse index replaces the old per-selection phraseSeedIndex.
     // It only narrows candidates; exact contiguous phrase verification remains
-    // unchanged so scanner behavior stays equivalent to the 5.2.43 baseline.
+    // unchanged so scanner behavior stays equivalent to the established baseline.
     const phraseMatchCache = new Map();
     const decodedWordVerseCache = new Map();
     const verseWordsCache = new Map();
@@ -5742,7 +5742,7 @@ function classifySelectionForBlb(selectionText) {
     let passageQuery;
     if (extractedRefs.length) {
       // Use the complete residual-prose Criteria scanner. Its candidate checks
-      // are corpus-index-gated, preserving 5.2.51.21 behavior while avoiding
+      // are corpus-index-gated, preserving established behavior while avoiding
       // expensive exact verification for phrases absent from the KJV corpus.
       passageQuery = extractKjvPassageSearchQuery(remainingText, excludedVerseTexts, {allowResidualProseTerms:true});
     } else {
