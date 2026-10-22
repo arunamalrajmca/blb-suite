@@ -17,15 +17,27 @@ jobs:
       runtime_changed: ${{ steps.select.outputs.runtime_changed }}
       browser_e2e_required: ${{ steps.select.outputs.browser_e2e_required }}
     steps:
-      - name: Read explicit CI selection
+      - name: Checkout for change classification
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Classify changed files
         id: select
         env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
           LABELS: ${{ toJSON(github.event.pull_request.labels) }}
         shell: bash
         run: |
           set -euo pipefail
-          echo "runtime_changed=false" >> "$GITHUB_OUTPUT"
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" || "${{ github.event_name }}" == "push" ]] || jq -e 'any(.[]; .name == "ci-run-all" or .name == "ci-run-references")' <<< "$LABELS" >/dev/null; then
+          BASE="$BASE_SHA"
+          if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then
+            RUNTIME_CHANGED=true
+          else
+            node scripts/classify-ci-changes.mjs "$BASE"
+            RUNTIME_CHANGED="$(node scripts/classify-ci-changes.mjs "$BASE" | sed -n 's/^runtime_changed=//p' | head -n1)"
+          fi
+          echo "runtime_changed=$RUNTIME_CHANGED" >> "$GITHUB_OUTPUT"
+          if [[ "$RUNTIME_CHANGED" == "true" || "${{ github.event_name }}" == "workflow_dispatch" ]] || jq -e 'any(.[]; .name == "ci-run-all" or .name == "ci-run-references")' <<< "$LABELS" >/dev/null; then
             echo "browser_e2e_required=true" >> "$GITHUB_OUTPUT"
           else
             echo "browser_e2e_required=false" >> "$GITHUB_OUTPUT"
