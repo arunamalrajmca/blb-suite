@@ -640,7 +640,7 @@ test('popup loading indicator is always cleared after initial state-load failure
   assert(start >= 0 && end > start, 'popup initialization block missing');
   const init = popup.slice(start, end);
   assert(init.includes('try {') && init.includes('render(await getState())'), 'initial state render must be guarded');
-  assert(init.includes('catch (error)') && init.includes("console.error('BLB Suite popup initialization failed:'"), 'initialization failure must be diagnosable');
+  assert(init.includes('catch (error)') && init.includes("console.error('KJV Scripture Tools popup initialization failed:'"), 'initialization failure must be diagnosable');
   assert(init.includes('finally {') && init.includes("document.body.classList.remove('popup-loading')"), 'popup must be made visible even when state loading fails');
 });
 section('selection');
