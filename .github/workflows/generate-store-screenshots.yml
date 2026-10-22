@@ -29,6 +29,12 @@ jobs:
           ref: chore/chrome-web-store-screenshots
           token: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Check out current default-branch asset auditor
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          path: .asset-audit-source
+
       - name: Set up Python and Chromium
         uses: actions/setup-python@v5
         with:
@@ -128,7 +134,7 @@ jobs:
               print(f"Verified {image_path}: 1280x800 PNG")
           PY
           python /tmp/render_store_screenshots.py
-          python scripts/verify-store-assets.py
+          python .asset-audit-source/scripts/verify-store-assets.py --asset-dir docs/chrome-web-store-assets
 
       - name: Commit screenshots to this branch
         run: |
