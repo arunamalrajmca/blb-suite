@@ -4,7 +4,7 @@
 **Privacy policy:** [PRIVACY-POLICY.md](./PRIVACY-POLICY.md)  
 **Developer registration:** https://chrome.google.com/webstore/devconsole/register
 
-This is a version-independent checklist for preparing a Blue Letter Bible Suite build for Chrome Web Store submission. Reuse it for every candidate version. Always validate the exact candidate ZIP intended for upload; a prior release, successful CI run, or completed checklist from an older version does not prove that the current candidate is ready. A GitHub release is not evidence that a Store listing has been uploaded or submitted.
+This is a version-independent checklist for preparing a KJV Scripture Tools build for Chrome Web Store submission. Reuse it for every candidate version. Always validate the exact candidate ZIP intended for upload; a prior release, successful CI run, or completed checklist from an older version does not prove that the current candidate is ready. A GitHub release is not evidence that a Store listing has been uploaded or submitted.
 
 ## Ready or reusable preparation
 
