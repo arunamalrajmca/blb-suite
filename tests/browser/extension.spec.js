@@ -367,21 +367,26 @@ test.describe('core user-visible E2E', () => {
       unrelated.textContent = '7000';
       document.querySelector('[data-ad-comet-preview="message"]').appendChild(unrelated);
     });
+    // Take a full tab-ID snapshot. Comparing all new tabs against a baseline
+    // containing only BLB tab IDs incorrectly counts the already-open Facebook
+    // tab as "new" and makes this unrelated-number guard fail for the wrong reason.
     const before = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
-      tabs.filter(tab => {
-        try { return new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org'); }
-        catch (_) { return false; }
-      }).map(tab => tab.id)
+      tabs.map(tab => tab.id)
     ));
     await page.locator('#fb-unrelated-number').dblclick();
     await page.waitForTimeout(500);
     const after = await extensionWorker.evaluate((beforeIds) => chrome.tabs.query({}).then(tabs =>
-      tabs.filter(tab => !beforeIds.includes(tab.id)).map(tab => {
-        try { return new URL(String(tab.url || tab.pendingUrl || '')).pathname; }
-        catch (_) { return ''; }
-      }).filter(Boolean)
+      tabs.filter(tab => !beforeIds.includes(tab.id)).map(tab => ({
+        id: tab.id,
+        url: String(tab.url || tab.pendingUrl || '')
+      }))
     ), before);
-    expect(after, 'unrelated number must not inherit chapter context').toEqual([]);
+    const unexpectedBlbTabs = after.filter(tab => {
+      try { return new URL(tab.url).hostname.endsWith('blueletterbible.org'); }
+      catch (_) { return false; }
+    });
+    expect(unexpectedBlbTabs, 'unrelated number must not open a Bible passage').toEqual([]);
+    expect(after, 'unrelated number must not create any new tabs').toEqual([]);
   });
 
   test('Article verse cues resolve context outside Facebook', async ({ page, extensionStorage, extensionWorker }) => {
