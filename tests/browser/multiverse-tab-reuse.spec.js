@@ -102,17 +102,28 @@ test('independent MultiVerse commands start opening tabs without waiting for ear
 });
 
 test('MultiVerse reuses both 200-verse batches when the same selection is repeated or reordered', async ({ context, extensionWorker }) => {
-  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
-    status: 200,
-    contentType: 'text/html',
-    body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
-  }));
+  const submittedPayloads = [];
+  await context.route('https://www.blueletterbible.org/**', route => {
+    if (route.request().method() === 'POST') {
+      const body = new URLSearchParams(route.request().postData() || '');
+      submittedPayloads.push(body.get('mvText') || '');
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
+    });
+  });
 
   const first = await openMultiVerse(extensionWorker, SELECTION);
   expect(first?.ok).toBe(true);
   expect(first.batchCount).toBe(2);
   expect(first.tabIds).toHaveLength(2);
   expect(first.tabIds[0]).not.toBe(first.tabIds[1]);
+
+  // Check stable reuse after both initial handoffs have reached BLB. The
+  // separate concurrency test covers overlapping in-flight requests.
+  await expect.poll(() => submittedPayloads.length, { timeout: 20000 }).toBe(2);
 
   const repeated = await openMultiVerse(extensionWorker, SELECTION);
   expect(repeated?.ok).toBe(true);
