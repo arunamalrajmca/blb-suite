@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Validate technical requirements for Chrome Web Store listing images.
 
-This validates image integrity and classifies known Store asset types by filename
-and dimensions. It does not verify visible branding, legibility, rights, or
-whether screenshots truthfully depict the product; those still require review.
+Checks image integrity, required listing candidates, dimensions, and the icon files
+referenced by the extension manifest. It does not verify visible branding,
+legibility, rights, or screenshot authenticity; those still require human review.
 """
 from pathlib import Path
 import argparse
+import json
 import sys
 
 try:
@@ -16,10 +17,16 @@ except ImportError as exc:
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_ASSET_DIR = ROOT / "docs" / "chrome-web-store-assets"
+DEFAULT_MANIFEST = ROOT / "extension" / "manifest.json"
 PROMO_TILE = "KJV-Scripture-Tools-Promo-Tile-440x280.png"
 PROMO_SIZE = (440, 280)
 SCREENSHOT_SIZES = {(1280, 800), (640, 400)}
-ICON_SIZES = {(16, 16), (48, 48), (128, 128)}
+EXPECTED_SCREENSHOTS = {
+    "extension-popup.png",
+    "tutorial-search.png",
+    "tutorial-references.png",
+    "tutorial-study.png",
+}
 SOURCE_CAPTURE_NAMES = {"Extension Popup.JPG", "KJV-Scripture-Tools-Home-Page.JPG"}
 SOURCE_CAPTURE_SIZE = (1920, 1042)
 SUPPORTED_EXTENSIONS = {".png", ".jpg", ".jpeg"}
@@ -30,17 +37,65 @@ def classify(path: Path, size: tuple[int, int]) -> str | None:
         return "promo"
     if path.name in SOURCE_CAPTURE_NAMES and size == SOURCE_CAPTURE_SIZE:
         return "source capture (not Store-ready screenshot)"
-    if "icon" in path.stem.lower() and size in ICON_SIZES:
-        return "icon"
     if size in SCREENSHOT_SIZES:
         return "screenshot"
     return None
 
 
+def check_manifest_icons(manifest_path: Path, errors: list[str]) -> None:
+    if not manifest_path.is_file():
+        errors.append(f"extension manifest not found: {manifest_path}")
+        return
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        errors.append(f"cannot read extension manifest {manifest_path}: {exc}")
+        return
+
+    icon_paths = set()
+    for section in ("icons",):
+        value = manifest.get(section, {})
+        if isinstance(value, dict):
+            icon_paths.update(str(path) for path in value.values() if path)
+    action = manifest.get("action", {})
+    if isinstance(action, dict) and isinstance(action.get("default_icon"), dict):
+        icon_paths.update(str(path) for path in action["default_icon"].values() if path)
+
+    if not icon_paths:
+        errors.append("manifest does not define any extension icon files")
+        return
+
+    expected_by_size = {"16": (16, 16), "48": (48, 48), "128": (128, 128)}
+    for icon_path in sorted(icon_paths):
+        path = manifest_path.parent / icon_path
+        if not path.is_file():
+            errors.append(f"manifest icon file missing: {icon_path}")
+            continue
+        try:
+            with Image.open(path) as image:
+                image.verify()
+            with Image.open(path) as image:
+                size, fmt = image.size, image.format
+        except Exception as exc:
+            errors.append(f"manifest icon {icon_path} cannot be decoded ({exc})")
+            continue
+        if fmt != "PNG":
+            errors.append(f"manifest icon {icon_path} must be PNG, got {fmt}")
+        for key, expected_size in expected_by_size.items():
+            if key in icon_path.lower() and size != expected_size:
+                errors.append(
+                    f"manifest icon {icon_path}: expected {expected_size[0]}x{expected_size[1]}, "
+                    f"got {size[0]}x{size[1]}"
+                )
+        print(f"OK: manifest icon {icon_path} — {size[0]}x{size[1]} {fmt}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--asset-dir", type=Path, default=DEFAULT_ASSET_DIR,
-                        help="directory containing the listing image files")
+                        help="directory containing listing image files")
+    parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST,
+                        help="extension manifest used to validate referenced icon files")
     args = parser.parse_args()
     asset_dir = args.asset_dir.resolve()
 
@@ -57,8 +112,14 @@ def main() -> int:
         return 1
 
     errors = []
-    if PROMO_TILE not in {path.name for path in assets}:
+    names = {path.name for path in assets}
+    if PROMO_TILE not in names:
         errors.append(f"required promotional tile missing: {PROMO_TILE}")
+    missing_screenshots = EXPECTED_SCREENSHOTS - names
+    for name in sorted(missing_screenshots):
+        errors.append(f"expected generated listing screenshot missing: {name}")
+
+    check_manifest_icons(args.manifest.resolve(), errors)
 
     for path in assets:
         try:
@@ -74,8 +135,7 @@ def main() -> int:
         if kind is None:
             errors.append(
                 f"{path.name}: unclassified dimensions {size[0]}x{size[1]}; "
-                "use 1280x800/640x400 for screenshots, 440x280 for the promo tile, "
-                "or name an icon file with 'icon' and use 16x16, 48x48, or 128x128"
+                "use 1280x800/640x400 for listing screenshots or 440x280 for the promo tile"
             )
             continue
 
@@ -84,10 +144,11 @@ def main() -> int:
                 errors.append(f"{path.name}: expected 440x280, got {size[0]}x{size[1]}")
             if fmt != "PNG":
                 errors.append(f"{path.name}: expected PNG format, got {fmt}")
-        elif kind == "icon" and fmt != "PNG":
-            errors.append(f"{path.name}: extension icon assets must be PNG")
         elif kind.startswith("source capture"):
-            print(f"WARNING: {path.name} — {kind}; prepare a compliant 1280x800 or 640x400 listing screenshot before submission")
+            print(
+                f"WARNING: {path.name} — {kind}; prepare a compliant 1280x800 or "
+                "640x400 listing screenshot before submission"
+            )
         else:
             print(f"OK: {path.name} — {kind}, {size[0]}x{size[1]} {fmt}")
 
