@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ask AI — ChatGPT access needed</title>
+<style>
+:root{color-scheme:light dark;font:16px/1.5 system-ui,sans-serif}
+body{max-width:42rem;margin:4rem auto;padding:0 1.25rem}
+main{border:1px solid #8886;border-radius:12px;padding:1.5rem}
+h1{font-size:1.5rem;margin-top:0}
+.query{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid #8886;border-radius:8px;padding:1rem}
+button{font:inherit;padding:.7rem 1rem;border-radius:8px;cursor:pointer}
+p{margin:1rem 0}
+</style>
+</head>
+<body>
+<main>
+<h1>ChatGPT access wasn’t granted</h1>
+<p>Ask AI can’t submit your query automatically because ChatGPT site access was not granted. Your query is preserved below.</p>
+<p>To enable automatic submission next time, open the extension’s site-access permissions in Chrome and allow access to <strong>chatgpt.com</strong>. You can still continue manually now.</p>
+<h2>Your query</h2>
+<div id="query" class="query"></div>
+<p><button id="open" type="button">Open ChatGPT with this query</button></p>
+<p>ChatGPT may place the query in its prompt field; review it and submit it there.</p>
+</main>
+<script>
+(() => {
+  const query = new URLSearchParams(location.search).get('q') || '';
+  document.getElementById('query').textContent = query || '(No query provided)';
+  document.getElementById('open').addEventListener('click', () => {
+    location.href = 'https://chatgpt.com/?q=' + encodeURIComponent(query);
+  });
+})();
+</script>
+</body>
+</html>
