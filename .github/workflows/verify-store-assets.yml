@@ -1,0 +1,46 @@
+name: Verify Chrome Web Store assets
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/generate-store-screenshots.yml'
+      - '.github/workflows/verify-store-assets.yml'
+      - 'docs/chrome-web-store-assets/**'
+      - 'scripts/verify-store-assets.py'
+      - 'scripts/verify-store-branding.py'
+      - 'docs/CHROME-WEB-STORE-PRE-REGISTRATION-CHECKLIST.md'
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/generate-store-screenshots.yml'
+      - '.github/workflows/verify-store-assets.yml'
+      - 'docs/chrome-web-store-assets/**'
+      - 'scripts/verify-store-assets.py'
+      - 'scripts/verify-store-branding.py'
+      - 'docs/CHROME-WEB-STORE-PRE-REGISTRATION-CHECKLIST.md'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-store-assets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install image validation dependency
+        run: python -m pip install pillow
+
+      - name: Validate store asset files and dimensions
+        run: python scripts/verify-store-assets.py
+
+      - name: Check screenshot generator branding
+        run: python scripts/verify-store-branding.py

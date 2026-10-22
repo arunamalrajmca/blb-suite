@@ -1,0 +1,42 @@
+name: Verify Chrome Web Store submission tools
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/verify-store-package.py'
+      - 'scripts/verify-store-submission-assets.py'
+      - 'tests/test_verify_store_package.py'
+      - '.github/workflows/verify-store-submission-tools.yml'
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/verify-store-package.py'
+      - 'scripts/verify-store-submission-assets.py'
+      - 'tests/test_verify_store_package.py'
+      - '.github/workflows/verify-store-submission-tools.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-tools:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install image validation dependency
+        run: python -m pip install pillow
+      - name: Compile verification scripts and tests
+        run: python -m py_compile scripts/verify-store-package.py scripts/verify-store-submission-assets.py tests/test_verify_store_package.py
+      - name: Verify command-line interfaces
+        run: |
+          python scripts/verify-store-package.py --help
+          python scripts/verify-store-submission-assets.py --help
+      - name: Run exact-package auditor tests
+        run: python -m unittest discover -s tests -p 'test_verify_store_package.py' -v
