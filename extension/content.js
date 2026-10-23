@@ -1199,7 +1199,7 @@ if (location.hostname.toLowerCase().replace(/^www\./,'') === BLB_HOSTNAME) {
 // Uses the Suite's own selection logic and never invokes BLB's native search.
 function resolveStrongLexiconUrl(value) {
   const source = normalizeSelectionText(value).normalize('NFKC');
-  const match = source.match(/^([GH])\\s*[-:]?\\s*(\\d+)$/i);
+  const match = source.match(/^([GH])\s*[-:]?\s*(\d+)$/i);
   if (!match) return '';
   const numericId = Number(match[2]);
   if (!Number.isSafeInteger(numericId) || numericId < 1) return '';
