@@ -49,7 +49,6 @@ try {
     'popup.js',
     'Tutorial.html',
     'Tutorial.js',
-    'Tutorial.pdf',
     'THIRD-PARTY-NOTICES.txt',
     'icons/icon16.png',
     'icons/icon48.png',
@@ -57,6 +56,9 @@ try {
   )
   foreach ($path in $required) {
     if ($names -notcontains $path) { throw "Missing required ZIP entry: $path" }
+  }
+  if ($names -contains 'Tutorial.pdf') {
+    throw 'Retired Tutorial.pdf must not be included in the extension ZIP'
   }
 
   $entry = $zip.GetEntry('manifest.json')
