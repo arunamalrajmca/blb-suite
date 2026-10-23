@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
-  "release_version": "5.2.51.100",
-  "source": "Manually reviewed Chrome Web Store listing assets committed for PR #410 on 2026-10-23",
+  "release_version": "5.2.51.102",
+  "source": "Manually reviewed Chrome Web Store listing assets originally committed for PR #410 on 2026-10-23; reused unchanged for release 5.2.51.102",
   "assets": {
     "KJV-Scripture-Tools-Promo-Tile-440x280.png": {
       "format": "PNG",
