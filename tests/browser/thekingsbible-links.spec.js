@@ -86,6 +86,18 @@ test.describe("The King's Bible study-link routing", () => {
     expect(results.invalid).toBeNull();
   });
 
+  test('double-click handler routes exact Strong’s tokens on The King’s Bible to BLB lexicon', () => {
+    const start = contentSource.indexOf('function handleDoubleClickBlb(event) {');
+    const end = contentSource.indexOf('function enableDoubleClickBlb()', start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const handler = contentSource.slice(start, end);
+    expect(handler).toContain('selection.match(/^([GH])\\\\s*[-:]?\\\\s*(\\\\d+)$/i)');
+    expect(handler).toContain('location.hostname.toLowerCase().replace(/^www\\\\./, "") === "thekingsbible.com"');
+    expect(handler).toContain('https://www.blueletterbible.org/lexicon/');
+    expect(handler).toContain('safeRuntimeSendMessage({');
+  });
+
   test('Strong’s routing is delegated for exact G/H tokens and is not popup-selector dependent', () => {
     const start = contentSource.indexOf('// ---------- The King\'s Bible Strong\'s and Bible-reference links ----------');
     const end = contentSource.indexOf('// ---------- Webster\'s 1828 ----------', start);
