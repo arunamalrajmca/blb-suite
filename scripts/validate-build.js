@@ -79,3 +79,22 @@ for (const s of ['chrome.permissions.request', 'chrome.permissions.contains', 'c
   if (present) pass('architecture API present: ' + s);
   else fail('architecture API missing: ' + s);
 }
+
+
+// User-guide assets and popup entry point must stay HTML-only; the retired PDF
+// must not return through a stale popup link or regression fixture.
+const popupPath = path.join(ext, 'popup.html');
+const guidePath = path.join(ext, 'Tutorial.html');
+const guidePdfPath = path.join(ext, 'Tutorial.pdf');
+if (!fs.existsSync(guidePath)) fail('Tutorial.html missing');
+else pass('HTML user guide present');
+if (fs.existsSync(guidePdfPath)) fail('retired extension/Tutorial.pdf must not be packaged');
+else pass('retired Tutorial.pdf absent');
+if (fs.existsSync(popupPath)) {
+  const popup = fs.readFileSync(popupPath, 'utf8');
+  const popupScript = fs.readFileSync(path.join(ext, 'popup.js'), 'utf8');
+  if (!popup.includes('id="extensionVersion"') || !popup.includes('KJV Scripture Tools')) fail('popup must show the extension version below KJV Scripture Tools');
+  else pass('popup version link is present below KJV Scripture Tools');
+  if (/Feature Guide|guidePdf|Tutorial\.pdf/i.test(popup + '\n' + popupScript)) fail('retired PDF guide UI/code reference remains');
+  else pass('no retired PDF guide UI/code references');
+}

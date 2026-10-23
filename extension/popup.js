@@ -278,19 +278,6 @@ const downloadMenu = document.getElementById('downloadMenu');
 const dateQuickMenu = document.getElementById('dateQuickMenu');
 const startButton = document.getElementById('startTopic');
 const stopButton = document.getElementById('stopTopic');
-const guidePdfButton = document.getElementById('guidePdf');
-
-async function openAndDownloadGuide(path, filename) {
-  const url = chrome.runtime.getURL(path);
-  // Download first because activating the guide tab closes the transient action popup.
-  try { await chrome.downloads.download({url, filename, saveAs:false}); } catch (_) {}
-  try {
-    const tab = await chrome.tabs.create({url, active:true});
-    if (tab?.windowId != null) {
-      try { await chrome.runtime.sendMessage({type:'blbSuiteReopenPopup', windowId:tab.windowId}); } catch (_) {}
-    }
-  } catch (_) {}
-}
 
 const multiViewButton = document.getElementById('multiView');
 const historyMenu = document.getElementById('historyMenu');
@@ -1155,7 +1142,25 @@ document.addEventListener('click', e => {
 });
 
 
-guidePdfButton?.addEventListener('click', () => openAndDownloadGuide('Tutorial.pdf', 'KJV-Scripture-Tools-User-Guide.pdf'));
+document.getElementById('extensionVersion')?.addEventListener('click', async event => {
+  event.preventDefault();
+  const url = chrome.runtime.getURL('Tutorial.html');
+  try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    if (tab?.id != null && (!tab.url || tab.url === 'chrome://newtab/' || tab.url === 'about:blank')) {
+      // Reuse an empty current tab instead of opening an extra tab.
+      await chrome.tabs.update(tab.id, { url });
+      return;
+    }
+  } catch (_) {}
+  try {
+    // Tutorial.html is the configured options page; this uses Chrome's options action.
+    await chrome.runtime.openOptionsPage();
+  } catch (_) {
+    try { await chrome.tabs.create({ url, active: true }); } catch (_) {}
+  }
+});
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
 async function setIndependentSiteFeature(feature, on) {
   // Do not request host permissions or persist feature opt-ins on sensitive sites.
