@@ -759,14 +759,14 @@ if (["thekingsbible.com", "webstersdictionary1828.com"].includes(location.hostna
     // A chapter-only URL such as /Bible/7/1 is ordinary site navigation,
     // not a study-reference link. Do not hijack it when global redirects are
     // OFF. Explicit verse citations in study popups remain eligible.
-    if (/(?:^|[^\\d])\\d+\\s*:\\s*\\d+/.test(String(label || ''))) return true;
+    if (/(?:^|[^\d])\d+\s*:\s*\d+/.test(String(label || ''))) return true;
     if (theKingsBibleDataReference(link)) return true;
     try {
       const url = new URL(link?.href || '', location.href);
-      if (url.hostname.toLowerCase().replace(/^www\\./, '') !== 'thekingsbible.com') return false;
-      if (/^\\/Bible\\/\\d+\\/\\d+\\/\\d+\\/?$/i.test(url.pathname)) return true;
-      if (/^\\d+$/.test(url.searchParams.get('verse') || url.searchParams.get('v') || '')) return true;
-      return /(?:verse[_-]?)\\d+$/i.test(url.hash);
+      if (url.hostname.toLowerCase().replace(/^www\./, '') !== 'thekingsbible.com') return false;
+      if (/^\/Bible\/\d+\/\d+\/\d+\/?$/i.test(url.pathname)) return true;
+      if (/^\d+$/.test(url.searchParams.get('verse') || url.searchParams.get('v') || '')) return true;
+      return /(?:verse[_-]?)\d+$/i.test(url.hash);
     } catch (_) {
       return false;
     }
