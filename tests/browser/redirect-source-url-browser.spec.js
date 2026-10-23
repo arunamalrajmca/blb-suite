@@ -62,6 +62,16 @@ test.describe('real-browser source URL redirect regressions', () => {
     await expect(page).toHaveURL(targetUrl);
   });
 
+  test("The King's Bible chapter URL navigates to the matching BLB KJV chapter", async ({ page }) => {
+    const sourceUrl = 'https://www.thekingsbible.com/Bible/43/3';
+    const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/1/';
+    await loadProductionRedirect(page, sourceUrl);
+    const navigated = page.waitForURL(targetUrl, { waitUntil: 'domcontentloaded' });
+    await page.addScriptTag({ content: productionRedirectGate });
+    await navigated;
+    await expect(page).toHaveURL(targetUrl);
+  });
+
   test('www KJV.site verse URL navigates to the resolved BLB destination', async ({ page }) => {
     const sourceUrl = 'https://www.kjv.site/John-3-16-kjv/';
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
