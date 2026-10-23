@@ -94,6 +94,10 @@ test.describe("The King's Bible study-link routing", () => {
     expect(handler).toContain('document.addEventListener("click", e =>');
     expect(handler).toContain('label.match(/^([GH]');
     expect(handler).toContain('https://www.blueletterbible.org/lexicon/');
+    expect(handler).toContain('"webstersdictionary1828.com"');
+    expect(handler).toContain('span.bible[data-bible]');
+    expect(handler).toContain('theKingsBibleDataReference');
+    expect(handler).toContain('blbUrl(parsedRef.book, parsedRef.chapter, parsedRef.from, parsedRef.to)');
     expect(handler).not.toContain('isStudyPopupLink');
   });
 });
