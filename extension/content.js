@@ -740,15 +740,29 @@ if (location.hostname.endsWith(BLB_HOSTNAME)) {
 
 // ---------- The King's Bible Strong's and Bible-reference links ----------
 if (location.hostname.toLowerCase().replace(/^www\./, "") === "thekingsbible.com") {
-  // Do not depend on the site's popup CSS: popup markup and IDs can vary, and
-  // both study popups and Dictionary pages can contain Bible links.
+  // The site uses both anchors (study popups) and span.bible[data-bible]
+  // elements (Webster's 1828 Dictionary pages). Support both actual formats.
+  function theKingsBibleDataReference(node) {
+    const raw = String(node?.getAttribute?.("data-bible") || "").trim();
+    // IDs are <book number><3-digit chapter><3-digit verse>:
+    // 1003019 = Genesis 3:19; 26041014 = Ezekiel 41:14.
+    if (!/^\d{7,8}$/.test(raw)) return null;
+    const bookNumber = Number(raw.slice(0, -6));
+    const chapter = Number(raw.slice(-6, -3));
+    const verse = Number(raw.slice(-3));
+    if (!bookNumber || !chapter || !verse) return null;
+    const book = BOOKS.find(item => Number(item.bookNumber) === bookNumber);
+    return book ? {book:book.name, chapter, from:verse, to:null} : null;
+  }
+
   function theKingsBibleLinkReference(link) {
-    const label = normalizeSelectionText(link.innerText || link.textContent || "");
+    const label = normalizeSelectionText(link?.innerText || link?.textContent || "");
     const fromLabel = parseRef(label);
     if (fromLabel) return fromLabel;
 
-    // Source links identify a book by numeric ID. Some links encode only the
-    // chapter; others include a verse in the path, query, or fragment.
+    const fromData = theKingsBibleDataReference(link);
+    if (fromData) return fromData;
+
     try {
       const url = new URL(link.href, location.href);
       if (url.hostname.toLowerCase().replace(/^www\./, "") !== "thekingsbible.com") return null;
@@ -773,15 +787,14 @@ if (location.hostname.toLowerCase().replace(/^www\./, "") === "thekingsbible.com
 
   document.addEventListener("click", e => {
     if (isModifiedLinkActivation(e)) return;
-    const link = e.target.closest?.("a[href]");
+    const target = e.target instanceof Element ? e.target : e.target?.parentElement;
+    const link = target?.closest?.("a[href], span.bible[data-bible]");
     if (!link) return;
 
     const label = normalizeSelectionText(link.innerText || link.textContent || "");
     const strongMatch = label.match(/^([GH])\s*[-:]?\s*(\d+)$/i);
     const isDictionaryPage = /^\/Dictionary\//i.test(location.pathname);
     const ref = theKingsBibleLinkReference(link);
-    // Exact Strong's tokens work regardless of popup markup. Bible links are
-    // recognized by their reference text or source URL, inside or outside popups.
     if (!strongMatch && !ref && !(isDictionaryPage && parseRef(label))) return;
     if (!suiteEnabled) return;
 
@@ -793,7 +806,7 @@ if (location.hostname.toLowerCase().replace(/^www\./, "") === "thekingsbible.com
       e.stopImmediatePropagation();
       void safeRuntimeSendMessage({
         type: "blbSuiteOpenBackgroundUrl",
-        url: `https://www.blueletterbible.org/lexicon/${prefix}${number}/kjv/${language}/0-1/`,
+        url: "https://www.blueletterbible.org/lexicon/" + prefix + number + "/kjv/" + language + "/0-1/",
         activeIfNew: true,
         activateExisting: true
       });
@@ -802,19 +815,18 @@ if (location.hostname.toLowerCase().replace(/^www\./, "") === "thekingsbible.com
 
     const parsedRef = ref || parseRef(label);
     if (!parsedRef) return;
-    const target = blbUrl(parsedRef.book, parsedRef.chapter, parsedRef.from, parsedRef.to);
-    if (!target) return;
+    const targetUrl = blbUrl(parsedRef.book, parsedRef.chapter, parsedRef.from, parsedRef.to);
+    if (!targetUrl) return;
     e.preventDefault();
     e.stopImmediatePropagation();
     void safeRuntimeSendMessage({
       type: "blbSuiteOpenBackgroundUrl",
-      url: target,
+      url: targetUrl,
       activeIfNew: true,
       activateExisting: true
     });
   }, true);
 }
-
 // ---------- Webster's 1828 ----------
 if (location.hostname==="webstersdictionary1828.com") {
   async function captureWebsterWord() {
