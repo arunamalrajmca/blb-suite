@@ -165,6 +165,16 @@ function redirectBibleSite() {
   const u=new URL(location.href), host=u.hostname.toLowerCase().replace(/^www\./,"");
   let ref=null;
 
+  if (host==="thekingsbible.com") {
+    // The King's Bible uses numeric book IDs and chapter numbers:
+    // /Bible/43/3 is John chapter 3. Its chapter pages do not encode a verse.
+    const m=u.pathname.match(/^\/Bible\/(\d+)\/(\d+)\/?$/i);
+    if (m) {
+      const sourceBook = BOOKS.find(book => Number(book.bookNumber) === Number(m[1]));
+      if (sourceBook) ref={book:sourceBook.name,chapter:+m[2],from:1,to:null};
+    }
+  }
+
   if (host==="bible.com") {
     // Ignore the selected translation/version completely. Any version clicked
     // on Bible.com is redirected to the KJV equivalent in BLB.
@@ -298,7 +308,7 @@ function redirectBlbNet() {
 const REDIRECT_HOSTS = new Set([
   'bible.com', 'biblegateway.com', 'bibleref.com', 'biblehub.com',
   'bibleportal.com', 'kingjamesbibleonline.org', 'kjbo.org',
-  'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com',
+  'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com', 'thekingsbible.com',
   'webstersdictionary1828.com', BLB_HOSTNAME
 ]);
 
