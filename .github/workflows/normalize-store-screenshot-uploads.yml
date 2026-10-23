@@ -32,12 +32,16 @@ jobs:
 
           assets = Path("docs/chrome-web-store-assets")
           mappings = {
-              "Extension Popup.PNG": "extension-popup.png",
-              "Omnibox Search.PNG": "tutorial-search.png",
-              "Verse Lookup.PNG": "tutorial-references.png",
-              "Study.PNG": "tutorial-study.png",
-              "KJV-Scripture-Tools-Home-Page.PNG": "KJV-Scripture-Tools-Home-Page.png",
+              "Extension Popup.JPG": "extension-popup.png",
+              "Omnibox Search.JPG": "tutorial-search.png",
+              "Verse Lookup.JPG": "tutorial-references.png",
+              "Study.JPG": "tutorial-study.png",
           }
+          # The homepage image is an optional extra, not one of the four
+          # required store screenshots. Convert it only if its JPG exists.
+          homepage = assets / "KJV-Scripture-Tools-Home-Page.JPG"
+          if homepage.is_file():
+              mappings[homepage.name] = "KJV-Scripture-Tools-Home-Page.png"
 
           for source_name, target_name in mappings.items():
               source = assets / source_name
@@ -46,8 +50,7 @@ jobs:
               target = assets / target_name
               with Image.open(source) as im:
                   im.load()
-                  rgb = im.convert("RGB")
-                  rgb.save(target, format="PNG", optimize=True)
+                  im.convert("RGB").save(target, format="PNG", optimize=True)
               with Image.open(target) as check:
                   check.verify()
               with Image.open(target) as check:
@@ -55,17 +58,18 @@ jobs:
                       raise SystemExit(f"Output is not PNG: {target}")
                   print(f"{target}: {check.format}, {check.width}x{check.height}, {target.stat().st_size} bytes")
 
-          # Remove the redundant JPEG uploads and the misleading title-case .PNG
-          # uploads only after all five genuine PNG outputs have been verified.
-          for name in [
+          # Delete duplicates only after all converted files pass PNG verification.
+          redundant = [
               "Extension Popup.JPG", "Omnibox Search.JPG", "Verse Lookup.JPG",
               "Study.JPG", "KJV-Scripture-Tools-Home-Page.JPG",
-              *mappings.keys(),
-          ]:
+              "Extension Popup.PNG", "Omnibox Search.PNG", "Verse Lookup.PNG",
+              "Study.PNG", "KJV-Scripture-Tools-Home-Page.PNG",
+          ]
+          for name in redundant:
               path = assets / name
               if path.exists():
                   path.unlink()
-                  print(f"Removed duplicate source: {path}")
+                  print(f"Removed duplicate upload: {path}")
           PY
       - name: Commit normalized screenshot assets
         run: |
