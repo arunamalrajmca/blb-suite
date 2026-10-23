@@ -86,14 +86,14 @@ test.describe("The King's Bible study-link routing", () => {
     expect(results.invalid).toBeNull();
   });
 
-  test('double-click handler routes exact Strong’s tokens on The King’s Bible to BLB lexicon', () => {
+  test('double-click handler routes exact Strong’s tokens on any website to BLB lexicon', () => {
     const start = contentSource.indexOf('function handleDoubleClickBlb(event) {');
     const end = contentSource.indexOf('function enableDoubleClickBlb()', start);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const handler = contentSource.slice(start, end);
     expect(handler).toContain('const strongLexiconMatch = selection.match');
-    expect(handler).toContain('"thekingsbible.com"');
+    expect(handler).not.toContain('"thekingsbible.com"');
     expect(handler).toContain('https://www.blueletterbible.org/lexicon/');
     expect(handler).toContain('safeRuntimeSendMessage({');
   });
