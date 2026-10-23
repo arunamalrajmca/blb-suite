@@ -739,7 +739,7 @@ if (location.hostname.endsWith(BLB_HOSTNAME)) {
 }
 
 // ---------- The King's Bible Strong's and verse modal links ----------
-if (location.hostname.toLowerCase().replace(/^www\\./, "") === "thekingsbible.com") {
+if (location.hostname.toLowerCase().replace(/^www\./, "") === "thekingsbible.com") {
   // The King's Bible uses dynamically-created study popups. Delegate at document
   // level so links added after the popup opens are handled as well.
   const isStudyPopupLink = link => Boolean(link.closest?.(
@@ -752,7 +752,7 @@ if (location.hostname.toLowerCase().replace(/^www\\./, "") === "thekingsbible.co
     if (!link || !isStudyPopupLink(link)) return;
 
     const label = normalizeSelectionText(link.innerText || link.textContent || "");
-    const strongMatch = label.match(/^([GH])\\s*[-:]?\\s*(\\d+)$/i);
+    const strongMatch = label.match(/^([GH])\s*[-:]?\s*(\d+)$/i);
     if (strongMatch) {
       e.preventDefault();
       e.stopImmediatePropagation();
