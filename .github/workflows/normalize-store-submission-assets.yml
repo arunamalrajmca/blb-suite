@@ -1,0 +1,99 @@
+name: Normalize Chrome Web Store submission screenshots
+
+on:
+  push:
+    branches:
+      - chore/chrome-web-store-screenshots-v5.2.51.100
+    paths:
+      - 'docs/chrome-web-store-assets/**'
+      - '.github/workflows/normalize-store-submission-assets.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  normalize-and-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out candidate branch
+        uses: actions/checkout@v4
+        with:
+          ref: chore/chrome-web-store-screenshots-v5.2.51.100
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install Pillow
+        run: python -m pip install Pillow
+      - name: Rename new captures, remove obsolete screenshots, and normalize dimensions
+        shell: python
+        run: |
+          from pathlib import Path
+          from PIL import Image, ImageStat
+          import subprocess
+
+          folder = Path("docs/chrome-web-store-assets")
+          mapping = {
+              "Extension Popup.PNG": "extension-popup.png",
+              "Omnibox Search.PNG": "tutorial-search.png",
+              "Omnibox Verse Loopup.PNG": "tutorial-references.png",
+              "Study Topics.PNG": "tutorial-study.png",
+          }
+          keep = {
+              "extension-popup.png",
+              "tutorial-search.png",
+              "tutorial-references.png",
+              "tutorial-study.png",
+              "KJV-Scripture-Tools-Promo-Tile-440x280.png",
+          }
+
+          # Prefer the newly uploaded captures; remove prior canonical screenshots
+          # first so they cannot be mistaken for the new source files.
+          for name in mapping.values():
+              p = folder / name
+              if p.exists():
+                  p.unlink()
+
+          for source, target in mapping.items():
+              src, dst = folder / source, folder / target
+              if not src.exists():
+                  raise SystemExit(f"Required new capture is missing: {src}")
+              src.rename(dst)
+
+          # Drop superseded/extra image captures from this submission folder.
+          for p in folder.iterdir():
+              if p.is_file() and p.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"} and p.name not in keep:
+                  p.unlink()
+
+          # The new captures are 1280x770. Extend the bottom edge by 30 px
+          # rather than scaling or cropping the screenshot content.
+          for name in mapping.values():
+              path = folder / name
+              with Image.open(path) as opened:
+                  im = opened.convert("RGB")
+                  if im.size == (1280, 770):
+                      strip = im.crop((0, 765, 1280, 770))
+                      color = tuple(round(v) for v in ImageStat.Stat(strip).mean)
+                      canvas = Image.new("RGB", (1280, 800), color)
+                      canvas.paste(im, (0, 0))
+                      canvas.save(path, format="PNG", optimize=True)
+                  elif im.size != (1280, 800):
+                      raise SystemExit(f"{name}: unexpected source size {im.size}; expected 1280x770 or 1280x800")
+                  with Image.open(path) as verified:
+                      print(f"{name}: {verified.size[0]}x{verified.size[1]}")
+
+      - name: Run strict listing asset audit
+        run: python scripts/verify-store-submission-assets.py --asset-dir docs/chrome-web-store-assets
+      - name: Commit normalized assets to this branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/chrome-web-store-assets
+          if git diff --cached --quiet; then
+            echo "No asset changes to commit."
+          else
+            git commit -m "Normalize Chrome Web Store screenshot assets"
+            git push origin HEAD:chore/chrome-web-store-screenshots-v5.2.51.100
+          fi
