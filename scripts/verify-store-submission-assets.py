@@ -123,11 +123,12 @@ def main() -> int:
             errors.append(f"{path.name}: image cannot be decoded ({exc})")
             continue
 
-        expected_size = PROMO_SIZE if path.name == PROMO else None
         if path.name == PROMO:
             if size != PROMO_SIZE or fmt != "PNG":
                 errors.append(f"{path.name}: expected PNG 440x280, got {fmt} {size[0]}x{size[1]}")
         elif path.name in EXPECTED_SCREENSHOTS:
+            if fmt != "PNG":
+                errors.append(f"{path.name}: expected PNG, got {fmt}")
             if size not in SIZES:
                 errors.append(f"{path.name}: expected 1280x800 or 640x400, got {size[0]}x{size[1]}")
 
@@ -142,6 +143,8 @@ def main() -> int:
                     f"{path.name}: SHA-256 mismatch; expected {expected_hash}, got {actual_hash}"
                 )
         if isinstance(expected_entry, dict):
+            if expected_entry.get("format") != fmt:
+                errors.append(f"{path.name}: format does not match approved inventory")
             if expected_entry.get("size") != path.stat().st_size:
                 errors.append(f"{path.name}: byte size does not match approved inventory")
             if expected_entry.get("dimensions") != [size[0], size[1]]:
