@@ -46,6 +46,46 @@ test.describe("The King's Bible study-link routing", () => {
     expect(results.outsideHost).toBeNull();
   });
 
+  test('Dictionary span.bible data-bible values resolve to their exact KJV references', async ({ page }) => {
+    const helperStart = contentSource.indexOf('function theKingsBibleDataReference(node) {');
+    const helperEnd = contentSource.indexOf('\n\n  function theKingsBibleLinkReference', helperStart);
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+
+    await page.route('https://www.thekingsbible.com/**', route => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Fixture</title>' }));
+    await page.goto('https://www.thekingsbible.com/Dictionary/Face');
+    await page.addScriptTag({ content: read('extension/books.js') });
+    await page.addScriptTag({ content: contentSource.slice(helperStart, helperEnd) });
+
+    const results = await page.evaluate(() => {
+      const make = id => {
+        const span = document.createElement('span');
+        span.className = 'bible';
+        span.setAttribute('data-bible', id);
+        return theKingsBibleDataReference(span);
+      };
+      return {
+        genesis319: make('1003019'),
+        genesis4811: make('1048011'),
+        ezekiel4114: make('26041014'),
+        psalms3116: make('19031016'),
+        psalms131: make('19013001'),
+        acts2516: make('44025016'),
+        corinthians1312: make('46013012'),
+        invalid: make('abc')
+      };
+    });
+
+    expect(results.genesis319).toMatchObject({book: 'Genesis', chapter: 3, from: 19, to: null});
+    expect(results.genesis4811).toMatchObject({book: 'Genesis', chapter: 48, from: 11, to: null});
+    expect(results.ezekiel4114).toMatchObject({book: 'Ezekiel', chapter: 41, from: 14, to: null});
+    expect(results.psalms3116).toMatchObject({book: 'Psalms', chapter: 31, from: 16, to: null});
+    expect(results.psalms131).toMatchObject({book: 'Psalms', chapter: 13, from: 1, to: null});
+    expect(results.acts2516).toMatchObject({book: 'Acts', chapter: 25, from: 16, to: null});
+    expect(results.corinthians1312).toMatchObject({book: '1 Corinthians', chapter: 13, from: 12, to: null});
+    expect(results.invalid).toBeNull();
+  });
+
   test('Strong’s routing is delegated for exact G/H tokens and is not popup-selector dependent', () => {
     const start = contentSource.indexOf('// ---------- The King\'s Bible Strong\'s and Bible-reference links ----------');
     const end = contentSource.indexOf('// ---------- Webster\'s 1828 ----------', start);
