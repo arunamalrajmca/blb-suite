@@ -19,7 +19,7 @@ PR: [#410](https://github.com/arunamalrajmca/blb-suite/pull/410)
 - [x] Automated audit runs on pull requests targeting `main`, candidate branch pushes, and manual dispatch.
 - [x] Third-party workflow actions are pinned to immutable full commit SHAs.
 - [x] Manual visual review of the five listing assets passed on 2026-10-23.
-- [x] This documentation-only listing audit does not change extension code or create a release.
+- [x] Extension and package version metadata are bumped together in this PR; the reusable audit logic remains version-agnostic and no release/tag is created by this change.
 
 Run local checks:
 
