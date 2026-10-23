@@ -739,7 +739,7 @@ if (location.hostname.endsWith(BLB_HOSTNAME)) {
 }
 
 // ---------- The King's Bible Strong's and Bible-reference links ----------
-if (["thekingsbible.com", "webstersdictionary1828.com"].includes(location.hostname.toLowerCase().replace(/^www\./, ""))) {
+          location.hostname.toLowerCase().replace(/^www\./, "") === "thekingsbible.com"
   // The site uses both anchors (study popups) and span.bible[data-bible]
   // elements (Webster's 1828 Dictionary pages). Support both actual formats.
   function theKingsBibleDataReference(node) {
@@ -2260,10 +2260,10 @@ function handleDoubleClickBlb(event) {
         // text rather than a clickable anchor. Route an exact G<n>/H<n> token
         // directly to its BLB lexicon entry before generic word/reference logic.
         // Keep this site-specific so ordinary G/H-containing text elsewhere is unaffected.
-        const strongLexiconMatch = selection.match(/^([GH])\\s*[-:]?\\s*(\\d+)$/i);
+        const strongLexiconMatch = selection.match(/^([GH])\s*[-:]?\s*(\d+)$/i);
         if (
           strongLexiconMatch &&
-          location.hostname.toLowerCase().replace(/^www\\./, "") === "thekingsbible.com"
+          location.hostname.toLowerCase().replace(/^www\./, "") === "thekingsbible.com"
         ) {
           const prefix = strongLexiconMatch[1].toLowerCase();
           const number = String(Number(strongLexiconMatch[2]));
