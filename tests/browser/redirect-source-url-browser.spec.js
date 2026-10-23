@@ -21,7 +21,7 @@ const productionRedirectHelpers =
   contentSource.slice(redirectStart, redirectEnd);
 const productionRedirectGate = contentSource.slice(gateStart, gateEnd);
 
-async function loadProductionRedirect(page, sourceUrl) {
+async function loadProductionRedirect(page, sourceUrl, redirectEnabled = true) {
   const sourceOrigin = new URL(sourceUrl).origin;
   await page.route(sourceOrigin + '/**', route =>
     route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Source Bible page</title>' })
@@ -38,7 +38,7 @@ async function loadProductionRedirect(page, sourceUrl) {
   await page.addScriptTag({ content: productionRedirectHelpers });
   // Stub only the extension APIs and unrelated BLB-native handler. The hostname
   // gate and redirectBibleSite() call below are copied verbatim from production.
-  await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) } } }; function redirectBlbNet() { return false; }' });
+  await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: ' + redirectEnabled + ' }) } } }; function redirectBlbNet() { return false; }' });
 }
 
 test.describe('real-browser source URL redirect regressions', () => {
@@ -70,6 +70,14 @@ test.describe('real-browser source URL redirect regressions', () => {
     await page.addScriptTag({ content: productionRedirectGate });
     await navigated;
     await expect(page).toHaveURL(targetUrl);
+  });
+
+  test("The King's Bible chapter URL stays on the source site when global redirects are OFF", async ({ page }) => {
+    const sourceUrl = 'https://www.thekingsbible.com/Bible/43/3';
+    await loadProductionRedirect(page, sourceUrl, false);
+    await page.addScriptTag({ content: productionRedirectGate });
+    await page.waitForTimeout(50);
+    await expect(page).toHaveURL(sourceUrl);
   });
 
   test('www KJV.site verse URL navigates to the resolved BLB destination', async ({ page }) => {
