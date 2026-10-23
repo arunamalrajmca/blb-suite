@@ -739,7 +739,7 @@ if (location.hostname.endsWith(BLB_HOSTNAME)) {
 }
 
 // ---------- The King's Bible Strong's and Bible-reference links ----------
-if (location.hostname.toLowerCase().replace(/^www\./, "") === "thekingsbible.com") {
+if (["thekingsbible.com", "webstersdictionary1828.com"].includes(location.hostname.toLowerCase().replace(/^www\./, ""))) {
   // The site uses both anchors (study popups) and span.bible[data-bible]
   // elements (Webster's 1828 Dictionary pages). Support both actual formats.
   function theKingsBibleDataReference(node) {
