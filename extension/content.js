@@ -823,9 +823,9 @@ if (["thekingsbible.com", "webstersdictionary1828.com"].includes(location.hostna
     const ref = theKingsBibleLinkReference(link);
     if (!strongMatch && !theKingsBibleLinkHasExplicitVerse(link, label)) return;
     if (!suiteEnabled) return;
-    // Strong's lexicon lookups are separate from the global Bible-link redirect
-    // toggle. Verse links inside study modals must honor that toggle.
-    if (!strongMatch && !redirectExternalBibleLinksEnabled) return;
+    // The global redirect toggle governs both Bible references and linked
+    // Strong's pages on The King's Bible / Webster's study pages.
+    if (!redirectExternalBibleLinksEnabled) return;
 
     if (strongMatch) {
       const prefix = strongMatch[1].toLowerCase();
