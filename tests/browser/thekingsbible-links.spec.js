@@ -118,7 +118,7 @@ test.describe("The King's Bible study-link routing", () => {
     expect(end).toBeGreaterThan(start);
     const handler = contentSource.slice(start, end);
     expect(handler).toContain('.dictitemsmall .strongs');
-    expect(handler).toContain('label.match(/^([GH]\\s*[-:]?\\s*(\\d+))$/i');
+    expect(handler).toContain('label.match(/^([GH])\\s*[-:]?\\s*(\\d+)$/i');
     expect(handler).toContain('if (!redirectExternalBibleLinksEnabled) return;');
     expect(handler).toContain('url: "https://www.blueletterbible.org/lexicon/" + prefix + number');
   });
