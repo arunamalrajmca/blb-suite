@@ -165,6 +165,16 @@ function redirectBibleSite() {
   const u=new URL(location.href), host=u.hostname.toLowerCase().replace(/^www\./,"");
   let ref=null;
 
+  if (host==="thekingsbible.com") {
+    // The King's Bible uses numeric book IDs and chapter numbers:
+    // /Bible/43/3 is John chapter 3. Its chapter pages do not encode a verse.
+    const m=u.pathname.match(/^\/Bible\/(\d+)\/(\d+)\/?$/i);
+    if (m) {
+      const sourceBook = BOOKS.find(book => Number(book.bookNumber) === Number(m[1]));
+      if (sourceBook) ref={book:sourceBook.name,chapter:+m[2],from:1,to:null};
+    }
+  }
+
   if (host==="bible.com") {
     // Ignore the selected translation/version completely. Any version clicked
     // on Bible.com is redirected to the KJV equivalent in BLB.
@@ -298,7 +308,7 @@ function redirectBlbNet() {
 const REDIRECT_HOSTS = new Set([
   'bible.com', 'biblegateway.com', 'bibleref.com', 'biblehub.com',
   'bibleportal.com', 'kingjamesbibleonline.org', 'kjbo.org',
-  'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com',
+  'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com', 'thekingsbible.com',
   'webstersdictionary1828.com', BLB_HOSTNAME
 ]);
 
@@ -728,6 +738,95 @@ if (location.hostname.endsWith(BLB_HOSTNAME)) {
   }
 }
 
+// ---------- The King's Bible Strong's and Bible-reference links ----------
+if (["thekingsbible.com", "webstersdictionary1828.com"].includes(location.hostname.toLowerCase().replace(/^www\./, ""))) {
+  // The site uses both anchors (study popups) and span.bible[data-bible]
+  // elements (Webster's 1828 Dictionary pages). Support both actual formats.
+  function theKingsBibleDataReference(node) {
+    const raw = String(node?.getAttribute?.("data-bible") || "").trim();
+    // IDs are <book number><3-digit chapter><3-digit verse>:
+    // 1003019 = Genesis 3:19; 26041014 = Ezekiel 41:14.
+    if (!/^\d{7,8}$/.test(raw)) return null;
+    const bookNumber = Number(raw.slice(0, -6));
+    const chapter = Number(raw.slice(-6, -3));
+    const verse = Number(raw.slice(-3));
+    if (!bookNumber || !chapter || !verse) return null;
+    const book = BOOKS.find(item => Number(item.bookNumber) === bookNumber);
+    return book ? {book:book.name, chapter, from:verse, to:null} : null;
+  }
+
+  function theKingsBibleLinkReference(link) {
+    const label = normalizeSelectionText(link?.innerText || link?.textContent || "");
+    const fromLabel = parseRef(label);
+    if (fromLabel) return fromLabel;
+
+    const fromData = theKingsBibleDataReference(link);
+    if (fromData) return fromData;
+
+    try {
+      const url = new URL(link.href, location.href);
+      if (url.hostname.toLowerCase().replace(/^www\./, "") !== "thekingsbible.com") return null;
+      const match = url.pathname.match(/^\/Bible\/(\d+)\/(\d+)(?:\/(\d+))?\/?$/i);
+      if (!match) return null;
+      const book = BOOKS.find(item => Number(item.bookNumber) === Number(match[1]));
+      if (!book) return null;
+      let verse = match[3] ? Number(match[3]) : null;
+      if (!verse) {
+        const queryVerse = url.searchParams.get("verse") || url.searchParams.get("v");
+        if (queryVerse && /^\d+$/.test(queryVerse)) verse = Number(queryVerse);
+      }
+      if (!verse) {
+        const fragment = url.hash.match(/(?:verse[_-]?)?(\d+)$/i);
+        if (fragment) verse = Number(fragment[1]);
+      }
+      return {book:book.name, chapter:Number(match[2]), from:verse || 1, to:null};
+    } catch (_) {
+      return null;
+    }
+  }
+
+  document.addEventListener("click", e => {
+    if (isModifiedLinkActivation(e)) return;
+    const target = e.target instanceof Element ? e.target : e.target?.parentElement;
+    const link = target?.closest?.("a[href], span.bible[data-bible]");
+    if (!link) return;
+
+    const label = normalizeSelectionText(link.innerText || link.textContent || "");
+    const strongMatch = label.match(/^([GH])\s*[-:]?\s*(\d+)$/i);
+    const isDictionaryPage = /^\/Dictionary\//i.test(location.pathname);
+    const ref = theKingsBibleLinkReference(link);
+    if (!strongMatch && !ref && !(isDictionaryPage && parseRef(label))) return;
+    if (!suiteEnabled) return;
+
+    if (strongMatch) {
+      const prefix = strongMatch[1].toLowerCase();
+      const number = String(Number(strongMatch[2]));
+      const language = prefix === "g" ? "tr" : "wlc";
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      void safeRuntimeSendMessage({
+        type: "blbSuiteOpenBackgroundUrl",
+        url: "https://www.blueletterbible.org/lexicon/" + prefix + number + "/kjv/" + language + "/0-1/",
+        activeIfNew: true,
+        activateExisting: true
+      });
+      return;
+    }
+
+    const parsedRef = ref || parseRef(label);
+    if (!parsedRef) return;
+    const targetUrl = blbUrl(parsedRef.book, parsedRef.chapter, parsedRef.from, parsedRef.to);
+    if (!targetUrl) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    void safeRuntimeSendMessage({
+      type: "blbSuiteOpenBackgroundUrl",
+      url: targetUrl,
+      activeIfNew: true,
+      activateExisting: true
+    });
+  }, true);
+}
 // ---------- Webster's 1828 ----------
 if (location.hostname==="webstersdictionary1828.com") {
   async function captureWebsterWord() {

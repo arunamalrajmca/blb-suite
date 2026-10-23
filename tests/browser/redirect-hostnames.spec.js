@@ -45,6 +45,7 @@ test('bare and www source hostnames normalize to the same native redirect key', 
     'kjv.site',
     'm.kjv.site',
     'officialkingjamesbible.com',
+    'thekingsbible.com',
     'webstersdictionary1828.com',
     'blueletterbible.org'
   ]);
