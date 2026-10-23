@@ -739,7 +739,7 @@ if (location.hostname.endsWith(BLB_HOSTNAME)) {
 }
 
 // ---------- The King's Bible Strong's and Bible-reference links ----------
-if (location.hostname.toLowerCase().replace(/^www\\./, "") === "thekingsbible.com") {
+if (location.hostname.toLowerCase().replace(/^www\./, "") === "thekingsbible.com") {
   // Do not depend on the site's popup CSS: popup markup and IDs can vary, and
   // both study popups and Dictionary pages can contain Bible links.
   function theKingsBibleLinkReference(link) {
@@ -751,18 +751,18 @@ if (location.hostname.toLowerCase().replace(/^www\\./, "") === "thekingsbible.co
     // chapter; others include a verse in the path, query, or fragment.
     try {
       const url = new URL(link.href, location.href);
-      if (url.hostname.toLowerCase().replace(/^www\\./, "") !== "thekingsbible.com") return null;
-      const match = url.pathname.match(/^\\/Bible\\/(\\d+)\\/(\\d+)(?:\\/(\\d+))?\\/?$/i);
+      if (url.hostname.toLowerCase().replace(/^www\./, "") !== "thekingsbible.com") return null;
+      const match = url.pathname.match(/^\/Bible\/(\d+)\/(\d+)(?:\/(\d+))?\/?$/i);
       if (!match) return null;
       const book = BOOKS.find(item => Number(item.bookNumber) === Number(match[1]));
       if (!book) return null;
       let verse = match[3] ? Number(match[3]) : null;
       if (!verse) {
         const queryVerse = url.searchParams.get("verse") || url.searchParams.get("v");
-        if (queryVerse && /^\\d+$/.test(queryVerse)) verse = Number(queryVerse);
+        if (queryVerse && /^\d+$/.test(queryVerse)) verse = Number(queryVerse);
       }
       if (!verse) {
-        const fragment = url.hash.match(/(?:verse[_-]?)?(\\d+)$/i);
+        const fragment = url.hash.match(/(?:verse[_-]?)?(\d+)$/i);
         if (fragment) verse = Number(fragment[1]);
       }
       return {book:book.name, chapter:Number(match[2]), from:verse || 1, to:null};
@@ -777,8 +777,8 @@ if (location.hostname.toLowerCase().replace(/^www\\./, "") === "thekingsbible.co
     if (!link) return;
 
     const label = normalizeSelectionText(link.innerText || link.textContent || "");
-    const strongMatch = label.match(/^([GH])\\s*[-:]?\\s*(\\d+)$/i);
-    const isDictionaryPage = /^\\/Dictionary\\//i.test(location.pathname);
+    const strongMatch = label.match(/^([GH])\s*[-:]?\s*(\d+)$/i);
+    const isDictionaryPage = /^\/Dictionary\//i.test(location.pathname);
     const ref = theKingsBibleLinkReference(link);
     // Exact Strong's tokens work regardless of popup markup. Bible links are
     // recognized by their reference text or source URL, inside or outside popups.
