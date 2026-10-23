@@ -1197,6 +1197,17 @@ if (location.hostname.toLowerCase().replace(/^www\./,'') === BLB_HOSTNAME) {
 // ---------- Double-Click BLB ----------
 // Double-click a single KJV word, Bible book name, or standalone book number.
 // Uses the Suite's own selection logic and never invokes BLB's native search.
+function resolveStrongLexiconUrl(value) {
+  const source = normalizeSelectionText(value).normalize('NFKC');
+  const match = source.match(/^([GH])\\s*[-:]?\\s*(\\d+)$/i);
+  if (!match) return '';
+  const numericId = Number(match[2]);
+  if (!Number.isSafeInteger(numericId) || numericId < 1) return '';
+  const prefix = match[1].toLowerCase();
+  const language = prefix === 'g' ? 'tr' : 'wlc';
+  return `https://www.blueletterbible.org/lexicon/${prefix}${numericId}/kjv/${language}/0-1/`;
+}
+
 function normalizeDoubleClickToken(value) {
   return String(value || '').trim().replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '').toLowerCase();
 }
@@ -2253,6 +2264,28 @@ function handleDoubleClickBlb(event) {
         if (cueTarget && /^(?:v|verse|verses)$/i.test(physicalToken)) selection = physicalToken;
         if (!selection) {
           if (Date.now()-started<1500) requestAnimationFrame(dispatch);
+          return true;
+        }
+
+        // Strong's identifiers are exact standalone tokens, not ordinary word
+        // searches or Bible references. Route them directly to the BLB lexicon
+        // on any site where Double-Click BLB is enabled.
+        const strongLexiconUrl = resolveStrongLexiconUrl(selection);
+        if (strongLexiconUrl) {
+          const now = Date.now();
+          const gestureTarget = event?.target && (typeof event.target === 'object' || typeof event.target === 'function')
+            ? event.target : null;
+          if (gestureTarget) {
+            const previous = recentDoubleClickDestinations.get(gestureTarget) || 0;
+            if (now - previous < 1200) return true;
+            recentDoubleClickDestinations.set(gestureTarget, now);
+          }
+          safeRuntimeSendMessage({
+            type: 'blbSuiteOpenBackgroundUrl',
+            url: strongLexiconUrl,
+            activeIfNew: true,
+            activateExisting: true
+          });
           return true;
         }
 
