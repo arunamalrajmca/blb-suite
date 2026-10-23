@@ -132,5 +132,40 @@ class SubmissionAssetAuditTests(unittest.TestCase):
         self.assertIn("manifest version mismatch", result.stderr)
 
 
+    def test_malformed_inventory_json_fails(self):
+        (self.asset_dir / "SUBMISSION-ASSET-INVENTORY.json").write_text(
+            "{ definitely not valid JSON", encoding="utf-8"
+        )
+        result = self._run()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("submission asset inventory is missing or invalid", result.stderr)
+
+    def test_inventory_entry_missing_checksum_fails(self):
+        del self.inventory["assets"][SCREENSHOTS[0]]["sha256"]
+        self._write_inventory()
+        result = self._run()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("must include a SHA-256 checksum", result.stderr)
+
+    def test_corrupt_release_zip_fails(self):
+        archive_path = Path(self.temp.name) / "corrupt-release.zip"
+        archive_path.write_bytes(b"this is not a ZIP archive")
+        result = self._run("--release-zip", archive_path)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("release ZIP cannot be read", result.stderr)
+
+    def test_release_zip_missing_required_root_file_fails(self):
+        archive_path = Path(self.temp.name) / "incomplete-release.zip"
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            archive.writestr("manifest.json", json.dumps({
+                "manifest_version": 3,
+                "version": "5.2.51.100",
+            }))
+        result = self._run("--release-zip", archive_path)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("release ZIP is missing required root file: popup.html", result.stderr)
+        self.assertIn("release ZIP is missing required root file: background.js", result.stderr)
+
+
 if __name__ == "__main__":
     unittest.main()
