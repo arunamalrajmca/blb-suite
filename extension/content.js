@@ -48,20 +48,29 @@ async function blbSuiteAccessAllowed() {
 let suiteEnabled = false;
 let doubleClickBlbEnabled = false;
 let suiteSettingsReady = false;
+let redirectExternalBibleLinksEnabled = false;
 
 // Cache the master setting in each content-script instance. This avoids a
 // storage read on every copy/click/selection event while still reacting
 // immediately to later setting changes through chrome.storage.onChanged.
-const suiteSettingsReadyPromise = chrome.storage.local.get({masterEnabled:true, doubleClickBlbSites:{}}).then(data => {
+const suiteSettingsReadyPromise = chrome.storage.local.get({masterEnabled:true, doubleClickBlbSites:{}, redirectEnabled:false}).then(data => {
   suiteEnabled = data.masterEnabled !== false;
+  redirectExternalBibleLinksEnabled = data.redirectEnabled === true;
   suiteSettingsReady = true;
   return suiteEnabled;
 }).catch(() => {
   // Fail closed if the master setting cannot be read. A storage failure must
   // never temporarily activate Suite features while the extension is meant to be OFF.
   suiteEnabled = false;
+  redirectExternalBibleLinksEnabled = false;
   suiteSettingsReady = true;
   return suiteEnabled;
+});
+
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === "local" && changes.redirectEnabled) {
+    redirectExternalBibleLinksEnabled = changes.redirectEnabled.newValue === true;
+  }
 });
 
 async function isSuiteEnabled() {
@@ -814,6 +823,9 @@ if (["thekingsbible.com", "webstersdictionary1828.com"].includes(location.hostna
     const ref = theKingsBibleLinkReference(link);
     if (!strongMatch && !theKingsBibleLinkHasExplicitVerse(link, label)) return;
     if (!suiteEnabled) return;
+    // Strong's lexicon lookups are separate from the global Bible-link redirect
+    // toggle. Verse links inside study modals must honor that toggle.
+    if (!strongMatch && !redirectExternalBibleLinksEnabled) return;
 
     if (strongMatch) {
       const prefix = strongMatch[1].toLowerCase();
