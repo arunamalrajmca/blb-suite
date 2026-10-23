@@ -1,7 +1,7 @@
 {
   "name": "blb-suite",
   "private": true,
-  "version": "5.2.51.100",
+  "version": "5.2.51.101",
   "description": "KJV Scripture Tools source and reproducible browser test harness",
   "scripts": {
     "test": "playwright test",
