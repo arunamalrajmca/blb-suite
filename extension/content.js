@@ -2256,6 +2256,29 @@ function handleDoubleClickBlb(event) {
           return true;
         }
 
+        // The King's Bible study text can expose Strong's IDs as selectable
+        // text rather than a clickable anchor. Route an exact G<n>/H<n> token
+        // directly to its BLB lexicon entry before generic word/reference logic.
+        // Keep this site-specific so ordinary G/H-containing text elsewhere is unaffected.
+        const strongLexiconMatch = selection.match(/^([GH])\\s*[-:]?\\s*(\\d+)$/i);
+        if (
+          strongLexiconMatch &&
+          location.hostname.toLowerCase().replace(/^www\\./, "") === "thekingsbible.com"
+        ) {
+          const prefix = strongLexiconMatch[1].toLowerCase();
+          const number = String(Number(strongLexiconMatch[2]));
+          const language = prefix === "g" ? "tr" : "wlc";
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          void safeRuntimeSendMessage({
+            type: "blbSuiteOpenBackgroundUrl",
+            url: "https://www.blueletterbible.org/lexicon/" + prefix + number + "/kjv/" + language + "/0-1/",
+            activeIfNew: true,
+            activateExisting: true
+          });
+          return true;
+        }
+
         // Fast-reject a single non-ASCII token (including Tamil) before
         // DOM/context scanning. BLB's word lookup is English KJV; these tokens
         // cannot be valid KJV word searches. Keep multiword/reference selections
