@@ -1,4 +1,4 @@
-// Blue Letter Bible Suite - shared Bible reference core.
+// Shared Bible reference core.
 // This file contains pure book/reference identity logic shared by the
 // content-script and service-worker contexts. DOM-specific context reading
 // remains in content.js because the service worker cannot access the DOM.

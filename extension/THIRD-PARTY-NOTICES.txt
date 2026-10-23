@@ -1,4 +1,4 @@
-Blue Letter Bible Suite — Third-Party Notice for Case-Sensitive KJV Corpus
+Third-Party Notice for the Case-Sensitive KJV Corpus
 
 Source repository:
 https://github.com/renniemaharaj/kjv-bible
