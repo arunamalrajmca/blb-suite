@@ -13,7 +13,7 @@ function loadStrongUrlResolver() {
   expect(end).toBeGreaterThan(start);
   const source = contentSource.slice(start, end);
   return vm.runInNewContext(
-    `(${source}; resolveStrongLexiconUrl)`,
+    `${source}\nresolveStrongLexiconUrl`,
     { normalizeSelectionText: value => String(value || '').replace(/[\\u00A0\\u2007\\u202F]/g, ' ').replace(/\\s+/g, ' ').trim() }
   );
 }
