@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "release_version": "5.2.51.100",
+  "source": "Manually reviewed Chrome Web Store listing assets committed for PR #410 on 2026-10-23",
+  "assets": {
+    "KJV-Scripture-Tools-Promo-Tile-440x280.png": {
+      "format": "PNG",
+      "dimensions": [440, 280],
+      "size": 179573,
+      "sha256": "026bb98090b3ff93178f4fe36109dfc89ab219541b03ecd97688f0c270f29a12"
+    },
+    "extension-popup.png": {
+      "format": "PNG",
+      "dimensions": [1280, 800],
+      "size": 150742,
+      "sha256": "b4173eca713b7b38b3e5b3862e26d7076f35998f50cc0b74e5960ae7c359f64c"
+    },
+    "tutorial-search.png": {
+      "format": "PNG",
+      "dimensions": [1280, 800],
+      "size": 148162,
+      "sha256": "58e25fe07cffd30ade1fa92d2a94d1f209b8bf29778ae41712061c9e050c3d8d"
+    },
+    "tutorial-references.png": {
+      "format": "PNG",
+      "dimensions": [1280, 800],
+      "size": 147542,
+      "sha256": "5c69069d2f3d2e83909e8d647bb4081c3302ff447b4ef6cb8aadbc7552bfd616"
+    },
+    "tutorial-study.png": {
+      "format": "PNG",
+      "dimensions": [1280, 800],
+      "size": 154211,
+      "sha256": "aa133cf4ea40c47dd8e0b1e9be98a537aa32468a89032072aca0c58c4ab88349"
+    }
+  }
+}
