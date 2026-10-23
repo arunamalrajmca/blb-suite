@@ -95,6 +95,6 @@ if (fs.existsSync(popupPath)) {
   const popupScript = fs.readFileSync(path.join(ext, 'popup.js'), 'utf8');
   if (!popup.includes('id="extensionVersion"') || !popup.includes('KJV Scripture Tools')) fail('popup must show the extension version below KJV Scripture Tools');
   else pass('popup version link is present below KJV Scripture Tools');
-  if (/Feature Guide|guidePdf|Tutorial\\.pdf/i.test(popup + '\\n' + popupScript)) fail('retired PDF guide UI/code reference remains');
+  if (/Feature Guide|guidePdf|Tutorial\.pdf/i.test(popup + '\n' + popupScript)) fail('retired PDF guide UI/code reference remains');
   else pass('no retired PDF guide UI/code references');
 }
