@@ -2256,15 +2256,11 @@ function handleDoubleClickBlb(event) {
           return true;
         }
 
-        // The King's Bible study text can expose Strong's IDs as selectable
-        // text rather than a clickable anchor. Route an exact G<n>/H<n> token
-        // directly to its BLB lexicon entry before generic word/reference logic.
-        // Keep this site-specific so ordinary G/H-containing text elsewhere is unaffected.
-        const strongLexiconMatch = selection.match(/^([GH])\s*[-:]?\s*(\d+)$/i);
-        if (
-          strongLexiconMatch &&
-          location.hostname.toLowerCase().replace(/^www\./, "") === "thekingsbible.com"
-        ) {
+        // Route exact Strong's IDs on any supported webpage to the corresponding
+        // BLB lexicon entry before generic word/reference logic. Require a standalone
+        // G/H token with digits so ordinary words are unaffected.
+        const strongLexiconMatch = selection.match(/^([GH])\\s*[-:]?\\s*(\\d+)$/i);
+        if (strongLexiconMatch) {
           const prefix = strongLexiconMatch[1].toLowerCase();
           const number = String(Number(strongLexiconMatch[2]));
           const language = prefix === "g" ? "tr" : "wlc";
