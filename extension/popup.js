@@ -1144,20 +1144,21 @@ document.addEventListener('click', e => {
 
 document.getElementById('extensionVersion')?.addEventListener('click', async event => {
   event.preventDefault();
+  const url = chrome.runtime.getURL('Tutorial.html');
   try {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    if (tab?.id != null && (!tab.url || tab.url === 'chrome://newtab/' || tab.url === 'about:blank')) {
+      // Reuse an empty current tab instead of opening an extra tab.
+      await chrome.tabs.update(tab.id, { url });
+      return;
+    }
+  } catch (_) {}
+  try {
+    // Tutorial.html is the configured options page; this uses Chrome's options action.
     await chrome.runtime.openOptionsPage();
   } catch (_) {
-    // Fallback for browsers that cannot open the configured options page.
-    const url = chrome.runtime.getURL('Tutorial.html');
-    try {
-      const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
-      const tab = tabs[0];
-      if (tab?.id != null && (!tab.url || tab.url === 'chrome://newtab/' || tab.url === 'about:blank')) {
-        await chrome.tabs.update(tab.id, { url });
-      } else {
-        await chrome.tabs.create({ url, active: true });
-      }
-    } catch (_) {}
+    try { await chrome.tabs.create({ url, active: true }); } catch (_) {}
   }
 });
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
