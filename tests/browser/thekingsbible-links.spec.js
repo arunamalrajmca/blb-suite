@@ -109,6 +109,20 @@ test.describe("The King's Bible study-link routing", () => {
     expect(results.invalid).toBeNull();
   });
 
+
+
+  test('left-side dictionary Strong\'s numbers are recognized as clickable lexicon links', () => {
+    const start = contentSource.indexOf('// ---------- The King\'s Bible Strong\'s and Bible-reference links ----------');
+    const end = contentSource.indexOf('// ---------- Webster\'s 1828 ----------', start);
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    const handler = contentSource.slice(start, end);
+    expect(handler).toContain('.dictitemsmall .strongs');
+    expect(handler).toContain('label.match(/^([GH]\\s*[-:]?\\s*(\\d+))$/i');
+    expect(handler).toContain('if (!redirectExternalBibleLinksEnabled) return;');
+    expect(handler).toContain('url: "https://www.blueletterbible.org/lexicon/" + prefix + number');
+  });
+
   test('Strong’s routing is delegated for exact G/H tokens and is not popup-selector dependent', () => {
     const start = contentSource.indexOf('// ---------- The King\'s Bible Strong\'s and Bible-reference links ----------');
     const end = contentSource.indexOf('// ---------- Webster\'s 1828 ----------', start);
