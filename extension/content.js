@@ -738,6 +738,53 @@ if (location.hostname.endsWith(BLB_HOSTNAME)) {
   }
 }
 
+// ---------- The King's Bible Strong's and verse modal links ----------
+if (location.hostname.toLowerCase().replace(/^www\\./, "") === "thekingsbible.com") {
+  // The King's Bible uses dynamically-created study popups. Delegate at document
+  // level so links added after the popup opens are handled as well.
+  const isStudyPopupLink = link => Boolean(link.closest?.(
+    '.modal, [role="dialog"], .modal-dialog, .modal-content, [id*="popup" i], [class*="popup" i], [id*="modal" i], [class*="modal" i]'
+  ));
+
+  document.addEventListener("click", e => {
+    if (!suiteEnabled || isModifiedLinkActivation(e)) return;
+    const link = e.target.closest?.("a[href]");
+    if (!link || !isStudyPopupLink(link)) return;
+
+    const label = normalizeSelectionText(link.innerText || link.textContent || "");
+    const strongMatch = label.match(/^([GH])\\s*[-:]?\\s*(\\d+)$/i);
+    if (strongMatch) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const prefix = strongMatch[1].toLowerCase();
+      const number = strongMatch[2];
+      const language = prefix === "g" ? "tr" : "wlc";
+      void safeRuntimeSendMessage({
+        type: "blbSuiteOpenBackgroundUrl",
+        url: `https://www.blueletterbible.org/lexicon/${prefix}${number}/kjv/${language}/0-1/`,
+        activeIfNew: true,
+        activateExisting: true
+      });
+      return;
+    }
+
+    // Verse links in the popup should go to the corresponding BLB KJV passage,
+    // rather than reopening the source site's verse popup.
+    const ref = parseRef(label);
+    if (!ref) return;
+    const target = blbUrl(ref.book, ref.chapter, ref.from, ref.to);
+    if (!target) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    void safeRuntimeSendMessage({
+      type: "blbSuiteOpenBackgroundUrl",
+      url: target,
+      activeIfNew: true,
+      activateExisting: true
+    });
+  }, true);
+}
+
 // ---------- Webster's 1828 ----------
 if (location.hostname==="webstersdictionary1828.com") {
   async function captureWebsterWord() {
