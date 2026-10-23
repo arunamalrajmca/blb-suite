@@ -749,9 +749,16 @@ if (location.hostname.toLowerCase().replace(/^www\./, "") === "thekingsbible.com
   document.addEventListener("click", e => {
     if (!suiteEnabled || isModifiedLinkActivation(e)) return;
     const link = e.target.closest?.("a[href]");
-    if (!link || !isStudyPopupLink(link)) return;
+    if (!link) return;
 
     const label = normalizeSelectionText(link.innerText || link.textContent || "");
+    const inStudyPopup = isStudyPopupLink(link);
+    const isDictionaryVerseLink =
+      /^\/Dictionary\//i.test(location.pathname) && Boolean(parseRef(label));
+    // Dictionary definition pages contain direct Bible-reference links outside
+    // the study modal, so route those too; keep popup handling scoped to popups.
+    if (!inStudyPopup && !isDictionaryVerseLink) return;
+
     const strongMatch = label.match(/^([GH])\s*[-:]?\s*(\d+)$/i);
     if (strongMatch) {
       e.preventDefault();
