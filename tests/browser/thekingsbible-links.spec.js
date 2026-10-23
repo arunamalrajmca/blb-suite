@@ -46,14 +46,14 @@ test.describe("The King's Bible study-link routing", () => {
     expect(results.outsideHost).toBeNull();
   });
 
-  test('Dictionary span.bible data-bible values resolve to their exact KJV references', async ({ page }) => {
+  test('Webster Dictionary span.bible data-bible values resolve to their exact KJV references', async ({ page }) => {
     const helperStart = contentSource.indexOf('function theKingsBibleDataReference(node) {');
     const helperEnd = contentSource.indexOf('\n\n  function theKingsBibleLinkReference', helperStart);
     expect(helperStart).toBeGreaterThanOrEqual(0);
     expect(helperEnd).toBeGreaterThan(helperStart);
 
-    await page.route('https://www.thekingsbible.com/**', route => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Fixture</title>' }));
-    await page.goto('https://www.thekingsbible.com/Dictionary/Face');
+    await page.route('https://webstersdictionary1828.com/**', route => route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><title>Fixture</title>' }));
+    await page.goto('https://webstersdictionary1828.com/Dictionary/Face');
     await page.addScriptTag({ content: read('extension/books.js') });
     await page.addScriptTag({ content: contentSource.slice(helperStart, helperEnd) });
 
