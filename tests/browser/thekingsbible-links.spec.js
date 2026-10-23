@@ -117,7 +117,8 @@ test.describe("The King's Bible study-link routing", () => {
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const handler = contentSource.slice(start, end);
-    expect(handler).toContain('.dictitemsmall .strongs');
+    expect(handler).toContain('const strongNode = target?.closest?.(".dictitemsmall .strongs")');
+    expect(handler).toContain('const strongLabel = strongNode ? normalizeSelectionText(strongNode.textContent || "") : label;');
     expect(handler).toContain('label.match(/^([GH])\\s*[-:]?\\s*(\\d+)$/i');
     expect(handler).toContain('if (!redirectExternalBibleLinksEnabled) return;');
     expect(handler).toContain('url: "https://www.blueletterbible.org/lexicon/" + prefix + number');
