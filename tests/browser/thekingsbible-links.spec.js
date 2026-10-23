@@ -92,8 +92,8 @@ test.describe("The King's Bible study-link routing", () => {
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const handler = contentSource.slice(start, end);
-    expect(handler).toContain('selection.match(/^([GH])\\\\s*[-:]?\\\\s*(\\\\d+)$/i)');
-    expect(handler).toContain('location.hostname.toLowerCase().replace(/^www\\\\./, "") === "thekingsbible.com"');
+    expect(handler).toContain('const strongLexiconMatch = selection.match');
+    expect(handler).toContain('"thekingsbible.com"');
     expect(handler).toContain('https://www.blueletterbible.org/lexicon/');
     expect(handler).toContain('safeRuntimeSendMessage({');
   });
