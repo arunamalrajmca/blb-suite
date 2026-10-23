@@ -130,7 +130,7 @@ class SubmissionAssetAuditTests(unittest.TestCase):
         archive_path = self._make_release_zip(version="7.8.9")
         result = self._run("--release-zip", archive_path, "--release-version", "7.8.9")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("release ZIP v7.8.9 verified", result.stdout)
+        self.assertIn("release ZIP verified (v7.8.9)", result.stdout)
 
     def test_release_zip_version_mismatch_fails(self):
         archive_path = self._make_release_zip(version="1.0.0")
