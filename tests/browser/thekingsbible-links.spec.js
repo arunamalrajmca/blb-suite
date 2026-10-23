@@ -53,14 +53,13 @@ test.describe("The King's Bible study-link routing", () => {
     expect(helperEnd).toBeGreaterThan(helperStart);
     const helper = contentSource.slice(helperStart, helperEnd);
     const isExplicitVerse = require('node:vm').runInNewContext(
-      helper + '\nisExplicitVerse = theKingsBibleLinkHasExplicitVerse;',
+      helper + '\ntheKingsBibleLinkHasExplicitVerse;',
       {
         URL,
         location: { href: 'https://www.thekingsbible.com/Bible/7/1' },
-        isExplicitVerse: null,
         theKingsBibleDataReference: node => node?.hasAttribute?.('data-bible') ? { book: 'Judges', chapter: 1, from: 1 } : null
       }
-    ).isExplicitVerse;
+    );
 
     const makeLink = href => ({ href, hasAttribute: () => false });
     expect(isExplicitVerse(makeLink('https://www.thekingsbible.com/Bible/7/1'), '1')).toBe(false);
