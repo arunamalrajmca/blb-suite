@@ -14,9 +14,10 @@ PR: [#410](https://github.com/arunamalrajmca/blb-suite/pull/410)
 - [x] Promotional tile is `KJV-Scripture-Tools-Promo-Tile-440x280.png`.
 - [x] `SUBMISSION-ASSET-INVENTORY.json` pins the approved file names, PNG format, dimensions, byte sizes, and SHA-256 checksums.
 - [x] Strict verifier rejects missing, corrupted, incorrectly sized, unrecognized, or checksum-mismatched image files.
-- [x] Regression tests cover the passing asset set, missing screenshot, wrong dimensions, corrupted image, unexpected image, changed approved bytes, and release ZIP version mismatch.
+- [x] Regression tests cover the passing asset set, missing screenshot, wrong dimensions, corrupted image, unexpected image, changed approved bytes, malformed inventory JSON, missing checksum fields, corrupt release ZIPs, missing required ZIP files, and release ZIP version mismatch.
 - [x] The audit downloads the exact published `v5.2.51.100` ZIP, checks its published SHA-256 digest, and verifies ZIP integrity, root manifest, MV3 manifest version, expected extension version, and required root files.
 - [x] Automated audit runs on pull requests targeting `main`, candidate branch pushes, and manual dispatch.
+- [x] Third-party workflow actions are pinned to immutable full commit SHAs, with release-version comments for maintainability.
 - [x] Manual visual review of the five listing assets passed on 2026-10-23.
 - [x] No version bump or release change is included in this PR.
 
