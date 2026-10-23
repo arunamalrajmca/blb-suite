@@ -7,6 +7,10 @@ on:
     types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   performance:
     name: Measured performance qualification
@@ -29,6 +33,13 @@ jobs:
         with:
           node-version: 22
 
+      - name: Cache npm download data
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node22-npm-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-npm-
       - name: Install dependencies
        
         run: npm install
