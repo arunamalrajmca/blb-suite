@@ -814,11 +814,15 @@ if (["thekingsbible.com", "webstersdictionary1828.com"].includes(location.hostna
   document.addEventListener("click", e => {
     if (isModifiedLinkActivation(e)) return;
     const target = e.target instanceof Element ? e.target : e.target?.parentElement;
-    const link = target?.closest?.("a[href], span.bible[data-bible], .dictitemsmall .strongs");
+    const strongNode = target?.closest?.(".dictitemsmall .strongs");
+    const link = strongNode || target?.closest?.("a[href], span.bible[data-bible]");
     if (!link) return;
 
     const label = normalizeSelectionText(link.innerText || link.textContent || "");
-    const strongMatch = label.match(/^([GH])\s*[-:]?\s*(\d+)$/i);
+    // Read the token directly from the clicked left-column Strong’s span;
+    // the modal may contain other clickable descendants and verse handlers.
+    const strongLabel = strongNode ? normalizeSelectionText(strongNode.textContent || "") : label;
+    const strongMatch = strongLabel.match(/^([GH])\s*[-:]?\s*(\d+)$/i);
     const isDictionaryPage = /^\/Dictionary\//i.test(location.pathname);
     const ref = theKingsBibleLinkReference(link);
     if (!strongMatch && !theKingsBibleLinkHasExplicitVerse(link, label)) return;
