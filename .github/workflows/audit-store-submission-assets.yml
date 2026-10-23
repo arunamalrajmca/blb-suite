@@ -1,0 +1,29 @@
+name: Audit Chrome Web Store submission assets
+
+on:
+  push:
+    branches:
+      - chore/chrome-web-store-screenshots-v5.2.51.100
+    paths:
+      - 'docs/chrome-web-store-assets/**'
+      - 'scripts/verify-store-submission-assets.py'
+      - '.github/workflows/audit-store-submission-assets.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  strict-submission-asset-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out candidate branch
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install image validation dependency
+        run: python -m pip install Pillow
+      - name: Run strict listing asset audit
+        run: python scripts/verify-store-submission-assets.py --asset-dir docs/chrome-web-store-assets
