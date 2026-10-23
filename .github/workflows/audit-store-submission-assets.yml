@@ -1,6 +1,13 @@
 name: Audit Chrome Web Store submission assets
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'docs/chrome-web-store-assets/**'
+      - 'scripts/verify-store-submission-assets.py'
+      - '.github/workflows/audit-store-submission-assets.yml'
   push:
     branches:
       - chore/chrome-web-store-screenshots-v5.2.51.100
