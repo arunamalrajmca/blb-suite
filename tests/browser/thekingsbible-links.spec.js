@@ -46,6 +46,29 @@ test.describe("The King's Bible study-link routing", () => {
     expect(results.outsideHost).toBeNull();
   });
 
+  test('chapter-only links remain native while explicit verse links stay eligible', async () => {
+    const helperStart = contentSource.indexOf('function theKingsBibleLinkHasExplicitVerse(link, label = \'\') {');
+    const helperEnd = contentSource.indexOf('\n  }\n', helperStart) + 4;
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helper = contentSource.slice(helperStart, helperEnd);
+    const isExplicitVerse = require('node:vm').runInNewContext(
+      helper + '\ntheKingsBibleLinkHasExplicitVerse;',
+      {
+        URL,
+        location: { href: 'https://www.thekingsbible.com/Bible/7/1' },
+        theKingsBibleDataReference: node => node?.hasAttribute?.('data-bible') ? { book: 'Judges', chapter: 1, from: 1 } : null
+      }
+    );
+
+    const makeLink = href => ({ href, hasAttribute: () => false });
+    expect(isExplicitVerse(makeLink('https://www.thekingsbible.com/Bible/7/1'), '1')).toBe(false);
+    expect(isExplicitVerse(makeLink('https://www.thekingsbible.com/Bible/7/1/1'), '1')).toBe(true);
+    expect(isExplicitVerse(makeLink('https://www.thekingsbible.com/Bible/7/1?verse=1'), '1')).toBe(true);
+    expect(isExplicitVerse(makeLink('https://www.thekingsbible.com/Bible/7/1'), 'Judges 1:1')).toBe(true);
+    expect(isExplicitVerse(makeLink('https://www.thekingsbible.com/Bible/7/1'), '1')).toBe(false);
+  });
+
   test('Webster Dictionary span.bible data-bible values resolve to their exact KJV references', async ({ page }) => {
     const helperStart = contentSource.indexOf('function theKingsBibleDataReference(node) {');
     const helperEnd = contentSource.indexOf('\n\n  function theKingsBibleLinkReference', helperStart);
