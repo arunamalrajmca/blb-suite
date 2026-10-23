@@ -30,7 +30,6 @@ class SubmissionAssetAuditTests(unittest.TestCase):
         self.asset_dir.mkdir()
         self.inventory = {
             "schema_version": 1,
-            "release_version": "5.2.51.100",
             "assets": {},
         }
         for name in (PROMO, *SCREENSHOTS):
@@ -68,10 +67,26 @@ class SubmissionAssetAuditTests(unittest.TestCase):
             check=False,
         )
 
+    def _make_release_zip(self, version="1.2.3", name="release.zip"):
+        archive_path = Path(self.temp.name) / name
+        with zipfile.ZipFile(archive_path, "w") as archive:
+            archive.writestr("manifest.json", json.dumps({
+                "manifest_version": 3,
+                "version": version,
+            }))
+            archive.writestr("popup.html", "<html></html>")
+            archive.writestr("background.js", "// service worker")
+        return archive_path
+
     def test_approved_assets_pass(self):
         result = self._run()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("pinned screenshots", result.stdout)
+
+    def test_inventory_has_no_release_version_requirement(self):
+        result = self._run()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("release_version", self.inventory)
 
     def test_missing_screenshot_fails(self):
         (self.asset_dir / SCREENSHOTS[0]).unlink()
@@ -105,32 +120,23 @@ class SubmissionAssetAuditTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("SHA-256 mismatch", result.stderr)
 
-    def test_release_zip_with_matching_manifest_passes(self):
-        archive_path = Path(self.temp.name) / "release.zip"
-        with zipfile.ZipFile(archive_path, "w") as archive:
-            archive.writestr("manifest.json", json.dumps({
-                "manifest_version": 3,
-                "version": "5.2.51.100",
-            }))
-            archive.writestr("popup.html", "<html></html>")
-            archive.writestr("background.js", "// service worker")
+    def test_release_zip_passes_without_hardcoded_version(self):
+        archive_path = self._make_release_zip()
         result = self._run("--release-zip", archive_path)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("release ZIP v5.2.51.100 verified", result.stdout)
+        self.assertIn("release ZIP verified", result.stdout)
+
+    def test_release_zip_matches_explicit_version(self):
+        archive_path = self._make_release_zip(version="7.8.9")
+        result = self._run("--release-zip", archive_path, "--release-version", "7.8.9")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("release ZIP verified (v7.8.9)", result.stdout)
 
     def test_release_zip_version_mismatch_fails(self):
-        archive_path = Path(self.temp.name) / "release.zip"
-        with zipfile.ZipFile(archive_path, "w") as archive:
-            archive.writestr("manifest.json", json.dumps({
-                "manifest_version": 3,
-                "version": "1.0.0",
-            }))
-            archive.writestr("popup.html", "<html></html>")
-            archive.writestr("background.js", "// service worker")
-        result = self._run("--release-zip", archive_path)
+        archive_path = self._make_release_zip(version="1.0.0")
+        result = self._run("--release-zip", archive_path, "--release-version", "9.9.9")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("manifest version mismatch", result.stderr)
-
 
     def test_malformed_inventory_json_fails(self):
         (self.asset_dir / "SUBMISSION-ASSET-INVENTORY.json").write_text(
@@ -159,7 +165,7 @@ class SubmissionAssetAuditTests(unittest.TestCase):
         with zipfile.ZipFile(archive_path, "w") as archive:
             archive.writestr("manifest.json", json.dumps({
                 "manifest_version": 3,
-                "version": "5.2.51.100",
+                "version": "1.0.0",
             }))
         result = self._run("--release-zip", archive_path)
         self.assertNotEqual(result.returncode, 0)

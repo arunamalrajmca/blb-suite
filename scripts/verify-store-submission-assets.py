@@ -2,7 +2,8 @@
 """Strictly audit the exact Chrome Web Store submission asset set.
 
 The inventory pins approved image bytes with SHA-256 checksums. Optionally pass
---release-zip to verify the published extension package and manifest version.
+--release-zip to verify the published extension package. Use --release-version
+when the package must match a version resolved from release metadata.
 """
 from __future__ import annotations
 
@@ -39,7 +40,7 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def check_release_zip(zip_path: Path, expected_version: str) -> list[str]:
+def check_release_zip(zip_path: Path, expected_version: str | None) -> list[str]:
     errors: list[str] = []
     if not zip_path.is_file():
         return [f"release ZIP not found: {zip_path}"]
@@ -55,13 +56,15 @@ def check_release_zip(zip_path: Path, expected_version: str) -> list[str]:
                 try:
                     manifest = json.loads(archive.read("manifest.json"))
                     actual_version = manifest.get("version")
-                    if actual_version != expected_version:
+                    if expected_version is not None and actual_version != expected_version:
                         errors.append(
                             f"release ZIP manifest version mismatch: expected "
                             f"{expected_version}, got {actual_version!r}"
                         )
                     if manifest.get("manifest_version") != 3:
                         errors.append("release ZIP manifest_version must be 3")
+                    if not isinstance(actual_version, str) or not actual_version:
+                        errors.append("release ZIP manifest version must be a non-empty string")
                 except (ValueError, KeyError, OSError) as exc:
                     errors.append(f"release ZIP manifest.json is invalid: {exc}")
     except (OSError, zipfile.BadZipFile) as exc:
@@ -72,8 +75,8 @@ def check_release_zip(zip_path: Path, expected_version: str) -> list[str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--asset-dir", type=Path, default=Path("docs/chrome-web-store-assets"))
-    parser.add_argument("--release-zip", type=Path, help="optional exact published extension ZIP to verify")
-    parser.add_argument("--release-version", help="expected extension version (defaults to inventory release_version)")
+    parser.add_argument("--release-zip", type=Path, help="optional published extension ZIP to verify")
+    parser.add_argument("--release-version", help="optional expected extension version for the release ZIP")
     args = parser.parse_args()
     folder = args.asset_dir.resolve()
     errors: list[str] = []
@@ -85,18 +88,12 @@ def main() -> int:
     try:
         inventory = json.loads(inventory_path.read_text(encoding="utf-8"))
         inventory_assets = inventory["assets"]
-        inventory_version = str(inventory["release_version"])
         if not isinstance(inventory_assets, dict):
             raise ValueError("'assets' must be a JSON object")
     except (OSError, ValueError, KeyError, TypeError) as exc:
         print(f"ERROR: submission asset inventory is missing or invalid: {exc}", file=sys.stderr)
         return 1
 
-    expected_version = args.release_version or inventory_version
-    if inventory_version != expected_version:
-        errors.append(
-            f"inventory release version mismatch: expected {expected_version}, got {inventory_version}"
-        )
     if set(inventory_assets) != EXPECTED_IMAGES:
         errors.append(
             "inventory must list exactly the promotional tile and four canonical screenshots"
@@ -151,7 +148,7 @@ def main() -> int:
                 errors.append(f"{path.name}: dimensions do not match approved inventory")
 
     if args.release_zip:
-        errors.extend(check_release_zip(args.release_zip.resolve(), expected_version))
+        errors.extend(check_release_zip(args.release_zip.resolve(), args.release_version))
 
     if errors:
         for error in errors:
@@ -159,10 +156,15 @@ def main() -> int:
         print("Strict submission audit failed; do not submit this asset/package set.", file=sys.stderr)
         return 1
 
-    print(
-        f"Strict submission audit passed: {PROMO}, {len(EXPECTED_SCREENSHOTS)} pinned screenshots"
-        + (f", and release ZIP v{expected_version} verified." if args.release_zip else ".")
-    )
+    message = f"Strict submission audit passed: {PROMO}, {len(EXPECTED_SCREENSHOTS)} pinned screenshots"
+    if args.release_zip:
+        message += " and release ZIP verified"
+        if args.release_version:
+            message += f" (v{args.release_version})"
+        message += "."
+    else:
+        message += "."
+    print(message)
     print("Visual branding, legibility, authenticity, rights, and dashboard validation still require manual review.")
     return 0
 
