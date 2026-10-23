@@ -39,10 +39,10 @@ test.describe("The King's Bible study-link routing", () => {
       };
     });
 
-    expect(results.pathVerse).toMatchObject({book: 'John', chapter: 3, from: 16, to: null});
-    expect(results.queryVerse).toMatchObject({book: 'John', chapter: 3, from: 16, to: null});
-    expect(results.fragmentVerse).toMatchObject({book: 'John', chapter: 3, from: 16, to: null});
-    expect(results.chapterOnly).toMatchObject({book: 'John', chapter: 3, from: 1, to: null});
+    expect(results.pathVerse).toMatchObject({book: 'john', chapter: 3, from: 16, to: null});
+    expect(results.queryVerse).toMatchObject({book: 'john', chapter: 3, from: 16, to: null});
+    expect(results.fragmentVerse).toMatchObject({book: 'john', chapter: 3, from: 16, to: null});
+    expect(results.chapterOnly).toMatchObject({book: 'john', chapter: 3, from: 1, to: null});
     expect(results.outsideHost).toBeNull();
   });
 
@@ -76,13 +76,13 @@ test.describe("The King's Bible study-link routing", () => {
       };
     });
 
-    expect(results.genesis319).toMatchObject({book: 'Genesis', chapter: 3, from: 19, to: null});
-    expect(results.genesis4811).toMatchObject({book: 'Genesis', chapter: 48, from: 11, to: null});
-    expect(results.ezekiel4114).toMatchObject({book: 'Ezekiel', chapter: 41, from: 14, to: null});
-    expect(results.psalms3116).toMatchObject({book: 'Psalms', chapter: 31, from: 16, to: null});
-    expect(results.psalms131).toMatchObject({book: 'Psalms', chapter: 13, from: 1, to: null});
-    expect(results.acts2516).toMatchObject({book: 'Acts', chapter: 25, from: 16, to: null});
-    expect(results.corinthians1312).toMatchObject({book: '1 Corinthians', chapter: 13, from: 12, to: null});
+    expect(results.genesis319).toMatchObject({book: 'genesis', chapter: 3, from: 19, to: null});
+    expect(results.genesis4811).toMatchObject({book: 'genesis', chapter: 48, from: 11, to: null});
+    expect(results.ezekiel4114).toMatchObject({book: 'ezekiel', chapter: 41, from: 14, to: null});
+    expect(results.psalms3116).toMatchObject({book: 'psalms', chapter: 31, from: 16, to: null});
+    expect(results.psalms131).toMatchObject({book: 'psalms', chapter: 13, from: 1, to: null});
+    expect(results.acts2516).toMatchObject({book: 'acts', chapter: 25, from: 16, to: null});
+    expect(results.corinthians1312).toMatchObject({book: '1 corinthians', chapter: 13, from: 12, to: null});
     expect(results.invalid).toBeNull();
   });
 
