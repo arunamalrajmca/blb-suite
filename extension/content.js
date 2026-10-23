@@ -738,34 +738,59 @@ if (location.hostname.endsWith(BLB_HOSTNAME)) {
   }
 }
 
-// ---------- The King's Bible Strong's and verse modal links ----------
-if (location.hostname.toLowerCase().replace(/^www\./, "") === "thekingsbible.com") {
-  // The King's Bible uses dynamically-created study popups. Delegate at document
-  // level so links added after the popup opens are handled as well.
-  const isStudyPopupLink = link => Boolean(link.closest?.(
-    '.modal, [role="dialog"], .modal-dialog, .modal-content, [id*="popup" i], [class*="popup" i], [id*="modal" i], [class*="modal" i]'
-  ));
+// ---------- The King's Bible Strong's and Bible-reference links ----------
+if (location.hostname.toLowerCase().replace(/^www\\./, "") === "thekingsbible.com") {
+  // Do not depend on the site's popup CSS: popup markup and IDs can vary, and
+  // both study popups and Dictionary pages can contain Bible links.
+  function theKingsBibleLinkReference(link) {
+    const label = normalizeSelectionText(link.innerText || link.textContent || "");
+    const fromLabel = parseRef(label);
+    if (fromLabel) return fromLabel;
+
+    // Source links identify a book by numeric ID. Some links encode only the
+    // chapter; others include a verse in the path, query, or fragment.
+    try {
+      const url = new URL(link.href, location.href);
+      if (url.hostname.toLowerCase().replace(/^www\\./, "") !== "thekingsbible.com") return null;
+      const match = url.pathname.match(/^\\/Bible\\/(\\d+)\\/(\\d+)(?:\\/(\\d+))?\\/?$/i);
+      if (!match) return null;
+      const book = BOOKS.find(item => Number(item.bookNumber) === Number(match[1]));
+      if (!book) return null;
+      let verse = match[3] ? Number(match[3]) : null;
+      if (!verse) {
+        const queryVerse = url.searchParams.get("verse") || url.searchParams.get("v");
+        if (queryVerse && /^\\d+$/.test(queryVerse)) verse = Number(queryVerse);
+      }
+      if (!verse) {
+        const fragment = url.hash.match(/(?:verse[_-]?)?(\\d+)$/i);
+        if (fragment) verse = Number(fragment[1]);
+      }
+      return {book:book.name, chapter:Number(match[2]), from:verse || 1, to:null};
+    } catch (_) {
+      return null;
+    }
+  }
 
   document.addEventListener("click", e => {
-    if (!suiteEnabled || isModifiedLinkActivation(e)) return;
+    if (isModifiedLinkActivation(e)) return;
     const link = e.target.closest?.("a[href]");
     if (!link) return;
 
     const label = normalizeSelectionText(link.innerText || link.textContent || "");
-    const inStudyPopup = isStudyPopupLink(link);
-    const isDictionaryVerseLink =
-      /^\/Dictionary\//i.test(location.pathname) && Boolean(parseRef(label));
-    // Dictionary definition pages contain direct Bible-reference links outside
-    // the study modal, so route those too; keep popup handling scoped to popups.
-    if (!inStudyPopup && !isDictionaryVerseLink) return;
+    const strongMatch = label.match(/^([GH])\\s*[-:]?\\s*(\\d+)$/i);
+    const isDictionaryPage = /^\\/Dictionary\\//i.test(location.pathname);
+    const ref = theKingsBibleLinkReference(link);
+    // Exact Strong's tokens work regardless of popup markup. Bible links are
+    // recognized by their reference text or source URL, inside or outside popups.
+    if (!strongMatch && !ref && !(isDictionaryPage && parseRef(label))) return;
+    if (!suiteEnabled) return;
 
-    const strongMatch = label.match(/^([GH])\s*[-:]?\s*(\d+)$/i);
     if (strongMatch) {
+      const prefix = strongMatch[1].toLowerCase();
+      const number = String(Number(strongMatch[2]));
+      const language = prefix === "g" ? "tr" : "wlc";
       e.preventDefault();
       e.stopImmediatePropagation();
-      const prefix = strongMatch[1].toLowerCase();
-      const number = strongMatch[2];
-      const language = prefix === "g" ? "tr" : "wlc";
       void safeRuntimeSendMessage({
         type: "blbSuiteOpenBackgroundUrl",
         url: `https://www.blueletterbible.org/lexicon/${prefix}${number}/kjv/${language}/0-1/`,
@@ -775,11 +800,9 @@ if (location.hostname.toLowerCase().replace(/^www\./, "") === "thekingsbible.com
       return;
     }
 
-    // Verse links in the popup should go to the corresponding BLB KJV passage,
-    // rather than reopening the source site's verse popup.
-    const ref = parseRef(label);
-    if (!ref) return;
-    const target = blbUrl(ref.book, ref.chapter, ref.from, ref.to);
+    const parsedRef = ref || parseRef(label);
+    if (!parsedRef) return;
+    const target = blbUrl(parsedRef.book, parsedRef.chapter, parsedRef.from, parsedRef.to);
     if (!target) return;
     e.preventDefault();
     e.stopImmediatePropagation();
