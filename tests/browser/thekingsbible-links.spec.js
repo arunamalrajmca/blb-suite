@@ -121,6 +121,7 @@ test.describe("The King's Bible study-link routing", () => {
     expect(handler).toContain('span.bible[data-bible]');
     expect(handler).toContain('theKingsBibleDataReference');
     expect(handler).toContain('blbUrl(parsedRef.book, parsedRef.chapter, parsedRef.from, parsedRef.to)');
+    expect(handler).toContain('if (!strongMatch && !redirectExternalBibleLinksEnabled) return;');
     expect(handler).not.toContain('isStudyPopupLink');
   });
 });
