@@ -52,7 +52,7 @@ test.describe("The King's Bible study-link routing", () => {
     expect(start).toBeGreaterThanOrEqual(0);
     const handler = contentSource.slice(start, end);
     expect(handler).toContain('document.addEventListener("click", e =>');
-    expect(handler).toMatch(/label\.match\(\/\^\[GH\]/);
+    expect(handler).toContain('label.match(/^([GH]');
     expect(handler).toContain('https://www.blueletterbible.org/lexicon/');
     expect(handler).not.toContain('isStudyPopupLink');
   });
