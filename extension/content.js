@@ -2259,7 +2259,7 @@ function handleDoubleClickBlb(event) {
         // Route exact Strong's IDs on any supported webpage to the corresponding
         // BLB lexicon entry before generic word/reference logic. Require a standalone
         // G/H token with digits so ordinary words are unaffected.
-        const strongLexiconMatch = selection.match(/^([GH])\\s*[-:]?\\s*(\\d+)$/i);
+        const strongLexiconMatch = selection.match(/^([GH])\s*[-:]?\s*(\d+)$/i);
         if (strongLexiconMatch) {
           const prefix = strongLexiconMatch[1].toLowerCase();
           const number = String(Number(strongLexiconMatch[2]));
