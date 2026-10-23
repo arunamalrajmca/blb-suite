@@ -8,7 +8,7 @@ const contentSource = read('extension/content.js');
 
 test.describe("The King's Bible study-link routing", () => {
   test('content handler recognizes Bible URLs without relying on popup CSS selectors', async ({ page }) => {
-    const helperStart = contentSource.indexOf('function theKingsBibleLinkReference(link) {');
+    const helperStart = contentSource.indexOf('function theKingsBibleDataReference(node) {');
     const helperEnd = contentSource.indexOf('\n\n  document.addEventListener("click"', helperStart);
     expect(helperStart).toBeGreaterThanOrEqual(0);
     expect(helperEnd).toBeGreaterThan(helperStart);
