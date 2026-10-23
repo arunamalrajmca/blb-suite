@@ -755,6 +755,23 @@ if (["thekingsbible.com", "webstersdictionary1828.com"].includes(location.hostna
     return book ? {book:book.name, chapter, from:verse, to:null} : null;
   }
 
+  function theKingsBibleLinkHasExplicitVerse(link, label = '') {
+    // A chapter-only URL such as /Bible/7/1 is ordinary site navigation,
+    // not a study-reference link. Do not hijack it when global redirects are
+    // OFF. Explicit verse citations in study popups remain eligible.
+    if (/(?:^|[^\d])\d+\s*:\s*\d+/.test(String(label || ''))) return true;
+    if (theKingsBibleDataReference(link)) return true;
+    try {
+      const url = new URL(link?.href || '', location.href);
+      if (url.hostname.toLowerCase().replace(/^www\./, '') !== 'thekingsbible.com') return false;
+      if (/^\/Bible\/\d+\/\d+\/\d+\/?$/i.test(url.pathname)) return true;
+      if (/^\d+$/.test(url.searchParams.get('verse') || url.searchParams.get('v') || '')) return true;
+      return /(?:verse[_-]?)\d+$/i.test(url.hash);
+    } catch (_) {
+      return false;
+    }
+  }
+
   function theKingsBibleLinkReference(link) {
     const label = normalizeSelectionText(link?.innerText || link?.textContent || "");
     const fromLabel = parseRef(label);
@@ -795,7 +812,7 @@ if (["thekingsbible.com", "webstersdictionary1828.com"].includes(location.hostna
     const strongMatch = label.match(/^([GH])\s*[-:]?\s*(\d+)$/i);
     const isDictionaryPage = /^\/Dictionary\//i.test(location.pathname);
     const ref = theKingsBibleLinkReference(link);
-    if (!strongMatch && !ref && !(isDictionaryPage && parseRef(label))) return;
+    if (!strongMatch && !theKingsBibleLinkHasExplicitVerse(link, label)) return;
     if (!suiteEnabled) return;
 
     if (strongMatch) {
