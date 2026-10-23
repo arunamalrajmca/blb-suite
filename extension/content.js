@@ -814,7 +814,7 @@ if (["thekingsbible.com", "webstersdictionary1828.com"].includes(location.hostna
   document.addEventListener("click", e => {
     if (isModifiedLinkActivation(e)) return;
     const target = e.target instanceof Element ? e.target : e.target?.parentElement;
-    const link = target?.closest?.("a[href], span.bible[data-bible]");
+    const link = target?.closest?.("a[href], span.bible[data-bible], .dictitemsmall .strongs");
     if (!link) return;
 
     const label = normalizeSelectionText(link.innerText || link.textContent || "");
