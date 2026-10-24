@@ -1004,7 +1004,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
     const isEntryPage = url => {
       if (url.origin !== location.origin) return false;
       const path = url.pathname.replace(/\/$/, "");
-      return path === basePath || new RegExp("^" + basePath.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&") + \"/\\\\d+$").test(path);
+      return path === basePath || (path.startsWith(basePath + "/") && /^\d+$/.test(path.slice(basePath.length + 1)));
     };
     while (pending.length && visited.size < 20) {
       const pageUrl = pending.shift();
@@ -1029,6 +1029,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
           const label = normalizeSelectionText(anchor.textContent || "");
           const pageParam = [...url.searchParams.keys()].some(key => /^(page|p|pageindex)$/i.test(key));
           const isPageLink = isEntryPage(url) && (url.pathname.replace(/\/$/, "") !== basePath || pageParam) &&
+            (/^(?:next|last|\d+|›|»|>)$/i.test(label) || url.pathname.replace(/\/$/, "") !== new URL(pageUrl).pathname.replace(/\/$/, "") || pageParam);
             (/^(?:next|last|\\d+|›|»|>)$/i.test(label) || url.pathname.replace(/\/$/, "") !== new URL(pageUrl).pathname.replace(/\/$/, "") || pageParam);
           if (!isPageLink) continue;
           url.hash = "";
