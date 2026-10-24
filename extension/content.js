@@ -347,31 +347,16 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
       // canonical KJV book number. Prefer the visible reference label (e.g.
       // "Judges 3:3") so it cannot be mistaken for "Jude 1:3".
       for (const book of BOOKS) {
-        const escapedName = String(book.name).replace(/[.*+?^${}()|[\]\\]/g, "\\    const bibleReference = event.target?.closest?.(".bible[data-bible]");
-    if (bibleReference) {
-      const encoded = String(bibleReference.getAttribute("data-bible") || "");
-      if (/^\d{8}$/.test(encoded)) {
-        const bookNumber = Number(encoded.slice(0, 2));
-        const chapter = Number(encoded.slice(2, 5));
-        const verse = Number(encoded.slice(5, 8));
-        const book = BOOKS.find(item => Number(item.bookNumber) === bookNumber);
-        if (book && chapter > 0 && verse > 0) {
-          event.preventDefault();
-          event.stopImmediatePropagation();
-          openBlbDestinationFromContent(blbUrl(book.name, chapter, verse));
-          return;
-        }
-      }
-    }");
-        const match = label.match(new RegExp("^" + escapedName + "\\s+(\\d+):(\\d+)$", "i"));
+        const prefix = String(book.name) + " ";
+        if (!label.toLowerCase().startsWith(prefix.toLowerCase())) continue;
+        const match = label.slice(prefix.length).match(/^(\d+):(\d+)$/);
         if (match) {
           const chapter = Number(match[1]);
           const verse = Number(match[2]);
           if (chapter > 0 && verse > 0) resolved = blbUrl(book.name, chapter, verse);
-          break;
         }
+        break;
       }
-
       // Fall back to the numeric identifier for labels that are not in the
       // standard "Book chapter:verse" form.
       if (!resolved) {
