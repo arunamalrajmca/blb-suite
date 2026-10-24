@@ -332,7 +332,7 @@ if (location.hostname.toLowerCase().replace(/^www\./, "") === "thekingsbible.com
   document.addEventListener("click", event => {
     if (event.defaultPrevented || isModifiedLinkActivation(event)) return;
     const anchor = event.target?.closest?.("a[href]");
-    if (!anchor || anchor.hasAttribute("download") || anchor.target === "_blank") return;
+    if (!anchor || anchor.hasAttribute("download")) return;
     const target = theKingsBibleLinkTarget(anchor.href);
     if (!target || !theKingsBibleRedirectEnabled || !suiteEnabled) return;
     event.preventDefault();
