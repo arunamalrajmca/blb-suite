@@ -143,6 +143,17 @@ test.describe('source Bible URL syntax regression coverage', () => {
       .toBe('https://www.blueletterbible.org/kjv/psa/23/1/');
   });
 
+  test("The King's Bible maps home, Strong's entries, dictionary/concordance, and passages", () => {
+    expect(runSourceRedirect('https://www.thekingsbible.com/').redirectedTo).toBe('https://www.blueletterbible.org/');
+    expect(runSourceRedirect('https://www.thekingsbible.com/Dictionary').redirectedTo).toBe('https://www.blueletterbible.org/');
+    expect(runSourceRedirect('https://www.thekingsbible.com/Concordance').redirectedTo).toBe('https://www.blueletterbible.org/');
+    expect(runSourceRedirect('https://www.thekingsbible.com/StrongsNo/H3811').redirectedTo).toBe('https://www.blueletterbible.org/lexicon/h3811/kjv/wlc/0-1/');
+    expect(runSourceRedirect('https://www.thekingsbible.com/Bible/18/4?verse=5').redirectedTo).toBe('https://www.blueletterbible.org/kjv/job/4/5/');
+    expect(runSourceRedirect('https://www.thekingsbible.com/Bible/3/1').redirectedTo).toBe('https://www.blueletterbible.org/kjv/lev/1/1/');
+    expect(runSourceRedirect('https://www.thekingsbible.com/Dictionary/Habitation').redirectedTo).toBe('https://www.blueletterbible.org/search/search.cfm?Criteria=Habitation&t=KJV');
+    expect(runSourceRedirect('https://www.thekingsbible.com/Concordance/vagabonds').redirectedTo).toBe('https://www.blueletterbible.org/search/search.cfm?Criteria=vagabonds&t=KJV');
+  });
+
   test('unsupported and malformed source URLs do not redirect', () => {
     expect(runSourceRedirect('https://biblehub.com/not-a-book/abc.htm').redirectedTo).toBe(null);
     expect(runSourceRedirect('https://biblehub.com/john/3-16-18-20.htm').redirectedTo).toBe(null);
