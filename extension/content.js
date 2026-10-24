@@ -1028,7 +1028,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
           const url = new URL(anchor.getAttribute("href"), pageUrl);
           const label = normalizeSelectionText(anchor.textContent || "");
           const pageParam = [...url.searchParams.keys()].some(key => /^(page|p|pageindex)$/i.test(key));
-          const isPageLink = isEntryPage(url) && (url.pathname.replace(/\/$/, "") !== basePath || pageParam) &&
+          const isPageLink = isEntryPage(url) && (url.pathname.replace(/\/$/, "") !== new URL(pageUrl).pathname.replace(/\/$/, "") || pageParam) &&
             (/^(?:next|last|\d+|›|»|>)$/i.test(label) || url.pathname.replace(/\/$/, "") !== new URL(pageUrl).pathname.replace(/\/$/, "") || pageParam);
             (/^(?:next|last|\\d+|›|»|>)$/i.test(label) || url.pathname.replace(/\/$/, "") !== new URL(pageUrl).pathname.replace(/\/$/, "") || pageParam);
           if (!isPageLink) continue;
