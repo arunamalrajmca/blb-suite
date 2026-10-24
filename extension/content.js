@@ -407,7 +407,22 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
         const book = bookCode === "65"
           ? BOOKS.find(item => item.name.toLowerCase() === "judges")
           : BOOKS.find(item => Number(item.bookNumber) === Number(bookCode));
-        if (book && chapter > 0 && verse > 0) resolved = blbUrl(book.name, chapter, verse);
+        // Dictionary entries may put the book name in a preceding tag and
+        // leave only a range such as "17:15-17" in this .bible span.
+        // Use data-bible for book/chapter/start verse and preserve the visible end.
+        const visibleRange = label.match(/^(\d+):(\d+)-(\d+)$/);
+        if (book && chapter > 0 && verse > 0) {
+          if (
+            visibleRange &&
+            Number(visibleRange[1]) === chapter &&
+            Number(visibleRange[2]) === verse &&
+            Number(visibleRange[3]) >= verse
+          ) {
+            resolved = blbUrl(book.name, chapter, verse, Number(visibleRange[3]));
+          } else {
+            resolved = blbUrl(book.name, chapter, verse);
+          }
+        }
       }
 
       if (resolved) {
