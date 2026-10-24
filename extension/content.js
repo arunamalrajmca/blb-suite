@@ -1002,9 +1002,19 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
     const visited = new Set();
     const currentUrl = new URL(location.href);
     const pathParts = currentUrl.pathname.replace(/\/$/, "").split("/");
-    // The site's paginated entry routes use a trailing page number (for example /Concordance/Aaron/2).
+    // Concordance pagination commonly uses /Concordance/term/1, /2, etc.
     if (/^\d+$/.test(pathParts[pathParts.length - 1] || "")) pathParts.pop();
     const basePath = pathParts.join("/") || "/";
+    // Some pages expose pagination through links that aren't ordinary anchors.
+    // Probe numbered Concordance routes directly as a fallback; duplicate pages
+    // are harmless because references and visited URLs are deduplicated.
+    for (let pageNumber = 1; pageNumber <= 10; pageNumber++) {
+      const pageUrl = new URL(basePath.replace(/\/$/, "") + "/" + pageNumber, currentUrl.origin).href;
+      if (!queued.has(pageUrl)) {
+        pending.push(pageUrl);
+        queued.add(pageUrl);
+      }
+    }
     const isEntryPage = url => {
       if (url.origin !== location.origin) return false;
       const path = url.pathname.replace(/\/$/, "");
