@@ -2531,6 +2531,67 @@ function getDoubleClickTargetElement(event) {
   return null;
 }
 
+// A standalone numeric double-click at the start of a text block may be
+// a numbered-list label rather than a Bible reference. Detect the label from
+// the physical click position and its punctuation; do not suppress standalone
+// book-number gestures (1–66) unless the clicked number is visibly followed by
+// a period at the start of the block. This guard is specific to double-click.
+function isNumberedListSerialDoubleClick(selectionText, event) {
+  const selected = normalizeSelectionText(selectionText).normalize('NFKC');
+  if (!/^\d+$/.test(selected)) return false;
+  const number = Number(selected);
+  if (!Number.isSafeInteger(number) || number < 0) return false;
+
+  try {
+    let pointRange = null;
+    if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
+      if (typeof document.caretRangeFromPoint === 'function') {
+        pointRange = document.caretRangeFromPoint(event.clientX, event.clientY);
+      } else if (typeof document.caretPositionFromPoint === 'function') {
+        const point = document.caretPositionFromPoint(event.clientX, event.clientY);
+        if (point?.offsetNode) {
+          pointRange = document.createRange();
+          pointRange.setStart(point.offsetNode, point.offset);
+          pointRange.collapse(true);
+        }
+      }
+    }
+
+    const nativeSelection = window.getSelection?.();
+    const nativeRange = nativeSelection?.rangeCount ? nativeSelection.getRangeAt(0) : null;
+    const range = pointRange || nativeRange;
+    if (!range) return false;
+
+    let node = range.startContainer;
+    let offset = range.startOffset;
+    if (node?.nodeType !== Node.TEXT_NODE) {
+      const children = node?.childNodes || [];
+      const right = children[Math.min(offset, children.length)] || null;
+      const left = offset > 0 ? children[offset - 1] : null;
+      if (right?.nodeType === Node.TEXT_NODE) { node = right; offset = 0; }
+      else if (left?.nodeType === Node.TEXT_NODE) { node = left; offset = (left.nodeValue || '').length; }
+      else return false;
+    }
+
+    const value = String(node.nodeValue || '');
+    let start = Math.max(0, Math.min(offset, value.length));
+    if (start === value.length || !/\d/.test(value[start] || '')) start--;
+    while (start > 0 && /\d/.test(value[start - 1])) start--;
+    let end = start;
+    while (end < value.length && /\d/.test(value[end])) end++;
+    if (start < 0 || value.slice(start, end) !== selected || value[end] !== '.') return false;
+
+    const block = node.parentElement?.closest?.('p,li,td,th,blockquote,article,section,div') || node.parentElement;
+    if (!block) return false;
+    const before = document.createRange();
+    before.selectNodeContents(block);
+    before.setEnd(node, start);
+    return !normalizeSelectionText(before.toString());
+  } catch (_) {
+    return false;
+  }
+}
+
 function getDoubleClickSelection(event) {
   const selection = normalizeSelectionText(window.getSelection ? window.getSelection().toString() : '');
   if (selection) return selection;
@@ -2588,6 +2649,13 @@ function handleDoubleClickBlb(event) {
           if (Date.now()-started<1500) requestAnimationFrame(dispatch);
           return true;
         }
+
+        // Numbered-list labels above the 66-book range must not borrow a
+        // nearby Bible reference from the same paragraph. Numbers 1–66 remain
+        // valid standalone book gestures even when formatted as list labels.
+        // This guard is double-click-only; floating-button and Alt+B are untouched.
+        const isNumberedListSerial = isNumberedListSerialDoubleClick(selection, event);
+        if (isNumberedListSerial && (Number(selection) === 0 || Number(selection) > 66)) return true;
 
         // Strong's values are lexicon identifiers, not ordinary KJV words.
         // Double-clicking G/H numbers (including a linked value on The King's
@@ -2735,7 +2803,7 @@ function handleDoubleClickBlb(event) {
 
         // Wait for the native selection/context to settle only for a number
         // that could be a standalone book number or part of a Bible reference.
-        if (isNumericBookCandidate && !blockContext && Date.now()-started<1500) {
+        if (isNumericBookCandidate && !blockContext && !isNumberedListSerial && Date.now()-started<1500) {
           requestAnimationFrame(dispatch);
           return true;
         }
@@ -2747,7 +2815,9 @@ function handleDoubleClickBlb(event) {
           event?.target?.closest?.('p,li,td,th,blockquote,article,section,div')?.textContent||''
         ) : '';
         const isStandaloneNumericBook=isNumericBookCandidate && standaloneBook && blockText===selection;
-        const contextualReference=isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook);
+        const contextualReference=isNumberedListSerial && standaloneBook
+          ? standaloneBook
+          : (isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook));
         if (!contextualReference) {
           // A version abbreviation alone is not a KJV word-search request.
           if (isBibleVersionCode) return true;
