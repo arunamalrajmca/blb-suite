@@ -2650,10 +2650,12 @@ function handleDoubleClickBlb(event) {
           return true;
         }
 
-        // Numbered-list labels such as Substack's `1.` must not borrow a
-        // nearby Bible reference from the same paragraph. Keep this guard in
-        // the double-click path only; floating-button and Alt+B are untouched.
-        if (isNumberedListSerialDoubleClick(selection, event)) return true;
+        // Numbered-list labels above the 66-book range must not borrow a
+        // nearby Bible reference from the same paragraph. Numbers 1–66 remain
+        // valid standalone book gestures even when formatted as list labels.
+        // This guard is double-click-only; floating-button and Alt+B are untouched.
+        const isNumberedListSerial = isNumberedListSerialDoubleClick(selection, event);
+        if (isNumberedListSerial && Number(selection) > 66) return true;
 
         // Strong's values are lexicon identifiers, not ordinary KJV words.
         // Double-clicking G/H numbers (including a linked value on The King's
@@ -2801,7 +2803,7 @@ function handleDoubleClickBlb(event) {
 
         // Wait for the native selection/context to settle only for a number
         // that could be a standalone book number or part of a Bible reference.
-        if (isNumericBookCandidate && !blockContext && Date.now()-started<1500) {
+        if (isNumericBookCandidate && !blockContext && !isNumberedListSerial && Date.now()-started<1500) {
           requestAnimationFrame(dispatch);
           return true;
         }
@@ -2813,7 +2815,9 @@ function handleDoubleClickBlb(event) {
           event?.target?.closest?.('p,li,td,th,blockquote,article,section,div')?.textContent||''
         ) : '';
         const isStandaloneNumericBook=isNumericBookCandidate && standaloneBook && blockText===selection;
-        const contextualReference=isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook);
+        const contextualReference=isNumberedListSerial && standaloneBook
+          ? standaloneBook
+          : (isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook));
         if (!contextualReference) {
           // A version abbreviation alone is not a KJV word-search request.
           if (isBibleVersionCode) return true;
