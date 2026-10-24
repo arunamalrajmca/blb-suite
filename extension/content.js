@@ -923,11 +923,11 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
       // Use that structured route rather than relying on abbreviated display labels such as "Ex 4:14".
       if (kingsBibleEntryType === "concordance") {
         try {
-          const sourceUrl = new URL(element.getAttribute("href") || "", sourceUrl);
-          const match = sourceUrl.pathname.match(/^\/Bible\/(\d+)\/(\d+)\/?$/i);
+          const sourceLink = new URL(element.getAttribute("href") || "", sourceUrl);
+          const match = sourceLink.pathname.match(/^\/Bible\/(\d+)\/(\d+)\/?$/i);
           if (match) {
             const book = BOOKS.find(item => Number(item.bookNumber) === Number(match[1]));
-            const verseParam = sourceUrl.searchParams.get("verse");
+            const verseParam = sourceLink.searchParams.get("verse");
             const verse = verseParam && /^\d+$/.test(verseParam) ? Number(verseParam) : 1;
             if (book && Number(match[2]) > 0 && verse > 0) {
               bookName = book.name;
@@ -997,13 +997,13 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
     const queued = new Set(pending);
     const visited = new Set();
     const currentUrl = new URL(location.href);
-    const pathParts = currentUrl.pathname.replace(/\\/$/, "").split("/");
+    const pathParts = currentUrl.pathname.replace(/\/$/, "").split("/");
     // The site's paginated entry routes use a trailing page number (for example /Concordance/Aaron/2).
-    if (/^\\d+$/.test(pathParts[pathParts.length - 1] || "")) pathParts.pop();
+    if (/^\d+$/.test(pathParts[pathParts.length - 1] || "")) pathParts.pop();
     const basePath = pathParts.join("/") || "/";
     const isEntryPage = url => {
       if (url.origin !== location.origin) return false;
-      const path = url.pathname.replace(/\\/$/, "");
+      const path = url.pathname.replace(/\/$/, "");
       return path === basePath || new RegExp("^" + basePath.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&") + \"/\\\\d+$").test(path);
     };
     while (pending.length && visited.size < 20) {
@@ -1028,8 +1028,8 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
           const url = new URL(anchor.getAttribute("href"), pageUrl);
           const label = normalizeSelectionText(anchor.textContent || "");
           const pageParam = [...url.searchParams.keys()].some(key => /^(page|p|pageindex)$/i.test(key));
-          const isPageLink = isEntryPage(url) && (url.pathname.replace(/\\/$/, "") !== basePath || pageParam) &&
-            (/^(?:next|last|\\d+|›|»|>)$/i.test(label) || url.pathname.replace(/\\/$/, "") !== new URL(pageUrl).pathname.replace(/\\/$/, "") || pageParam);
+          const isPageLink = isEntryPage(url) && (url.pathname.replace(/\/$/, "") !== basePath || pageParam) &&
+            (/^(?:next|last|\\d+|›|»|>)$/i.test(label) || url.pathname.replace(/\/$/, "") !== new URL(pageUrl).pathname.replace(/\/$/, "") || pageParam);
           if (!isPageLink) continue;
           url.hash = "";
           if (!visited.has(url.href) && !queued.has(url.href)) { pending.push(url.href); queued.add(url.href); }
@@ -1054,8 +1054,9 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
     box._timer = setTimeout(() => box.remove(), 3500);
   }
 
-  function openAllKingsBibleRefs() {
-    const refs = collectKingsBibleReferences();
+  async function openAllKingsBibleRefs() {
+    showKingsBibleStatus("Collecting references across pages…");
+    const refs = await collectAllKingsBibleReferences();
     if (!refs.length) {
       showKingsBibleStatus("No Bible references found on this page.", true);
       return;
