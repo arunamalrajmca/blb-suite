@@ -1023,16 +1023,38 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
         seen.add(ref.url);
         refs.push(ref);
       }
+      const sourcePageUrl = new URL(pageUrl);
+      const normalizedPath = value => value.pathname.replace(/\/{2,}/g, "/").replace(/\/$/, "");
+      const paginationParam = /^(?:page|p|pageindex|pagenumber|pageno|currentpage|page_num|page-number|page_no|pg|offset|skip)$/i;
       for (const anchor of pageDocument.querySelectorAll("a[href]")) {
         try {
           const url = new URL(anchor.getAttribute("href"), pageUrl);
+          if (!isEntryPage(url)) continue;
           const label = normalizeSelectionText(anchor.textContent || "");
-          const pageParam = [...url.searchParams.keys()].some(key => /^(page|p|pageindex)$/i.test(key));
-          const isPageLink = isEntryPage(url) && (url.pathname.replace(/\/$/, "") !== new URL(pageUrl).pathname.replace(/\/$/, "") || pageParam) &&
-            (/^(?:next|last|\d+|›|»|>)$/i.test(label) || url.pathname.replace(/\/$/, "") !== new URL(pageUrl).pathname.replace(/\/$/, "") || pageParam);
+          const accessibleLabel = normalizeSelectionText([
+            anchor.getAttribute("aria-label"),
+            anchor.getAttribute("title"),
+            anchor.getAttribute("rel")
+          ].filter(Boolean).join(" "));
+          const currentPath = normalizedPath(sourcePageUrl);
+          const targetPath = normalizedPath(url);
+          const pathChanged = targetPath !== currentPath;
+          const changedPaginationParam = [...url.searchParams.keys()].some(key =>
+            paginationParam.test(key) &&
+            url.searchParams.get(key) !== sourcePageUrl.searchParams.get(key)
+          );
+          const paginationLabel = /^(?:next|last|first|previous|prev|\d+|[‹›«»<>]+)$/i.test(label) ||
+            /\b(?:next|last|first|previous|prev)\b/i.test(accessibleLabel);
+          // Pagination may use a trailing numeric path segment or a query parameter
+          // (including pageNumber/pageNo); don't depend on the visible link text alone.
+          const isPageLink = pathChanged || changedPaginationParam ||
+            (paginationLabel && [...url.searchParams.keys()].some(key => paginationParam.test(key)));
           if (!isPageLink) continue;
           url.hash = "";
-          if (!visited.has(url.href) && !queued.has(url.href)) { pending.push(url.href); queued.add(url.href); }
+          if (!visited.has(url.href) && !queued.has(url.href)) {
+            pending.push(url.href);
+            queued.add(url.href);
+          }
         } catch (_) {}
       }
     }
