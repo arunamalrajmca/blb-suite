@@ -332,7 +332,7 @@ function redirectBlbNet() {
 const REDIRECT_HOSTS = new Set([
   'bible.com', 'biblegateway.com', 'bibleref.com', 'biblehub.com',
   'bibleportal.com', 'kingjamesbibleonline.org', 'kjbo.org',
-  'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com',
+  'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com', 'thekingsbible.com',
   'webstersdictionary1828.com', BLB_HOSTNAME
 ]);
 
