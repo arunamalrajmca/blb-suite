@@ -2226,6 +2226,31 @@ function handleDoubleClickBlb(event) {
           return true;
         }
 
+        // Strong's values are lexicon identifiers, not ordinary KJV words.
+        // Double-clicking G/H numbers (including a linked value on The King's
+        // Bible) should open the corresponding BLB lexicon entry directly.
+        const physicalTarget = event.target instanceof Element
+          ? event.target
+          : (event.target?.parentElement || null);
+        const strongLink = physicalTarget?.closest?.('a[href]');
+        let strongsMatch = normalizeSelectionText(selection).normalize('NFKC')
+          .match(/^(?:Strong(?:['’]s?)?\\s*)?([GH])\\s*0*(\\d+)$/i);
+        if (!strongsMatch && strongLink) {
+          try {
+            const strongPath = new URL(strongLink.href, location.href).pathname;
+            strongsMatch = strongPath.match(/^\\/StrongsNo\\/([GH])0*(\\d+)\\/?$/i);
+          } catch (_) {}
+        }
+        if (strongsMatch) {
+          const language = strongsMatch[1].toLowerCase();
+          const strongNumber = Number(strongsMatch[2]);
+          if (Number.isSafeInteger(strongNumber) && strongNumber > 0) {
+            const lexiconUrl = `${BLBShared.urls.blbOrigin}/lexicon/${language}${strongNumber}/kjv/${language === 'h' ? 'wlc' : 'tr'}/0-1/`;
+            openBlbDestinationFromContent(lexiconUrl);
+          }
+          return true;
+        }
+
         // Fast-reject a single non-ASCII token (including Tamil) before
         // DOM/context scanning. BLB's word lookup is English KJV; these tokens
         // cannot be valid KJV word searches. Keep multiword/reference selections
