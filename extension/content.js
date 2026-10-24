@@ -333,10 +333,33 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
     /^\/(?:dictionary|concordance)\//i.test(location.pathname.replace(/\/{2,}/g, "/"))) {
   document.addEventListener("click", event => {
     if (event.defaultPrevented || isModifiedLinkActivation(event)) return;
+    if (!theKingsBibleRedirectEnabled || !suiteEnabled) return;
+
+    // Dictionary entries render verse references as spans (for example,
+    // <span class="bible" data-bible="40022037">Matthew 22:37</span>),
+    // not anchors. Decode the fixed-width book/chapter/verse identifier.
+    const bibleReference = event.target?.closest?.(".bible[data-bible]");
+    if (bibleReference) {
+      const encoded = String(bibleReference.getAttribute("data-bible") || "");
+      if (/^\d{8}$/.test(encoded)) {
+        const bookNumber = Number(encoded.slice(0, 2));
+        const chapter = Number(encoded.slice(2, 5));
+        const verse = Number(encoded.slice(5, 8));
+        const book = BOOKS.find(item => Number(item.bookNumber) === bookNumber);
+        if (book && chapter > 0 && verse > 0) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          openBlbDestinationFromContent(blbUrl(book.name, chapter, verse));
+          return;
+        }
+      }
+    }
+
+    // Some dictionary/concordance references and Strong's numbers are anchors.
     const anchor = event.target?.closest?.("a[href]");
     if (!anchor || anchor.hasAttribute("download")) return;
     const target = theKingsBibleLinkTarget(anchor.href);
-    if (!target || !theKingsBibleRedirectEnabled || !suiteEnabled) return;
+    if (!target) return;
     event.preventDefault();
     event.stopImmediatePropagation();
     openBlbDestinationFromContent(target);
