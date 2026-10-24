@@ -167,7 +167,9 @@ function redirectBibleSite() {
 
   if (host==="thekingsbible.com") {
     const path=u.pathname.replace(/\/{2,}/g,"/");
-    if (path==="/" || /^\/(?:dictionary|concordance)\/?$/i.test(path)) {
+    // Keep the site's own homepage accessible; only supported content URLs redirect.
+    if (path==="/") return false;
+    if (/^\/(?:dictionary|concordance)\/?$/i.test(path)) {
       const target=BLBShared.urls.blbHome;
       if (target!==u.href) { location.replace(target); return true; }
       return false;
