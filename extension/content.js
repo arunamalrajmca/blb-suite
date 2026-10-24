@@ -2234,11 +2234,11 @@ function handleDoubleClickBlb(event) {
           : (event.target?.parentElement || null);
         const strongLink = physicalTarget?.closest?.('a[href]');
         let strongsMatch = normalizeSelectionText(selection).normalize('NFKC')
-          .match(/^(?:Strong(?:['’]s?)?\\s*)?([GH])\\s*0*(\\d+)$/i);
+          .match(/^(?:Strong(?:['’]s?)?\s*)?([GH])\s*0*(\d+)$/i);
         if (!strongsMatch && strongLink) {
           try {
             const strongPath = new URL(strongLink.href, location.href).pathname;
-            strongsMatch = strongPath.match(/^\\/StrongsNo\\/([GH])0*(\\d+)\\/?$/i);
+            strongsMatch = strongPath.match(/^\/StrongsNo\/([GH])0*(\d+)\/?$/i);
           } catch (_) {}
         }
         if (strongsMatch) {
