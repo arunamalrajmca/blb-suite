@@ -2540,7 +2540,7 @@ function isNumberedListSerialDoubleClick(selectionText, event) {
   const selected = normalizeSelectionText(selectionText).normalize('NFKC');
   if (!/^\d+$/.test(selected)) return false;
   const number = Number(selected);
-  if (!Number.isSafeInteger(number) || number < 1) return false;
+  if (!Number.isSafeInteger(number) || number < 0) return false;
 
   try {
     let pointRange = null;
@@ -2655,7 +2655,7 @@ function handleDoubleClickBlb(event) {
         // valid standalone book gestures even when formatted as list labels.
         // This guard is double-click-only; floating-button and Alt+B are untouched.
         const isNumberedListSerial = isNumberedListSerialDoubleClick(selection, event);
-        if (isNumberedListSerial && Number(selection) > 66) return true;
+        if (isNumberedListSerial && (Number(selection) === 0 || Number(selection) > 66)) return true;
 
         // Strong's values are lexicon identifiers, not ordinary KJV words.
         // Double-clicking G/H numbers (including a linked value on The King's
