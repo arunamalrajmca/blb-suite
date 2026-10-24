@@ -188,13 +188,6 @@ function redirectBibleSite() {
         ref={book:book.name,chapter,from:verse,to:null};
       }
     }
-    if (!ref && /^\/(?:dictionary|concordance)\//i.test(path)) {
-      const term=path.split("/").filter(Boolean).slice(1).join(" ").trim();
-      if (term) {
-        const target=`${BLBShared.urls.blbSearch}?Criteria=${encodeURIComponent(term)}&t=KJV`;
-        location.replace(target); return true;
-      }
-    }
   }
 
   if (host==="bible.com") {
@@ -304,6 +297,48 @@ function redirectBibleSite() {
   if (!target) return false;
   if (target!==u.href) { location.replace(target); return true; }
   return false;
+}
+
+// On The King's Bible Dictionary/Concordance pages, keep the source page open.
+// Only clicked Bible-passage and Strong's links are sent to BLB in a new tab.
+let theKingsBibleRedirectEnabled = false;
+chrome.storage.local.get({redirectEnabled:false}).then(data => {
+  theKingsBibleRedirectEnabled = data.redirectEnabled === true;
+}).catch(() => {});
+
+function theKingsBibleLinkTarget(href) {
+  let url;
+  try { url = new URL(href, location.href); } catch (_) { return null; }
+  if (url.hostname.toLowerCase().replace(/^www\./, "") !== "thekingsbible.com") return null;
+  const path = url.pathname.replace(/\/{2,}/g, "/");
+  let match = path.match(/^\/StrongsNo\/([GH])0*(\d+)\/?$/i);
+  if (match) {
+    const language = match[1].toLowerCase();
+    return `${BLBShared.urls.blbOrigin}/lexicon/${language}${Number(match[2])}/kjv/${language === "h" ? "wlc" : "tr"}/0-1/`;
+  }
+  match = path.match(/^\/Bible\/(\d+)\/(\d+)\/?$/i);
+  if (match) {
+    const book = BOOKS.find(item => Number(item.bookNumber) === Number(match[1]));
+    if (!book) return null;
+    const verseParam = url.searchParams.get("verse");
+    const verse = verseParam && /^\d+$/.test(verseParam) ? Number(verseParam) : 1;
+    return blbUrl(book.name, Number(match[2]), verse);
+  }
+  return null;
+}
+
+if (location.hostname.toLowerCase().replace(/^www\./, "") === "thekingsbible.com" &&
+    /^\/(?:dictionary|concordance)\//i.test(location.pathname.replace(/\/{2,}/g, "/"))) {
+  document.addEventListener("click", event => {
+    if (event.defaultPrevented || isModifiedLinkActivation(event)) return;
+    const anchor = event.target?.closest?.("a[href]");
+    if (!anchor || anchor.hasAttribute("download") || anchor.target === "_blank") return;
+    const target = theKingsBibleLinkTarget(anchor.href);
+    if (!target || !theKingsBibleRedirectEnabled || !suiteEnabled) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    openBlbDestinationFromContent(target);
+  }, true);
 }
 
 function redirectBlbNet() {
@@ -2983,6 +3018,9 @@ if (!isBlbPageButtonExcludedSite() && !isSensitiveSiteHostname(location.hostname
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
+  if (changes.redirectEnabled) {
+    theKingsBibleRedirectEnabled = changes.redirectEnabled.newValue === true;
+  }
 
   if (changes.masterEnabled) {
     suiteEnabled = changes.masterEnabled.newValue !== false;
