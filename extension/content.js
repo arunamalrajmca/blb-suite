@@ -335,17 +335,16 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
     if (event.defaultPrevented || isModifiedLinkActivation(event)) return;
     if (!theKingsBibleRedirectEnabled || !suiteEnabled) return;
 
-    // Dictionary entries render verse references as spans (for example,
-    // <span class="bible" data-bible="40022037">Matthew 22:37</span>),
-    // not anchors. Decode the fixed-width book/chapter/verse identifier.
+    // Dictionary entries render verse references as spans with a data-bible
+    // identifier. The last six digits encode chapter and verse; preceding
+    // digits are the source site's book code, which is not always canonical.
     const bibleReference = event.target?.closest?.(".bible[data-bible]");
     if (bibleReference) {
       const label = String(bibleReference.textContent || "").trim();
+      const encoded = String(bibleReference.getAttribute("data-bible") || "");
       let resolved = null;
 
-      // The King's Bible data-bible IDs are not consistently encoded as the
-      // canonical KJV book number. Prefer the visible reference label (e.g.
-      // "Judges 3:3") so it cannot be mistaken for "Jude 1:3".
+      // A complete visible label is the most reliable source for the book.
       for (const book of BOOKS) {
         const prefix = String(book.name) + " ";
         if (!label.toLowerCase().startsWith(prefix.toLowerCase())) continue;
@@ -357,17 +356,18 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
         }
         break;
       }
-      // Fall back to the numeric identifier for labels that are not in the
-      // standard "Book chapter:verse" form.
-      if (!resolved) {
-        const encoded = String(bibleReference.getAttribute("data-bible") || "");
-        if (/^\d{7,8}$/.test(encoded)) {
-          const bookNumber = Number(encoded.slice(0, -6));
-          const chapter = Number(encoded.slice(-6, -3));
-          const verse = Number(encoded.slice(-3));
-          const book = BOOKS.find(item => Number(item.bookNumber) === bookNumber);
-          if (book && chapter > 0 && verse > 0) resolved = blbUrl(book.name, chapter, verse);
-        }
+
+      // For abbreviated labels such as "13:1", decode the data-bible ID.
+      if (!resolved && /^\d{7,8}$/.test(encoded)) {
+        const bookCode = encoded.slice(0, -6);
+        const chapter = Number(encoded.slice(-6, -3));
+        const verse = Number(encoded.slice(-3));
+        // Observed dictionary IDs use source-specific code 65 for Judges
+        // (e.g. 65003003 = Judges 3:3); other observed codes match KJV numbers.
+        const book = bookCode === "65"
+          ? BOOKS.find(item => item.name.toLowerCase() === "judges")
+          : BOOKS.find(item => Number(item.bookNumber) === Number(bookCode));
+        if (book && chapter > 0 && verse > 0) resolved = blbUrl(book.name, chapter, verse);
       }
 
       if (resolved) {
