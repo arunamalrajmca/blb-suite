@@ -2540,7 +2540,7 @@ function isNumberedListSerialDoubleClick(selectionText, event) {
   const selected = normalizeSelectionText(selectionText).normalize('NFKC');
   if (!/^\d+$/.test(selected)) return false;
   const number = Number(selected);
-  if (!Number.isSafeInteger(number) || number < 1 || number > 176) return false;
+  if (!Number.isSafeInteger(number) || number < 1) return false;
 
   try {
     let pointRange = null;
