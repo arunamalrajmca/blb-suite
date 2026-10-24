@@ -991,6 +991,10 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
   }
 
   async function collectAllKingsBibleReferences() {
+    // Only Concordance entries use multi-page collection; Dictionary entries stay on the current page.
+    if (kingsBibleEntryType !== "concordance") {
+      return collectKingsBibleReferences(document, location.href);
+    }
     const refs = [];
     const seen = new Set();
     const pending = [location.href];
