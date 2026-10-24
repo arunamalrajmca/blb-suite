@@ -147,6 +147,7 @@ test.describe('source Bible URL syntax regression coverage', () => {
   test("The King's Bible maps home, Strong's entries, dictionary/concordance, and passages", () => {
     expect(runSourceRedirect('https://www.thekingsbible.com/').redirectedTo).toBeNull();
     expect(runSourceRedirect('https://www.thekingsbible.com/Dictionary').redirectedTo).toBe('https://www.blueletterbible.org/');
+    expect(runSourceRedirect('https://www.thekingsbible.com/Dictionary#').redirectedTo).toBeNull();
     expect(runSourceRedirect('https://www.thekingsbible.com/Concordance').redirectedTo).toBe('https://www.blueletterbible.org/');
     expect(runSourceRedirect('https://www.thekingsbible.com/StrongsNo/H3811').redirectedTo).toBe('https://www.blueletterbible.org/lexicon/h3811/kjv/wlc/0-1/');
     expect(runSourceRedirect('https://www.thekingsbible.com/Bible/18/4?verse=5').redirectedTo).toBe('https://www.blueletterbible.org/kjv/job/4/5/');
