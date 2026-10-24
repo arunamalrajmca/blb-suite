@@ -907,7 +907,9 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
   function collectKingsBibleReferences() {
     const refs = [];
     const seen = new Set();
-    const elements = document.querySelectorAll(".bible[data-bible], a.bible");
+    const elements = kingsBibleEntryType === "concordance"
+      ? document.querySelectorAll('#ConcordanceTable a.concordanceitem[href^="/Bible/"], a.concordanceitem[href^="/Bible/"]')
+      : document.querySelectorAll(".bible[data-bible], a.bible");
 
     for (const element of elements) {
       const label = normalizeSelectionText(element.textContent || "");
@@ -916,6 +918,26 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
       let chapter = parsed?.chapter;
       let from = parsed?.from ?? 1;
       let to = parsed?.to ?? null;
+
+      // Concordance entries identify the verse directly in their /Bible/<book>/<chapter>?verse=<n> URL.
+      // Use that structured route rather than relying on abbreviated display labels such as "Ex 4:14".
+      if (kingsBibleEntryType === "concordance") {
+        try {
+          const sourceUrl = new URL(element.getAttribute("href") || "", location.href);
+          const match = sourceUrl.pathname.match(/^\\/Bible\\/(\\d+)\\/(\\d+)\\/?$/i);
+          if (match) {
+            const book = BOOKS.find(item => Number(item.bookNumber) === Number(match[1]));
+            const verseParam = sourceUrl.searchParams.get("verse");
+            const verse = verseParam && /^\\d+$/.test(verseParam) ? Number(verseParam) : 1;
+            if (book && Number(match[2]) > 0 && verse > 0) {
+              bookName = book.name;
+              chapter = Number(match[2]);
+              from = verse;
+              to = null;
+            }
+          }
+        } catch (_) {}
+      }
 
       // Abbreviated spans (e.g. "9:20" or "17:15-17") use a numeric data-bible ID.
       // Prefer the encoded book/chapter/verse whenever the visible label omits the book.
