@@ -167,13 +167,9 @@ function redirectBibleSite() {
 
   if (host==="thekingsbible.com") {
     const path=u.pathname.replace(/\/{2,}/g,"/");
-    // Keep the site's own homepage and empty Dictionary#/Concordance# anchors accessible.
-    if (path==="/" || (u.href.endsWith("#") && /^\/(?:dictionary|concordance)\/?$/i.test(path))) return false;
-    if (/^\/(?:dictionary|concordance)\/?$/i.test(path)) {
-      const target=BLBShared.urls.blbHome;
-      if (target!==u.href) { location.replace(target); return true; }
-      return false;
-    }
+    // Keep The King's Bible homepage and Dictionary/Concordance landing pages accessible.
+    // Redirect only specific dictionary/concordance entries, not their root pages or empty anchors.
+    if (path==="/" || /^\/(?:dictionary|concordance)\/?$/i.test(path)) return false;
     let m=path.match(/^\/StrongsNo\/([GH])0*(\d+)\/?$/i);
     if (m) {
       const language=m[1].toLowerCase();
