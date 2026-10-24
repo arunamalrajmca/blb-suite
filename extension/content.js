@@ -898,9 +898,12 @@ if (location.hostname.endsWith(BLB_HOSTNAME)) {
   }
 }
 
-// ---------- The King's Bible Dictionary MultiVerse ----------
+// ---------- The King's Bible Dictionary/Concordance MultiVerse ----------
+const kingsBibleEntryPath = location.pathname.replace(/\/{2,}/g, "/");
+const kingsBibleEntryMatch = kingsBibleEntryPath.match(/^\/(dictionary|concordance)\/[^/]+(?:\/\d+)?\/?$/i);
 if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.com" &&
-    /^\/dictionary\/[^/]+\/?$/i.test(location.pathname.replace(/\/{2,}/g, "/"))) {
+    kingsBibleEntryMatch) {
+  const kingsBibleEntryType = kingsBibleEntryMatch[1].toLowerCase();
   function collectKingsBibleReferences() {
     const refs = [];
     const seen = new Set();
@@ -1011,7 +1014,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
     button.id = "blb-suite-kingsbible-multiverse";
     button.type = "button";
     button.textContent = "Open Bible References in BLB";
-    button.title = "Collect all Bible references on this Dictionary page and open them together in BLB MultiVerse.";
+    button.title = `Collect all Bible references on this ${kingsBibleEntryType === "concordance" ? "Concordance" : "Dictionary"} page and open them together in BLB MultiVerse.`;
     button.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:2147483647;background:#292a2d;color:#f1f3f4;border:1px solid #505257;border-radius:7px;padding:9px 12px;font:600 13px Arial,sans-serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.42)";
     button.addEventListener("click", event => {
       event.preventDefault();
