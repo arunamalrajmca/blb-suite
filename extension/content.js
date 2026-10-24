@@ -329,7 +329,7 @@ function theKingsBibleLinkTarget(href) {
   return null;
 }
 
-if (location.hostname.toLowerCase().replace(/^www\./, "") === "thekingsbible.com" &&
+if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.com" &&
     /^\/(?:dictionary|concordance)\//i.test(location.pathname.replace(/\/{2,}/g, "/"))) {
   document.addEventListener("click", event => {
     if (event.defaultPrevented || isModifiedLinkActivation(event)) return;
