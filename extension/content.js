@@ -1005,6 +1005,16 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
     // Concordance pagination commonly uses /Concordance/term/1, /2, etc.
     if (/^\d+$/.test(pathParts[pathParts.length - 1] || "")) pathParts.pop();
     const basePath = pathParts.join("/") || "/";
+    // The King's Bible uses numbered routes such as /Concordance/live/1.
+    // Some pagination controls aren't ordinary anchors, so seed likely numbered
+    // pages directly as well as following any pagination links found in markup.
+    for (let pageNumber = 1; pageNumber <= 10; pageNumber++) {
+      const pageUrl = new URL(basePath.replace(/\/$/, "") + "/" + pageNumber, currentUrl.origin).href;
+      if (!queued.has(pageUrl)) {
+        pending.push(pageUrl);
+        queued.add(pageUrl);
+      }
+    }
     const isEntryPage = url => {
       if (url.origin !== location.origin) return false;
       const path = url.pathname.replace(/\/$/, "");
