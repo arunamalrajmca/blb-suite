@@ -777,11 +777,11 @@ async function clearSelectedTopic() {
   if (!topic || !findTopicKey(topic)) { setStatus('Select a saved topic first.'); return; }
   const isRecordingSelected = !!studyState.recording && String(studyState.recordingTopic || '').toLowerCase() === topic.toLowerCase();
   if (isRecordingSelected) {
-    if (!confirm(`“${topic}” is currently recording. Stop recording and delete this topic?`)) return;
+    if (!confirm(`“${topic}” is recording. Export a Study backup to keep its notes and references. Stop and delete?`)) return;
     const stopResponse = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
     if (!stopResponse?.ok) { setStatus('Unable to stop recording.'); return; }
   } else {
-    if (!confirm(`Clear all notes and references for “${topic}”?`)) return;
+    if (!confirm(`Delete “${topic}”? Export a Study backup first to keep its notes and references. Continue?`)) return;
   }
   const response = await chrome.runtime.sendMessage({type:'blbSuiteClearStudyTopic', topic});
   if (!response?.ok) { setStatus('Unable to clear the selected topic.'); return; }
@@ -795,7 +795,7 @@ async function clearSelectedTopic() {
 async function clearAllTopics() {
   closeClearMenu();
   closeTopicMenu();
-  if (!confirm('Clear all Study Sessions, topics, notes, and history?')) return;
+  if (!confirm('Delete all Study data? Export a backup first to keep a copy. Continue?')) return;
   const response = await chrome.runtime.sendMessage({type:'blbSuiteClearStudy'});
   if (!response?.ok) { setStatus('Unable to clear Study Sessions.'); return; }
   topicInput.value = '';
