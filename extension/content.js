@@ -350,11 +350,15 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
       for (const book of BOOKS) {
         const prefix = String(book.name) + " ";
         if (!label.toLowerCase().startsWith(prefix.toLowerCase())) continue;
-        const match = label.slice(prefix.length).match(/^(\d+):(\d+)$/);
+        // Captions may identify a single verse or a range, e.g. "Numbers 20:10-12".
+        const match = label.slice(prefix.length).match(/^(\d+):(\d+)(?:-(\d+))?$/);
         if (match) {
           const chapter = Number(match[1]);
           const verse = Number(match[2]);
-          if (chapter > 0 && verse > 0) resolved = blbUrl(book.name, chapter, verse);
+          const verseEnd = match[3] ? Number(match[3]) : null;
+          if (chapter > 0 && verse > 0 && (verseEnd === null || verseEnd >= verse)) {
+            resolved = blbUrl(book.name, chapter, verse, verseEnd);
+          }
         }
         break;
       }
