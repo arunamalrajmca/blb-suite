@@ -1030,7 +1030,6 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
           const pageParam = [...url.searchParams.keys()].some(key => /^(page|p|pageindex)$/i.test(key));
           const isPageLink = isEntryPage(url) && (url.pathname.replace(/\/$/, "") !== new URL(pageUrl).pathname.replace(/\/$/, "") || pageParam) &&
             (/^(?:next|last|\d+|›|»|>)$/i.test(label) || url.pathname.replace(/\/$/, "") !== new URL(pageUrl).pathname.replace(/\/$/, "") || pageParam);
-            (/^(?:next|last|\\d+|›|»|>)$/i.test(label) || url.pathname.replace(/\/$/, "") !== new URL(pageUrl).pathname.replace(/\/$/, "") || pageParam);
           if (!isPageLink) continue;
           url.hash = "";
           if (!visited.has(url.href) && !queued.has(url.href)) { pending.push(url.href); queued.add(url.href); }
@@ -1059,7 +1058,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
     showKingsBibleStatus("Collecting references across pages…");
     const refs = await collectAllKingsBibleReferences();
     if (!refs.length) {
-      showKingsBibleStatus("No Bible references found on this page.", true);
+      showKingsBibleStatus("No Bible references found across the entry pages.", true);
       return;
     }
     if (refs.length === 1) {
