@@ -153,8 +153,11 @@ test.describe('source Bible URL syntax regression coverage', () => {
     expect(runSourceRedirect('https://www.thekingsbible.com/StrongsNo/H3811').redirectedTo).toBe('https://www.blueletterbible.org/lexicon/h3811/kjv/wlc/0-1/');
     expect(runSourceRedirect('https://www.thekingsbible.com/Bible/18/4?verse=5').redirectedTo).toBe('https://www.blueletterbible.org/kjv/job/4/5/');
     expect(runSourceRedirect('https://www.thekingsbible.com/Bible/3/1').redirectedTo).toBe('https://www.blueletterbible.org/kjv/lev/1/1/');
-    expect(runSourceRedirect('https://www.thekingsbible.com/Dictionary/Habitation').redirectedTo).toBe('https://www.blueletterbible.org/search/search.cfm?Criteria=Habitation&t=KJV');
-    expect(runSourceRedirect('https://www.thekingsbible.com/Concordance/vagabonds').redirectedTo).toBe('https://www.blueletterbible.org/search/search.cfm?Criteria=vagabonds&t=KJV');
+    expect(runSourceRedirect('https://www.thekingsbible.com/Dictionary/Habakkuk').redirectedTo).toBeNull();
+    expect(runSourceRedirect('https://www.thekingsbible.com/Dictionary/Habitation').redirectedTo).toBeNull();
+    expect(runSourceRedirect('https://www.thekingsbible.com/Dictionary/').redirectedTo).toBeNull();
+    expect(runSourceRedirect('https://www.thekingsbible.com/Concordance/beautify').redirectedTo).toBeNull();
+    expect(runSourceRedirect('https://www.thekingsbible.com/Concordance/').redirectedTo).toBeNull();
   });
 
   test('unsupported and malformed source URLs do not redirect', () => {
