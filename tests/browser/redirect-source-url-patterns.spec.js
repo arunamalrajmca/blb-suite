@@ -7,6 +7,7 @@ const source = fs.readFileSync(path.resolve(__dirname, '../../extension/content.
 const booksSource = fs.readFileSync(path.resolve(__dirname, '../../extension/books.js'), 'utf8');
 const aliasesSource = fs.readFileSync(path.resolve(__dirname, '../../extension/book-aliases.js'), 'utf8');
 const referenceCoreSource = fs.readFileSync(path.resolve(__dirname, '../../extension/reference-core.js'), 'utf8');
+const sharedPatternsSource = fs.readFileSync(path.resolve(__dirname, '../../extension/regex-patterns.js'), 'utf8');
 const decodeStart = source.indexOf('function decodeSafe(v) {');
 const parseStart = source.indexOf('function parseRef(text) {', decodeStart);
 const blbUrlStart = source.indexOf('function blbUrl(', decodeStart);
@@ -16,7 +17,7 @@ if ([decodeStart, blbUrlStart, parseStart, redirectStart, redirectEnd].some(inde
   throw new Error('Could not locate source-site redirect functions in extension/content.js');
 }
 // Exercise the production book table, alias resolver, reference validator, and URL builder.
-const helpers = booksSource + '\n' + aliasesSource + '\n' + referenceCoreSource + '\n' +
+const helpers = sharedPatternsSource + '\n' + booksSource + '\n' + aliasesSource + '\n' + referenceCoreSource + '\n' +
   source.slice(source.indexOf('function bookKey(value) {'), parseStart) +
   source.slice(parseStart, redirectStart) + source.slice(redirectStart, redirectEnd);
 
@@ -141,6 +142,22 @@ test.describe('source Bible URL syntax regression coverage', () => {
       .toBe('https://www.blueletterbible.org/kjv/mat/5/3-5/');
     expect(runSourceRedirect('https://www.bibleportal.com/verse-topic?v=Psalm%2023&version=NKJV').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/psa/23/1/');
+  });
+
+  test("The King's Bible maps home, Strong's entries, dictionary/concordance, and passages", () => {
+    expect(runSourceRedirect('https://www.thekingsbible.com/').redirectedTo).toBeNull();
+    expect(runSourceRedirect('https://www.thekingsbible.com/Dictionary').redirectedTo).toBeNull();
+    expect(runSourceRedirect('https://www.thekingsbible.com/Dictionary#').redirectedTo).toBeNull();
+    expect(runSourceRedirect('https://www.thekingsbible.com/Concordance').redirectedTo).toBeNull();
+    expect(runSourceRedirect('https://www.thekingsbible.com/Concordance#').redirectedTo).toBeNull();
+    expect(runSourceRedirect('https://www.thekingsbible.com/StrongsNo/H3811').redirectedTo).toBe('https://www.blueletterbible.org/lexicon/h3811/kjv/wlc/0-1/');
+    expect(runSourceRedirect('https://www.thekingsbible.com/Bible/18/4?verse=5').redirectedTo).toBe('https://www.blueletterbible.org/kjv/job/4/5/');
+    expect(runSourceRedirect('https://www.thekingsbible.com/Bible/3/1').redirectedTo).toBe('https://www.blueletterbible.org/kjv/lev/1/1/');
+    expect(runSourceRedirect('https://www.thekingsbible.com/Dictionary/Habakkuk').redirectedTo).toBeNull();
+    expect(runSourceRedirect('https://www.thekingsbible.com/Dictionary/Habitation').redirectedTo).toBeNull();
+    expect(runSourceRedirect('https://www.thekingsbible.com/Dictionary/').redirectedTo).toBeNull();
+    expect(runSourceRedirect('https://www.thekingsbible.com/Concordance/beautify').redirectedTo).toBeNull();
+    expect(runSourceRedirect('https://www.thekingsbible.com/Concordance/').redirectedTo).toBeNull();
   });
 
   test('unsupported and malformed source URLs do not redirect', () => {

@@ -165,6 +165,31 @@ function redirectBibleSite() {
   const u=new URL(location.href), host=u.hostname.toLowerCase().replace(/^www\./,"");
   let ref=null;
 
+  if (host==="thekingsbible.com") {
+    const path=u.pathname.replace(/\/{2,}/g,"/");
+    // Keep The King's Bible homepage and Dictionary/Concordance landing pages accessible.
+    // Redirect only specific dictionary/concordance entries, not their root pages or empty anchors.
+    if (path==="/" || /^\/(?:dictionary|concordance)\/?$/i.test(path)) return false;
+    let m=path.match(/^\/StrongsNo\/([GH])0*(\d+)\/?$/i);
+    if (m) {
+      const language=m[1].toLowerCase();
+      const target=`${BLBShared.urls.blbOrigin}/lexicon/${language}${Number(m[2])}/kjv/${language==="h"?"wlc":"tr"}/0-1/`;
+      if (target!==u.href) { location.replace(target); return true; }
+      return false;
+    }
+    // The King’s Bible uses canonical numeric book order in /Bible/<book>/<chapter>.
+    m=path.match(/^\/Bible\/(\d+)\/(\d+)\/?$/i);
+    if (m) {
+      const book=BOOKS.find(item=>Number(item.bookNumber)===Number(m[1]));
+      if (book) {
+        const chapter=Number(m[2]);
+        const verseParam=u.searchParams.get("verse");
+        const verse=verseParam && /^\d+$/.test(verseParam) ? Number(verseParam) : 1;
+        ref={book:book.name,chapter,from:verse,to:null};
+      }
+    }
+  }
+
   if (host==="bible.com") {
     // Ignore the selected translation/version completely. Any version clicked
     // on Bible.com is redirected to the KJV equivalent in BLB.
@@ -274,6 +299,151 @@ function redirectBibleSite() {
   return false;
 }
 
+// On The King's Bible Dictionary/Concordance pages, keep the source page open.
+// Only clicked Bible-passage and Strong's links are sent to BLB in a new tab.
+let theKingsBibleRedirectEnabled = false;
+if (typeof chrome !== "undefined" && chrome.storage?.local) {
+  chrome.storage.local.get({redirectEnabled:false}).then(data => {
+    theKingsBibleRedirectEnabled = data.redirectEnabled === true;
+  }).catch(() => {});
+}
+
+function theKingsBibleLinkTarget(href) {
+  let url;
+  try { url = new URL(href, location.href); } catch (_) { return null; }
+  if (url.hostname.toLowerCase().replace(/^www\./, "") !== "thekingsbible.com") return null;
+  const path = url.pathname.replace(/\/{2,}/g, "/");
+  let match = path.match(/^\/StrongsNo\/([GH])0*(\d+)\/?$/i);
+  if (match) {
+    const language = match[1].toLowerCase();
+    return `${BLBShared.urls.blbOrigin}/lexicon/${language}${Number(match[2])}/kjv/${language === "h" ? "wlc" : "tr"}/0-1/`;
+  }
+  match = path.match(/^\/Bible\/(\d+)\/(\d+)\/?$/i);
+  if (match) {
+    const book = BOOKS.find(item => Number(item.bookNumber) === Number(match[1]));
+    if (!book) return null;
+    const verseParam = url.searchParams.get("verse");
+    const verse = verseParam && /^\d+$/.test(verseParam) ? Number(verseParam) : 1;
+    return blbUrl(book.name, Number(match[2]), verse);
+  }
+  return null;
+}
+
+if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.com" &&
+    /^\/(?:dictionary|concordance)\//i.test(location.pathname.replace(/\/{2,}/g, "/"))) {
+  document.addEventListener("click", event => {
+    if (event.defaultPrevented || isModifiedLinkActivation(event)) return;
+    if (!theKingsBibleRedirectEnabled || !suiteEnabled) return;
+
+    // Only Dictionary pages are known to use the .bible[data-bible]
+    // markup. Keep this source-specific decoder off Concordance pages.
+    const isDictionaryPage = /^\/dictionary\//i.test(location.pathname.replace(/\/{2,}/g, "/"));
+    const bibleReference = isDictionaryPage
+      ? event.target?.closest?.(".bible[data-bible]")
+      : null;
+    if (bibleReference) {
+      const label = String(bibleReference.textContent || "").trim();
+      const encoded = String(bibleReference.getAttribute("data-bible") || "");
+      let resolved = null;
+
+      // A complete visible label is the most reliable source for the book.
+      // Some Dictionary references list non-contiguous verses as "2 Samuel 15;24,29,35,36".
+      // BLB URLs support a single verse or a continuous range, so use the first listed verse.
+      for (const book of BOOKS) {
+        const prefix = String(book.name) + " ";
+        if (!label.toLowerCase().startsWith(prefix.toLowerCase())) continue;
+        const referenceText = label.slice(prefix.length).trim();
+
+        // Textual data-bible values can list non-contiguous verses, e.g.
+        // "2 Samuel 15;24,29,35,36". Send all listed verses to BLB MultiVerse.
+        const listMatch = referenceText.match(/^(\d+);(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)$/);
+        if (listMatch) {
+          const chapter = Number(listMatch[1]);
+          const verseItems = listMatch[2].split(",");
+          const refs = [];
+          for (const item of verseItems) {
+            const verseMatch = item.match(/^(\d+)(?:-(\d+))?$/);
+            if (!verseMatch) { refs.length = 0; break; }
+            const verse = Number(verseMatch[1]);
+            const verseEnd = verseMatch[2] ? Number(verseMatch[2]) : verse;
+            const reference = resolveBibleReference(book.name, chapter, verse, verseEnd);
+            if (!reference) { refs.length = 0; break; }
+            refs.push({
+              book: reference.book.name,
+              bookNumber: Number(reference.book.bookNumber),
+              chapter: reference.chapter,
+              from: reference.from,
+              to: reference.to,
+              version: "kjv"
+            });
+          }
+          if (chapter > 0 && refs.length === verseItems.length && refs.length > 1) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            chrome.runtime.sendMessage({type: "blbSuiteOpenWebsterMultiVerse", refs}).catch(() => {});
+            return;
+          }
+        } else {
+          const match = referenceText.match(/^(\d+)(?:[:;](\d+)(?:-(\d+))?)?$/);
+          if (match) {
+            const chapter = Number(match[1]);
+            const verse = match[2] ? Number(match[2]) : 1;
+            const verseEnd = match[3] ? Number(match[3]) : null;
+            if (chapter > 0 && verse > 0 && (verseEnd === null || verseEnd >= verse)) {
+              resolved = blbUrl(book.name, chapter, verse, verseEnd);
+            }
+          }
+        }
+        break;
+      }
+
+      // For abbreviated labels such as "13:1", decode the data-bible ID.
+      if (!resolved && /^\d{7,8}$/.test(encoded)) {
+        const bookCode = encoded.slice(0, -6);
+        const chapter = Number(encoded.slice(-6, -3));
+        const verse = Number(encoded.slice(-3));
+        // Observed dictionary IDs use source-specific code 65 for Judges
+        // (e.g. 65003003 = Judges 3:3); other observed codes match KJV numbers.
+        const book = bookCode === "65"
+          ? BOOKS.find(item => item.name.toLowerCase() === "judges")
+          : BOOKS.find(item => Number(item.bookNumber) === Number(bookCode));
+        // Dictionary entries may put the book name in a preceding tag and
+        // leave only a range such as "17:15-17" in this .bible span.
+        // Use data-bible for book/chapter/start verse and preserve the visible end.
+        const visibleRange = label.match(/^(\d+):(\d+)-(\d+)$/);
+        if (book && chapter > 0 && verse > 0) {
+          if (
+            visibleRange &&
+            Number(visibleRange[1]) === chapter &&
+            Number(visibleRange[2]) === verse &&
+            Number(visibleRange[3]) >= verse
+          ) {
+            resolved = blbUrl(book.name, chapter, verse, Number(visibleRange[3]));
+          } else {
+            resolved = blbUrl(book.name, chapter, verse);
+          }
+        }
+      }
+
+      if (resolved) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        openBlbDestinationFromContent(resolved);
+        return;
+      }
+    }
+
+    // Some dictionary/concordance references and Strong's numbers are anchors.
+    const anchor = event.target?.closest?.("a[href]");
+    if (!anchor || anchor.hasAttribute("download")) return;
+    const target = theKingsBibleLinkTarget(anchor.href);
+    if (!target) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    openBlbDestinationFromContent(target);
+  }, true);
+}
+
 function redirectBlbNet() {
   if (location.hostname.toLowerCase() !== BLBShared.hostnames.blbWww) return false;
 
@@ -298,7 +468,7 @@ function redirectBlbNet() {
 const REDIRECT_HOSTS = new Set([
   'bible.com', 'biblegateway.com', 'bibleref.com', 'biblehub.com',
   'bibleportal.com', 'kingjamesbibleonline.org', 'kjbo.org',
-  'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com',
+  'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com', 'thekingsbible.com',
   'webstersdictionary1828.com', BLB_HOSTNAME
 ]);
 
@@ -726,6 +896,268 @@ if (location.hostname.endsWith(BLB_HOSTNAME)) {
   } else {
     schedulePassiveNewTabTargets();
   }
+}
+
+// ---------- The King's Bible Dictionary/Concordance MultiVerse ----------
+const kingsBibleEntryPath = location.pathname.replace(/\/{2,}/g, "/");
+const kingsBibleEntryMatch = kingsBibleEntryPath.match(/^\/(dictionary|concordance)\/[^/]+(?:\/\d+)?\/?$/i);
+if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.com" &&
+    kingsBibleEntryMatch) {
+  const kingsBibleEntryType = kingsBibleEntryMatch[1].toLowerCase();
+  function collectKingsBibleReferences(sourceDocument = document, sourceUrl = location.href) {
+    const refs = [];
+    const seen = new Set();
+    const elements = kingsBibleEntryType === "concordance"
+      ? sourceDocument.querySelectorAll('#ConcordanceTable a.concordanceitem[href^="/Bible/"], a.concordanceitem[href^="/Bible/"]')
+      : sourceDocument.querySelectorAll(".bible[data-bible], a.bible");
+
+    for (const element of elements) {
+      const label = normalizeSelectionText(element.textContent || "");
+      let parsed = parseRef(label);
+      let bookName = parsed?.book;
+      let chapter = parsed?.chapter;
+      let from = parsed?.from ?? 1;
+      let to = parsed?.to ?? null;
+
+      // Concordance entries identify the verse directly in their /Bible/<book>/<chapter>?verse=<n> URL.
+      // Use that structured route rather than relying on abbreviated display labels such as "Ex 4:14".
+      if (kingsBibleEntryType === "concordance") {
+        try {
+          const sourceLink = new URL(element.getAttribute("href") || "", sourceUrl);
+          const match = sourceLink.pathname.match(/^\/Bible\/(\d+)\/(\d+)\/?$/i);
+          if (match) {
+            const book = BOOKS.find(item => Number(item.bookNumber) === Number(match[1]));
+            const verseParam = sourceLink.searchParams.get("verse");
+            const verse = verseParam && /^\d+$/.test(verseParam) ? Number(verseParam) : 1;
+            if (book && Number(match[2]) > 0 && verse > 0) {
+              bookName = book.name;
+              chapter = Number(match[2]);
+              from = verse;
+              to = null;
+            }
+          }
+        } catch (_) {}
+      }
+
+      // Abbreviated spans (e.g. "9:20" or "17:15-17") use a numeric data-bible ID.
+      // Prefer the encoded book/chapter/verse whenever the visible label omits the book.
+      const encoded = String(element.getAttribute("data-bible") || "");
+      const abbreviatedLabel = /^\d+:\d+(?:-\d+)?$/.test(label);
+      if (abbreviatedLabel && /^\d{7,8}$/.test(encoded)) {
+        const bookCode = encoded.slice(0, -6);
+        chapter = Number(encoded.slice(-6, -3));
+        from = Number(encoded.slice(-3));
+        const book = bookCode === "65"
+          ? BOOKS.find(item => item.name.toLowerCase() === "judges")
+          : BOOKS.find(item => Number(item.bookNumber) === Number(bookCode));
+        const range = label.match(/^(\d+):(\d+)-(\d+)$/);
+        if (!book || chapter < 1 || from < 1) continue;
+        bookName = book.name;
+        if (range && Number(range[1]) === chapter && Number(range[2]) === from && Number(range[3]) >= from) {
+          to = Number(range[3]);
+        } else {
+          to = null;
+        }
+      } else if (!parsed) {
+        if (!/^\d{7,8}$/.test(encoded)) continue;
+        const bookCode = encoded.slice(0, -6);
+        chapter = Number(encoded.slice(-6, -3));
+        from = Number(encoded.slice(-3));
+        const book = bookCode === "65"
+          ? BOOKS.find(item => item.name.toLowerCase() === "judges")
+          : BOOKS.find(item => Number(item.bookNumber) === Number(bookCode));
+        if (!book || chapter < 1 || from < 1) continue;
+        bookName = book.name;
+        to = null;
+      }
+
+      const resolved = resolveBibleReference(bookName, chapter, from, to);
+      if (!resolved) continue;
+      const target = blbUrl(resolved.book.name, resolved.chapter, resolved.from, resolved.to);
+      if (!target || seen.has(target)) continue;
+      seen.add(target);
+      refs.push({
+        book: resolved.book.name,
+        bookNumber: Number(resolved.book.bookNumber),
+        chapter: resolved.chapter,
+        from: resolved.from,
+        to: resolved.to,
+        version: "kjv",
+        text: label,
+        url: target
+      });
+    }
+    return refs;
+  }
+
+  async function collectAllKingsBibleReferences() {
+    // Only Concordance entries use multi-page collection; Dictionary entries stay on the current page.
+    if (kingsBibleEntryType !== "concordance") {
+      return collectKingsBibleReferences(document, location.href);
+    }
+    const refs = [];
+    const seen = new Set();
+    const pending = [location.href];
+    const queued = new Set(pending);
+    const visited = new Set();
+    const currentUrl = new URL(location.href);
+    const pathParts = currentUrl.pathname.replace(/\/$/, "").split("/");
+    // Concordance pagination commonly uses /Concordance/term/1, /2, etc.
+    if (/^\d+$/.test(pathParts[pathParts.length - 1] || "")) pathParts.pop();
+    const basePath = pathParts.join("/") || "/";
+    // Pagination anchors may all use href="#", so read the numbered controls
+    // to learn the actual page count before probing numbered Concordance routes.
+    const pageNumbers = [...document.querySelectorAll("ul.pagination li.current-page a")]
+      .map(anchor => Number(normalizeSelectionText(anchor.textContent || "")))
+      .filter(pageNumber => Number.isInteger(pageNumber) && pageNumber > 0);
+    const lastPage = pageNumbers.length ? Math.max(...pageNumbers) : 1;
+    // Keep a conservative fallback for markup without numbered pagination controls.
+    const pageCount = pageNumbers.length ? Math.min(lastPage, 20) : 10;
+    for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
+      const pageUrl = new URL(basePath.replace(/\/$/, "") + "/" + pageNumber, currentUrl.origin).href;
+      if (!queued.has(pageUrl)) {
+        pending.push(pageUrl);
+        queued.add(pageUrl);
+      }
+    }
+    const isEntryPage = url => {
+      if (url.origin !== location.origin) return false;
+      const path = url.pathname.replace(/\/$/, "");
+      return path === basePath || (path.startsWith(basePath + "/") && /^\d+$/.test(path.slice(basePath.length + 1)));
+    };
+    while (pending.length && visited.size < 20) {
+      const pageUrl = pending.shift();
+      if (visited.has(pageUrl)) continue;
+      visited.add(pageUrl);
+      let pageDocument = document;
+      if (pageUrl !== location.href) {
+        try {
+          const response = await fetch(pageUrl, { credentials: "same-origin" });
+          if (!response.ok) continue;
+          pageDocument = new DOMParser().parseFromString(await response.text(), "text/html");
+        } catch (_) { continue; }
+      }
+      for (const ref of collectKingsBibleReferences(pageDocument, pageUrl)) {
+        if (seen.has(ref.url)) continue;
+        seen.add(ref.url);
+        refs.push(ref);
+      }
+      const sourcePageUrl = new URL(pageUrl);
+      const normalizedPath = value => value.pathname.replace(/\/{2,}/g, "/").replace(/\/$/, "");
+      const paginationParam = /^(?:page|p|pageindex|pagenumber|pageno|currentpage|page_num|page-number|page_no|pg|offset|skip)$/i;
+      for (const anchor of pageDocument.querySelectorAll("a[href]")) {
+        try {
+          const url = new URL(anchor.getAttribute("href"), pageUrl);
+          if (!isEntryPage(url)) continue;
+          const label = normalizeSelectionText(anchor.textContent || "");
+          const accessibleLabel = normalizeSelectionText([
+            anchor.getAttribute("aria-label"),
+            anchor.getAttribute("title"),
+            anchor.getAttribute("rel")
+          ].filter(Boolean).join(" "));
+          const currentPath = normalizedPath(sourcePageUrl);
+          const targetPath = normalizedPath(url);
+          const pathChanged = targetPath !== currentPath;
+          const changedPaginationParam = [...url.searchParams.keys()].some(key =>
+            paginationParam.test(key) &&
+            url.searchParams.get(key) !== sourcePageUrl.searchParams.get(key)
+          );
+          const paginationLabel = /^(?:next|last|first|previous|prev|\d+|[‹›«»<>]+)$/i.test(label) ||
+            /\b(?:next|last|first|previous|prev)\b/i.test(accessibleLabel);
+          // Pagination may use a trailing numeric path segment or a query parameter
+          // (including pageNumber/pageNo); don't depend on the visible link text alone.
+          const changedQuery = url.search !== sourcePageUrl.search;
+          // Some pagination controls use site-specific query parameter names.
+          // When the link is visibly a page/next/previous control, accept its
+          // changed query string even if the parameter name is unfamiliar.
+          const isPageLink = pathChanged || changedPaginationParam ||
+            (paginationLabel && changedQuery);
+          if (!isPageLink) continue;
+          url.hash = "";
+          if (!visited.has(url.href) && !queued.has(url.href)) {
+            pending.push(url.href);
+            queued.add(url.href);
+          }
+        } catch (_) {}
+      }
+    }
+    return refs;
+  }
+
+  function showKingsBibleStatus(message, isError = false) {
+    let box = document.getElementById("blb-suite-kingsbible-status");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "blb-suite-kingsbible-status";
+      box.style.cssText = "position:fixed;right:18px;bottom:72px;z-index:2147483647;background:#fff;border:1px solid #bbb;border-radius:6px;padding:9px 12px;font:13px Arial,sans-serif;color:#222;box-shadow:0 2px 10px rgba(0,0,0,.18)";
+      (document.body || document.documentElement)?.appendChild(box);
+    }
+    if (!box) return;
+    box.textContent = message;
+    box.style.color = isError ? "#b00020" : "#222";
+    clearTimeout(box._timer);
+    box._timer = setTimeout(() => box.remove(), 3500);
+  }
+
+  async function openAllKingsBibleRefs() {
+    showKingsBibleStatus("Collecting references across pages…");
+    const refs = await collectAllKingsBibleReferences();
+    if (!refs.length) {
+      showKingsBibleStatus("No Bible references found across the entry pages.", true);
+      return;
+    }
+    if (refs.length === 1) {
+      chrome.runtime.sendMessage({
+        type: "blbSuiteOpenBackgroundUrl",
+        url: refs[0].url,
+        activeIfNew: true,
+        activateExisting: true
+      }).catch(() => {});
+      return;
+    }
+    chrome.runtime.sendMessage({type: "blbSuiteOpenWebsterMultiVerse", refs}).then(response => {
+      if (!response?.ok) {
+        showKingsBibleStatus("Unable to open BLB MultiVerse.", true);
+        return;
+      }
+      showKingsBibleStatus(`Opening ${refs.length} Bible references in BLB MultiVerse…`);
+    }).catch(() => showKingsBibleStatus("Unable to open BLB MultiVerse.", true));
+  }
+
+  async function ensureKingsBibleButton() {
+    if (!(await isSuiteEnabled()) || !document.body ||
+        document.getElementById("blb-suite-kingsbible-multiverse")) return;
+    const button = document.createElement("button");
+    button.id = "blb-suite-kingsbible-multiverse";
+    button.type = "button";
+    button.textContent = "Open Bible References in BLB";
+    button.title = `Collect all Bible references on this ${kingsBibleEntryType === "concordance" ? "Concordance" : "Dictionary"} page and open them together in BLB MultiVerse.`;
+    button.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:2147483647;background:#292a2d;color:#f1f3f4;border:1px solid #505257;border-radius:7px;padding:9px 12px;font:600 13px Arial,sans-serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.42)";
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openAllKingsBibleRefs();
+    });
+    document.body.appendChild(button);
+  }
+
+  const ensureKingsBibleButtonWhenReady = () => ensureKingsBibleButton().catch(() => {});
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", ensureKingsBibleButtonWhenReady, {once: true});
+  } else {
+    ensureKingsBibleButtonWhenReady();
+  }
+  setTimeout(ensureKingsBibleButtonWhenReady, 500);
+  setTimeout(ensureKingsBibleButtonWhenReady, 1500);
+
+  chrome.storage.onChanged.addListener(changes => {
+    if (changes.masterEnabled?.newValue === false) {
+      document.getElementById("blb-suite-kingsbible-multiverse")?.remove();
+      document.getElementById("blb-suite-kingsbible-status")?.remove();
+    } else if (changes.masterEnabled?.newValue === true) {
+      ensureKingsBibleButtonWhenReady();
+    }
+  });
 }
 
 // ---------- Webster's 1828 ----------
@@ -2157,6 +2589,34 @@ function handleDoubleClickBlb(event) {
           return true;
         }
 
+        // Strong's values are lexicon identifiers, not ordinary KJV words.
+        // Double-clicking G/H numbers (including a linked value on The King's
+        // Bible) should open the corresponding BLB lexicon entry directly.
+        const physicalTarget = event.target instanceof Element
+          ? event.target
+          : (event.target?.parentElement || null);
+        const strongLink = physicalTarget?.closest?.('a[href]');
+        const strongValuePattern = /^(?:Strong(?:['’]s?)?\s*)?([GH])\s*0*(\d+)$/i;
+        let strongsMatch = [selection, physicalTarget?.textContent, caretTarget?.textContent]
+          .map(value => normalizeSelectionText(value || '').normalize('NFKC'))
+          .map(value => value.match(strongValuePattern))
+          .find(Boolean) || null;
+        if (!strongsMatch && strongLink) {
+          try {
+            const strongPath = new URL(strongLink.href, location.href).pathname;
+            strongsMatch = strongPath.match(/^\/StrongsNo\/([GH])0*(\d+)\/?$/i);
+          } catch (_) {}
+        }
+        if (strongsMatch) {
+          const language = strongsMatch[1].toLowerCase();
+          const strongNumber = Number(strongsMatch[2]);
+          if (Number.isSafeInteger(strongNumber) && strongNumber > 0) {
+            const lexiconUrl = `${BLBShared.urls.blbOrigin}/lexicon/${language}${strongNumber}/kjv/${language === 'h' ? 'wlc' : 'tr'}/0-1/`;
+            openBlbDestinationFromContent(lexiconUrl);
+          }
+          return true;
+        }
+
         // Fast-reject a single non-ASCII token (including Tamil) before
         // DOM/context scanning. BLB's word lookup is English KJV; these tokens
         // cannot be valid KJV word searches. Keep multiword/reference selections
@@ -2951,6 +3411,9 @@ if (!isBlbPageButtonExcludedSite() && !isSensitiveSiteHostname(location.hostname
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
+  if (changes.redirectEnabled) {
+    theKingsBibleRedirectEnabled = changes.redirectEnabled.newValue === true;
+  }
 
   if (changes.masterEnabled) {
     suiteEnabled = changes.masterEnabled.newValue !== false;
