@@ -924,7 +924,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
       if (kingsBibleEntryType === "concordance") {
         try {
           const sourceUrl = new URL(element.getAttribute("href") || "", location.href);
-          const match = sourceUrl.pathname.match(/^\\/Bible\\/(\\d+)\\/(\\d+)\\/?$/i);
+          const match = sourceUrl.pathname.match(/^\/Bible\/(\d+)\/(\d+)\/?$/i);
           if (match) {
             const book = BOOKS.find(item => Number(item.bookNumber) === Number(match[1]));
             const verseParam = sourceUrl.searchParams.get("verse");
