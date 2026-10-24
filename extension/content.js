@@ -901,8 +901,6 @@ if (location.hostname.endsWith(BLB_HOSTNAME)) {
 // ---------- The King's Bible Dictionary MultiVerse ----------
 if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.com" &&
     /^\/dictionary\/[^/]+\/?$/i.test(location.pathname.replace(/\/{2,}/g, "/"))) {
-  let kingsBibleButtonEnabled = false;
-
   function collectKingsBibleReferences() {
     const refs = [];
     const seen = new Set();
@@ -995,7 +993,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
   }
 
   async function ensureKingsBibleButton() {
-    if (!kingsBibleButtonEnabled || !(await isSuiteEnabled()) || !document.body ||
+    if (!(await isSuiteEnabled()) || !document.body ||
         document.getElementById("blb-suite-kingsbible-multiverse")) return;
     const button = document.createElement("button");
     button.id = "blb-suite-kingsbible-multiverse";
@@ -1011,27 +1009,21 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
     document.body.appendChild(button);
   }
 
-  chrome.storage.local.get({redirectEnabled: false}).then(data => {
-    kingsBibleButtonEnabled = data.redirectEnabled === true;
-    if (!kingsBibleButtonEnabled) return;
-    const ensure = () => ensureKingsBibleButton().catch(() => {});
-    if (document.readyState === "loading") {
-      document.addEventListener("DOMContentLoaded", ensure, {once: true});
-    } else {
-      ensure();
-    }
-    setTimeout(ensure, 500);
-    setTimeout(ensure, 1500);
-  }).catch(() => {});
+  const ensureKingsBibleButtonWhenReady = () => ensureKingsBibleButton().catch(() => {});
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", ensureKingsBibleButtonWhenReady, {once: true});
+  } else {
+    ensureKingsBibleButtonWhenReady();
+  }
+  setTimeout(ensureKingsBibleButtonWhenReady, 500);
+  setTimeout(ensureKingsBibleButtonWhenReady, 1500);
 
   chrome.storage.onChanged.addListener(changes => {
-    if (!changes.redirectEnabled) return;
-    kingsBibleButtonEnabled = changes.redirectEnabled.newValue === true;
-    if (kingsBibleButtonEnabled) {
-      ensureKingsBibleButton().catch(() => {});
-    } else {
+    if (changes.masterEnabled?.newValue === false) {
       document.getElementById("blb-suite-kingsbible-multiverse")?.remove();
       document.getElementById("blb-suite-kingsbible-status")?.remove();
+    } else if (changes.masterEnabled?.newValue === true) {
+      ensureKingsBibleButtonWhenReady();
     }
   });
 }
