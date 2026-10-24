@@ -3116,7 +3116,7 @@ const REDIRECT_HOSTNAMES = new Set([
   'biblehub.com', 'bibleportal.com',
   'kingjamesbibleonline.org', 'kjbo.org',
   'kjv.site', 'm.kjv.site',
-  'officialkingjamesbible.com',
+  'officialkingjamesbible.com', 'thekingsbible.com',
   'webstersdictionary1828.com', BLB_HOSTNAME
 ]);
 
