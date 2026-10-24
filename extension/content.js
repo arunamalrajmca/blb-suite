@@ -2233,8 +2233,11 @@ function handleDoubleClickBlb(event) {
           ? event.target
           : (event.target?.parentElement || null);
         const strongLink = physicalTarget?.closest?.('a[href]');
-        let strongsMatch = normalizeSelectionText(selection).normalize('NFKC')
-          .match(/^(?:Strong(?:['’]s?)?\s*)?([GH])\s*0*(\d+)$/i);
+        const strongValuePattern = /^(?:Strong(?:['’]s?)?\s*)?([GH])\s*0*(\d+)$/i;
+        let strongsMatch = [selection, physicalTarget?.textContent, caretTarget?.textContent]
+          .map(value => normalizeSelectionText(value || '').normalize('NFKC'))
+          .map(value => value.match(strongValuePattern))
+          .find(Boolean) || null;
         if (!strongsMatch && strongLink) {
           try {
             const strongPath = new URL(strongLink.href, location.href).pathname;
