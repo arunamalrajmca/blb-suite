@@ -165,6 +165,40 @@ function redirectBibleSite() {
   const u=new URL(location.href), host=u.hostname.toLowerCase().replace(/^www\./,"");
   let ref=null;
 
+  if (host==="thekingsbible.com") {
+    const path=u.pathname.replace(/\/{2,}/g,"/");
+    if (path==="/" || /^\/(?:dictionary|concordance)\/?$/i.test(path)) {
+      const target=BLBShared.urls.blbHome;
+      if (target!==u.href) { location.replace(target); return true; }
+      return false;
+    }
+    let m=path.match(/^\/StrongsNo\/([GH])0*(\d+)\/?$/i);
+    if (m) {
+      const language=m[1].toLowerCase();
+      const target=`${BLBShared.urls.blbOrigin}/lexicon/${language}${Number(m[2])}/kjv/${language==="h"?"wlc":"tr"}/0-1/`;
+      if (target!==u.href) { location.replace(target); return true; }
+      return false;
+    }
+    // The King’s Bible uses canonical numeric book order in /Bible/<book>/<chapter>.
+    m=path.match(/^\/Bible\/(\d+)\/(\d+)\/?$/i);
+    if (m) {
+      const book=BOOKS.find(item=>Number(item.bookNumber)===Number(m[1]));
+      if (book) {
+        const chapter=Number(m[2]);
+        const verseParam=u.searchParams.get("verse");
+        const verse=verseParam && /^\d+$/.test(verseParam) ? Number(verseParam) : 1;
+        ref={book:book.name,chapter,from:verse,to:null};
+      }
+    }
+    if (!ref && /^\/(?:dictionary|concordance)\//i.test(path)) {
+      const term=path.split("/").filter(Boolean).slice(1).join(" ").trim();
+      if (term) {
+        const target=`${BLBShared.urls.blbSearch}?Criteria=${encodeURIComponent(term)}&t=KJV`;
+        location.replace(target); return true;
+      }
+    }
+  }
+
   if (host==="bible.com") {
     // Ignore the selected translation/version completely. Any version clicked
     // on Bible.com is redirected to the KJV equivalent in BLB.
