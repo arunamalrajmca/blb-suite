@@ -347,14 +347,16 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
       let resolved = null;
 
       // A complete visible label is the most reliable source for the book.
+      // Some Dictionary references list non-contiguous verses as "2 Samuel 15;24,29,35,36".
+      // BLB URLs support a single verse or a continuous range, so use the first listed verse.
       for (const book of BOOKS) {
         const prefix = String(book.name) + " ";
         if (!label.toLowerCase().startsWith(prefix.toLowerCase())) continue;
-        // Captions may identify a single verse or a range, e.g. "Numbers 20:10-12".
-        const match = label.slice(prefix.length).match(/^(\d+):(\d+)(?:-(\d+))?$/);
+        const referenceText = label.slice(prefix.length).trim();
+        const match = referenceText.match(/^(\d+)(?:[:;](\d+)(?:-(\d+))?(?:,\d+(?:-\d+)?)*?)?$/);
         if (match) {
           const chapter = Number(match[1]);
-          const verse = Number(match[2]);
+          const verse = match[2] ? Number(match[2]) : 1;
           const verseEnd = match[3] ? Number(match[3]) : null;
           if (chapter > 0 && verse > 0 && (verseEnd === null || verseEnd >= verse)) {
             resolved = blbUrl(book.name, chapter, verse, verseEnd);
