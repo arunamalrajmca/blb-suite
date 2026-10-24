@@ -904,12 +904,12 @@ const kingsBibleEntryMatch = kingsBibleEntryPath.match(/^\/(dictionary|concordan
 if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.com" &&
     kingsBibleEntryMatch) {
   const kingsBibleEntryType = kingsBibleEntryMatch[1].toLowerCase();
-  function collectKingsBibleReferences() {
+  function collectKingsBibleReferences(sourceDocument = document, sourceUrl = location.href) {
     const refs = [];
     const seen = new Set();
     const elements = kingsBibleEntryType === "concordance"
-      ? document.querySelectorAll('#ConcordanceTable a.concordanceitem[href^="/Bible/"], a.concordanceitem[href^="/Bible/"]')
-      : document.querySelectorAll(".bible[data-bible], a.bible");
+      ? sourceDocument.querySelectorAll('#ConcordanceTable a.concordanceitem[href^="/Bible/"], a.concordanceitem[href^="/Bible/"]')
+      : sourceDocument.querySelectorAll(".bible[data-bible], a.bible");
 
     for (const element of elements) {
       const label = normalizeSelectionText(element.textContent || "");
@@ -923,7 +923,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
       // Use that structured route rather than relying on abbreviated display labels such as "Ex 4:14".
       if (kingsBibleEntryType === "concordance") {
         try {
-          const sourceUrl = new URL(element.getAttribute("href") || "", location.href);
+          const sourceUrl = new URL(element.getAttribute("href") || "", sourceUrl);
           const match = sourceUrl.pathname.match(/^\/Bible\/(\d+)\/(\d+)\/?$/i);
           if (match) {
             const book = BOOKS.find(item => Number(item.bookNumber) === Number(match[1]));
@@ -986,6 +986,55 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
         text: label,
         url: target
       });
+    }
+    return refs;
+  }
+
+  async function collectAllKingsBibleReferences() {
+    const refs = [];
+    const seen = new Set();
+    const pending = [location.href];
+    const queued = new Set(pending);
+    const visited = new Set();
+    const currentUrl = new URL(location.href);
+    const pathParts = currentUrl.pathname.replace(/\\/$/, "").split("/");
+    // The site's paginated entry routes use a trailing page number (for example /Concordance/Aaron/2).
+    if (/^\\d+$/.test(pathParts[pathParts.length - 1] || "")) pathParts.pop();
+    const basePath = pathParts.join("/") || "/";
+    const isEntryPage = url => {
+      if (url.origin !== location.origin) return false;
+      const path = url.pathname.replace(/\\/$/, "");
+      return path === basePath || new RegExp("^" + basePath.replace(/[.*+?^${}()|[\\]\\\\]/g, "\\\\$&") + \"/\\\\d+$").test(path);
+    };
+    while (pending.length && visited.size < 20) {
+      const pageUrl = pending.shift();
+      if (visited.has(pageUrl)) continue;
+      visited.add(pageUrl);
+      let pageDocument = document;
+      if (pageUrl !== location.href) {
+        try {
+          const response = await fetch(pageUrl, { credentials: "same-origin" });
+          if (!response.ok) continue;
+          pageDocument = new DOMParser().parseFromString(await response.text(), "text/html");
+        } catch (_) { continue; }
+      }
+      for (const ref of collectKingsBibleReferences(pageDocument, pageUrl)) {
+        if (seen.has(ref.url)) continue;
+        seen.add(ref.url);
+        refs.push(ref);
+      }
+      for (const anchor of pageDocument.querySelectorAll("a[href]")) {
+        try {
+          const url = new URL(anchor.getAttribute("href"), pageUrl);
+          const label = normalizeSelectionText(anchor.textContent || "");
+          const pageParam = [...url.searchParams.keys()].some(key => /^(page|p|pageindex)$/i.test(key));
+          const isPageLink = isEntryPage(url) && (url.pathname.replace(/\\/$/, "") !== basePath || pageParam) &&
+            (/^(?:next|last|\\d+|›|»|>)$/i.test(label) || url.pathname.replace(/\\/$/, "") !== new URL(pageUrl).pathname.replace(/\\/$/, "") || pageParam);
+          if (!isPageLink) continue;
+          url.hash = "";
+          if (!visited.has(url.href) && !queued.has(url.href)) { pending.push(url.href); queued.add(url.href); }
+        } catch (_) {}
+      }
     }
     return refs;
   }
