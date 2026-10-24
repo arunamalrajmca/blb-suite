@@ -398,6 +398,63 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
   await removeTabById(extensionWorker, verse.id);
 });
 
+test('Double-Click on numbered-list labels 1–66 opens the matching Bible book; 67–176 stays inert', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const cases = [
+      ['1', 'Genesis', 'serial-1'],
+      ['43', 'John', 'serial-43'],
+      ['66', 'Revelation', 'serial-66'],
+      ['67', 'Romans 1:16', 'serial-67'],
+      ['176', 'Romans 1:16', 'serial-176']
+    ];
+    const wrap = document.createElement('div');
+    wrap.id = 'blb-e2e-numbered-list-serials';
+    wrap.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    for (const [number, text, id] of cases) {
+      const row = document.createElement('p');
+      row.innerHTML = '<strong><span id="' + id + '">' + number + '.</span></strong> ' + text;
+      wrap.appendChild(row);
+    }
+    document.body.appendChild(wrap);
+  });
+
+  for (const [selector, expectedPath] of [
+    ['#serial-1', '/kjv/gen/1/1/'],
+    ['#serial-43', '/kjv/jhn/1/1/'],
+    ['#serial-66', '/kjv/rev/1/1/']
+  ]) {
+    await page.locator(selector).dblclick();
+    const resolved = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.url);
+        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+      } catch (_) { return false; }
+    });
+    expect(new URL(resolved.url).pathname).toBe(expectedPath);
+    await removeTabById(extensionWorker, resolved.id);
+  }
+
+  for (const selector of ['#serial-67', '#serial-176']) {
+    const existingIds = await extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({})).map(tab => tab.id)
+    );
+    await page.locator(selector).dblclick();
+    await page.waitForTimeout(700);
+    const newBlbTabs = await extensionWorker.evaluate(async existing =>
+      (await chrome.tabs.query({})).filter(tab => {
+        if (existing.includes(tab.id)) return false;
+        try { return new URL(tab.url).hostname === 'www.blueletterbible.org'; }
+        catch (_) { return false; }
+      }).map(tab => tab.url), existingIds
+    );
+    expect(newBlbTabs).toEqual([]);
+  }
+});
+
 test('Double-Click anywhere in a consecutive comma-separated verse citation opens the full range', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
