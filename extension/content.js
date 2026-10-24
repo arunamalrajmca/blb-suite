@@ -1051,8 +1051,12 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
             /\b(?:next|last|first|previous|prev)\b/i.test(accessibleLabel);
           // Pagination may use a trailing numeric path segment or a query parameter
           // (including pageNumber/pageNo); don't depend on the visible link text alone.
+          const changedQuery = url.search !== sourcePageUrl.search;
+          // Some pagination controls use site-specific query parameter names.
+          // When the link is visibly a page/next/previous control, accept its
+          // changed query string even if the parameter name is unfamiliar.
           const isPageLink = pathChanged || changedPaginationParam ||
-            (paginationLabel && [...url.searchParams.keys()].some(key => paginationParam.test(key)));
+            (paginationLabel && changedQuery);
           if (!isPageLink) continue;
           url.hash = "";
           if (!visited.has(url.href) && !queued.has(url.href)) {
