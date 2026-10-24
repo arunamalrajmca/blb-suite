@@ -353,13 +353,45 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
         const prefix = String(book.name) + " ";
         if (!label.toLowerCase().startsWith(prefix.toLowerCase())) continue;
         const referenceText = label.slice(prefix.length).trim();
-        const match = referenceText.match(/^(\d+)(?:[:;](\d+)(?:-(\d+))?(?:,\d+(?:-\d+)?)*?)?$/);
-        if (match) {
-          const chapter = Number(match[1]);
-          const verse = match[2] ? Number(match[2]) : 1;
-          const verseEnd = match[3] ? Number(match[3]) : null;
-          if (chapter > 0 && verse > 0 && (verseEnd === null || verseEnd >= verse)) {
-            resolved = blbUrl(book.name, chapter, verse, verseEnd);
+
+        // Textual data-bible values can list non-contiguous verses, e.g.
+        // "2 Samuel 15;24,29,35,36". Send all listed verses to BLB MultiVerse.
+        const listMatch = referenceText.match(/^(\d+);(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)$/);
+        if (listMatch) {
+          const chapter = Number(listMatch[1]);
+          const verseItems = listMatch[2].split(",");
+          const refs = [];
+          for (const item of verseItems) {
+            const verseMatch = item.match(/^(\d+)(?:-(\d+))?$/);
+            if (!verseMatch) { refs.length = 0; break; }
+            const verse = Number(verseMatch[1]);
+            const verseEnd = verseMatch[2] ? Number(verseMatch[2]) : verse;
+            const reference = resolveBibleReference(book.name, chapter, verse, verseEnd);
+            if (!reference) { refs.length = 0; break; }
+            refs.push({
+              book: reference.book.name,
+              bookNumber: Number(reference.book.bookNumber),
+              chapter: reference.chapter,
+              from: reference.from,
+              to: reference.to,
+              version: "kjv"
+            });
+          }
+          if (chapter > 0 && refs.length === verseItems.length && refs.length > 1) {
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            chrome.runtime.sendMessage({type: "blbSuiteOpenWebsterMultiVerse", refs}).catch(() => {});
+            return;
+          }
+        } else {
+          const match = referenceText.match(/^(\d+)(?:[:;](\d+)(?:-(\d+))?)?$/);
+          if (match) {
+            const chapter = Number(match[1]);
+            const verse = match[2] ? Number(match[2]) : 1;
+            const verseEnd = match[3] ? Number(match[3]) : null;
+            if (chapter > 0 && verse > 0 && (verseEnd === null || verseEnd >= verse)) {
+              resolved = blbUrl(book.name, chapter, verse, verseEnd);
+            }
           }
         }
         break;
