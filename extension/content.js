@@ -898,6 +898,144 @@ if (location.hostname.endsWith(BLB_HOSTNAME)) {
   }
 }
 
+// ---------- The King's Bible Dictionary MultiVerse ----------
+if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.com" &&
+    /^\/dictionary\/[^/]+\/?$/i.test(location.pathname.replace(/\/{2,}/g, "/"))) {
+  let kingsBibleButtonEnabled = false;
+
+  function collectKingsBibleReferences() {
+    const refs = [];
+    const seen = new Set();
+    const elements = document.querySelectorAll(".bible[data-bible], a.bible");
+
+    for (const element of elements) {
+      const label = normalizeSelectionText(element.textContent || "");
+      let parsed = parseRef(label);
+      let bookName = parsed?.book;
+      let chapter = parsed?.chapter;
+      let from = parsed?.from ?? 1;
+      let to = parsed?.to ?? null;
+
+      // Abbreviated spans (e.g. "17:15-17") use a source-specific numeric ID.
+      if (!parsed) {
+        const encoded = String(element.getAttribute("data-bible") || "");
+        if (!/^\d{7,8}$/.test(encoded)) continue;
+        const bookCode = encoded.slice(0, -6);
+        chapter = Number(encoded.slice(-6, -3));
+        from = Number(encoded.slice(-3));
+        const book = bookCode === "65"
+          ? BOOKS.find(item => item.name.toLowerCase() === "judges")
+          : BOOKS.find(item => Number(item.bookNumber) === Number(bookCode));
+        const range = label.match(/^(\d+):(\d+)-(\d+)$/);
+        if (!book || chapter < 1 || from < 1) continue;
+        bookName = book.name;
+        if (range && Number(range[1]) === chapter && Number(range[2]) === from && Number(range[3]) >= from) {
+          to = Number(range[3]);
+        } else {
+          to = null;
+        }
+      }
+
+      const resolved = resolveBibleReference(bookName, chapter, from, to);
+      if (!resolved) continue;
+      const target = blbUrl(resolved.book.name, resolved.chapter, resolved.from, resolved.to);
+      if (!target || seen.has(target)) continue;
+      seen.add(target);
+      refs.push({
+        book: resolved.book.name,
+        bookNumber: Number(resolved.book.bookNumber),
+        chapter: resolved.chapter,
+        from: resolved.from,
+        to: resolved.to,
+        version: "kjv",
+        text: label,
+        url: target
+      });
+    }
+    return refs;
+  }
+
+  function showKingsBibleStatus(message, isError = false) {
+    let box = document.getElementById("blb-suite-kingsbible-status");
+    if (!box) {
+      box = document.createElement("div");
+      box.id = "blb-suite-kingsbible-status";
+      box.style.cssText = "position:fixed;right:18px;bottom:72px;z-index:2147483647;background:#fff;border:1px solid #bbb;border-radius:6px;padding:9px 12px;font:13px Arial,sans-serif;color:#222;box-shadow:0 2px 10px rgba(0,0,0,.18)";
+      (document.body || document.documentElement)?.appendChild(box);
+    }
+    if (!box) return;
+    box.textContent = message;
+    box.style.color = isError ? "#b00020" : "#222";
+    clearTimeout(box._timer);
+    box._timer = setTimeout(() => box.remove(), 3500);
+  }
+
+  function openAllKingsBibleRefs() {
+    const refs = collectKingsBibleReferences();
+    if (!refs.length) {
+      showKingsBibleStatus("No Bible references found on this page.", true);
+      return;
+    }
+    if (refs.length === 1) {
+      chrome.runtime.sendMessage({
+        type: "blbSuiteOpenBackgroundUrl",
+        url: refs[0].url,
+        activeIfNew: true,
+        activateExisting: true
+      }).catch(() => {});
+      return;
+    }
+    chrome.runtime.sendMessage({type: "blbSuiteOpenWebsterMultiVerse", refs}).then(response => {
+      if (!response?.ok) {
+        showKingsBibleStatus("Unable to open BLB MultiVerse.", true);
+        return;
+      }
+      showKingsBibleStatus(`Opening ${refs.length} Bible references in BLB MultiVerse…`);
+    }).catch(() => showKingsBibleStatus("Unable to open BLB MultiVerse.", true));
+  }
+
+  async function ensureKingsBibleButton() {
+    if (!kingsBibleButtonEnabled || !(await isSuiteEnabled()) || !document.body ||
+        document.getElementById("blb-suite-kingsbible-multiverse")) return;
+    const button = document.createElement("button");
+    button.id = "blb-suite-kingsbible-multiverse";
+    button.type = "button";
+    button.textContent = "Open Bible References in BLB";
+    button.title = "Collect all Bible references on this Dictionary page and open them together in BLB MultiVerse.";
+    button.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:2147483647;background:#292a2d;color:#f1f3f4;border:1px solid #505257;border-radius:7px;padding:9px 12px;font:600 13px Arial,sans-serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.42)";
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      openAllKingsBibleRefs();
+    });
+    document.body.appendChild(button);
+  }
+
+  chrome.storage.local.get({redirectEnabled: false}).then(data => {
+    kingsBibleButtonEnabled = data.redirectEnabled === true;
+    if (!kingsBibleButtonEnabled) return;
+    const ensure = () => ensureKingsBibleButton().catch(() => {});
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", ensure, {once: true});
+    } else {
+      ensure();
+    }
+    setTimeout(ensure, 500);
+    setTimeout(ensure, 1500);
+  }).catch(() => {});
+
+  chrome.storage.onChanged.addListener(changes => {
+    if (!changes.redirectEnabled) return;
+    kingsBibleButtonEnabled = changes.redirectEnabled.newValue === true;
+    if (kingsBibleButtonEnabled) {
+      ensureKingsBibleButton().catch(() => {});
+    } else {
+      document.getElementById("blb-suite-kingsbible-multiverse")?.remove();
+      document.getElementById("blb-suite-kingsbible-status")?.remove();
+    }
+  });
+}
+
 // ---------- Webster's 1828 ----------
 if (location.hostname==="webstersdictionary1828.com") {
   async function captureWebsterWord() {
