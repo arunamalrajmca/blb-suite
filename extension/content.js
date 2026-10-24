@@ -335,10 +335,12 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
     if (event.defaultPrevented || isModifiedLinkActivation(event)) return;
     if (!theKingsBibleRedirectEnabled || !suiteEnabled) return;
 
-    // Dictionary entries render verse references as spans with a data-bible
-    // identifier. The last six digits encode chapter and verse; preceding
-    // digits are the source site's book code, which is not always canonical.
-    const bibleReference = event.target?.closest?.(".bible[data-bible]");
+    // Only Dictionary pages are known to use the .bible[data-bible]
+    // markup. Keep this source-specific decoder off Concordance pages.
+    const isDictionaryPage = /^\/dictionary\//i.test(location.pathname.replace(/\/{2,}/g, "/"));
+    const bibleReference = isDictionaryPage
+      ? event.target?.closest?.(".bible[data-bible]")
+      : null;
     if (bibleReference) {
       const label = String(bibleReference.textContent || "").trim();
       const encoded = String(bibleReference.getAttribute("data-bible") || "");
