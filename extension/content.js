@@ -914,10 +914,11 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
       let from = parsed?.from ?? 1;
       let to = parsed?.to ?? null;
 
-      // Abbreviated spans (e.g. "17:15-17") use a source-specific numeric ID.
-      if (!parsed) {
-        const encoded = String(element.getAttribute("data-bible") || "");
-        if (!/^\d{7,8}$/.test(encoded)) continue;
+      // Abbreviated spans (e.g. "9:20" or "17:15-17") use a numeric data-bible ID.
+      // Prefer the encoded book/chapter/verse whenever the visible label omits the book.
+      const encoded = String(element.getAttribute("data-bible") || "");
+      const abbreviatedLabel = /^\d+:\d+(?:-\d+)?$/.test(label);
+      if (abbreviatedLabel && /^\d{7,8}$/.test(encoded)) {
         const bookCode = encoded.slice(0, -6);
         chapter = Number(encoded.slice(-6, -3));
         from = Number(encoded.slice(-3));
@@ -932,6 +933,17 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
         } else {
           to = null;
         }
+      } else if (!parsed) {
+        if (!/^\d{7,8}$/.test(encoded)) continue;
+        const bookCode = encoded.slice(0, -6);
+        chapter = Number(encoded.slice(-6, -3));
+        from = Number(encoded.slice(-3));
+        const book = bookCode === "65"
+          ? BOOKS.find(item => item.name.toLowerCase() === "judges")
+          : BOOKS.find(item => Number(item.bookNumber) === Number(bookCode));
+        if (!book || chapter < 1 || from < 1) continue;
+        bookName = book.name;
+        to = null;
       }
 
       const resolved = resolveBibleReference(bookName, chapter, from, to);
