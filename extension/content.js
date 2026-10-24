@@ -302,9 +302,11 @@ function redirectBibleSite() {
 // On The King's Bible Dictionary/Concordance pages, keep the source page open.
 // Only clicked Bible-passage and Strong's links are sent to BLB in a new tab.
 let theKingsBibleRedirectEnabled = false;
-chrome.storage.local.get({redirectEnabled:false}).then(data => {
-  theKingsBibleRedirectEnabled = data.redirectEnabled === true;
-}).catch(() => {});
+if (typeof chrome !== "undefined" && chrome.storage?.local) {
+  chrome.storage.local.get({redirectEnabled:false}).then(data => {
+    theKingsBibleRedirectEnabled = data.redirectEnabled === true;
+  }).catch(() => {});
+}
 
 function theKingsBibleLinkTarget(href) {
   let url;
