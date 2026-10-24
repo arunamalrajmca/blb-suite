@@ -67,9 +67,11 @@ test.describe("The King's Bible redirect regressions", () => {
     expect(kingsBibleLinkTarget('/Concordance/beautify')).toBeNull();
   });
 
-  test('rejects non-numeric verse parameters rather than injecting them into a URL', () => {
-    expect(kingsBibleLinkTarget('/Bible/18/4?verse=5x')).toBeNull();
-    expect(kingsBibleLinkTarget('/Bible/18/4?verse=%3Cscript%3E')).toBeNull();
+  test('invalid verse parameters safely fall back to verse one', () => {
+    expect(kingsBibleLinkTarget('/Bible/18/4?verse=5x'))
+      .toBe('https://www.blueletterbible.org/kjv/job/4/1/');
+    expect(kingsBibleLinkTarget('/Bible/18/4?verse=%3Cscript%3E'))
+      .toBe('https://www.blueletterbible.org/kjv/job/4/1/');
   });
 });
 
