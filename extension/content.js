@@ -928,7 +928,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
           if (match) {
             const book = BOOKS.find(item => Number(item.bookNumber) === Number(match[1]));
             const verseParam = sourceUrl.searchParams.get("verse");
-            const verse = verseParam && /^\\d+$/.test(verseParam) ? Number(verseParam) : 1;
+            const verse = verseParam && /^\d+$/.test(verseParam) ? Number(verseParam) : 1;
             if (book && Number(match[2]) > 0 && verse > 0) {
               bookName = book.name;
               chapter = Number(match[2]);
