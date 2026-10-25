@@ -153,6 +153,12 @@ function blbUrl(book,ch,from=1,to=null) {
   const resolved=resolveBibleReference(key,ch,from,to);
   return resolved ? resolved.url : null;
 }
+function normalizeSourceBibleBook(book) {
+  // The resolver's canonical KJV book name is Psalms, while Christianity.com
+  // labels its linked references with the singular form, e.g. “Psalm 136:26”.
+  return /^Psalm$/i.test(String(book || "").trim()) ? "Psalms" : book;
+}
+
 function parseRef(text) {
   const value=decodeSafe(text).trim();
   // Accept normal references and BiblePortal's dotted form, e.g.
@@ -1444,8 +1450,7 @@ if (location.hostname==="webstersdictionary1828.com") {
         if (!parsed || !parsed.book || !Number.isInteger(Number(parsed.chapter)) ||
             Number(parsed.chapter) < 1) continue;
         // Enduring Word chips identify chapters, not individual verses.
-        const book = sourceSite === "enduringword" && /^psalm$/i.test(parsed.book)
-          ? "Psalms" : parsed.book;
+        const book = normalizeSourceBibleBook(parsed.book);
         const from = sourceSite === "enduringword" ? 1 : Number(parsed.from);
         const to = sourceSite === "enduringword" ? null : (parsed.to == null ? null : Number(parsed.to));
         if (!Number.isInteger(from) || from < 1) continue;
