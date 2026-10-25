@@ -11,19 +11,21 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 
 const base = process.argv[2];
-if (!base || !/^[0-9a-f]{7,40}$/i.test(base)) {
-  console.error("Usage: node scripts/select-browser-specs.mjs <base-sha>");
-  process.exit(2);
-}
-const run = (args) => execFileSync("git", args, { encoding: "utf8" }).trimEnd();
-const changed = run(["diff", "--name-only", "--diff-filter=ACDMRT", `${base}...HEAD`])
-  .split("\n").filter(Boolean);
-const specs = changed.filter(path => /^tests\/browser\/[^/]+\.spec\.js$/.test(path)).sort();
 const event = process.env.GITHUB_EVENT_NAME || "";
 const ref = process.env.GITHUB_REF || "";
-const forceFull = event === "workflow_dispatch"
-  || (event === "push" && ref === "refs/heads/main")
-  || changed.some(path =>
+const alwaysFull = event === "workflow_dispatch" || (event === "push" && ref === "refs/heads/main");
+const run = (args) => execFileSync("git", args, { encoding: "utf8" }).trimEnd();
+let changed = [];
+if (!alwaysFull) {
+  if (!base || !/^[0-9a-f]{7,40}$/i.test(base)) {
+    console.error("Usage: node scripts/select-browser-specs.mjs <base-sha>");
+    process.exit(2);
+  }
+  changed = run(["diff", "--name-only", "--diff-filter=ACDMRT", `${base}...HEAD`])
+    .split("\n").filter(Boolean);
+}
+const specs = changed.filter(path => /^tests\/browser\/[^/]+\.spec\.js$/.test(path)).sort();
+const forceFull = alwaysFull || changed.some(path =>
     path.startsWith(".github/workflows/")
     || path.startsWith("scripts/")
     || path === "package.json"
