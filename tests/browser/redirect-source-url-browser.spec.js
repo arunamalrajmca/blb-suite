@@ -63,6 +63,18 @@ test.describe('real-browser source URL redirect regressions', () => {
     await expect(page).toHaveURL(targetUrl);
   });
 
+  test('Christianity.com article passage link opens BLB separately before source navigation', async ({ page }) => {
+    const sourceUrl = 'https://www.christianity.com/faith/bible-study/article.html';
+    const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+    await loadProductionRedirect(page, sourceUrl);
+    await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+    await page.setContent('<article><p>Continue reading the article.</p><a id="bible-passage" href="https://www.christianity.com/bible/esv/john/3-16?ref=article">John 3:16</a></article>');
+    await page.locator('#bible-passage').click();
+    await expect.poll(() => page.evaluate(() => window.__openedBlbUrl || null)).toBe(targetUrl);
+    await expect(page).toHaveURL(sourceUrl);
+    await expect(page.locator('article')).toContainText('Continue reading the article.');
+  });
+
   test('Christianity.com passage opens BLB in a new tab and keeps the source tab', async ({ page }) => {
     const sourceUrl = 'https://www.christianity.com/bible/esv/john/3-16';
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
