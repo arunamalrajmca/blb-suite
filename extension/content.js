@@ -1416,7 +1416,7 @@ if (location.hostname==="webstersdictionary1828.com") {
       // "Referenced By" lists reverse links and must not be included.
       const enduringRelatedAnchors = sourceSite === "enduringword"
         ? Array.from(document.querySelectorAll("aside.ew-xref .ew-xref-sec"))
-            .filter(section => /^Related Commentary\\b/i.test(
+            .filter(section => /^Related Commentary\b/i.test(
               normalizeSelectionText(section.querySelector(".ew-xref-title")?.textContent || "")
             ))
             .flatMap(section => Array.from(section.querySelectorAll(".ew-xref-chips a[href]")))
