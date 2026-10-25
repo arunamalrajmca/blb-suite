@@ -42,7 +42,52 @@ async function loadProductionRedirect(page, sourceUrl) {
   await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) } } }; function redirectBlbNet() { return false; } function openBlbDestinationFromContent(url) { window.__openedBlbUrl = url; }' });
 }
 
+const sourcePageMultiVerseStart = contentSource.indexOf('// ---------- Christianity.com and GotQuestions.org MultiVerse collection ----------');
+const sourcePageMultiVerseEnd = contentSource.indexOf('// ---------- BLB MultiVerse hand-off ----------', sourcePageMultiVerseStart);
+if (sourcePageMultiVerseStart < 0 || sourcePageMultiVerseEnd < 0) {
+  throw new Error('Could not locate source-page MultiVerse button implementation');
+}
+const sourcePageMultiVerseCode = contentSource.slice(sourcePageMultiVerseStart, sourcePageMultiVerseEnd);
+
+async function loadSourcePageMultiVerse(page, sourceUrl) {
+  await loadProductionRedirect(page, sourceUrl);
+  await page.addScriptTag({ content: 'function normalizeSelectionText(s) { return String(s || "").replace(/\\s+/g, " ").trim(); }' });
+  await page.addScriptTag({ content: 'window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async message => { window.__multiVerseRequests = (window.__multiVerseRequests || []).concat([message]); return { ok: true }; } } };' });
+  await page.addScriptTag({ content: sourcePageMultiVerseCode });
+  await page.waitForSelector('button[id$="-multiverse"]');
+}
+
 test.describe('real-browser source URL redirect regressions', () => {
+  for (const source of [
+    { host: 'christianity.com', url: 'https://www.christianity.com/wiki/bible/example.html', button: '#blb-suite-christianity-multiverse' },
+    { host: 'gotquestions.org', url: 'https://www.gotquestions.org/example-question.html', button: '#blb-suite-gotquestions-multiverse' }
+  ]) {
+    test(`${source.host} offers a page-wide BLB MultiVerse button for linked Bible references`, async ({ page }) => {
+      await loadSourcePageMultiVerse(page, source.url);
+      await page.evaluate(() => {
+        document.body.innerHTML += [
+          '<a href="https://www.blueletterbible.org/kjv/jhn/3/16/">John 3:16</a>',
+          '<a href="https://www.biblegateway.com/passage/?search=Romans%208%3A9">Romans 8:9</a>',
+          '<a href="https://www.biblegateway.com/passage/?search=John%203%3A16">John 3:16</a>',
+          '<a href="/unrelated.html">Read more</a>',
+          '<a href="https://www.biblegateway.com/passage/?search=Ephesians%202%3A8-9">Ephesians 2:8-9</a>'
+        ].join(' ');
+      });
+      await page.locator(source.button).click();
+      await expect.poll(() => page.evaluate(() => window.__multiVerseRequests?.length || 0)).toBe(1);
+      const request = await page.evaluate(() => window.__multiVerseRequests[0]);
+      expect(request.type).toBe('blbSuiteOpenWebsterMultiVerse');
+      expect(request.refs.map(ref => ref.text)).toEqual(['John 3:16', 'Romans 8:9', 'Ephesians 2:8-9']);
+      expect(request.refs.map(ref => ref.url)).toEqual([
+        'https://www.blueletterbible.org/kjv/jhn/3/16/',
+        'https://www.blueletterbible.org/kjv/rom/8/9/',
+        'https://www.blueletterbible.org/kjv/eph/2/8-9/'
+      ]);
+      expect(request.refs.every(ref => ref.version === 'kjv')).toBe(true);
+      await expect(page).toHaveURL(source.url);
+    });
+  }
+
   test('King James Bible Online chapter URL navigates to the resolved BLB destination', async ({ page }) => {
     const sourceUrl = 'https://kingjamesbibleonline.org/John-Chapter-3/';
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/1/';
