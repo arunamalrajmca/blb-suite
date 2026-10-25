@@ -310,7 +310,16 @@ function redirectBibleSite() {
   if (!ref) return false;
   const target=blbUrl(ref.book,ref.chapter,ref.from,ref.to);
   if (!target) return false;
-  if (target!==u.href) { location.replace(target); return true; }
+  if (target!==u.href) {
+    // Christianity.com remains open in its original tab. Open resolved
+    // chapter/verse passages in a new BLB tab rather than replacing the source.
+    if (host==="christianity.com") {
+      openBlbDestinationFromContent(target);
+      return true;
+    }
+    location.replace(target);
+    return true;
+  }
   return false;
 }
 
