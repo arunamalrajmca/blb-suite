@@ -80,6 +80,9 @@ test.describe('core user-visible E2E', () => {
     });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('body')).toBeVisible();
+    // Wait for the content script's asynchronous site-setting initialization
+    // before installing the fixture and dispatching the first double-click.
+    await page.waitForTimeout(1000);
 
     // Use a normal article DOM on example.com, not Facebook markup or a live
     // social-media post. The fixture reproduces only the relevant text pattern.
