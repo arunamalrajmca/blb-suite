@@ -757,6 +757,14 @@ test.describe('real-browser source URL redirect regressions', () => {
     await loadSourcePageMultiVerse(page, 'https://www.gotquestions.org/example-question.html');
     const button = page.locator('#blb-suite-gotquestions-multiverse');
     await expect(button).toHaveAttribute('type', 'button');
+    // Give the collection handler a real Bible link so Enter activation must
+    // reach the same runtime hand-off path as a mouse click.
+    await page.evaluate(() => {
+      const link = document.createElement('a');
+      link.href = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+      link.textContent = 'John 3:16';
+      document.body.appendChild(link);
+    });
     await page.evaluate(() => document.getElementById('blb-suite-gotquestions-multiverse').focus());
     await page.keyboard.press('Enter');
     await expect.poll(() => page.evaluate(() => window.__multiVerseRequests?.length || 0)).toBe(1);
