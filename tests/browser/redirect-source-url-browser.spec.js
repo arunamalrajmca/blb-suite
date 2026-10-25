@@ -327,12 +327,18 @@ test.describe('real-browser source URL redirect regressions', () => {
     await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => false);' });
     await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
     const result = await page.evaluate(() => {
+      // The disabled guard must leave the click alone. Prevent the browser's
+      // real default navigation only after observing whether the guard claimed it.
+      let preventedByGuard = null;
+      window.addEventListener('click', event => {
+        preventedByGuard = event.defaultPrevented;
+        event.preventDefault();
+      }, { once:true });
       const anchor = document.createElement('a');
       anchor.href = 'https://www.christianity.com/bible/esv/john/3-16';
       document.body.appendChild(anchor);
-      const event = new MouseEvent('click', { bubbles:true, cancelable:true, button:0 });
-      anchor.dispatchEvent(event);
-      return event.defaultPrevented;
+      anchor.dispatchEvent(new MouseEvent('click', { bubbles:true, cancelable:true, button:0 }));
+      return preventedByGuard;
     });
     expect(result).toBe(false);
     await expect.poll(() => page.evaluate(() => window.__openedBlbUrl || null)).toBeNull();
