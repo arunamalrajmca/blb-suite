@@ -100,7 +100,7 @@ jobs:
   browser-e2e:
     name: BROWSER E2E — References — ${{ matrix.group }}
     needs: [change-detection, verse-context-regression]
-    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.verse-context-regression.result == 'success' || needs.change-detection.outputs.extension_spec_required == 'false') && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) }}
+    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.verse-context-regression.result == 'success' || needs.change-detection.outputs.extension_spec_required == 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -143,14 +143,17 @@ jobs:
         with:
           phase: start
       - name: Checkout
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
       - name: Setup Node
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Cache npm downloads
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         uses: actions/cache@v4
         with:
           path: ~/.npm
@@ -158,15 +161,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
       - name: Install dependencies
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         run: npm install --prefer-offline
       - name: Install Playwright Chromium
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         run: npx playwright install --with-deps chromium
       - name: Grant test-only generic host access
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
       - name: Read manifest version
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         id: version
         run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
       - name: Run Browser E2E — ${{ matrix.group }}
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: npx playwright test "${{ matrix.file || 'tests/browser/extension.spec.js' }}" --grep "${{ matrix.grep }}"
