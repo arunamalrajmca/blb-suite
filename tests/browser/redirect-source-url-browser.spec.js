@@ -188,7 +188,7 @@ test.describe('real-browser source URL redirect regressions', () => {
     await page.locator('#blb-suite-enduringword-multiverse').click();
     await expect.poll(() => page.evaluate(() => window.__multiVerseRequests?.length || 0)).toBe(1);
     const request = await page.evaluate(() => window.__multiVerseRequests[0]);
-    expect(request.refs.map(ref => ref.text)).toEqual(['psalms 15:1', 'john 13:1', 'genesis 1:1', 'psalms 6:1']);
+    expect(request.refs.map(ref => ref.text)).toEqual(['Psalms 15:1', 'John 13:1', 'Genesis 1:1', 'Psalms 6:1']);
     expect(request.refs.map(ref => ref.url)).toEqual([
       'https://www.blueletterbible.org/kjv/psa/15/1/',
       'https://www.blueletterbible.org/kjv/jhn/13/1/',
