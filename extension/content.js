@@ -1487,15 +1487,32 @@ if (location.hostname==="webstersdictionary1828.com") {
           // Fall back to visible text only when no usable metadata is present.
           if (!parsed) parsed = parseRef(label);
         }
-        const usedStructuredReference = sourceSite !== "enduringword" && Boolean(dataReference) && Boolean(parsed);
+        let usedStructuredReference = sourceSite !== "enduringword" && Boolean(dataReference) && Boolean(parsed);
         if (!parsed || !parsed.book || !Number.isInteger(Number(parsed.chapter)) ||
             Number(parsed.chapter) < 1) continue;
         // Enduring Word chips identify chapters, not individual verses.
-        const book = normalizeSourceBibleBook(parsed.book);
-        const from = sourceSite === "enduringword" ? 1 : Number(parsed.from);
-        const to = sourceSite === "enduringword" ? null : (parsed.to == null ? null : Number(parsed.to));
+        let book = normalizeSourceBibleBook(parsed.book);
+        let chapter = Number(parsed.chapter);
+        let from = sourceSite === "enduringword" ? 1 : Number(parsed.from);
+        let to = sourceSite === "enduringword" ? null : (parsed.to == null ? null : Number(parsed.to));
         if (!Number.isInteger(from) || from < 1) continue;
-        const resolved = resolveBibleReference(book, Number(parsed.chapter), from, to);
+        let resolved = resolveBibleReference(book, chapter, from, to);
+        // Metadata can be syntactically parseable yet refer to an unknown book
+        // or an impossible verse. In that case, try the visible caption before
+        // discarding a link that still contains a valid full Bible reference.
+        if (!resolved && usedStructuredReference) {
+          const captionRef = parseRef(label);
+          if (captionRef) {
+            book = normalizeSourceBibleBook(captionRef.book);
+            chapter = Number(captionRef.chapter);
+            from = Number(captionRef.from);
+            to = captionRef.to == null ? null : Number(captionRef.to);
+            if (Number.isInteger(from) && from >= 1) {
+              resolved = resolveBibleReference(book, chapter, from, to);
+              if (resolved) usedStructuredReference = false;
+            }
+          }
+        }
         if (!resolved) continue;
         const target = blbUrl(resolved.book.name, resolved.chapter, resolved.from, resolved.to);
         if (!target || seen.has(target)) continue;
