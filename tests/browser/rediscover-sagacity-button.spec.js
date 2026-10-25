@@ -17,8 +17,7 @@ test('Rediscover and Sagacity are declared content-script and host-permission ta
     expect(script.matches).not.toContain(`https://www.${host}/*`);
     expect(manifest.host_permissions).not.toContain(`https://${host}/*`);
     expect(manifest.host_permissions).not.toContain(`https://www.${host}/*`);
-    expect(manifest.optional_host_permissions).toContain(`https://${host}/*`);
-    expect(manifest.optional_host_permissions).toContain(`https://www.${host}/*`);
+    expect(manifest.optional_host_permissions).toContain('https://*/*');
   }
 });
 
