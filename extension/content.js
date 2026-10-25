@@ -3676,7 +3676,7 @@ function addBlbPageSelectionButton() {
 
   mount.appendChild(button);
   makeBlbMultiVerseButtonDraggable(button, {
-    positionKey: 'blbSuiteShowOnBlbButtonPosition',
+    positionKey: 'blbSuiteShowOnBLBButtonPosition',
     defaultRight: 20,
     defaultBottom: isWebsterPage ? 68 : 20
   });
