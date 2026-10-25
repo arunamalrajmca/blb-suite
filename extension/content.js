@@ -402,6 +402,11 @@ function redirectBibleSite() {
   }
 
   if (!ref) return false;
+  // Reject invalid numeric components before blbUrl() can normalize a zero
+  // verse into the first verse of a chapter. Apply this uniformly across hosts.
+  if (!Number.isInteger(ref.chapter) || ref.chapter < 1) return false;
+  if (ref.from != null && (!Number.isInteger(ref.from) || ref.from < 1)) return false;
+  if (ref.to != null && (!Number.isInteger(ref.to) || ref.to < (ref.from == null ? 1 : ref.from))) return false;
   const target=blbUrl(ref.book,ref.chapter,ref.from,ref.to);
   if (!target) return false;
   if (target!==u.href) {
