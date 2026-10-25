@@ -177,9 +177,9 @@ function christianityBibleLinkTarget(href) {
 function installChristianityLinkRedirect(isEnabled) {
   window.addEventListener("blb-suite-christianity-passage-click", event => {
     if (!isEnabled()) return;
-    const href = event.detail && typeof event.detail.href === "string"
-      ? event.detail.href
-      : "";
+    // A string detail crosses Chrome's MAIN/ISOLATED world boundary
+    // without exposing a page-owned object to the extension world.
+    const href = typeof event.detail === "string" ? event.detail : "";
     const target = christianityBibleLinkTarget(href);
     if (!target) return;
     // Cancel the custom request synchronously so the MAIN-world click guard
