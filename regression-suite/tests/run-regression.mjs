@@ -60,21 +60,22 @@ test('no optional host-permission regression', () => {
   assert.deepEqual(m.optional_host_permissions, ['http://*/*','https://*/*','https://chatgpt.com/*']);
 });
 
-test('Rediscover and Sagacity use the existing nested-page MultiVerse collector', () => {
+test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse collector', () => {
   const content = read('content.js');
   assert(content.includes('"rediscover.bible":"rediscover"'));
   assert(content.includes('"sagacityweb.com":"sagacity"'));
-  assert(content.includes("'rediscover.bible', 'sagacityweb.com'"));
+  assert(content.includes('"thetreasuryofscriptureknowledge.com":"treasury"'));
+  assert(content.includes("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'"));
   assert(content.includes('if (sourceSite && !isSourceHomepage)'));
   assert(content.includes('document.querySelectorAll("a[href]")'));
   const background = read('background.js');
-  assert(background.includes("'rediscover.bible', 'sagacityweb.com'"));
+  assert(background.includes("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'"));
 });
 
 test('Rediscover and Sagacity use optional access and dynamic injection only', () => {
   const m = JSON.parse(read('manifest.json'));
   const matches = m.content_scripts?.flatMap(x=>x.matches||[]) || [];
-  for (const host of ['rediscover.bible','www.rediscover.bible','sagacityweb.com','www.sagacityweb.com']) {
+  for (const host of ['rediscover.bible','www.rediscover.bible','sagacityweb.com','www.sagacityweb.com','thetreasuryofscriptureknowledge.com','www.thetreasuryofscriptureknowledge.com']) {
     assert(!m.host_permissions.includes(`https://${host}/*`), `${host} must not become a required host permission`);
     assert(!matches.includes(`https://${host}/*`), `${host} must not become a permanent content-script match`);
   }
