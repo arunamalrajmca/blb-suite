@@ -117,7 +117,11 @@ test.describe('real-browser source URL redirect regressions', () => {
               <a class="ew-xref-chip" href="https://enduringword.com/bible-commentary/psalm-6/">Psalm 6</a>
             </div>
           </section>
-        </aside>`);
+        </aside>
+        <article class="commentary-body">
+          <a href="https://enduringword.com/bible-commentary/john-3/16/">John 3:16</a>
+          <a href="https://www.blueletterbible.org/kjv/jhn/3/16/">John 3:16</a>
+        </article>`);
     });
     await page.locator('#blb-suite-enduringword-multiverse').click();
     await expect.poll(() => page.evaluate(() => window.__multiVerseRequests?.length || 0)).toBe(1);
