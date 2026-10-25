@@ -1394,7 +1394,7 @@ if (location.hostname==="webstersdictionary1828.com") {
 
 // ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------
 {
-  const host = location.hostname.toLowerCase().replace(/^www\\./, "");
+  const host = location.hostname.toLowerCase().replace(/^www\./, "");
   const sourceSite = ({
     "christianity.com":"christianity",
     "gotquestions.org":"gotquestions",
