@@ -1401,26 +1401,47 @@ if (location.hostname==="webstersdictionary1828.com") {
     "crosswalk.com":"crosswalk",
     "enduringword.com":"enduringword"
   })[host] || "";
-  if (sourceSite) {
+  // These sites' homepages are general landing pages, not article/reference
+  // pages. Keep the page-wide collection button limited to nested pages.
+  const isSourceHomepage = location.pathname === "/" || location.pathname === "";
+  if (sourceSite && !isSourceHomepage) {
     const buttonId = "blb-suite-" + sourceSite + "-multiverse";
     const statusId = "blb-suite-" + sourceSite + "-multiverse-status";
 
     function collectSourcePageBibleReferences() {
       const refs = [];
       const seen = new Set();
-      for (const anchor of document.querySelectorAll("a[href]")) {
+      // Enduring Word's "Related Commentary" section explicitly lists the
+      // chapters used by the current commentary. Use only that first section;
+      // "Referenced By" lists reverse links and must not be included.
+      const enduringRelatedAnchors = sourceSite === "enduringword"
+        ? Array.from(document.querySelectorAll("aside.ew-xref .ew-xref-sec"))
+            .filter(section => /^Related Commentary\\b/i.test(
+              normalizeSelectionText(section.querySelector(".ew-xref-title")?.textContent || "")
+            ))
+            .flatMap(section => Array.from(section.querySelectorAll(".ew-xref-chips a[href]")))
+        : null;
+      const anchors = sourceSite === "enduringword" && enduringRelatedAnchors?.length
+        ? enduringRelatedAnchors
+        : sourceSite === "enduringword"
+          ? []
+          : Array.from(document.querySelectorAll("a[href]"));
+      for (const anchor of anchors) {
         if (anchor.id === buttonId || anchor.closest("#" + buttonId) ||
             anchor.hasAttribute("download")) continue;
         const label = normalizeSelectionText(anchor.innerText || anchor.textContent || "");
         if (!label || label.length > 100) continue;
         const parsed = parseRef(label);
         if (!parsed || !parsed.book || !Number.isInteger(Number(parsed.chapter)) ||
-            Number(parsed.chapter) < 1 || !Number.isInteger(Number(parsed.from)) ||
-            Number(parsed.from) < 1) continue;
-        const resolved = resolveBibleReference(
-          parsed.book, Number(parsed.chapter), Number(parsed.from),
-          parsed.to == null ? null : Number(parsed.to)
-        );
+            Number(parsed.chapter) < 1) continue;
+        // The Related Commentary chips identify chapters, not individual
+        // verses. Open verse 1 of each distinct chapter, including Psalm N.
+        const book = sourceSite === "enduringword" && /^psalm$/i.test(parsed.book)
+          ? "Psalms" : parsed.book;
+        const from = sourceSite === "enduringword" ? 1 : Number(parsed.from);
+        const to = sourceSite === "enduringword" ? null : (parsed.to == null ? null : Number(parsed.to));
+        if (!Number.isInteger(from) || from < 1) continue;
+        const resolved = resolveBibleReference(book, Number(parsed.chapter), from, to);
         if (!resolved) continue;
         const target = blbUrl(resolved.book.name, resolved.chapter, resolved.from, resolved.to);
         if (!target || seen.has(target)) continue;
@@ -1432,7 +1453,7 @@ if (location.hostname==="webstersdictionary1828.com") {
           from: resolved.from,
           to: resolved.to,
           version: "kjv",
-          text: label,
+          text: sourceSite === "enduringword" ? (resolved.book.name + " " + resolved.chapter + ":1") : label,
           url: target
         });
       }
