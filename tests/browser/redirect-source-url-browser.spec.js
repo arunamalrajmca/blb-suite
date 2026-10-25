@@ -97,6 +97,37 @@ test.describe('real-browser source URL redirect regressions', () => {
     });
   }
 
+  test('Christianity.com MultiVerse collects only current-page references and never follows pagination', async ({ page }) => {
+    const sourceUrl = 'https://www.christianity.com/wiki/christian-life/example.html';
+    await loadSourcePageMultiVerse(page, sourceUrl);
+    await page.evaluate(() => {
+      window.__paginationFetchCalls = 0;
+      const originalFetch = window.fetch.bind(window);
+      window.fetch = (...args) => {
+        window.__paginationFetchCalls += 1;
+        return originalFetch(...args);
+      };
+      document.body.insertAdjacentHTML('beforeend', `
+        <article>
+          <a href="https://www.christianity.com/bible/esv/john/3-16">John 3:16</a>
+        </article>
+        <nav class="pagination" aria-label="Pagination">
+          <a href="?page=2" aria-label="Page 2">2</a>
+          <a href="?page=2" rel="next" aria-label="Next page">Next</a>
+        </nav>`);
+    });
+
+    await page.locator('#blb-suite-christianity-multiverse').click();
+    await expect.poll(() => page.evaluate(() => window.__multiVerseRequests?.length || 0)).toBe(1);
+    const request = await page.evaluate(() => window.__multiVerseRequests[0]);
+    expect(request.refs.map(ref => ref.text)).toEqual(['John 3:16']);
+    expect(request.refs.map(ref => ref.url)).toEqual([
+      'https://www.blueletterbible.org/kjv/jhn/3/16/'
+    ]);
+    expect(await page.evaluate(() => window.__paginationFetchCalls)).toBe(0);
+    await expect(page).toHaveURL(sourceUrl);
+  });
+
   test('Enduring Word extracts Related Commentary and Referenced By chapters as verse 1, including Psalms', async ({ page }) => {
     const sourceUrl = 'https://www.enduringword.com/bible-commentary/john-3/';
     await loadSourcePageMultiVerse(page, sourceUrl);
