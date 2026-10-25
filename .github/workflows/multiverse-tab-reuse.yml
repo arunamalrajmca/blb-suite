@@ -1,6 +1,8 @@
 name: MultiVerse tab reuse regression
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
     paths:
