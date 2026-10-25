@@ -60,6 +60,14 @@ test('no optional host-permission regression', () => {
   assert.deepEqual(m.optional_host_permissions, ['http://*/*','https://*/*','https://chatgpt.com/*']);
 });
 
+test('Rediscover and Sagacity use the existing nested-page MultiVerse collector', () => {
+  const content = read('content.js');
+  assert(content.includes('"rediscover.bible":"rediscover"'));
+  assert(content.includes('"sagacityweb.com":"sagacity"'));
+  assert(content.includes('if (sourceSite && !isSourceHomepage)'));
+  assert(content.includes('document.querySelectorAll("a[href]")'));
+});
+
 test('Rediscover and Sagacity use optional access and dynamic injection only', () => {
   const m = JSON.parse(read('manifest.json'));
   const matches = m.content_scripts?.flatMap(x=>x.matches||[]) || [];
