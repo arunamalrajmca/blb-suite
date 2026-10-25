@@ -60,6 +60,7 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
@@ -75,6 +76,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node22-npm-
       - run: npm install
+        if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
       - name: Install Playwright Chromium
         run: npx playwright install chromium
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
