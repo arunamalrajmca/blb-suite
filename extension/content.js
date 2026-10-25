@@ -171,26 +171,20 @@ function christianityBibleLinkTarget(href) {
     match[3] ? Number(match[3]) : 1, match[4] ? Number(match[4]) : null);
 }
 
-// Intercept passage links before Christianity.com navigates away from an article.
+// Handle passage-click requests raised by the tiny MAIN-world guard.
+// The page-world guard can cancel native handlers only after this isolated-world
+// resolver confirms that the link maps to a valid KJV passage.
 function installChristianityLinkRedirect(isEnabled) {
-  // Capture at window level so the extension can stop site-level click handlers
-  // before they trigger a client-side route change or reload of the article tab.
-  window.addEventListener("click", event => {
-    // A site listener may already have called preventDefault; still intercept
-    // valid Bible links so that site-specific handlers cannot reload the article.
-    if (event.button !== 0 ||
-        event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  window.addEventListener("blb-suite-christianity-passage-click", event => {
     if (!isEnabled()) return;
-    const eventTarget = event.target instanceof Element
-      ? event.target
-      : event.target?.parentElement;
-    const anchor = eventTarget?.closest?.("a[href]");
-    if (!anchor || anchor.hasAttribute("download")) return;
-    const target = christianityBibleLinkTarget(anchor.href);
+    const href = event.detail && typeof event.detail.href === "string"
+      ? event.detail.href
+      : "";
+    const target = christianityBibleLinkTarget(href);
     if (!target) return;
+    // Cancel the custom request synchronously so the MAIN-world click guard
+    // knows it may also cancel the original click and its native site handlers.
     event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
     openBlbDestinationFromContent(target);
   }, true);
 }
