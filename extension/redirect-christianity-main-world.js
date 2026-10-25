@@ -8,7 +8,7 @@
 
   window.addEventListener("click", event => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey ||
-        event.shiftKey || event.altKey || event.defaultPrevented) return;
+        event.shiftKey || event.altKey) return;
 
     const node = event.target instanceof Element
       ? event.target
