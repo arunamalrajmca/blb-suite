@@ -1664,7 +1664,18 @@ if (location.hostname==="webstersdictionary1828.com") {
               const criteria = normalizeSelectionText(
                 String(targetUrl.searchParams.get("Criteria") || "").replace(/\+/g, " ")
               );
-              sagacityCriteriaReference = parseRef(criteria);
+              // BLB's Sagacity links use dotted chapter/verse notation
+              // (e.g. "Matt. 12.37"). Parse that URL citation independently
+              // of the anchor caption, and canonicalize its book immediately
+              // so abbreviated source names cannot be lost in fallback logic.
+              const criteriaReference = parseRef(criteria.replace(
+                /^(.*?)\s+(\d+)\.(\d+(?:-\d+)?)$/,
+                "$1 $2:$3"
+              ));
+              if (criteriaReference) {
+                criteriaReference.book = normalizeSourceBibleBook(criteriaReference.book);
+              }
+              sagacityCriteriaReference = criteriaReference;
             }
           } catch (_) {}
         }
