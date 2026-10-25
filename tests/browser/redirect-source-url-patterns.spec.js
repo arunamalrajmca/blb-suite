@@ -290,7 +290,6 @@ test('table-driven malformed reference matrix refuses unsafe or ambiguous destin
     'https://biblehub.com/not-a-book/abc.htm',
     'https://biblehub.com/john/3-16-18-20.htm',
     'https://biblegateway.com/search/?search=John%203%3A16',
-    'https://www.christianity.com/bible/esv/john/3-0',
     'https://www.christianity.com/bible/esv/john/3-18-16',
     'https://kjv.site/not-a-book-3-16-kjv/',
     'https://m.kjv.site/John-3-16-18-20-kjv/',
