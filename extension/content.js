@@ -1282,7 +1282,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
         from: resolved.from,
         to: resolved.to,
         version: "kjv",
-        // Keep the source caption when available; this collector does not define usedStructuredReference.
+        // Preserve the visible source caption, with a canonical reference as a fallback.
         text: label || `${resolved.book.name} ${resolved.chapter}:${resolved.from}${resolved.to != null && resolved.to !== resolved.from ? "-" + resolved.to : ""}`,
         url: target
       });
