@@ -1023,6 +1023,147 @@ if (location.hostname.endsWith(BLB_HOSTNAME)) {
   }
 }
 
+// Shared drag behavior for page-wide MultiVerse buttons. Position is stored
+// in extension-local storage so it survives reloads and browser restarts.
+function makeBlbMultiVerseButtonDraggable(button) {
+  const positionKey = "blbSuiteMultiVerseButtonPosition";
+  if (!button || button.dataset.blbDraggableReady === "true") return;
+  button.dataset.blbDraggableReady = "true";
+  button.style.touchAction = "none";
+  button.style.cursor = "grab";
+  button.style.userSelect = "none";
+
+  const reset = document.createElement("button");
+  reset.type = "button";
+  reset.id = button.id + "-reset-position";
+  reset.textContent = "↺";
+  reset.title = "Reset button position";
+  reset.setAttribute("aria-label", "Reset button position");
+  reset.style.cssText = "position:fixed;z-index:2147483647;display:inline-flex;align-items:center;justify-content:center;width:27px;height:27px;padding:0;border:1px solid #505257;border-radius:6px;background:#292a2d;color:#f1f3f4;font:600 17px Arial,sans-serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.35)";
+  reset.addEventListener("pointerdown", event => event.stopPropagation());
+  reset.addEventListener("click", async event => {
+    event.preventDefault();
+    event.stopPropagation();
+    try { await chrome.storage.local.remove(positionKey); } catch (_) {}
+    button.style.left = "auto";
+    button.style.top = "auto";
+    button.style.right = "18px";
+    button.style.bottom = "18px";
+    placeReset();
+  });
+
+  function clamp(value, min, max) {
+    return Math.min(Math.max(value, min), Math.max(min, max));
+  }
+  function viewportSize() {
+    const viewport = window.visualViewport;
+    return {
+      width: Math.max(0, Math.floor(viewport?.width || document.documentElement.clientWidth || window.innerWidth || 0)),
+      height: Math.max(0, Math.floor(viewport?.height || document.documentElement.clientHeight || window.innerHeight || 0))
+    };
+  }
+  function clampButtonPosition() {
+    const size = viewportSize();
+    const rect = button.getBoundingClientRect();
+    const left = clamp(rect.left, 0, size.width - rect.width);
+    const top = clamp(rect.top, 0, size.height - rect.height);
+    button.style.left = left + "px";
+    button.style.top = top + "px";
+    button.style.right = "auto";
+    button.style.bottom = "auto";
+    return {left, top};
+  }
+  function placeReset() {
+    if (!button.isConnected || !reset.isConnected) return;
+    const size = viewportSize();
+    const rect = button.getBoundingClientRect();
+    const resetRect = reset.getBoundingClientRect();
+    const preferredLeft = rect.left - resetRect.width - 6;
+    const left = preferredLeft >= 0 ? preferredLeft : rect.right + 6;
+    reset.style.left = clamp(left, 0, size.width - resetRect.width) + "px";
+    reset.style.top = clamp(rect.top + (rect.height - resetRect.height) / 2, 0, size.height - resetRect.height) + "px";
+  }
+  async function savePosition() {
+    const position = clampButtonPosition();
+    placeReset();
+    try { await chrome.storage.local.set({[positionKey]: position}); } catch (_) {}
+  }
+
+  let pointerStart = null;
+  let dragged = false;
+  let suppressNextClick = false;
+  button.addEventListener("pointerdown", event => {
+    if (event.button !== 0 || event.isPrimary === false) return;
+    const rect = button.getBoundingClientRect();
+    pointerStart = {id:event.pointerId, x:event.clientX, y:event.clientY, left:rect.left, top:rect.top};
+    dragged = false;
+    suppressNextClick = false;
+    try { button.setPointerCapture(event.pointerId); } catch (_) {}
+  });
+  button.addEventListener("pointermove", event => {
+    if (!pointerStart || event.pointerId !== pointerStart.id) return;
+    const dx = event.clientX - pointerStart.x;
+    const dy = event.clientY - pointerStart.y;
+    if (!dragged && Math.hypot(dx, dy) < 5) return;
+    dragged = true;
+    event.preventDefault();
+    const size = viewportSize();
+    const rect = button.getBoundingClientRect();
+    button.style.left = clamp(pointerStart.left + dx, 0, size.width - rect.width) + "px";
+    button.style.top = clamp(pointerStart.top + dy, 0, size.height - rect.height) + "px";
+    button.style.right = "auto";
+    button.style.bottom = "auto";
+    button.style.cursor = "grabbing";
+    placeReset();
+  });
+  async function finishPointer(event) {
+    if (!pointerStart || event.pointerId !== pointerStart.id) return;
+    const didDrag = dragged;
+    pointerStart = null;
+    dragged = false;
+    button.style.cursor = "grab";
+    if (didDrag) {
+      suppressNextClick = true;
+      await savePosition();
+    }
+    try { if (button.hasPointerCapture(event.pointerId)) button.releasePointerCapture(event.pointerId); } catch (_) {}
+  }
+  button.addEventListener("pointerup", finishPointer);
+  button.addEventListener("pointercancel", finishPointer);
+  button.addEventListener("click", event => {
+    if (!suppressNextClick) return;
+    suppressNextClick = false;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+  }, true);
+
+  document.body.appendChild(reset);
+  chrome.storage.local.get({[positionKey]: null}).then(data => {
+    const saved = data?.[positionKey];
+    if (!saved || !Number.isFinite(saved.left) || !Number.isFinite(saved.top) || !button.isConnected) {
+      placeReset();
+      return;
+    }
+    const size = viewportSize();
+    const rect = button.getBoundingClientRect();
+    button.style.left = clamp(saved.left, 0, size.width - rect.width) + "px";
+    button.style.top = clamp(saved.top, 0, size.height - rect.height) + "px";
+    button.style.right = "auto";
+    button.style.bottom = "auto";
+    placeReset();
+  }).catch(() => placeReset());
+
+  const onViewportChange = () => {
+    if (!button.isConnected) { reset.remove(); return; }
+    clampButtonPosition();
+    placeReset();
+  };
+  window.addEventListener("resize", onViewportChange);
+  window.addEventListener("scroll", onViewportChange, true);
+  window.visualViewport?.addEventListener("resize", onViewportChange);
+}
+
 // ---------- The King's Bible Dictionary/Concordance MultiVerse ----------
 const kingsBibleEntryPath = location.pathname.replace(/\/{2,}/g, "/");
 const kingsBibleEntryMatch = kingsBibleEntryPath.match(/^\/(dictionary|concordance)\/[^/]+(?:\/\d+)?\/?$/i);
@@ -1266,6 +1407,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
       openAllKingsBibleRefs();
     });
     document.body.appendChild(button);
+    makeBlbMultiVerseButtonDraggable(button);
   }
 
   const ensureKingsBibleButtonWhenReady = () => ensureKingsBibleButton().catch(() => {});
@@ -1280,6 +1422,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
   chrome.storage.onChanged.addListener(changes => {
     if (changes.masterEnabled?.newValue === false) {
       document.getElementById("blb-suite-kingsbible-multiverse")?.remove();
+      document.getElementById("blb-suite-kingsbible-multiverse-reset-position")?.remove();
       document.getElementById("blb-suite-kingsbible-status")?.remove();
     } else if (changes.masterEnabled?.newValue === true) {
       ensureKingsBibleButtonWhenReady();
@@ -1372,6 +1515,7 @@ if (location.hostname==="webstersdictionary1828.com") {
     button.style.cssText="position:fixed;right:18px;bottom:18px;z-index:2147483647;background:#292a2d;color:#f1f3f4;border:1px solid #505257;border-radius:7px;padding:10px 13px;font:600 13px Arial,sans-serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.08);transition:transform .12s ease,box-shadow .12s ease,background .12s ease;"; button.addEventListener("mouseenter",()=>{button.style.background="#303136";button.style.transform="translateY(-1px)";button.style.boxShadow="0 4px 12px rgba(0,0,0,.48),inset 0 1px 0 rgba(255,255,255,.1)";}); button.addEventListener("mouseleave",()=>{button.style.background="#292a2d";button.style.transform="translateY(0)";button.style.boxShadow="0 2px 8px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.08)";}); button.addEventListener("mousedown",()=>{button.style.transform="translateY(1px)";button.style.boxShadow="0 1px 3px rgba(0,0,0,.38),inset 0 1px 2px rgba(0,0,0,.22)";}); button.addEventListener("mouseup",()=>{button.style.transform="translateY(-1px)";button.style.boxShadow="0 4px 12px rgba(0,0,0,.48),inset 0 1px 0 rgba(255,255,255,.1)";});
     button.addEventListener("click",e=>{e.preventDefault();e.stopPropagation();openAllWebsterRefs();});
     mount.appendChild(button);
+    makeBlbMultiVerseButtonDraggable(button);
   }
 
   // Global external redirects default OFF. Keep this handler fail-closed when storage is empty or unavailable.
@@ -1602,6 +1746,7 @@ if (location.hostname==="webstersdictionary1828.com") {
         openSourcePageBibleReferencesInMultiVerse();
       });
       document.body.appendChild(button);
+      makeBlbMultiVerseButtonDraggable(button);
     }
 
     const ensureSourcePageButtonWhenReady = () => ensureSourcePageMultiVerseButton().catch(() => {});
@@ -1616,6 +1761,7 @@ if (location.hostname==="webstersdictionary1828.com") {
     chrome.storage.onChanged.addListener(changes => {
       if (changes.masterEnabled?.newValue === false) {
         document.getElementById(buttonId)?.remove();
+        document.getElementById(buttonId + "-reset-position")?.remove();
         document.getElementById(statusId)?.remove();
       } else if (changes.masterEnabled?.newValue === true) {
         ensureSourcePageButtonWhenReady();
@@ -3808,6 +3954,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     suiteEnabled = changes.masterEnabled.newValue !== false;
     if (!suiteEnabled) {
       document.getElementById('blb-suite-webster-multiverse')?.remove();
+      document.getElementById('blb-suite-webster-multiverse-reset-position')?.remove();
       document.getElementById('blb-suite-webster-status')?.remove();
       disableBlbPageButtonMonitoring();
     } else {

@@ -42,17 +42,21 @@ async function loadProductionRedirect(page, sourceUrl) {
   await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) } } }; function redirectBlbNet() { return false; } function openBlbDestinationFromContent(url) { window.__openedBlbUrl = url; }' });
 }
 
+const draggableButtonStart = contentSource.indexOf('function makeBlbMultiVerseButtonDraggable(button) {');
+const draggableButtonEnd = contentSource.indexOf("// ---------- The King's Bible Dictionary/Concordance MultiVerse ----------", draggableButtonStart);
 const sourcePageMultiVerseStart = contentSource.indexOf('// ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------');
 const sourcePageMultiVerseEnd = contentSource.indexOf('// ---------- BLB MultiVerse hand-off ----------', sourcePageMultiVerseStart);
-if (sourcePageMultiVerseStart < 0 || sourcePageMultiVerseEnd < 0) {
-  throw new Error('Could not locate source-page MultiVerse button implementation');
+if ([draggableButtonStart, draggableButtonEnd, sourcePageMultiVerseStart, sourcePageMultiVerseEnd].some(i => i < 0)) {
+  throw new Error('Could not locate draggable-button or source-page MultiVerse implementation');
 }
-const sourcePageMultiVerseCode = contentSource.slice(sourcePageMultiVerseStart, sourcePageMultiVerseEnd);
+const sourcePageMultiVerseCode =
+  contentSource.slice(draggableButtonStart, draggableButtonEnd) +
+  contentSource.slice(sourcePageMultiVerseStart, sourcePageMultiVerseEnd);
 
 async function loadSourcePageMultiVerse(page, sourceUrl, enabled = true) {
   await loadProductionRedirect(page, sourceUrl);
   await page.addScriptTag({ content: 'function normalizeSelectionText(s) { return String(s || "").replace(/\\s+/g, " ").trim(); }' });
-  await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => ' + JSON.stringify(enabled) + '; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async message => { window.__multiVerseRequests = (window.__multiVerseRequests || []).concat([message]); return { ok: true }; } } };' });
+  await page.addScriptTag({ content: 'window.__localStorageValues = window.__localStorageValues || {}; window.isSuiteEnabled = async () => ' + JSON.stringify(enabled) + '; window.chrome = { storage: { local: { get: async defaults => Object.assign({}, defaults || {}, window.__localStorageValues, { redirectEnabled: true }), set: async values => Object.assign(window.__localStorageValues, values), remove: async key => { for (const k of (Array.isArray(key) ? key : [key])) delete window.__localStorageValues[k]; } }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async message => { window.__multiVerseRequests = (window.__multiVerseRequests || []).concat([message]); return { ok: true }; } } };' });
   await page.addScriptTag({ content: sourcePageMultiVerseCode });
   if (enabled) await page.waitForSelector('button[id$="-multiverse"]');
 }
@@ -698,6 +702,73 @@ test.describe('real-browser source URL redirect regressions', () => {
       });
       expect(await page.evaluate(() => window.__openedBlbUrl || null), source.url).toBeNull();
     }
+  });
+
+  test('MultiVerse button can be dragged, restores its saved position, clamps to viewport, and resets without opening', async ({ page }) => {
+    await loadSourcePageMultiVerse(page, 'https://www.christianity.com/wiki/bible/example.html');
+    const button = page.locator('#blb-suite-christianity-multiverse');
+    await page.waitForTimeout(50);
+    const start = await button.boundingBox();
+    expect(start).not.toBeNull();
+    await page.mouse.move(start.x + start.width / 2, start.y + start.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(120, 130, {steps:6});
+    await page.mouse.up();
+    await expect.poll(() => page.evaluate(() => window.__localStorageValues.blbSuiteMultiVerseButtonPosition || null)).not.toBeNull();
+    const saved = await page.evaluate(() => window.__localStorageValues.blbSuiteMultiVerseButtonPosition);
+    expect(saved.left).toBeGreaterThanOrEqual(0);
+    expect(saved.top).toBeGreaterThanOrEqual(0);
+    await expect.poll(() => page.evaluate(() => window.__multiVerseRequests?.length || 0)).toBe(0);
+
+    await page.evaluate(async () => {
+      document.getElementById('blb-suite-christianity-multiverse').remove();
+      document.getElementById('blb-suite-christianity-multiverse-reset-position')?.remove();
+      const replacement = document.createElement('button');
+      replacement.id = 'blb-suite-christianity-multiverse';
+      replacement.textContent = 'Open Bible References in BLB';
+      replacement.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:2147483647;padding:9px 12px;font:600 13px Arial,sans-serif';
+      document.body.appendChild(replacement);
+      makeBlbMultiVerseButtonDraggable(replacement);
+      await new Promise(resolve => setTimeout(resolve, 30));
+    });
+    const restored = await page.locator('#blb-suite-christianity-multiverse').boundingBox();
+    expect(Math.abs(restored.x - saved.left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(restored.y - saved.top)).toBeLessThanOrEqual(1);
+
+    await page.setViewportSize({width:360,height:240});
+    await page.waitForTimeout(30);
+    const bounded = await page.locator('#blb-suite-christianity-multiverse').evaluate(el => {
+      const r=el.getBoundingClientRect();
+      return {left:r.left,top:r.top,right:r.right,bottom:r.bottom,width:innerWidth,height:innerHeight};
+    });
+    expect(bounded.left).toBeGreaterThanOrEqual(0);
+    expect(bounded.top).toBeGreaterThanOrEqual(0);
+    expect(bounded.right).toBeLessThanOrEqual(bounded.width + 1);
+    expect(bounded.bottom).toBeLessThanOrEqual(bounded.height + 1);
+
+    await page.locator('#blb-suite-christianity-multiverse-reset-position').click();
+    await expect.poll(() => page.evaluate(() => Object.hasOwn(window.__localStorageValues, 'blbSuiteMultiVerseButtonPosition'))).toBe(false);
+    await expect(page.locator('#blb-suite-christianity-multiverse')).toHaveCSS('right', '18px');
+    await expect(page.locator('#blb-suite-christianity-multiverse')).toHaveCSS('bottom', '18px');
+    await expect.poll(() => page.evaluate(() => window.__multiVerseRequests?.length || 0)).toBe(0);
+  });
+
+  test('MultiVerse button remains keyboard activatable and reset control is accessible', async ({ page }) => {
+    await loadSourcePageMultiVerse(page, 'https://www.gotquestions.org/example-question.html');
+    const button = page.locator('#blb-suite-gotquestions-multiverse');
+    await expect(button).toHaveAttribute('type', 'button');
+    // Give the collection handler a real Bible link so Enter activation must
+    // reach the same runtime hand-off path as a mouse click.
+    await page.evaluate(() => {
+      const link = document.createElement('a');
+      link.href = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+      link.textContent = 'John 3:16';
+      document.body.appendChild(link);
+    });
+    await page.evaluate(() => document.getElementById('blb-suite-gotquestions-multiverse').focus());
+    await page.keyboard.press('Enter');
+    await expect.poll(() => page.evaluate(() => window.__multiVerseRequests?.length || 0)).toBe(1);
+    await expect(page.locator('#blb-suite-gotquestions-multiverse-reset-position')).toHaveAttribute('aria-label', 'Reset button position');
   });
 
 });
