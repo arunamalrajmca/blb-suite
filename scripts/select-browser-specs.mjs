@@ -69,6 +69,7 @@ const values = {
   full_browser_suite: String(full),
   changed_specs: selected.join(","),
   unmapped_specs: unmapped.join(","),
+  extension_spec_required: String(full || selected.includes("tests/browser/extension.spec.js")),
   group_a_required: String(has(
     "tests/browser/redirect-source-url-patterns.spec.js",
     "tests/browser/omnibox-boolean-operators.spec.js",
