@@ -59,3 +59,55 @@ test('Sagacity BLB Criteria remains a fallback and does not replace valid captio
   expect(criteriaFallback).toBeGreaterThan(captionFallback);
   expect(resolutionFallback).toBeGreaterThan(criteriaFallback);
 });
+
+test('Sagacity browser collector captures Matt. 12:37 from malformed nested BLB anchors', async ({ page }) => {
+  const extractFunction = (source, name) => {
+    const start = source.indexOf('function ' + name + '(');
+    expect(start, 'expected ' + name + ' helper in source').toBeGreaterThan(-1);
+    const end = source.indexOf('\n}', start) + 2;
+    expect(end).toBeGreaterThan(start + 2);
+    return source.slice(start, end);
+  };
+  const collectorStart = content.indexOf('function collectSourcePageBibleReferences()');
+  expect(collectorStart).toBeGreaterThan(-1);
+  const collectorEnd = content.indexOf('\n    }\n\n    function showSourcePageMultiVerseStatus', collectorStart);
+  expect(collectorEnd).toBeGreaterThan(collectorStart);
+  const collectorSource = content.slice(collectorStart, collectorEnd + '\n    }'.length);
+
+  await page.setContent(`
+    <main>
+      <p>
+        <a href="https://www.blueletterbible.org/search/preSearch.cfm?Criteria=Matt.+12.37&amp;t=ESV"><a href="https://www.blueletterbible.org/search/preSearch.cfm?Criteria=Matt.+12.37&amp;t=NLT" rel="NLT.Matt.12.37" class="BLBST_a" style="white-space: nowrap;">Matt. 12:37</a></a>
+      </p>
+    </main>
+  `);
+  // Use the real Bible book table and reference resolver in the browser.
+  await page.addScriptTag({ path: path.join(root, 'extension/books.js') });
+  await page.addScriptTag({ path: path.join(root, 'extension/book-aliases.js') });
+  await page.addScriptTag({ path: path.join(root, 'extension/reference-core.js') });
+
+  const helpers = [
+    extractFunction(content, 'normalizeSelectionText'),
+    extractFunction(content, 'decodeSafe'),
+    extractFunction(content, 'parseRef'),
+    extractFunction(content, 'bookKey'),
+    extractFunction(content, 'blbUrl'),
+    extractFunction(content, 'normalizeSourceBibleBook'),
+    extractFunction(content, 'formatSourceBibleBookName'),
+    collectorSource
+  ].join('\n');
+  const refs = await page.evaluate(helperSource => {
+    const collect = new Function(
+      'sourceSite', 'buttonId',
+      helperSource + '\nreturn collectSourcePageBibleReferences;'
+    )('sagacity', 'test-collector-button');
+    return collect();
+  }, helpers);
+
+  expect(refs.some(ref =>
+    ref.book.toLowerCase() === 'matthew' &&
+    ref.chapter === 12 &&
+    ref.from === 37 &&
+    (ref.to == null || ref.to === 37)
+  )).toBe(true);
+});
