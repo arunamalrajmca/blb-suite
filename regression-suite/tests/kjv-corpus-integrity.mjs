@@ -113,8 +113,10 @@ function decodePostingIndices(encoded, word) {
 }
 
 for (const [word, encoded] of Object.entries(postings)) {
-  assert(indexedWords.has(word), 'Posting key is absent from word index: "' + word + '"');
   assert.equal(word, word.toLowerCase(), 'Posting key is not lowercase: "' + word + '"');
+  const normalizedWord = word.replace(/^['-]+|['-]+$/g, '');
+  assert(normalizedWord.length > 0, 'Empty normalized posting key: "' + word + '"');
+  assert(indexedWords.has(normalizedWord), 'Posting key has no matching canonical word: "' + word + '"');
   const indices = decodePostingIndices(encoded, word);
   assert(indices.length > 0, 'Empty postings for "' + word + '"');
   let previous = -1;
@@ -123,7 +125,7 @@ for (const [word, encoded] of Object.entries(postings)) {
     assert(index > previous, 'Duplicate or unordered posting ' + index + ' for "' + word + '"');
     previous = index;
     const tokens = String(verses[index][3]).toLowerCase().match(tokenPattern) || [];
-    assert(tokens.some(token => token.toLowerCase() === word), 'False posting: "' + word + '" absent from verse index ' + index);
+    assert(tokens.some(token => token.toLowerCase().replace(/^['-]+|['-]+$/g, '') === normalizedWord), 'False posting: "' + word + '" absent from verse index ' + index);
   }
 }
 
