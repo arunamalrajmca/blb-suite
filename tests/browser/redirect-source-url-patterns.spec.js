@@ -9,31 +9,34 @@ const aliasesSource = fs.readFileSync(path.resolve(__dirname, '../../extension/b
 const referenceCoreSource = fs.readFileSync(path.resolve(__dirname, '../../extension/reference-core.js'), 'utf8');
 const sharedPatternsSource = fs.readFileSync(path.resolve(__dirname, '../../extension/regex-patterns.js'), 'utf8');
 const decodeStart = source.indexOf('function decodeSafe(v) {');
+const bookKeyStart = source.indexOf('function bookKey(value) {');
 const parseStart = source.indexOf('function parseRef(text) {', decodeStart);
 const blbUrlStart = source.indexOf('function blbUrl(', decodeStart);
 const redirectStart = source.indexOf('function redirectBibleSite() {', parseStart);
 const redirectEnd = source.indexOf('\nfunction redirectBlbNet() {', redirectStart);
-if ([decodeStart, blbUrlStart, parseStart, redirectStart, redirectEnd].some(index => index < 0)) {
+if ([decodeStart, bookKeyStart, blbUrlStart, parseStart, redirectStart, redirectEnd].some(index => index < 0)) {
   throw new Error('Could not locate source-site redirect functions in extension/content.js');
 }
 // Exercise the production book table, alias resolver, reference validator, and URL builder.
 const helpers = sharedPatternsSource + '\n' + booksSource + '\n' + aliasesSource + '\n' + referenceCoreSource + '\n' +
-  source.slice(source.indexOf('function bookKey(value) {'), parseStart) +
+  source.slice(bookKeyStart, parseStart) +
   source.slice(parseStart, redirectStart) + source.slice(redirectStart, redirectEnd);
 
 function runSourceRedirect(url) {
   let redirectedTo = null;
+  let openedInNewTab = null;
   const context = {
     URL,
     location: {
       href: url,
       replace(target) { redirectedTo = target; }
     },
+    openBlbDestinationFromContent(target) { openedInNewTab = target; },
     // No blbUrl stub: this calls the real production resolver.
 
   };
   vm.runInNewContext(helpers + '\nresult = redirectBibleSite();', context);
-  return { result: context.result, redirectedTo };
+  return { result: context.result, redirectedTo, openedInNewTab };
 }
 
 test.describe('source Bible URL syntax regression coverage', () => {
@@ -71,6 +74,67 @@ test.describe('source Bible URL syntax regression coverage', () => {
   test('King James Bible Online preserves underscore-separated same-chapter ranges', () => {
     expect(runSourceRedirect('https://kingjamesbibleonline.org/John-3-16_3-17/').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16-17/');
+  });
+
+  test('Christianity.com homepage is excluded; chapter, verse, and range routes open BLB in a new tab', () => {
+    for (const url of [
+      'https://www.christianity.com/',
+      'https://www.christianity.com/bible/',
+      'https://www.christianity.com/bible/help/passage-search-basics/'
+    ]) {
+      expect(runSourceRedirect(url).openedInNewTab, url).toBeNull();
+      expect(runSourceRedirect(url).redirectedTo, url).toBeNull();
+    }
+    expect(runSourceRedirect('https://www.christianity.com/bible/esv/ephesians/2').openedInNewTab)
+      .toBe('https://www.blueletterbible.org/kjv/eph/2/1/');
+    expect(runSourceRedirect('https://www.christianity.com/bible/esv/john/3-16').openedInNewTab)
+      .toBe('https://www.blueletterbible.org/kjv/jhn/3/16/');
+    expect(runSourceRedirect('https://www.christianity.com/bible/niv%2Cesv/1-john/3-16-21').openedInNewTab)
+      .toBe('https://www.blueletterbible.org/kjv/1jo/3/16-21/');
+    expect(runSourceRedirect('https://christianity.com/bible/esv/2-corinthians/5-17').openedInNewTab)
+      .toBe('https://www.blueletterbible.org/kjv/2co/5/17/');
+    for (const url of [
+      'https://www.christianity.com/bible/esv/ephesians/2',
+      'https://www.christianity.com/bible/esv/john/3-16',
+      'https://www.christianity.com/bible/niv%2Cesv/1-john/3-16-21'
+    ]) {
+      expect(runSourceRedirect(url).redirectedTo, url).toBeNull();
+    }
+    for (const url of [
+      'https://www.christianity.com/bible/esv/john/0',
+      'https://www.christianity.com/bible/esv/john/3-0',
+      'https://www.christianity.com/bible/esv/john/3-18-16',
+      'https://www.christianity.com/bible/esv/not-a-book/3-16',
+      'https://www.christianity.com/bible/esv/john/999-1'
+    ]) {
+      expect(runSourceRedirect(url).openedInNewTab, url).toBeNull();
+      expect(runSourceRedirect(url).redirectedTo, url).toBeNull();
+    }
+  });
+
+  test('ESV.org supports root-level chapters, verses, ranges, and /verses/ references', () => {
+    expect(runSourceRedirect('https://www.esv.org/Ephesians+2/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/eph/2/1/');
+    expect(runSourceRedirect('https://www.esv.org/Ephesians%2B2/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/eph/2/1/');
+    expect(runSourceRedirect('https://esv.org/John+3%3A16/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/jhn/3/16/');
+    expect(runSourceRedirect('https://www.esv.org/John+3%3A16-18/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/jhn/3/16-18/');
+    expect(runSourceRedirect('https://www.esv.org/verses/John%2B3%3A16/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/jhn/3/16/');
+    expect(runSourceRedirect('https://esv.org/verses/John%2B3%3A16-18/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/jhn/3/16-18/');
+    expect(runSourceRedirect('https://www.esv.org/verses/Psalm%2B23/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/psa/23/1/');
+    for (const url of [
+      'https://www.esv.org/',
+      'https://www.esv.org/about/',
+      'https://www.esv.org/resources/esv-crossreference-tool/'
+    ]) {
+      expect(runSourceRedirect(url).redirectedTo, url).toBeNull();
+      expect(runSourceRedirect(url).openedInNewTab, url).toBeNull();
+    }
   });
 
   test('translation selection does not alter the BLB KJV destination', () => {
@@ -165,6 +229,21 @@ test.describe('source Bible URL syntax regression coverage', () => {
     expect(runSourceRedirect('https://biblehub.com/john/3-16-18-20.htm').redirectedTo).toBe(null);
     expect(runSourceRedirect('https://example.com/john/3-16.htm').redirectedTo).toBe(null);
     expect(runSourceRedirect('https://biblegateway.com/search/?search=John%203%3A16').redirectedTo).toBe(null);
+  });
+
+
+  test('new source redirects require an exact supported hostname, not a lookalike domain or subdomain', () => {
+    for (const url of [
+      'https://notchristianity.com/bible/esv/john/3-16',
+      'https://christianity.com.example.test/bible/esv/john/3-16',
+      'https://blog.christianity.com/bible/esv/john/3-16',
+      'https://not-esv.org/John+3%3A16/',
+      'https://esv.org.example.test/John+3%3A16/',
+      'https://blog.esv.org/John+3%3A16/'
+    ]) {
+      expect(runSourceRedirect(url).redirectedTo, url).toBeNull();
+      expect(runSourceRedirect(url).openedInNewTab, url).toBeNull();
+    }
   });
 
 });

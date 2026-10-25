@@ -40,6 +40,11 @@ test('bare and www source hostnames normalize to the same native redirect key', 
     'bibleref.com',
     'biblehub.com',
     'bibleportal.com',
+    'christianity.com',
+    'crosswalk.com',
+    'enduringword.com',
+    'esv.org',
+    'gotquestions.org',
     'kingjamesbibleonline.org',
     'kjbo.org',
     'kjv.site',
@@ -55,3 +60,20 @@ test('bare and www source hostnames normalize to the same native redirect key', 
     expect(supported.has(normalize(`www.${host}`))).toBe(true);
   }
 });
+
+test('MAIN-world guard registration normalizes www hosts and is limited to article source sites', () => {
+  const background = fs.readFileSync(path.join(root, 'extension/background.js'), 'utf8');
+  const registrationStart = background.indexOf('let hostname = \'\';');
+  const registrationEnd = background.indexOf('const mainWorldId', registrationStart);
+  expect(registrationStart).toBeGreaterThanOrEqual(0);
+  expect(registrationEnd).toBeGreaterThan(registrationStart);
+  const registration = background.slice(registrationStart, registrationEnd);
+  expect(registration).toContain("new URL(tab.url).hostname.toLowerCase().replace(/^www\\./, '')");
+  expect(registration).not.toContain("replace(/^www\\\\./, '')");
+  for (const host of ['christianity.com', 'gotquestions.org', 'crosswalk.com', 'enduringword.com']) {
+    expect(registration).toContain(host);
+  }
+  // ESV.org is redirect-only; it does not need the source-page click guard.
+  expect(registration).not.toContain("'esv.org'");
+});
+

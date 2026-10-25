@@ -153,12 +153,94 @@ function blbUrl(book,ch,from=1,to=null) {
   const resolved=resolveBibleReference(key,ch,from,to);
   return resolved ? resolved.url : null;
 }
+function normalizeSourceBibleBook(book) {
+  // The resolver's canonical KJV book name is Psalms, while Christianity.com
+  // labels its linked references with the singular form, e.g. “Psalm 136:26”.
+  return /^Psalm$/i.test(String(book || "").trim()) ? "Psalms" : book;
+}
+
+function formatSourceBibleBookName(book) {
+  // BOOKS stores names in lowercase for matching; generated labels need
+  // readable book-name casing without capitalizing words such as “of”.
+  return String(book || "").split(/\s+/).map((word, index) => {
+    if (!word) return word;
+    const lower = word.toLowerCase();
+    if (index > 0 && (lower === "of" || lower === "the")) return lower;
+    return word.charAt(0).toUpperCase() + word.slice(1);
+  }).join(" ");
+}
+
 function parseRef(text) {
   const value=decodeSafe(text).trim();
   // Accept normal references and BiblePortal's dotted form, e.g.
   // John 3:16, John 3 16, and John.3.16.
   const m=value.match(/^(.+?)[\s.]+(\d+)(?:[:.\s]+(\d+)(?:-(\d+))?)?$/);
   return m ? {book:m[1].trim(),chapter:Number(m[2]),from:m[3]?Number(m[3]):1,to:m[4]?Number(m[4]):null} : null;
+}
+
+function validateSourceBibleReference(ref) {
+  if (!ref) return null;
+  const book = resolveBibleBook(ref.book);
+  const chapter = Number(ref.chapter);
+  const from = ref.from == null ? 1 : Number(ref.from);
+  const to = ref.to == null ? null : Number(ref.to);
+  if (!book || !Number.isInteger(chapter) || chapter < 1 || chapter > book.chapterCount ||
+      !Number.isInteger(from) || from < 1) return null;
+  const maxVerse = book.verses?.[chapter - 1];
+  if (!maxVerse || from > maxVerse ||
+      (to !== null && (!Number.isInteger(to) || to < from || to > maxVerse))) return null;
+  return {book:book.name, chapter, from, to};
+}
+
+function parseChristianityBibleLink(href) {
+  let url;
+  try { url = new URL(href, location.href); } catch (_) { return null; }
+  if (url.hostname.toLowerCase().replace(/^www\./, "") !== "christianity.com") return null;
+  const match = url.pathname.match(/^\/bible\/[^/]+\/([^/]+)\/(\d+)(?:-(\d+)(?:-(\d+))?)?\/?$/i);
+  if (!match) return null;
+
+  const book = resolveBibleBook(match[1].replace(/-/g, " "));
+  const chapter = Number(match[2]);
+  const from = match[3] ? Number(match[3]) : 1;
+  const to = match[4] ? Number(match[4]) : null;
+  if (!book || !Number.isInteger(chapter) || chapter < 1 || chapter > book.chapterCount ||
+      !Number.isInteger(from) || from < 1) return null;
+  const maxVerse = book.verses?.[chapter - 1];
+  if (!maxVerse || from > maxVerse ||
+      (to !== null && (!Number.isInteger(to) || to < from || to > maxVerse))) return null;
+  return { book:book.name, chapter, from, to };
+}
+
+function christianityBibleLinkTarget(href) {
+  const ref = parseChristianityBibleLink(href);
+  return ref ? blbUrl(ref.book, ref.chapter, ref.from, ref.to) : null;
+}
+
+// Handle passage-click requests raised by the tiny MAIN-world guard.
+// The page-world guard can cancel native handlers only after this isolated-world
+// resolver confirms that the link maps to a valid KJV passage.
+function installChristianityLinkRedirect(isEnabled) {
+  window.addEventListener("blb-suite-source-passage-click", event => {
+    if (!isEnabled()) return;
+    // A string detail crosses Chrome's MAIN/ISOLATED world boundary
+    // without exposing a page-owned object to the extension world.
+    let detail = null;
+    try { detail = JSON.parse(typeof event.detail === "string" ? event.detail : ""); } catch (_) {}
+    const href = typeof detail?.href === "string" ? detail.href : "";
+    const label = String(typeof detail?.label === "string" ? detail.label : "").replace(/\s+/g, " ").trim();
+    const host = String(location.hostname || "").toLowerCase().replace(/^www\./, "");
+    let target = christianityBibleLinkTarget(href);
+    if (!target && ["crosswalk.com", "enduringword.com", "gotquestions.org"].includes(host)) {
+      const cleanLabel = label.replace(/\s*\((?:KJV|NKJV|ESV|NIV|NASB|CSB|NLT|WEB|AMP|RSV|ASV)\)\s*$/i, "").trim();
+      const parsed = parseRef(cleanLabel);
+      if (parsed) target = blbUrl(parsed.book, parsed.chapter, parsed.from, parsed.to);
+    }
+    if (!target) return;
+    // Cancel the custom request synchronously so the MAIN-world click guard
+    // knows it may also cancel the original click and its native site handlers.
+    event.preventDefault();
+    openBlbDestinationFromContent(target);
+  }, true);
 }
 
 function redirectBibleSite() {
@@ -195,6 +277,33 @@ function redirectBibleSite() {
     // on Bible.com is redirected to the KJV equivalent in BLB.
     const m=u.pathname.match(/^\/bible\/[^/]+\/([^./]+)\.(\d+)(?:\.(\d+)(?:-(\d+))?)?(?:\.[^/]+)?\/?$/i);
     if (m) ref={book:m[1],chapter:+m[2],from:m[3]?+m[3]:1,to:m[4]?+m[4]:null};
+  }
+
+  if (host==="christianity.com") {
+    // Christianity.com Bible pages use /bible/<version>/<book>/<chapter>,
+    // /bible/<version>/<book>/<chapter>-<verse>, and verse ranges ending in -<end>.
+    // Ignore the source translation and preserve the requested KJV passage.
+    ref=parseChristianityBibleLink(u.href);
+  }
+
+  if (host==="esv.org") {
+    // ESV.org uses both /verses/<reference>/ and root-level passage URLs
+    // such as /Ephesians+2/ and /John+3%3A16/. Decode plus signs and encoded
+    // punctuation, then let the shared reference resolver validate the book
+    // and passage. Root-level non-reference pages (including the homepage)
+    // are ignored.
+    const versePath=u.pathname.match(/^\/verses\/(.+?)\/?$/i);
+    if (versePath) {
+      ref=validateSourceBibleReference(parseRef(decodeSafe(versePath[1]).replace(/\+/g," ").replace(/[–—]/g,"-")));
+    } else {
+      const rootPath=u.pathname.match(/^\/([^/]+)\/?$/);
+      if (rootPath && /[+%\s]/.test(rootPath[1]) || rootPath && /\d/.test(decodeSafe(rootPath[1]))) {
+        const candidate=decodeSafe(rootPath[1]).replace(/\+/g," ").replace(/[–—]/g,"-");
+        if (/^[\p{L}\d][\p{L}\d\s.'-]*\s+\d+(?::\d+(?:-\d+)?)?$/u.test(candidate)) {
+          ref=validateSourceBibleReference(parseRef(candidate));
+        }
+      }
+    }
   }
 
   if (host==="biblegateway.com" && u.pathname.toLowerCase()==="/passage/") {
@@ -295,7 +404,16 @@ function redirectBibleSite() {
   if (!ref) return false;
   const target=blbUrl(ref.book,ref.chapter,ref.from,ref.to);
   if (!target) return false;
-  if (target!==u.href) { location.replace(target); return true; }
+  if (target!==u.href) {
+    // Christianity.com remains open in its original tab. Open resolved
+    // chapter/verse passages in a new BLB tab rather than replacing the source.
+    if (host==="christianity.com") {
+      openBlbDestinationFromContent(target);
+      return true;
+    }
+    location.replace(target);
+    return true;
+  }
   return false;
 }
 
@@ -467,15 +585,22 @@ function redirectBlbNet() {
 // This makes bare and "www." variants resolve to the same supported source.
 const REDIRECT_HOSTS = new Set([
   'bible.com', 'biblegateway.com', 'bibleref.com', 'biblehub.com',
+  'christianity.com', 'crosswalk.com', 'enduringword.com', 'esv.org', 'gotquestions.org',
   'bibleportal.com', 'kingjamesbibleonline.org', 'kjbo.org',
   'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com', 'thekingsbible.com',
   'webstersdictionary1828.com', BLB_HOSTNAME
 ]);
 
+let sourceBibleRedirectEnabled = false;
+if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com"].includes(location.hostname.toLowerCase().replace(/^www\./, ""))) {
+  installChristianityLinkRedirect(() => suiteEnabled && sourceBibleRedirectEnabled);
+}
+
 if (REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\./, ''))) {
   isSuiteEnabled().then(enabled => {
     if (!enabled) return;
     return chrome.storage.local.get({redirectEnabled:false}).then(({redirectEnabled})=>{
+      sourceBibleRedirectEnabled = redirectEnabled === true;
       if (!redirectEnabled) return;
       if (!redirectBlbNet()) redirectBibleSite();
     });
@@ -983,7 +1108,9 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
         from: resolved.from,
         to: resolved.to,
         version: "kjv",
-        text: label,
+        text: usedStructuredReference
+          ? `${resolved.book.name} ${resolved.chapter}:${resolved.from}${resolved.to != null && resolved.to !== resolved.from ? "-" + resolved.to : ""}`
+          : label,
         url: target
       });
     }
@@ -1304,6 +1431,197 @@ if (location.hostname==="webstersdictionary1828.com") {
   };
   if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",startWebsterObserver,{once:true});
   else startWebsterObserver();
+}
+
+// ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------
+{
+  const host = location.hostname.toLowerCase().replace(/^www\./, "");
+  const sourceSite = ({
+    "christianity.com":"christianity",
+    "gotquestions.org":"gotquestions",
+    "crosswalk.com":"crosswalk",
+    "enduringword.com":"enduringword"
+  })[host] || "";
+  // These sites' homepages are general landing pages, not article/reference
+  // pages. Keep the page-wide collection button limited to nested pages.
+  const isSourceHomepage = location.pathname === "/" || location.pathname === "";
+  if (sourceSite && !isSourceHomepage) {
+    const buttonId = "blb-suite-" + sourceSite + "-multiverse";
+    const statusId = "blb-suite-" + sourceSite + "-multiverse-status";
+
+    function collectSourcePageBibleReferences() {
+      const refs = [];
+      const seen = new Set();
+      // Enduring Word must use only its two structured cross-reference sections.
+      // Require chapter-page URLs too, so individual verse links can never enter.
+      const enduringSectionAnchors = sourceSite === "enduringword"
+        ? Array.from(document.querySelectorAll("aside.ew-xref .ew-xref-sec"))
+            .filter(section => /^(?:Related Commentary|Referenced By)\b/i.test(
+              normalizeSelectionText(section.querySelector(".ew-xref-title")?.textContent || "")
+            ))
+            .flatMap(section => Array.from(section.querySelectorAll(".ew-xref-chips a[href]")))
+        : null;
+      const anchors = sourceSite === "enduringword"
+        ? enduringSectionAnchors
+        : Array.from(document.querySelectorAll("a[href]"));
+      for (const anchor of anchors) {
+        if (anchor.id === buttonId || anchor.closest("#" + buttonId) ||
+            anchor.hasAttribute("download")) continue;
+        const label = normalizeSelectionText(anchor.innerText || anchor.textContent || "");
+        const dataReference = sourceSite !== "enduringword"
+          ? anchor.getAttribute("data-bible-ref-link")
+          : null;
+        // A structured reference is authoritative even when the visible
+        // caption is abbreviated or non-reference text.
+        if ((!label || label.length > 100) && !dataReference) continue;
+        let parsed;
+        if (sourceSite === "enduringword") {
+          let url;
+          try { url = new URL(anchor.href, location.href); } catch (_) { continue; }
+          const chapterPath = url.hostname.toLowerCase().replace(/^www\./, "") === "enduringword.com"
+            ? url.pathname.match(/^\/bible-commentary\/([^/]+?)-(\d+)\/?$/i)
+            : null;
+          // Only chapter commentary URLs qualify; ignore verse URLs and body references.
+          if (!chapterPath) continue;
+          parsed = { book: chapterPath[1].replace(/-/g, " "), chapter: Number(chapterPath[2]), from: 1, to: null };
+        } else {
+          // Prefer structured Bible-reference metadata when a site's visible
+          // caption is abbreviated (e.g. "3:11") or otherwise not a full
+          // reference. Ignore the source translation; BLB resolves to KJV.
+          if (dataReference) {
+            const rawReference = dataReference.split("|", 1)[0]
+              .replace(/_/g, " ")
+              .replace(/[–—]/g, "-")
+              .trim();
+            parsed = parseRef(rawReference);
+          }
+          // Fall back to visible text only when no usable metadata is present.
+          if (!parsed) parsed = parseRef(label);
+        }
+        let usedStructuredReference = sourceSite !== "enduringword" && Boolean(dataReference) && Boolean(parsed);
+        if ((!parsed || !parsed.book || !Number.isInteger(Number(parsed.chapter)) ||
+             Number(parsed.chapter) < 1) && usedStructuredReference) {
+          // Even malformed structured values should not suppress a valid caption.
+          parsed = parseRef(label);
+          usedStructuredReference = false;
+        }
+        if (!parsed || !parsed.book || !Number.isInteger(Number(parsed.chapter)) ||
+            Number(parsed.chapter) < 1) continue;
+        // Enduring Word chips identify chapters, not individual verses.
+        let book = normalizeSourceBibleBook(parsed.book);
+        let chapter = Number(parsed.chapter);
+        let from = sourceSite === "enduringword" ? 1 : Number(parsed.from);
+        let to = sourceSite === "enduringword" ? null : (parsed.to == null ? null : Number(parsed.to));
+        if (!Number.isInteger(from) || from < 1) continue;
+        let resolved = resolveBibleReference(book, chapter, from, to);
+        // Metadata can be syntactically parseable yet refer to an unknown book
+        // or an impossible verse. In that case, try the visible caption before
+        // discarding a link that still contains a valid full Bible reference.
+        if (!resolved && usedStructuredReference) {
+          const captionRef = parseRef(label);
+          if (captionRef) {
+            book = normalizeSourceBibleBook(captionRef.book);
+            chapter = Number(captionRef.chapter);
+            from = Number(captionRef.from);
+            to = captionRef.to == null ? null : Number(captionRef.to);
+            if (Number.isInteger(from) && from >= 1) {
+              resolved = resolveBibleReference(book, chapter, from, to);
+              if (resolved) usedStructuredReference = false;
+            }
+          }
+        }
+        if (!resolved) continue;
+        const target = blbUrl(resolved.book.name, resolved.chapter, resolved.from, resolved.to);
+        if (!target || seen.has(target)) continue;
+        seen.add(target);
+        refs.push({
+          book: resolved.book.name,
+          bookNumber: Number(resolved.book.bookNumber),
+          chapter: resolved.chapter,
+          from: resolved.from,
+          to: resolved.to,
+          version: "kjv",
+          text: sourceSite === "enduringword"
+            ? (formatSourceBibleBookName(resolved.book.name) + " " + resolved.chapter + ":1")
+            : (dataReference
+                ? `${formatSourceBibleBookName(resolved.book.name)} ${resolved.chapter}:${resolved.from}${resolved.to != null && resolved.to !== resolved.from ? "-" + resolved.to : ""}`
+                : label),
+          url: target
+        });
+      }
+      return refs;
+    }
+
+    function showSourcePageMultiVerseStatus(message, isError = false) {
+      let box = document.getElementById(statusId);
+      if (!box) {
+        box = document.createElement("div");
+        box.id = statusId;
+        box.style.cssText = "position:fixed;right:18px;bottom:72px;z-index:2147483647;background:#fff;border:1px solid #bbb;border-radius:6px;padding:9px 12px;font:13px Arial,sans-serif;color:#222;box-shadow:0 2px 10px rgba(0,0,0,.18)";
+        (document.body || document.documentElement)?.appendChild(box);
+      }
+      if (!box) return;
+      box.textContent = message;
+      box.style.color = isError ? "#b00020" : "#222";
+      clearTimeout(box._timer);
+      box._timer = setTimeout(() => box.remove(), 3500);
+    }
+
+    async function openSourcePageBibleReferencesInMultiVerse() {
+      const refs = collectSourcePageBibleReferences();
+      if (!refs.length) {
+        showSourcePageMultiVerseStatus("No linked Bible references found on this page.", true);
+        return;
+      }
+      try {
+        const response = await chrome.runtime.sendMessage({
+          type: "blbSuiteOpenWebsterMultiVerse",
+          refs
+        });
+        if (!response?.ok) {
+          showSourcePageMultiVerseStatus("Unable to open BLB MultiVerse.", true);
+          return;
+        }
+        showSourcePageMultiVerseStatus(`Opening ${refs.length} Bible references in BLB MultiVerse…`);
+      } catch (_) {
+        showSourcePageMultiVerseStatus("Unable to open BLB MultiVerse.", true);
+      }
+    }
+
+    async function ensureSourcePageMultiVerseButton() {
+      if (!(await isSuiteEnabled()) || !document.body || document.getElementById(buttonId)) return;
+      const button = document.createElement("button");
+      button.id = buttonId;
+      button.type = "button";
+      button.textContent = "Open Bible References in BLB";
+      button.title = "Collect all linked Bible references on this page and open them together in BLB MultiVerse.";
+      button.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:2147483647;background:#292a2d;color:#f1f3f4;border:1px solid #505257;border-radius:7px;padding:9px 12px;font:600 13px Arial,sans-serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.42)";
+      button.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        openSourcePageBibleReferencesInMultiVerse();
+      });
+      document.body.appendChild(button);
+    }
+
+    const ensureSourcePageButtonWhenReady = () => ensureSourcePageMultiVerseButton().catch(() => {});
+    if (document.readyState === "loading") {
+      document.addEventListener("DOMContentLoaded", ensureSourcePageButtonWhenReady, {once:true});
+    } else {
+      ensureSourcePageButtonWhenReady();
+    }
+    setTimeout(ensureSourcePageButtonWhenReady, 500);
+    setTimeout(ensureSourcePageButtonWhenReady, 1500);
+
+    chrome.storage.onChanged.addListener(changes => {
+      if (changes.masterEnabled?.newValue === false) {
+        document.getElementById(buttonId)?.remove();
+        document.getElementById(statusId)?.remove();
+      } else if (changes.masterEnabled?.newValue === true) {
+        ensureSourcePageButtonWhenReady();
+      }
+    });
+  }
 }
 
 // ---------- BLB MultiVerse hand-off ----------
@@ -3483,6 +3801,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (changes.redirectEnabled) {
     theKingsBibleRedirectEnabled = changes.redirectEnabled.newValue === true;
+    sourceBibleRedirectEnabled = changes.redirectEnabled.newValue === true;
   }
 
   if (changes.masterEnabled) {
