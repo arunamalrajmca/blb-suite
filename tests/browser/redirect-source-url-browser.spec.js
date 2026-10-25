@@ -388,6 +388,27 @@ test.describe('real-browser source URL redirect regressions', () => {
     await expect(page).toHaveURL(sourceUrl);
   });
 
+  test('source-page MultiVerse uses data-bible-ref-link when visible caption is abbreviated or unrelated', async ({ page }) => {
+    await loadSourcePageMultiVerse(page, 'https://www.christianity.com/faith/bible-study/article.html');
+    await page.evaluate(() => {
+      document.body.insertAdjacentHTML('beforeend', `
+        <article>
+          <a href="https://www.bibleref.com/Galatians/3/Galatians-3-11.html"
+             data-bible-ref-link="Galatians_3:11|ESV">3:11</a>
+          <a href="https://www.bibleref.com/John/3/John-3-16.html"
+             data-bible-ref-link="John_3:16|ESV">read more</a>
+        </article>`);
+    });
+    await page.locator('#blb-suite-christianity-multiverse').click();
+    await expect.poll(() => page.evaluate(() => window.__multiVerseRequests?.length || 0)).toBe(1);
+    const refs = await page.evaluate(() => window.__multiVerseRequests[0].refs);
+    expect(refs.map(ref => ref.url)).toEqual([
+      'https://www.blueletterbible.org/kjv/gal/3/11/',
+      'https://www.blueletterbible.org/kjv/jhn/3/16/'
+    ]);
+    expect(refs.map(ref => ref.text)).toEqual(['Galatians 3:11', 'John 3:16']);
+  });
+
   test('source-page MultiVerse normalizes singular Psalm labels to canonical Psalms', async ({ page }) => {
     await loadProductionRedirect(page, 'https://www.christianity.com/faith/bible-study/article.html');
     const normalized = await page.evaluate(() => ({
