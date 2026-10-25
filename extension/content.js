@@ -197,6 +197,21 @@ function redirectBibleSite() {
     if (m) ref={book:m[1],chapter:+m[2],from:m[3]?+m[3]:1,to:m[4]?+m[4]:null};
   }
 
+  if (host==="christianity.com") {
+    // Christianity.com Bible passages use /bible/<version>/<book>/<chapter>-<verse>[-<end>].
+    // Ignore the source translation (including multi-version URLs) and send the
+    // same passage to BLB's KJV.
+    const m=u.pathname.match(/^\/bible\/[^/]+\/([^/]+)\/(\d+)-(\d+)(?:-(\d+))?\/?$/i);
+    if (m) ref={book:m[1].replace(/-/g," "),chapter:+m[2],from:+m[3],to:m[4]?+m[4]:null};
+  }
+
+  if (host==="esv.org") {
+    // ESV.org verse links use /verses/John+3%3A16/ (also ranges and chapters).
+    // Decode '+' and percent-encoded punctuation, then reuse the common reference parser.
+    const m=u.pathname.match(/^\/verses\/(.+?)\/?$/i);
+    if (m) ref=parseRef(decodeSafe(m[1]).replace(/[–—]/g,"-"));
+  }
+
   if (host==="biblegateway.com" && u.pathname.toLowerCase()==="/passage/") {
     // The version=... parameter is deliberately ignored; always target KJV.
     ref=parseRef(u.searchParams.get("search")||"");
@@ -467,6 +482,7 @@ function redirectBlbNet() {
 // This makes bare and "www." variants resolve to the same supported source.
 const REDIRECT_HOSTS = new Set([
   'bible.com', 'biblegateway.com', 'bibleref.com', 'biblehub.com',
+  'christianity.com', 'esv.org',
   'bibleportal.com', 'kingjamesbibleonline.org', 'kjbo.org',
   'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com', 'thekingsbible.com',
   'webstersdictionary1828.com', BLB_HOSTNAME
