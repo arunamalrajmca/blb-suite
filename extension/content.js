@@ -1445,7 +1445,19 @@ if (location.hostname==="webstersdictionary1828.com") {
           if (!chapterPath) continue;
           parsed = { book: chapterPath[1].replace(/-/g, " "), chapter: Number(chapterPath[2]), from: 1, to: null };
         } else {
-          parsed = parseRef(label);
+          // Prefer structured Bible-reference metadata when a site's visible
+          // caption is abbreviated (e.g. "3:11") or otherwise not a full
+          // reference. Ignore the source translation; BLB resolves to KJV.
+          const dataReference = anchor.getAttribute("data-bible-ref-link");
+          if (dataReference) {
+            const rawReference = dataReference.split("|", 1)[0]
+              .replace(/_/g, " ")
+              .replace(/[–—]/g, "-")
+              .trim();
+            parsed = parseRef(rawReference);
+          }
+          // Fall back to visible text only when no usable metadata is present.
+          if (!parsed) parsed = parseRef(label);
         }
         if (!parsed || !parsed.book || !Number.isInteger(Number(parsed.chapter)) ||
             Number(parsed.chapter) < 1) continue;
