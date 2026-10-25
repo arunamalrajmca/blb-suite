@@ -41,6 +41,8 @@ jobs:
     needs: change-detection
     name: BROWSER E2E — GROUP A — REFERENCE
     runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -59,8 +61,6 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node22-npm-
       - run: npm install
-        if: ${{ needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
-      - run: npx playwright install --with-deps chromium
         if: ${{ needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
       - name: Grant test-only generic host access
         if: ${{ needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
