@@ -83,6 +83,7 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
@@ -254,6 +255,7 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
