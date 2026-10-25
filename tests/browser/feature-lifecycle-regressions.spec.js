@@ -41,7 +41,7 @@ test('Study Sessions lifecycle creates a topic, edits notes, stops recording, an
     ok: true,
     recording: false,
     topics: expect.arrayContaining([normalizedTopic]),
-    currentSession: { topic: normalizedTopic, notes: 2 }
+    currentSession: null
   });
   expect(afterReload.topicStats[normalizedTopic].notes).toBe(2);
   await page.close();
