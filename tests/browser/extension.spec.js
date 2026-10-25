@@ -308,7 +308,11 @@ test.describe('core user-visible E2E', () => {
     await selectReference();
     const button = page.locator('#blb-suite-page-selection-button');
     await expect(button).toBeVisible({ timeout: 10000 });
-    await expect(page.locator('#blb-suite-page-selection-button-reset-position')).toBeVisible();
+    const resetButton = page.locator('#blb-suite-page-selection-button-reset-position');
+    await expect(resetButton).toBeVisible();
+    await expect(resetButton).toHaveAttribute('aria-label', 'Reset button position');
+    await expect(button).toHaveAttribute('aria-label', 'Show on BLB');
+    const tabsBeforeDrag = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.length));
 
     const start = await button.boundingBox();
     expect(start).not.toBeNull();
@@ -325,6 +329,7 @@ test.describe('core user-visible E2E', () => {
     );
     expect(saved.left).toBeGreaterThanOrEqual(0);
     expect(saved.top).toBeGreaterThanOrEqual(0);
+    await expect.poll(() => extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.length))).toBe(tabsBeforeDrag);
 
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
