@@ -86,6 +86,10 @@ jobs:
         if: ${{ needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
         run: npx playwright test tests/browser/feature-lifecycle-regressions.spec.js
 
+      - name: Run Study Sessions backup and restore regressions
+        if: ${{ needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
+        run: npx playwright test tests/browser/study-backup-restore.spec.js
+
       # Keep the Facebook-style DOM regression in this targeted suite so range-context fixes are exercised on branch pushes.
       - name: Run Facebook nested reference token regression
         if: ${{ needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
