@@ -594,7 +594,7 @@ function redirectBlbNet() {
 const REDIRECT_HOSTS = new Set([
   'bible.com', 'biblegateway.com', 'bibleref.com', 'biblehub.com',
   'christianity.com', 'crosswalk.com', 'enduringword.com', 'esv.org', 'gotquestions.org',
-  'rediscover.bible', 'sagacityweb.com',
+  'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com',
   'bibleportal.com', 'kingjamesbibleonline.org', 'kjbo.org',
   'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com', 'thekingsbible.com',
   'webstersdictionary1828.com', BLB_HOSTNAME
@@ -1615,7 +1615,8 @@ if (location.hostname==="webstersdictionary1828.com") {
     "crosswalk.com":"crosswalk",
     "enduringword.com":"enduringword",
     "rediscover.bible":"rediscover",
-    "sagacityweb.com":"sagacity"
+    "sagacityweb.com":"sagacity",
+    "thetreasuryofscriptureknowledge.com":"treasury"
   })[host] || "";
   // These sites' homepages are general landing pages, not article/reference
   // pages. Keep the page-wide collection button limited to nested pages.
