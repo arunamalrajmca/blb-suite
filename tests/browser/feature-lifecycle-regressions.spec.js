@@ -55,7 +55,7 @@ test('Study Sessions reject empty topic and note input without corrupting the cu
   const emptyStart = await send({ type: 'blbSuiteStartStudyTopic', title: '   ', note: 'ignored' });
   expect(emptyStart).toMatchObject({ ok: false, reason: 'empty' });
 
-  const topic = 'BLB regression empty-input ' + Date.now();
+  const topic = 'BLB regression empty input ' + Date.now();
   const normalizedTopic = topic.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
   const started = await send({ type: 'blbSuiteStartStudyTopic', title: topic });
   expect(started).toMatchObject({ ok: true, recording: true, topic: normalizedTopic });
