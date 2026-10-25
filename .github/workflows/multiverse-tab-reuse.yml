@@ -72,7 +72,7 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Install Chromium for Playwright
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Run MultiVerse tab reuse regression suite
         run: npx playwright test tests/browser/multiverse-tab-reuse.spec.js --workers=1
