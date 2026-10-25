@@ -6367,7 +6367,7 @@ async function shouldShowBlbContextMenu(tab, selectionText) {
   try {
     const url = new URL(String(tab?.url || tab?.pendingUrl || ''));
     const host = normalizeSiteHostname(url.hostname);
-    if ((host === 'rediscover.bible' || host === 'sagacityweb.com') && url.pathname.replace(/\\/+$/, '') === '') return false;
+    if ((host === 'rediscover.bible' || host === 'sagacityweb.com') && url.pathname.split('/').join('') === '') return false;
   } catch (_) {}
   const siteKey = pageSelectionSettingKeyFromTab(tab);
   // The right-click action is exactly the same site-based feature as the
