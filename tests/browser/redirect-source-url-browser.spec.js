@@ -518,10 +518,10 @@ test.describe('real-browser source URL redirect regressions', () => {
     const refs = await page.evaluate(() => window.__multiVerseRequests[0].refs);
     expect(refs.map(ref => ref.url)).toEqual([
       'https://www.blueletterbible.org/kjv/rom/8/9/',
-      'https://www.blueletterbible.org/kjv/jud/1/3/',
-      'https://www.blueletterbible.org/kjv/jhn/3/16-18/'
+      'https://www.blueletterbible.org/kjv/jhn/3/16-18/',
+      'https://www.blueletterbible.org/kjv/jud/1/3/'
     ]);
-    expect(refs.map(ref => ref.text)).toEqual(['Romans 8:9', 'Jude 1:3', 'John 3:16-18']);
+    expect(refs.map(ref => ref.text)).toEqual(['Romans 8:9', 'John 3:16-18', 'Jude 1:3']);
   });
 
   test('Enduring Word MultiVerse ignores body references and unrelated cross-reference sections', async ({ page }) => {
