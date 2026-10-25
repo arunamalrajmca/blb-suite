@@ -1387,3 +1387,37 @@ document.addEventListener('click', event => {
   await refreshStudyState();
   await refreshStudyAutoStop();
 })();
+
+
+// Popup appearance preference: dark is the default unless light was selected.
+(() => {
+  const button = document.getElementById('themeToggle');
+  const icon = document.getElementById('themeToggleIcon');
+  if (!button || !icon) return;
+
+  const sunIcon = '<path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.64 5.64l1.42 1.42M16.94 16.94l1.42 1.42M18.36 5.64l-1.42 1.42M7.06 16.94l-1.42 1.42"/><circle cx="12" cy="12" r="4"/>';
+  const moonIcon = '<path d="M20.2 15.1A8.5 8.5 0 0 1 8.9 3.8 8.6 8.6 0 1 0 20.2 15.1Z"/>';
+
+  function applyTheme(theme) {
+    const isLight = theme === 'light';
+    document.body.classList.toggle('light', isLight);
+    button.title = isLight ? 'Switch to dark theme' : 'Switch to light theme';
+    button.setAttribute('aria-label', button.title);
+    icon.innerHTML = isLight ? moonIcon : sunIcon;
+  }
+
+  applyTheme('dark');
+  chrome.storage.local.get({popupTheme: 'dark'}).then(({popupTheme}) => {
+    applyTheme(popupTheme === 'light' ? 'light' : 'dark');
+  }).catch(() => applyTheme('dark'));
+
+  button.addEventListener('click', async () => {
+    const nextTheme = document.body.classList.contains('light') ? 'dark' : 'light';
+    applyTheme(nextTheme);
+    try {
+      await chrome.storage.local.set({popupTheme: nextTheme});
+    } catch (error) {
+      console.error('Could not save popup theme preference:', error);
+    }
+  });
+})();
