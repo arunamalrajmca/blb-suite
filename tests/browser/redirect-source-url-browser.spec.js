@@ -62,6 +62,26 @@ test.describe('real-browser source URL redirect regressions', () => {
     await expect(page).toHaveURL(targetUrl);
   });
 
+  test('Christianity.com ESV passage URL navigates to BLB KJV', async ({ page }) => {
+    const sourceUrl = 'https://www.christianity.com/bible/esv/john/3-16';
+    const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+    await loadProductionRedirect(page, sourceUrl);
+    const navigated = page.waitForURL(targetUrl, { waitUntil: 'domcontentloaded' });
+    await page.addScriptTag({ content: productionRedirectGate });
+    await navigated;
+    await expect(page).toHaveURL(targetUrl);
+  });
+
+  test('ESV.org encoded verse URL navigates to BLB KJV', async ({ page }) => {
+    const sourceUrl = 'https://www.esv.org/verses/John%2B3%3A16/';
+    const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+    await loadProductionRedirect(page, sourceUrl);
+    const navigated = page.waitForURL(targetUrl, { waitUntil: 'domcontentloaded' });
+    await page.addScriptTag({ content: productionRedirectGate });
+    await navigated;
+    await expect(page).toHaveURL(targetUrl);
+  });
+
   test('www KJV.site verse URL navigates to the resolved BLB destination', async ({ page }) => {
     const sourceUrl = 'https://www.kjv.site/John-3-16-kjv/';
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
