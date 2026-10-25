@@ -1,6 +1,7 @@
 const { test, expect } = require('./fixtures');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '../..');
 const content = fs.readFileSync(path.join(root, 'extension/content.js'), 'utf8');
@@ -23,6 +24,28 @@ test('Sagacity collector recovers full references from BLB preSearch URLs', () =
   expect(content).toContain('String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")');
   expect(content).toContain('if (/^Matt\\.?$/i.test(value)) return "Matthew";');
   expect(content).toContain('normalizeSourceBibleBook(sagacityCriteriaReference.book)');
+});
+
+test('Sagacity dotted BLB Criteria resolves Matt. 12.37 as Matthew 12:37', () => {
+  const extract = source => {
+    const match = content.match(source);
+    expect(match, 'expected helper declaration in production source').not.toBeNull();
+    return match[0];
+  };
+  const helpers = vm.runInNewContext([
+    extract(/function decodeSafe\\(v\\) \\{[\\s\\S]*?\\n\\}/),
+    extract(/function parseRef\\(text\\) \\{[\\s\\S]*?\\n\\}/),
+    extract(/function normalizeSourceBibleBook\\(book\\) \\{[\\s\\S]*?\\n\\}/),
+    '({ parseRef, normalizeSourceBibleBook })'
+  ].join('\\n'));
+  const target = new URL('https://www.blueletterbible.org/search/preSearch.cfm?Criteria=Matt.+12.37&t=ESV');
+  const criteria = target.searchParams.get('Criteria').replace(
+    /^(.*?)\\s+(\\d+)\\.(\\d+(?:-\\d+)?)$/,
+    '$1 $2:$3'
+  );
+  const parsed = helpers.parseRef(criteria);
+  expect(parsed).toEqual({ book: 'Matt', chapter: 12, from: 37, to: null });
+  expect(helpers.normalizeSourceBibleBook(parsed.book)).toBe('Matthew');
 });
 
 test('Sagacity BLB Criteria remains a fallback and does not replace valid captions', () => {
