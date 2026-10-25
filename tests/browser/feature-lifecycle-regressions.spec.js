@@ -38,7 +38,7 @@ test('Study Sessions lifecycle creates a topic, edits notes, stops recording, an
     currentTopic: normalizedTopic,
     currentSession: { topic: normalizedTopic, notes: 2 }
   });
-  expect(active.topicStats[topic].notes).toBe(2);
+  expect(active.topicStats[normalizedTopic].notes).toBe(2);
 
   const stopped = await extensionWorker.evaluate(() =>
     chrome.runtime.sendMessage({ type: 'blbSuiteStopStudyRecording' }));
