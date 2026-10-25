@@ -508,8 +508,9 @@ test.describe('real-browser source URL redirect regressions', () => {
           <a href="/bible-reference/2" data-bible-ref-link="Romans_8:9|NIV">Read more</a>
           <a href="/bible-reference/3" data-bible-ref-link="John_3:16-18|ESV">passage</a>
           <a href="/bible-reference/4" data-bible-ref-link="not-a-reference|ESV">not a Bible reference</a>
-          <a href="/bible-reference/5">read more</a>
-          <a href="/bible-reference/6" data-bible-ref-link="John_3:16|ESV" download>John 3:16 download</a>
+          <a href="/bible-reference/5" data-bible-ref-link="not-a-reference|ESV">Jude 1:3</a>
+          <a href="/bible-reference/6">read more</a>
+          <a href="/bible-reference/7" data-bible-ref-link="John_3:16|ESV" download>John 3:16 download</a>
         </article>`);
     });
     await page.locator('#blb-suite-crosswalk-multiverse').click();
@@ -517,9 +518,10 @@ test.describe('real-browser source URL redirect regressions', () => {
     const refs = await page.evaluate(() => window.__multiVerseRequests[0].refs);
     expect(refs.map(ref => ref.url)).toEqual([
       'https://www.blueletterbible.org/kjv/rom/8/9/',
+      'https://www.blueletterbible.org/kjv/jud/1/3/',
       'https://www.blueletterbible.org/kjv/jhn/3/16-18/'
     ]);
-    expect(refs.map(ref => ref.text)).toEqual(['Romans 8:9', 'John 3:16-18']);
+    expect(refs.map(ref => ref.text)).toEqual(['Romans 8:9', 'Jude 1:3', 'John 3:16-18']);
   });
 
   test('Enduring Word MultiVerse ignores body references and unrelated cross-reference sections', async ({ page }) => {
