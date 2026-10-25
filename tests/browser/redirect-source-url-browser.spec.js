@@ -532,7 +532,7 @@ test.describe('real-browser source URL redirect regressions', () => {
     expect(refs.map(ref => ref.url)).toEqual([
       'https://www.blueletterbible.org/kjv/rom/8/9/',
       'https://www.blueletterbible.org/kjv/jhn/3/16-18/',
-      'https://www.blueletterbible.org/kjv/jud/1/3/',
+      'https://www.blueletterbible.org/kjv/jde/1/3/',
       'https://www.blueletterbible.org/kjv/phm/1/6/',
       'https://www.blueletterbible.org/kjv/tit/2/11/'
     ]);
