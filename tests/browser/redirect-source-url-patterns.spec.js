@@ -231,4 +231,19 @@ test.describe('source Bible URL syntax regression coverage', () => {
     expect(runSourceRedirect('https://biblegateway.com/search/?search=John%203%3A16').redirectedTo).toBe(null);
   });
 
+
+  test('new source redirects require an exact supported hostname, not a lookalike domain or subdomain', () => {
+    for (const url of [
+      'https://notchristianity.com/bible/esv/john/3-16',
+      'https://christianity.com.example.test/bible/esv/john/3-16',
+      'https://blog.christianity.com/bible/esv/john/3-16',
+      'https://not-esv.org/John+3%3A16/',
+      'https://esv.org.example.test/John+3%3A16/',
+      'https://blog.esv.org/John+3%3A16/'
+    ]) {
+      expect(runSourceRedirect(url).redirectedTo, url).toBeNull();
+      expect(runSourceRedirect(url).openedInNewTab, url).toBeNull();
+    }
+  });
+
 });
