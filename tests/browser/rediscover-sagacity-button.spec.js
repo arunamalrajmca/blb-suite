@@ -21,6 +21,8 @@ test('Sagacity collector recovers full references from BLB preSearch URLs', () =
   expect(content).toContain('targetHost === "blueletterbible.org"');
   expect(content).toContain('/^\\/search\\/preSearch\\.cfm$/i.test(targetUrl.pathname)');
   expect(content).toContain('String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")');
+  expect(content).toContain('if (/^Matt\\.?$/i.test(value)) return "Matthew";');
+  expect(content).toContain('normalizeSourceBibleBook(sagacityCriteriaReference.book)');
 });
 
 test('Sagacity BLB Criteria remains a fallback and does not replace valid captions', () => {
