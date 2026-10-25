@@ -24,9 +24,10 @@ test('Sagacity collector recovers full references from BLB preSearch URLs', () =
 });
 
 test('Sagacity BLB Criteria remains a fallback and does not replace valid captions', () => {
-  const captionFallback = content.indexOf('if (!parsed) parsed = parseRef(label);');
-  const criteriaFallback = content.indexOf('if (!parsed) parsed = sagacityCriteriaReference;');
-  const resolutionFallback = content.indexOf('if (!resolved && sourceSite === "sagacity" && sagacityCriteriaReference)');
+  const collector = content.slice(content.indexOf('function collectSourcePageBibleReferences'));
+  const captionFallback = collector.indexOf('if (!parsed) parsed = parseRef(label);');
+  const criteriaFallback = collector.indexOf('if (!parsed) parsed = sagacityCriteriaReference;');
+  const resolutionFallback = collector.indexOf('if (!resolved && sourceSite === "sagacity" && sagacityCriteriaReference)');
   expect(captionFallback).toBeGreaterThan(-1);
   expect(criteriaFallback).toBeGreaterThan(captionFallback);
   expect(resolutionFallback).toBeGreaterThan(criteriaFallback);
