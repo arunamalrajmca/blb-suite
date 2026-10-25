@@ -41,12 +41,34 @@ const nonDocs = changed.filter(path =>
 );
 const hasRuntimeOrTestChange = nonDocs.length > 0;
 const full = forceFull || (hasRuntimeOrTestChange && specs.length === 0);
-const selected = full ? [] : specs;
+const selected = specs;
+const mappedSpecs = new Set([
+  "tests/browser/redirect-source-url-patterns.spec.js",
+  "tests/browser/omnibox-boolean-operators.spec.js",
+  "tests/browser/redirect-source-url-browser.spec.js",
+  "tests/browser/e2e-core-user-actions.spec.js",
+  "tests/browser/kings-bible-collector-behavior.spec.js",
+  "tests/browser/feature-lifecycle-regressions.spec.js",
+  "tests/browser/study-backup-restore.spec.js",
+  "tests/browser/extension.spec.js",
+  "tests/browser/redirect-hostnames.spec.js",
+  "tests/browser/blb-non-kjv-redirect.spec.js",
+  "tests/browser/scripttagger-global-injection.spec.js",
+  "tests/browser/shared-regex-patterns.spec.js",
+  "tests/browser/rediscover-sagacity-button.spec.js",
+  "tests/browser/research-dom-smoke.spec.js"
+]);
+const separatelyManagedSpecs = new Set([
+  "tests/browser/multiverse-tab-reuse.spec.js",
+  "tests/browser/performance.spec.js"
+]);
+const unmapped = selected.filter(path => !mappedSpecs.has(path) && !separatelyManagedSpecs.has(path));
 const has = (...names) => full || selected.some(path => names.includes(path));
 const output = process.env.GITHUB_OUTPUT;
 const values = {
   full_browser_suite: String(full),
   changed_specs: selected.join(","),
+  unmapped_specs: unmapped.join(","),
   group_a_required: String(has(
     "tests/browser/redirect-source-url-patterns.spec.js",
     "tests/browser/omnibox-boolean-operators.spec.js",
@@ -56,7 +78,7 @@ const values = {
     "tests/browser/feature-lifecycle-regressions.spec.js",
     "tests/browser/study-backup-restore.spec.js",
     "tests/browser/extension.spec.js"
-  )),
+  ) || unmapped.length > 0),
   group_b_required: String(has(
     "tests/browser/redirect-hostnames.spec.js",
     "tests/browser/blb-non-kjv-redirect.spec.js",
