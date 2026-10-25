@@ -93,6 +93,65 @@ test('Study Sessions delete removes a topic and clears its active recording stat
   await page.close();
 });
 
+
+test('Study Sessions deleting an inactive topic preserves the active topic and its notes', async ({ context, extensionId, extensionStorage }) => {
+  await extensionStorage.clear();
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  const send = message => page.evaluate(value => chrome.runtime.sendMessage(value), message);
+  const inactiveTopic = 'BLB regression inactive topic ' + Date.now();
+  const activeTopic = 'BLB regression active topic ' + Date.now();
+  const titleCase = value => value.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+  const inactiveTitle = titleCase(inactiveTopic);
+  const activeTitle = titleCase(activeTopic);
+
+  expect(await send({ type: 'blbSuiteStartStudyTopic', title: inactiveTopic, note: 'Inactive note' }))
+    .toMatchObject({ ok: true, topic: inactiveTitle });
+  expect(await send({ type: 'blbSuiteStartStudyTopic', title: activeTopic, note: 'Active note' }))
+    .toMatchObject({ ok: true, topic: activeTitle, recording: true });
+
+  expect(await send({ type: 'blbSuiteClearStudyTopic', topic: inactiveTitle }))
+    .toMatchObject({ ok: true, topic: inactiveTitle });
+
+  const state = await send({ type: 'blbSuiteGetStudyUiState' });
+  expect(state).toMatchObject({
+    ok: true,
+    recording: true,
+    currentTopic: activeTitle,
+    currentSession: { topic: activeTitle, notes: 1 }
+  });
+  expect(state.topics).not.toContain(inactiveTitle);
+  expect(state.topics).toContain(activeTitle);
+  expect(state.topicStats[activeTitle].notes).toBe(1);
+  await page.close();
+});
+
+test('Study Sessions confirmation cancel preserves active recording for topic-delete and delete-all actions', async ({ context, extensionId, extensionStorage, extensionWorker }) => {
+  await extensionStorage.clear();
+  const topic = 'BLB regression cancel deletion ' + Date.now();
+  const normalizedTopic = topic.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+  await extensionWorker.evaluate(async value => startStudyTopicFromPopup(value, 'Keep this note'), topic);
+
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await page.evaluate(() => { window.confirm = () => false; });
+  await page.locator('#studyTopic').fill(normalizedTopic);
+  await expect(page.locator('#clearSelectedTopic')).toBeEnabled();
+
+  await page.locator('#clearStudy').click();
+  await page.locator('#clearSelectedTopic').click();
+  let state = await extensionWorker.evaluate(() => getStudyUiState());
+  expect(state).toMatchObject({ ok: true, recording: true, currentTopic: normalizedTopic });
+  expect(state.topicStats[normalizedTopic].notes).toBe(1);
+
+  await page.locator('#clearStudy').click();
+  await page.locator('#clearAllTopics').click();
+  state = await extensionWorker.evaluate(() => getStudyUiState());
+  expect(state).toMatchObject({ ok: true, recording: true, currentTopic: normalizedTopic });
+  expect(state.topicStats[normalizedTopic].notes).toBe(1);
+  await page.close();
+});
+
 test('Global master OFF gates Show on BLB without erasing per-site preferences or coupling redirects', async ({ extensionWorker, extensionStorage }) => {
   await extensionStorage.clear();
   await extensionStorage.set({
