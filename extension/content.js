@@ -1433,7 +1433,12 @@ if (location.hostname==="webstersdictionary1828.com") {
         if (anchor.id === buttonId || anchor.closest("#" + buttonId) ||
             anchor.hasAttribute("download")) continue;
         const label = normalizeSelectionText(anchor.innerText || anchor.textContent || "");
-        if (!label || label.length > 100) continue;
+        const dataReference = sourceSite !== "enduringword"
+          ? anchor.getAttribute("data-bible-ref-link")
+          : null;
+        // A structured reference is authoritative even when the visible
+        // caption is abbreviated or non-reference text.
+        if ((!label || label.length > 100) && !dataReference) continue;
         let parsed;
         if (sourceSite === "enduringword") {
           let url;
@@ -1448,7 +1453,6 @@ if (location.hostname==="webstersdictionary1828.com") {
           // Prefer structured Bible-reference metadata when a site's visible
           // caption is abbreviated (e.g. "3:11") or otherwise not a full
           // reference. Ignore the source translation; BLB resolves to KJV.
-          const dataReference = anchor.getAttribute("data-bible-ref-link");
           if (dataReference) {
             const rawReference = dataReference.split("|", 1)[0]
               .replace(/_/g, " ")
@@ -1478,7 +1482,10 @@ if (location.hostname==="webstersdictionary1828.com") {
           from: resolved.from,
           to: resolved.to,
           version: "kjv",
-          text: sourceSite === "enduringword" ? (resolved.book.name + " " + resolved.chapter + ":1") : label,
+          text: sourceSite === "enduringword"
+            ? (resolved.book.name + " " + resolved.chapter + ":1")
+            : (dataReference ? (resolved.book.name + " " + resolved.chapter + ":" + resolved.from +
+                (resolved.to == null ? "" : "-" + resolved.to)) : label),
           url: target
         });
       }
