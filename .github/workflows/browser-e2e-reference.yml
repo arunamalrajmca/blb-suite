@@ -37,12 +37,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail-with-body --silent --show-error \\
-            -X POST \\
-            -H "Authorization: Bearer $GH_TOKEN" \\
-            -H "Accept: application/vnd.github+json" \\
-            -H "X-GitHub-Api-Version: 2022-11-28" \\
-            "${{ github.api_url }}/repos/${{ github.repository }}/statuses/$STATUS_SHA" \\
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/statuses/$STATUS_SHA" \
             -d '{"state":"pending","target_url":"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}","description":"Browser E2E validation is running","context":"browser-e2e"}'
       - name: Checkout for change classification
         uses: actions/checkout@v4
@@ -396,12 +396,12 @@ jobs:
           fi
 
           payload=$(printf '{"state":"%s","target_url":"%s","description":"%s","context":"browser-e2e"}' "$state" "$TARGET_URL" "$description")
-          curl --fail-with-body --silent --show-error \\
-            -X POST \\
-            -H "Authorization: Bearer $GH_TOKEN" \\
-            -H "Accept: application/vnd.github+json" \\
-            -H "X-GitHub-Api-Version: 2022-11-28" \\
-            "${{ github.api_url }}/repos/${{ github.repository }}/statuses/$STATUS_SHA" \\
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/statuses/$STATUS_SHA" \
             -d "$payload"
 
           if [[ "$failed" != 0 ]]; then
