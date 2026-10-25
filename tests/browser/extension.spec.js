@@ -346,7 +346,17 @@ test.describe('core user-visible E2E', () => {
       return !!rect && rect.x >= 0 && rect.y >= 0 && rect.x + rect.width <= 361 && rect.y + rect.height <= 241;
     }).toBe(true);
 
-    await page.locator('#blb-suite-page-selection-button-reset-position').click();
+    const reset = page.locator('#blb-suite-page-selection-button-reset-position');
+    await reset.click();
+    await expect.poll(() => reset.getAttribute('data-blb-reset-click-handler')).toBe('entered');
+    await expect.poll(() => reset.getAttribute('data-blb-reset-remove-resolved')).toBe('true');
+    const resetDiagnostics = await reset.evaluate(el => ({
+      handler: el.dataset.blbResetClickHandler || null,
+      removeResolved: el.dataset.blbResetRemoveResolved || null,
+      removeError: el.dataset.blbResetRemoveError || null,
+      keyReadded: el.dataset.blbResetKeyReadded || null
+    }));
+    expect(resetDiagnostics.removeError, JSON.stringify(resetDiagnostics)).toBeNull();
     await expect.poll(() => extensionWorker.evaluate(async () =>
       Object.prototype.hasOwnProperty.call(await chrome.storage.local.get('blbSuiteShowOnBLBButtonPosition'), 'blbSuiteShowOnBLBButtonPosition')
     )).toBe(false);
