@@ -15,7 +15,11 @@
     "alarms"
   ],
   "host_permissions": [
-    "https://www.blueletterbible.org/*"
+    "https://www.blueletterbible.org/*",
+    "https://rediscover.bible/*",
+    "https://www.rediscover.bible/*",
+    "https://sagacityweb.com/*",
+    "https://www.sagacityweb.com/*"
   ],
   "omnibox": {
     "keyword": "b"
@@ -58,7 +62,11 @@
         "https://www.blueletterbible.org/*",
         "file:///*.pdf",
         "file:///*.html",
-        "file:///*.htm"
+        "file:///*.htm",
+        "https://rediscover.bible/*",
+        "https://www.rediscover.bible/*",
+        "https://sagacityweb.com/*",
+        "https://www.sagacityweb.com/*"
       ],
       "js": [
         "regex-patterns.js",
