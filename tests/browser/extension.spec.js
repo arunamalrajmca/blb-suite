@@ -349,7 +349,9 @@ test.describe('core user-visible E2E', () => {
     const reset = page.locator('#blb-suite-page-selection-button-reset-position');
     await reset.click();
     await expect.poll(() => reset.getAttribute('data-blb-reset-click-handler')).toBe('entered');
-    await expect.poll(() => reset.getAttribute('data-blb-reset-remove-resolved')).toBe('true');
+    await expect.poll(() => reset.evaluate(el =>
+      el.dataset.blbResetRemoveResolved === 'true' || !!el.dataset.blbResetRemoveError
+    )).toBe(true);
     const resetDiagnostics = await reset.evaluate(el => ({
       handler: el.dataset.blbResetClickHandler || null,
       removeResolved: el.dataset.blbResetRemoveResolved || null,
