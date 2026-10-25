@@ -75,7 +75,7 @@ jobs:
             ${{ runner.os }}-node22-npm-
       - run: npm install
         if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install chromium
         if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
       - name: Run native redirect hostname regression tests
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-hostnames.spec.js') }}
