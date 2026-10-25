@@ -1488,6 +1488,12 @@ if (location.hostname==="webstersdictionary1828.com") {
           if (!parsed) parsed = parseRef(label);
         }
         let usedStructuredReference = sourceSite !== "enduringword" && Boolean(dataReference) && Boolean(parsed);
+        if ((!parsed || !parsed.book || !Number.isInteger(Number(parsed.chapter)) ||
+             Number(parsed.chapter) < 1) && usedStructuredReference) {
+          // Even malformed structured values should not suppress a valid caption.
+          parsed = parseRef(label);
+          usedStructuredReference = false;
+        }
         if (!parsed || !parsed.book || !Number.isInteger(Number(parsed.chapter)) ||
             Number(parsed.chapter) < 1) continue;
         // Enduring Word chips identify chapters, not individual verses.
