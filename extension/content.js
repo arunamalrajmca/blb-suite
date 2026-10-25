@@ -1163,6 +1163,9 @@ function makeBlbMultiVerseButtonDraggable(button, options = {}) {
 
   const onViewportChange = () => {
     if (!button.isConnected) { reset.remove(); visibilityObserver.disconnect(); return; }
+    // A selection-driven button is hidden between selections; do not convert
+    // its right/bottom default anchor into a meaningless 0,0 position.
+    if (getComputedStyle(button).display === "none") { placeReset(); return; }
     clampButtonPosition();
     placeReset();
   };
