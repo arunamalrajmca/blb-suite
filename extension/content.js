@@ -1049,7 +1049,6 @@ function makeBlbMultiVerseButtonDraggable(button, options = {}) {
   reset.addEventListener("click", event => {
     event.preventDefault();
     event.stopPropagation();
-    reset.dataset.blbResetClickHandler = "entered";
     button.style.left = "auto";
     button.style.top = "auto";
     button.style.right = defaultRight + "px";
@@ -1058,18 +1057,7 @@ function makeBlbMultiVerseButtonDraggable(button, options = {}) {
     positionWriteQueue = positionWriteQueue
       .catch(() => {})
       .then(() => chrome.storage.local.remove(positionKey))
-      .then(() => {
-        reset.dataset.blbResetRemoveResolved = "true";
-      })
-      .catch(error => {
-        reset.dataset.blbResetRemoveError = String(error && error.message || error);
-      });
-  });
-  chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName !== "local" || !Object.prototype.hasOwnProperty.call(changes, positionKey)) return;
-    if (reset.dataset.blbResetClickHandler === "entered" && changes[positionKey].newValue !== undefined) {
-      reset.dataset.blbResetKeyReadded = "true";
-    }
+      .catch(() => {});
   });
 
   function clamp(value, min, max) {
@@ -3791,7 +3779,7 @@ function scheduleFinalBlbPageSelectionButtonUpdate() {
 
 function handleBlbPageSelectionMouseDown(event) {
   if (!pageButtonMonitoring || pageButtonActionInProgress) return;
-  if (event?.target instanceof Element && event.target.closest(`#${BLB_PAGE_BUTTON_ID}`)) return;
+  if (event?.target instanceof Element && event.target.closest(`#${BLB_PAGE_BUTTON_ID}, #${BLB_PAGE_BUTTON_ID}-reset-position`)) return;
   // Preserve an existing selection for the native right-click menu.
   if (event?.button === 2) return;
   invalidateBlbPageSelectionButton();
