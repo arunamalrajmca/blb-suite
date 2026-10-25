@@ -128,6 +128,43 @@ test.describe('real-browser source URL redirect regressions', () => {
     await expect(page).toHaveURL(sourceUrl);
   });
 
+  for (const source of [
+    { host: 'gotquestions.org', url: 'https://www.gotquestions.org/example-question.html', button: '#blb-suite-gotquestions-multiverse' },
+    { host: 'crosswalk.com', url: 'https://www.crosswalk.com/faith/bible-study/example.html', button: '#blb-suite-crosswalk-multiverse' },
+    { host: 'enduringword.com', url: 'https://www.enduringword.com/bible-commentary/john-3/', button: '#blb-suite-enduringword-multiverse' }
+  ]) {
+    test(`${source.host} MultiVerse collects only current-page references and never follows pagination`, async ({ page }) => {
+      await loadSourcePageMultiVerse(page, source.url);
+      await page.evaluate(() => {
+        window.__paginationFetchCalls = 0;
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = (...args) => {
+          window.__paginationFetchCalls += 1;
+          return originalFetch(...args);
+        };
+        document.body.insertAdjacentHTML('beforeend', `
+          <article>
+            <a href="https://www.blueletterbible.org/kjv/jhn/3/16/">John 3:16</a>
+            <a href="https://www.blueletterbible.org/kjv/rom/8/9/">Romans 8:9</a>
+          </article>
+          <nav class="pagination" aria-label="Pagination">
+            <a href="?page=2" aria-label="Page 2">2</a>
+            <a href="?page=2" rel="next" aria-label="Next page">Next</a>
+          </nav>`);
+      });
+
+      await page.locator(source.button).click();
+      await expect.poll(() => page.evaluate(() => window.__multiVerseRequests?.length || 0)).toBe(1);
+      const request = await page.evaluate(() => window.__multiVerseRequests[0]);
+      expect(request.refs.map(ref => ref.url)).toEqual([
+        'https://www.blueletterbible.org/kjv/jhn/3/16/',
+        'https://www.blueletterbible.org/kjv/rom/8/9/'
+      ]);
+      expect(await page.evaluate(() => window.__paginationFetchCalls)).toBe(0);
+      await expect(page).toHaveURL(source.url);
+    });
+  }
+
   test('Enduring Word extracts Related Commentary and Referenced By chapters as verse 1, including Psalms', async ({ page }) => {
     const sourceUrl = 'https://www.enduringword.com/bible-commentary/john-3/';
     await loadSourcePageMultiVerse(page, sourceUrl);
