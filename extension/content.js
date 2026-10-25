@@ -1411,31 +1411,39 @@ if (location.hostname==="webstersdictionary1828.com") {
     function collectSourcePageBibleReferences() {
       const refs = [];
       const seen = new Set();
-      // Enduring Word's structured Related Commentary and Referenced By
-      // sections both contain chapter links. Collect only those sections,
-      // never scripture references from the middle of the commentary body.
-      const enduringRelatedAnchors = sourceSite === "enduringword"
+      // Enduring Word must use only its two structured cross-reference sections.
+      // Require chapter-page URLs too, so individual verse links can never enter.
+      const enduringSectionAnchors = sourceSite === "enduringword"
         ? Array.from(document.querySelectorAll("aside.ew-xref .ew-xref-sec"))
             .filter(section => /^(?:Related Commentary|Referenced By)\b/i.test(
               normalizeSelectionText(section.querySelector(".ew-xref-title")?.textContent || "")
             ))
             .flatMap(section => Array.from(section.querySelectorAll(".ew-xref-chips a[href]")))
         : null;
-      const anchors = sourceSite === "enduringword" && enduringRelatedAnchors?.length
-        ? enduringRelatedAnchors
-        : sourceSite === "enduringword"
-          ? []
-          : Array.from(document.querySelectorAll("a[href]"));
+      const anchors = sourceSite === "enduringword"
+        ? enduringSectionAnchors
+        : Array.from(document.querySelectorAll("a[href]"));
       for (const anchor of anchors) {
         if (anchor.id === buttonId || anchor.closest("#" + buttonId) ||
             anchor.hasAttribute("download")) continue;
         const label = normalizeSelectionText(anchor.innerText || anchor.textContent || "");
         if (!label || label.length > 100) continue;
-        const parsed = parseRef(label);
+        let parsed;
+        if (sourceSite === "enduringword") {
+          let url;
+          try { url = new URL(anchor.href, location.href); } catch (_) { continue; }
+          const chapterPath = url.hostname.toLowerCase().replace(/^www\./, "") === "enduringword.com"
+            ? url.pathname.match(/^\/bible-commentary\/([^/]+?)-(\d+)\/?$/i)
+            : null;
+          // Only chapter commentary URLs qualify; ignore verse URLs and body references.
+          if (!chapterPath) continue;
+          parsed = { book: chapterPath[1].replace(/-/g, " "), chapter: Number(chapterPath[2]), from: 1, to: null };
+        } else {
+          parsed = parseRef(label);
+        }
         if (!parsed || !parsed.book || !Number.isInteger(Number(parsed.chapter)) ||
             Number(parsed.chapter) < 1) continue;
-        // The Related Commentary chips identify chapters, not individual
-        // verses. Open verse 1 of each distinct chapter, including Psalm N.
+        // Enduring Word chips identify chapters, not individual verses.
         const book = sourceSite === "enduringword" && /^psalm$/i.test(parsed.book)
           ? "Psalms" : parsed.book;
         const from = sourceSite === "enduringword" ? 1 : Number(parsed.from);
