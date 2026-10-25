@@ -169,14 +169,22 @@ test.describe('real-browser source URL redirect regressions', () => {
       return {
         ordinary: dispatch('ordinary'),
         foreign: dispatch('foreign'),
-        modified: dispatch('modified', { ctrlKey:true }),
+        modifiedCtrl: dispatch('modified', { ctrlKey:true }),
+        modifiedMeta: dispatch('modified', { metaKey:true }),
+        modifiedShift: dispatch('modified', { shiftKey:true }),
+        modifiedAlt: dispatch('modified', { altKey:true }),
+        middleButton: dispatch('modified', { button:1 }),
         download: dispatch('download'),
         unknown: dispatch('unknown')
       };
     });
     expect(results.ordinary.prevented).toBe(false);
     expect(results.foreign.prevented).toBe(false);
-    expect(results.modified.prevented).toBe(false);
+    expect(results.modifiedCtrl.prevented).toBe(false);
+    expect(results.modifiedMeta.prevented).toBe(false);
+    expect(results.modifiedShift.prevented).toBe(false);
+    expect(results.modifiedAlt.prevented).toBe(false);
+    expect(results.middleButton.prevented).toBe(false);
     expect(results.download.prevented).toBe(false);
     expect(results.unknown.prevented).toBe(false);
     await expect.poll(() => page.evaluate(() => window.__openedBlbUrl || null)).toBeNull();
