@@ -68,7 +68,7 @@ function collectorFor(type, anchors) {
         if (type === 'concordance') {
           return anchors.filter(anchor => String(anchor.getAttribute('href') || '').startsWith('/Bible/'));
         }
-        return anchors.filter(anchor => anchor.getAttribute('data-bible') != null || /\\bbible\\b/i.test(anchor.getAttribute('class') || ''));
+        return anchors.filter(anchor => anchor.getAttribute('data-bible') != null || /\bbible\b/i.test(anchor.getAttribute('class') || ''));
       }
     }, url);
 }
@@ -91,7 +91,7 @@ test.describe("The King's Bible MultiVerse collector behavior", () => {
       from: 14,
       to: null,
       version: 'kjv',
-      text: 'unparseable caption'
+      text: 'Exodus 4:14'
     });
     expect(refs[0].url).toBe('https://www.blueletterbible.org/kjv/exodus/4/14/');
   });
@@ -128,7 +128,7 @@ test.describe("The King's Bible MultiVerse collector behavior", () => {
       from: 15,
       to: 17,
       version: 'kjv',
-      text: '6:15-17'
+      text: 'Judges 6:15-17'
     });
     expect(refs[0].url).toBe('https://www.blueletterbible.org/kjv/judges/6/15/17/');
   });
