@@ -627,7 +627,9 @@ test.describe('real-browser source URL redirect regressions', () => {
       'https://www.esv.org/about/',
       'https://www.esv.org/resources/esv-crossreference-tool/',
       'https://www.esv.org/John+0/',
+      'https://www.esv.org/John+999/',
       'https://www.esv.org/John+3%3A0/',
+      'https://www.esv.org/John+3%3A999/',
       'https://www.esv.org/John+3%3A18-16/',
       'https://www.esv.org/NotABook+3%3A16/',
       'https://www.esv.org/verses/not-a-reference/'
