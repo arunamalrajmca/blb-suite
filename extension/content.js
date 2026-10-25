@@ -1078,7 +1078,9 @@ function makeBlbMultiVerseButtonDraggable(button) {
     const size = viewportSize();
     const rect = button.getBoundingClientRect();
     const resetRect = reset.getBoundingClientRect();
-    reset.style.left = clamp(rect.left - resetRect.width - 6, 0, size.width - resetRect.width) + "px";
+    const preferredLeft = rect.left - resetRect.width - 6;
+    const left = preferredLeft >= 0 ? preferredLeft : rect.right + 6;
+    reset.style.left = clamp(left, 0, size.width - resetRect.width) + "px";
     reset.style.top = clamp(rect.top + (rect.height - resetRect.height) / 2, 0, size.height - resetRect.height) + "px";
   }
   async function savePosition() {
@@ -1154,7 +1156,7 @@ function makeBlbMultiVerseButtonDraggable(button) {
 
   const onViewportChange = () => {
     if (!button.isConnected) { reset.remove(); return; }
-    if (button.style.left !== "auto" && button.style.left !== "") clampButtonPosition();
+    clampButtonPosition();
     placeReset();
   };
   window.addEventListener("resize", onViewportChange);
@@ -1420,6 +1422,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
   chrome.storage.onChanged.addListener(changes => {
     if (changes.masterEnabled?.newValue === false) {
       document.getElementById("blb-suite-kingsbible-multiverse")?.remove();
+      document.getElementById("blb-suite-kingsbible-multiverse-reset-position")?.remove();
       document.getElementById("blb-suite-kingsbible-status")?.remove();
     } else if (changes.masterEnabled?.newValue === true) {
       ensureKingsBibleButtonWhenReady();
@@ -1758,6 +1761,7 @@ if (location.hostname==="webstersdictionary1828.com") {
     chrome.storage.onChanged.addListener(changes => {
       if (changes.masterEnabled?.newValue === false) {
         document.getElementById(buttonId)?.remove();
+        document.getElementById(buttonId + "-reset-position")?.remove();
         document.getElementById(statusId)?.remove();
       } else if (changes.masterEnabled?.newValue === true) {
         ensureSourcePageButtonWhenReady();
@@ -3950,6 +3954,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     suiteEnabled = changes.masterEnabled.newValue !== false;
     if (!suiteEnabled) {
       document.getElementById('blb-suite-webster-multiverse')?.remove();
+      document.getElementById('blb-suite-webster-multiverse-reset-position')?.remove();
       document.getElementById('blb-suite-webster-status')?.remove();
       disableBlbPageButtonMonitoring();
     } else {
