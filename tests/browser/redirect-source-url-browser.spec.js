@@ -49,15 +49,21 @@ if (sourcePageMultiVerseStart < 0 || sourcePageMultiVerseEnd < 0) {
 }
 const sourcePageMultiVerseCode = contentSource.slice(sourcePageMultiVerseStart, sourcePageMultiVerseEnd);
 
-async function loadSourcePageMultiVerse(page, sourceUrl) {
+async function loadSourcePageMultiVerse(page, sourceUrl, enabled = true) {
   await loadProductionRedirect(page, sourceUrl);
   await page.addScriptTag({ content: 'function normalizeSelectionText(s) { return String(s || "").replace(/\\s+/g, " ").trim(); }' });
-  await page.addScriptTag({ content: 'window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async message => { window.__multiVerseRequests = (window.__multiVerseRequests || []).concat([message]); return { ok: true }; } } };' });
+  await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => ' + JSON.stringify(enabled) + '; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async message => { window.__multiVerseRequests = (window.__multiVerseRequests || []).concat([message]); return { ok: true }; } } };' });
   await page.addScriptTag({ content: sourcePageMultiVerseCode });
-  await page.waitForSelector('button[id$="-multiverse"]');
+  if (enabled) await page.waitForSelector('button[id$="-multiverse"]');
 }
 
 test.describe('real-browser source URL redirect regressions', () => {
+  test('source-page MultiVerse button is absent when the extension is disabled', async ({ page }) => {
+    await loadSourcePageMultiVerse(page, 'https://www.gotquestions.org/example-question.html', false);
+    await page.waitForTimeout(50);
+    await expect(page.locator('#blb-suite-gotquestions-multiverse')).toHaveCount(0);
+  });
+
   for (const source of [
     { host: 'christianity.com', url: 'https://www.christianity.com/wiki/bible/example.html', button: '#blb-suite-christianity-multiverse' },
     { host: 'gotquestions.org', url: 'https://www.gotquestions.org/example-question.html', button: '#blb-suite-gotquestions-multiverse' }
