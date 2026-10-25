@@ -22,7 +22,7 @@ test('Rediscover and Sagacity are declared content-script and host-permission ta
 
 test('Show on BLB defaults on for these sites while homepage and double-click rules stay separate', () => {
   expect(background).toContain("return host === 'rediscover.bible' || host === 'sagacityweb.com';");
-  expect(background).toContain("url.pathname.replace(/\\/+$/, '') === ''");
+  expect(background).toContain("url.pathname.split('/').join('') === ''");
   expect(content).toContain("(host === 'rediscover.bible' || host === 'sagacityweb.com') && pathname === '/'");
   expect(content).toContain("const buttonOnlyDefaultSite = siteKey === 'rediscover.bible' || siteKey === 'sagacityweb.com';");
 });
