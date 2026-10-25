@@ -327,6 +327,20 @@ test.describe('real-browser source URL redirect regressions', () => {
     await expect(page).toHaveURL(sourceUrl);
   });
 
+  test('source-page MultiVerse normalizes singular Psalm labels to canonical Psalms', async ({ page }) => {
+    await loadProductionRedirect(page, 'https://www.christianity.com/faith/bible-study/article.html');
+    const normalized = await page.evaluate(() => ({
+      singular: normalizeSourceBibleBook('Psalm'),
+      plural: normalizeSourceBibleBook('Psalms'),
+      caseInsensitive: normalizeSourceBibleBook('PSALM')
+    }));
+    expect(normalized).toEqual({
+      singular: 'Psalms',
+      plural: 'Psalms',
+      caseInsensitive: 'Psalms'
+    });
+  });
+
   test('Christianity.com homepage does not redirect or open a BLB tab', async ({ page }) => {
     const sourceUrl = 'https://www.christianity.com/';
     await loadProductionRedirect(page, sourceUrl);
