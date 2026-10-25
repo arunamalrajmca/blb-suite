@@ -1411,12 +1411,12 @@ if (location.hostname==="webstersdictionary1828.com") {
     function collectSourcePageBibleReferences() {
       const refs = [];
       const seen = new Set();
-      // Enduring Word's "Related Commentary" section explicitly lists the
-      // chapters used by the current commentary. Use only that first section;
-      // "Referenced By" lists reverse links and must not be included.
+      // Enduring Word's structured Related Commentary and Referenced By
+      // sections both contain chapter links. Collect only those sections,
+      // never scripture references from the middle of the commentary body.
       const enduringRelatedAnchors = sourceSite === "enduringword"
         ? Array.from(document.querySelectorAll("aside.ew-xref .ew-xref-sec"))
-            .filter(section => /^Related Commentary\b/i.test(
+            .filter(section => /^(?:Related Commentary|Referenced By)\b/i.test(
               normalizeSelectionText(section.querySelector(".ew-xref-title")?.textContent || "")
             ))
             .flatMap(section => Array.from(section.querySelectorAll(".ew-xref-chips a[href]")))
