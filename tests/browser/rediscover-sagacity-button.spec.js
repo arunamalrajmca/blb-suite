@@ -22,3 +22,12 @@ test('Sagacity collector recovers full references from BLB preSearch URLs', () =
   expect(content).toContain('/^\\/search\\/preSearch\\.cfm$/i.test(targetUrl.pathname)');
   expect(content).toContain('String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")');
 });
+
+test('Sagacity BLB Criteria remains a fallback and does not replace valid captions', () => {
+  const captionFallback = content.indexOf('if (!parsed) parsed = parseRef(label);');
+  const criteriaFallback = content.indexOf('if (!parsed) parsed = sagacityCriteriaReference;');
+  const resolutionFallback = content.indexOf('if (!resolved && sourceSite === "sagacity" && sagacityCriteriaReference)');
+  expect(captionFallback).toBeGreaterThan(-1);
+  expect(criteriaFallback).toBeGreaterThan(captionFallback);
+  expect(resolutionFallback).toBeGreaterThan(criteriaFallback);
+});
