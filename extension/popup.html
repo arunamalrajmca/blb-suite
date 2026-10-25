@@ -78,6 +78,39 @@ button,input,textarea{font:inherit}
   background: #b62324;
 }
 .backup-wrap{position:relative;flex:0 0 auto}.backup-menu{right:0;left:auto;min-width:135px;z-index:20}.backup-wrap{width:100%;min-width:0}.backup-menu{width:max-content;min-width:160px;max-width:calc(100vw - 24px);box-sizing:border-box}.backup-wrap>.action-btn{width:100%;min-width:0;padding:0}.backup-wrap>.action-btn svg{width:17px;height:17px}.backup-menu button{white-space:nowrap}.backup-menu button svg{width:14px;height:14px;flex:0 0 14px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.backup-menu button span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Optional light theme; dark remains the default. */
+body.light{background:#f4f5f7;color:#202124;color-scheme:light}
+body.light .app-header{border-bottom-color:#d6d9de}
+body.light .header-title,body.light .header-subtitle,body.light .master-state{color:#30343a}
+body.light .guide-version{color:#4d5968}
+body.light .gospel-card{background:#edf3fa;border-color:#c5d4e6;color:#273546}
+body.light .gospel-card strong{color:#172334}
+body.light .gospel-card a,body.light .study-topic-verse-link{color:#1758a6}
+body.light .suite-group,body.light .study-section{background:#fff;border-color:#d2d6dc}
+body.light .suite-group-label{color:#4a515a}
+body.light .secondary-control,body.light .section-title{color:#252a30}
+body.light input[type=text],body.light textarea{background:#fff;color:#202124;border-color:#b9c0c9}
+body.light input[type=text]:focus,body.light textarea:focus{border-color:#3977c3;box-shadow:0 0 0 1px #3977c3}
+body.light .topic-arrow,body.light .topic-import-btn,body.light .topic-clear-btn{color:#505862}
+body.light .topic-arrow:hover:not(:disabled),body.light .topic-import-btn:hover,body.light .topic-clear-btn:hover{background:#e8ebef}
+body.light .square-btn,body.light .date-btn,body.light .topic-stop-btn,body.light .autostop-row #resumeStudy{background:#eef0f3;color:#202124;border-color:#c4cad2}
+body.light .autostop-row,body.light .topic-hint,body.light .notes-help,body.light .status{color:#616873}
+body.light .notes-header>span:first-child{color:#444b54}
+body.light .topic-menu,body.light .history-menu,body.light .download-menu,body.light .clear-menu,body.light .date-quick-menu{background:#fff;border-color:#c6cbd2;box-shadow:0 6px 18px rgba(0,0,0,.15)}
+body.light .topic-option,body.light .history-menu button,body.light .download-menu button,body.light .clear-menu button,body.light .date-quick-menu button{color:#202124}
+body.light .topic-option:hover,body.light .topic-option.active,body.light .history-menu button:hover:not(:disabled),body.light .download-menu button:hover:not(:disabled),body.light .clear-menu button:hover:not(:disabled),body.light .date-quick-menu button:hover{background:#e9edf2}
+body.light .topic-group-label{background:#eef0f3;color:#555d67}
+body.light .topic-group-label.with-divider{background:transparent;border-color:#d2d6dc}
+body.light textarea:disabled{background:#eceef1;color:#777e87;border-color:#d2d6dc}
+body.light .master-switch .slider{background:#d0d4da;border-color:#aeb5be}
+body.light .master-switch .slider:after{color:#343941}
+.theme-toggle{width:27px;height:27px;flex:0 0 27px;display:flex;align-items:center;justify-content:center;padding:0;border:1px solid #5a6068;border-radius:7px;background:#303238;color:#f1d27a;cursor:pointer}
+.theme-toggle:hover{filter:brightness(1.12)}
+.theme-toggle svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+body.light .theme-toggle{background:#fff;border-color:#c4cad2;color:#5b6470}
+.guide-version{display:inline-block;margin-top:3px}
+
 </style>
 </head>
 <body class="popup-loading">
@@ -89,6 +122,7 @@ button,input,textarea{font:inherit}
     </div>
     <div id="masterSetting">
       <div class="master-right">
+        <button id="themeToggle" class="theme-toggle" type="button" title="Switch to light theme" aria-label="Switch to light theme"><svg id="themeToggleIcon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.64 5.64l1.42 1.42M16.94 16.94l1.42 1.42M18.36 5.64l-1.42 1.42M7.06 16.94l-1.42 1.42"/><circle cx="12" cy="12" r="4"/></svg></button>
         <span class="master-state" id="masterState">ON</span>
         <label class="switch master-switch" title="Turn KJV Scripture Tools on or off">
           <input id="master" type="checkbox" checked aria-label="Turn KJV Scripture Tools on or off">
