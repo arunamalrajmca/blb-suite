@@ -3209,7 +3209,7 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
     // validation/opening to content.js and cancels native navigation only
     // when the isolated-world resolver claims the link.
     let hostname = '';
-    try { hostname = new URL(tab.url).hostname.toLowerCase().replace(/^www\\./, ''); } catch (_) {}
+    try { hostname = new URL(tab.url).hostname.toLowerCase().replace(/^www\./, ''); } catch (_) {}
     if (['christianity.com','gotquestions.org','crosswalk.com','enduringword.com'].includes(hostname) && files.includes('content.js')) {
       const mainWorldId = `${id}-main-world`;
       const mainWorldFiles = ['redirect-christianity-main-world.js'];
