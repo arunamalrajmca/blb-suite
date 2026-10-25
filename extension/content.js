@@ -1647,9 +1647,26 @@ if (location.hostname==="webstersdictionary1828.com") {
         const dataReference = sourceSite !== "enduringword"
           ? anchor.getAttribute("data-bible-ref-link")
           : null;
-        // A structured reference is authoritative even when the visible
-        // caption is abbreviated or non-reference text.
-        if ((!label || label.length > 100) && !dataReference) continue;
+        // Keep Sagacity's URL-derived citation as a fallback candidate only.
+        // Parsing the URL first can override valid captions and regress the
+        // previously working page-wide collection.
+        let sagacityCriteriaReference = null;
+        if (sourceSite === "sagacity") {
+          try {
+            const targetUrl = new URL(anchor.href, location.href);
+            const targetHost = targetUrl.hostname.toLowerCase().replace(/^www\./, "");
+            if (targetHost === "blueletterbible.org" &&
+                /^\/search\/preSearch\.cfm$/i.test(targetUrl.pathname)) {
+              const criteria = normalizeSelectionText(
+                String(targetUrl.searchParams.get("Criteria") || "").replace(/\+/g, " ")
+              );
+              sagacityCriteriaReference = parseRef(criteria);
+            }
+          } catch (_) {}
+        }
+        // Structured metadata or a BLB URL citation can qualify anchors with
+        // empty captions caused by malformed/nested HTML.
+        if ((!label || label.length > 100) && !dataReference && !sagacityCriteriaReference) continue;
         let parsed;
         if (sourceSite === "enduringword") {
           let url;
@@ -1661,23 +1678,6 @@ if (location.hostname==="webstersdictionary1828.com") {
           if (!chapterPath) continue;
           parsed = { book: chapterPath[1].replace(/-/g, " "), chapter: Number(chapterPath[2]), from: 1, to: null };
         } else {
-          // Sagacity can wrap a normal reference in malformed/nested anchors,
-          // or expose only an orphaned verse number such as "25". Its BLB
-          // preSearch URL's Criteria parameter is the authoritative full citation.
-          // Read it before the caption so both forms resolve consistently.
-          if (sourceSite === "sagacity") {
-            try {
-              const targetUrl = new URL(anchor.href, location.href);
-              const targetHost = targetUrl.hostname.toLowerCase().replace(/^www\./, "");
-              if (targetHost === "blueletterbible.org" &&
-                  /^\/search\/preSearch\.cfm$/i.test(targetUrl.pathname)) {
-                const criteria = normalizeSelectionText(
-                  String(targetUrl.searchParams.get("Criteria") || "").replace(/\+/g, " ")
-                );
-                parsed = parseRef(criteria);
-              }
-            } catch (_) {}
-          }
           // Prefer structured Bible-reference metadata when a site's visible
           // caption is abbreviated (e.g. "3:11") or otherwise not a full
           // reference. Ignore the source translation; BLB resolves to KJV.
@@ -1688,9 +1688,10 @@ if (location.hostname==="webstersdictionary1828.com") {
               .trim();
             parsed = parseRef(rawReference);
           }
-          // Fall back to visible text only when no usable metadata or source URL
-          // reference is present.
+          // Preserve caption-based collection. Use BLB Criteria only when the
+          // caption and structured metadata do not provide a usable reference.
           if (!parsed) parsed = parseRef(label);
+          if (!parsed) parsed = sagacityCriteriaReference;
         }
         let usedStructuredReference = sourceSite !== "enduringword" && Boolean(dataReference) && Boolean(parsed);
         if ((!parsed || !parsed.book || !Number.isInteger(Number(parsed.chapter)) ||
@@ -1722,6 +1723,17 @@ if (location.hostname==="webstersdictionary1828.com") {
               resolved = resolveBibleReference(book, chapter, from, to);
               if (resolved) usedStructuredReference = false;
             }
+          }
+        }
+        // A malformed caption may parse but fail actual book/verse resolution.
+        // Retry the BLB Criteria citation before discarding that link.
+        if (!resolved && sourceSite === "sagacity" && sagacityCriteriaReference) {
+          book = normalizeSourceBibleBook(sagacityCriteriaReference.book);
+          chapter = Number(sagacityCriteriaReference.chapter);
+          from = Number(sagacityCriteriaReference.from);
+          to = sagacityCriteriaReference.to == null ? null : Number(sagacityCriteriaReference.to);
+          if (Number.isInteger(from) && from >= 1) {
+            resolved = resolveBibleReference(book, chapter, from, to);
           }
         }
         if (!resolved) continue;
