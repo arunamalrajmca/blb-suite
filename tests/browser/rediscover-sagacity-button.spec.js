@@ -14,3 +14,11 @@ test('Rediscover, Sagacity, and TSK use the existing current-page MultiVerse col
   expect(content).toContain('document.querySelectorAll("a[href]")');
   expect(content).toContain('openSourcePageBibleReferencesInMultiVerse');
 });
+
+test('Sagacity collector recovers full references from BLB preSearch URLs', () => {
+  expect(content).toContain('if (sourceSite === "sagacity")');
+  expect(content).toContain('targetUrl.searchParams.get("Criteria")');
+  expect(content).toContain('targetHost === "blueletterbible.org"');
+  expect(content).toContain('/^\\/search\\/preSearch\\.cfm$/i.test(targetUrl.pathname)');
+  expect(content).toContain('String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")');
+});
