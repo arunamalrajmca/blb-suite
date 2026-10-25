@@ -58,6 +58,13 @@ jobs:
         if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
         with:
           node-version: 22
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
       - name: Cache npm download data
         if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
         uses: actions/cache@v4
