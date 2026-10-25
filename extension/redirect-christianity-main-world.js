@@ -26,7 +26,7 @@
     if (!/^\/bible\/[^/]+\/[^/]+\/\d+(?:-\d+(?:-\d+)?)?\/?$/i.test(url.pathname)) return;
 
     const request = new CustomEvent("blb-suite-christianity-passage-click", {
-      detail: { href: url.href },
+      detail: url.href,
       cancelable: true
     });
     const handled = !window.dispatchEvent(request);
