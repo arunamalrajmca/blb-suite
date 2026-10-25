@@ -39,9 +39,20 @@ assert(postings && typeof postings === 'object' && !Array.isArray(postings), 'Wo
 const bookByNumber = new Map(books.map(book => [Number(book.bookNumber), book]));
 assert.equal(bookByNumber.size, 66, 'Canonical book numbers are not unique');
 const seen = new Set();
+const expected = new Set();
+for (const book of books) {
+  const bookNumber = Number(book.bookNumber);
+  assert(Number.isInteger(bookNumber), 'Invalid canonical book number: ' + book.bookNumber);
+  assert.equal(Number(book.chapterCount), book.verses.length, 'Chapter count mismatch for ' + book.name);
+  for (let chapter = 1; chapter <= book.verses.length; chapter++) {
+    const count = Number(book.verses[chapter - 1]);
+    assert(Number.isInteger(count) && count > 0, 'Invalid verse count for ' + book.name + ' chapter ' + chapter);
+    for (let verse = 1; verse <= count; verse++) expected.add(bookNumber + ':' + chapter + ':' + verse);
+  }
+}
+assert.equal(expected.size, 31102, 'Canonical book metadata does not describe exactly 31,102 verses');
 const derivedWords = new Set();
 const tokenPattern = /[A-Za-z]+(?:['-][A-Za-z]+)*/g;
-let previousBook = 0, previousChapter = 0, previousVerse = 0;
 
 for (let index = 0; index < verses.length; index++) {
   const entry = verses[index];
@@ -59,24 +70,8 @@ for (let index = 0; index < verses.length; index++) {
   assert(!seen.has(key), 'Duplicate verse identifier ' + key);
   seen.add(key);
 
-  if (index > 0) {
-    assert(bookNumber > previousBook ||
-      (bookNumber === previousBook && (chapter > previousChapter ||
-        (chapter === previousChapter && verse === previousVerse + 1))),
-      'Corpus ordering/gap error near ' + key + ' (index ' + index + ')');
-    if (bookNumber > previousBook) {
-      assert.equal(chapter, 1, 'First chapter in new book is not 1: ' + key);
-      assert.equal(verse, 1, 'First verse in new book is not 1: ' + key);
-      assert.equal(bookNumber, previousBook + 1, 'Book gap before ' + key);
-    } else if (chapter > previousChapter) {
-      assert.equal(chapter, previousChapter + 1, 'Chapter gap before ' + key);
-      assert.equal(verse, 1, 'First verse in chapter is not 1: ' + key);
-    }
-  } else assert.deepEqual([bookNumber, chapter, verse], [1, 1, 1], 'Corpus must begin at Genesis 1:1');
+  assert(expected.has(key), 'Verse identifier is not present in canonical book metadata: ' + key);
 
-  previousBook = bookNumber;
-  previousChapter = chapter;
-  previousVerse = verse;
 
   const original = originalCase[index];
   assert(Array.isArray(original) && original.length >= 4, 'Original-case verse ' + index + ' has invalid shape');
@@ -86,10 +81,9 @@ for (let index = 0; index < verses.length; index++) {
   for (const match of text.matchAll(tokenPattern)) derivedWords.add(match[0].toLowerCase());
 }
 
-assert.equal(seen.size, 31102, 'Verse identifier count differs from canonical corpus size');
-assert.equal(previousBook, 66, 'Corpus does not end in Revelation');
-assert.equal(previousChapter, bookByNumber.get(66).verses.length, 'Corpus does not end at the last Revelation chapter');
-assert.equal(previousVerse, Number(bookByNumber.get(66).verses.at(-1)), 'Corpus does not end at Revelation 22:21');
+assert.equal(seen.size, expected.size, 'Verse identifier count differs from canonical book metadata');
+const missingReferences = [...expected].filter(key => !seen.has(key));
+assert.equal(missingReferences.length, 0, 'Canonical verses missing from corpus (' + missingReferences.length + '): ' + missingReferences.slice(0, 20).join(', '));
 
 const indexedWords = new Set([...words].map(word => String(word).toLowerCase()));
 assert.equal(indexedWords.size, words.size, 'Word index contains case-normalized duplicates');
