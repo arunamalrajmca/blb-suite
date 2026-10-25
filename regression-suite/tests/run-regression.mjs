@@ -72,7 +72,7 @@ test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse coll
   assert(background.includes("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'"));
 });
 
-test('Rediscover and Sagacity use optional access and dynamic injection only', () => {
+test('Rediscover, Sagacity, and TSK use optional access and dynamic injection only', () => {
   const m = JSON.parse(read('manifest.json'));
   const matches = m.content_scripts?.flatMap(x=>x.matches||[]) || [];
   for (const host of ['rediscover.bible','www.rediscover.bible','sagacityweb.com','www.sagacityweb.com','thetreasuryofscriptureknowledge.com','www.thetreasuryofscriptureknowledge.com']) {
