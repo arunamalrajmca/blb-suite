@@ -150,6 +150,28 @@ test.describe('real-browser source URL redirect regressions', () => {
     await expect(page.locator('article')).toContainText('Continue reading the article.');
   });
 
+  for (const source of [
+    { host: 'gotquestions.org', url: 'https://www.gotquestions.org/example-question.html' },
+    { host: 'crosswalk.com', url: 'https://www.crosswalk.com/faith/bible-study/example.html' },
+    { host: 'enduringword.com', url: 'https://enduringword.com/bible-commentary/john-3/' }
+  ]) {
+    test(`${source.host} passage clicks open BLB and cancel the source site's native click`, async ({ page }) => {
+      const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+      await loadProductionRedirect(page, source.url);
+      await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+      await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
+      await page.evaluate(() => {
+        document.body.innerHTML = '<article><p>Keep this article open.</p><a id="passage" href="/bible-reference">John 3:16</a></article>';
+        document.addEventListener('click', () => { window.__nativeClickRan = true; location.reload(); });
+      });
+      await page.locator('#passage').click();
+      await expect.poll(() => page.evaluate(() => window.__openedBlbUrl || null)).toBe(targetUrl);
+      await expect(page).toHaveURL(source.url);
+      await expect.poll(() => page.evaluate(() => window.__nativeClickRan || false)).toBe(false);
+      await expect(page.locator('article')).toContainText('Keep this article open.');
+    });
+  }
+
   test('Christianity.com click guard resolves chapter, single-verse, and verse-range links to KJV', async ({ page }) => {
     await loadProductionRedirect(page, 'https://www.christianity.com/faith/bible-study/article.html');
     await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });

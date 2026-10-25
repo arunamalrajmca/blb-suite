@@ -546,14 +546,14 @@ function redirectBlbNet() {
 // This makes bare and "www." variants resolve to the same supported source.
 const REDIRECT_HOSTS = new Set([
   'bible.com', 'biblegateway.com', 'bibleref.com', 'biblehub.com',
-  'christianity.com', 'esv.org',
+  'christianity.com', 'crosswalk.com', 'enduringword.com', 'esv.org', 'gotquestions.org',
   'bibleportal.com', 'kingjamesbibleonline.org', 'kjbo.org',
   'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com', 'thekingsbible.com',
   'webstersdictionary1828.com', BLB_HOSTNAME
 ]);
 
 let sourceBibleRedirectEnabled = false;
-if (location.hostname.toLowerCase().replace(/^www\./, "") === "christianity.com") {
+if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com"].includes(location.hostname.toLowerCase().replace(/^www\./, ""))) {
   installChristianityLinkRedirect(() => suiteEnabled && sourceBibleRedirectEnabled);
 }
 

@@ -4,7 +4,7 @@
 // only when that script confirms a valid BLB destination.
 (() => {
   if (window.__blbSourcePassageClickGuardInstalled) return;
-  window.__blbChristianityClickGuardInstalled = true;
+  window.__blbSourcePassageClickGuardInstalled = true;
 
   window.addEventListener("click", event => {
     if (event.button !== 0 || event.metaKey || event.ctrlKey ||
