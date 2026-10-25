@@ -1509,8 +1509,9 @@ if (location.hostname==="webstersdictionary1828.com") {
           version: "kjv",
           text: sourceSite === "enduringword"
             ? (resolved.book.name + " " + resolved.chapter + ":1")
-            : (dataReference ? (resolved.book.name + " " + resolved.chapter + ":" + resolved.from +
-                (resolved.to == null ? "" : "-" + resolved.to)) : label),
+            : (dataReference
+                ? `${resolved.book.name} ${resolved.chapter}:${resolved.from}${resolved.to != null && resolved.to !== resolved.from ? "-" + resolved.to : ""}`
+                : label),
           url: target
         });
       }
