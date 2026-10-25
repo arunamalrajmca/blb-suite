@@ -1661,35 +1661,36 @@ if (location.hostname==="webstersdictionary1828.com") {
           if (!chapterPath) continue;
           parsed = { book: chapterPath[1].replace(/-/g, " "), chapter: Number(chapterPath[2]), from: 1, to: null };
         } else {
+          // Sagacity can wrap a normal reference in malformed/nested anchors,
+          // or expose only an orphaned verse number such as "25". Its BLB
+          // preSearch URL's Criteria parameter is the authoritative full citation.
+          // Read it before the caption so both forms resolve consistently.
+          if (sourceSite === "sagacity") {
+            try {
+              const targetUrl = new URL(anchor.href, location.href);
+              const targetHost = targetUrl.hostname.toLowerCase().replace(/^www\./, "");
+              if (targetHost === "blueletterbible.org" &&
+                  /^\/search\/preSearch\.cfm$/i.test(targetUrl.pathname)) {
+                const criteria = normalizeSelectionText(
+                  String(targetUrl.searchParams.get("Criteria") || "").replace(/\+/g, " ")
+                );
+                parsed = parseRef(criteria);
+              }
+            } catch (_) {}
+          }
           // Prefer structured Bible-reference metadata when a site's visible
           // caption is abbreviated (e.g. "3:11") or otherwise not a full
           // reference. Ignore the source translation; BLB resolves to KJV.
-          if (dataReference) {
+          if (!parsed && dataReference) {
             const rawReference = dataReference.split("|", 1)[0]
               .replace(/_/g, " ")
               .replace(/[–—]/g, "-")
               .trim();
             parsed = parseRef(rawReference);
           }
-          // Fall back to visible text only when no usable metadata is present.
+          // Fall back to visible text only when no usable metadata or source URL
+          // reference is present.
           if (!parsed) parsed = parseRef(label);
-          // Some Sagacity cross-reference links display only an orphaned verse
-          // number (e.g. "25"), while the BLB destination carries the complete
-          // citation in Criteria=Eph+4.25. Recover that full reference only for
-          // number-only captions linking to BLB's native search endpoint.
-          if (!parsed && /^\\d+(?:\\s*[-–—]\\s*\\d+)?$/.test(label)) {
-            try {
-              const targetUrl = new URL(anchor.href, location.href);
-              const targetHost = targetUrl.hostname.toLowerCase().replace(/^www\\./, "");
-              if (targetHost === "blueletterbible.org" &&
-                  /^\\/search\\/preSearch\\.cfm$/i.test(targetUrl.pathname)) {
-                const criteria = normalizeSelectionText(
-                  String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")
-                );
-                parsed = parseRef(criteria);
-              }
-            } catch (_) {}
-          }
         }
         let usedStructuredReference = sourceSite !== "enduringword" && Boolean(dataReference) && Boolean(parsed);
         if ((!parsed || !parsed.book || !Number.isInteger(Number(parsed.chapter)) ||
