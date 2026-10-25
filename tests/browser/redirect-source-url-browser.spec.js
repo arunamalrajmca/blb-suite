@@ -69,8 +69,7 @@ test.describe('real-browser source URL redirect regressions', () => {
   for (const source of [
     { host: 'christianity.com', url: 'https://www.christianity.com/wiki/bible/example.html', button: '#blb-suite-christianity-multiverse' },
     { host: 'gotquestions.org', url: 'https://www.gotquestions.org/example-question.html', button: '#blb-suite-gotquestions-multiverse' },
-    { host: 'crosswalk.com', url: 'https://www.crosswalk.com/faith/bible-study/example.html', button: '#blb-suite-crosswalk-multiverse' },
-    { host: 'enduringword.com', url: 'https://enduringword.com/bible-commentary/john-3/', button: '#blb-suite-enduringword-multiverse' }
+    { host: 'crosswalk.com', url: 'https://www.crosswalk.com/faith/bible-study/example.html', button: '#blb-suite-crosswalk-multiverse' }
   ]) {
     test(`${source.host} offers a page-wide BLB MultiVerse button for linked Bible references`, async ({ page }) => {
       await loadSourcePageMultiVerse(page, source.url);
@@ -94,6 +93,56 @@ test.describe('real-browser source URL redirect regressions', () => {
         'https://www.blueletterbible.org/kjv/eph/2/8-9/'
       ]);
       expect(request.refs.every(ref => ref.version === 'kjv')).toBe(true);
+      await expect(page).toHaveURL(source.url);
+    });
+  }
+
+  test('Enduring Word extracts only Related Commentary chapters and opens verse 1, including Psalms', async ({ page }) => {
+    const sourceUrl = 'https://www.enduringword.com/bible-commentary/john-3/';
+    await loadSourcePageMultiVerse(page, sourceUrl);
+    await page.evaluate(() => {
+      document.body.insertAdjacentHTML('beforeend', `
+        <aside class="ew-xref ew-no-scripture-tag" aria-label="Related commentary in Enduring Word">
+          <section class="ew-xref-sec">
+            <h2 class="ew-xref-title">Related Commentary <span class="ew-xref-count">2</span></h2>
+            <div class="ew-xref-chips">
+              <a class="ew-xref-chip" href="https://enduringword.com/bible-commentary/psalm-15/">Psalm 15</a>
+              <a class="ew-xref-chip" href="https://enduringword.com/bible-commentary/john-13/">John 13</a>
+            </div>
+          </section>
+          <section class="ew-xref-sec">
+            <h2 class="ew-xref-title">Referenced By <span class="ew-xref-count">2</span></h2>
+            <div class="ew-xref-chips">
+              <a class="ew-xref-chip" href="https://enduringword.com/bible-commentary/genesis-1/">Genesis 1</a>
+              <a class="ew-xref-chip" href="https://enduringword.com/bible-commentary/psalm-6/">Psalm 6</a>
+            </div>
+          </section>
+        </aside>`);
+    });
+    await page.locator('#blb-suite-enduringword-multiverse').click();
+    await expect.poll(() => page.evaluate(() => window.__multiVerseRequests?.length || 0)).toBe(1);
+    const request = await page.evaluate(() => window.__multiVerseRequests[0]);
+    expect(request.refs.map(ref => ref.text)).toEqual(['Psalms 15:1', 'John 13:1']);
+    expect(request.refs.map(ref => ref.url)).toEqual([
+      'https://www.blueletterbible.org/kjv/psa/15/1/',
+      'https://www.blueletterbible.org/kjv/jhn/13/1/'
+    ]);
+    await expect(page).toHaveURL(sourceUrl);
+  });
+
+  for (const source of [
+    { host: 'christianity.com', url: 'https://www.christianity.com/', button: '#blb-suite-christianity-multiverse' },
+    { host: 'gotquestions.org', url: 'https://www.gotquestions.org/', button: '#blb-suite-gotquestions-multiverse' },
+    { host: 'crosswalk.com', url: 'https://www.crosswalk.com/', button: '#blb-suite-crosswalk-multiverse' },
+    { host: 'enduringword.com', url: 'https://www.enduringword.com/', button: '#blb-suite-enduringword-multiverse' }
+  ]) {
+    test(`${source.host} homepage does not show the MultiVerse button`, async ({ page }) => {
+      await loadProductionRedirect(page, source.url);
+      await page.addScriptTag({ content: 'function normalizeSelectionText(s) { return String(s || "").replace(/\\\\s+/g, " ").trim(); }' });
+      await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async () => ({ ok: true }) } };' });
+      await page.addScriptTag({ content: sourcePageMultiVerseCode });
+      await page.waitForTimeout(100);
+      await expect(page.locator(source.button)).toHaveCount(0);
       await expect(page).toHaveURL(source.url);
     });
   }
