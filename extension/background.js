@@ -29,12 +29,10 @@ function hostnameMatchesBundledPattern(hostname, pattern) {
 }
 
 async function isSiteEnabledByDefault(hostname, title = '') {
-  // These two sites are enabled for the floating Show on BLB button by default.
-  // The content script and context-menu handler separately suppress the
-  // homepage; nested pages remain eligible. Double-click has its own opt-in
-  // path and must not inherit this default.
-  const host = normalizeSiteHostname(hostname);
-  return host === 'rediscover.bible' || host === 'sagacityweb.com';
+  // A hostname containing "bible" is not evidence that the user enabled a
+  // feature. Keep this default OFF; explicit per-site preferences are checked
+  // separately by isPageButtonEnabledForHostname and the Double-click path.
+  return false;
 }
 
 function redirectToHomepage() {
@@ -6362,13 +6360,6 @@ async function isPageButtonEnabledForHostname(hostname, title = '') {
 
 async function shouldShowBlbContextMenu(tab, selectionText) {
   if (!(await isSuiteEnabled())) return false;
-  // Do not expose the floating-button equivalent in the two configured
-  // sites' homepages; nested pages on the same hosts remain enabled.
-  try {
-    const url = new URL(String(tab?.url || tab?.pendingUrl || ''));
-    const host = normalizeSiteHostname(url.hostname);
-    if ((host === 'rediscover.bible' || host === 'sagacityweb.com') && url.pathname.split('/').join('') === '') return false;
-  } catch (_) {}
   const siteKey = pageSelectionSettingKeyFromTab(tab);
   // The right-click action is exactly the same site-based feature as the
   // floating Show on BLB button. Do not require a content-script visibility
