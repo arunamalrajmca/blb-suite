@@ -75,23 +75,55 @@ test.describe('source Bible URL syntax regression coverage', () => {
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16-17/');
   });
 
-  test('Christianity.com homepage stays put and passage URLs open BLB in a new tab', () => {
-    expect(runSourceRedirect('https://www.christianity.com/').openedInNewTab).toBeNull();
-    expect(runSourceRedirect('https://www.christianity.com/').redirectedTo).toBeNull();
+  test('Christianity.com homepage is excluded; chapter, verse, and range routes open BLB in a new tab', () => {
+    for (const url of [
+      'https://www.christianity.com/',
+      'https://www.christianity.com/bible/',
+      'https://www.christianity.com/bible/help/passage-search-basics/'
+    ]) {
+      expect(runSourceRedirect(url).openedInNewTab, url).toBeNull();
+      expect(runSourceRedirect(url).redirectedTo, url).toBeNull();
+    }
+    expect(runSourceRedirect('https://www.christianity.com/bible/esv/ephesians/2').openedInNewTab)
+      .toBe('https://www.blueletterbible.org/kjv/eph/2/1/');
     expect(runSourceRedirect('https://www.christianity.com/bible/esv/john/3-16').openedInNewTab)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16/');
-    expect(runSourceRedirect('https://www.christianity.com/bible/esv/john/3-16').redirectedTo).toBeNull();
     expect(runSourceRedirect('https://www.christianity.com/bible/niv%2Cesv/1-john/3-16-21').openedInNewTab)
       .toBe('https://www.blueletterbible.org/kjv/1jo/3/16-21/');
+    expect(runSourceRedirect('https://christianity.com/bible/esv/2-corinthians/5-17').openedInNewTab)
+      .toBe('https://www.blueletterbible.org/kjv/2co/5/17/');
+    for (const url of [
+      'https://www.christianity.com/bible/esv/ephesians/2',
+      'https://www.christianity.com/bible/esv/john/3-16',
+      'https://www.christianity.com/bible/niv%2Cesv/1-john/3-16-21'
+    ]) {
+      expect(runSourceRedirect(url).redirectedTo, url).toBeNull();
+    }
   });
 
-  test('ESV.org verse URLs decode plus signs and preserve verse ranges and chapters', () => {
+  test('ESV.org supports root-level chapters, verses, ranges, and /verses/ references', () => {
+    expect(runSourceRedirect('https://www.esv.org/Ephesians+2/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/eph/2/1/');
+    expect(runSourceRedirect('https://www.esv.org/Ephesians%2B2/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/eph/2/1/');
+    expect(runSourceRedirect('https://esv.org/John+3%3A16/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/jhn/3/16/');
+    expect(runSourceRedirect('https://www.esv.org/John+3%3A16-18/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/jhn/3/16-18/');
     expect(runSourceRedirect('https://www.esv.org/verses/John%2B3%3A16/').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16/');
     expect(runSourceRedirect('https://esv.org/verses/John%2B3%3A16-18/').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16-18/');
     expect(runSourceRedirect('https://www.esv.org/verses/Psalm%2B23/').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/psa/23/1/');
+    for (const url of [
+      'https://www.esv.org/',
+      'https://www.esv.org/about/',
+      'https://www.esv.org/resources/esv-crossreference-tool/'
+    ]) {
+      expect(runSourceRedirect(url).redirectedTo, url).toBeNull();
+      expect(runSourceRedirect(url).openedInNewTab, url).toBeNull();
+    }
   });
 
   test('translation selection does not alter the BLB KJV destination', () => {
