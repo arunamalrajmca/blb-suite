@@ -27,20 +27,22 @@ test('Sagacity collector recovers full references from BLB preSearch URLs', () =
 });
 
 test('Sagacity dotted BLB Criteria resolves Matt. 12.37 as Matthew 12:37', () => {
-  const extract = source => {
-    const match = content.match(source);
-    expect(match, 'expected helper declaration in production source').not.toBeNull();
-    return match[0];
+  const extractFunction = name => {
+    const start = content.indexOf('function ' + name + '(');
+    expect(start, 'expected ' + name + ' helper in production source').toBeGreaterThan(-1);
+    const end = content.indexOf('\n}', start) + 2;
+    expect(end).toBeGreaterThan(start + 2);
+    return content.slice(start, end);
   };
   const helpers = vm.runInNewContext([
-    extract(/function decodeSafe\\(v\\) \\{[\\s\\S]*?\\n\\}/),
-    extract(/function parseRef\\(text\\) \\{[\\s\\S]*?\\n\\}/),
-    extract(/function normalizeSourceBibleBook\\(book\\) \\{[\\s\\S]*?\\n\\}/),
+    extractFunction('decodeSafe'),
+    extractFunction('parseRef'),
+    extractFunction('normalizeSourceBibleBook'),
     '({ parseRef, normalizeSourceBibleBook })'
-  ].join('\\n'));
+  ].join('\n'));
   const target = new URL('https://www.blueletterbible.org/search/preSearch.cfm?Criteria=Matt.+12.37&t=ESV');
   const criteria = target.searchParams.get('Criteria').replace(
-    /^(.*?)\\s+(\\d+)\\.(\\d+(?:-\\d+)?)$/,
+    /^(.*?)\s+(\d+)\.(\d+(?:-\d+)?)$/,
     '$1 $2:$3'
   );
   const parsed = helpers.parseRef(criteria);
