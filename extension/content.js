@@ -204,10 +204,11 @@ function parseChristianityBibleLink(href) {
   const from = match[3] ? Number(match[3]) : 1;
   const to = match[4] ? Number(match[4]) : null;
   if (!book || !Number.isInteger(chapter) || chapter < 1 || chapter > book.chapterCount ||
-      !Number.isInteger(from) || from < 1) return null;
+      !Number.isInteger(from)) return null;
   const maxVerse = book.verses?.[chapter - 1];
-  if (!maxVerse || from > maxVerse ||
-      (to !== null && (!Number.isInteger(to) || to < from || to > maxVerse))) return null;
+  if (!maxVerse || (to !== null && (!Number.isInteger(to) || to < from))) return null;
+  // Match other source hosts: the shared resolver clamps verse values to the
+  // valid chapter boundaries instead of rejecting them here.
   return { book:book.name, chapter, from, to };
 }
 
@@ -369,7 +370,7 @@ function redirectBibleSite() {
     }
   }
 
-  if (host==="kjv.site") {
+  if (host==="kjv.site" || host==="m.kjv.site") {
     // The chapter pattern can greedily treat a verse URL such as
     // /John-3-16-kjv/ as book "John-3", chapter 16. Only accept a chapter
     // match when its book token resolves; otherwise try the verse pattern.
@@ -402,6 +403,13 @@ function redirectBibleSite() {
   }
 
   if (!ref) return false;
+  // Chapter numbers must identify a real positive chapter. Verse numbers,
+  // however, follow the shared resolver's boundary policy: values below 1 map
+  // to verse 1 and values above the chapter maximum map to its last verse.
+  // Descending ranges remain invalid rather than being silently reinterpreted.
+  if (!Number.isInteger(ref.chapter) || ref.chapter < 1) return false;
+  if (ref.from != null && !Number.isInteger(ref.from)) return false;
+  if (ref.to != null && (!Number.isInteger(ref.to) || ref.to < (ref.from == null ? 1 : ref.from))) return false;
   const target=blbUrl(ref.book,ref.chapter,ref.from,ref.to);
   if (!target) return false;
   if (target!==u.href) {

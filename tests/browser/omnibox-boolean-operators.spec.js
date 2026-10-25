@@ -82,3 +82,43 @@ test('b cs queries normalize Boolean operators and route expressions to native B
   expect(handler.indexOf('hasUnquotedBooleanOperator(normalizedRawQuery)') < handler.indexOf('searchCaseSensitiveCorpus(')).toBe(true);
   expect(handler.includes('openCaseSensitiveNativeSearch(normalizedRawQuery, disposition)')).toBe(true);
 });
+
+test('omnibox reference boundaries normalize verses but reject invalid chapters and descending ranges', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({ masterEnabled: true });
+
+  const results = await extensionWorker.evaluate(async () => {
+    const originalUpdate = chrome.tabs.update;
+    const navigations = [];
+    chrome.tabs.update = async details => {
+      navigations.push(typeof details === 'object' ? details.url : details);
+      return {};
+    };
+    try {
+      const cases = [
+        ['John 3:0', 'https://www.blueletterbible.org/kjv/jhn/3/1/'],
+        ['John 3:999', 'https://www.blueletterbible.org/kjv/jhn/3/36/'],
+        ['John 0:1', null],
+        ['John 3:16-0', null],
+        ['John 3:18-16', null]
+      ];
+      const output = [];
+      for (const [query, expected] of cases) {
+        navigations.length = 0;
+        await handleBCommand(query);
+        output.push({ query, expected, navigations: [...navigations] });
+      }
+      return output;
+    } finally {
+      chrome.tabs.update = originalUpdate;
+    }
+  });
+
+  for (const result of results) {
+    if (result.expected) {
+      expect(result.navigations, result.query).toContain(result.expected);
+    } else {
+      expect(result.navigations, result.query).toEqual([]);
+    }
+  }
+});

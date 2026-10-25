@@ -2383,6 +2383,16 @@ async function handleBCommand(text, disposition = 'currentTab') {
   if (book) {
     let ch=parsed.chapter, from=parsed.fromVerse, to=parsed.toVerse;
 
+    // Omnibox references share verse-boundary normalization with redirects,
+    // but malformed chapters and descending ranges must not be silently
+    // rewritten. Verse zero is the one intentional lower-bound normalization.
+    if (ch != null) {
+      const numericChapter = Number(ch);
+      if (!Number.isInteger(numericChapter) || numericChapter < 1 || numericChapter > book.chapterCount) return;
+      if (from != null && (!Number.isInteger(Number(from)) || Number(from) < 0)) return;
+      if (to != null && (!Number.isInteger(Number(to)) || Number(to) < Number(from))) return;
+    }
+
     if (ch == null && [book.name,book.urlKey,book.bookNumber,...(book.aliases||[])].includes(low)) {
       // Bare book input is always a book navigation command. Vocabulary overlap
       // (for example Psalms) must never turn a complete book name into search.
