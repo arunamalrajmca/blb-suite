@@ -67,6 +67,10 @@ test.describe('real-browser source URL redirect regressions', () => {
     const sourceUrl = 'https://www.christianity.com/faith/bible-study/article.html';
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
     await loadProductionRedirect(page, sourceUrl);
+    await page.evaluate(() => {
+      // Model a site-level capture handler that has already prevented the default action.
+      window.addEventListener('click', event => event.preventDefault(), true);
+    });
     await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
     await page.evaluate(() => {
       document.body.innerHTML = '<article><p>Continue reading the article.</p><a id="bible-passage" href="https://www.christianity.com/bible/esv/john/3-16?ref=article">John 3:16</a></article>';
