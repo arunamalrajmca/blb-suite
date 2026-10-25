@@ -138,7 +138,7 @@ test.describe('real-browser source URL redirect regressions', () => {
   ]) {
     test(`${source.host} homepage does not show the MultiVerse button`, async ({ page }) => {
       await loadProductionRedirect(page, source.url);
-      await page.addScriptTag({ content: 'function normalizeSelectionText(s) { return String(s || "").replace(/\\\\s+/g, " ").trim(); }' });
+      await page.addScriptTag({ content: 'function normalizeSelectionText(s) { return String(s || "").replace(/\\s+/g, " ").trim(); }' });
       await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async () => ({ ok: true }) } };' });
       await page.addScriptTag({ content: sourcePageMultiVerseCode });
       await page.waitForTimeout(100);
