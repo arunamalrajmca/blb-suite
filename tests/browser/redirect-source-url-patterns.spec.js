@@ -18,7 +18,7 @@ if ([decodeStart, blbUrlStart, parseStart, redirectStart, redirectEnd].some(inde
 }
 // Exercise the production book table, alias resolver, reference validator, and URL builder.
 const helpers = sharedPatternsSource + '\n' + booksSource + '\n' + aliasesSource + '\n' + referenceCoreSource + '\n' +
-  source.slice(decodeStart, parseStart) +
+  source.slice(blbUrlStart, parseStart) +
   source.slice(parseStart, redirectStart) + source.slice(redirectStart, redirectEnd);
 
 function runSourceRedirect(url) {
