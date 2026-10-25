@@ -154,9 +154,13 @@ function blbUrl(book,ch,from=1,to=null) {
   return resolved ? resolved.url : null;
 }
 function normalizeSourceBibleBook(book) {
-  // The resolver's canonical KJV book name is Psalms, while Christianity.com
-  // labels its linked references with the singular form, e.g. “Psalm 136:26”.
-  return /^Psalm$/i.test(String(book || "").trim()) ? "Psalms" : book;
+  // Normalize common source-site abbreviations before KJV book resolution.
+  // Sagacity can expose “Matt. 12:37” in captions and BLB Criteria URLs;
+  // the resolver expects the canonical book name “Matthew”.
+  const value = String(book || "").trim();
+  if (/^Psalm$/i.test(value)) return "Psalms";
+  if (/^Matt\.?$/i.test(value)) return "Matthew";
+  return book;
 }
 
 function formatSourceBibleBookName(book) {
