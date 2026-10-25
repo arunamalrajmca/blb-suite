@@ -176,7 +176,9 @@ function installChristianityLinkRedirect(isEnabled) {
   // Capture at window level so the extension can stop site-level click handlers
   // before they trigger a client-side route change or reload of the article tab.
   window.addEventListener("click", event => {
-    if (event.defaultPrevented || event.button !== 0 ||
+    // A site listener may already have called preventDefault; still intercept
+    // valid Bible links so that site-specific handlers cannot reload the article.
+    if (event.button !== 0 ||
         event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     if (!isEnabled()) return;
     const anchor = event.target?.closest?.("a[href]");
