@@ -369,7 +369,7 @@ function redirectBibleSite() {
     }
   }
 
-  if (host==="kjv.site") {
+  if (host==="kjv.site" || host==="m.kjv.site") {
     // The chapter pattern can greedily treat a verse URL such as
     // /John-3-16-kjv/ as book "John-3", chapter 16. Only accept a chapter
     // match when its book token resolves; otherwise try the verse pattern.
