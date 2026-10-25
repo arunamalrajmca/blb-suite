@@ -167,6 +167,20 @@ function parseRef(text) {
   return m ? {book:m[1].trim(),chapter:Number(m[2]),from:m[3]?Number(m[3]):1,to:m[4]?Number(m[4]):null} : null;
 }
 
+function validateSourceBibleReference(ref) {
+  if (!ref) return null;
+  const book = resolveBibleBook(ref.book);
+  const chapter = Number(ref.chapter);
+  const from = ref.from == null ? 1 : Number(ref.from);
+  const to = ref.to == null ? null : Number(ref.to);
+  if (!book || !Number.isInteger(chapter) || chapter < 1 || chapter > book.chapterCount ||
+      !Number.isInteger(from) || from < 1) return null;
+  const maxVerse = book.verses?.[chapter - 1];
+  if (!maxVerse || from > maxVerse ||
+      (to !== null && (!Number.isInteger(to) || to < from || to > maxVerse))) return null;
+  return {book:book.name, chapter, from, to};
+}
+
 function parseChristianityBibleLink(href) {
   let url;
   try { url = new URL(href, location.href); } catch (_) { return null; }
@@ -269,13 +283,13 @@ function redirectBibleSite() {
     // are ignored.
     const versePath=u.pathname.match(/^\/verses\/(.+?)\/?$/i);
     if (versePath) {
-      ref=parseRef(decodeSafe(versePath[1]).replace(/\+/g," ").replace(/[–—]/g,"-"));
+      ref=validateSourceBibleReference(parseRef(decodeSafe(versePath[1]).replace(/\+/g," ").replace(/[–—]/g,"-")));
     } else {
       const rootPath=u.pathname.match(/^\/([^/]+)\/?$/);
       if (rootPath && /[+%\s]/.test(rootPath[1]) || rootPath && /\d/.test(decodeSafe(rootPath[1]))) {
         const candidate=decodeSafe(rootPath[1]).replace(/\+/g," ").replace(/[–—]/g,"-");
         if (/^[\p{L}\d][\p{L}\d\s.'-]*\s+\d+(?::\d+(?:-\d+)?)?$/u.test(candidate)) {
-          ref=parseRef(candidate);
+          ref=validateSourceBibleReference(parseRef(candidate));
         }
       }
     }
