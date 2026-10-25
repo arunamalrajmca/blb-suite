@@ -63,25 +63,69 @@ test.describe('real-browser source URL redirect regressions', () => {
     await expect(page).toHaveURL(targetUrl);
   });
 
-  test('Christianity.com article passage link opens BLB separately before source navigation', async ({ page }) => {
+  test('Christianity.com article passage click cancels native navigation and opens BLB exactly once', async ({ page }) => {
     const sourceUrl = 'https://www.christianity.com/faith/bible-study/article.html';
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
     await loadProductionRedirect(page, sourceUrl);
     await page.evaluate(() => {
-      // Model a site-level capture handler that has already prevented the default action.
+      // A page listener may preventDefault before the extension sees the click.
       window.addEventListener('click', event => event.preventDefault(), true);
     });
     await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+    await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
     await page.evaluate(() => {
-      document.body.innerHTML = '<article><p>Continue reading the article.</p><a id="bible-passage" href="https://www.christianity.com/bible/esv/john/3-16?ref=article">John 3:16</a></article>';
-      // Model article-site click behavior that would otherwise reload/navigate the source tab.
-      document.addEventListener('click', () => { window.__sourceClickHandlerRan = true; location.reload(); });
+      window.__openedBlbCount = 0;
+      const originalOpen = window.openBlbDestinationFromContent;
+      window.openBlbDestinationFromContent = url => {
+        window.__openedBlbCount += 1;
+        originalOpen(url);
+      };
+      document.body.innerHTML = '<article><p>Continue reading the article.</p><a id="bible-passage" href="https://www.christianity.com/bible/esv/john/3-16?ref=article"><span>John 3:16</span></a></article>';
+      // This source-site bubble handler would otherwise reload the article tab.
+      document.addEventListener('click', () => {
+        window.__sourceClickHandlerRan = true;
+        location.reload();
+      });
     });
-    await page.locator('#bible-passage').click();
+    await page.locator('#bible-passage span').click();
     await expect.poll(() => page.evaluate(() => window.__openedBlbUrl || null)).toBe(targetUrl);
+    await expect.poll(() => page.evaluate(() => window.__openedBlbCount)).toBe(1);
     await expect(page).toHaveURL(sourceUrl);
     await expect(page.evaluate(() => window.__sourceClickHandlerRan || false)).resolves.toBe(false);
     await expect(page.locator('article')).toContainText('Continue reading the article.');
+  });
+
+  test('Christianity.com passage guard leaves ordinary, foreign, modified, and download clicks alone', async ({ page }) => {
+    await loadProductionRedirect(page, 'https://www.christianity.com/faith/bible-study/article.html');
+    await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+    await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
+    const results = await page.evaluate(() => {
+      document.body.innerHTML = [
+        '<a id="ordinary" href="/faith/about-us/">About us</a>',
+        '<a id="foreign" href="https://www.esv.org/John+3%3A16/">John 3:16 ESV</a>',
+        '<a id="modified" href="https://www.christianity.com/bible/esv/john/3-16">John 3:16</a>',
+        '<a id="download" download href="https://www.christianity.com/bible/esv/john/3-16">Download passage</a>',
+        '<a id="unknown" href="https://www.christianity.com/bible/esv/not-a-bible-book/3-16">Unknown book</a>'
+      ].join('');
+      const dispatch = (id, options = {}) => {
+        const anchor = document.getElementById(id);
+        const event = new MouseEvent('click', { bubbles:true, cancelable:true, button:0, ...options });
+        return { allowed: anchor.dispatchEvent(event), prevented: event.defaultPrevented };
+      };
+      return {
+        ordinary: dispatch('ordinary'),
+        foreign: dispatch('foreign'),
+        modified: dispatch('modified', { ctrlKey:true }),
+        download: dispatch('download'),
+        unknown: dispatch('unknown')
+      };
+    });
+    expect(results.ordinary.prevented).toBe(false);
+    expect(results.foreign.prevented).toBe(false);
+    expect(results.modified.prevented).toBe(false);
+    expect(results.download.prevented).toBe(false);
+    expect(results.unknown.prevented).toBe(false);
+    await expect.poll(() => page.evaluate(() => window.__openedBlbUrl || null)).toBeNull();
   });
 
   test('Christianity.com passage opens BLB in a new tab and keeps the source tab', async ({ page }) => {
