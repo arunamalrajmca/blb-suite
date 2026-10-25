@@ -493,4 +493,144 @@ test.describe('real-browser source URL redirect regressions', () => {
     await navigated;
     await expect(page).toHaveURL(targetUrl);
   });
+
+  test('source-page MultiVerse deduplicates equivalent references and ignores malformed metadata and captions', async ({ page }) => {
+    await loadSourcePageMultiVerse(page, 'https://www.crosswalk.com/faith/bible-study/example.html');
+    await page.evaluate(() => {
+      document.body.insertAdjacentHTML('beforeend', `
+        <article>
+          <a href="/bible-reference/1" data-bible-ref-link="Romans_8:9|ESV">8:9</a>
+          <a href="/bible-reference/2" data-bible-ref-link="Romans_8:9|NIV">Read more</a>
+          <a href="/bible-reference/3" data-bible-ref-link="John_3:16-18|ESV">passage</a>
+          <a href="/bible-reference/4" data-bible-ref-link="not-a-reference|ESV">not a Bible reference</a>
+          <a href="/bible-reference/5">read more</a>
+          <a href="/bible-reference/6" data-bible-ref-link="John_3:16|ESV" download>John 3:16 download</a>
+        </article>`);
+    });
+    await page.locator('#blb-suite-crosswalk-multiverse').click();
+    await expect.poll(() => page.evaluate(() => window.__multiVerseRequests?.length || 0)).toBe(1);
+    const refs = await page.evaluate(() => window.__multiVerseRequests[0].refs);
+    expect(refs.map(ref => ref.url)).toEqual([
+      'https://www.blueletterbible.org/kjv/rom/8/9/',
+      'https://www.blueletterbible.org/kjv/jhn/3/16-18/'
+    ]);
+    expect(refs.map(ref => ref.text)).toEqual(['Romans 8:9', 'John 3:16-18']);
+  });
+
+  test('Enduring Word MultiVerse ignores body references and unrelated cross-reference sections', async ({ page }) => {
+    const sourceUrl = 'https://www.enduringword.com/bible-commentary/john-3/';
+    await loadSourcePageMultiVerse(page, sourceUrl);
+    await page.evaluate(() => {
+      document.body.insertAdjacentHTML('beforeend', `
+        <article><a href="https://enduringword.com/bible-commentary/romans-8/">Romans 8</a>
+          <a href="https://enduringword.com/bible-commentary/psalm-23/">Psalm 23</a></article>
+        <aside class="ew-xref">
+          <section class="ew-xref-sec">
+            <h2 class="ew-xref-title">Related Articles</h2>
+            <div class="ew-xref-chips"><a href="https://enduringword.com/bible-commentary/genesis-1/">Genesis 1</a></div>
+          </section>
+          <section class="ew-xref-sec">
+            <h2 class="ew-xref-title">Referenced By</h2>
+            <div class="ew-xref-chips">
+              <a href="https://enduringword.com/bible-commentary/psalm-23/">Psalm 23</a>
+              <a href="https://enduringword.com/bible-commentary/john-3/verse-16/">John 3:16</a>
+              <a href="https://enduringword.com/bible-commentary/romans-8/">Romans 8</a>
+            </div>
+          </section>
+        </aside>`);
+    });
+    await page.locator('#blb-suite-enduringword-multiverse').click();
+    await expect.poll(() => page.evaluate(() => window.__multiVerseRequests?.length || 0)).toBe(1);
+    const refs = await page.evaluate(() => window.__multiVerseRequests[0].refs);
+    expect(refs.map(ref => ref.url)).toEqual([
+      'https://www.blueletterbible.org/kjv/psa/23/1/',
+      'https://www.blueletterbible.org/kjv/rom/8/1/'
+    ]);
+    expect(refs.every(ref => ref.text.endsWith(':1'))).toBe(true);
+  });
+
+  test('Christianity.com passage click guard ignores non-passage links and preserves modified clicks', async ({ page }) => {
+    await loadProductionRedirect(page, 'https://www.christianity.com/faith/bible-study/article.html');
+    await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+    await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
+    const results = await page.evaluate(() => {
+      document.body.innerHTML = [
+        '<a id="ordinary" href="/about/">About</a>',
+        '<a id="foreign" href="https://www.esv.org/John+3%3A16/">John 3:16</a>',
+        '<a id="bad-book" href="/bible/esv/not-a-book/3-16">John 3:16</a>',
+        '<a id="modified" href="/bible/esv/john/3-16">John 3:16</a>'
+      ].join('');
+      const click = (id, options = {}) => {
+        const anchor = document.getElementById(id);
+        const event = new MouseEvent('click', { bubbles:true, cancelable:true, button:0, ...options });
+        let guardPrevented = false;
+        window.addEventListener('click', e => {
+          guardPrevented = e.defaultPrevented;
+          e.preventDefault();
+        }, { once:true });
+        anchor.dispatchEvent(event);
+        return guardPrevented;
+      };
+      return {
+        ordinary: click('ordinary'),
+        foreign: click('foreign'),
+        badBook: click('bad-book'),
+        ctrl: click('modified', { ctrlKey:true }),
+        shift: click('modified', { shiftKey:true }),
+        middle: click('modified', { button:1 })
+      };
+    });
+    expect(results).toEqual({
+      ordinary:false, foreign:false, badBook:false, ctrl:false, shift:false, middle:false
+    });
+    expect(await page.evaluate(() => window.__openedBlbUrl || null)).toBeNull();
+  });
+
+  test('source-site passage click guards respect disabled redirect setting on all guarded hosts', async ({ page }) => {
+    for (const source of [
+      { url:'https://www.gotquestions.org/example-question.html', href:'/question-about-john-3-16', label:'John 3:16' },
+      { url:'https://www.crosswalk.com/faith/bible-study/example.html', href:'/john-3-16', label:'John 3:16' },
+      { url:'https://www.enduringword.com/bible-commentary/john-3/', href:'/john-3-16', label:'John 3:16' }
+    ]) {
+      await loadProductionRedirect(page, source.url);
+      await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => false);' });
+      await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
+      const result = await page.evaluate(({href,label}) => {
+        document.body.innerHTML = '';
+        const anchor = document.createElement('a');
+        anchor.href = href;
+        anchor.textContent = label;
+        document.body.appendChild(anchor);
+        let guardPrevented = null;
+        window.addEventListener('click', event => {
+          guardPrevented = event.defaultPrevented;
+          event.preventDefault();
+        }, { once:true });
+        anchor.dispatchEvent(new MouseEvent('click', { bubbles:true, cancelable:true, button:0 }));
+        return guardPrevented;
+      }, {href:source.href,label:source.label});
+      expect(result, source.url).toBe(false);
+      expect(await page.evaluate(() => window.__openedBlbUrl || null), source.url).toBeNull();
+    }
+  });
+
+  test('ESV.org ignores malformed, unrelated, and invalid Bible references', async ({ page }) => {
+    for (const sourceUrl of [
+      'https://www.esv.org/',
+      'https://www.esv.org/about/',
+      'https://www.esv.org/resources/esv-crossreference-tool/',
+      'https://www.esv.org/John+0/',
+      'https://www.esv.org/John+3%3A0/',
+      'https://www.esv.org/John+3%3A18-16/',
+      'https://www.esv.org/NotABook+3%3A16/',
+      'https://www.esv.org/verses/not-a-reference/'
+    ]) {
+      await loadProductionRedirect(page, sourceUrl);
+      await page.addScriptTag({ content: productionRedirectGate });
+      await page.waitForTimeout(30);
+      expect(await page.evaluate(() => window.__openedBlbUrl || null), sourceUrl).toBeNull();
+      expect(new URL(page.url()).hostname, sourceUrl).toBe('www.esv.org');
+    }
+  });
+
 });
