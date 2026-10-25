@@ -68,6 +68,10 @@ jobs:
       - name: Run source URL parser regressions
         if: ${{ needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
         run: npx playwright test tests/browser/redirect-source-url-patterns.spec.js
+
+      - name: Run omnibox reference boundary regressions
+        if: ${{ needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
+        run: npx playwright test tests/browser/omnibox-boolean-operators.spec.js --grep 'omnibox reference boundaries'
       - name: Run source URL browser redirect regressions
         if: ${{ needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-e2e-a') }}
         run: npx playwright test tests/browser/redirect-source-url-browser.spec.js
