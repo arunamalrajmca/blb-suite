@@ -1282,9 +1282,8 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
         from: resolved.from,
         to: resolved.to,
         version: "kjv",
-        text: usedStructuredReference
-          ? `${resolved.book.name} ${resolved.chapter}:${resolved.from}${resolved.to != null && resolved.to !== resolved.from ? "-" + resolved.to : ""}`
-          : label,
+        // Keep the source caption when available; this collector does not define usedStructuredReference.
+        text: label || `${resolved.book.name} ${resolved.chapter}:${resolved.from}${resolved.to != null && resolved.to !== resolved.from ? "-" + resolved.to : ""}`,
         url: target
       });
     }
