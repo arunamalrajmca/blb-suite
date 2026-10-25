@@ -42,7 +42,7 @@ async function loadProductionRedirect(page, sourceUrl) {
   await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) } } }; function redirectBlbNet() { return false; } function openBlbDestinationFromContent(url) { window.__openedBlbUrl = url; }' });
 }
 
-const draggableButtonStart = contentSource.indexOf('function makeBlbMultiVerseButtonDraggable(button) {');
+const draggableButtonStart = contentSource.indexOf('function makeBlbMultiVerseButtonDraggable(button');
 const draggableButtonEnd = contentSource.indexOf("// ---------- The King's Bible Dictionary/Concordance MultiVerse ----------", draggableButtonStart);
 const sourcePageMultiVerseStart = contentSource.indexOf('// ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------');
 const sourcePageMultiVerseEnd = contentSource.indexOf('// ---------- BLB MultiVerse hand-off ----------', sourcePageMultiVerseStart);
