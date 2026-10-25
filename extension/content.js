@@ -1025,8 +1025,10 @@ if (location.hostname.endsWith(BLB_HOSTNAME)) {
 
 // Shared drag behavior for page-wide MultiVerse buttons. Position is stored
 // in extension-local storage so it survives reloads and browser restarts.
-function makeBlbMultiVerseButtonDraggable(button) {
-  const positionKey = "blbSuiteMultiVerseButtonPosition";
+function makeBlbMultiVerseButtonDraggable(button, options = {}) {
+  const positionKey = options.positionKey || "blbSuiteMultiVerseButtonPosition";
+  const defaultRight = Number.isFinite(options.defaultRight) ? options.defaultRight : 18;
+  const defaultBottom = Number.isFinite(options.defaultBottom) ? options.defaultBottom : 18;
   if (!button || button.dataset.blbDraggableReady === "true") return;
   button.dataset.blbDraggableReady = "true";
   button.style.touchAction = "none";
@@ -1035,21 +1037,27 @@ function makeBlbMultiVerseButtonDraggable(button) {
 
   const reset = document.createElement("button");
   reset.type = "button";
-  reset.id = button.id + "-reset-position";
+  reset.id = button.id + (options.resetIdSuffix || "-reset-position");
   reset.textContent = "↺";
   reset.title = "Reset button position";
   reset.setAttribute("aria-label", "Reset button position");
   reset.style.cssText = "position:fixed;z-index:2147483647;display:inline-flex;align-items:center;justify-content:center;width:27px;height:27px;padding:0;border:1px solid #505257;border-radius:6px;background:#292a2d;color:#f1f3f4;font:600 17px Arial,sans-serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.35)";
   reset.addEventListener("pointerdown", event => event.stopPropagation());
-  reset.addEventListener("click", async event => {
+  // Serialize position writes and resets so an in-flight drag save cannot
+  // race with Reset and restore the position immediately after it is removed.
+  let positionWriteQueue = Promise.resolve();
+  reset.addEventListener("click", event => {
     event.preventDefault();
     event.stopPropagation();
-    try { await chrome.storage.local.remove(positionKey); } catch (_) {}
     button.style.left = "auto";
     button.style.top = "auto";
-    button.style.right = "18px";
-    button.style.bottom = "18px";
+    button.style.right = defaultRight + "px";
+    button.style.bottom = defaultBottom + "px";
     placeReset();
+    positionWriteQueue = positionWriteQueue
+      .catch(() => {})
+      .then(() => chrome.storage.local.remove(positionKey))
+      .catch(() => {});
   });
 
   function clamp(value, min, max) {
@@ -1075,6 +1083,7 @@ function makeBlbMultiVerseButtonDraggable(button) {
   }
   function placeReset() {
     if (!button.isConnected || !reset.isConnected) return;
+    reset.style.display = getComputedStyle(button).display === "none" ? "none" : "inline-flex";
     const size = viewportSize();
     const rect = button.getBoundingClientRect();
     const resetRect = reset.getBoundingClientRect();
@@ -1083,10 +1092,14 @@ function makeBlbMultiVerseButtonDraggable(button) {
     reset.style.left = clamp(left, 0, size.width - resetRect.width) + "px";
     reset.style.top = clamp(rect.top + (rect.height - resetRect.height) / 2, 0, size.height - resetRect.height) + "px";
   }
-  async function savePosition() {
+  function savePosition() {
     const position = clampButtonPosition();
     placeReset();
-    try { await chrome.storage.local.set({[positionKey]: position}); } catch (_) {}
+    positionWriteQueue = positionWriteQueue
+      .catch(() => {})
+      .then(() => chrome.storage.local.set({[positionKey]: position}))
+      .catch(() => {});
+    return positionWriteQueue;
   }
 
   let pointerStart = null;
@@ -1138,7 +1151,11 @@ function makeBlbMultiVerseButtonDraggable(button) {
     event.stopImmediatePropagation();
   }, true);
 
-  document.body.appendChild(reset);
+  (document.body || document.documentElement).appendChild(reset);
+  // Show the reset control only while the floating button itself is visible.
+  const visibilityObserver = new MutationObserver(() => placeReset());
+  visibilityObserver.observe(button, {attributes:true, attributeFilter:["style"]});
+  button.__blbDragVisibilityObserver = visibilityObserver;
   chrome.storage.local.get({[positionKey]: null}).then(data => {
     const saved = data?.[positionKey];
     if (!saved || !Number.isFinite(saved.left) || !Number.isFinite(saved.top) || !button.isConnected) {
@@ -1155,7 +1172,10 @@ function makeBlbMultiVerseButtonDraggable(button) {
   }).catch(() => placeReset());
 
   const onViewportChange = () => {
-    if (!button.isConnected) { reset.remove(); return; }
+    if (!button.isConnected) { reset.remove(); visibilityObserver.disconnect(); return; }
+    // A selection-driven button is hidden between selections; do not convert
+    // its right/bottom default anchor into a meaningless 0,0 position.
+    if (getComputedStyle(button).display === "none") { placeReset(); return; }
     clampButtonPosition();
     placeReset();
   };
@@ -3595,7 +3615,10 @@ function setBlbPageButtonVisible(visible) {
 
 function removeBlbPageSelectionButton() {
   setBlbPageButtonVisible(false);
-  document.getElementById(BLB_PAGE_BUTTON_ID)?.remove();
+  const button = document.getElementById(BLB_PAGE_BUTTON_ID);
+  button?.__blbDragVisibilityObserver?.disconnect();
+  document.getElementById(BLB_PAGE_BUTTON_ID + '-reset-position')?.remove();
+  button?.remove();
   blbPageButtonSelection = '';
 }
 
@@ -3615,7 +3638,7 @@ function addBlbPageSelectionButton() {
   const isWebsterPage = location.hostname.toLowerCase() === 'webstersdictionary1828.com';
   const buttonBottom = isWebsterPage ? 'bottom:68px' : 'bottom:20px';
   button.style.cssText = [
-    'position:fixed !important','right:20px !important',buttonBottom + ' !important','z-index:2147483647 !important','max-width:calc(100vw - 40px) !important',
+    'position:fixed !important','right:20px',buttonBottom,'z-index:2147483647 !important','max-width:calc(100vw - 40px) !important',
     'display:none','padding:9px 13px','border-radius:7px',
     'background:#292a2d','color:#f1f3f4','border:1px solid #505257','font:600 13px Arial,sans-serif',
     'line-height:1.2','cursor:pointer','box-shadow:0 2px 8px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.08)',
@@ -3662,6 +3685,11 @@ function addBlbPageSelectionButton() {
   });
 
   mount.appendChild(button);
+  makeBlbMultiVerseButtonDraggable(button, {
+    positionKey: 'blbSuiteShowOnBLBButtonPosition',
+    defaultRight: 20,
+    defaultBottom: isWebsterPage ? 68 : 20
+  });
 }
 
 async function updateBlbPageSelectionButtonFromSelection() {
@@ -3751,7 +3779,7 @@ function scheduleFinalBlbPageSelectionButtonUpdate() {
 
 function handleBlbPageSelectionMouseDown(event) {
   if (!pageButtonMonitoring || pageButtonActionInProgress) return;
-  if (event?.target instanceof Element && event.target.closest(`#${BLB_PAGE_BUTTON_ID}`)) return;
+  if (event?.target instanceof Element && event.target.closest(`#${BLB_PAGE_BUTTON_ID}, #${BLB_PAGE_BUTTON_ID}-reset-position`)) return;
   // Preserve an existing selection for the native right-click menu.
   if (event?.button === 2) return;
   invalidateBlbPageSelectionButton();
