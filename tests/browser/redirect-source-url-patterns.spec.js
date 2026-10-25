@@ -73,6 +73,22 @@ test.describe('source Bible URL syntax regression coverage', () => {
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16-17/');
   });
 
+  test('Christianity.com passage URLs ignore selected translations and preserve ranges', () => {
+    expect(runSourceRedirect('https://www.christianity.com/bible/esv/john/3-16').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/jhn/3/16/');
+    expect(runSourceRedirect('https://www.christianity.com/bible/niv%2Cesv/1-john/3-16-21').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/1jo/3/16-21/');
+  });
+
+  test('ESV.org verse URLs decode plus signs and preserve verse ranges and chapters', () => {
+    expect(runSourceRedirect('https://www.esv.org/verses/John%2B3%3A16/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/jhn/3/16/');
+    expect(runSourceRedirect('https://esv.org/verses/John%2B3%3A16-18/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/jhn/3/16-18/');
+    expect(runSourceRedirect('https://www.esv.org/verses/Psalm%2B23/').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/psa/23/1/');
+  });
+
   test('translation selection does not alter the BLB KJV destination', () => {
     expect(runSourceRedirect('https://www.bible.com/bible/111/JHN.3.16-21.niv').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16-21/');
