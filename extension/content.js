@@ -1217,6 +1217,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
       let chapter = parsed?.chapter;
       let from = parsed?.from ?? 1;
       let to = parsed?.to ?? null;
+      let usedStructuredReference = false;
 
       // Concordance entries identify the verse directly in their /Bible/<book>/<chapter>?verse=<n> URL.
       // Use that structured route rather than relying on abbreviated display labels such as "Ex 4:14".
@@ -1233,6 +1234,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
               chapter = Number(match[2]);
               from = verse;
               to = null;
+              usedStructuredReference = true;
             }
           }
         } catch (_) {}
@@ -1252,6 +1254,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
         const range = label.match(/^(\d+):(\d+)-(\d+)$/);
         if (!book || chapter < 1 || from < 1) continue;
         bookName = book.name;
+        usedStructuredReference = true;
         if (range && Number(range[1]) === chapter && Number(range[2]) === from && Number(range[3]) >= from) {
           to = Number(range[3]);
         } else {
@@ -1282,8 +1285,10 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
         from: resolved.from,
         to: resolved.to,
         version: "kjv",
-        // Preserve the visible source caption, with a canonical reference as a fallback.
-        text: label || `${resolved.book.name} ${resolved.chapter}:${resolved.from}${resolved.to != null && resolved.to !== resolved.from ? "-" + resolved.to : ""}`,
+        // Structured source data determines the passage; use the caption when parsing it supplied the reference.
+        text: usedStructuredReference || !label
+          ? `${resolved.book.name} ${resolved.chapter}:${resolved.from}${resolved.to != null && resolved.to !== resolved.from ? "-" + resolved.to : ""}`
+          : label,
         url: target
       });
     }
