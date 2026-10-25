@@ -1,37 +1,23 @@
 const { test, expect } = require('./fixtures');
 
-test('Study Sessions lifecycle creates a topic, edits notes, stops recording, and retains history', async ({ extensionWorker, extensionStorage }) => {
+test('Study Sessions lifecycle creates a topic, edits notes, stops recording, and retains history', async ({ context, extensionId, extensionStorage }) => {
   await extensionStorage.clear();
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  const send = message => page.evaluate(value => chrome.runtime.sendMessage(value), message);
   const topic = 'BLB regression lifecycle ' + Date.now();
   const normalizedTopic = topic.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
 
-  const started = await extensionWorker.evaluate(async ({ topic }) =>
-    chrome.runtime.sendMessage({
-      type: 'blbSuiteStartStudyTopic',
-      title: topic,
-      note: 'Initial note'
-    }), { topic });
+  const started = await send({ type: 'blbSuiteStartStudyTopic', title: topic, note: 'Initial note' });
   expect(started).toMatchObject({ ok: true, recording: true, topic: normalizedTopic });
 
-  const added = await extensionWorker.evaluate(async ({ topic }) =>
-    chrome.runtime.sendMessage({
-      type: 'blbSuiteAddStudyNoteToTopic',
-      topic,
-      note: 'Second note'
-    }), { topic });
+  const added = await send({ type: 'blbSuiteAddStudyNoteToTopic', topic, note: 'Second note' });
   expect(added).toMatchObject({ ok: true, topic: normalizedTopic });
 
-  const updated = await extensionWorker.evaluate(async ({ topic }) =>
-    chrome.runtime.sendMessage({
-      type: 'blbSuiteUpdateStudyNoteToTopic',
-      topic,
-      originalNote: 'Initial note',
-      note: 'Edited initial note'
-    }), { topic });
+  const updated = await send({ type: 'blbSuiteUpdateStudyNoteToTopic', topic, originalNote: 'Initial note', note: 'Edited initial note' });
   expect(updated).toMatchObject({ ok: true, topic: normalizedTopic });
 
-  const active = await extensionWorker.evaluate(() =>
-    chrome.runtime.sendMessage({ type: 'blbSuiteGetStudyUiState' }));
+  const active = await send({ type: 'blbSuiteGetStudyUiState' });
   expect(active).toMatchObject({
     ok: true,
     recording: true,
@@ -40,38 +26,37 @@ test('Study Sessions lifecycle creates a topic, edits notes, stops recording, an
   });
   expect(active.topicStats[normalizedTopic].notes).toBe(2);
 
-  const stopped = await extensionWorker.evaluate(() =>
-    chrome.runtime.sendMessage({ type: 'blbSuiteStopStudyRecording' }));
+  const stopped = await send({ type: 'blbSuiteStopStudyRecording' });
   expect(stopped).toMatchObject({ ok: true, recording: false });
 
-  const persisted = await extensionWorker.evaluate(() =>
-    chrome.runtime.sendMessage({ type: 'blbSuiteGetStudyUiState' }));
+  const persisted = await send({ type: 'blbSuiteGetStudyUiState' });
   expect(persisted.ok).toBe(true);
   expect(persisted.recording).toBe(false);
   expect(persisted.topics).toContain(normalizedTopic);
   expect(persisted.topicStats[normalizedTopic].notes).toBe(2);
+  await page.close();
 });
 
-test('Study Sessions reject empty topic and note input without corrupting the current session', async ({ extensionWorker, extensionStorage }) => {
+test('Study Sessions reject empty topic and note input without corrupting the current session', async ({ context, extensionId, extensionStorage }) => {
   await extensionStorage.clear();
-  const emptyStart = await extensionWorker.evaluate(() =>
-    chrome.runtime.sendMessage({ type: 'blbSuiteStartStudyTopic', title: '   ', note: 'ignored' }));
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  const send = message => page.evaluate(value => chrome.runtime.sendMessage(value), message);
+  const emptyStart = await send({ type: 'blbSuiteStartStudyTopic', title: '   ', note: 'ignored' });
   expect(emptyStart).toMatchObject({ ok: false, reason: 'empty' });
 
   const topic = 'BLB regression empty-input ' + Date.now();
   const normalizedTopic = topic.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
-  const started = await extensionWorker.evaluate(async ({ topic }) =>
-    chrome.runtime.sendMessage({ type: 'blbSuiteStartStudyTopic', title: topic }), { topic });
+  const started = await send({ type: 'blbSuiteStartStudyTopic', title: topic });
   expect(started).toMatchObject({ ok: true, recording: true, topic: normalizedTopic });
 
-  const emptyNote = await extensionWorker.evaluate(async ({ topic }) =>
-    chrome.runtime.sendMessage({ type: 'blbSuiteAddStudyNoteToTopic', topic, note: '   ' }), { topic });
+  const emptyNote = await send({ type: 'blbSuiteAddStudyNoteToTopic', topic, note: '   ' });
   expect(emptyNote).toMatchObject({ ok: false, reason: 'empty' });
 
-  const state = await extensionWorker.evaluate(() =>
-    chrome.runtime.sendMessage({ type: 'blbSuiteGetStudyUiState' }));
+  const state = await send({ type: 'blbSuiteGetStudyUiState' });
   expect(state).toMatchObject({ ok: true, recording: true, currentTopic: normalizedTopic });
   expect(state.currentSession.notes).toBe(0);
+  await page.close();
 });
 
 test('Global master OFF gates Show on BLB without erasing per-site preferences or coupling redirects', async ({ extensionWorker, extensionStorage }) => {
