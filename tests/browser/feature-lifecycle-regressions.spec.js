@@ -73,3 +73,35 @@ test('Study Sessions reject empty topic and note input without corrupting the cu
   expect(state).toMatchObject({ ok: true, recording: true, currentTopic: normalizedTopic });
   expect(state.currentSession.notes).toBe(0);
 });
+
+test('Global master OFF gates Show on BLB without erasing per-site preferences or coupling redirects', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    masterEnabled: true,
+    redirectEnabled: false,
+    pageSelectionButtonSites: { 'example.com': true },
+    doubleClickBlbSites: { 'example.com': true }
+  });
+
+  const enabled = await extensionWorker.evaluate(async () => ({
+    eligible: await isPageButtonEnabledForHostname('example.com'),
+    contextMenu: await shouldShowBlbContextMenu({ url: 'https://example.com/', title: 'Example' }, 'John 3:16')
+  }));
+  expect(enabled).toEqual({ eligible: true, contextMenu: true });
+
+  await extensionStorage.set({ masterEnabled: false });
+  const disabled = await extensionWorker.evaluate(async () => ({
+    eligible: await isPageButtonEnabledForHostname('example.com'),
+    contextMenu: await shouldShowBlbContextMenu({ url: 'https://example.com/', title: 'Example' }, 'John 3:16'),
+    saved: await chrome.storage.local.get({ pageSelectionButtonSites: {}, doubleClickBlbSites: {}, redirectEnabled: true })
+  }));
+  expect(disabled.eligible).toBe(false);
+  expect(disabled.contextMenu).toBe(false);
+  expect(disabled.saved.pageSelectionButtonSites['example.com']).toBe(true);
+  expect(disabled.saved.doubleClickBlbSites['example.com']).toBe(true);
+  expect(disabled.saved.redirectEnabled).toBe(false);
+
+  await extensionStorage.set({ masterEnabled: true });
+  const restored = await extensionWorker.evaluate(() => isPageButtonEnabledForHostname('example.com'));
+  expect(restored).toBe(true);
+});
