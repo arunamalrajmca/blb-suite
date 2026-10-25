@@ -181,11 +181,15 @@ function installChristianityLinkRedirect(isEnabled) {
     if (event.button !== 0 ||
         event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     if (!isEnabled()) return;
-    const anchor = event.target?.closest?.("a[href]");
+    const eventTarget = event.target instanceof Element
+      ? event.target
+      : event.target?.parentElement;
+    const anchor = eventTarget?.closest?.("a[href]");
     if (!anchor || anchor.hasAttribute("download")) return;
     const target = christianityBibleLinkTarget(anchor.href);
     if (!target) return;
     event.preventDefault();
+    event.stopPropagation();
     event.stopImmediatePropagation();
     openBlbDestinationFromContent(target);
   }, true);
