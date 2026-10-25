@@ -50,11 +50,7 @@
   "optional_host_permissions": [
     "http://*/*",
     "https://*/*",
-    "https://chatgpt.com/*",
-    "https://rediscover.bible/*",
-    "https://www.rediscover.bible/*",
-    "https://sagacityweb.com/*",
-    "https://www.sagacityweb.com/*"
+    "https://chatgpt.com/*"
   ],
   "content_scripts": [
     {
