@@ -1612,7 +1612,9 @@ if (location.hostname==="webstersdictionary1828.com") {
     "christianity.com":"christianity",
     "gotquestions.org":"gotquestions",
     "crosswalk.com":"crosswalk",
-    "enduringword.com":"enduringword"
+    "enduringword.com":"enduringword",
+    "rediscover.bible":"rediscover",
+    "sagacityweb.com":"sagacity"
   })[host] || "";
   // These sites' homepages are general landing pages, not article/reference
   // pages. Keep the page-wide collection button limited to nested pages.
@@ -3408,10 +3410,7 @@ async function refreshDoubleClickBlb() {
       ? data.doubleClickBlbSites : {};
     const hasExplicitPreference = Object.prototype.hasOwnProperty.call(sites, siteKey);
     const defaultEnabled = await getSiteDefaultEnabled();
-    // These sites are default-enabled for the floating Show on BLB button
-    // only. Keep Double-click independent unless the user explicitly enables it.
-    const buttonOnlyDefaultSite = siteKey === 'rediscover.bible' || siteKey === 'sagacityweb.com';
-    doubleClickBlbEnabled = hasExplicitPreference ? sites[siteKey] === true : (buttonOnlyDefaultSite ? false : defaultEnabled);
+    doubleClickBlbEnabled = hasExplicitPreference ? sites[siteKey] === true : defaultEnabled;
     if (doubleClickBlbEnabled) enableDoubleClickBlb();
     else disableDoubleClickBlb();
   } catch (_) {
@@ -3455,11 +3454,9 @@ let pageButtonDomValidationFrame = 0;
 
 function isBlbPageButtonExcludedSite() {
   const host = String(location.hostname || '').toLowerCase().replace(/\.$/, '').replace(/^www\./, '');
-  // Exclude only BLB subdomains other than the main hostname, plus the
-  // homepages of these two sites. Their nested pages are intentionally enabled.
-  if (host !== BLBShared.hostnames.blb && host.endsWith('.' + BLBShared.hostnames.blb)) return true;
-  const pathname = String(location.pathname || '/').replace(/\/+$/, '') || '/';
-  return (host === 'rediscover.bible' || host === 'sagacityweb.com') && pathname === '/';
+  // Exclude only BLB subdomains other than the main hostname. Ordinary external
+  // sites must remain eligible when Show on BLB is explicitly enabled.
+  return host !== BLBShared.hostnames.blb && host.endsWith('.' + BLBShared.hostnames.blb);
 }
 
 
