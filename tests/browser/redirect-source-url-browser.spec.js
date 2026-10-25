@@ -17,7 +17,7 @@ const gateStart = contentSource.indexOf('const REDIRECT_HOSTS = new Set([');
 const gateEnd = contentSource.indexOf('// ---------- BLB MultiVerse', gateStart);
 if (gateStart < 0 || gateEnd < 0) throw new Error('Could not locate production content-side redirect gate');
 const productionRedirectHelpers =
-  contentSource.slice(decodeStart, parseStart) +
+  contentSource.slice(bookKeyStart, parseStart) +
   contentSource.slice(parseStart, redirectStart) +
   contentSource.slice(redirectStart, redirectEnd);
 const productionRedirectGate = contentSource.slice(gateStart, gateEnd);
