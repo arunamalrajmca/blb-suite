@@ -159,6 +159,17 @@ function normalizeSourceBibleBook(book) {
   return /^Psalm$/i.test(String(book || "").trim()) ? "Psalms" : book;
 }
 
+function formatSourceBibleBookName(book) {
+  // BOOKS stores names in lowercase for matching; generated labels need
+  // readable book-name casing without capitalizing words such as “of”.
+  const minorWords = new Set(["of", "the"]);
+  return String(book || "").split(/\s+/).map((word, index) => {
+    if (!word) return word;
+    if (index > 0 && minorWords.has(word.toLowerCase())) return word.toLowerCase();
+    return word.charAt(0).toUpperCase() + word.slice(1);
+  }).join(" ");
+}
+
 function parseRef(text) {
   const value=decodeSafe(text).trim();
   // Accept normal references and BiblePortal's dotted form, e.g.
@@ -1531,9 +1542,9 @@ if (location.hostname==="webstersdictionary1828.com") {
           to: resolved.to,
           version: "kjv",
           text: sourceSite === "enduringword"
-            ? (resolved.book.name + " " + resolved.chapter + ":1")
+            ? (formatSourceBibleBookName(resolved.book.name) + " " + resolved.chapter + ":1")
             : (dataReference
-                ? `${resolved.book.name} ${resolved.chapter}:${resolved.from}${resolved.to != null && resolved.to !== resolved.from ? "-" + resolved.to : ""}`
+                ? `${formatSourceBibleBookName(resolved.book.name)} ${resolved.chapter}:${resolved.from}${resolved.to != null && resolved.to !== resolved.from ? "-" + resolved.to : ""}`
                 : label),
           url: target
         });
