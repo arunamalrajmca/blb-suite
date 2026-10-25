@@ -167,14 +167,28 @@ function parseRef(text) {
   return m ? {book:m[1].trim(),chapter:Number(m[2]),from:m[3]?Number(m[3]):1,to:m[4]?Number(m[4]):null} : null;
 }
 
-function christianityBibleLinkTarget(href) {
+function parseChristianityBibleLink(href) {
   let url;
   try { url = new URL(href, location.href); } catch (_) { return null; }
   if (url.hostname.toLowerCase().replace(/^www\./, "") !== "christianity.com") return null;
   const match = url.pathname.match(/^\/bible\/[^/]+\/([^/]+)\/(\d+)(?:-(\d+)(?:-(\d+))?)?\/?$/i);
   if (!match) return null;
-  return blbUrl(match[1].replace(/-/g, " "), Number(match[2]),
-    match[3] ? Number(match[3]) : 1, match[4] ? Number(match[4]) : null);
+
+  const book = resolveBibleBook(match[1].replace(/-/g, " "));
+  const chapter = Number(match[2]);
+  const from = match[3] ? Number(match[3]) : 1;
+  const to = match[4] ? Number(match[4]) : null;
+  if (!book || !Number.isInteger(chapter) || chapter < 1 || chapter > book.chapterCount ||
+      !Number.isInteger(from) || from < 1) return null;
+  const maxVerse = book.verses?.[chapter - 1];
+  if (!maxVerse || from > maxVerse ||
+      (to !== null && (!Number.isInteger(to) || to < from || to > maxVerse))) return null;
+  return { book:book.name, chapter, from, to };
+}
+
+function christianityBibleLinkTarget(href) {
+  const ref = parseChristianityBibleLink(href);
+  return ref ? blbUrl(ref.book, ref.chapter, ref.from, ref.to) : null;
 }
 
 // Handle passage-click requests raised by the tiny MAIN-world guard.
@@ -244,13 +258,7 @@ function redirectBibleSite() {
     // Christianity.com Bible pages use /bible/<version>/<book>/<chapter>,
     // /bible/<version>/<book>/<chapter>-<verse>, and verse ranges ending in -<end>.
     // Ignore the source translation and preserve the requested KJV passage.
-    const m=u.pathname.match(/^\/bible\/[^/]+\/([^/]+)\/(\d+)(?:-(\d+)(?:-(\d+))?)?\/?$/i);
-    if (m) ref={
-      book:m[1].replace(/-/g," "),
-      chapter:+m[2],
-      from:m[3]?+m[3]:1,
-      to:m[4]?+m[4]:null
-    };
+    ref=parseChristianityBibleLink(u.href);
   }
 
   if (host==="esv.org") {
