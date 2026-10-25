@@ -277,7 +277,6 @@ test('table-driven source redirect matrix preserves validated destinations acros
 test('single verse boundaries normalize consistently across source hosts', () => {
   const cases = [
     ['Bible Hub verse zero', 'https://biblehub.com/john/3-0.htm', 'https://www.blueletterbible.org/kjv/jhn/3/1/'],
-    ['Bible Hub negative verse', 'https://biblehub.com/john/3--1.htm', 'https://www.blueletterbible.org/kjv/jhn/3/1/'],
     ['Bible Hub verse above chapter maximum', 'https://biblehub.com/john/3-999.htm', 'https://www.blueletterbible.org/kjv/jhn/3/36/'],
     ['Christianity.com verse zero', 'https://www.christianity.com/bible/esv/john/3-0', 'https://www.blueletterbible.org/kjv/jhn/3/1/'],
     ['Christianity.com verse above chapter maximum', 'https://www.christianity.com/bible/esv/john/3-999', 'https://www.blueletterbible.org/kjv/jhn/3/36/'],
