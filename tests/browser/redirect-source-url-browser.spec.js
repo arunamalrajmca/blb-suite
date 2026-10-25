@@ -416,6 +416,10 @@ test.describe('real-browser source URL redirect regressions', () => {
              data-bible-ref-link="Galatians_3:11|ESV">3:11</a>
           <a href="https://www.bibleref.com/John/3/John-3-16.html"
              data-bible-ref-link="John_3:16|ESV">read more</a>
+          <a href="https://www.bibleref.com/Psalms/23/Psalm-23-1.html"
+             data-bible-ref-link="Psalm_23:1|NIV">Psalm 23:1</a>
+          <a href="https://www.bibleref.com/Romans/8/Romans-8-1.html"
+             data-bible-ref-link="Romans_8:1-2|ESV">8:1-2</a>
         </article>`);
     });
     await page.locator('#blb-suite-christianity-multiverse').click();
@@ -423,9 +427,16 @@ test.describe('real-browser source URL redirect regressions', () => {
     const refs = await page.evaluate(() => window.__multiVerseRequests[0].refs);
     expect(refs.map(ref => ref.url)).toEqual([
       'https://www.blueletterbible.org/kjv/gal/3/11/',
-      'https://www.blueletterbible.org/kjv/jhn/3/16/'
+      'https://www.blueletterbible.org/kjv/jhn/3/16/',
+      'https://www.blueletterbible.org/kjv/psa/23/1/',
+      'https://www.blueletterbible.org/kjv/rom/8/1-2/'
     ]);
-    expect(refs.map(ref => ref.text)).toEqual(['Galatians 3:11', 'John 3:16']);
+    expect(refs.map(ref => ref.text)).toEqual([
+      'Galatians 3:11',
+      'John 3:16',
+      'Psalms 23:1',
+      'Romans 8:1-2'
+    ]);
   });
 
   test('source-page MultiVerse normalizes singular Psalm labels to canonical Psalms', async ({ page }) => {
