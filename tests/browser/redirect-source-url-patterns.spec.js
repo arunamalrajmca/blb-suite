@@ -247,3 +247,53 @@ test.describe('source Bible URL syntax regression coverage', () => {
   });
 
 });
+
+
+test('table-driven source redirect matrix preserves validated destinations across supported URL families', () => {
+  const cases = [
+    ['Bible.com translation-prefixed range', 'https://www.bible.com/bible/111/1JN.4.7-8.esv', 'https://www.blueletterbible.org/kjv/1jo/4/7-8/'],
+    ['BibleGateway search with ignored translation', 'https://www.biblegateway.com/passage/?search=Romans%208%3A28&version=NIV', 'https://www.blueletterbible.org/kjv/rom/8/28/'],
+    ['BibleRef commentary range', 'https://www.bibleref.com/john/3/john-3-16-17.html', 'https://www.blueletterbible.org/kjv/jhn/3/16-17/'],
+    ['Bible Hub alternate passage range', 'https://biblehub.com/passage/john/3/16-18', 'https://www.blueletterbible.org/kjv/jhn/3/16-18/'],
+    ['Christianity.com passage opens a new tab', 'https://www.christianity.com/bible/esv/john/3-16', 'https://www.blueletterbible.org/kjv/jhn/3/16/', 'newTab'],
+    ['ESV encoded plus-sign range', 'https://www.esv.org/verses/John%2B3%3A16-18/', 'https://www.blueletterbible.org/kjv/jhn/3/16-18/'],
+    ['BiblePortal dotted book and range', 'https://bibleportal.com/verse-topic?verse-topic=Matthew.5.3-5&version=ESV', 'https://www.blueletterbible.org/kjv/mat/5/3-5/'],
+    ['King James Bible Online underscore range', 'https://kingjamesbibleonline.org/John-3-16_3-17/', 'https://www.blueletterbible.org/kjv/jhn/3/16-17/'],
+    ['King James Bible Online chapter route', 'https://www.kingjamesbibleonline.org/John-Chapter-3/', 'https://www.blueletterbible.org/kjv/jhn/3/1/'],
+    ['KJV.site verse route', 'https://kjv.site/John-3-16-kjv/', 'https://www.blueletterbible.org/kjv/jhn/3/16/'],
+    ['KJV.site mobile subdomain verse route', 'https://m.kjv.site/John-3-16-kjv/', 'https://www.blueletterbible.org/kjv/jhn/3/16/'],
+    ['Official King James Bible numbered book range', 'https://officialkingjamesbible.com/bible/1-john/3/16-17', 'https://www.blueletterbible.org/kjv/1jo/3/16-17/'],
+    ["The King's Bible numeric book and query verse", 'https://www.thekingsbible.com/Bible/18/4?verse=5', 'https://www.blueletterbible.org/kjv/job/4/5/'],
+    ["The King's Bible Strong's entry", 'https://www.thekingsbible.com/StrongsNo/H3811', 'https://www.blueletterbible.org/lexicon/h3811/kjv/wlc/0-1/']
+  ];
+
+  for (const [label, url, expected, mode] of cases) {
+    const result = runSourceRedirect(url);
+    const actual = mode === 'newTab' ? result.openedInNewTab : result.redirectedTo;
+    expect(actual, label + ': ' + url).toBe(expected);
+    if (mode === 'newTab') expect(result.redirectedTo, label).toBeNull();
+  }
+});
+
+test('table-driven malformed reference matrix refuses unsafe or ambiguous destinations', () => {
+  const cases = [
+    'https://biblehub.com/not-a-book/abc.htm',
+    'https://biblehub.com/john/3-16-18-20.htm',
+    'https://biblehub.com/john/3-0.htm',
+    'https://biblegateway.com/search/?search=John%203%3A16',
+    'https://www.christianity.com/bible/esv/john/3-0',
+    'https://www.christianity.com/bible/esv/john/3-18-16',
+    'https://kjv.site/not-a-book-3-16-kjv/',
+    'https://m.kjv.site/John-3-0-kjv/',
+    'https://m.kjv.site/John-3-16-18-20-kjv/',
+    'https://notchristianity.com/bible/esv/john/3-16',
+    'https://christianity.com.example.test/bible/esv/john/3-16',
+    'https://blog.esv.org/John+3%3A16/'
+  ];
+
+  for (const url of cases) {
+    const result = runSourceRedirect(url);
+    expect(result.redirectedTo, url).toBeNull();
+    expect(result.openedInNewTab, url).toBeNull();
+  }
+});
