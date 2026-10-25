@@ -162,10 +162,10 @@ function normalizeSourceBibleBook(book) {
 function formatSourceBibleBookName(book) {
   // BOOKS stores names in lowercase for matching; generated labels need
   // readable book-name casing without capitalizing words such as “of”.
-  const minorWords = new Set(["of", "the"]);
   return String(book || "").split(/\s+/).map((word, index) => {
     if (!word) return word;
-    if (index > 0 && minorWords.has(word.toLowerCase())) return word.toLowerCase();
+    const lower = word.toLowerCase();
+    if (index > 0 && (lower === "of" || lower === "the")) return lower;
     return word.charAt(0).toUpperCase() + word.slice(1);
   }).join(" ");
 }
