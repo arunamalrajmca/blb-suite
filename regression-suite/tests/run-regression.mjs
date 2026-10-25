@@ -68,6 +68,9 @@ test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse coll
   assert(content.includes("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'"));
   assert(content.includes('if (sourceSite && !isSourceHomepage)'));
   assert(content.includes('document.querySelectorAll("a[href]")'));
+  assert(content.includes('targetUrl.searchParams.get("Criteria")'), 'orphaned verse links must recover the full citation from BLB Criteria');
+  assert(content.includes('targetHost === "blueletterbible.org"'), 'Criteria fallback must be restricted to BLB links');
+  assert(content.includes('/^\\\\d+(?:\\\\s*[-–—]\\\\s*\\\\d+)?$/'), 'Criteria fallback must only apply to number-only link captions');
   const background = read('background.js');
   assert(background.includes("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'"));
 });
