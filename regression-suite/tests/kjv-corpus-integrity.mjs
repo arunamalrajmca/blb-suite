@@ -112,9 +112,10 @@ function decodePostingIndices(encoded, word) {
   return result;
 }
 
-for (const word of indexedWords) {
-  assert(Object.hasOwn(postings, word), 'Word index entry has no postings: "' + word + '"');
-  const indices = decodePostingIndices(postings[word], word);
+for (const [word, encoded] of Object.entries(postings)) {
+  assert(indexedWords.has(word), 'Posting key is absent from word index: "' + word + '"');
+  assert.equal(word, word.toLowerCase(), 'Posting key is not lowercase: "' + word + '"');
+  const indices = decodePostingIndices(encoded, word);
   assert(indices.length > 0, 'Empty postings for "' + word + '"');
   let previous = -1;
   for (const index of indices) {
