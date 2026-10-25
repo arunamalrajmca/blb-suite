@@ -96,6 +96,22 @@ test.describe("The King's Bible MultiVerse collector behavior", () => {
     expect(refs[0].url).toBe('https://www.blueletterbible.org/kjv/exodus/4/14/');
   });
 
+  test('Dictionary preserves a meaningful caption when the reference is parsed from visible text', () => {
+    const collect = collectorFor('dictionary', [
+      makeAnchor({ href: '/Dictionary/test', text: 'Genesis 1:1', className: 'bible' })
+    ]);
+
+    const refs = collect();
+    expect(refs).toHaveLength(1);
+    expect(refs[0]).toMatchObject({
+      book: 'Genesis',
+      chapter: 1,
+      from: 1,
+      to: null,
+      text: 'Genesis 1:1'
+    });
+  });
+
   test('Dictionary resolves an abbreviated data-bible verse range without treating the page as paginated Concordance', () => {
     const collect = collectorFor('dictionary', [
       makeAnchor({ href: '/Bible/7/6?verse=15', text: '6:15-17', dataBible: '65006015', className: 'bible' }),
