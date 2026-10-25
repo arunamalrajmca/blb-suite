@@ -638,4 +638,45 @@ test.describe('real-browser source URL redirect regressions', () => {
     }
   });
 
+
+  test('non-Christianity source click guards ignore ordinary captions and non-primary clicks', async ({ page }) => {
+    for (const source of [
+      { url:'https://www.gotquestions.org/example-question.html' },
+      { url:'https://www.crosswalk.com/faith/bible-study/example.html' },
+      { url:'https://www.enduringword.com/bible-commentary/john-3/' }
+    ]) {
+      await loadProductionRedirect(page, source.url);
+      await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+      await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
+      const result = await page.evaluate(() => {
+        document.body.innerHTML = [
+          '<a id="ordinary" href="/about/">Read more</a>',
+          '<a id="external" href="https://www.esv.org/John+3%3A16/">Read more</a>',
+          '<a id="modified" href="/passage">John 3:16</a>'
+        ].join('');
+        const check = (id, options = {}) => {
+          const anchor = document.getElementById(id);
+          const event = new MouseEvent('click', { bubbles:true, cancelable:true, button:0, ...options });
+          let guardPrevented = false;
+          window.addEventListener('click', e => {
+            guardPrevented = e.defaultPrevented;
+            e.preventDefault();
+          }, { once:true });
+          anchor.dispatchEvent(event);
+          return guardPrevented;
+        };
+        return {
+          ordinary:check('ordinary'),
+          externalOrdinary:check('external'),
+          ctrl:check('modified', { ctrlKey:true }),
+          middle:check('modified', { button:1 })
+        };
+      });
+      expect(result, source.url).toEqual({
+        ordinary:false, externalOrdinary:false, ctrl:false, middle:false
+      });
+      expect(await page.evaluate(() => window.__openedBlbUrl || null), source.url).toBeNull();
+    }
+  });
+
 });
