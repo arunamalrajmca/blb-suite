@@ -65,13 +65,13 @@ test.describe('real-browser source URL redirect regressions', () => {
     test(`${source.host} offers a page-wide BLB MultiVerse button for linked Bible references`, async ({ page }) => {
       await loadSourcePageMultiVerse(page, source.url);
       await page.evaluate(() => {
-        document.body.innerHTML += [
+        document.body.insertAdjacentHTML('beforeend', [
           '<a href="https://www.blueletterbible.org/kjv/jhn/3/16/">John 3:16</a>',
           '<a href="https://www.biblegateway.com/passage/?search=Romans%208%3A9">Romans 8:9</a>',
           '<a href="https://www.biblegateway.com/passage/?search=John%203%3A16">John 3:16</a>',
           '<a href="/unrelated.html">Read more</a>',
           '<a href="https://www.biblegateway.com/passage/?search=Ephesians%202%3A8-9">Ephesians 2:8-9</a>'
-        ].join(' ');
+        ].join(' '));
       });
       await page.locator(source.button).click();
       await expect.poll(() => page.evaluate(() => window.__multiVerseRequests?.length || 0)).toBe(1);
