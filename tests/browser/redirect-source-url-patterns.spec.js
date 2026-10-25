@@ -100,6 +100,16 @@ test.describe('source Bible URL syntax regression coverage', () => {
     ]) {
       expect(runSourceRedirect(url).redirectedTo, url).toBeNull();
     }
+    for (const url of [
+      'https://www.christianity.com/bible/esv/john/0',
+      'https://www.christianity.com/bible/esv/john/3-0',
+      'https://www.christianity.com/bible/esv/john/3-18-16',
+      'https://www.christianity.com/bible/esv/not-a-book/3-16',
+      'https://www.christianity.com/bible/esv/john/999-1'
+    ]) {
+      expect(runSourceRedirect(url).openedInNewTab, url).toBeNull();
+      expect(runSourceRedirect(url).redirectedTo, url).toBeNull();
+    }
   });
 
   test('ESV.org supports root-level chapters, verses, ranges, and /verses/ references', () => {
