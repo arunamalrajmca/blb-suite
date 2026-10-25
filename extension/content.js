@@ -1043,15 +1043,21 @@ function makeBlbMultiVerseButtonDraggable(button, options = {}) {
   reset.setAttribute("aria-label", "Reset button position");
   reset.style.cssText = "position:fixed;z-index:2147483647;display:inline-flex;align-items:center;justify-content:center;width:27px;height:27px;padding:0;border:1px solid #505257;border-radius:6px;background:#292a2d;color:#f1f3f4;font:600 17px Arial,sans-serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.35)";
   reset.addEventListener("pointerdown", event => event.stopPropagation());
-  reset.addEventListener("click", async event => {
+  // Serialize position writes and resets so an in-flight drag save cannot
+  // race with Reset and restore the position immediately after it is removed.
+  let positionWriteQueue = Promise.resolve();
+  reset.addEventListener("click", event => {
     event.preventDefault();
     event.stopPropagation();
-    try { await chrome.storage.local.remove(positionKey); } catch (_) {}
     button.style.left = "auto";
     button.style.top = "auto";
     button.style.right = defaultRight + "px";
     button.style.bottom = defaultBottom + "px";
     placeReset();
+    positionWriteQueue = positionWriteQueue
+      .catch(() => {})
+      .then(() => chrome.storage.local.remove(positionKey))
+      .catch(() => {});
   });
 
   function clamp(value, min, max) {
@@ -1086,10 +1092,14 @@ function makeBlbMultiVerseButtonDraggable(button, options = {}) {
     reset.style.left = clamp(left, 0, size.width - resetRect.width) + "px";
     reset.style.top = clamp(rect.top + (rect.height - resetRect.height) / 2, 0, size.height - resetRect.height) + "px";
   }
-  async function savePosition() {
+  function savePosition() {
     const position = clampButtonPosition();
     placeReset();
-    try { await chrome.storage.local.set({[positionKey]: position}); } catch (_) {}
+    positionWriteQueue = positionWriteQueue
+      .catch(() => {})
+      .then(() => chrome.storage.local.set({[positionKey]: position}))
+      .catch(() => {});
+    return positionWriteQueue;
   }
 
   let pointerStart = null;
