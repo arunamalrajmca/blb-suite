@@ -1673,6 +1673,23 @@ if (location.hostname==="webstersdictionary1828.com") {
           }
           // Fall back to visible text only when no usable metadata is present.
           if (!parsed) parsed = parseRef(label);
+          // Some Sagacity cross-reference links display only an orphaned verse
+          // number (e.g. "25"), while the BLB destination carries the complete
+          // citation in Criteria=Eph+4.25. Recover that full reference only for
+          // number-only captions linking to BLB's native search endpoint.
+          if (!parsed && /^\\d+(?:\\s*[-–—]\\s*\\d+)?$/.test(label)) {
+            try {
+              const targetUrl = new URL(anchor.href, location.href);
+              const targetHost = targetUrl.hostname.toLowerCase().replace(/^www\\./, "");
+              if (targetHost === "blueletterbible.org" &&
+                  /^\\/search\\/preSearch\\.cfm$/i.test(targetUrl.pathname)) {
+                const criteria = normalizeSelectionText(
+                  String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")
+                );
+                parsed = parseRef(criteria);
+              }
+            } catch (_) {}
+          }
         }
         let usedStructuredReference = sourceSite !== "enduringword" && Boolean(dataReference) && Boolean(parsed);
         if ((!parsed || !parsed.book || !Number.isInteger(Number(parsed.chapter)) ||
