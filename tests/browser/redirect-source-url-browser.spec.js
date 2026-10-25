@@ -95,6 +95,60 @@ test.describe('real-browser source URL redirect regressions', () => {
     await expect(page.locator('article')).toContainText('Continue reading the article.');
   });
 
+  test('Christianity.com click guard resolves chapter, single-verse, and verse-range links to KJV', async ({ page }) => {
+    await loadProductionRedirect(page, 'https://www.christianity.com/faith/bible-study/article.html');
+    await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+    await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
+    const cases = [
+      {
+        href: 'https://www.christianity.com/bible/niv/ephesians/2',
+        expected: 'https://www.blueletterbible.org/kjv/eph/2/1/'
+      },
+      {
+        href: 'https://www.christianity.com/bible/esv/john/3-16',
+        expected: 'https://www.blueletterbible.org/kjv/jhn/3/16/'
+      },
+      {
+        href: 'https://www.christianity.com/bible/ylt/john/3-16-18?source=article#verse',
+        expected: 'https://www.blueletterbible.org/kjv/jhn/3/16-18/'
+      },
+      {
+        href: 'https://www.christianity.com/bible/kjv/1-corinthians/13-4-7',
+        expected: 'https://www.blueletterbible.org/kjv/1co/13/4-7/'
+      }
+    ];
+    for (const [index, item] of cases.entries()) {
+      await page.evaluate(({ href, index }) => {
+        const anchor = document.createElement('a');
+        anchor.id = 'passage-' + index;
+        anchor.href = href;
+        anchor.textContent = 'Bible passage';
+        document.body.appendChild(anchor);
+      }, { href:item.href, index });
+      await page.locator('#passage-' + index).evaluate(anchor => {
+        anchor.dispatchEvent(new MouseEvent('click', { bubbles:true, cancelable:true, button:0 }));
+      });
+      await expect.poll(() => page.evaluate(() => window.__openedBlbUrl || null)).toBe(item.expected);
+      await expect(page).toHaveURL('https://www.christianity.com/faith/bible-study/article.html');
+    }
+  });
+
+  test('Christianity.com click guard does not claim a passage when redirect is disabled', async ({ page }) => {
+    await loadProductionRedirect(page, 'https://www.christianity.com/faith/bible-study/article.html');
+    await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => false);' });
+    await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
+    const result = await page.evaluate(() => {
+      const anchor = document.createElement('a');
+      anchor.href = 'https://www.christianity.com/bible/esv/john/3-16';
+      document.body.appendChild(anchor);
+      const event = new MouseEvent('click', { bubbles:true, cancelable:true, button:0 });
+      anchor.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+    expect(result).toBe(false);
+    await expect.poll(() => page.evaluate(() => window.__openedBlbUrl || null)).toBeNull();
+  });
+
   test('Christianity.com passage guard leaves ordinary, foreign, modified, and download clicks alone', async ({ page }) => {
     await loadProductionRedirect(page, 'https://www.christianity.com/faith/bible-study/article.html');
     await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
