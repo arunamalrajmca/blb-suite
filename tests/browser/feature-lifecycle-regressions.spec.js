@@ -34,6 +34,16 @@ test('Study Sessions lifecycle creates a topic, edits notes, stops recording, an
   expect(persisted.recording).toBe(false);
   expect(persisted.topics).toContain(normalizedTopic);
   expect(persisted.topicStats[normalizedTopic].notes).toBe(2);
+
+  await page.reload();
+  const afterReload = await send({ type: 'blbSuiteGetStudyUiState' });
+  expect(afterReload).toMatchObject({
+    ok: true,
+    recording: false,
+    topics: expect.arrayContaining([normalizedTopic]),
+    currentSession: { topic: normalizedTopic, notes: 2 }
+  });
+  expect(afterReload.topicStats[normalizedTopic].notes).toBe(2);
   await page.close();
 });
 
@@ -56,6 +66,30 @@ test('Study Sessions reject empty topic and note input without corrupting the cu
   const state = await send({ type: 'blbSuiteGetStudyUiState' });
   expect(state).toMatchObject({ ok: true, recording: true, currentTopic: normalizedTopic });
   expect(state.currentSession.notes).toBe(0);
+  await page.close();
+});
+
+
+test('Study Sessions delete removes a topic and clears its active recording state', async ({ context, extensionId, extensionStorage }) => {
+  await extensionStorage.clear();
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  const send = message => page.evaluate(value => chrome.runtime.sendMessage(value), message);
+  const topic = 'BLB regression delete ' + Date.now();
+  const normalizedTopic = topic.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+
+  const started = await send({ type: 'blbSuiteStartStudyTopic', title: topic, note: 'Delete me' });
+  expect(started).toMatchObject({ ok: true, recording: true, topic: normalizedTopic });
+
+  const deleted = await send({ type: 'blbSuiteClearStudyTopic', topic: normalizedTopic });
+  expect(deleted).toMatchObject({ ok: true, topic: normalizedTopic });
+
+  const state = await send({ type: 'blbSuiteGetStudyUiState' });
+  expect(state.ok).toBe(true);
+  expect(state.recording).toBe(false);
+  expect(state.currentSession).toBeNull();
+  expect(state.topics).not.toContain(normalizedTopic);
+  expect(state.topicStats[normalizedTopic]).toBeUndefined();
   await page.close();
 });
 
