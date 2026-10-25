@@ -68,10 +68,15 @@ test.describe('real-browser source URL redirect regressions', () => {
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
     await loadProductionRedirect(page, sourceUrl);
     await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
-    await page.evaluate(() => { document.body.innerHTML = '<article><p>Continue reading the article.</p><a id="bible-passage" href="https://www.christianity.com/bible/esv/john/3-16?ref=article">John 3:16</a></article>'; });
+    await page.evaluate(() => {
+      document.body.innerHTML = '<article><p>Continue reading the article.</p><a id="bible-passage" href="https://www.christianity.com/bible/esv/john/3-16?ref=article">John 3:16</a></article>';
+      // Model article-site click behavior that would otherwise reload/navigate the source tab.
+      document.addEventListener('click', () => { window.__sourceClickHandlerRan = true; location.reload(); });
+    });
     await page.locator('#bible-passage').click();
     await expect.poll(() => page.evaluate(() => window.__openedBlbUrl || null)).toBe(targetUrl);
     await expect(page).toHaveURL(sourceUrl);
+    await expect(page.evaluate(() => window.__sourceClickHandlerRan || false)).resolves.toBe(false);
     await expect(page.locator('article')).toContainText('Continue reading the article.');
   });
 
