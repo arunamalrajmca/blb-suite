@@ -59,6 +59,7 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
