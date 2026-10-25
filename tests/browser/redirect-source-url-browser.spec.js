@@ -8,15 +8,16 @@ const contentSource = read('extension/content.js');
 const parseStart = contentSource.indexOf('function parseRef(text) {');
 const redirectStart = contentSource.indexOf('function redirectBibleSite() {', parseStart);
 const redirectEnd = contentSource.indexOf('\nfunction redirectBlbNet() {', redirectStart);
+const decodeStart = contentSource.indexOf('function decodeSafe(v) {');
 const bookKeyStart = contentSource.indexOf('function bookKey(value) {');
-if ([parseStart, redirectStart, redirectEnd, bookKeyStart].some(i => i < 0)) {
+if ([parseStart, redirectStart, redirectEnd, decodeStart, bookKeyStart].some(i => i < 0)) {
   throw new Error('Could not locate production source redirect helpers');
 }
 const gateStart = contentSource.indexOf('const REDIRECT_HOSTS = new Set([');
 const gateEnd = contentSource.indexOf('// ---------- BLB MultiVerse', gateStart);
 if (gateStart < 0 || gateEnd < 0) throw new Error('Could not locate production content-side redirect gate');
 const productionRedirectHelpers =
-  contentSource.slice(bookKeyStart, parseStart) +
+  contentSource.slice(decodeStart, parseStart) +
   contentSource.slice(parseStart, redirectStart) +
   contentSource.slice(redirectStart, redirectEnd);
 const productionRedirectGate = contentSource.slice(gateStart, gateEnd);
@@ -87,6 +88,25 @@ test.describe('real-browser source URL redirect regressions', () => {
     await page.waitForTimeout(100);
     await expect(page).toHaveURL(sourceUrl);
     await expect.poll(() => page.evaluate(() => window.__openedBlbUrl || null)).toBeNull();
+  });
+
+  test('Christianity.com chapter page opens BLB KJV in a new tab without replacing source', async ({ page }) => {
+    const sourceUrl = 'https://www.christianity.com/bible/esv/ephesians/2';
+    const targetUrl = 'https://www.blueletterbible.org/kjv/eph/2/1/';
+    await loadProductionRedirect(page, sourceUrl);
+    await page.addScriptTag({ content: productionRedirectGate });
+    await expect.poll(() => page.evaluate(() => window.__openedBlbUrl || null)).toBe(targetUrl);
+    await expect(page).toHaveURL(sourceUrl);
+  });
+
+  test('ESV.org root-level chapter URL redirects to BLB KJV', async ({ page }) => {
+    const sourceUrl = 'https://www.esv.org/Ephesians+2/';
+    const targetUrl = 'https://www.blueletterbible.org/kjv/eph/2/1/';
+    await loadProductionRedirect(page, sourceUrl);
+    const navigated = page.waitForURL(targetUrl, { waitUntil: 'domcontentloaded' });
+    await page.addScriptTag({ content: productionRedirectGate });
+    await navigated;
+    await expect(page).toHaveURL(targetUrl);
   });
 
   test('ESV.org encoded verse URL navigates to BLB KJV', async ({ page }) => {
