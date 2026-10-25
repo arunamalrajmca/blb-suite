@@ -38,7 +38,7 @@ async function loadProductionRedirect(page, sourceUrl) {
   await page.addScriptTag({ content: productionRedirectHelpers });
   // Stub only the extension APIs and unrelated BLB-native handler. The hostname
   // gate and redirectBibleSite() call below are copied verbatim from production.
-  await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) } } }; function redirectBlbNet() { return false; }' });
+  await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) } } }; function redirectBlbNet() { return false; } function openBlbDestinationFromContent(url) { window.__openedBlbUrl = url; }' });
 }
 
 test.describe('real-browser source URL redirect regressions', () => {
@@ -62,14 +62,31 @@ test.describe('real-browser source URL redirect regressions', () => {
     await expect(page).toHaveURL(targetUrl);
   });
 
-  test('Christianity.com ESV passage URL navigates to BLB KJV', async ({ page }) => {
+  test('Christianity.com passage opens BLB in a new tab and keeps the source tab', async ({ page }) => {
     const sourceUrl = 'https://www.christianity.com/bible/esv/john/3-16';
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
     await loadProductionRedirect(page, sourceUrl);
-    const navigated = page.waitForURL(targetUrl, { waitUntil: 'domcontentloaded' });
     await page.addScriptTag({ content: productionRedirectGate });
-    await navigated;
-    await expect(page).toHaveURL(targetUrl);
+    await expect.poll(() => page.evaluate(() => window.__openedBlbUrl || null)).toBe(targetUrl);
+    await expect(page).toHaveURL(sourceUrl);
+  });
+
+  test('Christianity.com homepage does not redirect or open a BLB tab', async ({ page }) => {
+    const sourceUrl = 'https://www.christianity.com/';
+    await loadProductionRedirect(page, sourceUrl);
+    await page.addScriptTag({ content: productionRedirectGate });
+    await page.waitForTimeout(100);
+    await expect(page).toHaveURL(sourceUrl);
+    await expect.poll(() => page.evaluate(() => window.__openedBlbUrl || null)).toBeNull();
+  });
+
+  test('ESV.org homepage does not redirect', async ({ page }) => {
+    const sourceUrl = 'https://www.esv.org/';
+    await loadProductionRedirect(page, sourceUrl);
+    await page.addScriptTag({ content: productionRedirectGate });
+    await page.waitForTimeout(100);
+    await expect(page).toHaveURL(sourceUrl);
+    await expect.poll(() => page.evaluate(() => window.__openedBlbUrl || null)).toBeNull();
   });
 
   test('ESV.org encoded verse URL navigates to BLB KJV', async ({ page }) => {
