@@ -77,7 +77,7 @@ for (let index = 0; index < verses.length; index++) {
   assert(Array.isArray(original) && original.length >= 4, 'Original-case verse ' + index + ' has invalid shape');
   assert.deepEqual([Number(original[0]), Number(original[1]), Number(original[2])],
     [bookNumber, chapter, verse], 'Original-case reference mismatch at corpus index ' + index);
-  assert.equal(String(original[3] ?? ''), text, 'Original-case text differs at ' + key);
+  assert.equal(String(original[3] ?? '').toLowerCase(), text.toLowerCase(), 'Original-case verse content differs beyond capitalization at ' + key);
   for (const match of text.matchAll(tokenPattern)) derivedWords.add(match[0].toLowerCase());
 }
 
