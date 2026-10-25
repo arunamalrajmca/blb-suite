@@ -161,6 +161,32 @@ function parseRef(text) {
   return m ? {book:m[1].trim(),chapter:Number(m[2]),from:m[3]?Number(m[3]):1,to:m[4]?Number(m[4]):null} : null;
 }
 
+function christianityBibleLinkTarget(href) {
+  let url;
+  try { url = new URL(href, location.href); } catch (_) { return null; }
+  if (url.hostname.toLowerCase().replace(/^www\./, "") !== "christianity.com") return null;
+  const match = url.pathname.match(/^\/bible\/[^/]+\/([^/]+)\/(\d+)(?:-(\d+)(?:-(\d+))?)?\/?$/i);
+  if (!match) return null;
+  return blbUrl(match[1].replace(/-/g, " "), Number(match[2]),
+    match[3] ? Number(match[3]) : 1, match[4] ? Number(match[4]) : null);
+}
+
+// Intercept passage links before Christianity.com navigates away from an article.
+function installChristianityLinkRedirect(isEnabled) {
+  document.addEventListener("click", event => {
+    if (event.defaultPrevented || event.button !== 0 ||
+        event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (!isEnabled()) return;
+    const anchor = event.target?.closest?.("a[href]");
+    if (!anchor || anchor.hasAttribute("download")) return;
+    const target = christianityBibleLinkTarget(anchor.href);
+    if (!target) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    openBlbDestinationFromContent(target);
+  }, true);
+}
+
 function redirectBibleSite() {
   const u=new URL(location.href), host=u.hostname.toLowerCase().replace(/^www\./,"");
   let ref=null;
@@ -515,10 +541,16 @@ const REDIRECT_HOSTS = new Set([
   'webstersdictionary1828.com', BLB_HOSTNAME
 ]);
 
+let sourceBibleRedirectEnabled = false;
+if (location.hostname.toLowerCase().replace(/^www\./, "") === "christianity.com") {
+  installChristianityLinkRedirect(() => suiteEnabled && sourceBibleRedirectEnabled);
+}
+
 if (REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\./, ''))) {
   isSuiteEnabled().then(enabled => {
     if (!enabled) return;
     return chrome.storage.local.get({redirectEnabled:false}).then(({redirectEnabled})=>{
+      sourceBibleRedirectEnabled = redirectEnabled === true;
       if (!redirectEnabled) return;
       if (!redirectBlbNet()) redirectBibleSite();
     });
@@ -3526,6 +3558,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (changes.redirectEnabled) {
     theKingsBibleRedirectEnabled = changes.redirectEnabled.newValue === true;
+    sourceBibleRedirectEnabled = changes.redirectEnabled.newValue === true;
   }
 
   if (changes.masterEnabled) {
