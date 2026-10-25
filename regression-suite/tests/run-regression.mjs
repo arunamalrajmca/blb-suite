@@ -60,6 +60,33 @@ test('no optional host-permission regression', () => {
   assert.deepEqual(m.optional_host_permissions, ['http://*/*','https://*/*','https://chatgpt.com/*']);
 });
 
+test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse collector', () => {
+  const content = read('content.js');
+  assert(content.includes('"rediscover.bible":"rediscover"'));
+  assert(content.includes('"sagacityweb.com":"sagacity"'));
+  assert(content.includes('"thetreasuryofscriptureknowledge.com":"treasury"'));
+  assert(content.includes("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'"));
+  assert(content.includes('if (sourceSite && !isSourceHomepage)'));
+  assert(content.includes('document.querySelectorAll("a[href]")'));
+  assert(content.includes('if (sourceSite === "sagacity")'), 'Sagacity links must prefer the linked BLB citation over malformed/nested captions');
+  assert(content.includes('targetUrl.searchParams.get("Criteria")'), 'Sagacity links must recover the full citation from BLB Criteria');
+  assert(content.includes('targetHost === "blueletterbible.org"'), 'Criteria extraction must be restricted to BLB links');
+  assert(content.includes('/^\\/search\\/preSearch\\.cfm$/i.test(targetUrl.pathname)'), 'Criteria extraction must be limited to the BLB preSearch endpoint');
+  assert(content.includes('String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")'), 'plus signs in BLB Criteria must decode to spaces');
+  const background = read('background.js');
+  assert(background.includes("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'"));
+});
+
+test('Rediscover, Sagacity, and TSK use optional access and dynamic injection only', () => {
+  const m = JSON.parse(read('manifest.json'));
+  const matches = m.content_scripts?.flatMap(x=>x.matches||[]) || [];
+  for (const host of ['rediscover.bible','www.rediscover.bible','sagacityweb.com','www.sagacityweb.com','thetreasuryofscriptureknowledge.com','www.thetreasuryofscriptureknowledge.com']) {
+    assert(!m.host_permissions.includes(`https://${host}/*`), `${host} must not become a required host permission`);
+    assert(!matches.includes(`https://${host}/*`), `${host} must not become a permanent content-script match`);
+  }
+  assert(m.optional_host_permissions.includes('https://*/*'), 'existing optional HTTPS access must remain available');
+});
+
 test('Ask AI requests ChatGPT access in the omnibox gesture and does nothing when denied', () => {
   const m = JSON.parse(read('manifest.json'));
   const source = read('background.js');

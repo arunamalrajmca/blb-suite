@@ -131,6 +131,9 @@ jobs:
             grep: 'generic aliases|numbered aliases and Roman prefixes|standalone Roman prefixes'
           - group: resolver
             grep: 'All 66 canonical'
+          - group: sagacity-nested-anchor
+            file: tests/browser/rediscover-sagacity-button.spec.js
+            grep: 'Sagacity browser collector captures Matt\\. 12:37 from malformed nested BLB anchors'
           - group: research-derived
             file: tests/browser/research-dom-smoke.spec.js
             grep: 'D14|D16|D18|D19|D20|D21|D22|D23|D25|D41|D42|D43|D44|D45|D46|D47|D48|D49|D50|D51|D52|D53|D54|D55|D56|D57|D58|D59|D60'

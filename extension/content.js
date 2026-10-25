@@ -154,9 +154,13 @@ function blbUrl(book,ch,from=1,to=null) {
   return resolved ? resolved.url : null;
 }
 function normalizeSourceBibleBook(book) {
-  // The resolver's canonical KJV book name is Psalms, while Christianity.com
-  // labels its linked references with the singular form, e.g. “Psalm 136:26”.
-  return /^Psalm$/i.test(String(book || "").trim()) ? "Psalms" : book;
+  // Normalize common source-site abbreviations before KJV book resolution.
+  // Sagacity can expose “Matt. 12:37” in captions and BLB Criteria URLs;
+  // the resolver expects the canonical book name “Matthew”.
+  const value = String(book || "").trim();
+  if (/^Psalm$/i.test(value)) return "Psalms";
+  if (/^Matt\.?$/i.test(value)) return "Matthew";
+  return book;
 }
 
 function formatSourceBibleBookName(book) {
@@ -594,6 +598,7 @@ function redirectBlbNet() {
 const REDIRECT_HOSTS = new Set([
   'bible.com', 'biblegateway.com', 'bibleref.com', 'biblehub.com',
   'christianity.com', 'crosswalk.com', 'enduringword.com', 'esv.org', 'gotquestions.org',
+  'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com',
   'bibleportal.com', 'kingjamesbibleonline.org', 'kjbo.org',
   'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com', 'thekingsbible.com',
   'webstersdictionary1828.com', BLB_HOSTNAME
@@ -1612,7 +1617,10 @@ if (location.hostname==="webstersdictionary1828.com") {
     "christianity.com":"christianity",
     "gotquestions.org":"gotquestions",
     "crosswalk.com":"crosswalk",
-    "enduringword.com":"enduringword"
+    "enduringword.com":"enduringword",
+    "rediscover.bible":"rediscover",
+    "sagacityweb.com":"sagacity",
+    "thetreasuryofscriptureknowledge.com":"treasury"
   })[host] || "";
   // These sites' homepages are general landing pages, not article/reference
   // pages. Keep the page-wide collection button limited to nested pages.
@@ -1643,9 +1651,37 @@ if (location.hostname==="webstersdictionary1828.com") {
         const dataReference = sourceSite !== "enduringword"
           ? anchor.getAttribute("data-bible-ref-link")
           : null;
-        // A structured reference is authoritative even when the visible
-        // caption is abbreviated or non-reference text.
-        if ((!label || label.length > 100) && !dataReference) continue;
+        // Keep Sagacity's URL-derived citation as a fallback candidate only.
+        // Parsing the URL first can override valid captions and regress the
+        // previously working page-wide collection.
+        let sagacityCriteriaReference = null;
+        if (sourceSite === "sagacity") {
+          try {
+            const targetUrl = new URL(anchor.href, location.href);
+            const targetHost = targetUrl.hostname.toLowerCase().replace(/^www\./, "");
+            if (targetHost === "blueletterbible.org" &&
+                /^\/search\/preSearch\.cfm$/i.test(targetUrl.pathname)) {
+              const criteria = normalizeSelectionText(
+                String(targetUrl.searchParams.get("Criteria") || "").replace(/\+/g, " ")
+              );
+              // BLB's Sagacity links use dotted chapter/verse notation
+              // (e.g. "Matt. 12.37"). Parse that URL citation independently
+              // of the anchor caption, and canonicalize its book immediately
+              // so abbreviated source names cannot be lost in fallback logic.
+              const criteriaReference = parseRef(criteria.replace(
+                /^(.*?)\s+(\d+)\.(\d+(?:-\d+)?)$/,
+                "$1 $2:$3"
+              ));
+              if (criteriaReference) {
+                criteriaReference.book = normalizeSourceBibleBook(criteriaReference.book);
+              }
+              sagacityCriteriaReference = criteriaReference;
+            }
+          } catch (_) {}
+        }
+        // Structured metadata or a BLB URL citation can qualify anchors with
+        // empty captions caused by malformed/nested HTML.
+        if ((!label || label.length > 100) && !dataReference && !sagacityCriteriaReference) continue;
         let parsed;
         if (sourceSite === "enduringword") {
           let url;
@@ -1660,15 +1696,17 @@ if (location.hostname==="webstersdictionary1828.com") {
           // Prefer structured Bible-reference metadata when a site's visible
           // caption is abbreviated (e.g. "3:11") or otherwise not a full
           // reference. Ignore the source translation; BLB resolves to KJV.
-          if (dataReference) {
+          if (!parsed && dataReference) {
             const rawReference = dataReference.split("|", 1)[0]
               .replace(/_/g, " ")
               .replace(/[–—]/g, "-")
               .trim();
             parsed = parseRef(rawReference);
           }
-          // Fall back to visible text only when no usable metadata is present.
+          // Preserve caption-based collection. Use BLB Criteria only when the
+          // caption and structured metadata do not provide a usable reference.
           if (!parsed) parsed = parseRef(label);
+          if (!parsed) parsed = sagacityCriteriaReference;
         }
         let usedStructuredReference = sourceSite !== "enduringword" && Boolean(dataReference) && Boolean(parsed);
         if ((!parsed || !parsed.book || !Number.isInteger(Number(parsed.chapter)) ||
@@ -1700,6 +1738,17 @@ if (location.hostname==="webstersdictionary1828.com") {
               resolved = resolveBibleReference(book, chapter, from, to);
               if (resolved) usedStructuredReference = false;
             }
+          }
+        }
+        // A malformed caption may parse but fail actual book/verse resolution.
+        // Retry the BLB Criteria citation before discarding that link.
+        if (!resolved && sourceSite === "sagacity" && sagacityCriteriaReference) {
+          book = normalizeSourceBibleBook(sagacityCriteriaReference.book);
+          chapter = Number(sagacityCriteriaReference.chapter);
+          from = Number(sagacityCriteriaReference.from);
+          to = sagacityCriteriaReference.to == null ? null : Number(sagacityCriteriaReference.to);
+          if (Number.isInteger(from) && from >= 1) {
+            resolved = resolveBibleReference(book, chapter, from, to);
           }
         }
         if (!resolved) continue;

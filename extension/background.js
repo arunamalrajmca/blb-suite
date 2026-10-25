@@ -3125,6 +3125,7 @@ const REDIRECT_HOSTNAMES = new Set([
   'bible.com', 'biblegateway.com', 'bibleref.com',
   'biblehub.com', 'bibleportal.com',
   'christianity.com', 'crosswalk.com', 'enduringword.com', 'esv.org', 'gotquestions.org',
+  'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com',
   'kingjamesbibleonline.org', 'kjbo.org',
   'kjv.site', 'm.kjv.site',
   'officialkingjamesbible.com', 'thekingsbible.com',

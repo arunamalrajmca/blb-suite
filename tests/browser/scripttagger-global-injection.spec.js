@@ -144,10 +144,15 @@ test('global redirect uses the minimal handlers on ordinary sites and the full b
   context.globalThis = context;
   vm.runInNewContext(sharedRegexPatterns, context);
   vm.runInNewContext(background.slice(start, end), context);
+  // Rediscover and Sagacity use the existing full content bundle because it
+  // contains the current-page MultiVerse collector. They still use dynamic,
+  // optional host access rather than manifest-wide site permissions.
   expect(Array.from(context.contentScriptFilesForTab(
     {url:'https://sagacityweb.com/article'},
     {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}
-  ))).toEqual(['redirect-scripttagger.js','redirect-bibleref-ranges.js']);
+  ))).toEqual([
+    'regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','content.js','redirect-scripttagger.js','redirect-bibleref-ranges.js'
+  ]);
 
   expect(Array.from(context.contentScriptFilesForTab(
     {url:'https://www.biblegateway.com/passage/?search=John+3%3A16'},
