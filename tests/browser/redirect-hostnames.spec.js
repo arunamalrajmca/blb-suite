@@ -59,6 +59,7 @@ test('bare and www source hostnames normalize to the same native redirect key', 
     expect(supported.has(normalize(host))).toBe(true);
     expect(supported.has(normalize(`www.${host}`))).toBe(true);
   }
+});
 
 test('MAIN-world guard registration normalizes www hosts and is limited to article source sites', () => {
   const background = fs.readFileSync(path.join(root, 'extension/background.js'), 'utf8');
@@ -76,4 +77,3 @@ test('MAIN-world guard registration normalizes www hosts and is limited to artic
   expect(registration).not.toContain("'esv.org'");
 });
 
-});
