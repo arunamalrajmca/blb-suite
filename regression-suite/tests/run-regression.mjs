@@ -60,6 +60,25 @@ test('no optional host-permission regression', () => {
   assert.deepEqual(m.optional_host_permissions, ['http://*/*','https://*/*','https://chatgpt.com/*']);
 });
 
+test('Rediscover and Sagacity use optional access and dynamic injection only', () => {
+  const m = JSON.parse(read('manifest.json'));
+  const matches = m.content_scripts?.flatMap(x=>x.matches||[]) || [];
+  for (const host of ['rediscover.bible','www.rediscover.bible','sagacityweb.com','www.sagacityweb.com']) {
+    assert(!m.host_permissions.includes(`https://${host}/*`), `${host} must not become a required host permission`);
+    assert(!matches.includes(`https://${host}/*`), `${host} must not become a permanent content-script match`);
+  }
+  assert(m.optional_host_permissions.includes('https://*/*'), 'existing optional HTTPS access must remain available');
+});
+
+test('Rediscover and Sagacity enable only the floating button on nested pages', () => {
+  const bg = read('background.js');
+  const content = read('content.js');
+  assert(bg.includes("return host === 'rediscover.bible' || host === 'sagacityweb.com';"), 'site default must enable the floating button for both hosts');
+  assert(bg.includes("url.pathname.split('/').join('') === ''"), 'context-menu equivalent must stay hidden on both homepages');
+  assert(content.includes("(host === 'rediscover.bible' || host === 'sagacityweb.com') && pathname === '/'"), 'floating button must stay hidden on both homepages');
+  assert(content.includes("const buttonOnlyDefaultSite = siteKey === 'rediscover.bible' || siteKey === 'sagacityweb.com';"), 'Double-click must remain opt-in separately');
+});
+
 test('Ask AI requests ChatGPT access in the omnibox gesture and does nothing when denied', () => {
   const m = JSON.parse(read('manifest.json'));
   const source = read('background.js');
