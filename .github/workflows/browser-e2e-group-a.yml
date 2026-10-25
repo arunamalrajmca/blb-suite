@@ -21,6 +21,7 @@ jobs:
       runtime_changed: ${{ steps.classify.outputs.runtime_changed }}
       full_browser_suite: ${{ steps.select.outputs.full_browser_suite }}
       changed_specs: ${{ steps.select.outputs.changed_specs }}
+      unmapped_specs: ${{ steps.select.outputs.unmapped_specs }}
       group_a_required: ${{ steps.select.outputs.group_a_required }}
     steps:
       - uses: actions/checkout@v4
@@ -106,6 +107,16 @@ jobs:
       - name: Run Supply of Grace Ephesians chapter-context regression
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js') }}
         run: npx playwright test tests/browser/extension.spec.js --grep 'Supply of Grace Substack Ephesians chapter context does not fall back to Ephesians 1:1'
+
+      - name: Run changed browser specs without a dedicated workflow step
+        if: ${{ needs.change-detection.outputs.unmapped_specs != '' }}
+        env:
+          UNMAPPED_SPECS: ${{ needs.change-detection.outputs.unmapped_specs }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          IFS=',' read -r -a specs <<< "$UNMAPPED_SPECS"
+          npx playwright test "${specs[@]}"
 
       - name: Run Facebook Revelation directional-format range regression
         if: ${{ always() && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) }}
