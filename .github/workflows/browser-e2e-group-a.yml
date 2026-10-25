@@ -76,7 +76,7 @@ jobs:
             ${{ runner.os }}-node22-npm-
       - run: npm install
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
       - name: Grant test-only generic host access
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
