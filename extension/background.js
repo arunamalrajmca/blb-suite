@@ -3203,6 +3203,36 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
         runAt:'document_start'
       });
     }
+
+    // Christianity.com can attach native click handlers in the page's MAIN
+    // world. Register a tiny early guard separately; it delegates passage
+    // validation/opening to content.js and cancels native navigation only
+    // when the isolated-world resolver claims the link.
+    let hostname = '';
+    try { hostname = new URL(tab.url).hostname.toLowerCase().replace(/^www\\./, ''); } catch (_) {}
+    if (hostname === 'christianity.com' && files.includes('content.js')) {
+      const mainWorldId = `${id}-main-world`;
+      const mainWorldFiles = ['redirect-christianity-main-world.js'];
+      const registeredMain = await chrome.scripting.getRegisteredContentScripts({ids:[mainWorldId]});
+      if (!registeredMain.length) {
+        await chrome.scripting.registerContentScripts([{
+          id:mainWorldId,
+          matches:[pattern],
+          js:mainWorldFiles,
+          runAt:'document_start',
+          world:'MAIN',
+          persistAcrossSessions:true
+        }]);
+      } else if (JSON.stringify(registeredMain[0].js || []) !== JSON.stringify(mainWorldFiles) ||
+                 registeredMain[0].world !== 'MAIN') {
+        await chrome.scripting.updateContentScripts({
+          ids:[mainWorldId],
+          js:mainWorldFiles,
+          runAt:'document_start',
+          world:'MAIN'
+        });
+      }
+    }
     return true;
   } catch (_) {
     return false;
@@ -3244,6 +3274,22 @@ async function ensureContentScriptInTab(tabId) {
       if (!files.length) return false;
 
       await ensureRuntimeContentScriptRegistered(tab, files);
+
+      // A newly enabled site may already be open, so install the MAIN-world
+      // guard in that current document too. The registration above covers
+      // future navigations; the script's own marker makes this idempotent.
+      if (normalizeSiteHostname(hostnameFromTabUrl(tab.url)) === 'christianity.com' &&
+          files.includes('content.js')) {
+        try {
+          await chrome.scripting.executeScript({
+            target:{tabId},
+            files:['redirect-christianity-main-world.js'],
+            world:'MAIN'
+          });
+        } catch (_) {
+          return false;
+        }
+      }
 
       // First refresh an already-installed content script. If it responds,
       // its feature gates have been re-read from storage and no reinjection is
