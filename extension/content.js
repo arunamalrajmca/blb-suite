@@ -1097,7 +1097,9 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
         from: resolved.from,
         to: resolved.to,
         version: "kjv",
-        text: label,
+        text: usedStructuredReference
+          ? `${resolved.book.name} ${resolved.chapter}:${resolved.from}${resolved.to != null && resolved.to !== resolved.from ? "-" + resolved.to : ""}`
+          : label,
         url: target
       });
     }
@@ -1485,6 +1487,7 @@ if (location.hostname==="webstersdictionary1828.com") {
           // Fall back to visible text only when no usable metadata is present.
           if (!parsed) parsed = parseRef(label);
         }
+        const usedStructuredReference = sourceSite !== "enduringword" && Boolean(dataReference) && Boolean(parsed);
         if (!parsed || !parsed.book || !Number.isInteger(Number(parsed.chapter)) ||
             Number(parsed.chapter) < 1) continue;
         // Enduring Word chips identify chapters, not individual verses.
