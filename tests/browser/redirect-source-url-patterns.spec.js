@@ -9,16 +9,17 @@ const aliasesSource = fs.readFileSync(path.resolve(__dirname, '../../extension/b
 const referenceCoreSource = fs.readFileSync(path.resolve(__dirname, '../../extension/reference-core.js'), 'utf8');
 const sharedPatternsSource = fs.readFileSync(path.resolve(__dirname, '../../extension/regex-patterns.js'), 'utf8');
 const decodeStart = source.indexOf('function decodeSafe(v) {');
+const bookKeyStart = source.indexOf('function bookKey(value) {');
 const parseStart = source.indexOf('function parseRef(text) {', decodeStart);
 const blbUrlStart = source.indexOf('function blbUrl(', decodeStart);
 const redirectStart = source.indexOf('function redirectBibleSite() {', parseStart);
 const redirectEnd = source.indexOf('\nfunction redirectBlbNet() {', redirectStart);
-if ([decodeStart, blbUrlStart, parseStart, redirectStart, redirectEnd].some(index => index < 0)) {
+if ([decodeStart, bookKeyStart, blbUrlStart, parseStart, redirectStart, redirectEnd].some(index => index < 0)) {
   throw new Error('Could not locate source-site redirect functions in extension/content.js');
 }
 // Exercise the production book table, alias resolver, reference validator, and URL builder.
 const helpers = sharedPatternsSource + '\n' + booksSource + '\n' + aliasesSource + '\n' + referenceCoreSource + '\n' +
-  source.slice(blbUrlStart, parseStart) +
+  source.slice(bookKeyStart, parseStart) +
   source.slice(parseStart, redirectStart) + source.slice(redirectStart, redirectEnd);
 
 function runSourceRedirect(url) {
