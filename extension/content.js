@@ -182,7 +182,7 @@ function installChristianityLinkRedirect(isEnabled) {
     let detail = null;
     try { detail = JSON.parse(typeof event.detail === "string" ? event.detail : ""); } catch (_) {}
     const href = typeof detail?.href === "string" ? detail.href : "";
-    const label = normalizeSelectionText(typeof detail?.label === "string" ? detail.label : "");
+    const label = String(typeof detail?.label === "string" ? detail.label : "").replace(/\s+/g, " ").trim();
     const host = (() => { try { return new URL(href, location.href).hostname.toLowerCase().replace(/^www\./, ""); } catch (_) { return ""; } })();
     let target = christianityBibleLinkTarget(href);
     if (!target && ["crosswalk.com", "enduringword.com", "gotquestions.org"].includes(host)) {
