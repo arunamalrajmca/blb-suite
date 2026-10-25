@@ -3114,6 +3114,7 @@ const BIBLEREF_RANGE_CONTENT_SCRIPT_FILES = ['redirect-bibleref-ranges.js'];
 const REDIRECT_HOSTNAMES = new Set([
   'bible.com', 'biblegateway.com', 'bibleref.com',
   'biblehub.com', 'bibleportal.com',
+  'christianity.com', 'esv.org',
   'kingjamesbibleonline.org', 'kjbo.org',
   'kjv.site', 'm.kjv.site',
   'officialkingjamesbible.com', 'thekingsbible.com',
