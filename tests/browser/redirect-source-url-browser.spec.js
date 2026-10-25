@@ -359,7 +359,15 @@ test.describe('real-browser source URL redirect regressions', () => {
       const dispatch = (id, options = {}) => {
         const anchor = document.getElementById(id);
         const event = new MouseEvent('click', { bubbles:true, cancelable:true, button:0, ...options });
-        return { allowed: anchor.dispatchEvent(event), prevented: event.defaultPrevented };
+        let preventedByGuard = false;
+        // Observe the event after the extension's document-level guard has run,
+        // then suppress only the browser's native navigation for this test.
+        window.addEventListener('click', currentEvent => {
+          preventedByGuard = currentEvent.defaultPrevented;
+          currentEvent.preventDefault();
+        }, { once:true });
+        const allowed = anchor.dispatchEvent(event);
+        return { allowed, prevented: preventedByGuard };
       };
       return {
         ordinary: dispatch('ordinary'),
