@@ -64,6 +64,8 @@ jobs:
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: node regression-suite/tests/run-regression.mjs extension --group=package
+      - name: Verify KJV corpus and search-index integrity
+        run: node regression-suite/tests/kjv-corpus-integrity.mjs extension
       - name: ⏱ Workflow ETA — finish
         if: ${{ always() }}
         uses: $/.github/actions/workflow-eta
