@@ -218,11 +218,11 @@ function redirectBibleSite() {
     // are ignored.
     const versePath=u.pathname.match(/^\/verses\/(.+?)\/?$/i);
     if (versePath) {
-      ref=parseRef(decodeSafe(versePath[1]).replace(/[–—]/g,"-"));
+      ref=parseRef(decodeSafe(versePath[1]).replace(/\+/g," ").replace(/[–—]/g,"-"));
     } else {
       const rootPath=u.pathname.match(/^\/([^/]+)\/?$/);
       if (rootPath && /[+%\s]/.test(rootPath[1]) || rootPath && /\d/.test(decodeSafe(rootPath[1]))) {
-        const candidate=decodeSafe(rootPath[1]).replace(/[–—]/g,"-");
+        const candidate=decodeSafe(rootPath[1]).replace(/\+/g," ").replace(/[–—]/g,"-");
         if (/^[\p{L}\d][\p{L}\d\s.'-]*\s+\d+(?::\d+(?:-\d+)?)?$/u.test(candidate)) {
           ref=parseRef(candidate);
         }
