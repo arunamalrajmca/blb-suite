@@ -23,17 +23,19 @@ const helpers = sharedPatternsSource + '\n' + booksSource + '\n' + aliasesSource
 
 function runSourceRedirect(url) {
   let redirectedTo = null;
+  let openedInNewTab = null;
   const context = {
     URL,
     location: {
       href: url,
       replace(target) { redirectedTo = target; }
     },
+    openBlbDestinationFromContent(target) { openedInNewTab = target; },
     // No blbUrl stub: this calls the real production resolver.
 
   };
   vm.runInNewContext(helpers + '\nresult = redirectBibleSite();', context);
-  return { result: context.result, redirectedTo };
+  return { result: context.result, redirectedTo, openedInNewTab };
 }
 
 test.describe('source Bible URL syntax regression coverage', () => {
@@ -73,10 +75,13 @@ test.describe('source Bible URL syntax regression coverage', () => {
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16-17/');
   });
 
-  test('Christianity.com passage URLs ignore selected translations and preserve ranges', () => {
-    expect(runSourceRedirect('https://www.christianity.com/bible/esv/john/3-16').redirectedTo)
+  test('Christianity.com homepage stays put and passage URLs open BLB in a new tab', () => {
+    expect(runSourceRedirect('https://www.christianity.com/').openedInNewTab).toBeNull();
+    expect(runSourceRedirect('https://www.christianity.com/').redirectedTo).toBeNull();
+    expect(runSourceRedirect('https://www.christianity.com/bible/esv/john/3-16').openedInNewTab)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16/');
-    expect(runSourceRedirect('https://www.christianity.com/bible/niv%2Cesv/1-john/3-16-21').redirectedTo)
+    expect(runSourceRedirect('https://www.christianity.com/bible/esv/john/3-16').redirectedTo).toBeNull();
+    expect(runSourceRedirect('https://www.christianity.com/bible/niv%2Cesv/1-john/3-16-21').openedInNewTab)
       .toBe('https://www.blueletterbible.org/kjv/1jo/3/16-21/');
   });
 
