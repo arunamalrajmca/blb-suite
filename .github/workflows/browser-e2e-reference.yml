@@ -21,6 +21,7 @@ jobs:
       runtime_changed: ${{ steps.classify.outputs.runtime_changed }}
       full_browser_suite: ${{ steps.browser-select.outputs.full_browser_suite }}
       changed_specs: ${{ steps.browser-select.outputs.changed_specs }}
+      extension_spec_required: ${{ steps.browser-select.outputs.extension_spec_required }}
       browser_e2e_required: ${{ steps.browser-select.outputs.reference_required }}
     steps:
       - name: Checkout for change classification
@@ -99,7 +100,7 @@ jobs:
   browser-e2e:
     name: BROWSER E2E — References — ${{ matrix.group }}
     needs: [change-detection, verse-context-regression]
-    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.verse-context-regression.result == 'success' || (needs.change-detection.outputs.full_browser_suite != 'true' && !contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js'))) && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) }}
+    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.verse-context-regression.result == 'success' || needs.change-detection.outputs.extension_spec_required == 'false') && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -265,7 +266,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATUS_SHA: ${{ github.sha }}
-          STATUS_STATE: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || (needs.browser-e2e.result == 'skipped' && needs.change-detection.outputs.browser_e2e_required == 'false')) && (needs.browser-e2e-features.result == 'success' || (needs.browser-e2e-features.result == 'skipped' && (needs.change-detection.outputs.full_browser_suite != 'true' && !contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js') || needs.change-detection.outputs.browser_e2e_required == 'false'))) && 'success' || 'failure' }}
+          STATUS_STATE: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || (needs.browser-e2e.result == 'skipped' && needs.change-detection.outputs.browser_e2e_required == 'false')) && (needs.browser-e2e-features.result == 'success' || (needs.browser-e2e-features.result == 'skipped' && needs.change-detection.outputs.extension_spec_required == 'false')) && 'success' || 'failure' }}
           STATUS_DESCRIPTION: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || (needs.browser-e2e.result == 'skipped' && needs.change-detection.outputs.browser_e2e_required == 'false')) && (needs.browser-e2e-features.result == 'success' || (needs.browser-e2e-features.result == 'skipped' && (needs.change-detection.outputs.full_browser_suite != 'true' && !contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js') || needs.change-detection.outputs.browser_e2e_required == 'false'))) && 'browser E2E passed or not applicable' || 'browser E2E failed' }}
         shell: bash
         run: |
@@ -280,7 +281,7 @@ jobs:
       - name: Require all browser E2E suites to pass
         shell: bash
         run: |
-          if [ "${{ needs.change-detection.result }}" != "success" ] || [ "${{ needs.browser-e2e.result }}" = "failure" ] || [ "${{ needs.browser-e2e.result }}" = "cancelled" ] || ( [ "${{ needs.browser-e2e.result }}" = "skipped" ] && [ "${{ needs.change-detection.outputs.browser_e2e_required }}" != "false" ] ) || [ "${{ needs.browser-e2e-features.result }}" = "failure" ] || [ "${{ needs.browser-e2e-features.result }}" = "cancelled" ] || ( [ "${{ needs.browser-e2e-features.result }}" = "skipped" ] && { [ "${{ needs.change-detection.outputs.full_browser_suite }}" = "true" ] || [[ "${{ needs.change-detection.outputs.changed_specs }}" == *"tests/browser/extension.spec.js"* ]]; } && [ "${{ needs.change-detection.outputs.browser_e2e_required }}" != "false" ] ); then
+          if [ "${{ needs.change-detection.result }}" != "success" ] || [ "${{ needs.browser-e2e.result }}" = "failure" ] || [ "${{ needs.browser-e2e.result }}" = "cancelled" ] || ( [ "${{ needs.browser-e2e.result }}" = "skipped" ] && [ "${{ needs.change-detection.outputs.browser_e2e_required }}" != "false" ] ) || [ "${{ needs.browser-e2e-features.result }}" = "failure" ] || [ "${{ needs.browser-e2e-features.result }}" = "cancelled" ] || ( [ "${{ needs.browser-e2e-features.result }}" = "skipped" ] && [ "${{ needs.change-detection.outputs.extension_spec_required }}" != "false" ] ); then
             echo "References matrix: ${{ needs.browser-e2e.result }}"
             echo "Features: ${{ needs.browser-e2e-features.result }}"
             exit 1
