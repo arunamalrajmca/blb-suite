@@ -173,7 +173,9 @@ function christianityBibleLinkTarget(href) {
 
 // Intercept passage links before Christianity.com navigates away from an article.
 function installChristianityLinkRedirect(isEnabled) {
-  document.addEventListener("click", event => {
+  // Capture at window level so the extension can stop site-level click handlers
+  // before they trigger a client-side route change or reload of the article tab.
+  window.addEventListener("click", event => {
     if (event.defaultPrevented || event.button !== 0 ||
         event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     if (!isEnabled()) return;
