@@ -3114,7 +3114,7 @@ const BIBLEREF_RANGE_CONTENT_SCRIPT_FILES = ['redirect-bibleref-ranges.js'];
 const REDIRECT_HOSTNAMES = new Set([
   'bible.com', 'biblegateway.com', 'bibleref.com',
   'biblehub.com', 'bibleportal.com',
-  'christianity.com', 'esv.org',
+  'christianity.com', 'crosswalk.com', 'enduringword.com', 'esv.org', 'gotquestions.org',
   'kingjamesbibleonline.org', 'kjbo.org',
   'kjv.site', 'm.kjv.site',
   'officialkingjamesbible.com', 'thekingsbible.com',
@@ -3210,7 +3210,7 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
     // when the isolated-world resolver claims the link.
     let hostname = '';
     try { hostname = new URL(tab.url).hostname.toLowerCase().replace(/^www\\./, ''); } catch (_) {}
-    if (hostname === 'christianity.com' && files.includes('content.js')) {
+    if (['christianity.com','gotquestions.org','crosswalk.com','enduringword.com'].includes(hostname) && files.includes('content.js')) {
       const mainWorldId = `${id}-main-world`;
       const mainWorldFiles = ['redirect-christianity-main-world.js'];
       const registeredMain = await chrome.scripting.getRegisteredContentScripts({ids:[mainWorldId]});
@@ -3278,7 +3278,7 @@ async function ensureContentScriptInTab(tabId) {
       // A newly enabled site may already be open, so install the MAIN-world
       // guard in that current document too. The registration above covers
       // future navigations; the script's own marker makes this idempotent.
-      if (normalizeSiteHostname(hostnameFromTabUrl(tab.url)) === 'christianity.com' &&
+      if (['christianity.com','gotquestions.org','crosswalk.com','enduringword.com'].includes(normalizeSiteHostname(hostnameFromTabUrl(tab.url))) &&
           files.includes('content.js')) {
         try {
           await chrome.scripting.executeScript({

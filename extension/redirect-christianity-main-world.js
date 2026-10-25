@@ -1,9 +1,9 @@
-// MAIN-world click guard for Christianity.com. This script deliberately does
+// MAIN-world click guard for supported Bible-reference source sites. This script deliberately does
 // not resolve Bible references or call extension APIs; it asks the isolated
 // content script to handle a candidate passage and cancels native navigation
 // only when that script confirms a valid BLB destination.
 (() => {
-  if (window.__blbChristianityClickGuardInstalled) return;
+  if (window.__blbSourcePassageClickGuardInstalled) return;
   window.__blbChristianityClickGuardInstalled = true;
 
   window.addEventListener("click", event => {
@@ -18,15 +18,15 @@
 
     let url;
     try { url = new URL(anchor.href, location.href); } catch (_) { return; }
-    if (url.hostname.toLowerCase().replace(/^www\./, "") !== "christianity.com") return;
-
-    // Only passage routes are candidates. Unknown books/references are still
-    // allowed to use Christianity.com's normal navigation because the
-    // isolated-world resolver must explicitly cancel this event to claim it.
-    if (!/^\/bible\/[^/]+\/[^/]+\/\d+(?:-\d+(?:-\d+)?)?\/?$/i.test(url.pathname)) return;
-
-    const request = new CustomEvent("blb-suite-christianity-passage-click", {
-      detail: url.href,
+    const host = url.hostname.toLowerCase().replace(/^www\./, "");
+    if (!["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com"].includes(host)) return;
+    const label = String(anchor.innerText || anchor.textContent || "").replace(/\s+/g, " ").trim();
+    const isChristianityPassage = host === "christianity.com" &&
+      /^\/bible\/[^/]+\/[^/]+\/\d+(?:-\d+(?:-\d+)?)?\/?$/i.test(url.pathname);
+    const isReferenceLabel = /^(?:[1-3]\s*)?[A-Za-z][A-Za-z .'-]*\s+\d+(?::\d+(?:[-–]\d+)?|\s+\d+(?:[-–]\d+)?)?(?:\s*\((?:KJV|NKJV|ESV|NIV|NASB|CSB|NLT|WEB|AMP|RSV|ASV)\))?$/i.test(label);
+    if (!isChristianityPassage && !isReferenceLabel) return;
+    const request = new CustomEvent("blb-suite-source-passage-click", {
+      detail: JSON.stringify({ href:url.href, label }),
       cancelable: true
     });
     const handled = !window.dispatchEvent(request);

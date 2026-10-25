@@ -175,12 +175,21 @@ function christianityBibleLinkTarget(href) {
 // The page-world guard can cancel native handlers only after this isolated-world
 // resolver confirms that the link maps to a valid KJV passage.
 function installChristianityLinkRedirect(isEnabled) {
-  window.addEventListener("blb-suite-christianity-passage-click", event => {
+  window.addEventListener("blb-suite-source-passage-click", event => {
     if (!isEnabled()) return;
     // A string detail crosses Chrome's MAIN/ISOLATED world boundary
     // without exposing a page-owned object to the extension world.
-    const href = typeof event.detail === "string" ? event.detail : "";
-    const target = christianityBibleLinkTarget(href);
+    let detail = null;
+    try { detail = JSON.parse(typeof event.detail === "string" ? event.detail : ""); } catch (_) {}
+    const href = typeof detail?.href === "string" ? detail.href : "";
+    const label = normalizeSelectionText(typeof detail?.label === "string" ? detail.label : "");
+    const host = (() => { try { return new URL(href, location.href).hostname.toLowerCase().replace(/^www\./, ""); } catch (_) { return ""; } })();
+    let target = christianityBibleLinkTarget(href);
+    if (!target && ["crosswalk.com", "enduringword.com", "gotquestions.org"].includes(host)) {
+      const cleanLabel = label.replace(/\s*\((?:KJV|NKJV|ESV|NIV|NASB|CSB|NLT|WEB|AMP|RSV|ASV)\)\s*$/i, "").trim();
+      const parsed = parseRef(cleanLabel);
+      if (parsed) target = blbUrl(parsed.book, parsed.chapter, parsed.from, parsed.to);
+    }
     if (!target) return;
     // Cancel the custom request synchronously so the MAIN-world click guard
     // knows it may also cancel the original click and its native site handlers.
@@ -1383,14 +1392,15 @@ if (location.hostname==="webstersdictionary1828.com") {
   else startWebsterObserver();
 }
 
-// ---------- Christianity.com and GotQuestions.org MultiVerse collection ----------
+// ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------
 {
   const host = location.hostname.toLowerCase().replace(/^www\\./, "");
-  const sourceSite = host === "christianity.com"
-    ? "christianity"
-    : host === "gotquestions.org"
-      ? "gotquestions"
-      : "";
+  const sourceSite = ({
+    "christianity.com":"christianity",
+    "gotquestions.org":"gotquestions",
+    "crosswalk.com":"crosswalk",
+    "enduringword.com":"enduringword"
+  })[host] || "";
   if (sourceSite) {
     const buttonId = "blb-suite-" + sourceSite + "-multiverse";
     const statusId = "blb-suite-" + sourceSite + "-multiverse-status";

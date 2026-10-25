@@ -42,7 +42,7 @@ async function loadProductionRedirect(page, sourceUrl) {
   await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) } } }; function redirectBlbNet() { return false; } function openBlbDestinationFromContent(url) { window.__openedBlbUrl = url; }' });
 }
 
-const sourcePageMultiVerseStart = contentSource.indexOf('// ---------- Christianity.com and GotQuestions.org MultiVerse collection ----------');
+const sourcePageMultiVerseStart = contentSource.indexOf('// ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------');
 const sourcePageMultiVerseEnd = contentSource.indexOf('// ---------- BLB MultiVerse hand-off ----------', sourcePageMultiVerseStart);
 if (sourcePageMultiVerseStart < 0 || sourcePageMultiVerseEnd < 0) {
   throw new Error('Could not locate source-page MultiVerse button implementation');
@@ -62,11 +62,15 @@ test.describe('real-browser source URL redirect regressions', () => {
     await loadSourcePageMultiVerse(page, 'https://www.gotquestions.org/example-question.html', false);
     await page.waitForTimeout(50);
     await expect(page.locator('#blb-suite-gotquestions-multiverse')).toHaveCount(0);
+    await expect(page.locator('#blb-suite-crosswalk-multiverse')).toHaveCount(0);
+    await expect(page.locator('#blb-suite-enduringword-multiverse')).toHaveCount(0);
   });
 
   for (const source of [
     { host: 'christianity.com', url: 'https://www.christianity.com/wiki/bible/example.html', button: '#blb-suite-christianity-multiverse' },
-    { host: 'gotquestions.org', url: 'https://www.gotquestions.org/example-question.html', button: '#blb-suite-gotquestions-multiverse' }
+    { host: 'gotquestions.org', url: 'https://www.gotquestions.org/example-question.html', button: '#blb-suite-gotquestions-multiverse' },
+    { host: 'crosswalk.com', url: 'https://www.crosswalk.com/faith/bible-study/example.html', button: '#blb-suite-crosswalk-multiverse' },
+    { host: 'enduringword.com', url: 'https://enduringword.com/bible-commentary/john-3/', button: '#blb-suite-enduringword-multiverse' }
   ]) {
     test(`${source.host} offers a page-wide BLB MultiVerse button for linked Bible references`, async ({ page }) => {
       await loadSourcePageMultiVerse(page, source.url);
