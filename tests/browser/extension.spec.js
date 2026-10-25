@@ -347,6 +347,18 @@ test.describe('core user-visible E2E', () => {
     }).toBe(true);
 
     const reset = page.locator('#blb-suite-page-selection-button-reset-position');
+    const resetHitTest = await reset.evaluate(el => {
+      const rect = el.getBoundingClientRect();
+      const target = document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      return {
+        resetConnected: el.isConnected,
+        resetRect: { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+        targetTag: target?.tagName || null,
+        targetId: target?.id || null,
+        targetIsReset: target === el || !!target && el.contains(target)
+      };
+    });
+    expect(resetHitTest.targetIsReset, JSON.stringify(resetHitTest)).toBe(true);
     await reset.click();
     await expect.poll(() => reset.getAttribute('data-blb-reset-click-handler')).toBe('entered');
     await expect.poll(() => reset.evaluate(el =>
