@@ -50,8 +50,6 @@ jobs:
     needs: change-detection
     name: BROWSER E2E — GROUP A — REFERENCE
     runs-on: ubuntu-latest
-    container:
-      image: mcr.microsoft.com/playwright:v1.63.0-noble
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
@@ -61,6 +59,13 @@ jobs:
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
         with:
           node-version: 22
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
       - name: Cache npm download data
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
         uses: actions/cache@v4
@@ -70,6 +75,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node22-npm-
       - run: npm install
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
       - name: Grant test-only generic host access
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
