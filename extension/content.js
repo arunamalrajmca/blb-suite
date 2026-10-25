@@ -1025,8 +1025,10 @@ if (location.hostname.endsWith(BLB_HOSTNAME)) {
 
 // Shared drag behavior for page-wide MultiVerse buttons. Position is stored
 // in extension-local storage so it survives reloads and browser restarts.
-function makeBlbMultiVerseButtonDraggable(button) {
-  const positionKey = "blbSuiteMultiVerseButtonPosition";
+function makeBlbMultiVerseButtonDraggable(button, options = {}) {
+  const positionKey = options.positionKey || "blbSuiteMultiVerseButtonPosition";
+  const defaultRight = Number.isFinite(options.defaultRight) ? options.defaultRight : 18;
+  const defaultBottom = Number.isFinite(options.defaultBottom) ? options.defaultBottom : 18;
   if (!button || button.dataset.blbDraggableReady === "true") return;
   button.dataset.blbDraggableReady = "true";
   button.style.touchAction = "none";
@@ -1035,7 +1037,7 @@ function makeBlbMultiVerseButtonDraggable(button) {
 
   const reset = document.createElement("button");
   reset.type = "button";
-  reset.id = button.id + "-reset-position";
+  reset.id = button.id + (options.resetIdSuffix || "-reset-position");
   reset.textContent = "↺";
   reset.title = "Reset button position";
   reset.setAttribute("aria-label", "Reset button position");
@@ -1047,8 +1049,8 @@ function makeBlbMultiVerseButtonDraggable(button) {
     try { await chrome.storage.local.remove(positionKey); } catch (_) {}
     button.style.left = "auto";
     button.style.top = "auto";
-    button.style.right = "18px";
-    button.style.bottom = "18px";
+    button.style.right = defaultRight + "px";
+    button.style.bottom = defaultBottom + "px";
     placeReset();
   });
 
@@ -1075,6 +1077,7 @@ function makeBlbMultiVerseButtonDraggable(button) {
   }
   function placeReset() {
     if (!button.isConnected || !reset.isConnected) return;
+    reset.style.display = getComputedStyle(button).display === "none" ? "none" : "inline-flex";
     const size = viewportSize();
     const rect = button.getBoundingClientRect();
     const resetRect = reset.getBoundingClientRect();
@@ -1138,7 +1141,11 @@ function makeBlbMultiVerseButtonDraggable(button) {
     event.stopImmediatePropagation();
   }, true);
 
-  document.body.appendChild(reset);
+  (document.body || document.documentElement).appendChild(reset);
+  // Show the reset control only while the floating button itself is visible.
+  const visibilityObserver = new MutationObserver(() => placeReset());
+  visibilityObserver.observe(button, {attributes:true, attributeFilter:["style"]});
+  button.__blbDragVisibilityObserver = visibilityObserver;
   chrome.storage.local.get({[positionKey]: null}).then(data => {
     const saved = data?.[positionKey];
     if (!saved || !Number.isFinite(saved.left) || !Number.isFinite(saved.top) || !button.isConnected) {
@@ -1155,7 +1162,7 @@ function makeBlbMultiVerseButtonDraggable(button) {
   }).catch(() => placeReset());
 
   const onViewportChange = () => {
-    if (!button.isConnected) { reset.remove(); return; }
+    if (!button.isConnected) { reset.remove(); visibilityObserver.disconnect(); return; }
     clampButtonPosition();
     placeReset();
   };
@@ -3595,7 +3602,10 @@ function setBlbPageButtonVisible(visible) {
 
 function removeBlbPageSelectionButton() {
   setBlbPageButtonVisible(false);
-  document.getElementById(BLB_PAGE_BUTTON_ID)?.remove();
+  const button = document.getElementById(BLB_PAGE_BUTTON_ID);
+  button?.__blbDragVisibilityObserver?.disconnect();
+  document.getElementById(BLB_PAGE_BUTTON_ID + '-reset-position')?.remove();
+  button?.remove();
   blbPageButtonSelection = '';
 }
 
@@ -3615,7 +3625,7 @@ function addBlbPageSelectionButton() {
   const isWebsterPage = location.hostname.toLowerCase() === 'webstersdictionary1828.com';
   const buttonBottom = isWebsterPage ? 'bottom:68px' : 'bottom:20px';
   button.style.cssText = [
-    'position:fixed !important','right:20px !important',buttonBottom + ' !important','z-index:2147483647 !important','max-width:calc(100vw - 40px) !important',
+    'position:fixed !important','right:20px',buttonBottom,'z-index:2147483647 !important','max-width:calc(100vw - 40px) !important',
     'display:none','padding:9px 13px','border-radius:7px',
     'background:#292a2d','color:#f1f3f4','border:1px solid #505257','font:600 13px Arial,sans-serif',
     'line-height:1.2','cursor:pointer','box-shadow:0 2px 8px rgba(0,0,0,.42),inset 0 1px 0 rgba(255,255,255,.08)',
@@ -3662,6 +3672,11 @@ function addBlbPageSelectionButton() {
   });
 
   mount.appendChild(button);
+  makeBlbMultiVerseButtonDraggable(button, {
+    positionKey: 'blbSuiteShowOnBlbButtonPosition',
+    defaultRight: 20,
+    defaultBottom: isWebsterPage ? 68 : 20
+  });
 }
 
 async function updateBlbPageSelectionButtonFromSelection() {
