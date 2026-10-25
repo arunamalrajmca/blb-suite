@@ -99,7 +99,7 @@ jobs:
   browser-e2e:
     name: BROWSER E2E — References — ${{ matrix.group }}
     needs: [change-detection, verse-context-regression]
-    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && needs.verse-context-regression.result == 'success' && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) }}
+    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.verse-context-regression.result == 'success' || (needs.change-detection.outputs.full_browser_suite != 'true' && !contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js'))) && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -193,7 +193,7 @@ jobs:
     needs:
       - change-detection
       - browser-e2e
-    if: ${{ needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
