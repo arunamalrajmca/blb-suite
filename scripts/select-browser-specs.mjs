@@ -25,7 +25,10 @@ if (!alwaysFull) {
     .split("\n").filter(Boolean);
 }
 
-const specs = new Set(changed.filter(path => /^tests\/browser\/[^/]+\.spec\.js$/.test(path)));
+const browserSpecPattern = /^tests\/browser\/[^/]+\.spec\.js$/;
+const existingBrowserSpecs = new Set(run(["ls-tree", "-r", "--name-only", "HEAD", "--", "tests/browser"]).split("\n").filter(Boolean));
+const changedBrowserSpecs = [...new Set(changed.filter(path => browserSpecPattern.test(path) && existingBrowserSpecs.has(path)))].sort();
+const specs = new Set(changedBrowserSpecs);
 // Any changed browser spec triggers the full applicable browser suite. A spec can
 // contain cross-feature assertions, and running only its mapped/grep-selected
 // cases risks missing valid regressions. Keep runtime-file routing conservative.
@@ -92,7 +95,7 @@ for (const path of changed) {
 }
 
 const full = forceFull || unknownRuntime;
-const selected = [...specs].sort();
+const selected = [...specs].filter(path => existingBrowserSpecs.has(path)).sort();
 const mappedSpecs = new Set([
   "tests/browser/redirect-source-url-patterns.spec.js",
   "tests/browser/omnibox-boolean-operators.spec.js",
@@ -119,6 +122,7 @@ const has = (...names) => full || selected.some(path => names.includes(path));
 const values = {
   full_browser_suite: String(full),
   changed_specs: selected.join(","),
+  changed_browser_specs: changedBrowserSpecs.join(","),
   unmapped_specs: unmapped.join(","),
   extension_spec_required: String(full || selected.includes("tests/browser/extension.spec.js")),
   group_a_required: String(has(
