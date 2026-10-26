@@ -229,4 +229,25 @@ test.describe("The King's Bible MultiVerse collector behavior", () => {
     expect(harness.fetched.filter(url => url === secondUrl)).toHaveLength(1);
   });
 
+
+  test('Concordance pagination respects the 20-page safety cap', async () => {
+    const startUrl = 'https://www.thekingsbible.com/Concordance/faith/1';
+    const pages = new Map();
+    const pageNumbers = Array.from({ length: 25 }, (_, index) => index + 1);
+    for (let pageNumber = 1; pageNumber <= 20; pageNumber++) {
+      const url = `https://www.thekingsbible.com/Concordance/faith/${pageNumber}`;
+      pages.set(url, makeConcordancePage({
+        pageNumbers: pageNumber === 1 ? pageNumbers : [],
+        entries: []
+      }));
+    }
+    const harness = allPagesCollectorFor(pages, startUrl);
+
+    await harness.collect();
+
+    expect(harness.fetched).toHaveLength(19);
+    expect(harness.fetched).toContain('https://www.thekingsbible.com/Concordance/faith/20');
+    expect(harness.fetched).not.toContain('https://www.thekingsbible.com/Concordance/faith/21');
+  });
+
 });
