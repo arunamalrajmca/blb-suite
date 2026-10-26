@@ -5,7 +5,7 @@ globalThis.BLBParsePopupLinksModule = Object.freeze({
     // Keep parsing-popup links working on both normal BLB verse pages and
     // Criteria Search pages. A stable window name prevents repeated clicks from
     // opening duplicate tabs; the same tab is reused for the same destination.
-    if (location.hostname.endsWith(BLB_HOSTNAME)) {
+    if (location.hostname.endsWith(blbHostname)) {
       const handleParsePopupLink = link => {
         if (!link || !link.href || !link.closest?.(".parse-popup")) return;
         if (link.dataset.blbSuitePopup) return;
@@ -20,7 +20,7 @@ globalThis.BLBParsePopupLinksModule = Object.freeze({
           const m = link.href.match(/lexicon\/(g|h)\d+/i);
           if (m) {
             const criteriaUrl =
-              `${BLBShared.urls.blbSearch}?Criteria=${m[0].split("/").pop()}`;
+              `${blbSearchUrl}?Criteria=${m[0].split("/").pop()}`;
             openBlbDestinationFromContent(criteriaUrl);
           }
         }, true);
