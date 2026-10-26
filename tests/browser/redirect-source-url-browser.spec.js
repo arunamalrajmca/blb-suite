@@ -43,7 +43,7 @@ async function loadProductionRedirect(page, sourceUrl) {
 }
 
 const draggableButtonStart = contentSource.indexOf('function makeBlbMultiVerseButtonDraggable(button');
-const draggableButtonEnd = contentSource.indexOf("// ---------- The King's Bible Dictionary/Concordance MultiVerse ----------", draggableButtonStart);
+const draggableButtonEnd = contentSource.indexOf('// The feature module is loaded before this content script by manifest order.', draggableButtonStart);
 const sourcePageMultiVerseStart = contentSource.indexOf('// ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------');
 const sourcePageMultiVerseEnd = contentSource.indexOf('// ---------- BLB MultiVerse hand-off ----------', sourcePageMultiVerseStart);
 if ([draggableButtonStart, draggableButtonEnd, sourcePageMultiVerseStart, sourcePageMultiVerseEnd].some(i => i < 0)) {
