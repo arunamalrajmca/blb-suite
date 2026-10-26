@@ -104,7 +104,7 @@ test.describe('core user-visible E2E', () => {
     await expect(article).toBeVisible();
     // Enable trace-only diagnostics for this gesture so a failed trace shows
     // whether the content handler ran and which reference it resolved.
-    await page.evaluate(() => { window.__BLB_SUITE_E2E_DIAGNOSTICS__ = true; });
+    await page.evaluate(() => { document.documentElement.setAttribute('data-blb-suite-e2e-diagnostics', 'true'); });
     const gestures = [
       ['#generic-verse-42', 42, 18, '/kjv/1ki/18/42/'],
       ['#generic-verse-44', 44, 18, '/kjv/1ki/18/44/'],

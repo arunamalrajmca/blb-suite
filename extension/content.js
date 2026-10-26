@@ -443,7 +443,9 @@ function getDoubleClickSelection(event) {
 
 function doubleClickDiagnostic(stage, details = {}) {
   try {
-    if (window.__BLB_SUITE_E2E_DIAGNOSTICS__ !== true) return;
+    // The page and content script have isolated JS worlds; use a DOM marker
+    // so the Playwright page can enable this trace-only diagnostic reliably.
+    if (document.documentElement?.getAttribute('data-blb-suite-e2e-diagnostics') !== 'true') return;
     const entry = {stage, at:Date.now(), hostname:location.hostname, ...details};
     window.__blbSuiteDoubleClickDiagnosticV1 = entry;
     console.info('[BLB double-click diagnostic]', JSON.stringify(entry));
