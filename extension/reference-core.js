@@ -272,7 +272,7 @@ function resolveBibleReferenceText(text, options = {}) {
 
   // Match both shorthand forms in one pass so context always comes from the
   // immediately preceding reference already encountered in the source.
-  const shorthandEntryRe = /[,;]\s*(\d+)\s*:\s*(\d+)(?:\s*[-–—]\s*(\d+))?(?![A-Za-z0-9])|,\s*(\d+)(?!\s*[:.]\s*\d)(?![A-Za-z0-9])/g;
+  const shorthandEntryRe = /[,;]\s*(\d+)\s*:\s*(\d+)(?:\s*[-–—]\s*(\d+))?(?![A-Za-z0-9])|,\s*(\d+)(?!\s*[:.]\s*\d)(?![A-Za-z0-9])(?!\s+[A-Za-z])/g;
   while ((m = shorthandEntryRe.exec(source))) {
     const entryStart = m.index + m[0].search(/\d/);
     const prior = findPriorReference(m.index);

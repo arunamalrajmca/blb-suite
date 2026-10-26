@@ -4055,7 +4055,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
               '(?<![A-Za-z0-9])' +
               escapePattern(clean).replace(/\s+/g, '\\s+') +
               bookBoundary +
-              '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?',
+              '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?(?!\\d)',
               'gi'
             )
           });
@@ -4260,34 +4260,59 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // Comma-separated verses. For consecutive verses such as 9,10 or 9,10,11,
   // treat the selection as one continuous range. For non-consecutive verses,
   // open each verse separately in BLB MultiVerse.
-  const colonCommaRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)(\s*,\s*\d+(?!\s*:))+(?![A-Za-z0-9])/gi;
+  const colonCommaRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)((?:\s*,\s*\d+(?:\s*:\s*\d+)?(?:\s*-\s*\d+)?)+)(?![A-Za-z0-9]|\s+[A-Za-z])/gi;
   while ((m = colonCommaRe.exec(source))) {
     if (isShadowedBookMatch(m.index)) continue;
-    const rawBook = m[1].trim();
-    const book = resolveBook(rawBook);
+    const book = resolveBook(m[1].trim());
     if (!book) continue;
-    const chapter = Number(m[2]);
-    const verses = (m[0].match(/:\s*\d+(?:\s*,\s*\d+)*/)?.[0] || '')
-      .replace(/^:\s*/, '')
-      .split(/\s*,\s*/)
-      .map(Number)
-      .filter(Number.isFinite);
-    if (!verses.length) continue;
-    const maxVerse = Number(book.verses?.[chapter - 1]);
-    if (!Number.isInteger(maxVerse) || chapter < 1 || chapter > book.chapterCount) continue;
-    // Comma-separated values are explicit verses in the stated chapter.
-    // Do not send an impossible value through resolveBibleReference(), whose
-    // normal boundary behavior intentionally clamps explicit references.
-    // In a comma list that would create the historical false positive where
-    // "Psalms 1:2, 105:1" was interpreted as Psalm 1:105 and clamped to 1:6.
-    const validVerses = verses.filter(v => v >= 1 && v <= maxVerse);
-    if (!validVerses.length) continue;
-    const consecutive = validVerses.length === verses.length &&
-      validVerses.every((v, i) => i === 0 || v === validVerses[i - 1] + 1);
+    let currentChapter = Number(m[2]);
+    const firstVerse = Number(m[3]);
+    const rangeText = String(m[4] || '').replace(/^,\s*/, '');
+    const ranges = [{ chapter: currentChapter, from: firstVerse, to: firstVerse }];
+    for (const tokenRaw of rangeText.split(',')) {
+      const token = tokenRaw.trim();
+      let item = token.match(/^(\d+)\s*:\s*(\d+)(?:\s*-\s*(\d+))?$/);
+      if (item) {
+        currentChapter = Number(item[1]);
+        ranges.push({chapter:currentChapter, from:Number(item[2]), to:Number(item[3] || item[2])});
+        continue;
+      }
+      item = token.match(/^(\d+)(?:\s*-\s*(\d+))?$/);
+      if (item) ranges.push({chapter:currentChapter, from:Number(item[1]), to:Number(item[2] || item[1])});
+    }
+
+    const validRanges = ranges.filter(range => {
+      const maxVerse = Number(book.verses?.[range.chapter - 1]);
+      return Number.isInteger(maxVerse) && range.chapter >= 1 &&
+        range.chapter <= book.chapterCount && range.from >= 1 &&
+        range.to >= range.from && range.to <= maxVerse;
+    });
+    if (!validRanges.length) continue;
+
+    // Preserve compact behavior for consecutive single verses in one chapter,
+    // but keep disjoint ranges and explicit chapter changes separate.
+    const firstChapter = validRanges[0].chapter;
+    const allSingles = validRanges.every(range => range.from === range.to && range.chapter === firstChapter);
+    const consecutive = allSingles && validRanges.every((range, index) =>
+      index === 0 || range.from === validRanges[index - 1].to + 1
+    );
+    const addRangeUnlessAlreadyCovered = range => {
+      // Other parser passes also recognize comma continuations. Avoid adding
+      // an overlapping singleton/range when that pass already preserved it.
+      const overlapsExisting = refs.some(ref =>
+        ref.book === book.name && ref.chapter === range.chapter &&
+        ref.from <= range.to && ref.to >= range.from
+      );
+      if (!overlapsExisting) addRef(book, range.chapter, range.from, range.to, m[0]);
+    };
     if (consecutive) {
-      addRef(book, chapter, validVerses[0], validVerses[validVerses.length - 1], m[0]);
+      addRangeUnlessAlreadyCovered({
+        chapter:firstChapter,
+        from:validRanges[0].from,
+        to:validRanges[validRanges.length - 1].to
+      });
     } else {
-      validVerses.forEach(v => addRef(book, chapter, v, v, m[0]));
+      validRanges.forEach(addRangeUnlessAlreadyCovered);
     }
   }
 
@@ -4401,9 +4426,27 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   const mergedRefs = [];
   const mergedKeys = new Set();
   const appendCanonical = parsed => {
+    const sourceToken = String(parsed.text || '').trim();
+    // Reject a parser match that ends in the middle of a numeric token.
+    // For example, "Rom. 15:1" must not be accepted from "Rom. 15:16",
+    // and "1 Cor. 6:2" must not be accepted from "1 Cor. 6:11".
+    // Check the original source rather than relying on an individual regex
+    // pass to enforce the same digit-boundary rule.
+    if (sourceToken && /\d$/.test(sourceToken)) {
+      let hasOccurrence = false;
+      let hasCompleteOccurrence = false;
+      for (let candidate = source.indexOf(sourceToken); candidate >= 0; candidate = source.indexOf(sourceToken, candidate + 1)) {
+        hasOccurrence = true;
+        if (!/\d/.test(source[candidate + sourceToken.length] || '')) {
+          hasCompleteOccurrence = true;
+          break;
+        }
+      }
+      if (hasOccurrence && !hasCompleteOccurrence) return;
+    }
     // Drop the shared parser's verse-one normalization when the source token
     // is chapter-only; the local chapter-only scan preserves it as null range.
-    if (parsed.from === 1 && parsed.to === 1 && /^.+\s+\d+\s*$/.test(String(parsed.text || '').trim())) return;
+    if (parsed.from === 1 && parsed.to === 1 && /^.+\s+\d+\s*$/.test(sourceToken)) return;
     const canonical = resolveBibleReference(parsed.book, parsed.chapter, parsed.from, parsed.to);
     if (!canonical) return;
     // The shared resolver normalizes a chapter-only reference to verse 1
