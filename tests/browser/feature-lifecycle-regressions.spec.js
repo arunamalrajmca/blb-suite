@@ -341,3 +341,49 @@ test('Alt+B refuses stale Show on BLB and Double-click preferences on sensitive 
   expect(newTabs, 'Alt+B must not bypass the sensitive-site gate even with stale saved preferences').toEqual([]);
 });
 
+test('Study Sessions confirmed deletion stops and removes only the selected recording, while delete-all clears remaining history', async ({ context, extensionId, extensionStorage, extensionWorker }) => {
+  await extensionStorage.clear();
+  const inactiveTopic = 'BLB confirmed delete inactive ' + Date.now();
+  const activeTopic = 'BLB confirmed delete active ' + Date.now();
+  const titleCase = value => value.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+  const inactiveTitle = titleCase(inactiveTopic);
+  const activeTitle = titleCase(activeTopic);
+
+  await extensionWorker.evaluate(async value => startStudyTopicFromPopup(value, 'Preserve this separate note'), inactiveTopic);
+  await extensionWorker.evaluate(async value => startStudyTopicFromPopup(value, 'Delete with active topic'), activeTopic);
+
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await page.evaluate(() => {
+    window.__studyConfirmMessages = [];
+    window.confirm = message => {
+      window.__studyConfirmMessages.push(String(message));
+      return true;
+    };
+  });
+
+  await page.locator('#studyTopic').fill(activeTitle);
+  await expect(page.locator('#clearSelectedTopic')).toBeEnabled();
+  await page.locator('#clearStudy').click();
+  await page.locator('#clearSelectedTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Cleared:');
+
+  let state = await extensionWorker.evaluate(() => getStudyUiState());
+  expect(state).toMatchObject({ ok: true, recording: false, currentSession: null });
+  expect(state.topics).toContain(inactiveTitle);
+  expect(state.topics).not.toContain(activeTitle);
+  expect(state.topicStats[inactiveTitle].notes).toBe(1);
+  expect(state.topicStats[activeTitle]).toBeUndefined();
+
+  await page.locator('#clearStudy').click();
+  await page.locator('#clearAllTopics').click();
+  await expect(page.locator('#studyStatus')).toContainText('All topics cleared.');
+  state = await extensionWorker.evaluate(() => getStudyUiState());
+  expect(state).toMatchObject({ ok: true, recording: false, currentSession: null, topics: [] });
+  expect(await page.evaluate(() => window.__studyConfirmMessages)).toEqual([
+    expect.stringContaining('is recording'),
+    expect.stringContaining('Delete all Study data?')
+  ]);
+  await page.close();
+});
+
