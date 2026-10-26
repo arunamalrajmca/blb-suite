@@ -159,13 +159,5 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
 
 
 
-    const host = String(location.hostname || '').toLowerCase().replace(/^www\\./, '');
-    if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com"].includes(host)) {
-      installChristianityLinkRedirect(() => getCachedSuiteEnabled() && isSourceRedirectEnabled());
-    }
-    const host = String(location.hostname || '').toLowerCase().replace(/^www\./, '');
-    if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com"].includes(host)) {
-      installChristianityLinkRedirect(() => getCachedSuiteEnabled());
-    }
   }
 });
