@@ -195,7 +195,7 @@ test.describe("The King's Bible MultiVerse collector behavior", () => {
     expect(refs[0].url).toBe('https://www.blueletterbible.org/kjv/judges/6/15/17/');
   });
 
-  test('Concordance fetches numbered pages, deduplicates references across pages, and respects the page cap', async () => {
+  test('Concordance fetches numbered pages and deduplicates references across pages', async () => {
     const startUrl = 'https://www.thekingsbible.com/Concordance/faith/1';
     const secondUrl = 'https://www.thekingsbible.com/Concordance/faith/2';
     const thirdUrl = 'https://www.thekingsbible.com/Concordance/faith/3';
