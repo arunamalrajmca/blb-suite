@@ -28,6 +28,7 @@ const expectedContentScripts = [
   'books.js',
   'book-aliases.js',
   'reference-core.js',
+  'kings-bible-collector.js',
   'content.js'
 ];
 const contentEntry = (manifest.content_scripts || []).find(entry =>
