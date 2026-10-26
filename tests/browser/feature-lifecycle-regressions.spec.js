@@ -305,3 +305,39 @@ test('Study Sessions auto-stop can be disabled without stopping an inactive reco
   expect(state.studyPausedTopic).toBe('');
 });
 
+test('Alt+B refuses stale Show on BLB and Double-click preferences on sensitive government hosts', async ({ page, extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    masterEnabled: true,
+    redirectEnabled: false,
+    pageSelectionButtonSites: { 'gov.scot': true },
+    doubleClickBlbSites: { 'gov.scot': true }
+  });
+
+  await page.route('https://www.gov.scot/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Government test page</title></head><body><p id="sensitive-selection">John 3:16</p></body></html>'
+  }));
+  await page.goto('https://www.gov.scot/', { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    const target = document.querySelector('#sensitive-selection');
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+
+  const beforeIds = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+  );
+  await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+  await page.waitForTimeout(300);
+  const newTabs = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+    tabs.filter(tab => !before.includes(tab.id)).map(tab => tab.url || tab.pendingUrl || '')
+  ), beforeIds);
+
+  expect(newTabs, 'Alt+B must not bypass the sensitive-site gate even with stale saved preferences').toEqual([]);
+});
+
