@@ -1,0 +1,162 @@
+#!/usr/bin/env node
+/**
+ * Exercise CI browser-suite routing against synthetic git diffs.
+ * This catches regressions in the selector without requiring browser installs.
+ */
+const assert = require('node:assert/strict');
+const cp = require('node:child_process');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+
+const root = path.resolve(__dirname, '..');
+const selector = path.join(__dirname, 'select-browser-specs.mjs');
+const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-ci-routing-'));
+const run = (args, options = {}) => cp.execFileSync(args[0], args.slice(1), {
+  cwd: options.cwd || temp,
+  encoding: 'utf8',
+  env: { ...process.env, ...(options.env || {}) },
+  stdio: options.stdio || 'pipe'
+});
+const write = (relative, value = '// fixture\n') => {
+  const file = path.join(temp, relative);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, value);
+};
+const commit = (message) => {
+  run(['git', 'add', '-A']);
+  run(['git', '-c', 'user.name=CI Routing Test', '-c', 'user.email=ci-routing@example.invalid', 'commit', '-m', message]);
+  return run(['git', 'rev-parse', 'HEAD']).trim();
+};
+const resetScenario = (base) => {
+  run(['git', 'reset', '--hard', base]);
+  run(['git', 'clean', '-fd']);
+};
+const selectorResult = (base) => {
+  const output = run([process.execPath, selector, base], {
+    env: { GITHUB_EVENT_NAME: 'pull_request', GITHUB_REF: 'refs/pull/1/merge' }
+  });
+  const values = Object.fromEntries(output.split(/\r?\n/).filter(line => /^[a-z_]+=/.test(line))
+    .map(line => {
+      const index = line.indexOf('=');
+      return [line.slice(0, index), line.slice(index + 1)];
+    }));
+  return { output, values };
+};
+const assertValue = (result, key, value, scenario) => {
+  assert.equal(result.values[key], String(value), scenario + ': ' + key + ' expected ' + value + ', got ' + result.values[key] + '\n' + result.output);
+};
+
+try {
+  run(['git', 'init', '-q']);
+  run(['git', 'config', 'user.name', 'CI Routing Test']);
+  run(['git', 'config', 'user.email', 'ci-routing@example.invalid']);
+  const fixtures = [
+    'tests/browser/redirect-source-url-patterns.spec.js',
+    'tests/browser/redirect-source-url-browser.spec.js',
+    'tests/browser/redirect-hostnames.spec.js',
+    'tests/browser/blb-non-kjv-redirect.spec.js',
+    'tests/browser/scripttagger-global-injection.spec.js',
+    'tests/browser/e2e-core-user-actions.spec.js',
+    'tests/browser/multiverse-tab-reuse.spec.js',
+    'tests/browser/site-feature-defaults.spec.js',
+    'tests/browser/study-session-popup-ui-regression.spec.js',
+    'tests/browser/study-backup-restore.spec.js',
+    'tests/browser/feature-lifecycle-regressions.spec.js',
+    'tests/browser/extension.spec.js',
+    'tests/browser/shared-regex-patterns.spec.js',
+    'tests/browser/rediscover-sagacity-button.spec.js',
+    'tests/browser/research-dom-smoke.spec.js',
+    'tests/browser/omnibox-boolean-operators.spec.js',
+    'tests/browser/performance.spec.js',
+    'tests/browser/test-only.spec.js'
+  ];
+  for (const file of fixtures) write(file);
+  write('extension/redirect-bibleref-ranges.js');
+  write('extension/redirect-christianity-main-world.js');
+  write('extension/redirect-scripttagger.js');
+  write('extension/popup.html');
+  write('extension/popup.js');
+  write('extension/background.js');
+  write('extension/content.js');
+  write('extension/reference-core.js');
+  write('extension/unmapped-feature.js');
+  const base = commit('base fixture');
+
+  // A mapped production feature should select only its declared E2E specs.
+  resetScenario(base);
+  write('extension/redirect-bibleref-ranges.js', '// changed redirect adapter\n');
+  commit('change mapped redirect feature');
+  let result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', false, 'mapped feature');
+  assert(result.values.changed_specs.includes('redirect-source-url-patterns.spec.js'));
+  assert(!result.values.changed_specs.includes('popup'), 'mapped feature should not pull in unrelated popup tests');
+  console.log('PASS: mapped feature selects focused browser coverage');
+
+  // A popup-only feature stays focused as well.
+  resetScenario(base);
+  write('extension/popup.js', '// changed popup feature\n');
+  commit('change popup feature');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', false, 'popup feature');
+  assert(result.values.changed_specs.includes('site-feature-defaults.spec.js'));
+  console.log('PASS: popup feature selects its mapped regression coverage');
+
+  // Shared runtime/bootstrap changes must force the full applicable suite.
+  resetScenario(base);
+  write('extension/reference-core.js', '// shared-core change\n');
+  commit('change shared core');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', true, 'shared core');
+  console.log('PASS: shared-core changes force broad browser coverage');
+
+  // Unknown runtime files must not silently receive narrow coverage.
+  resetScenario(base);
+  write('extension/unmapped-feature.js', '// new unknown runtime feature\n');
+  commit('change unmapped runtime');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', true, 'unknown runtime');
+  console.log('PASS: unknown runtime changes force broad browser coverage');
+
+  // Mixed mapped and shared changes remain broad.
+  resetScenario(base);
+  write('extension/redirect-bibleref-ranges.js', '// mapped change\n');
+  write('extension/content.js', '// shared content change\n');
+  commit('mixed mapped and shared change');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', true, 'mixed changes');
+  console.log('PASS: mixed feature/shared changes force broad browser coverage');
+
+  // Deleting a mapped feature still selects that feature's tests.
+  resetScenario(base);
+  fs.unlinkSync(path.join(temp, 'extension/redirect-bibleref-ranges.js'));
+  commit('delete mapped feature file');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', false, 'deleted mapped feature');
+  assert(result.values.changed_specs.includes('redirect-source-url-patterns.spec.js'));
+  console.log('PASS: deleted mapped files retain feature coverage');
+
+  // Browser-spec-only edits must not trigger the browser suite by themselves.
+  resetScenario(base);
+  write('tests/browser/test-only.spec.js', '// test-only edit\n');
+  commit('change browser test only');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', false, 'browser test only');
+  assert.equal(result.values.changed_specs, '', 'browser test-only changes should not select production E2E');
+  console.log('PASS: browser-spec-only edits do not trigger feature E2E');
+
+  // Changes to the selector/test infrastructure must remain conservative.
+  resetScenario(base);
+  write('scripts/select-browser-specs.mjs', '// selector infrastructure change\n');
+  commit('change selector infrastructure');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', true, 'selector infrastructure');
+  console.log('PASS: selector infrastructure changes force broad browser coverage');
+
+  console.log('All CI routing selector contract checks passed.');
+} catch (error) {
+  console.error('FAIL: CI routing selector contract checks:', error.stack || error.message);
+  process.exitCode = 1;
+} finally {
+  fs.rmSync(temp, { recursive: true, force: true });
+}
