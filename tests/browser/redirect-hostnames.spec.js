@@ -15,6 +15,7 @@ function readHostnameSet(source, constantName) {
 
 test('native redirect hostname lists stay normalized and in sync', () => {
   const background = fs.readFileSync(path.join(root, 'extension/background.js'), 'utf8');
+  const selectionContextMenu = fs.readFileSync(path.join(root, 'extension/background-selection-context-menu.js'), 'utf8');
   const hostPolicy = fs.readFileSync(path.join(root, 'extension/background-host-policy.js'), 'utf8');
   const content = fs.readFileSync(path.join(root, 'extension/content.js'), 'utf8');
 
@@ -30,7 +31,7 @@ test('native redirect hostname lists stay normalized and in sync', () => {
   expect([...contentHosts].sort()).toEqual([...backgroundHosts].sort());
 
   // Both call sites must normalize incoming hostnames before set membership.
-  expect(background).toContain('normalizeSiteHostname(u.hostname)');
+  expect(selectionContextMenu).toContain('normalizeSiteHostname(u.hostname)');
   expect(content).toMatch(/REDIRECT_HOSTS\.has\(location\.hostname\.toLowerCase\(\)\.replace\(\/\^www\\\.\/\s*,\s*['"]['"]\)\)/);
 });
 
