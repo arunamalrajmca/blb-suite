@@ -8,6 +8,14 @@ Split the large shared production scripts along real feature boundaries so a pro
 
 The initial audit is complete. PR #463 carries the runtime refactor, supporting tests, and loading-contract updates together. Complete the planned extraction scope before requesting comprehensive final validation; ordinary pushes may still trigger repository-configured automatic workflows.
 
+### Progress on the umbrella branch
+
+- Extracted page-wide source collectors, MultiVerse copy-link behavior, selection-text normalization, and the shared MultiVerse button drag/position behavior into classic-script modules with explicit APIs.
+- Extracted MultiVerse reference canonicalization/expansion and serialized tab-tracking storage into `background-multiverse-tracking.js`.
+- Extracted BLB destination identity locking/reuse/activation into `background-blb-destination-manager.js`.
+- Kept service-worker `importScripts` bootstrap and Chrome event-listener registration in `background.js`; loading-contract tests guard the order and listener boundary.
+- The Double-click/context resolver and floating page-selection lifecycle remain in `content.js`; additional separation must preserve their shared selection state and message-handler ordering. Study Sessions/export and remaining PDF/reference responsibilities remain in `background.js` and are not yet complete.
+
 ## Baseline architecture inventory
 
 ### `extension/background.js` — MV3 service worker (6,708 lines)
