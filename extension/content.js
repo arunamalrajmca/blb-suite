@@ -441,9 +441,28 @@ function getDoubleClickSelection(event) {
   return '';
 }
 
+function doubleClickDiagnostic(stage, details = {}) {
+  try {
+    if (window.__BLB_SUITE_E2E_DIAGNOSTICS__ !== true) return;
+    const entry = {stage, at:Date.now(), hostname:location.hostname, ...details};
+    window.__blbSuiteDoubleClickDiagnosticV1 = entry;
+    console.info('[BLB double-click diagnostic]', JSON.stringify(entry));
+  } catch (_) {}
+}
+
 function handleDoubleClickBlb(event) {
   try {
-    if (!suiteEnabled || isSensitiveSiteHostname(location.hostname) || isDoubleClickExcludedTarget(event.target)) return;
+    doubleClickDiagnostic('handler-entered', {
+      suiteEnabled, doubleClickSettingsReady, doubleClickBlbEnabled,
+      eventTargetText:normalizeSelectionText(event?.target?.textContent || '').slice(0,100)
+    });
+    if (!suiteEnabled || isSensitiveSiteHostname(location.hostname) || isDoubleClickExcludedTarget(event.target)) {
+      doubleClickDiagnostic('handler-gated', {
+        suiteEnabled, sensitiveSite:isSensitiveSiteHostname(location.hostname),
+        excludedTarget:isDoubleClickExcludedTarget(event.target)
+      });
+      return;
+    }
 
     // Chromium may dispatch dblclick before the new word selection has replaced
     // the previous native selection. Never freeze that early selection/context:
@@ -481,6 +500,11 @@ function handleDoubleClickBlb(event) {
         );
         const physicalToken = normalizeSelectionText(cueTarget?.textContent || '').normalize('NFKC');
         if (cueTarget && /^(?:v|verse|verses)$/i.test(physicalToken)) selection = physicalToken;
+        doubleClickDiagnostic('selection-captured', {
+          requestId, selection, physicalToken,
+          eventTargetText:normalizeSelectionText(eventTarget?.textContent || '').slice(0,100),
+          cueTargetText:normalizeSelectionText(cueTarget?.textContent || '').slice(0,100)
+        });
         if (!selection) {
           if (Date.now()-started<1500) requestAnimationFrame(dispatch);
           return true;
@@ -654,7 +678,13 @@ function handleDoubleClickBlb(event) {
         const contextualReference=isNumberedListSerial && standaloneBook
           ? standaloneBook
           : (isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook));
+        doubleClickDiagnostic('reference-resolved', {
+          requestId, selection, isVerseContextWord,
+          blockContext, contextualReference,
+          targetText:normalizeSelectionText(contextualTarget?.textContent || '').slice(0,100)
+        });
         if (!contextualReference) {
+          doubleClickDiagnostic('no-reference-resolved', {requestId, selection, isVerseContextWord});
           // A version abbreviation alone is not a KJV word-search request.
           if (isBibleVersionCode) return true;
           if (/^[A-Za-z][A-Za-z'’-]*$/.test(selection) && !/^(?:i|ii|iii)$/i.test(selection)) {
@@ -687,6 +717,11 @@ function handleDoubleClickBlb(event) {
           recentDoubleClickDestinations.set(gestureTarget,now);
         }
 
+        doubleClickDiagnostic('destination-request', {
+          requestId, selection, resolvedUrl:contextualReference.url || null,
+          book:contextualReference.book, chapter:contextualReference.chapter,
+          from:contextualReference.from, to:contextualReference.to
+        });
         safeRuntimeSendMessage({
           type:'blbSuiteOpenSelectionText',
           text:selection,

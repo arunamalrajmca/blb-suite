@@ -32,6 +32,16 @@
       logTiming({stage:'queue-request-sent', queueRequestedAt, sinceHandoffStartMs:queueRequestedAt-handoffStartedAt, refChars:mvText.length});
       let slot;
       let queueError = null;
+      let queueResponseSettled = false;
+      // Diagnostic watchdog: expose a stalled runtime-message response in the trace
+      // without changing queue admission or allowing duplicate form submissions.
+      const queueResponseWatchdog = setTimeout(() => {
+        if (!queueResponseSettled) logTiming({
+          stage:'queue-response-still-pending', queueRequestedAt,
+          sinceQueueRequestMs:Date.now()-queueRequestedAt,
+          sinceHandoffStartMs:Date.now()-handoffStartedAt
+        });
+      }, 2000);
       // Extension service workers can occasionally drop a long-lived message
       // response while a queued timer is pending. Retry once on a fresh message
       // channel; do not bypass the shared queue or submit twice after a success.
@@ -47,7 +57,10 @@
           if (attempt < 2) await new Promise(resolve => setTimeout(resolve, 150));
         }
       }
+      queueResponseSettled = true;
+      clearTimeout(queueResponseWatchdog);
       if (queueError) {
+        logTiming({stage:'queue-request-failed', queueRequestedAt, sinceQueueRequestMs:Date.now()-queueRequestedAt, error:String(queueError)});
         showFailure('Multi-Verse queue connection failed after retry: ' + String(queueError));
         return;
       }
