@@ -31,6 +31,7 @@ const expectedContentScripts = [
   'kings-bible-collector.js',
   'webster-collector.js',
   'source-page-collector.js',
+  'selection-text.js',
   'multiverse-copy-links.js',
   'blb-auto-hyperlinker.js',
   'blb-parse-popup-links.js',
@@ -105,7 +106,7 @@ if (!dynamicFilesMatch) {
   fail('runtime-injected content scripts declare their dependency list');
 } else {
   const dynamicFiles = [...dynamicFilesMatch[1].matchAll(/['\"]([^'\"]+\.js)['\"]/g)].map(match => match[1]);
-  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-navigation-links.js', 'blb-new-tab-links.js', 'blb-multiverse-handoff.js', 'blb-passive-new-tab.js', 'content.js'];
+  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'selection-text.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-navigation-links.js', 'blb-new-tab-links.js', 'blb-multiverse-handoff.js', 'blb-passive-new-tab.js', 'content.js'];
   const positions = requiredDynamic.map(name => dynamicFiles.indexOf(name));
   if (positions.some(index => index < 0)
       || positions.some((index, i) => i > 0 && index <= positions[i - 1])) {
@@ -117,6 +118,22 @@ if (!dynamicFilesMatch) {
 }
 
 const content = read('extension/content.js');
+
+const selectionText = read('extension/selection-text.js');
+if (!selectionText.includes('BLBSelectionTextModule')
+    || !selectionText.includes('normalize(value)')
+    || !selectionText.includes('normalizeKey(value)')
+    || /\\b(?:document|window)\\s*\\./.test(selectionText)) {
+  fail('selection-text normalization is isolated behind a DOM-free feature-module API');
+} else {
+  pass('selection-text normalization remains isolated and DOM-free');
+}
+if (!content.includes('BLBSelectionTextModule.normalize(value)')
+    || !content.includes('BLBSelectionTextModule.normalizeKey(value)')) {
+  fail('content script delegates selection normalization to the feature module');
+} else {
+  pass('content script delegates selection normalization to the feature module');
+}
 
 const copyModule = read('extension/multiverse-copy-links.js');
 if (!copyModule.includes('BLBMultiVerseCopyLinksModule')
