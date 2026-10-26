@@ -15,15 +15,17 @@ function readHostnameSet(source, constantName) {
 
 test('native redirect hostname lists stay normalized and in sync', () => {
   const background = fs.readFileSync(path.join(root, 'extension/background.js'), 'utf8');
+  const hostPolicy = fs.readFileSync(path.join(root, 'extension/background-host-policy.js'), 'utf8');
   const content = fs.readFileSync(path.join(root, 'extension/content.js'), 'utf8');
 
-  const backgroundHosts = readHostnameSet(background, 'REDIRECT_HOSTNAMES');
+  const backgroundHosts = readHostnameSet(hostPolicy, 'redirectHostnames');
   const contentHosts = readHostnameSet(content, 'REDIRECT_HOSTS');
 
   expect(backgroundHosts.length).toBeGreaterThan(0);
   expect(new Set(backgroundHosts).size).toBe(backgroundHosts.length);
   expect(new Set(contentHosts).size).toBe(contentHosts.length);
   expect(backgroundHosts).not.toContain('www.blueletterbible.org');
+  expect(hostPolicy).toContain('blbHostname');
   expect(backgroundHosts.every(host => host === host.toLowerCase() && !host.startsWith('www.'))).toBe(true);
   expect([...contentHosts].sort()).toEqual([...backgroundHosts].sort());
 

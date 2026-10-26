@@ -491,24 +491,27 @@ test('Bible redirect parser contracts cover every supported Bible redirect gramm
   assert(content.includes('const REDIRECT_HOSTS'), 'redirect host table missing');
 });test('external redirect coverage includes every supported redirect host', () => {
   const content = read('content.js');
-  for (const host of ['bible.com','biblegateway.com','bibleref.com','biblehub.com','kingjamesbibleonline.org','kjbo.org','kjv.site','officialkingjamesbible.com','bibleportal.com','webstersdictionary1828.com','blueletterbible.org']) assert(content.includes(host), `redirect host missing: ${host}`);
+  const hostPolicy = read('background-host-policy.js');
+  for (const host of ['bible.com','biblegateway.com','bibleref.com','biblehub.com','kingjamesbibleonline.org','kjbo.org','kjv.site','officialkingjamesbible.com','bibleportal.com','webstersdictionary1828.com']) assert(content.includes(host), `redirect host missing: ${host}`);
+  assert(content.includes('BLB_HOSTNAME') && hostPolicy.includes('blbHostname'), 'BLB hostname must remain in the normalized redirect host policies');
   assert(content.includes('function redirectBibleSite'), 'Bible-site redirect parser missing');
   assert(content.includes('function redirectBlbNet'), 'BLB NET redirect missing');
-  assert(content.includes('const REDIRECT_HOSTS'), 'redirect host table missing');
+  assert(content.includes('const REDIRECT_HOSTS'), 'content redirect host table missing');
 });
 test('BLB native-event interception remains explicitly scoped', () => {
   const content = read('content.js');
   const parsePopup = read('blb-parse-popup-links.js');
+  const newTabLinks = read('blb-new-tab-links.js');
 
   assert(parsePopup.includes('const handleParsePopupLink'), 'parse-popup handler block missing');
   assert(parsePopup.includes('link.closest?.(".parse-popup")'), 'parse-popup click override must remain selector-scoped');
   assert(parsePopup.includes('preventDefault()'), 'parse-popup override must retain its intentional native-navigation override');
   assert(parsePopup.includes('stopImmediatePropagation()'), 'parse-popup override must retain event isolation');
 
-  const nowrapStart = content.indexOf('const a=e.target.closest?.("a.nowrap")');
-  const nowrapEnd = content.indexOf('},true);', nowrapStart);
+  const nowrapStart = newTabLinks.indexOf('const a=e.target.closest?.("a.nowrap")');
+  const nowrapEnd = newTabLinks.indexOf('},true);', nowrapStart);
   assert(nowrapStart >= 0 && nowrapEnd > nowrapStart, 'nowrap click handler missing');
-  const nowrap = content.slice(nowrapStart, nowrapEnd + 7);
+  const nowrap = newTabLinks.slice(nowrapStart, nowrapEnd + 7);
   assert(nowrap.includes('if (!a) return'), 'nowrap click override must reject unrelated clicks');
 
   const selectionStart = content.indexOf('function handleBlbPageSelectionMouseDown');
@@ -561,9 +564,10 @@ test('passive BLB verse links retain observer-driven new-tab targets', () => {
 });
 test('BLB new-tab and Copy-as-link contracts remain wired', () => {
   const content = read('content.js');
+  const newTabLinks = read('blb-new-tab-links.js');
   const autoHyperlinker = read('blb-auto-hyperlinker.js');
-  assert(content.includes('modifyLinks'), 'BLB link modifier missing');
-  assert(content.includes('target="_blank"'), 'BLB new-tab target missing');
+  assert(newTabLinks.includes('modifyLinks'), 'BLB link modifier missing');
+  assert(newTabLinks.includes('target="_blank"'), 'BLB new-tab target missing');
   assert(content.includes('BLBAutoHyperlinkModule?.initialize({'), 'HTML clipboard module initialization missing');
   assert(autoHyperlinker.includes('format(rawText, blbHomeUrl)'), 'HTML clipboard formatter missing');
   assert(autoHyperlinker.includes('setData("text/html"'), 'HTML clipboard write missing');

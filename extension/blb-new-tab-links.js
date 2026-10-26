@@ -73,6 +73,5 @@ globalThis.BLBNewTabLinksModule = Object.freeze({
       },true);
       if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",process);
       else process();
-    }
   }
 });
