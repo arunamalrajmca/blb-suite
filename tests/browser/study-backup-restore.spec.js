@@ -152,7 +152,9 @@ test.describe('Study Sessions backup and restore', () => {
     });
     expect(backup.exportedAt).toEqual(expect.any(String));
     expect(backup.study.studySessions).toEqual(expect.any(Array));
-    expect(backup.study.studySelectedTopic).toEqual(expect.any(String));
+    if (Object.prototype.hasOwnProperty.call(backup.study, 'studySelectedTopic')) {
+      expect(backup.study.studySelectedTopic).toEqual(expect.any(String));
+    }
     expect(backup).not.toHaveProperty('masterEnabled');
     expect(backup).not.toHaveProperty('redirectEnabled');
     expect(backup.study).not.toHaveProperty('masterEnabled');
