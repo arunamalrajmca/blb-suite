@@ -13,7 +13,8 @@ The initial audit is complete. PR #463 carries the runtime refactor, supporting 
 - Extracted page-wide source collectors, MultiVerse copy-link behavior, selection-text normalization, and the shared MultiVerse button drag/position behavior into classic-script modules with explicit APIs.
 - Extracted MultiVerse reference canonicalization/expansion and serialized tab-tracking storage into `background-multiverse-tracking.js`.
 - Extracted BLB destination identity locking/reuse/activation into `background-blb-destination-manager.js`.
-- Extracted Study Session data normalization, canonical reference/Strong’s handling, topic keys, and session cleanup into `background-study-session-model.js`; storage I/O, export/download, alarms, and UI messaging remain in `background.js`.
+- Extracted Study Session data normalization, canonical reference/Strong’s handling, topic keys, and session cleanup into `background-study-session-model.js`.
+- Extracted PDF layout, pagination, text wrapping, and PDF serialization into `background-study-pdf-export.js`; export orchestration, downloads, alarms, storage, and UI messaging remain in `background.js`.
 - Kept service-worker `importScripts` bootstrap and Chrome event-listener registration in `background.js`; loading-contract tests guard the order and listener boundary.
 - The Double-click/context resolver and floating page-selection lifecycle remain in `content.js`; additional separation must preserve their shared selection state and message-handler ordering. Study Sessions/export and remaining PDF/reference responsibilities remain in `background.js` and are not yet complete.
 

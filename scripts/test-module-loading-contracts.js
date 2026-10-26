@@ -89,7 +89,8 @@ if (!importMatch) {
     'background-content-script-activation.js',
     'background-multiverse-tracking.js',
     'background-blb-destination-manager.js',
-    'background-study-session-model.js'
+    'background-study-session-model.js',
+    'background-study-pdf-export.js'
   ];
   const positions = required.map(name => imports.indexOf(name));
   if (positions.some(index => index < 0)
@@ -186,6 +187,24 @@ if (!background.includes('BLBBackgroundStudySessionModelModule.create({')
   fail('service worker initializes the study model before storage operations');
 } else {
   pass('study-session model is initialized before dependent storage operations');
+}
+
+
+const studyPdf = read('extension/background-study-pdf-export.js');
+if (!studyPdf.includes('BLBStudyPdfExportModule')
+    || !studyPdf.includes('buildStudySessionsPdf')
+    || !studyPdf.includes('startxref')
+    || !studyPdf.includes('studyBookDisplayName')
+    || /chrome(?:Api)?\.(?:tabs|runtime|alarms|contextMenus)\.[A-Za-z]+\.addListener/.test(studyPdf)) {
+  fail('Study Session PDF formatting and serialization are isolated from service-worker listeners');
+} else {
+  pass('Study Session PDF formatter remains a self-contained module');
+}
+if (!background.includes('BLBStudyPdfExportModule.create({studyBookDisplayName})')
+    || !background.includes('function buildStudySessionsPdf(content, options = {})')) {
+  fail('background initializes the PDF formatter and preserves the existing call contract');
+} else {
+  pass('Study Session PDF module initialization and call contract remain stable');
 }
 
 const content = read('extension/content.js');
