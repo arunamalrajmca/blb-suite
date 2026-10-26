@@ -108,3 +108,13 @@ if (moduleContractTest.status !== 0) {
 } else {
   pass('module-loading and shared-reference contracts validated');
 }
+
+const routingContractTest = cp.spawnSync(process.execPath, [
+  path.join(__dirname, 'test-ci-routing-selector.js')
+], { encoding: 'utf8' });
+if (routingContractTest.stdout) process.stdout.write(routingContractTest.stdout);
+if (routingContractTest.status !== 0) {
+  fail('CI routing selector contract checks failed\\n' + (routingContractTest.stderr || ''));
+} else {
+  pass('CI routing selector decisions validated against synthetic diffs');
+}
