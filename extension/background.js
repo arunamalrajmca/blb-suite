@@ -4296,10 +4296,23 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     const consecutive = allSingles && validRanges.every((range, index) =>
       index === 0 || range.from === validRanges[index - 1].to + 1
     );
+    const addRangeUnlessAlreadyCovered = range => {
+      // Other parser passes also recognize comma continuations. Avoid adding
+      // an overlapping singleton/range when that pass already preserved it.
+      const overlapsExisting = refs.some(ref =>
+        ref.book === book.name && ref.chapter === range.chapter &&
+        ref.from <= range.to && ref.to >= range.from
+      );
+      if (!overlapsExisting) addRef(book, range.chapter, range.from, range.to, m[0]);
+    };
     if (consecutive) {
-      addRef(book, firstChapter, validRanges[0].from, validRanges[validRanges.length - 1].to, m[0]);
+      addRangeUnlessAlreadyCovered({
+        chapter:firstChapter,
+        from:validRanges[0].from,
+        to:validRanges[validRanges.length - 1].to
+      });
     } else {
-      validRanges.forEach(range => addRef(book, range.chapter, range.from, range.to, m[0]));
+      validRanges.forEach(addRangeUnlessAlreadyCovered);
     }
   }
 
