@@ -54,3 +54,24 @@ test('Substack selection parser preserves the second chapter-qualified 2 Corinth
     { book: '2 corinthians', chapter: 5, verse: 5 }
   ]);
 });
+
+// Regression for a new numbered book after a comma. The leading "2" in
+// "2 Thess. 2:13" must not be parsed as 1 Corinthians 6:2.
+test('Substack selection parser does not absorb the next book number as a verse', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    const selected = '<p><strong>53. </strong><span>He sets us apart for God’s good use </span><strong>(Rom. 15:16, 1 Cor. 6:11, 2 Thess. 2:13)</strong><span>.</span></p>';
+    return extractBibleRefsFromSelectedTextUncached(selected).flatMap(ref => {
+      const verses = [];
+      for (let verse = ref.from; verse <= ref.to; verse++) {
+        verses.push({ book: ref.book, chapter: ref.chapter, verse });
+      }
+      return verses;
+    });
+  });
+
+  expect(result).toEqual([
+    { book: 'romans', chapter: 15, verse: 16 },
+    { book: '1 corinthians', chapter: 6, verse: 11 },
+    { book: '2 thessalonians', chapter: 2, verse: 13 }
+  ]);
+});
