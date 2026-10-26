@@ -3,7 +3,7 @@
  * Shared content-script helpers are injected explicitly by content.js.
  */
 globalThis.BLBWebsterCollectorModule = Object.freeze({
-  initialize({ normalizeSelectionText, parseRef, blbUrl, isSuiteEnabled, isModifiedLinkActivation, makeBlbMultiVerseButtonDraggable }) {
+  initialize({ normalizeSelectionText, parseRef, blbUrl, isSuiteEnabled, isSuiteEnabledNow, isModifiedLinkActivation, makeBlbMultiVerseButtonDraggable }) {
     // ---------- Webster's 1828 ----------
     if (location.hostname==="webstersdictionary1828.com") {
       async function captureWebsterWord() {
@@ -99,7 +99,7 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
       }).catch(()=>{});
     
       document.addEventListener("click",e=>{
-        if (!suiteEnabled || !websterRedirectEnabled || isModifiedLinkActivation(e)) return;
+        if (!isSuiteEnabledNow() || !websterRedirectEnabled || isModifiedLinkActivation(e)) return;
         const a=e.target.closest?.("a.bible");
         if (!a) return;
         const ref=parseRef(normalizeSelectionText(a.innerText||a.textContent||""));
