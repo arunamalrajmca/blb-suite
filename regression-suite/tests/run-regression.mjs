@@ -73,8 +73,8 @@ test('Rediscover, Sagacity, and TSK use the extracted nested-page MultiVerse col
   assert(sourceCollector.includes('targetHost === "blueletterbible.org"'), 'Criteria extraction must be restricted to BLB links');
   assert(sourceCollector.includes('/^\\/search\\/preSearch\\.cfm$/i.test(targetUrl.pathname)'), 'Criteria extraction must be limited to the BLB preSearch endpoint');
   assert(sourceCollector.includes('String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")'), 'plus signs in BLB Criteria must decode to spaces');
-  const background = read('background.js');
-  assert(background.includes("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'"));
+  const hostPolicy = read('background-host-policy.js');
+  assert(hostPolicy.includes("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'"));
 });
 
 test('Rediscover, Sagacity, and TSK use optional access and dynamic injection only', () => {
