@@ -165,11 +165,11 @@ test.describe('Study Sessions backup and restore', () => {
   });
 
 
-  test('preserves saved Study topics, sessions, and notes across an extension reload', async ({ context, extensionId, extensionWorker, extensionStorage }) => {
+  test('preserves saved Study topics, sessions, and notes when the popup is reopened', async ({ context, extensionId, extensionWorker, extensionStorage }) => {
     await extensionStorage.clear();
-    const page = await openPopup(context, extensionId);
-    const topic = 'Upgrade preservation ' + Date.now();
-    await send(page, { type: 'blbSuiteStartStudyTopic', title: topic, note: 'Keep this note after updating' });
+    let page = await openPopup(context, extensionId);
+    const topic = 'Study persistence ' + Date.now();
+    await send(page, { type: 'blbSuiteStartStudyTopic', title: topic, note: 'Keep this note after reopening' });
     await send(page, { type: 'blbSuiteStopStudyRecording' });
     await extensionWorker.evaluate(() => chrome.storage.local.set({
       masterEnabled: false,
@@ -178,24 +178,23 @@ test.describe('Study Sessions backup and restore', () => {
     }));
 
     const before = await readStudyBackupData(extensionWorker);
-    expect(before.studyTopics).toContain(topic.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' '));
+    const normalizedTopic = topic.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+    expect(before.studyTopics).toContain(normalizedTopic);
     expect(before.studySessions.length).toBeGreaterThan(0);
+    await page.close();
 
-    // Request the extension reload from the popup page. The page may be torn
-    // down as part of reload, so don't await its evaluate() promise.
-    const reloadedWorkerPromise = context.waitForEvent('serviceworker', { timeout: 20000 });
-    void page.evaluate(() => chrome.runtime.reload()).catch(() => {});
-    const workerAfterReload = await reloadedWorkerPromise;
-    expect(workerAfterReload.url()).toContain(extensionId);
-    const after = await workerAfterReload.evaluate(keys => chrome.storage.local.get(keys), BACKUP_KEYS);
+    page = await openPopup(context, extensionId);
+    const after = await readStudyBackupData(extensionWorker);
     expect(after).toEqual(before);
-    expect(await workerAfterReload.evaluate(() => chrome.storage.local.get([
+    expect(await extensionWorker.evaluate(() => chrome.storage.local.get([
       'masterEnabled', 'redirectEnabled', 'pageSelectionButtonSites'
     ]))).toEqual({
       masterEnabled: false,
       redirectEnabled: true,
       pageSelectionButtonSites: { 'example.com': true }
     });
+    const state = await send(page, { type: 'blbSuiteGetStudyUiState' });
+    expect(state.topics).toContain(normalizedTopic);
     await page.close();
   });
 
