@@ -5,6 +5,7 @@ const vm = require('node:vm');
 
 const background = fs.readFileSync(path.resolve(__dirname, '../../extension/background.js'), 'utf8');
 const sharedRegexPatterns = fs.readFileSync(path.resolve(__dirname, '../../extension/regex-patterns.js'), 'utf8');
+const hostPolicyScript = fs.readFileSync(path.resolve(__dirname, '../../extension/background-host-policy.js'), 'utf8');
 const scriptTaggerScript = fs.readFileSync(path.resolve(__dirname, '../../extension/redirect-scripttagger.js'), 'utf8');
 
 function runBlbUrlNormalizer() {
@@ -132,9 +133,6 @@ test.describe('global ScriptTagger content-script injection', () => {
 });
 
 test('global redirect uses the minimal handlers on ordinary sites and the full bundle on supported Bible sites', () => {
-  const start = background.indexOf('const BLB_CONTENT_SCRIPT_FILES = [');
-  const end = background.indexOf('\nfunction isHttpPageUrl(', start);
-  if (start < 0 || end < 0) throw new Error('Could not extract content script selection helpers');
   const context = {
     URL,
     BLB_HOSTNAME: 'blueletterbible.org',
@@ -143,7 +141,13 @@ test('global redirect uses the minimal handlers on ordinary sites and the full b
   };
   context.globalThis = context;
   vm.runInNewContext(sharedRegexPatterns, context);
-  vm.runInNewContext(background.slice(start, end), context);
+  vm.runInNewContext(hostPolicyScript, context);
+  const policy = context.BLBBackgroundHostPolicyModule.create({ blbHostname: context.BLB_HOSTNAME });
+  context.contentScriptFilesForTab = (tab, data) => policy.contentScriptFilesForTab(tab, data, {
+    hostnameFromTabUrl: context.hostnameFromTabUrl,
+    normalizeSiteHostname: context.normalizeSiteHostname,
+    isSensitiveSiteHostname: value => context.BLBShared.isSensitiveSiteHostname(value)
+  });
   // Rediscover and Sagacity use the existing full content bundle because it
   // contains the current-page MultiVerse collector. They still use dynamic,
   // optional host access rather than manifest-wide site permissions.
@@ -151,14 +155,14 @@ test('global redirect uses the minimal handlers on ordinary sites and the full b
     {url:'https://sagacityweb.com/article'},
     {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}
   ))).toEqual([
-    'regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','content.js','redirect-scripttagger.js','redirect-bibleref-ranges.js'
+    'regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','multiverse-copy-links.js','blb-auto-hyperlinker.js','blb-parse-popup-links.js','blb-navigation-links.js','blb-new-tab-links.js','blb-multiverse-handoff.js','blb-passive-new-tab.js','content.js','redirect-scripttagger.js','redirect-bibleref-ranges.js'
   ]);
 
   expect(Array.from(context.contentScriptFilesForTab(
     {url:'https://www.biblegateway.com/passage/?search=John+3%3A16'},
     {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}
   ))).toEqual([
-    'regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','content.js','redirect-scripttagger.js','redirect-bibleref-ranges.js'
+    'regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','multiverse-copy-links.js','blb-auto-hyperlinker.js','blb-parse-popup-links.js','blb-navigation-links.js','blb-new-tab-links.js','blb-multiverse-handoff.js','blb-passive-new-tab.js','content.js','redirect-scripttagger.js','redirect-bibleref-ranges.js'
   ]);
 
   expect(Array.from(context.contentScriptFilesForTab(

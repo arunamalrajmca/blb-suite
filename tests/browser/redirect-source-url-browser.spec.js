@@ -14,7 +14,7 @@ if ([parseStart, redirectStart, redirectEnd, decodeStart, bookKeyStart].some(i =
   throw new Error('Could not locate production source redirect helpers');
 }
 const gateStart = contentSource.indexOf('const REDIRECT_HOSTS = new Set([');
-const gateEnd = contentSource.indexOf('// ---------- BLB MultiVerse', gateStart);
+const gateEnd = contentSource.indexOf('// MultiVerse native-copy enhancement is initialized', gateStart);
 if (gateStart < 0 || gateEnd < 0) throw new Error('Could not locate production content-side redirect gate');
 const productionRedirectHelpers =
   contentSource.slice(bookKeyStart, parseStart) +
