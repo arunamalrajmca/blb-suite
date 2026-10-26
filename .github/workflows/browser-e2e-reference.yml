@@ -83,11 +83,12 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        id: playwright-cache
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm downloads
@@ -101,6 +102,7 @@ jobs:
         run: npm install --prefer-offline
       - name: Install Playwright Chromium
         run: npx playwright install chromium
+        if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
       - name: Grant test-only generic host access
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
       - name: Read manifest version
@@ -177,11 +179,12 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        id: playwright-cache
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm downloads
@@ -198,6 +201,7 @@ jobs:
       - name: Install Playwright Chromium
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         run: npx playwright install chromium
+        if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
       - name: Grant test-only generic host access
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
@@ -242,11 +246,12 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        id: playwright-cache
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm downloads
@@ -260,6 +265,7 @@ jobs:
         run: npm install --prefer-offline
       - name: Install Playwright Chromium
         run: npx playwright install chromium
+        if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
       - name: Grant test-only generic host access
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
       - name: Read manifest version
