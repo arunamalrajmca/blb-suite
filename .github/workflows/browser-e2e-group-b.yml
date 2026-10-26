@@ -59,11 +59,12 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        id: playwright-cache
         if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm download data
@@ -77,7 +78,7 @@ jobs:
       - run: npm install
         if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
       - run: npx playwright install chromium
-        if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
+        if: ${{ needs.change-detection.outputs.group_b_required == 'true' && steps.playwright-cache.outputs.cache-hit != 'true' }}
       - name: Run native redirect hostname regression tests
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-hostnames.spec.js') }}
         run: npx playwright test tests/browser/redirect-hostnames.spec.js
