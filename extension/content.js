@@ -792,6 +792,7 @@ async function getSiteDefaultEnabled() {
 async function refreshDoubleClickBlb() {
   try {
     const siteKey = getPageSelectionSiteKey();
+    doubleClickDiagnostic('settings-refresh-start', {siteKey, suiteEnabled, doubleClickSettingsReady});
     if (siteKey === BLB_HOSTNAME || isSensitiveSiteHostname(siteKey) || !suiteEnabled || !siteKey) {
       doubleClickBlbEnabled = false;
       disableDoubleClickBlb();
@@ -802,7 +803,10 @@ async function refreshDoubleClickBlb() {
     const sites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
       ? data.doubleClickBlbSites : {};
     const hasExplicitPreference = Object.prototype.hasOwnProperty.call(sites, siteKey);
+    doubleClickDiagnostic('settings-storage-read', {siteKey, hasExplicitPreference, storedValue:sites[siteKey]});
+    doubleClickDiagnostic('default-status-request', {siteKey, hasExplicitPreference});
     const defaultEnabled = await getSiteDefaultEnabled();
+    doubleClickDiagnostic('default-status-response', {siteKey, defaultEnabled});
     doubleClickBlbEnabled = hasExplicitPreference ? sites[siteKey] === true : defaultEnabled;
     if (doubleClickBlbEnabled) enableDoubleClickBlb();
     else disableDoubleClickBlb();
