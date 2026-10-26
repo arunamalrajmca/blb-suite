@@ -161,6 +161,13 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+
+  observer-ab:
+    name: Interleaved selection handoff with observer on/off
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.pull_request.number == 234 }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Node
