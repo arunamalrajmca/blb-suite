@@ -1,0 +1,55 @@
+name: Cancel sibling workflow runs after failure
+
+on:
+  workflow_run:
+    workflows:
+      - BLB Suite BROWSER E2E — GROUP A
+      - BLB Suite BROWSER E2E — GROUP B
+      - BLB Suite BROWSER E2E — PERFORMANCE
+      - BLB Suite BROWSER E2E — REFERENCE
+      - BLB Suite Browser Tests
+      - BLB Suite CI Command Router
+      - BLB Suite Main Build
+      - BLB Suite Multiverse Tab Reuse
+      - BLB Suite Require Latest Main Ancestry
+      - BLB Suite Release
+      - BLB Suite Zip Integrity
+      - Audit Chrome Web Store Submission Assets
+      - Generate Chrome Web Store Screenshots
+      - Verify Chrome Web Store Assets
+      - Verify Chrome Web Store Submission Tools
+    types: [completed]
+
+permissions:
+  actions: write
+
+jobs:
+  cancel-siblings:
+    if: >-
+      github.event.workflow_run.conclusion == 'failure' &&
+      github.event.workflow_run.head_branch != 'main' &&
+      github.event.workflow_run.head_branch != 'development'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel other in-progress runs for the failed branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
+          FAILED_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          page=1
+          while :; do
+            response="$(gh api --paginate --slurp "repos/$REPOSITORY/actions/runs?branch=$FAILED_BRANCH&status=in_progress&per_page=100" 2>/dev/null || true)"
+            [[ -n "$response" ]] || break
+            run_ids="$(printf '%s' "$response" | jq -r --arg failed "$FAILED_RUN_ID" '[.[] | .workflow_runs[]? | select((.id | tostring) != $failed) | .id] | unique | .[]' 2>/dev/null || true)"
+            [[ -n "$run_ids" ]] || break
+            while IFS= read -r run_id; do
+              [[ -n "$run_id" ]] || continue
+              echo "Cancelling run $run_id on branch $FAILED_BRANCH after failure of run $FAILED_RUN_ID"
+              gh api --method POST "repos/$REPOSITORY/actions/runs/$run_id/cancel" || true
+            done <<< "$run_ids"
+            break
+          done
