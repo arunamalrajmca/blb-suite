@@ -26,7 +26,12 @@ if (!alwaysFull) {
 }
 
 const specs = new Set(changed.filter(path => /^tests\/browser\/[^/]+\.spec\.js$/.test(path)));
+// Any changed browser spec triggers the full applicable browser suite. A spec can
+// contain cross-feature assertions, and running only its mapped/grep-selected
+// cases risks missing valid regressions. Keep runtime-file routing conservative.
 const forceFull = alwaysFull || changed.some(path =>
+  /^tests\\/browser\\/[^/]+\\.spec\\.js$/.test(path)
+) || changed.some(path =>
   path.startsWith(".github/workflows/")
   || path.startsWith("scripts/")
   || path.startsWith("regression-suite/")
