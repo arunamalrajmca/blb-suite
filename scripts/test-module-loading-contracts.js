@@ -36,6 +36,7 @@ const expectedContentScripts = [
   'blb-parse-popup-links.js',
   'blb-navigation-links.js',
   'blb-new-tab-links.js',
+  'blb-multiverse-handoff.js',
   'blb-passive-new-tab.js',
   'content.js'
 ];
@@ -101,7 +102,7 @@ if (!dynamicFilesMatch) {
   fail('runtime-injected content scripts declare their dependency list');
 } else {
   const dynamicFiles = [...dynamicFilesMatch[1].matchAll(/['\"]([^'\"]+\.js)['\"]/g)].map(match => match[1]);
-  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-navigation-links.js', 'blb-new-tab-links.js', 'blb-passive-new-tab.js', 'content.js'];
+  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-navigation-links.js', 'blb-new-tab-links.js', 'blb-multiverse-handoff.js', 'blb-passive-new-tab.js', 'content.js'];
   const positions = requiredDynamic.map(name => dynamicFiles.indexOf(name));
   if (positions.some(index => index < 0)
       || positions.some((index, i) => i > 0 && index <= positions[i - 1])) {
@@ -200,6 +201,21 @@ if (!content.includes('BLBNewTabLinksModule?.initialize({')) {
   fail('content script initializes normal BLB new-tab feature module');
 } else {
   pass('content script initializes normal BLB new-tab feature module');
+}
+
+const multiverseHandoff = read('extension/blb-multiverse-handoff.js');
+if (!multiverseHandoff.includes('BLBMultiVerseHandoffModule')
+    || !multiverseHandoff.includes('blbSuiteGetPendingMultiVerseRefs')
+    || !multiverseHandoff.includes('blbSuiteCaptureStudyRefs')
+    || !multiverseHandoff.includes('revealPendingMultiVerseView')) {
+  fail('MultiVerse hand-off and study capture remain in their feature module');
+} else {
+  pass('MultiVerse hand-off and study capture remain in their feature module');
+}
+if (!content.includes('BLBMultiVerseHandoffModule?.initialize({')) {
+  fail('content script initializes the MultiVerse hand-off feature module');
+} else {
+  pass('content script initializes the MultiVerse hand-off feature module');
 }
 
 const referenceCore = read('extension/reference-core.js');

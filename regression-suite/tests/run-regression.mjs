@@ -527,6 +527,14 @@ test('BLB native-event interception remains explicitly scoped', () => {
   assert(!dbl.includes('stopPropagation()'), 'double-click resolver must not stop native propagation');
   assert(!dbl.includes('stopImmediatePropagation()'), 'double-click resolver must not stop native propagation');
 });
+test('MultiVerse hand-off keeps result gating and study capture isolated', () => {
+  const content = read('content.js');
+  const handoff = read('blb-multiverse-handoff.js');
+  assert(content.includes('BLBMultiVerseHandoffModule?.initialize({'), 'MultiVerse hand-off module initialization missing');
+  assert(handoff.includes('blbSuiteGetPendingMultiVerseRefs'), 'pending MultiVerse refs retrieval missing');
+  assert(handoff.includes('revealPendingMultiVerseView'), 'MultiVerse pending view reveal fallback missing');
+  assert(handoff.includes('blbSuiteCaptureStudyRefs'), 'Study capture reference hand-off missing');
+});
 test('normal BLB new-tab behavior remains isolated from dedicated pages', () => {
   const content = read('content.js');
   const newTab = read('blb-new-tab-links.js');

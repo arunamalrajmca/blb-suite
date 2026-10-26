@@ -3027,6 +3027,7 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'blb-parse-popup-links.js',
   'blb-navigation-links.js',
   'blb-new-tab-links.js',
+  'blb-multiverse-handoff.js',
   'blb-passive-new-tab.js',
   'content.js'
 ];
