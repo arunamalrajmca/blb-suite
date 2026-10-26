@@ -772,3 +772,68 @@ test.describe('real-browser source URL redirect regressions', () => {
   });
 
 });
+
+
+// Exercise the actual King's Bible Concordance button and collector together.
+// The HTML is deterministic and served under the real source origin, so the
+// test verifies page integration without depending on the live site.
+const kingsBibleEntryStart = contentSource.indexOf("// ---------- The King's Bible Dictionary/Concordance MultiVerse ----------");
+const kingsBibleEntryEnd = contentSource.indexOf("// ---------- Webster's 1828 ----------", kingsBibleEntryStart);
+if (kingsBibleEntryStart < 0 || kingsBibleEntryEnd < 0) {
+  throw new Error("Could not locate The King's Bible production MultiVerse block");
+}
+const kingsBibleMultiVerseCode =
+  contentSource.slice(draggableButtonStart, draggableButtonEnd) +
+  contentSource.slice(kingsBibleEntryStart, kingsBibleEntryEnd);
+
+async function loadKingsBibleMultiVerse(page, sourceUrl, pages) {
+  const sourceOrigin = new URL(sourceUrl).origin;
+  await page.route(sourceOrigin + "/**", route => {
+    const url = new URL(route.request().url());
+    return route.fulfill({
+      status: 200,
+      contentType: "text/html",
+      body: pages[url.pathname] || "<!doctype html><html><head><title>Mock King's Bible</title></head><body></body></html>"
+    });
+  });
+  await page.goto(sourceUrl, { waitUntil: "domcontentloaded" });
+  await page.addScriptTag({ content: read("extension/regex-patterns.js") });
+  await page.addScriptTag({ content: "const BLB_HOSTNAME = BLBShared.hostnames.blb;" });
+  await page.addScriptTag({ content: read("extension/books.js") });
+  await page.addScriptTag({ content: read("extension/book-aliases.js") });
+  await page.addScriptTag({ content: read("extension/reference-core.js") });
+  await page.addScriptTag({ content: productionRedirectHelpers });
+  await page.addScriptTag({ content: 'function normalizeSelectionText(s) { return String(s || "").replace(/\\s+/g, " ").trim(); }' });
+  await page.addScriptTag({ content: 'window.__localStorageValues = {}; window.__multiVerseRequests = []; window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async defaults => Object.assign({}, defaults || {}, window.__localStorageValues), set: async values => Object.assign(window.__localStorageValues, values), remove: async key => { for (const k of (Array.isArray(key) ? key : [key])) delete window.__localStorageValues[k]; } }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async message => { window.__multiVerseRequests.push(message); return { ok: true }; } } };' });
+  await page.addScriptTag({ content: kingsBibleMultiVerseCode });
+  await page.waitForSelector("#blb-suite-kingsbible-multiverse");
+}
+
+test("The King's Bible Concordance button collects and deduplicates references across numbered pages", async ({ page }) => {
+  const sourceUrl = "https://www.thekingsbible.com/Concordance/faith/1";
+  const pagination = '<ul class="pagination"><li class="current-page"><a href="#">1</a></li><li class="current-page"><a href="#">2</a></li><li class="current-page"><a href="#">3</a></li></ul>';
+  const pages = {
+    "/Concordance/faith/1": '<!doctype html><html><body>' + pagination +
+      '<div id="ConcordanceTable"><a class="concordanceitem" href="/Bible/1/1?verse=1">Genesis 1:1</a></div></body></html>',
+    "/Concordance/faith/2": '<!doctype html><html><body><div id="ConcordanceTable">' +
+      '<a class="concordanceitem" href="/Bible/1/1?verse=1">Genesis 1:1 duplicate</a>' +
+      '<a class="concordanceitem" href="/Bible/2/4?verse=14">Exodus 4:14</a>' +
+      '</div></body></html>',
+    "/Concordance/faith/3": '<!doctype html><html><body><div id="ConcordanceTable">' +
+      '<a class="concordanceitem" href="/Bible/7/6?verse=15">Judges 6:15</a>' +
+      '</div></body></html>'
+  };
+
+  await loadKingsBibleMultiVerse(page, sourceUrl, pages);
+  await page.locator("#blb-suite-kingsbible-multiverse").click();
+  await expect.poll(() => page.evaluate(() => window.__multiVerseRequests.length), { timeout: 5000 }).toBe(1);
+
+  const request = await page.evaluate(() => window.__multiVerseRequests[0]);
+  expect(request.type).toBe("blbSuiteOpenWebsterMultiVerse");
+  expect(request.refs.map(ref => ref.text.toLowerCase())).toEqual(["genesis 1:1", "exodus 4:14", "judges 6:15"]);
+  expect(request.refs.map(ref => ref.url)).toEqual([
+    "https://www.blueletterbible.org/kjv/gen/1/1/",
+    "https://www.blueletterbible.org/kjv/exo/4/14/",
+    "https://www.blueletterbible.org/kjv/jdg/6/15/"
+  ]);
+});
