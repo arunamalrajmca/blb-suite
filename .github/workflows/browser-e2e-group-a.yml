@@ -77,7 +77,7 @@ jobs:
           key: ${{ runner.os }}-node22-npm-${{ hashFiles('package.json') }}
           restore-keys: |
             ${{ runner.os }}-node22-npm-
-      - run: npm install
+      - run: npm install --prefer-offline --no-audit --no-fund
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
       - name: Install Playwright Chromium
         run: npx playwright install chromium
