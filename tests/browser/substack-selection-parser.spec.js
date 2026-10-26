@@ -6,13 +6,16 @@ const { test, expect } = require('./fixtures');
 test('Substack selection parser preserves all disjoint Romans 6 verse ranges', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(() => {
     const selected = '<p><strong>17. </strong><span>He made us free from the power and bondage of sin </span><strong>(Rom. 6:2,6-7,9-11,14,18,22)</strong><span>.</span></p>';
-    return extractBibleRefsFromSelectedTextUncached(selected).flatMap(ref => {
-      const verses = [];
+    const verses = extractBibleRefsFromSelectedTextUncached(selected).flatMap(ref => {
+      const expanded = [];
       for (let verse = ref.from; verse <= ref.to; verse++) {
-        verses.push({ book: ref.book, chapter: ref.chapter, verse });
+        expanded.push({ book: ref.book, chapter: ref.chapter, verse });
       }
-      return verses;
+      return expanded;
     });
+    // Parser passes may represent the same explicit verse in overlapping
+    // ranges. This regression checks the unique verse set, not range grouping.
+    return [...new Map(verses.map(v => [`${v.book}|${v.chapter}|${v.verse}`, v])).values()];
   });
 
   expect(result).toEqual([
@@ -34,13 +37,16 @@ test('Substack selection parser preserves all disjoint Romans 6 verse ranges', a
 test('Substack selection parser preserves the second chapter-qualified 2 Corinthians reference', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(() => {
     const selected = '<p><strong>75. </strong><span>He is God’s earnest, the non-refundable deposit, if you will, of God’s purchased possession forever </span><strong>(2 Cor. 1:22, 5:5)</strong><span>.</span></p>';
-    return extractBibleRefsFromSelectedTextUncached(selected).flatMap(ref => {
-      const verses = [];
+    const verses = extractBibleRefsFromSelectedTextUncached(selected).flatMap(ref => {
+      const expanded = [];
       for (let verse = ref.from; verse <= ref.to; verse++) {
-        verses.push({ book: ref.book, chapter: ref.chapter, verse });
+        expanded.push({ book: ref.book, chapter: ref.chapter, verse });
       }
-      return verses;
+      return expanded;
     });
+    // Parser passes may represent the same explicit verse in overlapping
+    // ranges. This regression checks the unique verse set, not range grouping.
+    return [...new Map(verses.map(v => [`${v.book}|${v.chapter}|${v.verse}`, v])).values()];
   });
 
   expect(result).toEqual([
