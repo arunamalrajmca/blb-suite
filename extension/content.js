@@ -308,6 +308,17 @@ const BLBDoubleClickContext = globalThis.BLBDoubleClickContextModule.create({
 });
 const { normalizeDoubleClickToken, getAdjacentBoundaryText, getSelectionContextPosition, resolveBibleReferenceFromContextWindow, getContextualBibleReference, getStandaloneBookReference, isBibleVersionCodeToken, getDoubleClickBlockContextReference } = BLBDoubleClickContext;
 
+// ---------- Double-Click BLB ----------
+// Double-click is an entry point into the same background selection resolver.
+// It must not maintain a second Bible/reference parser here.
+let doubleClickBound = false;
+let doubleClickSettingsReady = false;
+let doubleClickSettingsRefreshPromise = null;
+const recentDoubleClickDestinations = new WeakMap();
+let doubleClickRequestSequence = 0;
+const DOUBLE_CLICK_WINDOW_GUARD = '__blbSuiteDoubleClickBoundV2';
+
+
 function isDoubleClickExcludedTarget(target) {
   return !!target?.closest?.('input,textarea,select,button,[contenteditable="true"],[contenteditable=""]');
 }

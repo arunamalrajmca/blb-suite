@@ -118,6 +118,14 @@ if (!studySessionStorage.includes('BLBBackgroundStudySessionStorageModule')
 } else {
   pass('Study Session storage adapter owns sanitized read/write persistence');
 }
+const contentLifecycle = read('extension/content.js');
+if (!contentLifecycle.includes('let doubleClickBound = false;')
+    || !contentLifecycle.includes('const recentDoubleClickDestinations = new WeakMap();')
+    || !contentLifecycle.includes('document.addEventListener(\'dblclick\', handleDoubleClickBlb, true)')) {
+  fail('Double-click event lifecycle state and listener remain in content.js');
+} else {
+  pass('Double-click event lifecycle state and listener remain in content.js');
+}
 if (!read('extension/background.js').includes('chrome.alarms.onAlarm.addListener')) {
   fail('Study Session alarm event listener remains registered in background.js');
 } else {
