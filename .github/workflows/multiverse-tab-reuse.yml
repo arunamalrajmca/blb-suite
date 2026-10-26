@@ -55,10 +55,11 @@ jobs:
           node-version: 22
 
       - name: Cache Playwright browsers
+        id: playwright-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm download data
@@ -72,6 +73,7 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Install Chromium for Playwright
+        if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
         run: npx playwright install chromium
 
       - name: Run MultiVerse tab reuse regression suite
