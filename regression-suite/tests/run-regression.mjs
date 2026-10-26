@@ -610,7 +610,7 @@ test('Study Sessions download paths remain wired', () => {
 test('b dict routes bare, multiword, and invalid input home; one alphabetic word to Webster entry', () => {
   const bg = read('background.js');
   const start = bg.indexOf('const dictMatch = normalized.match');
-  const end = bg.indexOf('  // A dedicated prefix routes to ChatGPT', start);
+  const end = bg.indexOf('  if (/^cs\\s+/i.test(normalized)) {', start);
   assert(start >= 0 && end > start, 'dictionary omnibox route missing');
   const route = bg.slice(start, end);
   assert(route.includes('dictMatch = normalized.match'), 'dict prefix parser missing');
