@@ -16,8 +16,10 @@ The initial audit is complete. PR #463 carries the runtime refactor, supporting 
 - Extracted Study Session data normalization, canonical reference/Strong’s handling, topic keys, and session cleanup into `background-study-session-model.js`.
 - Extracted PDF layout, pagination, text wrapping, and PDF serialization into `background-study-pdf-export.js`; export orchestration, downloads, alarms, storage, and UI messaging remain in `background.js`.
 - Extracted Bible-input parsing, book matching, gibberish filtering, and fallback criteria normalization into `background-bible-input.js`; omnibox command routing and tab-opening side effects remain in `background.js`.
+- Extracted selected-text Bible-reference parsing, including cross-chapter ranges and same-book continuations, into `background-pdf-reference-extractor.js`; PDF selection orchestration and tab-opening side effects remain in `background.js`.
 - Kept service-worker `importScripts` bootstrap and Chrome event-listener registration in `background.js`; loading-contract tests guard the order and listener boundary.
-- The Double-click/context resolver and floating page-selection lifecycle remain in `content.js`; additional separation must preserve their shared selection state and message-handler ordering. Study Sessions/export and remaining PDF/reference responsibilities remain in `background.js` and are not yet complete.
+- Extracted Double-click reference-context parsing into `double-click-context.js`; floating page-selection lifecycle and its message-handler ordering remain in `content.js`.
+- Study Session data, PDF formatting, Bible-input parsing, and selected-text reference extraction now have dedicated modules; storage, export orchestration, remaining KJV selection classification, and context-menu lifecycle still require careful separation.
 
 ## Baseline architecture inventory
 

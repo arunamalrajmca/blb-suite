@@ -92,7 +92,8 @@ if (!importMatch) {
     'background-blb-destination-manager.js',
     'background-study-session-model.js',
     'background-study-pdf-export.js',
-    'background-bible-input.js'
+    'background-bible-input.js',
+    'background-pdf-reference-extractor.js'
   ];
   const positions = required.map(name => imports.indexOf(name));
   if (positions.some(index => index < 0)
@@ -245,6 +246,25 @@ if (!background.includes('BLBBackgroundBibleInputModule.create({')
   fail('background initializes Bible-input parsing with explicit shared dependencies');
 } else {
   pass('Bible-input module receives explicit parser dependencies');
+}
+
+
+const pdfReferenceExtractor = read('extension/background-pdf-reference-extractor.js');
+if (!pdfReferenceExtractor.includes('BLBBackgroundPdfReferenceExtractorModule')
+    || !pdfReferenceExtractor.includes('extractBibleRefsFromSelectedTextUncached')
+    || !pdfReferenceExtractor.includes('crossChapterRangeRe')
+    || !pdfReferenceExtractor.includes('sameBookClauseRe')
+    || !pdfReferenceExtractor.includes('resolveBibleReference')) {
+  fail('PDF/selection Bible-reference extraction is isolated behind explicit resolver dependencies');
+} else {
+  pass('PDF/selection reference extractor retains chapter-range and continuation parsing');
+}
+if (!background.includes('BLBBackgroundPdfReferenceExtractorModule.create({')
+    || !background.includes('getBibleBookForms')
+    || !background.includes('resolveBibleReference')) {
+  fail('service worker initializes the PDF reference extractor with shared book/reference APIs');
+} else {
+  pass('PDF reference extractor receives explicit shared resolver dependencies');
 }
 
 const content = read('extension/content.js');
