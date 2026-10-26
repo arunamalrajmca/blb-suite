@@ -139,14 +139,19 @@ test('shared alias source is authoritative for Omnibox and reference resolver', 
   assert(bgSource.includes('importScripts(') && bgSource.includes("'kjv-corpus-word-index.js'"), 'background import list missing');
   assert(bgSource.includes("'book-aliases.js'"), 'background does not import shared alias source');
   assert(bgSource.includes('bookData.forEach(book => { book.aliases = buildBookAliases(book); });'), 'Omnibox book aliases are not built from shared source');
-  assert(bgSource.includes('const explicitAlias = BOOK_ALIASES[base] || BOOK_ALIASES[base.replace(/\\s/g,"")];'), 'Omnibox resolver does not use shared alias map');
+  const bibleInputSource = read('background-bible-input.js');
+  assert(bibleInputSource.includes('const explicitAlias = BOOK_ALIASES[base] || BOOK_ALIASES[base.replace(/\\s/g,"")];'), 'Omnibox resolver does not use shared alias map');
+  assert(bgSource.includes('bookAliases:BOOK_ALIASES'), 'background does not inject the shared alias map into the Omnibox parser');
   assert.equal((read('book-aliases.js').match(/const EXTRA_BOOK_ALIASES\s*=/g) || []).length, 1, 'duplicate alias source detected');
   assert(!read('reference-core.js').includes('const EXTRA_BOOK_ALIASES'), 'reference resolver contains a duplicate alias source');
 });
 
-const extractorStart = bgSource.indexOf('function extractBibleRefsFromSelectedTextUncached');
-const extractorEnd = bgSource.indexOf('\nfunction ', extractorStart + 10);
-vm.runInContext(bgSource.slice(extractorStart, extractorEnd > extractorStart ? extractorEnd : undefined), refCtx, {filename:'background.js:extractBibleRefsFromSelectedTextUncached'});
+vm.runInContext(read('background-pdf-reference-extractor.js'), refCtx, {filename:'background-pdf-reference-extractor.js'});
+const pdfReferenceExtractor = vm.runInContext(
+  'BLBBackgroundPdfReferenceExtractorModule.create({books:BOOKS,getBibleBookForms,resolveBibleBook,resolveBibleReference})',
+  refCtx
+);
+refCtx.extractBibleRefsFromSelectedTextUncached = pdfReferenceExtractor.extractBibleRefsFromSelectedTextUncached;
 
 test('shared core resolves every numbered Bible-book family', () => {
   for (const book of refBooks.filter(book => /^[123] /.test(book.name))) {
@@ -500,6 +505,7 @@ test('Bible redirect parser contracts cover every supported Bible redirect gramm
 });
 test('BLB native-event interception remains explicitly scoped', () => {
   const content = read('content.js');
+  const selectionLifecycle = read('page-selection-lifecycle.js');
   const parsePopup = read('blb-parse-popup-links.js');
   const newTabLinks = read('blb-new-tab-links.js');
 
@@ -514,10 +520,10 @@ test('BLB native-event interception remains explicitly scoped', () => {
   const nowrap = newTabLinks.slice(nowrapStart, nowrapEnd + 7);
   assert(nowrap.includes('if (!a) return'), 'nowrap click override must reject unrelated clicks');
 
-  const selectionStart = content.indexOf('function handleBlbPageSelectionMouseDown');
-  const selectionEnd = content.indexOf('function getPageSelectionSiteKey', selectionStart);
+  const selectionStart = selectionLifecycle.indexOf('function handleBlbPageSelectionMouseDown');
+  const selectionEnd = selectionLifecycle.indexOf('function getPageSelectionSiteKey', selectionStart);
   assert(selectionStart >= 0 && selectionEnd > selectionStart, 'selection-monitoring block missing');
-  const selection = content.slice(selectionStart, selectionEnd);
+  const selection = selectionLifecycle.slice(selectionStart, selectionEnd);
   assert(!selection.includes('preventDefault()'), 'selection monitoring must not cancel native events');
   assert(!selection.includes('stopPropagation()'), 'selection monitoring must not stop native propagation');
   assert(!selection.includes('stopImmediatePropagation()'), 'selection monitoring must not stop native propagation');
@@ -594,7 +600,7 @@ test('Double-click BLB path remains wired', () => {
   assert(content.includes('blbSuiteOpenSelectionText'), 'double-click opener missing');
 });
 test('Double-click citation handling validates book labels and preserves nonconsecutive verse lists', () => {
-  const content = read('content.js');
+  const content = read('double-click-context.js');
   const bg = read('background.js');
   assert(content.includes('let clickedWordRange = null;'), 'double-click must recover the word at the physical click location');
   assert(content.includes('clickedWordText = normalizeSelectionText(clickedWordRange.toString()).normalize(\'NFKC\');'), 'physical click word must replace stale native selection text');
