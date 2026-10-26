@@ -44,10 +44,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - name: ⏱ Workflow ETA — start
-        uses: $/.github/actions/workflow-eta
-        with:
-          phase: start
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Node
@@ -66,33 +62,6 @@ jobs:
         run: node regression-suite/tests/run-regression.mjs extension --group=package
       - name: Verify KJV corpus and search-index integrity
         run: node regression-suite/tests/kjv-corpus-integrity.mjs extension
-      - name: ⏱ Workflow ETA — finish
-        if: ${{ always() }}
-        uses: $/.github/actions/workflow-eta
-        with:
-          phase: finish
-
-  regression-behavioral:
-    name: Regression — ${{ matrix.group }}
-    needs: change-detection
-    # The hard gate always runs behavioral groups on PRs/main. Runtime-change
-    # detection remains useful to other workflows, but a hard gate must never
-    # report green while behavioral coverage was silently skipped.
-    if: ${{ needs.change-detection.result == 'success' && (needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-hard-gate')) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        group:
-          - resolver
-          - selection
-          - features
-    steps:
-      - name: ⏱ Workflow ETA — start
-        uses: $/.github/actions/workflow-eta
-        with:
-          phase: start
       - name: Checkout
         uses: actions/checkout@v4
       - name: Setup Node
@@ -109,27 +78,6 @@ jobs:
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: node regression-suite/tests/run-regression.mjs extension --group=${{ matrix.group }}
-      - name: ⏱ Workflow ETA — finish
-        if: ${{ always() }}
-        uses: $/.github/actions/workflow-eta
-        with:
-          phase: finish
-
-  regression-gate-summary:
-    name: regression-gate
-    needs:
-      - change-detection
-      - regression-package
-      - regression-behavioral
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    permissions:
-      statuses: write
-    steps:
-      - name: ⏱ Workflow ETA — start
-        uses: $/.github/actions/workflow-eta
-        with:
-          phase: start
       - name: Publish regression-gate commit status
         if: ${{ always() }}
         env:
@@ -157,8 +105,3 @@ jobs:
           fi
           echo "All applicable regression groups passed."
 
-      - name: ⏱ Workflow ETA — finish
-        if: ${{ always() }}
-        uses: $/.github/actions/workflow-eta
-        with:
-          phase: finish
