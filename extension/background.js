@@ -1,4 +1,4 @@
-importScripts('regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js', 'background-host-policy.js', 'background-content-script-registry.js', 'background-content-script-activation.js', 'background-multiverse-tracking.js');
+importScripts('regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js', 'background-host-policy.js', 'background-content-script-registry.js', 'background-content-script-activation.js', 'background-multiverse-tracking.js', 'background-blb-destination-manager.js');
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
@@ -703,36 +703,9 @@ async function openBlbMultiVerseRefs(refs, active = true, options = {}) {
 // Shared destination identity/reuse/creation coordinator for BLB tabs.
 // Feature-specific code supplies only its identity and any handoff-specific
 // lookup/creation steps; locking and activation policy stay centralized.
-const pendingBlbDestinationOperations = new Map();
-
-async function openBlbDestinationByIdentity({key, active = false, findExisting, create}) {
-  const identity = String(key || '');
-  if (!identity) throw new Error('A BLB destination identity is required');
-  const pending = pendingBlbDestinationOperations.get(identity);
-  if (pending) {
-    const result = await pending;
-    if (active && result?.tab?.id != null) {
-      await chrome.tabs.update(result.tab.id, {active:true}).catch(()=>{});
-      if (result.tab.windowId != null) await chrome.windows.update(result.tab.windowId, {focused:true}).catch(()=>{});
-    }
-    return result;
-  }
-  const operation = (async () => {
-    const existing = await findExisting();
-    if (existing?.id != null) {
-      if (active) {
-        await chrome.tabs.update(existing.id, {active:true}).catch(()=>{});
-        if (existing.windowId != null) await chrome.windows.update(existing.windowId, {focused:true}).catch(()=>{});
-      }
-      return {tab:existing, reused:true};
-    }
-    return {tab:await create(), reused:false};
-  })();
-  pendingBlbDestinationOperations.set(identity, operation);
-  try { return await operation; }
-  finally {
-    if (pendingBlbDestinationOperations.get(identity) === operation) pendingBlbDestinationOperations.delete(identity);
-  }
+const BLBBlbDestinationManager = globalThis.BLBBackgroundBlbDestinationManagerModule.create({chromeApi:chrome});
+function openBlbDestinationByIdentity(options) {
+  return BLBBlbDestinationManager.openBlbDestinationByIdentity(options);
 }
 
 async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false, preferredTabId = null, preparedVerses = null) {
