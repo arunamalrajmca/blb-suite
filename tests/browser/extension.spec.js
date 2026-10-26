@@ -78,6 +78,13 @@ test.describe('core user-visible E2E', () => {
       masterEnabled: true,
       doubleClickBlbSites: { 'example.com': true }
     });
+    // Set the diagnostic marker before navigation; page and content scripts
+    // use isolated JS worlds, but share DOM attributes.
+    await page.addInitScript(() => {
+      document.addEventListener('DOMContentLoaded', () => {
+        document.documentElement?.setAttribute('data-blb-suite-e2e-diagnostics', 'true');
+      }, {once:true});
+    });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('body')).toBeVisible();
     await page.waitForTimeout(1000);
@@ -102,9 +109,6 @@ test.describe('core user-visible E2E', () => {
 
     const article = page.locator('#generic-verse-context-article');
     await expect(article).toBeVisible();
-    // Enable trace-only diagnostics for this gesture so a failed trace shows
-    // whether the content handler ran and which reference it resolved.
-    await page.evaluate(() => { document.documentElement.setAttribute('data-blb-suite-e2e-diagnostics', 'true'); });
     const gestures = [
       ['#generic-verse-42', 42, 18, '/kjv/1ki/18/42/'],
       ['#generic-verse-44', 44, 18, '/kjv/1ki/18/44/'],
@@ -124,6 +128,7 @@ test.describe('core user-visible E2E', () => {
           ), expectedPath), { timeout: 5000, intervals: [100, 200, 300] }).toBe(true);
       } catch (error) {
         const diagnostics = await page.evaluate(() => ({
+          contentScriptExecuted: document.documentElement?.getAttribute('data-blb-suite-content-script-executed'),
           lastHandlerDiagnostic: document.documentElement?.getAttribute('data-blb-suite-dblclick-last-diagnostic'),
           diagnosticsEnabled: document.documentElement?.getAttribute('data-blb-suite-e2e-diagnostics'),
           pageText: document.querySelector('#generic-verse-context-article')?.textContent?.slice(0,500) || ''

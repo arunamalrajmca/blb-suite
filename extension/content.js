@@ -1,6 +1,11 @@
 // Top-level execution marker lets the browser E2E distinguish file execution
 // from failures inside the async initializer below.
 try { window.__blbSuiteContentScriptFileExecutedV3 = true; } catch (_) {}
+try {
+  if (document.documentElement?.getAttribute('data-blb-suite-e2e-diagnostics') === 'true') {
+    document.documentElement.setAttribute('data-blb-suite-content-script-executed', 'true');
+  }
+} catch (_) {}
 (async function () {
 // Lightweight test/diagnostic marker: content-script injection is distinct from
 // whether the user's per-site double-click preference enables the listener.
@@ -753,6 +758,7 @@ function enableDoubleClickBlb() {
     document.addEventListener('dblclick', handleDoubleClickBlb, true);
     doubleClickBound = true;
     window[DOUBLE_CLICK_WINDOW_GUARD] = handleDoubleClickBlb;
+    doubleClickDiagnostic('listener-bound', {doubleClickBound, doubleClickSettingsReady, doubleClickBlbEnabled});
   } catch (_) {
     try { document.addEventListener('dblclick', handleDoubleClickBlb, true); doubleClickBound = true; } catch (_) {}
   }
@@ -783,6 +789,7 @@ async function refreshDoubleClickBlb() {
     if (siteKey === BLB_HOSTNAME || isSensitiveSiteHostname(siteKey) || !suiteEnabled || !siteKey) {
       doubleClickBlbEnabled = false;
       disableDoubleClickBlb();
+      doubleClickDiagnostic('settings-refresh-disabled', {siteKey, suiteEnabled, sensitiveSite:isSensitiveSiteHostname(siteKey)});
       return;
     }
     const data = await chrome.storage.local.get({doubleClickBlbSites:{}});
@@ -793,10 +800,12 @@ async function refreshDoubleClickBlb() {
     doubleClickBlbEnabled = hasExplicitPreference ? sites[siteKey] === true : defaultEnabled;
     if (doubleClickBlbEnabled) enableDoubleClickBlb();
     else disableDoubleClickBlb();
+    doubleClickDiagnostic('settings-refreshed', {siteKey, hasExplicitPreference, storedValue:sites[siteKey], defaultEnabled, doubleClickBlbEnabled, doubleClickBound});
   } catch (_) {
     // Fail closed if site-feature settings or defaults cannot be read.
     doubleClickBlbEnabled = false;
     disableDoubleClickBlb();
+    doubleClickDiagnostic('settings-refresh-error', {doubleClickBlbEnabled, doubleClickBound});
   }
 }
 
