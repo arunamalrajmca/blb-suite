@@ -665,9 +665,9 @@ test('Omnibox command path remains wired', () => {
   assert(bg.includes('SEARCH_RANGES'), 'Criteria search ranges missing');
 });
 test('permission Allow/Deny/Re-Allow lifecycle remains wired', () => {
-  const bg = read('background.js'), popup = read('popup.js');
+  const bg = read('background.js'), popup = read('popup.js'), hostPolicy = read('background-host-policy.js');
   assert(bg.includes('permissions?.onAdded') || bg.includes('onAdded?.addListener'), 'permission-added activation missing');
-  assert(bg.includes('permissions.contains'), 'permission detection missing');
+  assert(hostPolicy.includes('permissions?.contains') || hostPolicy.includes('permissions.contains'), 'permission detection missing');
   assert(bg.includes('permissions') && bg.includes('request'), 'permission request missing');
   assert(popup.includes('requestCurrentSiteAccess'), 'site-access request missing');
   assert(popup.includes('setPageButton(on)'), 'site feature enable/disable state missing');

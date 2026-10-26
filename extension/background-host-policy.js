@@ -37,7 +37,7 @@ globalThis.BLBBackgroundHostPolicyModule = Object.freeze({
       bibleRefRangeFiles,
       redirectHostnames,
       isHttpPageUrl(url) {
-        return /^https?:\\/\\//i.test(String(url || ''));
+        return /^https?:\/\//i.test(String(url || ''));
       },
       originPatternForUrl(url) {
         try {
