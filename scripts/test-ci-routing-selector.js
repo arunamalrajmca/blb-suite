@@ -68,10 +68,12 @@ try {
     'tests/browser/rediscover-sagacity-button.spec.js',
     'tests/browser/research-dom-smoke.spec.js',
     'tests/browser/omnibox-boolean-operators.spec.js',
+    'tests/browser/kings-bible-collector-behavior.spec.js',
     'tests/browser/performance.spec.js',
     'tests/browser/test-only.spec.js'
   ];
   for (const file of fixtures) write(file);
+  write('extension/kings-bible-collector.js');
   write('extension/redirect-bibleref-ranges.js');
   write('extension/redirect-christianity-main-world.js');
   write('extension/redirect-scripttagger.js');
@@ -92,6 +94,16 @@ try {
   assert(result.values.changed_specs.includes('redirect-source-url-patterns.spec.js'));
   assert(!result.values.changed_specs.includes('popup'), 'mapped feature should not pull in unrelated popup tests');
   console.log('PASS: mapped feature selects focused browser coverage');
+
+  // The extracted Kings Bible collector should select its existing behavior suite only.
+  resetScenario(base);
+  write('extension/kings-bible-collector.js', '// changed Kings Bible feature\\n');
+  commit('change Kings Bible collector feature');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', false, 'Kings Bible feature');
+  assert(result.values.changed_specs.includes('kings-bible-collector-behavior.spec.js'));
+  assert(!result.values.changed_specs.includes('popup'), 'Kings feature should not pull in unrelated popup tests');
+  console.log('PASS: Kings Bible collector selects focused browser coverage');
 
   // A popup-only feature stays focused as well.
   resetScenario(base);
