@@ -163,83 +163,9 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
     if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com"].includes(host)) {
       installChristianityLinkRedirect(() => getCachedSuiteEnabled());
     }
-    let theKingsBibleRedirectEnabled = false;
-    if (typeof chrome !== "undefined" && chrome.storage?.local) {
-      chrome.storage.local.get({redirectEnabled:false}).then(data => {
-        theKingsBibleRedirectEnabled = data.redirectEnabled === true;
-      }).catch(() => {});
-    }
-    if (host === "thekingsbible.com" && /^\\/(?:dictionary|concordance)\\//i.test(location.pathname.replace(/\\/{2,}/g, "/"))) {
-      document.addEventListener("click", event => {
-        if (event.defaultPrevented || isModifiedLinkActivation(event)) return;
-        if (!theKingsBibleRedirectEnabled || !getCachedSuiteEnabled()) return;
-        const isDictionaryPage = /^\\/dictionary\\//i.test(location.pathname.replace(/\\/{2,}/g, "/"));
-        const bibleReference = isDictionaryPage ? event.target?.closest?.(".bible[data-bible]") : null;
-        if (bibleReference) {
-          const label = String(bibleReference.textContent || "").trim();
-          const encoded = String(bibleReference.getAttribute("data-bible") || "");
-          let resolved = null;
-          for (const book of BOOKS) {
-            const prefix = String(book.name) + " ";
-            if (!label.toLowerCase().startsWith(prefix.toLowerCase())) continue;
-            const referenceText = label.slice(prefix.length).trim();
-            const listMatch = referenceText.match(/^(\\d+);(\\d+(?:-\\d+)?(?:,\\d+(?:-\\d+)?)*)$/);
-            if (listMatch) {
-              const chapter = Number(listMatch[1]);
-              const verseItems = listMatch[2].split(",");
-              const refs = [];
-              for (const item of verseItems) {
-                const verseMatch = item.match(/^(\\d+)(?:-(\\d+))?$/);
-                if (!verseMatch) { refs.length = 0; break; }
-                const verse = Number(verseMatch[1]);
-                const verseEnd = verseMatch[2] ? Number(verseMatch[2]) : verse;
-                const reference = resolveBibleReference(book.name, chapter, verse, verseEnd);
-                if (!reference) { refs.length = 0; break; }
-                refs.push({book: reference.book.name, bookNumber: Number(reference.book.bookNumber), chapter: reference.chapter, from: reference.from, to: reference.to, version: "kjv"});
-              }
-              if (chapter > 0 && refs.length === verseItems.length && refs.length > 1) {
-                event.preventDefault();
-                event.stopImmediatePropagation();
-                chrome.runtime.sendMessage({type: "blbSuiteOpenWebsterMultiVerse", refs}).catch(() => {});
-                return;
-              }
-            } else {
-              const match = referenceText.match(/^(\\d+)(?:[:;](\\d+)(?:-(\\d+))?)?$/);
-              if (match) {
-                const chapter = Number(match[1]);
-                const verse = match[2] ? Number(match[2]) : 1;
-                const verseEnd = match[3] ? Number(match[3]) : null;
-                if (chapter > 0 && verse > 0 && (verseEnd === null || verseEnd >= verse)) resolved = blbUrl(book.name, chapter, verse, verseEnd);
-              }
-            }
-            break;
-          }
-          if (!resolved && /^\\d{7,8}$/.test(encoded)) {
-            const bookCode = encoded.slice(0, -6);
-            const chapter = Number(encoded.slice(-6, -3));
-            const verse = Number(encoded.slice(-3));
-            const book = bookCode === "65" ? BOOKS.find(item => item.name.toLowerCase() === "judges") : BOOKS.find(item => Number(item.bookNumber) === Number(bookCode));
-            const visibleRange = label.match(/^(\\d+):(\\d+)-(\\d+)$/);
-            if (book && chapter > 0 && verse > 0) {
-              if (visibleRange && Number(visibleRange[1]) === chapter && Number(visibleRange[2]) === verse && Number(visibleRange[3]) >= verse) resolved = blbUrl(book.name, chapter, verse, Number(visibleRange[3]));
-              else resolved = blbUrl(book.name, chapter, verse);
-            }
-          }
-          if (resolved) {
-            event.preventDefault();
-            event.stopImmediatePropagation();
-            openBlbDestinationFromContent(resolved);
-            return;
-          }
-        }
-        const anchor = event.target?.closest?.("a[href]");
-        if (!anchor || anchor.hasAttribute("download")) return;
-        const target = theKingsBibleLinkTarget(anchor.href);
-        if (!target) return;
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        openBlbDestinationFromContent(target);
-      }, true);
+    const host = String(location.hostname || '').toLowerCase().replace(/^www\./, '');
+    if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com"].includes(host)) {
+      installChristianityLinkRedirect(() => getCachedSuiteEnabled());
     }
   }
 });
