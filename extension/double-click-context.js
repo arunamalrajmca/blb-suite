@@ -2,7 +2,7 @@
 // This module owns only reference/context interpretation; event listeners and
 // selection lifecycle stay in content.js.
 globalThis.BLBDoubleClickContextModule = Object.freeze({
-  create({ documentApi, windowApi, NodeCtor, ElementCtor, books, shared, normalizeSelectionText, parseRef, validateSourceBibleReference }) {
+  create({ documentApi, windowApi, NodeCtor, ElementCtor, books, shared, normalizeSelectionText, parseRef, validateSourceBibleReference, getDoubleClickTargetElement }) {
     const document = documentApi;
     const window = windowApi;
     const Node = NodeCtor;
