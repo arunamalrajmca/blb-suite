@@ -494,7 +494,7 @@ test('Bible redirect parser contracts cover every supported Bible redirect gramm
     assert(parser.includes(token), host + ': ' + description + ' missing');
   }
   assert(content.includes('function redirectBlbNet'), 'BLB NET redirect parser missing');
-  assert(content.includes('const REDIRECT_HOSTS'), 'redirect host table missing');
+  assert(read('content.js').includes('const REDIRECT_HOSTS'), 'redirect host table missing');
 });test('external redirect coverage includes every supported redirect host', () => {
   const content = read('content.js'), sourceRedirects = read('source-bible-redirects.js');
   const hostPolicy = read('background-host-policy.js');
