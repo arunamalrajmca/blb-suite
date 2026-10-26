@@ -35,6 +35,7 @@ const expectedContentScripts = [
   'double-click-context.js',
   'page-selection-classifier.js',
   'multiverse-button-drag.js',
+  'page-selection-lifecycle.js',
   'multiverse-copy-links.js',
   'blb-auto-hyperlinker.js',
   'blb-parse-popup-links.js',
@@ -117,7 +118,7 @@ if (!dynamicFilesMatch) {
   fail('runtime-injected content scripts declare their dependency list in host policy');
 } else {
   const dynamicFiles = [...dynamicFilesMatch[1].matchAll(/['\"]([^'\"]+\.js)['\"]/g)].map(match => match[1]);
-  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'selection-text.js', 'double-click-context.js', 'page-selection-classifier.js', 'multiverse-button-drag.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-navigation-links.js', 'blb-new-tab-links.js', 'blb-multiverse-handoff.js', 'blb-passive-new-tab.js', 'content.js'];
+  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'selection-text.js', 'double-click-context.js', 'page-selection-classifier.js', 'multiverse-button-drag.js', 'page-selection-lifecycle.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-navigation-links.js', 'blb-new-tab-links.js', 'blb-multiverse-handoff.js', 'blb-passive-new-tab.js', 'content.js'];
   const positions = requiredDynamic.map(name => dynamicFiles.indexOf(name));
   if (positions.some(index => index < 0)
       || positions.some((index, i) => i > 0 && index <= positions[i - 1])) {
@@ -306,6 +307,26 @@ if (!background.includes('chrome.tabs.onActivated.addListener(')
   fail('service-worker tab/context-menu listeners remain registered after module initialization');
 } else {
   pass('service-worker tab and context-menu listener registration remains in background.js');
+}
+
+
+const pageSelectionLifecycle = read('extension/page-selection-lifecycle.js');
+if (!pageSelectionLifecycle.includes('BLBPageSelectionLifecycleModule')
+    || !pageSelectionLifecycle.includes('validateBlbPageSelectionAfterDomMutation')
+    || !pageSelectionLifecycle.includes('enableBlbPageButtonMonitoring')
+    || !pageSelectionLifecycle.includes('disableBlbPageButtonMonitoring')
+    || !pageSelectionLifecycle.includes('state.pageButtonMonitoring')
+    || /chrome\.runtime\.onMessage\.addListener/.test(pageSelectionLifecycle)) {
+  fail('floating page-selection lifecycle is isolated without moving the runtime message listener');
+} else {
+  pass('floating page-selection lifecycle preserves shared state and DOM invalidation');
+}
+if (!content.includes('BLBPageSelectionLifecycleModule.create({')
+    || !content.includes('Object.defineProperties(BLBPageSelectionState')
+    || !content.includes('chrome.runtime.onMessage.addListener(')) {
+  fail('content script initializes lifecycle state and retains its runtime message listener');
+} else {
+  pass('content script bridges live lifecycle state and retains message-listener ordering');
 }
 
 const content = read('extension/content.js');

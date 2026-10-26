@@ -14,6 +14,7 @@ globalThis.BLBBackgroundHostPolicyModule = Object.freeze({
       'double-click-context.js',
       'page-selection-classifier.js',
       'multiverse-button-drag.js',
+      'page-selection-lifecycle.js',
       'multiverse-copy-links.js',
       'blb-auto-hyperlinker.js',
       'blb-parse-popup-links.js',
