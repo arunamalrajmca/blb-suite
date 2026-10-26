@@ -219,6 +219,45 @@ test.describe('real-browser source URL redirect regressions', () => {
     });
   }
 
+  test("The King's Bible direct Bible URLs redirect chapter and selected-verse routes to BLB KJV", async ({ page }) => {
+    const cases = [
+      {
+        sourceUrl: 'https://www.thekingsbible.com/Bible/43/3',
+        targetUrl: 'https://www.blueletterbible.org/kjv/jhn/3/1/'
+      },
+      {
+        sourceUrl: 'https://www.thekingsbible.com/Bible/43/3?verse=16',
+        targetUrl: 'https://www.blueletterbible.org/kjv/jhn/3/16/'
+      },
+      {
+        sourceUrl: 'https://www.thekingsbible.com/Bible/43/3?verse=invalid',
+        targetUrl: 'https://www.blueletterbible.org/kjv/jhn/3/1/'
+      }
+    ];
+
+    for (const item of cases) {
+      await loadProductionRedirect(page, item.sourceUrl);
+      const navigated = page.waitForURL(item.targetUrl, { waitUntil: 'domcontentloaded' });
+      await page.addScriptTag({ content: productionRedirectGate });
+      await navigated;
+      await expect(page).toHaveURL(item.targetUrl);
+    }
+  });
+
+  test("The King's Bible homepage and Dictionary/Concordance landing pages remain on the source site", async ({ page }) => {
+    for (const sourceUrl of [
+      'https://www.thekingsbible.com/',
+      'https://www.thekingsbible.com/Dictionary/',
+      'https://www.thekingsbible.com/Concordance/'
+    ]) {
+      await loadProductionRedirect(page, sourceUrl);
+      await page.addScriptTag({ content: productionRedirectGate });
+      await page.waitForTimeout(30);
+      await expect(page).toHaveURL(sourceUrl);
+      await expect.poll(() => page.evaluate(() => window.__openedBlbUrl || null)).toBeNull();
+    }
+  });
+
   test('King James Bible Online chapter URL navigates to the resolved BLB destination', async ({ page }) => {
     const sourceUrl = 'https://kingjamesbibleonline.org/John-Chapter-3/';
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/1/';
