@@ -17,7 +17,7 @@ test('popup master toggle persists across reload and preserves per-site feature 
   const master = page.locator('#master');
   await expect(master).toBeChecked();
 
-  await master.uncheck();
+  await page.locator('label.master-switch .slider').click();
 
   await expect.poll(async () => extensionWorker.evaluate(async () => {
     const state = await chrome.storage.local.get([
@@ -37,7 +37,7 @@ test('popup master toggle persists across reload and preserves per-site feature 
   await page.reload();
   await expect(master).not.toBeChecked();
 
-  await master.check();
+  await page.locator('label.master-switch .slider').click();
   await expect.poll(async () => extensionWorker.evaluate(async () => {
     const state = await chrome.storage.local.get(['masterEnabled', 'pageSelectionButtonSites', 'doubleClickBlbSites']);
     return state;
