@@ -120,8 +120,8 @@ try {
   }
 
   $optionalHostPermissions = @($manifest.optional_host_permissions)
-  if ($optionalHostPermissions -notcontains 'https://chatgpt.com/*') {
-    throw 'ZIP optional_host_permissions must include https://chatgpt.com/* for the user-triggered Ask AI feature'
+  if ($optionalHostPermissions -contains 'https://chatgpt.com/*') {
+    throw 'Retired ChatGPT/Ask AI host permission must not be included in the extension ZIP'
   }
   foreach ($permission in @('http://*/*', 'https://*/*')) {
     if ($optionalHostPermissions -notcontains $permission) {
