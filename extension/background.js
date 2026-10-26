@@ -57,17 +57,6 @@ const BLBMultiVerseTracking = globalThis.BLBBackgroundMultiVerseTrackingModule.c
   bookData
 });
 
-const BLBStudySessionModel = globalThis.BLBBackgroundStudySessionModelModule.create({
-  bookData,
-  bookAliases:BOOK_ALIASES,
-  resolveBibleReference
-});
-const { studyDateInfo, createStudySession, normalizeStudyNoteKey, titleCaseStudyNote, canonicalStoredStrong, resolveStudyBookIdentity, canonicalStoredRef, studyTopicStorageKey, sanitizeStudySessions } = BLBStudySessionModel;
-const BLBMultiVerseTracking = globalThis.BLBBackgroundMultiVerseTrackingModule.create({
-  chromeApi:chrome,
-  canonicalStoredRef,
-  bookData
-});
 
 async function notifyStudyUiChanged() {
   try { await chrome.runtime.sendMessage({type:'blbSuiteStudyUiChanged'}); } catch (_) {}
