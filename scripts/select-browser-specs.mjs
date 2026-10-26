@@ -27,12 +27,15 @@ if (!alwaysFull) {
 
 const browserSpecPattern = /^tests\/browser\/[^/]+\.spec\.js$/;
 const existingBrowserSpecs = new Set(run(["ls-tree", "-r", "--name-only", "HEAD", "--", "tests/browser"]).split("\n").filter(Boolean));
-const changedBrowserSpecs = [...new Set(changed.filter(path => browserSpecPattern.test(path) && existingBrowserSpecs.has(path)))].sort();
-const specs = new Set(changedBrowserSpecs);
-// Any changed browser spec triggers the full applicable browser suite. A spec can
-// contain cross-feature assertions, and running only its mapped/grep-selected
-// cases risks missing valid regressions. Keep runtime-file routing conservative.
-const forceFull = alwaysFull || changed.some(path => /^tests\/browser\/[^/]+\.spec\.js$/.test(path)) || changed.some(path =>
+// Test-file edits alone must not launch feature E2E suites. Those suites are
+// selected by production-file changes below; this prevents a double-click test
+// edit, for example, from triggering double-click E2E when production is untouched.
+// An explicit workflow_dispatch or main push remains a full verification run.
+const changedBrowserSpecs = [];
+const specs = new Set();
+// Shared-core, test-infrastructure, package, manifest, and unknown production
+// changes remain conservative and may require the full applicable browser suite.
+const forceFull = alwaysFull || changed.some(path =>
   path.startsWith("scripts/")
   || path.startsWith("regression-suite/")
   || (path.startsWith("tests/") && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path))
