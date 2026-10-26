@@ -81,9 +81,17 @@ test.describe('core user-visible E2E', () => {
     // Set the diagnostic marker before navigation; page and content scripts
     // use isolated JS worlds, but share DOM attributes.
     await page.addInitScript(() => {
-      document.addEventListener('DOMContentLoaded', () => {
-        document.documentElement?.setAttribute('data-blb-suite-e2e-diagnostics', 'true');
-      }, {once:true});
+      const markDiagnostics = () => {
+        if (!document.documentElement) return false;
+        document.documentElement.setAttribute('data-blb-suite-e2e-diagnostics', 'true');
+        return true;
+      };
+      if (!markDiagnostics()) {
+        const observer = new MutationObserver(() => {
+          if (markDiagnostics()) observer.disconnect();
+        });
+        observer.observe(document, {childList:true, subtree:true});
+      }
     });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await expect(page.locator('body')).toBeVisible();
