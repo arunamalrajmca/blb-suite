@@ -52,7 +52,7 @@ test('Study Sessions popup starts recording, saves a note, and stops without los
   await page.close();
 });
 
-test('Study Sessions popup pauses and resumes the selected recording without creating duplicate history', async ({
+test('Study Sessions popup pauses and restarts the selected recording without creating duplicate history', async ({
   context, extensionId, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.clear();
@@ -70,16 +70,15 @@ test('Study Sessions popup pauses and resumes the selected recording without cre
   await page.locator('#startTopic').click();
   await expect(page.locator('#studyStatus')).toContainText('Recording paused');
   await expect.poll(async () => extensionWorker.evaluate(async () => {
-    const state = await chrome.storage.local.get(['currentStudySessionId', 'studyPausedTopic', 'studySessions']);
+    const state = await chrome.storage.local.get(['currentStudySessionId', 'studySelectedTopic', 'studySessions']);
     return {
       currentStudySessionId: state.currentStudySessionId ?? null,
-      pausedTopic: state.studyPausedTopic,
+      selectedTopic: state.studySelectedTopic,
       sessions: state.studySessions.length
     };
-  })).toMatchObject({ currentStudySessionId: null, pausedTopic: normalizedTopic, sessions: 1 });
+  })).toMatchObject({ currentStudySessionId: null, selectedTopic: normalizedTopic, sessions: 1 });
 
-  await expect(page.locator('#resumeStudy')).toBeVisible();
-  await page.locator('#resumeStudy').click();
+  await page.locator('#startTopic').click();
   await expect(page.locator('#studyStatus')).toContainText('Recording started');
   const resumed = await extensionWorker.evaluate(async () => {
     const state = await chrome.storage.local.get(['currentStudySessionId', 'studySessions']);
