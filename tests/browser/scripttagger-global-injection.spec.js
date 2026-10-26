@@ -146,7 +146,7 @@ test('global redirect uses the minimal handlers on ordinary sites and the full b
   context.contentScriptFilesForTab = (tab, data) => policy.contentScriptFilesForTab(tab, data, {
     hostnameFromTabUrl: context.hostnameFromTabUrl,
     normalizeSiteHostname: context.normalizeSiteHostname,
-    isSensitiveSiteHostname: value => /(?:bank|banking|banker|credit.?union|financial|finance|hospital|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)/i.test(String(value || ''))
+    isSensitiveSiteHostname: value => context.BLBShared.isSensitiveSiteHostname(value)
   });
   // Rediscover and Sagacity use the existing full content bundle because it
   // contains the current-page MultiVerse collector. They still use dynamic,
@@ -168,7 +168,7 @@ test('global redirect uses the minimal handlers on ordinary sites and the full b
   expect(Array.from(context.contentScriptFilesForTab(
     {url:'https://sagacityweb.com/article'},
     {redirectEnabled:false,pageSelectionButtonSites:{'sagacityweb.com':true},doubleClickBlbSites:{}}
-  ))).toEqual(['regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','content.js']);
+  ))).toEqual(['regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','multiverse-copy-links.js','blb-auto-hyperlinker.js','blb-parse-popup-links.js','blb-navigation-links.js','blb-new-tab-links.js','blb-multiverse-handoff.js','blb-passive-new-tab.js','content.js']);
 });
 
 async function runMinimalScriptTaggerClick(settings, eventOverrides = {}) {
