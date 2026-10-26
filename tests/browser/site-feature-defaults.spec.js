@@ -121,7 +121,7 @@ test('BLB page selection reuses a Criteria search tab and prioritizes references
     });
     const reference = await openBlbPageSelection('John 3:16');
     const tabsAfterReference = await chrome.tabs.query({});
-    const referenceTabs = tabsAfterReference.filter(tab => /\/kjv\/john\/3\/16\/?(?:[?#]|$)/i.test(tab.url || tab.pendingUrl || ''));
+    const referenceTabs = tabsAfterReference.filter(tab => /\/kjv\/(?:john|jhn)\/3\/16(?:\/|[?#]|$)/i.test(tab.url || tab.pendingUrl || ''));
     return {
       firstSearch,
       secondSearch,
