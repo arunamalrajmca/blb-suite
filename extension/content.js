@@ -152,7 +152,8 @@ globalThis.BLBSourceSiteClickRedirectsModule?.initialize({
   openBlbDestinationFromContent,
   isModifiedLinkActivation,
   isSuiteEnabled,
-  getCachedSuiteEnabled:() => suiteEnabled
+  getCachedSuiteEnabled:() => suiteEnabled,
+  isSourceRedirectEnabled:() => sourceBibleRedirectEnabled
 });
 
 // Match the same normalized hostname form used by background.js.
@@ -167,9 +168,6 @@ const REDIRECT_HOSTS = new Set([
 ]);
 
 let sourceBibleRedirectEnabled = false;
-if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com"].includes(location.hostname.toLowerCase().replace(/^www\./, ""))) {
-  installChristianityLinkRedirect(() => suiteEnabled && sourceBibleRedirectEnabled);
-}
 
 if (REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\./, ''))) {
   isSuiteEnabled().then(enabled => {
