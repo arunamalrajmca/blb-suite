@@ -1,4 +1,4 @@
-importScripts('regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js', 'background-host-policy.js', 'background-content-script-registry.js', 'background-content-script-activation.js');
+importScripts('regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js', 'background-host-policy.js', 'background-content-script-registry.js', 'background-content-script-activation.js', 'background-multiverse-tracking.js');
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
@@ -6,6 +6,10 @@ const BLB_ORIGIN = BLBShared.urls.blbOrigin;
 const BLB_HOME_URL = BLBShared.urls.blbHome;
 const BLB_SEARCH_URL = BLBShared.urls.blbSearch;
 const bookData = BOOKS;
+const BLBMultiVerseTracking = globalThis.BLBBackgroundMultiVerseTrackingModule.create({
+  chromeApi:chrome,
+  canonicalStoredRef
+});
 const DEFAULT_HOMEPAGE_URL = BLB_HOME_URL;
 
 // Site-based features are OFF by default on every hostname.
@@ -548,60 +552,23 @@ async function downloadStudyDateFromPopup(date) {
 }
 
 function canonicalMultiVerseSet(refs) {
-  const items = [];
-  const seen = new Set();
-  for (const raw of Array.isArray(refs) ? refs : []) {
-    // Some callers (notably nth-verse search) provide a single verse as
-    // {book, chapter, verse}, while canonicalStoredRef normally treats a
-    // missing from/to pair as a whole-chapter reference. Preserve that verse
-    // identity before canonicalizing so the 200-verse cap counts correctly.
-    const input = raw && typeof raw === 'object' &&
-      raw.verse != null && raw.from == null && raw.to == null
-      ? {...raw, from:Number(raw.verse), to:Number(raw.verse)}
-      : raw;
-    const ref = canonicalStoredRef(input);
-    if (!ref) continue;
-    const key = `${ref.bookNumber}|${ref.chapter}|${ref.from ?? ''}|${ref.to ?? ''}|${ref.version}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    items.push({ref, key});
-  }
-  items.sort((a,b) => a.key.localeCompare(b.key, undefined, {numeric:true}));
-  return {key:items.map(x=>x.key).join(';'), refs:items.map(x=>x.ref)};
+  return BLBMultiVerseTracking.canonicalMultiVerseSet(refs);
 }
 
 async function getTrackedMultiVerseTabs() {
-  const data = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
-  return data.blbSuiteMultiVerseTabSets && typeof data.blbSuiteMultiVerseTabSets === 'object'
-    ? {...data.blbSuiteMultiVerseTabSets} : {};
+  return BLBMultiVerseTracking.getTrackedMultiVerseTabs();
 }
 
-// Serialize read-modify-write operations for the shared tab tracking map.
-// Navigation events can fire while a new batch is being reserved; without
-// this queue, an older cleanup snapshot can overwrite a newer batch identity.
-let pendingMultiVerseTrackingUpdate = Promise.resolve();
-
 function updateTrackedMultiVerseTabs(mutator) {
-  const run = pendingMultiVerseTrackingUpdate.then(async () => {
-    const map = await getTrackedMultiVerseTabs();
-    await mutator(map);
-    await chrome.storage.local.set({blbSuiteMultiVerseTabSets:map});
-    return map;
-  });
-  pendingMultiVerseTrackingUpdate = run.then(() => undefined, () => undefined);
-  return run;
+  return BLBMultiVerseTracking.updateTrackedMultiVerseTabs(mutator);
 }
 
 async function setTrackedMultiVerseTab(tabId, setKey) {
-  await updateTrackedMultiVerseTabs(map => {
-    map[String(tabId)] = {key:setKey, updatedAt:Date.now()};
-  });
+  return BLBMultiVerseTracking.setTrackedMultiVerseTab(tabId, setKey);
 }
 
 async function clearTrackedMultiVerseTab(tabId) {
-  await updateTrackedMultiVerseTabs(map => {
-    delete map[String(tabId)];
-  });
+  return BLBMultiVerseTracking.clearTrackedMultiVerseTab(tabId);
 }
 
 function isReservedMultiVerseTabCandidate(tab, handoffUrl) {
