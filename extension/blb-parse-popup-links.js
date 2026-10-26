@@ -5,7 +5,6 @@ globalThis.BLBParsePopupLinksModule = Object.freeze({
     // Keep parsing-popup links working on both normal BLB verse pages and
     // Criteria Search pages. A stable window name prevents repeated clicks from
     // opening duplicate tabs; the same tab is reused for the same destination.
-    if (location.hostname.endsWith(blbHostname)) {
       const handleParsePopupLink = link => {
         if (!link || !link.href || !link.closest?.(".parse-popup")) return;
         if (link.dataset.blbSuitePopup) return;
@@ -41,6 +40,5 @@ globalThis.BLBParsePopupLinksModule = Object.freeze({
       });
       parsePopupObserver.observe(document.documentElement, {childList:true, subtree:true});
       processParsePopups();
-    }
   }
 });

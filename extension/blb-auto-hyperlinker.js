@@ -1,5 +1,5 @@
 // BLB text-to-HTML formatting for copy-as-link behavior.
-// This module is DOM-independent; content.js owns event lifecycle and policy.
+// This module owns BLB copy-event handling and text-to-HTML formatting.
 globalThis.BLBAutoHyperlinkModule = Object.freeze({
   initialize({ isSuiteEnabled, getCachedEnabled, blbHostname, blbHomeUrl }) {
     if (!location.hostname.endsWith(blbHostname)
