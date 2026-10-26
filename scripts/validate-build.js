@@ -118,3 +118,13 @@ if (routingContractTest.status !== 0) {
 } else {
   pass('CI routing selector decisions validated against synthetic diffs');
 }
+
+const crossFeatureContractTest = cp.spawnSync(process.execPath, [
+  path.join(__dirname, 'test-cross-feature-contracts.js')
+], { encoding: 'utf8' });
+if (crossFeatureContractTest.stdout) process.stdout.write(crossFeatureContractTest.stdout);
+if (crossFeatureContractTest.status !== 0) {
+  fail('cross-feature integration contract checks failed\\n' + (crossFeatureContractTest.stderr || ''));
+} else {
+  pass('cross-feature integration contracts validated');
+}
