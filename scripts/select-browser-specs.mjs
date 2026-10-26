@@ -33,8 +33,7 @@ const specs = new Set(changedBrowserSpecs);
 // contain cross-feature assertions, and running only its mapped/grep-selected
 // cases risks missing valid regressions. Keep runtime-file routing conservative.
 const forceFull = alwaysFull || changed.some(path => /^tests\/browser\/[^/]+\.spec\.js$/.test(path)) || changed.some(path =>
-  path.startsWith(".github/workflows/")
-  || path.startsWith("scripts/")
+  path.startsWith("scripts/")
   || path.startsWith("regression-suite/")
   || (path.startsWith("tests/") && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path))
   || path === "package.json"
@@ -79,7 +78,7 @@ const featureSpecs = [
   }
 ];
 const ignoredNonRuntime = path =>
-  /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/))/.test(path)
+  /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/))/.test(path)
   || /^(?:store-assets\/|assets\/store\/|extension\/(?:icons|store-assets)\/)/.test(path)
   || /^extension\/(?:Tutorial\.html|Tutorial\.js|THIRD-PARTY-NOTICES\.txt)$/.test(path);
 
