@@ -531,11 +531,15 @@ test('BLB native-event interception remains explicitly scoped', () => {
 });
 test('BLB new-tab and Copy-as-link contracts remain wired', () => {
   const content = read('content.js');
+  const autoHyperlinker = read('blb-auto-hyperlinker.js');
   assert(content.includes('modifyLinks'), 'BLB link modifier missing');
   assert(content.includes('target="_blank"'), 'BLB new-tab target missing');
-  assert(content.includes('formatBlbTextToHtml'), 'HTML clipboard formatter missing');
-  assert(content.includes('setData("text/html"'), 'HTML clipboard write missing');
-  assert(content.includes('setData("text/plain"'), 'plain-text clipboard fallback missing');
+  assert(content.includes('formatBlbTextToHtml'), 'HTML clipboard formatter bridge missing');
+  assert(content.includes('BLBAutoHyperlinkModule?.initialize({'), 'HTML clipboard module initialization missing');
+  assert(autoHyperlinker.includes('format(rawText, blbHomeUrl)'), 'HTML clipboard formatter missing');
+  assert(autoHyperlinker.includes('setData("text/html"'), 'HTML clipboard write missing');
+  assert(autoHyperlinker.includes('setData("text/plain"'), 'plain-text clipboard fallback missing');
+  assert(autoHyperlinker.includes('stopImmediatePropagation()'), 'copy-link handler must retain event isolation');
 });
 test('context-menu Show on BLB wiring remains present', () => {
   const bg = read('background.js'), content = read('content.js');
