@@ -67,6 +67,7 @@
         "reference-core.js",
         "kings-bible-collector.js",
         "webster-collector.js",
+        "source-page-collector.js",
         "content.js"
       ],
       "run_at": "document_start"
