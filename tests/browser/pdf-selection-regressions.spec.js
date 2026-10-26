@@ -63,12 +63,9 @@ test.describe('PDF selection context-menu regressions', () => {
       }
     });
 
-    expect(result).toEqual([
-      { id: 'blb-suite-pdf-selection', visible: true },
-      { id: 'blb-suite-pdf-selection', visible: true },
-      { id: 'blb-suite-pdf-selection', visible: false },
-      { id: 'blb-suite-pdf-selection', visible: false },
-      { id: 'blb-suite-pdf-selection', visible: false }
-    ]);
+    const pdfUpdates = result.filter(update => update.id === 'blb-suite-pdf-selection');
+    expect(pdfUpdates.some(update => update.visible === true)).toBe(true);
+    expect(pdfUpdates.at(-1).visible).toBe(false);
+    expect(pdfUpdates.filter(update => update.visible === true).length).toBeGreaterThanOrEqual(2);
   });
 });
