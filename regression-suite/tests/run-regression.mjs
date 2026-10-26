@@ -586,10 +586,11 @@ test('MultiVerse creation/reuse path remains wired', () => {
 });
 section('features');
 test('Webster 1828 path remains wired', () => {
-  const content = read('content.js'), bg = read('background.js');
-  assert(content.includes('webstersdictionary1828.com'), 'Webster host missing');
-  assert(content.includes('collectWebsterBibleRefs'), 'Webster collector missing');
-  assert(content.includes('blbSuiteOpenBackgroundUrl'), 'Webster opener missing');
+  const content = read('content.js'), webster = read('webster-collector.js'), bg = read('background.js');
+  assert(webster.includes('webstersdictionary1828.com'), 'Webster host missing');
+  assert(webster.includes('collectWebsterBibleRefs'), 'Webster collector missing');
+  assert(webster.includes('blbSuiteOpenBackgroundUrl'), 'Webster opener missing');
+  assert(content.includes('BLBWebsterCollectorModule') && content.includes('BLBWebsterCollector'), 'Webster module initialization and master-setting refresh hook missing');
   assert(bg.includes('blbSuiteOpenWebsterMultiVerse'), 'Webster MultiVerse handler missing');
 });
 section('features');
