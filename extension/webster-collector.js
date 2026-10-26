@@ -120,7 +120,7 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
       // hard refresh. The duplicate guard inside addWebsterMultiVerseButton()
       // keeps these retries harmless.
       const ensureWebsterButton=()=>{
-        if (!suiteEnabled) return;
+        if (!isSuiteEnabledNow()) return;
         addWebsterMultiVerseButton().catch(()=>{});
       };
       globalThis.BLBWebsterCollector = Object.freeze({ ensureButton: ensureWebsterButton });
