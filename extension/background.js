@@ -1,4 +1,4 @@
-importScripts('regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js');
+importScripts('regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js', 'background-host-policy.js');
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
@@ -3011,48 +3011,14 @@ async function openBlbHomeNoDuplicate(activeIfNew = true, activateExisting = act
 }
 
 // Reopen the action popup on the newly focused guide tab where supported.
-const BLB_CONTENT_SCRIPT_FILES = [
-  // Runtime-injected pages need the shared constants before content.js runs,
-  // just like pages matched by manifest.content_scripts.
-  'regex-patterns.js',
-  'kjv-corpus-word-index.js',
-  'books.js',
-  'book-aliases.js',
-  'reference-core.js',
-  'kings-bible-collector.js',
-  'webster-collector.js',
-  'source-page-collector.js',
-  'multiverse-copy-links.js',
-  'blb-auto-hyperlinker.js',
-  'blb-parse-popup-links.js',
-  'blb-navigation-links.js',
-  'blb-new-tab-links.js',
-  'blb-multiverse-handoff.js',
-  'blb-passive-new-tab.js',
-  'content.js'
-];
-
-// Global ScriptTagger handling is deliberately isolated from the full Suite
-// bundle on ordinary sites. Known Bible translation hosts retain the full
-// bundle because they also need supported non-KJV-to-KJV page redirects.
-const SCRIPT_TAGGER_CONTENT_SCRIPT_FILES = ['redirect-scripttagger.js'];
-const BIBLEREF_RANGE_CONTENT_SCRIPT_FILES = ['redirect-bibleref-ranges.js'];
-
-// Hostnames are normalized by hostnameFromTabUrl() before this set is checked.
-// Keep entries in normalized form (without "www.") to avoid unreachable duplicates.
-const REDIRECT_HOSTNAMES = new Set([
-  'bible.com', 'biblegateway.com', 'bibleref.com',
-  'biblehub.com', 'bibleportal.com',
-  'christianity.com', 'crosswalk.com', 'enduringword.com', 'esv.org', 'gotquestions.org',
-  'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com',
-  'kingjamesbibleonline.org', 'kjbo.org',
-  'kjv.site', 'm.kjv.site',
-  'officialkingjamesbible.com', 'thekingsbible.com',
-  'webstersdictionary1828.com', BLB_HOSTNAME
-]);
+const BLB_BACKGROUND_HOST_POLICY = globalThis.BLBBackgroundHostPolicyModule.create({ blbHostname: BLB_HOSTNAME });
+const BLB_CONTENT_SCRIPT_FILES = BLB_BACKGROUND_HOST_POLICY.contentScriptFiles;
+const SCRIPT_TAGGER_CONTENT_SCRIPT_FILES = BLB_BACKGROUND_HOST_POLICY.scriptTaggerFiles;
+const BIBLEREF_RANGE_CONTENT_SCRIPT_FILES = BLB_BACKGROUND_HOST_POLICY.bibleRefRangeFiles;
+const REDIRECT_HOSTNAMES = BLB_BACKGROUND_HOST_POLICY.redirectHostnames;
 
 function isRedirectHostname(hostname) {
-  return REDIRECT_HOSTNAMES.has(normalizeSiteHostname(String(hostname || '')));
+  return BLB_BACKGROUND_HOST_POLICY.isRedirectHostname(hostname, normalizeSiteHostname);
 }
 
 function isSensitiveSiteHostname(hostname) {
@@ -3060,23 +3026,11 @@ function isSensitiveSiteHostname(hostname) {
 }
 
 function contentScriptFilesForTab(tab, data) {
-  const hostname = hostnameFromTabUrl(tab?.url);
-  const key = normalizeSiteHostname(hostname);
-  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
-    ? data.pageSelectionButtonSites : {};
-  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
-    ? data.doubleClickBlbSites : {};
-  const sensitiveSite = isSensitiveSiteHostname(hostname);
-  const blbSite = key === BLB_HOSTNAME;
-  const explicitSiteFeature = blbSite ? pageSites[key] === true : !sensitiveSite && (pageSites[key] === true || doubleSites[key] === true);
-  const redirectEnabled = data.redirectEnabled === true;
-  const needsFullBundle = explicitSiteFeature || (redirectEnabled && isRedirectHostname(hostname));
-  if (needsFullBundle && redirectEnabled) {
-    return [...BLB_CONTENT_SCRIPT_FILES, ...SCRIPT_TAGGER_CONTENT_SCRIPT_FILES, ...BIBLEREF_RANGE_CONTENT_SCRIPT_FILES];
-  }
-  if (needsFullBundle) return BLB_CONTENT_SCRIPT_FILES;
-  if (redirectEnabled) return [...SCRIPT_TAGGER_CONTENT_SCRIPT_FILES, ...BIBLEREF_RANGE_CONTENT_SCRIPT_FILES];
-  return [];
+  return BLB_BACKGROUND_HOST_POLICY.contentScriptFilesForTab(tab, data, {
+    hostnameFromTabUrl,
+    normalizeSiteHostname,
+    isSensitiveSiteHostname
+  });
 }
 
 function isHttpPageUrl(url) {

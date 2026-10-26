@@ -81,7 +81,8 @@ if (!importMatch) {
     'kjv-corpus-case-verse-index.js',
     'books.js',
     'book-aliases.js',
-    'reference-core.js'
+    'reference-core.js',
+    'background-host-policy.js'
   ];
   const positions = required.map(name => imports.indexOf(name));
   if (positions.some(index => index < 0)
@@ -216,6 +217,20 @@ if (!content.includes('BLBMultiVerseHandoffModule?.initialize({')) {
   fail('content script initializes the MultiVerse hand-off feature module');
 } else {
   pass('content script initializes the MultiVerse hand-off feature module');
+}
+
+const hostPolicy = read('extension/background-host-policy.js');
+if (!hostPolicy.includes('BLBBackgroundHostPolicyModule')
+    || !hostPolicy.includes('contentScriptFilesForTab(tab, data')
+    || !hostPolicy.includes('isSensitiveSiteHostname(hostname)')) {
+  fail('background host and injection policy is isolated behind its module API');
+} else {
+  pass('background host and injection policy is isolated behind its module API');
+}
+if (!background.includes('BLB_BACKGROUND_HOST_POLICY.contentScriptFilesForTab(tab, data')) {
+  fail('background service worker delegates tab injection policy to the module');
+} else {
+  pass('background service worker delegates tab injection policy to the module');
 }
 
 const referenceCore = read('extension/reference-core.js');
