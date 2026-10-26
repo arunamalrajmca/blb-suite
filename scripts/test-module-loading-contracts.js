@@ -116,6 +116,8 @@ if (!dynamicFilesMatch) {
   }
 }
 
+const content = read('extension/content.js');
+
 const copyModule = read('extension/multiverse-copy-links.js');
 if (!copyModule.includes('BLBMultiVerseCopyLinksModule')
     || !copyModule.includes('nativeMultiVerseCopyPending')
@@ -276,7 +278,6 @@ if (/\b(?:document|window)\s*\./.test(referenceCore)) {
   pass('shared reference-core has no direct DOM/window property access');
 }
 
-const content = read('extension/content.js');
 if (!content.includes('window.__blbSuiteContentScriptFileExecutedV3')
     || !content.includes('(async function ()')) {
   fail('content script retains its file-execution marker and async initializer');
