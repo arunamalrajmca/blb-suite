@@ -4426,9 +4426,27 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   const mergedRefs = [];
   const mergedKeys = new Set();
   const appendCanonical = parsed => {
+    const sourceToken = String(parsed.text || '').trim();
+    // Reject a parser match that ends in the middle of a numeric token.
+    // For example, "Rom. 15:1" must not be accepted from "Rom. 15:16",
+    // and "1 Cor. 6:2" must not be accepted from "1 Cor. 6:11".
+    // Check the original source rather than relying on an individual regex
+    // pass to enforce the same digit-boundary rule.
+    if (sourceToken && /\d$/.test(sourceToken)) {
+      let hasOccurrence = false;
+      let hasCompleteOccurrence = false;
+      for (let candidate = source.indexOf(sourceToken); candidate >= 0; candidate = source.indexOf(sourceToken, candidate + 1)) {
+        hasOccurrence = true;
+        if (!/\d/.test(source[candidate + sourceToken.length] || '')) {
+          hasCompleteOccurrence = true;
+          break;
+        }
+      }
+      if (hasOccurrence && !hasCompleteOccurrence) return;
+    }
     // Drop the shared parser's verse-one normalization when the source token
     // is chapter-only; the local chapter-only scan preserves it as null range.
-    if (parsed.from === 1 && parsed.to === 1 && /^.+\s+\d+\s*$/.test(String(parsed.text || '').trim())) return;
+    if (parsed.from === 1 && parsed.to === 1 && /^.+\s+\d+\s*$/.test(sourceToken)) return;
     const canonical = resolveBibleReference(parsed.book, parsed.chapter, parsed.from, parsed.to);
     if (!canonical) return;
     // The shared resolver normalizes a chapter-only reference to verse 1
