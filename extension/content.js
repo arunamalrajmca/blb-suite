@@ -420,6 +420,13 @@ globalThis.BLBMultiVerseHandoffModule?.initialize({
 // ---------- Double-Click BLB ----------
 // Double-click a single KJV word, Bible book name, or standalone book number.
 // Uses the Suite's own selection logic and never invokes BLB's native search.
+const { resolveNearestChapterContext } = globalThis.BLBDoubleClickReferenceContextModule.create({
+  books:BOOKS,
+  bookAliases:BOOK_ALIASES,
+  resolveBibleReference,
+  resolveNearestChapterContext
+});
+
 const BLBDoubleClickContext = globalThis.BLBDoubleClickContextModule.create({
   documentApi:document,
   windowApi:window,

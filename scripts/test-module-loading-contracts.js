@@ -33,6 +33,7 @@ const expectedContentScripts = [
   'webster-collector.js',
   'source-page-collector.js',
   'selection-text.js',
+  'double-click-reference-context.js',
   'double-click-context.js',
   'page-selection-classifier.js',
   'multiverse-button-drag.js',
@@ -66,6 +67,20 @@ if (!contentEntry) {
   } else {
     pass('content script initialization timing remains document_start');
   }
+}
+
+const doubleClickReferenceContext = read('extension/double-click-reference-context.js');
+if (!doubleClickReferenceContext.includes('BLBDoubleClickReferenceContextModule')
+    || !doubleClickReferenceContext.includes('resolveNearestChapterContext')
+    || !doubleClickReferenceContext.includes('candidates.sort((a, b) => b.index - a.index)')) {
+  fail('double-click nearest book/chapter context is isolated behind a pure module API');
+} else {
+  pass('double-click nearest book/chapter context remains isolated and nearest-match ordered');
+}
+if (!read('extension/double-click-context.js').includes('resolveNearestChapterContext(contextText)')) {
+  fail('double-click context delegates nearest chapter resolution to the pure module');
+} else {
+  pass('double-click context delegates chapter matching to its pure module');
 }
 
 const background = read('extension/background.js');
