@@ -143,6 +143,7 @@ test.describe('core user-visible E2E', () => {
         const diagnostics = await page.evaluate(() => ({
           contentScriptExecuted: document.documentElement?.getAttribute('data-blb-suite-content-script-executed'),
           doubleClickInitReached: document.documentElement?.getAttribute('data-blb-suite-double-click-init-reached'),
+          contentScriptInitComplete: document.documentElement?.getAttribute('data-blb-suite-content-script-init-complete'),
           contentScriptError: document.documentElement?.getAttribute('data-blb-suite-content-script-error'),
           lastHandlerDiagnostic: document.documentElement?.getAttribute('data-blb-suite-dblclick-last-diagnostic'),
           diagnosticsEnabled: document.documentElement?.getAttribute('data-blb-suite-e2e-diagnostics'),

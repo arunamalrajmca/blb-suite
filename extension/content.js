@@ -1002,6 +1002,7 @@ if (!isBlbPageButtonExcludedSite() && !isSensitiveSiteHostname(location.hostname
 
 
 chrome.storage.onChanged.addListener((changes, area) => {
+  doubleClickDiagnostic('storage-change', {area, changedKeys:Object.keys(changes || {})});
   if (area !== 'local') return;
   if (changes.redirectEnabled) {
     theKingsBibleRedirectEnabled = changes.redirectEnabled.newValue === true;
@@ -1029,6 +1030,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
     refreshDoubleClickBlb();
   }
 });
+try {
+  if (document.documentElement?.getAttribute('data-blb-suite-e2e-diagnostics') === 'true') {
+    document.documentElement.setAttribute('data-blb-suite-content-script-init-complete', 'true');
+  }
+} catch (_) {}
 
 })().catch(error => {
   try {
