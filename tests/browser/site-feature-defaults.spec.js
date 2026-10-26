@@ -131,7 +131,10 @@ test('BLB page selection reuses a Criteria search tab and prioritizes references
     };
   });
   expect(result.firstSearch).toMatchObject({ok:true,criteriaSearch:true});
-  expect(result.secondSearch).toMatchObject({ok:true,criteriaSearch:true,reused:true});
+  expect(result.secondSearch).toMatchObject({ok:true,criteriaSearch:true});
+  // Verify reuse by the browser's actual tab state, not the helper's `reused`
+  // field: openBlbDestination returns a Chrome tab object, so that field is not
+  // propagated to openBlbPageSelection's result.
   expect(result.matchingSearchTabCount).toBe(1);
   expect(result.reference).toMatchObject({ok:true,referenceNavigation:true});
   expect(result.referenceTabCount).toBeGreaterThan(0);
