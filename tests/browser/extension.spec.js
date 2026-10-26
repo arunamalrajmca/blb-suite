@@ -109,6 +109,11 @@ test.describe('core user-visible E2E', () => {
 
     const article = page.locator('#generic-verse-context-article');
     await expect(article).toBeVisible();
+    // Force a fresh site-preference refresh after the trace marker is present.
+    // This keeps the diagnostic able to report whether settings activated the listener.
+    await extensionStorage.set({doubleClickBlbSites:{'example.com':false}});
+    await extensionStorage.set({doubleClickBlbSites:{'example.com':true}});
+    await page.waitForTimeout(200);
     const gestures = [
       ['#generic-verse-42', 42, 18, '/kjv/1ki/18/42/'],
       ['#generic-verse-44', 44, 18, '/kjv/1ki/18/44/'],
