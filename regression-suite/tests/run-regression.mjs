@@ -498,14 +498,12 @@ test('Bible redirect parser contracts cover every supported Bible redirect gramm
 });
 test('BLB native-event interception remains explicitly scoped', () => {
   const content = read('content.js');
+  const parsePopup = read('blb-parse-popup-links.js');
 
-  const popupStart = content.indexOf('const handleParsePopupLink');
-  const popupEnd = content.indexOf('\n  }', popupStart);
-  assert(popupStart >= 0 && popupEnd > popupStart, 'parse-popup handler block missing');
-  const popup = content.slice(popupStart, popupEnd);
-  assert(popup.includes('link.closest(".parse-popup")') || popup.includes('link.closest?.(".parse-popup")'), 'parse-popup click override must remain selector-scoped');
-  assert(popup.includes('preventDefault()'), 'parse-popup override must retain its intentional native-navigation override');
-  assert(popup.includes('stopImmediatePropagation()'), 'parse-popup override must retain event isolation');
+  assert(parsePopup.includes('const handleParsePopupLink'), 'parse-popup handler block missing');
+  assert(parsePopup.includes('link.closest?.(".parse-popup")'), 'parse-popup click override must remain selector-scoped');
+  assert(parsePopup.includes('preventDefault()'), 'parse-popup override must retain its intentional native-navigation override');
+  assert(parsePopup.includes('stopImmediatePropagation()'), 'parse-popup override must retain event isolation');
 
   const nowrapStart = content.indexOf('const a=e.target.closest?.("a.nowrap")');
   const nowrapEnd = content.indexOf('},true);', nowrapStart);

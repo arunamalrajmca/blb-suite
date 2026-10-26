@@ -33,6 +33,7 @@ const expectedContentScripts = [
   'source-page-collector.js',
   'multiverse-copy-links.js',
   'blb-auto-hyperlinker.js',
+  'blb-parse-popup-links.js',
   'content.js'
 ];
 const contentEntry = (manifest.content_scripts || []).find(entry =>
@@ -97,7 +98,7 @@ if (!dynamicFilesMatch) {
   fail('runtime-injected content scripts declare their dependency list');
 } else {
   const dynamicFiles = [...dynamicFilesMatch[1].matchAll(/['\"]([^'\"]+\.js)['\"]/g)].map(match => match[1]);
-  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'content.js'];
+  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'content.js'];
   const positions = requiredDynamic.map(name => dynamicFiles.indexOf(name));
   if (positions.some(index => index < 0)
       || positions.some((index, i) => i > 0 && index <= positions[i - 1])) {
@@ -137,6 +138,20 @@ if (!content.includes('BLBAutoHyperlinkModule?.initialize({')
   fail('content script initializes the extracted BLB copy-link feature module');
 } else {
   pass('BLB copy-link event lifecycle is owned by its feature module');
+}
+
+const parsePopupModule = read('extension/blb-parse-popup-links.js');
+if (!parsePopupModule.includes('BLBParsePopupLinksModule')
+    || !parsePopupModule.includes('link.closest?.(".parse-popup")')
+    || !parsePopupModule.includes('stopImmediatePropagation()')) {
+  fail('BLB parse-popup interception remains scoped in its feature module');
+} else {
+  pass('BLB parse-popup interception remains scoped in its feature module');
+}
+if (!content.includes('BLBParsePopupLinksModule?.initialize({')) {
+  fail('content script initializes the parse-popup feature module');
+} else {
+  pass('content script initializes the parse-popup feature module');
 }
 
 const referenceCore = read('extension/reference-core.js');
