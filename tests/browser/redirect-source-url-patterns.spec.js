@@ -3,39 +3,19 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 
-const source = fs.readFileSync(path.resolve(__dirname, '../../extension/content.js'), 'utf8');
 const booksSource = fs.readFileSync(path.resolve(__dirname, '../../extension/books.js'), 'utf8');
 const aliasesSource = fs.readFileSync(path.resolve(__dirname, '../../extension/book-aliases.js'), 'utf8');
 const referenceCoreSource = fs.readFileSync(path.resolve(__dirname, '../../extension/reference-core.js'), 'utf8');
 const sharedPatternsSource = fs.readFileSync(path.resolve(__dirname, '../../extension/regex-patterns.js'), 'utf8');
-const decodeStart = source.indexOf('function decodeSafe(v) {');
-const bookKeyStart = source.indexOf('function bookKey(value) {');
-const parseStart = source.indexOf('function parseRef(text) {', decodeStart);
-const blbUrlStart = source.indexOf('function blbUrl(', decodeStart);
-const redirectStart = source.indexOf('function redirectBibleSite() {', parseStart);
-const redirectEnd = source.indexOf('\nfunction redirectBlbNet() {', redirectStart);
-if ([decodeStart, bookKeyStart, blbUrlStart, parseStart, redirectStart, redirectEnd].some(index => index < 0)) {
-  throw new Error('Could not locate source-site redirect functions in extension/content.js');
-}
-// Exercise the production book table, alias resolver, reference validator, and URL builder.
-const helpers = sharedPatternsSource + '\n' + booksSource + '\n' + aliasesSource + '\n' + referenceCoreSource + '\n' +
-  source.slice(bookKeyStart, parseStart) +
-  source.slice(parseStart, redirectStart) + source.slice(redirectStart, redirectEnd);
+const sourceRedirectSource = fs.readFileSync(path.resolve(__dirname, '../../extension/source-bible-redirects.js'), 'utf8');
 
 function runSourceRedirect(url) {
   let redirectedTo = null;
   let openedInNewTab = null;
-  const context = {
-    URL,
-    location: {
-      href: url,
-      replace(target) { redirectedTo = target; }
-    },
-    openBlbDestinationFromContent(target) { openedInNewTab = target; },
-    // No blbUrl stub: this calls the real production resolver.
-
-  };
-  vm.runInNewContext(helpers + '\nresult = redirectBibleSite();', context);
+  const parsed = new URL(url);
+  const context = { URL, location: { href: url, hostname: parsed.hostname, pathname: parsed.pathname, search: parsed.search, replace(target) { redirectedTo = target; } }, openBlbDestinationFromContent(target) { openedInNewTab = target; } };
+  const bootstrap = "\nconst redirectModule = BLBSourceBibleRedirectModule.create({books:BOOKS, shared:BLBShared, locationApi:location, resolveBibleBook, resolveBibleReference, openBlbDestinationFromContent});\nresult = redirectModule.redirectBibleSite();\n";
+  vm.runInNewContext([sharedPatternsSource, booksSource, aliasesSource, referenceCoreSource, sourceRedirectSource, bootstrap].join('\n'), context);
   return { result: context.result, redirectedTo, openedInNewTab };
 }
 
