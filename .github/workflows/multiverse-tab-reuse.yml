@@ -70,7 +70,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-node22-npm-
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --prefer-offline --no-audit --no-fund
 
       - name: Install Chromium for Playwright
         run: npx playwright install chromium
