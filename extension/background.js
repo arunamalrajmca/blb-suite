@@ -4260,39 +4260,46 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // Comma-separated verses. For consecutive verses such as 9,10 or 9,10,11,
   // treat the selection as one continuous range. For non-consecutive verses,
   // open each verse separately in BLB MultiVerse.
-  const colonCommaRe = /(?<![A-Za-z0-9])((?:[1-3]\\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\\s*(\\d+)\\s*:\\s*(\\d+)((?:\\s*,\\s*\\d+(?:\\s*-\\s*\\d+)?(?!\\s*:))+)(?![A-Za-z0-9])/gi;
+  const colonCommaRe = /(?<![A-Za-z0-9])((?:[1-3]\\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\\s*(\\d+)\\s*:\\s*(\\d+)((?:\\s*,\\s*\\d+(?:\\s*:\\s*\\d+)?(?:\\s*-\\s*\\d+)?)+)(?![A-Za-z0-9])/gi;
   while ((m = colonCommaRe.exec(source))) {
     if (isShadowedBookMatch(m.index)) continue;
-    const rawBook = m[1].trim();
-    const book = resolveBook(rawBook);
+    const book = resolveBook(m[1].trim());
     if (!book) continue;
-    const chapter = Number(m[2]);
-    const maxVerse = Number(book.verses?.[chapter - 1]);
-    if (!Number.isInteger(maxVerse) || chapter < 1 || chapter > book.chapterCount) continue;
+    let currentChapter = Number(m[2]);
+    const firstVerse = Number(m[3]);
+    const rangeText = String(m[4] || '').replace(/^,\\s*/, '');
+    const ranges = [{ chapter: currentChapter, from: firstVerse, to: firstVerse }];
+    for (const tokenRaw of rangeText.split(',')) {
+      const token = tokenRaw.trim();
+      let item = token.match(/^(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?$/);
+      if (item) {
+        currentChapter = Number(item[1]);
+        ranges.push({chapter:currentChapter, from:Number(item[2]), to:Number(item[3] || item[2])});
+        continue;
+      }
+      item = token.match(/^(\\d+)(?:\\s*-\\s*(\\d+))?$/);
+      if (item) ranges.push({chapter:currentChapter, from:Number(item[1]), to:Number(item[2] || item[1])});
+    }
 
-    // Parse each comma item as either a single verse or an explicit range.
-    // The former expression stopped at the first hyphen, so a citation such
-    // as "Rom. 6:2,6-7,9-11,14,18,22" silently lost the range endpoints.
-    const rangeText = `${m[3]}`.replace(/^,\\s*/, '');
-    const ranges = rangeText.split(',').map(token => {
-      const rangeMatch = token.trim().match(/^(\\d+)(?:\\s*-\\s*(\\d+))?$/);
-      if (!rangeMatch) return null;
-      return { from: Number(rangeMatch[1]), to: Number(rangeMatch[2] || rangeMatch[1]) };
-    }).filter(range =>
-      range && range.from >= 1 && range.to >= range.from && range.to <= maxVerse
-    );
-    if (!ranges.length) continue;
+    const validRanges = ranges.filter(range => {
+      const maxVerse = Number(book.verses?.[range.chapter - 1]);
+      return Number.isInteger(maxVerse) && range.chapter >= 1 &&
+        range.chapter <= book.chapterCount && range.from >= 1 &&
+        range.to >= range.from && range.to <= maxVerse;
+    });
+    if (!validRanges.length) continue;
 
-    // Preserve the established compact behavior for a list of consecutive
-    // single verses (e.g. "Romans 10:9,10"), but keep disjoint ranges distinct.
-    const allSingles = ranges.every(range => range.from === range.to);
-    const consecutive = allSingles && ranges.every((range, index) =>
-      index === 0 || range.from === ranges[index - 1].to + 1
+    // Preserve compact behavior for consecutive single verses in one chapter,
+    // but keep disjoint ranges and explicit chapter changes separate.
+    const firstChapter = validRanges[0].chapter;
+    const allSingles = validRanges.every(range => range.from === range.to && range.chapter === firstChapter);
+    const consecutive = allSingles && validRanges.every((range, index) =>
+      index === 0 || range.from === validRanges[index - 1].to + 1
     );
     if (consecutive) {
-      addRef(book, chapter, ranges[0].from, ranges[ranges.length - 1].to, m[0]);
+      addRef(book, firstChapter, validRanges[0].from, validRanges[validRanges.length - 1].to, m[0]);
     } else {
-      ranges.forEach(range => addRef(book, chapter, range.from, range.to, m[0]));
+      validRanges.forEach(range => addRef(book, range.chapter, range.from, range.to, m[0]));
     }
   }
 
