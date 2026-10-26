@@ -1,7 +1,7 @@
 // Source-specific click routing for Christianity resources and The King's Bible.
 // This module owns only click redirection; general host redirects remain in content.js.
 globalThis.BLBSourceSiteClickRedirectsModule = Object.freeze({
-  initialize({ windowApi, documentApi, locationApi, chromeApi, books, resolveBibleReference, blbUrl, christianityBibleLinkTarget, parseRef, theKingsBibleLinkTarget, openBlbDestinationFromContent, isModifiedLinkActivation, isSuiteEnabled, getCachedSuiteEnabled }) {
+  initialize({ windowApi, documentApi, locationApi, chromeApi, books, resolveBibleReference, blbUrl, christianityBibleLinkTarget, parseRef, theKingsBibleLinkTarget, openBlbDestinationFromContent, isModifiedLinkActivation, isSuiteEnabled, getCachedSuiteEnabled, isSourceRedirectEnabled }) {
     const window = windowApi;
     const document = documentApi;
     const location = locationApi;
@@ -161,7 +161,7 @@ if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.co
 
     const host = String(location.hostname || '').toLowerCase().replace(/^www\\./, '');
     if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com"].includes(host)) {
-      installChristianityLinkRedirect(() => getCachedSuiteEnabled());
+      installChristianityLinkRedirect(() => getCachedSuiteEnabled() && isSourceRedirectEnabled());
     }
     const host = String(location.hostname || '').toLowerCase().replace(/^www\./, '');
     if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com"].includes(host)) {
