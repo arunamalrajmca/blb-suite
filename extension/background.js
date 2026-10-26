@@ -4260,34 +4260,39 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // Comma-separated verses. For consecutive verses such as 9,10 or 9,10,11,
   // treat the selection as one continuous range. For non-consecutive verses,
   // open each verse separately in BLB MultiVerse.
-  const colonCommaRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)(\s*,\s*\d+(?!\s*:))+(?![A-Za-z0-9])/gi;
+  const colonCommaRe = /(?<![A-Za-z0-9])((?:[1-3]\\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\\s*(\\d+)\\s*:\\s*(\\d+)((?:\\s*,\\s*\\d+(?:\\s*-\\s*\\d+)?(?!\\s*:))+(?![A-Za-z0-9])/gi;
   while ((m = colonCommaRe.exec(source))) {
     if (isShadowedBookMatch(m.index)) continue;
     const rawBook = m[1].trim();
     const book = resolveBook(rawBook);
     if (!book) continue;
     const chapter = Number(m[2]);
-    const verses = (m[0].match(/:\s*\d+(?:\s*,\s*\d+)*/)?.[0] || '')
-      .replace(/^:\s*/, '')
-      .split(/\s*,\s*/)
-      .map(Number)
-      .filter(Number.isFinite);
-    if (!verses.length) continue;
     const maxVerse = Number(book.verses?.[chapter - 1]);
     if (!Number.isInteger(maxVerse) || chapter < 1 || chapter > book.chapterCount) continue;
-    // Comma-separated values are explicit verses in the stated chapter.
-    // Do not send an impossible value through resolveBibleReference(), whose
-    // normal boundary behavior intentionally clamps explicit references.
-    // In a comma list that would create the historical false positive where
-    // "Psalms 1:2, 105:1" was interpreted as Psalm 1:105 and clamped to 1:6.
-    const validVerses = verses.filter(v => v >= 1 && v <= maxVerse);
-    if (!validVerses.length) continue;
-    const consecutive = validVerses.length === verses.length &&
-      validVerses.every((v, i) => i === 0 || v === validVerses[i - 1] + 1);
+
+    // Parse each comma item as either a single verse or an explicit range.
+    // The former expression stopped at the first hyphen, so a citation such
+    // as "Rom. 6:2,6-7,9-11,14,18,22" silently lost the range endpoints.
+    const rangeText = `${m[3]}`;
+    const ranges = rangeText.split(',').map(token => {
+      const rangeMatch = token.trim().match(/^(\\d+)(?:\\s*-\\s*(\\d+))?$/);
+      if (!rangeMatch) return null;
+      return { from: Number(rangeMatch[1]), to: Number(rangeMatch[2] || rangeMatch[1]) };
+    }).filter(range =>
+      range && range.from >= 1 && range.to >= range.from && range.to <= maxVerse
+    );
+    if (!ranges.length) continue;
+
+    // Preserve the established compact behavior for a list of consecutive
+    // single verses (e.g. "Romans 10:9,10"), but keep disjoint ranges distinct.
+    const allSingles = ranges.every(range => range.from === range.to);
+    const consecutive = allSingles && ranges.every((range, index) =>
+      index === 0 || range.from === ranges[index - 1].to + 1
+    );
     if (consecutive) {
-      addRef(book, chapter, validVerses[0], validVerses[validVerses.length - 1], m[0]);
+      addRef(book, chapter, ranges[0].from, ranges[ranges.length - 1].to, m[0]);
     } else {
-      validVerses.forEach(v => addRef(book, chapter, v, v, m[0]));
+      ranges.forEach(range => addRef(book, chapter, range.from, range.to, m[0]));
     }
   }
 
