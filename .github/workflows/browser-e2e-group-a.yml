@@ -81,7 +81,7 @@ jobs:
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
       - name: Install Playwright Chromium
         run: npx playwright install chromium
-        if: ${{ needs.change-detection.outputs.group_a_required == 'true' && steps.playwright-cache.outputs.cache-hit != 'true' }}
+        if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
       - name: Grant test-only generic host access
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
