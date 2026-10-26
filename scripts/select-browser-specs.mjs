@@ -30,7 +30,7 @@ const forceFull = alwaysFull || changed.some(path =>
   path.startsWith(".github/workflows/")
   || path.startsWith("scripts/")
   || path.startsWith("regression-suite/")
-  || path.startsWith("tests/")
+  || (path.startsWith("tests/") && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path))
   || path === "package.json"
   || path === "package-lock.json"
   || path === "playwright.config.js"
