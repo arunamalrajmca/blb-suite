@@ -246,3 +246,62 @@ test('a stale saved Double-click preference cannot activate Double-click on BLB 
 
   expect(newTabs, 'Double-click must not open a BLB search or passage tab on BLB itself').toEqual([]);
 });
+
+test('Study Sessions auto-stop respects the inactivity threshold and preserves paused topic history', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({ masterEnabled: true, studyAutoStopMinutes: 5 });
+
+  const topic = 'BLB regression auto-stop ' + Date.now();
+  const normalizedTopic = topic.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+  const started = await extensionWorker.evaluate(value => startStudyTopicFromPopup(value, 'Keep this note'), topic);
+  expect(started).toMatchObject({ ok: true, recording: true, topic: normalizedTopic });
+
+  const sessionId = await extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({ currentStudySessionId: null })).currentStudySessionId
+  );
+
+  // Just under the configured limit must not stop recording.
+  await extensionStorage.set({ studyLastActivityAt: Date.now() - (5 * 60 * 1000) + 1000 });
+  await extensionWorker.evaluate(() => checkStudyAutoStop());
+  let state = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    currentStudySessionId: null, studyPauseReason: '', studyPausedTopic: ''
+  }));
+  expect(state.currentStudySessionId).toBe(sessionId);
+  expect(state.studyPauseReason).toBe('');
+
+  // At the inactivity limit, recording stops but the topic and notes remain.
+  await extensionStorage.set({ studyLastActivityAt: Date.now() - (5 * 60 * 1000) });
+  await extensionWorker.evaluate(() => checkStudyAutoStop());
+  state = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    currentStudySessionId: null, studyPauseReason: '', studyPausedTopic: '', studySessions: []
+  }));
+  expect(state.currentStudySessionId).toBeNull();
+  expect(state.studyPauseReason).toBe('inactivity');
+  expect(state.studyPausedTopic).toBe(normalizedTopic);
+  const saved = state.studySessions.find(session => session.id === sessionId);
+  expect(saved).toBeTruthy();
+  expect(saved.notes).toContain('Keep this note');
+});
+
+test('Study Sessions auto-stop can be disabled without stopping an inactive recording', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({ masterEnabled: true, studyAutoStopMinutes: 0 });
+
+  const topic = 'BLB regression no auto-stop ' + Date.now();
+  const started = await extensionWorker.evaluate(value => startStudyTopicFromPopup(value), topic);
+  expect(started).toMatchObject({ ok: true, recording: true });
+
+  const sessionId = await extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({ currentStudySessionId: null })).currentStudySessionId
+  );
+  await extensionStorage.set({ studyLastActivityAt: Date.now() - 24 * 60 * 60 * 1000 });
+  await extensionWorker.evaluate(() => checkStudyAutoStop());
+
+  const state = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    currentStudySessionId: null, studyPauseReason: '', studyPausedTopic: ''
+  }));
+  expect(state.currentStudySessionId).toBe(sessionId);
+  expect(state.studyPauseReason).toBe('');
+  expect(state.studyPausedTopic).toBe('');
+});
+
