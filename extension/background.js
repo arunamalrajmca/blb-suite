@@ -8,7 +8,8 @@ const BLB_SEARCH_URL = BLBShared.urls.blbSearch;
 const bookData = BOOKS;
 const BLBMultiVerseTracking = globalThis.BLBBackgroundMultiVerseTrackingModule.create({
   chromeApi:chrome,
-  canonicalStoredRef
+  canonicalStoredRef,
+  bookData
 });
 const DEFAULT_HOMEPAGE_URL = BLB_HOME_URL;
 
@@ -622,88 +623,17 @@ async function findMatchingMultiVerseTab(setKey, tabs) {
 }
 
 function getContinuousSameChapterRange(refs) {
-  if (!Array.isArray(refs) || refs.length < 2) return null;
-  const first = refs[0];
-  if (!first || !Number.isInteger(first.bookNumber) || !Number.isInteger(first.chapter) ||
-      !Number.isInteger(first.from) || !Number.isInteger(first.to) ||
-      first.from < 1 || first.to < first.from) return null;
-
-  const sameChapter = refs.every(ref =>
-    ref &&
-    Number(ref.bookNumber) === Number(first.bookNumber) &&
-    Number(ref.chapter) === Number(first.chapter) &&
-    String(ref.version || 'kjv').toLowerCase() === String(first.version || 'kjv').toLowerCase() &&
-    Number.isInteger(ref.from) && Number.isInteger(ref.to) &&
-    ref.from >= 1 && ref.to >= ref.from
-  );
-  if (!sameChapter) return null;
-
-  const intervals = refs
-    .map(ref => ({from:Number(ref.from), to:Number(ref.to)}))
-    .sort((a,b) => a.from - b.from || a.to - b.to);
-  let from = intervals[0].from;
-  let to = intervals[0].to;
-  for (const interval of intervals.slice(1)) {
-    // Overlapping or directly adjacent ranges together form one continuous
-    // verse range; a gap means the MultiVerse destination must be preserved.
-    if (interval.from > to + 1) return null;
-    to = Math.max(to, interval.to);
-  }
-  return {bookNumber:Number(first.bookNumber), chapter:Number(first.chapter), from, to, version:String(first.version || 'kjv').toLowerCase()};
+  return BLBMultiVerseTracking.getContinuousSameChapterRange(refs);
 }
 
-const BLB_MULTIVERSE_MAX_VERSES = 200;
+const BLB_MULTIVERSE_MAX_VERSES = BLBMultiVerseTracking.maxVerses;
 
 function expandMultiVerseRefsToVerses(refs) {
-  const canonical = canonicalMultiVerseSet(refs);
-  const verses = [];
-  const seen = new Set();
-
-  for (const ref of canonical.refs) {
-    const book = bookData.find(item => Number(item.bookNumber) === Number(ref.bookNumber));
-    if (!book) continue;
-    const chapter = Number(ref.chapter);
-    if (!Number.isInteger(chapter) || chapter < 1 || chapter > book.chapterCount) continue;
-
-    const chapterVerseCount = Number(book.verses[chapter - 1]);
-    const from = ref.from == null ? 1 : Number(ref.from);
-    const to = ref.to == null ? chapterVerseCount : Number(ref.to);
-    if (!Number.isInteger(from) || !Number.isInteger(to) || from < 1 || to < from) continue;
-
-    for (let verse = from; verse <= Math.min(to, chapterVerseCount); verse++) {
-      const version = String(ref.version || 'kjv').toLowerCase();
-      const key = `${ref.bookNumber}|${chapter}|${verse}|${version}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      verses.push({
-        book:book.name,
-        bookNumber:Number(book.bookNumber),
-        chapter,
-        from:verse,
-        to:verse,
-        version
-      });
-    }
-  }
-
-  return verses;
+  return BLBMultiVerseTracking.expandMultiVerseRefsToVerses(refs);
 }
 
 function compactMultiVerseVerses(verses) {
-  const compact = [];
-  for (const verse of verses) {
-    const previous = compact[compact.length - 1];
-    if (previous &&
-        previous.bookNumber === verse.bookNumber &&
-        previous.chapter === verse.chapter &&
-        previous.version === verse.version &&
-        previous.to + 1 === verse.from) {
-      previous.to = verse.to;
-    } else {
-      compact.push({...verse});
-    }
-  }
-  return compact;
+  return BLBMultiVerseTracking.compactMultiVerseVerses(verses);
 }
 
 // Keep independent MultiVerse commands concurrent. Per-destination identity locks
