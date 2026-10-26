@@ -9,11 +9,11 @@ on:
     types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
-# Keep each commit's gate independent so a newer PR commit receives a
-# pending status immediately instead of waiting behind an older commit's run.
+# Keep one active run per PR: newer commits supersede outdated PR runs.
+# Pushes to main and manual runs keep their own ref-based group and are not cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.sha }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   change-detection:
@@ -83,11 +83,12 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        id: playwright-cache
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm downloads
@@ -98,7 +99,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
       - name: Install dependencies
-        run: npm install --prefer-offline
+        run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
         run: npx playwright install chromium
       - name: Grant test-only generic host access
@@ -177,11 +178,12 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        id: playwright-cache
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm downloads
@@ -194,7 +196,7 @@ jobs:
             ${{ runner.os }}-npm-
       - name: Install dependencies
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
-        run: npm install --prefer-offline
+        run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         run: npx playwright install chromium
@@ -242,11 +244,12 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        id: playwright-cache
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm downloads
@@ -257,7 +260,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
       - name: Install dependencies
-        run: npm install --prefer-offline
+        run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
         run: npx playwright install chromium
       - name: Grant test-only generic host access

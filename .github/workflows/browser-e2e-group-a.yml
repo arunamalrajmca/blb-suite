@@ -21,6 +21,7 @@ jobs:
       runtime_changed: ${{ steps.classify.outputs.runtime_changed }}
       full_browser_suite: ${{ steps.select.outputs.full_browser_suite }}
       changed_specs: ${{ steps.select.outputs.changed_specs }}
+      changed_browser_specs: ${{ steps.select.outputs.changed_browser_specs }}
       unmapped_specs: ${{ steps.select.outputs.unmapped_specs }}
       group_a_required: ${{ steps.select.outputs.group_a_required }}
     steps:
@@ -60,11 +61,12 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        id: playwright-cache
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm download data
@@ -75,7 +77,7 @@ jobs:
           key: ${{ runner.os }}-node22-npm-${{ hashFiles('package.json') }}
           restore-keys: |
             ${{ runner.os }}-node22-npm-
-      - run: npm install
+      - run: npm install --prefer-offline --no-audit --no-fund
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
       - name: Install Playwright Chromium
         run: npx playwright install chromium
@@ -100,6 +102,14 @@ jobs:
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/kings-bible-collector-behavior.spec.js') }}
         run: npx playwright test tests/browser/kings-bible-collector-behavior.spec.js
 
+      - name: Run popup site-feature defaults regressions
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/site-feature-defaults.spec.js') }}
+        run: npx playwright test tests/browser/site-feature-defaults.spec.js
+
+      - name: Run Study Sessions popup UI regressions
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/study-session-popup-ui-regression.spec.js') }}
+        run: npx playwright test tests/browser/study-session-popup-ui-regression.spec.js
+
       - name: Run Study Sessions lifecycle regressions
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/feature-lifecycle-regressions.spec.js') }}
         run: npx playwright test tests/browser/feature-lifecycle-regressions.spec.js
@@ -116,6 +126,16 @@ jobs:
       - name: Run Supply of Grace Ephesians chapter-context regression
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js') }}
         run: npx playwright test tests/browser/extension.spec.js --grep 'Supply of Grace Substack Ephesians chapter context does not fall back to Ephesians 1:1'
+
+      - name: Run every test in changed browser spec files
+        if: ${{ needs.change-detection.outputs.changed_browser_specs != '' }}
+        env:
+          CHANGED_BROWSER_SPECS: ${{ needs.change-detection.outputs.changed_browser_specs }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          IFS=',' read -r -a specs <<< "$CHANGED_BROWSER_SPECS"
+          npx playwright test "${specs[@]}"
 
       - name: Run changed browser specs without a dedicated workflow step
         if: ${{ needs.change-detection.outputs.unmapped_specs != '' }}

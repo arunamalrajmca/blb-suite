@@ -1,0 +1,48 @@
+name: Cancel sibling workflow runs after failure
+
+on:
+  workflow_run:
+    workflows:
+      - BLB Suite BROWSER E2E — GROUP A
+      - BLB Suite BROWSER E2E — GROUP B
+      - BLB Suite BROWSER E2E — PERFORMANCE
+      - BLB Suite BROWSER E2E — REFERENCES & DOUBLE-CLICK
+      - BLB Suite HARD-GATE
+      - BLB Suite CI Command Router
+      - Build Main
+      - MultiVerse tab reuse regression
+      - Require latest main ancestry
+      - BLB Suite RELEASE
+      - ZIP Integrity
+      - Audit Chrome Web Store submission assets
+      - Generate Chrome Web Store screenshots
+      - Verify Chrome Web Store assets
+      - Verify Chrome Web Store submission tools
+    types: [completed]
+
+permissions:
+  actions: write
+
+jobs:
+  cancel-siblings:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel queued and in-progress runs for the failed branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
+          FAILED_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          response="$(gh api --paginate --slurp "repos/$REPOSITORY/actions/runs?branch=$FAILED_BRANCH&per_page=100" 2>/dev/null || true)"
+          [[ -n "$response" ]] || exit 0
+          run_ids="$(printf '%s' "$response" | jq -r --arg failed "$FAILED_RUN_ID" '[.[] | .workflow_runs[]? | select((.id | tostring) != $failed) | select(.status == "in_progress" or .status == "queued") | .id] | unique | .[]' 2>/dev/null || true)"
+          [[ -n "$run_ids" ]] || exit 0
+          while IFS= read -r run_id; do
+            [[ -n "$run_id" ]] || continue
+            echo "Cancelling run $run_id on branch $FAILED_BRANCH after failure of run $FAILED_RUN_ID"
+            gh api --method POST "repos/$REPOSITORY/actions/runs/$run_id/cancel" || true
+          done <<< "$run_ids"

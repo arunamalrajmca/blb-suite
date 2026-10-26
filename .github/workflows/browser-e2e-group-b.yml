@@ -59,11 +59,12 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        id: playwright-cache
         if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm download data
@@ -74,7 +75,7 @@ jobs:
           key: ${{ runner.os }}-node22-npm-${{ hashFiles('package.json') }}
           restore-keys: |
             ${{ runner.os }}-node22-npm-
-      - run: npm install
+      - run: npm install --prefer-offline --no-audit --no-fund
         if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
       - run: npx playwright install chromium
         if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
@@ -87,6 +88,10 @@ jobs:
       - name: Run ScriptTagger injection and toggle regression tests
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/scripttagger-global-injection.spec.js') }}
         run: npx playwright test tests/browser/scripttagger-global-injection.spec.js
+      - name: Run MultiVerse tab reuse regressions
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/multiverse-tab-reuse.spec.js') }}
+        run: npx playwright test tests/browser/multiverse-tab-reuse.spec.js
+
       - name: Run Group B
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/e2e-core-user-actions.spec.js') }}
         run: npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep 'MultiVerse Copy button adds a BLB hyperlink to HTML clipboard data|copying typed MultiVerse references preserves the exact input text|copying selected Bible text|BLB verse links inside parse popups'
