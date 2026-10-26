@@ -32,6 +32,7 @@ const expectedContentScripts = [
   'webster-collector.js',
   'source-page-collector.js',
   'selection-text.js',
+  'double-click-context.js',
   'multiverse-button-drag.js',
   'multiverse-copy-links.js',
   'blb-auto-hyperlinker.js',
@@ -112,7 +113,7 @@ if (!dynamicFilesMatch) {
   fail('runtime-injected content scripts declare their dependency list in host policy');
 } else {
   const dynamicFiles = [...dynamicFilesMatch[1].matchAll(/['\"]([^'\"]+\.js)['\"]/g)].map(match => match[1]);
-  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'selection-text.js', 'multiverse-button-drag.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-navigation-links.js', 'blb-new-tab-links.js', 'blb-multiverse-handoff.js', 'blb-passive-new-tab.js', 'content.js'];
+  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'selection-text.js', 'double-click-context.js', 'multiverse-button-drag.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-navigation-links.js', 'blb-new-tab-links.js', 'blb-multiverse-handoff.js', 'blb-passive-new-tab.js', 'content.js'];
   const positions = requiredDynamic.map(name => dynamicFiles.indexOf(name));
   if (positions.some(index => index < 0)
       || positions.some((index, i) => i > 0 && index <= positions[i - 1])) {
@@ -205,6 +206,25 @@ if (!background.includes('BLBStudyPdfExportModule.create({studyBookDisplayName})
   fail('background initializes the PDF formatter and preserves the existing call contract');
 } else {
   pass('Study Session PDF module initialization and call contract remain stable');
+}
+
+
+const doubleClickContext = read('extension/double-click-context.js');
+if (!doubleClickContext.includes('BLBDoubleClickContextModule')
+    || !doubleClickContext.includes('getDoubleClickBlockContextReference')
+    || !doubleClickContext.includes('resolveBibleReferenceFromContextWindow')
+    || !doubleClickContext.includes('caretRangeFromPoint')
+    || /chrome(?:Api)?\.(?:tabs|runtime|alarms|contextMenus)\.[A-Za-z]+\.addListener/.test(doubleClickContext)) {
+  fail('Double-click reference-context logic is isolated from event listeners');
+} else {
+  pass('Double-click context module retains positional and block-local reference resolution');
+}
+if (!content.includes('BLBDoubleClickContextModule.create({')
+    || !content.includes('NodeCtor:Node')
+    || !content.includes('validateSourceBibleReference')) {
+  fail('content script initializes the context module with explicit DOM and reference dependencies');
+} else {
+  pass('double-click context module receives explicit DOM and reference dependencies');
 }
 
 const content = read('extension/content.js');
