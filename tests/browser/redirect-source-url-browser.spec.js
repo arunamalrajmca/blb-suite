@@ -15,9 +15,8 @@ const productionRedirectGate = contentSource.slice(gateStart, gateEnd);
 const productionRedirectHelpers = sourceRedirectModuleSource + '\n' + [
   'function openBlbDestinationFromContent(url) { window.__openedBlbUrl = url; }',
   'const { bookKey, decodeSafe, blbUrl, normalizeSourceBibleBook, formatSourceBibleBookName, parseRef, validateSourceBibleReference, parseChristianityBibleLink, christianityBibleLinkTarget, redirectBibleSite, theKingsBibleLinkTarget } = BLBSourceBibleRedirectModule.create({ books: BOOKS, shared: BLBShared, locationApi: location, resolveBibleBook, resolveBibleReference, openBlbDestinationFromContent });'
-].join('\\n');
+].join('\n');
 
-const productionRedirectGate = contentSource.slice(gateStart, gateEnd);
 
 async function loadProductionRedirect(page, sourceUrl) {
   const sourceOrigin = new URL(sourceUrl).origin;

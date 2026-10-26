@@ -88,7 +88,8 @@ const sourceSiteClickRedirects = read('extension/source-site-click-redirects.js'
 if (!sourceSiteClickRedirects.includes('BLBSourceSiteClickRedirectsModule')
     || !sourceSiteClickRedirects.includes('blbSuiteOpenWebsterMultiVerse')
     || !sourceSiteClickRedirects.includes('theKingsBibleLinkTarget')
-    || !sourceSiteClickRedirects.includes('getCachedSuiteEnabled()')) {
+    || !sourceSiteClickRedirects.includes('getCachedSuiteEnabled()')
+    || !sourceSiteClickRedirects.includes('installChristianityLinkRedirect(() => getCachedSuiteEnabled() && isSourceRedirectEnabled())')) {
   fail('source-specific click redirect listeners are isolated behind an explicit module API');
 } else {
   pass('source-specific click redirects retain explicit dependencies and master-setting gate');
