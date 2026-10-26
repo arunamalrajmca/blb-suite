@@ -69,6 +69,25 @@ if (!contentEntry) {
 }
 
 const background = read('extension/background.js');
+
+const kjvSelectionNormalization = read('extension/background-kjv-selection-normalization.js');
+if (!kjvSelectionNormalization.includes('BLBBackgroundKjvSelectionNormalizationModule')
+    || !kjvSelectionNormalization.includes('isKjvVocabularySelection')
+    || !kjvSelectionNormalization.includes('selectionContainsBibleBookName')
+    || !kjvSelectionNormalization.includes('KJV_CITED_VERSE_MIN_EXCLUSION_WORDS')
+    || !kjvSelectionNormalization.includes('kjvPassageQueryCache')) {
+  fail('KJV selection normalization and passage-cache policy are isolated behind a module API');
+} else {
+  pass('KJV selection normalization and vocabulary/book-name checks remain together');
+}
+if (!background.includes('BLBBackgroundKjvSelectionNormalizationModule.create({')
+    || !background.includes('kjvWordIndex:KJV_CORPUS_WORD_INDEX')
+    || !background.includes('const { normalizeSelectedScriptureText')) {
+  fail('background initializes KJV selection normalization before downstream passage matching');
+} else {
+  pass('KJV selection normalization is initialized before downstream passage matching');
+}
+
 const content = read('extension/content.js');
 const importMatch = background.match(/^\s*importScripts\(([^;]+)\);/);
 if (!importMatch) {
@@ -99,7 +118,8 @@ if (!importMatch) {
     'background-omnibox-search.js',
     'background-bible-input.js',
     'background-pdf-reference-extractor.js',
-    'background-selection-context-menu.js'
+    'background-selection-context-menu.js',
+    'background-kjv-selection-normalization.js'
   ];
   const positions = required.map(name => imports.indexOf(name));
   if (positions.some(index => index < 0)
