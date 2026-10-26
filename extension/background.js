@@ -4260,7 +4260,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // Comma-separated verses. For consecutive verses such as 9,10 or 9,10,11,
   // treat the selection as one continuous range. For non-consecutive verses,
   // open each verse separately in BLB MultiVerse.
-  const colonCommaRe = /(?<![A-Za-z0-9])((?:[1-3]\\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\\s*(\\d+)\\s*:\\s*(\\d+)((?:\\s*,\\s*\\d+(?:\\s*-\\s*\\d+)?(?!\\s*:))+(?![A-Za-z0-9])/gi;
+  const colonCommaRe = /(?<![A-Za-z0-9])((?:[1-3]\\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\\s*(\\d+)\\s*:\\s*(\\d+)((?:\\s*,\\s*\\d+(?:\\s*-\\s*\\d+)?(?!\\s*:))+)(?![A-Za-z0-9])/gi;
   while ((m = colonCommaRe.exec(source))) {
     if (isShadowedBookMatch(m.index)) continue;
     const rawBook = m[1].trim();
@@ -4273,7 +4273,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     // Parse each comma item as either a single verse or an explicit range.
     // The former expression stopped at the first hyphen, so a citation such
     // as "Rom. 6:2,6-7,9-11,14,18,22" silently lost the range endpoints.
-    const rangeText = `${m[3]}`;
+    const rangeText = `${m[3]}`.replace(/^,\\s*/, '');
     const ranges = rangeText.split(',').map(token => {
       const rangeMatch = token.trim().match(/^(\\d+)(?:\\s*-\\s*(\\d+))?$/);
       if (!rangeMatch) return null;
