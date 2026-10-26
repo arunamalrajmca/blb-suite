@@ -49,8 +49,7 @@
   },
   "optional_host_permissions": [
     "http://*/*",
-    "https://*/*",
-    "https://chatgpt.com/*"
+    "https://*/*"
   ],
   "content_scripts": [
     {
