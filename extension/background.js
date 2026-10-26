@@ -55,9 +55,10 @@ const { normalizeBooleanOperatorsOutsideQuotes, hasUnquotedBooleanOperator, norm
 const BLBStudySessionModel = globalThis.BLBBackgroundStudySessionModelModule.create({
   bookData,
   bookAliases:BOOK_ALIASES,
-  resolveBibleReference
+  resolveBibleReference,
+  blbHostname:BLB_HOSTNAME
 });
-const { studyDateInfo, createStudySession, normalizeStudyNoteKey, titleCaseStudyNote, canonicalStoredStrong, resolveStudyBookIdentity, canonicalStoredRef, studyTopicStorageKey, sanitizeStudySessions } = BLBStudySessionModel;
+const { studyDateInfo, createStudySession, normalizeStudyNoteKey, titleCaseStudyNote, canonicalStoredStrong, resolveStudyBookIdentity, canonicalStoredRef, canonicalStudyRef, parseBlbKjvUrlToStudyRef, studyTopicStorageKey, sanitizeStudySessions } = BLBStudySessionModel;
 const BLBStudySessionExport = globalThis.BLBBackgroundStudySessionExportModule.create({
   resolveStudyBookIdentity,
   sortStudyRefs
@@ -687,16 +688,6 @@ async function openStudyTopicMultiVerse(topic) {
   return await openBlbMultiVerseRefs(refs, true);
 }
 
-function canonicalStudyRef(book, parsed, version="kjv") {
-  if (!book || !parsed || parsed.chapter == null) return null;
-  const resolved = resolveBibleReference(book.name, parsed.chapter, parsed.fromVerse, parsed.toVerse);
-  if (!resolved) return null;
-  let label = resolved.from == null ? String(resolved.chapter) : `${resolved.chapter}:${resolved.from}`;
-  if (resolved.to != null && resolved.to !== resolved.from) label += `-${resolved.to}`;
-  if (version && version.toLowerCase() !== "kjv") label += ` ${version.toUpperCase()}`;
-  return {book: resolved.book.name, bookNumber:Number(resolved.book.bookNumber), chapter:resolved.chapter, from:resolved.from, to:resolved.to, text:label};
-}
-
 async function recordStudyRefs(refs) {
   const list = Array.isArray(refs) ? refs : [];
   if (!list.length) return 0;
@@ -765,27 +756,6 @@ async function recordStudyStrong(entry) {
     await saveStudySessions(data.sessions, {currentStudySessionId:current.id});
   }
   return true;
-}
-
-function parseBlbKjvUrlToStudyRef(url) {
-  try {
-    const u = new URL(String(url || ''));
-    const host = u.hostname.toLowerCase().replace(/^www\./, '');
-    if (host !== BLB_HOSTNAME) return null;
-    const parts = u.pathname.split('/').filter(Boolean);
-    if (parts.length < 3 || parts[0].toLowerCase() !== 'kjv') return null;
-    const urlKey = parts[1].toLowerCase();
-    const chapter = Number(parts[2]);
-    if (!/^(?:\d+)$/.test(parts[2])) return null;
-    let from = null, to = null;
-    if (parts[3]) {
-      const m = parts[3].match(/^(\d+)(?:-(\d+))?$/);
-      if (!m) return null;
-      from = Number(m[1]);
-      to = m[2] ? Number(m[2]) : from;
-    }
-    return {urlKey, chapter, from, to, version:'kjv'};
-  } catch (_) { return null; }
 }
 
 async function recordStudySearchTerm(text) {

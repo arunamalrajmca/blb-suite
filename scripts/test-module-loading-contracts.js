@@ -274,6 +274,13 @@ if (!background.includes('chrome.tabs.onRemoved.addListener(')
 
 
 const studyModel = read('extension/background-study-session-model.js');
+if (!studyModel.includes('canonicalStudyRef')
+    || !studyModel.includes('parseBlbKjvUrlToStudyRef')
+    || !read('extension/background.js').includes('blbHostname:BLB_HOSTNAME')) {
+  fail('Study Session reference canonicalization and BLB URL parsing remain in the model module');
+} else {
+  pass('Study Session reference canonicalization and BLB URL parsing use explicit model dependencies');
+}
 if (!studyModel.includes('BLBBackgroundStudySessionModelModule')
     || !studyModel.includes('sanitizeStudySessions')
     || !studyModel.includes('canonicalStoredRef')

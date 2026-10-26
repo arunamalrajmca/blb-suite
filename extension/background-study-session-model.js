@@ -1,7 +1,7 @@
 // Study-session data model: canonicalization, normalization and migration-safe cleanup.
 // Storage I/O, downloads, alarms, messages and service-worker listeners stay in background.js.
 globalThis.BLBBackgroundStudySessionModelModule = Object.freeze({
-  create({ bookData, bookAliases, resolveBibleReference }) {
+  create({ bookData, bookAliases, resolveBibleReference, blbHostname }) {
     function studyDateInfo(date = new Date()) {
   const pad = n => String(n).padStart(2, "0");
   const y = date.getFullYear();
@@ -111,6 +111,38 @@ function canonicalStoredRef(item) {
   };
 }
 
+
+function canonicalStudyRef(book, parsed, version="kjv") {
+  if (!book || !parsed || parsed.chapter == null) return null;
+  const resolved = resolveBibleReference(book.name, parsed.chapter, parsed.fromVerse, parsed.toVerse);
+  if (!resolved) return null;
+  let label = resolved.from == null ? String(resolved.chapter) : `${resolved.chapter}:${resolved.from}`;
+  if (resolved.to != null && resolved.to !== resolved.from) label += `-${resolved.to}`;
+  if (version && version.toLowerCase() !== "kjv") label += ` ${version.toUpperCase()}`;
+  return {book: resolved.book.name, bookNumber:Number(resolved.book.bookNumber), chapter:resolved.chapter, from:resolved.from, to:resolved.to, text:label};
+}
+
+function parseBlbKjvUrlToStudyRef(url) {
+  try {
+    const u = new URL(String(url || ''));
+    const host = u.hostname.toLowerCase().replace(/^www\./, '');
+    if (host !== blbHostname) return null;
+    const parts = u.pathname.split('/').filter(Boolean);
+    if (parts.length < 3 || parts[0].toLowerCase() !== 'kjv') return null;
+    const urlKey = parts[1].toLowerCase();
+    const chapter = Number(parts[2]);
+    if (!/^\d+$/.test(parts[2])) return null;
+    let from = null, to = null;
+    if (parts[3]) {
+      const m = parts[3].match(/^(\d+)(?:-(\d+))?$/);
+      if (!m) return null;
+      from = Number(m[1]);
+      to = m[2] ? Number(m[2]) : from;
+    }
+    return {urlKey, chapter, from, to, version:'kjv'};
+  } catch (_) { return null; }
+}
+
 function studyTopicStorageKey(session) {
   return normalizeStudyNoteKey(session?.title || '');
 }
@@ -205,6 +237,6 @@ function sanitizeStudySessions(sessions) {
   return {sessions:list, changed};
 }
 
-    return Object.freeze({studyDateInfo, createStudySession, normalizeStudyNoteKey, titleCaseStudyNote, canonicalStoredStrong, resolveStudyBookIdentity, canonicalStoredRef, studyTopicStorageKey, sanitizeStudySessions});
+    return Object.freeze({studyDateInfo, createStudySession, normalizeStudyNoteKey, titleCaseStudyNote, canonicalStoredStrong, resolveStudyBookIdentity, canonicalStoredRef, canonicalStudyRef, parseBlbKjvUrlToStudyRef, studyTopicStorageKey, sanitizeStudySessions});
   }
 });
