@@ -64,15 +64,22 @@ This module is already a useful shared boundary. It normalizes reference text an
 
 The desired routing is not “run only one test no matter what”: a genuinely shared dependency, bootstrap/manifest change, unknown production path, or cross-feature contract change must retain broad coverage.
 
-## Proposed staged sequence
+## Consolidated refactor sequence
 
-1. **Audit baseline (this PR):** record responsibilities, load order, scope constraints, existing CI selector behavior and extraction guardrails. No runtime changes.
-2. **Add extraction safety tests:** verify manifest script order and loading; add focused contract tests for module registration/initialization and explicit feature dependencies. Establish a baseline for cross-feature message, storage, navigation and shared-reference contracts.
-3. **Extract one low-coupling feature at a time:** start with a self-contained content feature only after its state, DOM hooks, and callers are mapped. Introduce an explicit module factory/registration contract rather than relying on cross-file lexical scope. Keep the old implementation until equivalent tests pass, then remove the duplicate in the same PR.
-4. **Add precise routing for each extracted module:** map each new production path to its relevant existing E2E spec(s), and test the selector against synthetic diffs for mapped, shared, unknown, deleted, and mixed-feature paths. Shared infrastructure continues to select the broad suites.
-5. **Move background responsibilities in similarly small steps:** prioritize clear service-worker domains (e.g. Study Sessions or tab management) only after listener registration, persistence, alarms, tab reuse and permissions are covered.
-6. **Re-evaluate shared reference core last:** retain it as a shared module unless a demonstrated responsibility split improves cohesion without creating duplicate parsers or load-order hazards.
-7. **Verify and merge each PR:** inspect changed files and latest-main ancestry, require every required check to pass, compare behavior against this baseline, and do not create a release for test-only changes.
+The remaining refactor will be delivered as **one comprehensive pull request**, using the existing umbrella PR branch `refactor/extract-source-page-collector` (PR #463). The earlier recommendation to merge each extraction as a separate PR is superseded. Logical extraction order still matters, but intermediate commits stay on the same branch and are not merged independently.
+
+1. **Preserve the audit baseline:** use the responsibility inventory above as the map; validate each boundary against actual callers, shared state, and initialization order before moving code.
+2. **Complete content-script extractions:** finish the source-page collector already underway, then extract the remaining separable responsibilities: MultiVerse copy-link enhancement, BLB auto-hyperlinking, page/link integrations, MultiVerse hand-off, and selection/Double-click/floating-button functionality where a clean explicit API can be established.
+3. **Complete service-worker extractions:** separate clear responsibilities such as Study Sessions and export, tab/MultiVerse destination management, Bible-input/Omnibox search, host permission and injection policy, PDF/reference resolution, and context-menu/selection lifecycle. Keep top-level service-worker event registration and dependency bootstrap stable unless a tested explicit registration API is introduced.
+4. **Use explicit module contracts:** each new module must declare the helpers/state it receives or the narrow global API it publishes. Do not depend on lexical variables inside the existing content-script IIFE becoming visible across files.
+5. **Update loading and package wiring:** update manifest script order, runtime injection lists, package checks, and module-loading contracts together with each extraction. Keep `reference-core.js` as shared, DOM-free infrastructure unless a demonstrated and tested boundary justifies a change.
+6. **Retain conservative CI selection during the umbrella refactor:** while `content.js`, `background.js`, manifest wiring, shared contracts, or cross-feature integration are changing, run the broad required regression and browser coverage. Do not prematurely narrow CI to feature-only suites. A separate, tested routing update may narrow future changes only after all module mappings and mixed/shared/unknown-path cases are proven.
+7. **Validate the complete result:** run package and manifest checks, module-loading contracts, deterministic regression groups, all required browser E2E groups, MultiVerse tab-reuse checks, ZIP integrity, and performance checks when applicable. Fix failures and rerun affected checks; do not merge on skipped, cancelled, failed, or stale required results.
+8. **Merge once:** immediately before merging, verify the current PR head, changed files, latest `main` ancestry, and all required checks. Merge the consolidated PR only when all required checks pass. This refactor does not require a version bump or release.
+
+## Why one PR
+
+A single PR avoids repeating review and merge cycles, while keeping each extraction a distinct commit or coherent patch on the same branch. The trade-off is a larger combined diff and more interaction risk, so the final validation must remain broad; this plan does not treat passing isolated module tests as sufficient evidence of integration safety.
 
 ## Acceptance criteria
 
@@ -80,4 +87,4 @@ The desired routing is not “run only one test no matter what”: a genuinely s
 - Module load order and service-worker/content-script initialization are tested explicitly.
 - Feature-specific production changes run their mapped E2E tests; shared, mixed, unmapped and unknown changes stay conservative.
 - Tests and CI selector tests prove the routing decision itself, not merely that the selector script exits successfully.
-- Every extraction is independently reviewable and green before the next one begins.
+- Each extraction has focused contract coverage, and the complete combined branch passes the required checks before its single merge.
