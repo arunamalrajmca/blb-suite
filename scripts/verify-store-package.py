@@ -14,7 +14,7 @@ import zipfile
 
 REQUIRED_FILES = {"manifest.json"}
 EXPECTED_REQUIRED_HOSTS = {"https://www.blueletterbible.org/*"}
-EXPECTED_OPTIONAL_HOSTS = {"https://chatgpt.com/*", "http://*/*", "https://*/*"}
+EXPECTED_OPTIONAL_HOSTS = {"http://*/*", "https://*/*"}
 
 
 def manifest_paths(manifest: dict) -> set[str]:
@@ -124,7 +124,7 @@ def main() -> int:
                     if required_hosts != EXPECTED_REQUIRED_HOSTS:
                         errors.append("required host permissions differ from the expected model; expected only https://www.blueletterbible.org/*")
                     if not EXPECTED_OPTIONAL_HOSTS.issubset(optional_hosts):
-                        errors.append("optional host permissions do not include the expected broad site access and https://chatgpt.com/*")
+                        errors.append("optional host permissions differ from the expected broad site-access model")
                     if required_hosts & optional_hosts:
                         errors.append("host permissions are duplicated between required and optional host permissions")
                 elif manifest is not None:
