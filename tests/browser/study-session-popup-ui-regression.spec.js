@@ -98,8 +98,8 @@ test('Study Sessions popup rejects an empty topic without starting a recording',
   const page = await context.newPage();
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
 
-  await page.locator('#startTopic').click();
-  await expect(page.locator('#studyStatus')).toContainText('Enter a topic first.');
+  await expect(page.locator('#startTopic')).toBeDisabled();
+  await expect(page.locator('#studyStatus')).not.toContainText('Recording started');
   const state = await extensionWorker.evaluate(() => chrome.storage.local.get([
     'currentStudySessionId', 'studySessions'
   ]));
