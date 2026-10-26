@@ -1,7 +1,7 @@
 // Study-session data model: canonicalization, normalization and migration-safe cleanup.
 // Storage I/O, downloads, alarms, messages and service-worker listeners stay in background.js.
 globalThis.BLBBackgroundStudySessionModelModule = Object.freeze({
-  create({ bookData, bookAliases, resolveBibleReference, blbHostname }) {
+  create({ bookData, bookAliases, resolveBibleReference, blbHostname, sortStudyRefs }) {
     function studyDateInfo(date = new Date()) {
   const pad = n => String(n).padStart(2, "0");
   const y = date.getFullYear();
@@ -143,6 +143,55 @@ function parseBlbKjvUrlToStudyRef(url) {
   } catch (_) { return null; }
 }
 
+function buildStudyTopicHistory(sessions, topic) {
+  const value = String(topic || '').trim();
+  if (!value) return {ok:false, reason:'empty', topic:'', refs:[], strongs:[], searchTerms:[], notes:[]};
+  const matching = (Array.isArray(sessions) ? sessions : []).filter(s => String(s.title || '').trim().toLowerCase() === value.toLowerCase());
+  if (!matching.length) return {ok:false, reason:'not-found', topic:value, refs:[], strongs:[], searchTerms:[], notes:[]};
+
+  const refs = [];
+  const refSeen = new Set();
+  const strongs = [];
+  const strongSeen = new Set();
+  const searchTerms = [];
+  const searchSeen = new Set();
+  const notes = [];
+  const noteSeen = new Set();
+
+  for (const session of matching) {
+    for (const raw of Array.isArray(session.refs) ? session.refs : []) {
+      const ref = canonicalStoredRef(raw);
+      if (!ref) continue;
+      const key = `${ref.bookNumber}|${ref.chapter}|${ref.from ?? ''}|${ref.to ?? ''}|${ref.version}`;
+      if (refSeen.has(key)) continue;
+      refSeen.add(key);
+      refs.push(ref);
+    }
+    for (const raw of Array.isArray(session.strongs) ? session.strongs : []) {
+      const value = canonicalStoredStrong(raw);
+      if (!value || strongSeen.has(value)) continue;
+      strongSeen.add(value);
+      strongs.push(value);
+    }
+    for (const raw of Array.isArray(session.searchTerms) ? session.searchTerms : []) {
+      const cleaned = String(raw || '').trim().replace(/\s+/g, ' ');
+      const key = normalizeStudyNoteKey(cleaned);
+      if (!key || searchSeen.has(key)) continue;
+      searchSeen.add(key);
+      searchTerms.push(cleaned);
+    }
+    for (const raw of Array.isArray(session.notes) ? session.notes : []) {
+      const cleaned = String(raw || '').trim().replace(/\s+/g, ' ');
+      const key = normalizeStudyNoteKey(cleaned);
+      if (!key || noteSeen.has(key)) continue;
+      noteSeen.add(key);
+      notes.push(cleaned);
+    }
+  }
+  strongs.sort((a,b) => a[0].localeCompare(b[0]) || Number(a.slice(1)) - Number(b.slice(1)));
+  return {ok:true, topic:value, refs:sortStudyRefs(refs), strongs, searchTerms, notes};
+}
+
 function studyTopicStorageKey(session) {
   return normalizeStudyNoteKey(session?.title || '');
 }
@@ -237,6 +286,6 @@ function sanitizeStudySessions(sessions) {
   return {sessions:list, changed};
 }
 
-    return Object.freeze({studyDateInfo, createStudySession, normalizeStudyNoteKey, titleCaseStudyNote, canonicalStoredStrong, resolveStudyBookIdentity, canonicalStoredRef, canonicalStudyRef, parseBlbKjvUrlToStudyRef, studyTopicStorageKey, sanitizeStudySessions});
+    return Object.freeze({studyDateInfo, createStudySession, normalizeStudyNoteKey, titleCaseStudyNote, canonicalStoredStrong, resolveStudyBookIdentity, canonicalStoredRef, canonicalStudyRef, parseBlbKjvUrlToStudyRef, buildStudyTopicHistory, studyTopicStorageKey, sanitizeStudySessions});
   }
 });

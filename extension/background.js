@@ -56,9 +56,10 @@ const BLBStudySessionModel = globalThis.BLBBackgroundStudySessionModelModule.cre
   bookData,
   bookAliases:BOOK_ALIASES,
   resolveBibleReference,
-  blbHostname:BLB_HOSTNAME
+  blbHostname:BLB_HOSTNAME,
+  sortStudyRefs
 });
-const { studyDateInfo, createStudySession, normalizeStudyNoteKey, titleCaseStudyNote, canonicalStoredStrong, resolveStudyBookIdentity, canonicalStoredRef, canonicalStudyRef, parseBlbKjvUrlToStudyRef, studyTopicStorageKey, sanitizeStudySessions } = BLBStudySessionModel;
+const { studyDateInfo, createStudySession, normalizeStudyNoteKey, titleCaseStudyNote, canonicalStoredStrong, resolveStudyBookIdentity, canonicalStoredRef, canonicalStudyRef, parseBlbKjvUrlToStudyRef, buildStudyTopicHistory, studyTopicStorageKey, sanitizeStudySessions } = BLBStudySessionModel;
 const BLBStudySessionExport = globalThis.BLBBackgroundStudySessionExportModule.create({
   resolveStudyBookIdentity,
   sortStudyRefs
@@ -618,53 +619,8 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
 }
 
 async function getStudyTopicHistory(topic) {
-  const value = String(topic || '').trim();
-  if (!value) return {ok:false, reason:'empty', topic:'', refs:[], strongs:[], searchTerms:[], notes:[]};
   const data = await getStudySessions();
-  const matching = data.sessions.filter(s => String(s.title || '').trim().toLowerCase() === value.toLowerCase());
-  if (!matching.length) return {ok:false, reason:'not-found', topic:value, refs:[], strongs:[], searchTerms:[], notes:[]};
-
-  const refs = [];
-  const refSeen = new Set();
-  const strongs = [];
-  const strongSeen = new Set();
-  const searchTerms = [];
-  const searchSeen = new Set();
-  const notes = [];
-  const noteSeen = new Set();
-
-  for (const session of matching) {
-    for (const raw of Array.isArray(session.refs) ? session.refs : []) {
-      const ref = canonicalStoredRef(raw);
-      if (!ref) continue;
-      const key = `${ref.bookNumber}|${ref.chapter}|${ref.from ?? ''}|${ref.to ?? ''}|${ref.version}`;
-      if (refSeen.has(key)) continue;
-      refSeen.add(key);
-      refs.push(ref);
-    }
-    for (const raw of Array.isArray(session.strongs) ? session.strongs : []) {
-      const value = canonicalStoredStrong(raw);
-      if (!value || strongSeen.has(value)) continue;
-      strongSeen.add(value);
-      strongs.push(value);
-    }
-    for (const raw of Array.isArray(session.searchTerms) ? session.searchTerms : []) {
-      const cleaned = String(raw || '').trim().replace(/\s+/g, ' ');
-      const key = normalizeStudyNoteKey(cleaned);
-      if (!key || searchSeen.has(key)) continue;
-      searchSeen.add(key);
-      searchTerms.push(cleaned);
-    }
-    for (const raw of Array.isArray(session.notes) ? session.notes : []) {
-      const cleaned = String(raw || '').trim().replace(/\s+/g, ' ');
-      const key = normalizeStudyNoteKey(cleaned);
-      if (!key || noteSeen.has(key)) continue;
-      noteSeen.add(key);
-      notes.push(cleaned);
-    }
-  }
-  strongs.sort((a,b) => a[0].localeCompare(b[0]) || Number(a.slice(1)) - Number(b.slice(1)));
-  return {ok:true, topic:value, refs:sortStudyRefs(refs), strongs, searchTerms, notes};
+  return buildStudyTopicHistory(data.sessions, topic);
 }
 
 async function openStudyTopicMultiVerse(topic) {

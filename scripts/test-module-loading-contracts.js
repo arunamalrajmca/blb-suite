@@ -274,6 +274,13 @@ if (!background.includes('chrome.tabs.onRemoved.addListener(')
 
 
 const studyModel = read('extension/background-study-session-model.js');
+if (!studyModel.includes('buildStudyTopicHistory')
+    || !read('extension/background.js').includes('buildStudyTopicHistory(data.sessions, topic)')
+    || !studyModel.includes('sortStudyRefs(refs)')) {
+  fail('Study Session history aggregation is isolated from storage reads');
+} else {
+  pass('Study Session history aggregation is a pure model operation; background retains storage I/O');
+}
 if (!studyModel.includes('canonicalStudyRef')
     || !studyModel.includes('parseBlbKjvUrlToStudyRef')
     || !read('extension/background.js').includes('blbHostname:BLB_HOSTNAME')) {
