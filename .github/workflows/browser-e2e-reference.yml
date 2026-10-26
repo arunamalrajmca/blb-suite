@@ -220,6 +220,19 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 14
+
+
+  browser-e2e-features:
+    name: BROWSER E2E — FEATURES
+    # Do not start feature tests until every reference group has passed.
+    # A failed reference group skips this job instead of running more tests.
+    needs:
+      - change-detection
+      - browser-e2e
+    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -266,6 +279,22 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 14
+
+  browser-e2e-summary:
+    name: browser-e2e
+    needs:
+      - change-detection
+      - verse-context-regression
+      - browser-e2e
+      - browser-e2e-features
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    permissions:
+      statuses: write
+    steps:
+
+      # One shell predicate determines both the published commit status and
+      # the job result, preventing the status and required-check logic drifting.
       - name: Validate all applicable browser suites and publish final status
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
