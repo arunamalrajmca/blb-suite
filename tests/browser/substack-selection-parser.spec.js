@@ -70,9 +70,9 @@ test('Substack selection parser does not absorb the next book number as a verse'
   });
 
   expect(result).toEqual([
-    { book: 'romans', chapter: 15, verse: 16 },
-    { book: '1 corinthians', chapter: 6, verse: 11 },
-    { book: '2 thessalonians', chapter: 2, verse: 13 }
+    { book: 'romans', chapter: 15, verse: 16, text: 'Rom. 15:16' },
+    { book: '1 corinthians', chapter: 6, verse: 11, text: '1 Cor. 6:11' },
+    { book: '2 thessalonians', chapter: 2, verse: 13, text: '2 Thess. 2:13' }
   ]);
 });
 
