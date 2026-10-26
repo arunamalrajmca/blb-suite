@@ -11,6 +11,7 @@ globalThis.BLBBackgroundHostPolicyModule = Object.freeze({
       'webster-collector.js',
       'source-page-collector.js',
       'selection-text.js',
+      'multiverse-button-drag.js',
       'multiverse-copy-links.js',
       'blb-auto-hyperlinker.js',
       'blb-parse-popup-links.js',
