@@ -4,9 +4,9 @@ Baseline: release tag `v5.2.51.104` (manifest and package version both `5.2.51.1
 
 ## Goal and guardrails
 
-Split the large shared production scripts along real feature boundaries so a production change can select the relevant browser E2E coverage. Preserve runtime behavior, extension lifecycle, and initialization order. Do not delete or replace existing logic until equivalent tests cover it. Every extraction is a small PR with required checks green before the next extraction starts.
+Split the large shared production scripts along real feature boundaries so a production change can select the relevant browser E2E coverage. Preserve runtime behavior, extension lifecycle, and initialization order. Do not delete or replace existing logic until equivalent tests cover it. All remaining extractions are consolidated in PR #463; do not merge intermediate extraction PRs.
 
-This first stage is an audit only. It intentionally changes no runtime code or CI behavior.
+The initial audit is complete. PR #463 carries the runtime refactor, supporting tests, and loading-contract updates together. Complete the planned extraction scope before requesting comprehensive final validation; ordinary pushes may still trigger repository-configured automatic workflows.
 
 ## Baseline architecture inventory
 

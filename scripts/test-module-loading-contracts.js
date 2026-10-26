@@ -31,6 +31,7 @@ const expectedContentScripts = [
   'kings-bible-collector.js',
   'webster-collector.js',
   'source-page-collector.js',
+  'multiverse-copy-links.js',
   'content.js'
 ];
 const contentEntry = (manifest.content_scripts || []).find(entry =>
@@ -95,7 +96,7 @@ if (!dynamicFilesMatch) {
   fail('runtime-injected content scripts declare their dependency list');
 } else {
   const dynamicFiles = [...dynamicFilesMatch[1].matchAll(/['\"]([^'\"]+\.js)['\"]/g)].map(match => match[1]);
-  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'content.js'];
+  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'multiverse-copy-links.js', 'content.js'];
   const positions = requiredDynamic.map(name => dynamicFiles.indexOf(name));
   if (positions.some(index => index < 0)
       || positions.some((index, i) => i > 0 && index <= positions[i - 1])) {
@@ -104,6 +105,21 @@ if (!dynamicFilesMatch) {
   } else {
     pass('runtime-injected content scripts retain feature module dependency order');
   }
+}
+
+const copyModule = read('extension/multiverse-copy-links.js');
+if (!copyModule.includes('BLBMultiVerseCopyLinksModule')
+    || !copyModule.includes('nativeMultiVerseCopyPending')
+    || !copyModule.includes('#copyButton, #copyByVerseButton')) {
+  fail('MultiVerse copy enhancement is isolated behind its feature-module API');
+} else {
+  pass('MultiVerse copy enhancement module retains native-copy gating');
+}
+if (!content.includes('BLBMultiVerseCopyLinksModule?.initialize({')
+    || !content.includes('isSuiteEnabled: () => suiteEnabled')) {
+  fail('content script initializes MultiVerse copy enhancement with live suite state');
+} else {
+  pass('MultiVerse copy enhancement receives live suite state');
 }
 
 const referenceCore = read('extension/reference-core.js');

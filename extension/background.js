@@ -3022,6 +3022,7 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'kings-bible-collector.js',
   'webster-collector.js',
   'source-page-collector.js',
+  'multiverse-copy-links.js',
   'content.js'
 ];
 
