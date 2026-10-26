@@ -134,6 +134,8 @@ test.describe('core user-visible E2E', () => {
       } catch (error) {
         const diagnostics = await page.evaluate(() => ({
           contentScriptExecuted: document.documentElement?.getAttribute('data-blb-suite-content-script-executed'),
+          doubleClickInitReached: document.documentElement?.getAttribute('data-blb-suite-double-click-init-reached'),
+          contentScriptError: document.documentElement?.getAttribute('data-blb-suite-content-script-error'),
           lastHandlerDiagnostic: document.documentElement?.getAttribute('data-blb-suite-dblclick-last-diagnostic'),
           diagnosticsEnabled: document.documentElement?.getAttribute('data-blb-suite-e2e-diagnostics'),
           pageText: document.querySelector('#generic-verse-context-article')?.textContent?.slice(0,500) || ''

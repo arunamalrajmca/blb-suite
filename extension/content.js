@@ -829,6 +829,11 @@ function ensureDoubleClickSettingsReady() {
 }
 
 void ensureDoubleClickSettingsReady();
+try {
+  if (document.documentElement?.getAttribute('data-blb-suite-e2e-diagnostics') === 'true') {
+    document.documentElement.setAttribute('data-blb-suite-double-click-init-reached', 'true');
+  }
+} catch (_) {}
 
 // ---------- Floating page selection button ----------
 // This feature is intentionally dormant unless the user enables "Show on BLB".
@@ -1025,4 +1030,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 });
 
-})();
+})().catch(error => {
+  try {
+    if (document.documentElement?.getAttribute('data-blb-suite-e2e-diagnostics') === 'true') {
+      document.documentElement.setAttribute('data-blb-suite-content-script-error', String(error?.stack || error).slice(0,1200));
+      console.error('[BLB content-script initialization error]', error);
+    }
+  } catch (_) {}
+});
