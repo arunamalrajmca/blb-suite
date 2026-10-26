@@ -43,7 +43,7 @@ async function loadProductionRedirect(page, sourceUrl) {
 }
 
 const draggableButtonStart = contentSource.indexOf('function makeBlbMultiVerseButtonDraggable(button');
-const draggableButtonEnd = contentSource.indexOf("// ---------- The King's Bible Dictionary/Concordance MultiVerse ----------", draggableButtonStart);
+const draggableButtonEnd = contentSource.indexOf('// The feature module is loaded before this content script by manifest order.', draggableButtonStart);
 const sourcePageMultiVerseStart = contentSource.indexOf('// ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------');
 const sourcePageMultiVerseEnd = contentSource.indexOf('// ---------- BLB MultiVerse hand-off ----------', sourcePageMultiVerseStart);
 if ([draggableButtonStart, draggableButtonEnd, sourcePageMultiVerseStart, sourcePageMultiVerseEnd].some(i => i < 0)) {
@@ -816,14 +816,15 @@ test.describe('real-browser source URL redirect regressions', () => {
 // Exercise the actual King's Bible Concordance button and collector together.
 // The HTML is deterministic and served under the real source origin, so the
 // test verifies page integration without depending on the live site.
-const kingsBibleEntryStart = contentSource.indexOf("// ---------- The King's Bible Dictionary/Concordance MultiVerse ----------");
-const kingsBibleEntryEnd = contentSource.indexOf("// ---------- Webster's 1828 ----------", kingsBibleEntryStart);
-if (kingsBibleEntryStart < 0 || kingsBibleEntryEnd < 0) {
-  throw new Error("Could not locate The King's Bible production MultiVerse block");
+const kingsBibleModuleSource = read("extension/kings-bible-collector.js");
+if (!kingsBibleModuleSource.includes("function collectKingsBibleReferences(") ||
+    !kingsBibleModuleSource.includes("BLBKingsBibleCollector")) {
+  throw new Error("Could not locate the extracted King's Bible collector module");
 }
 const kingsBibleMultiVerseCode =
   contentSource.slice(draggableButtonStart, draggableButtonEnd) +
-  contentSource.slice(kingsBibleEntryStart, kingsBibleEntryEnd);
+  kingsBibleModuleSource +
+  '\nBLBKingsBibleCollector.initialize({ BOOKS, normalizeSelectionText, parseRef, resolveBibleReference, blbUrl, isSuiteEnabled, makeBlbMultiVerseButtonDraggable });';
 
 async function loadKingsBibleMultiVerse(page, sourceUrl, pages) {
   const sourceOrigin = new URL(sourceUrl).origin;

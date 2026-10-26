@@ -76,6 +76,10 @@ const featureSpecs = [
     specs: ["tests/browser/site-feature-defaults.spec.js", "tests/browser/study-session-popup-ui-regression.spec.js", "tests/browser/study-backup-restore.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js"]
   },
   {
+    paths: ["extension/kings-bible-collector.js"],
+    specs: ["tests/browser/kings-bible-collector-behavior.spec.js"]
+  },
+  {
     paths: ["extension/Tutorial.html", "extension/Tutorial.js"],
     specs: []
   }

@@ -65,6 +65,7 @@
         "books.js",
         "book-aliases.js",
         "reference-core.js",
+        "kings-bible-collector.js",
         "content.js"
       ],
       "run_at": "document_start"

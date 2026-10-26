@@ -76,8 +76,10 @@ try {
   const scripts = (manifest.content_scripts || []).flatMap(entry => entry.js || []);
   const referenceIndex = scripts.indexOf('reference-core.js');
   const contentIndex = scripts.indexOf('content.js');
-  assert.ok(referenceIndex >= 0 && contentIndex > referenceIndex, 'reference-core.js must load before content.js');
-  console.log('PASS: shared reference resolver loads before content script');
+  const kingsIndex = scripts.indexOf('kings-bible-collector.js');
+  assert.ok(referenceIndex >= 0 && kingsIndex > referenceIndex && contentIndex > kingsIndex,
+    'reference-core.js and the Kings Bible feature module must load before content.js');
+  console.log('PASS: shared reference resolver and Kings Bible module load before content script');
 
   console.log('All cross-feature integration contracts passed.');
 } catch (error) {
