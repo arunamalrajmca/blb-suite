@@ -32,6 +32,7 @@ const expectedContentScripts = [
   'webster-collector.js',
   'source-page-collector.js',
   'multiverse-copy-links.js',
+  'blb-auto-hyperlinker.js',
   'content.js'
 ];
 const contentEntry = (manifest.content_scripts || []).find(entry =>
@@ -96,7 +97,7 @@ if (!dynamicFilesMatch) {
   fail('runtime-injected content scripts declare their dependency list');
 } else {
   const dynamicFiles = [...dynamicFilesMatch[1].matchAll(/['\"]([^'\"]+\.js)['\"]/g)].map(match => match[1]);
-  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'multiverse-copy-links.js', 'content.js'];
+  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'content.js'];
   const positions = requiredDynamic.map(name => dynamicFiles.indexOf(name));
   if (positions.some(index => index < 0)
       || positions.some((index, i) => i > 0 && index <= positions[i - 1])) {
@@ -120,6 +121,20 @@ if (!content.includes('BLBMultiVerseCopyLinksModule?.initialize({')
   fail('content script initializes MultiVerse copy enhancement with live suite state');
 } else {
   pass('MultiVerse copy enhancement receives live suite state');
+}
+
+const autoHyperlinker = read('extension/blb-auto-hyperlinker.js');
+if (!autoHyperlinker.includes('BLBAutoHyperlinkModule')
+    || !autoHyperlinker.includes('function format(rawText, blbHomeUrl)')
+    || !autoHyperlinker.includes('text-decoration:underline')) {
+  fail('BLB auto-hyperlink formatter is isolated behind its feature-module API');
+} else {
+  pass('BLB auto-hyperlink formatter retains its HTML-link contract');
+}
+if (!content.includes('BLBAutoHyperlinkModule?.format(rawText, BLBShared.urls.blbHome)')) {
+  fail('content script delegates auto-hyperlink formatting to the feature module');
+} else {
+  pass('content script delegates auto-hyperlink formatting');
 }
 
 const referenceCore = read('extension/reference-core.js');

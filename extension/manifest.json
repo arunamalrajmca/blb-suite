@@ -69,6 +69,7 @@
         "webster-collector.js",
         "source-page-collector.js",
         "multiverse-copy-links.js",
+        "blb-auto-hyperlinker.js",
         "content.js"
       ],
       "run_at": "document_start"
