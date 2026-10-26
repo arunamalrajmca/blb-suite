@@ -94,6 +94,21 @@ if (!sourceSiteClickRedirects.includes('BLBSourceSiteClickRedirectsModule')
   pass('source-specific click redirects retain explicit dependencies and master-setting gate');
 }
 
+const studySessionExport = read('extension/background-study-session-export.js');
+if (!studySessionExport.includes('BLBBackgroundStudySessionExportModule')
+    || !studySessionExport.includes('studySessionText')
+    || !studySessionExport.includes('filterStudySessions')
+    || !studySessionExport.includes('sortStudyRefs')) {
+  fail('Study Session export formatting and filtering are isolated from Chrome I/O');
+} else {
+  pass('Study Session export formatting and filtering use an explicit pure-module contract');
+}
+if (!read('extension/background.js').includes('chrome.downloads.download({url, filename, saveAs:false}')) {
+  fail('Study Session download side effect remains in the service worker');
+} else {
+  pass('Study Session download side effect remains in the service worker');
+}
+
 const background = read('extension/background.js');
 
 const kjvSelectionNormalization = read('extension/background-kjv-selection-normalization.js');
@@ -140,6 +155,7 @@ if (!importMatch) {
     'background-multiverse-tracking.js',
     'background-blb-destination-manager.js',
     'background-study-session-model.js',
+  'background-study-session-export.js',
     'background-study-pdf-export.js',
     'background-omnibox-search.js',
     'background-bible-input.js',
