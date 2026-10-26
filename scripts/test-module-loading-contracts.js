@@ -33,6 +33,7 @@ const expectedContentScripts = [
   'source-page-collector.js',
   'selection-text.js',
   'double-click-context.js',
+  'page-selection-classifier.js',
   'multiverse-button-drag.js',
   'multiverse-copy-links.js',
   'blb-auto-hyperlinker.js',
@@ -115,7 +116,7 @@ if (!dynamicFilesMatch) {
   fail('runtime-injected content scripts declare their dependency list in host policy');
 } else {
   const dynamicFiles = [...dynamicFilesMatch[1].matchAll(/['\"]([^'\"]+\.js)['\"]/g)].map(match => match[1]);
-  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'selection-text.js', 'double-click-context.js', 'multiverse-button-drag.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-navigation-links.js', 'blb-new-tab-links.js', 'blb-multiverse-handoff.js', 'blb-passive-new-tab.js', 'content.js'];
+  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'selection-text.js', 'double-click-context.js', 'page-selection-classifier.js', 'multiverse-button-drag.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-navigation-links.js', 'blb-new-tab-links.js', 'blb-multiverse-handoff.js', 'blb-passive-new-tab.js', 'content.js'];
   const positions = requiredDynamic.map(name => dynamicFiles.indexOf(name));
   if (positions.some(index => index < 0)
       || positions.some((index, i) => i > 0 && index <= positions[i - 1])) {
@@ -265,6 +266,25 @@ if (!background.includes('BLBBackgroundPdfReferenceExtractorModule.create({')
   fail('service worker initializes the PDF reference extractor with shared book/reference APIs');
 } else {
   pass('PDF reference extractor receives explicit shared resolver dependencies');
+}
+
+
+const pageSelectionClassifier = read('extension/page-selection-classifier.js');
+if (!pageSelectionClassifier.includes('BLBPageSelectionClassifierModule')
+    || !pageSelectionClassifier.includes('hasLocalValidBibleReference')
+    || !pageSelectionClassifier.includes('canonicalStrongValue')
+    || !pageSelectionClassifier.includes('resolveBibleReference')
+    || /chrome(?:Api)?\.(?:tabs|runtime|alarms|contextMenus)\.[A-Za-z]+\.addListener/.test(pageSelectionClassifier)) {
+  fail('page-selection classification is isolated from UI and event lifecycle');
+} else {
+  pass('page-selection classifier retains local Bible-reference and Strong’s checks');
+}
+if (!content.includes('BLBPageSelectionClassifierModule.create({')
+    || !content.includes('bookAliases:BOOK_ALIASES')
+    || !content.includes('canonicalStrongValue')) {
+  fail('content initializes page-selection classifier with explicit resolver dependencies');
+} else {
+  pass('page-selection classifier receives explicit reference dependencies');
 }
 
 const content = read('extension/content.js');

@@ -18,7 +18,7 @@ The initial audit is complete. PR #463 carries the runtime refactor, supporting 
 - Extracted Bible-input parsing, book matching, gibberish filtering, and fallback criteria normalization into `background-bible-input.js`; omnibox command routing and tab-opening side effects remain in `background.js`.
 - Extracted selected-text Bible-reference parsing, including cross-chapter ranges and same-book continuations, into `background-pdf-reference-extractor.js`; PDF selection orchestration and tab-opening side effects remain in `background.js`.
 - Kept service-worker `importScripts` bootstrap and Chrome event-listener registration in `background.js`; loading-contract tests guard the order and listener boundary.
-- Extracted Double-click reference-context parsing into `double-click-context.js`; floating page-selection lifecycle and its message-handler ordering remain in `content.js`.
+- Extracted Double-click reference-context parsing into `double-click-context.js` and local page-selection classification into `page-selection-classifier.js`; floating page-selection lifecycle and its message-handler ordering remain in `content.js`.
 - Study Session data, PDF formatting, Bible-input parsing, and selected-text reference extraction now have dedicated modules; storage, export orchestration, remaining KJV selection classification, and context-menu lifecycle still require careful separation.
 
 ## Baseline architecture inventory
