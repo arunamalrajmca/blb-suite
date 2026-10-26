@@ -32,6 +32,7 @@ const expectedContentScripts = [
   'webster-collector.js',
   'source-page-collector.js',
   'selection-text.js',
+  'multiverse-button-drag.js',
   'multiverse-copy-links.js',
   'blb-auto-hyperlinker.js',
   'blb-parse-popup-links.js',
@@ -106,7 +107,7 @@ if (!dynamicFilesMatch) {
   fail('runtime-injected content scripts declare their dependency list');
 } else {
   const dynamicFiles = [...dynamicFilesMatch[1].matchAll(/['\"]([^'\"]+\.js)['\"]/g)].map(match => match[1]);
-  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'selection-text.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-navigation-links.js', 'blb-new-tab-links.js', 'blb-multiverse-handoff.js', 'blb-passive-new-tab.js', 'content.js'];
+  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'selection-text.js', 'multiverse-button-drag.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-navigation-links.js', 'blb-new-tab-links.js', 'blb-multiverse-handoff.js', 'blb-passive-new-tab.js', 'content.js'];
   const positions = requiredDynamic.map(name => dynamicFiles.indexOf(name));
   if (positions.some(index => index < 0)
       || positions.some((index, i) => i > 0 && index <= positions[i - 1])) {
@@ -118,6 +119,23 @@ if (!dynamicFilesMatch) {
 }
 
 const content = read('extension/content.js');
+
+const dragModule = read('extension/multiverse-button-drag.js');
+if (!dragModule.includes('BLBMultiVerseButtonDragModule')
+    || !dragModule.includes('pointerdown')
+    || !dragModule.includes('pointermove')
+    || !dragModule.includes('Reset button position')
+    || !dragModule.includes('positionWriteQueue')) {
+  fail('MultiVerse drag/position behavior is isolated behind its feature-module API');
+} else {
+  pass('MultiVerse drag/position behavior retains pointer and reset safeguards');
+}
+if (!content.includes('BLBMultiVerseButtonDragModule.create({')
+    || !content.includes('MutationObserverCtor:MutationObserver')) {
+  fail('content script initializes drag module with explicit browser dependencies');
+} else {
+  pass('MultiVerse drag module receives explicit browser dependencies');
+}
 
 const selectionText = read('extension/selection-text.js');
 if (!selectionText.includes('BLBSelectionTextModule')
