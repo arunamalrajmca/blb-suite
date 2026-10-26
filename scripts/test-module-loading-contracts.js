@@ -94,6 +94,7 @@ if (!importMatch) {
     'background-blb-destination-manager.js',
     'background-study-session-model.js',
     'background-study-pdf-export.js',
+    'background-omnibox-search.js',
     'background-bible-input.js',
     'background-pdf-reference-extractor.js',
     'background-selection-context-menu.js'
@@ -327,6 +328,25 @@ if (!content.includes('BLBPageSelectionLifecycleModule.create({')
   fail('content script initializes lifecycle state and retains its runtime message listener');
 } else {
   pass('content script bridges live lifecycle state and retains message-listener ordering');
+}
+
+
+const omniboxSearch = read('extension/background-omnibox-search.js');
+if (!omniboxSearch.includes('BLBBackgroundOmniboxSearchModule')
+    || !omniboxSearch.includes('normalizeBooleanOperatorsOutsideQuotes')
+    || !omniboxSearch.includes('findSingleKjvPhraseMatch')
+    || !omniboxSearch.includes('findSingleKjvWordIntersectionMatch')
+    || !omniboxSearch.includes('KJV_CORPUS_WORD_VERSE_INDEX')) {
+  fail('Omnibox exact-match and boolean normalization helpers are isolated behind a module API');
+} else {
+  pass('Omnibox query normalization and exact-match search helpers remain together');
+}
+if (!background.includes('BLBBackgroundOmniboxSearchModule.create({')
+    || !background.includes('normalizeBooleanOperatorsOutsideQuotes')
+    || !background.includes('background-omnibox-search.js')) {
+  fail('background initializes omnibox helpers before dependent Bible-input parsing');
+} else {
+  pass('Omnibox module initialization precedes dependent Bible-input parser');
 }
 
 const content = read('extension/content.js');

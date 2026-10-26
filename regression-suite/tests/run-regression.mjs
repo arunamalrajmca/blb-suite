@@ -360,11 +360,12 @@ section('features');
 const csCtx = loadPure(['case-sensitive-search-core.js','kjv-corpus-original-case.js','kjv-corpus-case-verse-index.js']);
 const omniboxCtx = loadPure(['books.js','kjv-corpus-verses.js','kjv-corpus-word-verse-index.js']);
 const omniboxBgSource = read('background.js');
-const omniboxHelperStart = omniboxBgSource.indexOf('function normalizeOmniboxSearchPhrase');
-const omniboxHelperEnd = omniboxBgSource.indexOf('\nasync function handleBCommand', omniboxHelperStart);
-if (omniboxHelperStart >= 0 && omniboxHelperEnd > omniboxHelperStart) {
-  vm.runInContext(omniboxBgSource.slice(omniboxHelperStart, omniboxHelperEnd), omniboxCtx, {filename:'background.js:omnibox-search-helpers'});
-}
+vm.runInContext(read('background-omnibox-search.js'), omniboxCtx, {filename:'background-omnibox-search.js'});
+const omniboxSearch = vm.runInContext(
+  'BLBBackgroundOmniboxSearchModule.create({bookData:BOOKS,kjvCorpusVerses:KJV_CORPUS_VERSES,kjvWordVerseIndex:KJV_CORPUS_WORD_VERSE_INDEX,atobFn:atob})',
+  omniboxCtx
+);
+Object.assign(omniboxCtx, omniboxSearch);
 test('normal b single-result phrase resolves directly to its verse', () => {
   const match = omniboxCtx.findSingleKjvPhraseMatch('"adoption to wit"');
   assert(match, 'expected unique KJV phrase result');

@@ -15,7 +15,8 @@ The initial audit is complete. PR #463 carries the runtime refactor, supporting 
 - Extracted BLB destination identity locking/reuse/activation into `background-blb-destination-manager.js`.
 - Extracted Study Session data normalization, canonical reference/Strong’s handling, topic keys, and session cleanup into `background-study-session-model.js`.
 - Extracted PDF layout, pagination, text wrapping, and PDF serialization into `background-study-pdf-export.js`; export orchestration, downloads, alarms, storage, and UI messaging remain in `background.js`.
-- Extracted Bible-input parsing, book matching, gibberish filtering, and fallback criteria normalization into `background-bible-input.js`; omnibox command routing and tab-opening side effects remain in `background.js`.
+- Extracted normal Omnibox query normalization, boolean-operator parsing, and exact KJV phrase/word-intersection matching into `background-omnibox-search.js`.
+- Extracted Bible-input parsing, book matching, gibberish filtering, and fallback criteria normalization into `background-bible-input.js`; omnibox command routing and tab-opening side effects remain in `background.js.
 - Extracted selected-text Bible-reference parsing, including cross-chapter ranges and same-book continuations, into `background-pdf-reference-extractor.js`; PDF selection orchestration and tab-opening side effects remain in `background.js`.
 - Kept service-worker `importScripts` bootstrap and Chrome event-listener registration in `background.js`; loading-contract tests guard the order and listener boundary.
 - Extracted Double-click reference-context parsing into `double-click-context.js` and local page-selection classification into `page-selection-classifier.js`; floating page-selection lifecycle and its message-handler ordering remain in `content.js`.
