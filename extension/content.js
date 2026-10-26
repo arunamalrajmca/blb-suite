@@ -2,9 +2,13 @@
 // from failures inside the async initializer below.
 try { window.__blbSuiteContentScriptFileExecutedV3 = true; } catch (_) {}
 try {
-  if (document.documentElement?.getAttribute('data-blb-suite-e2e-diagnostics') === 'true') {
-    document.documentElement.setAttribute('data-blb-suite-content-script-executed', 'true');
-  }
+  const markContentScriptExecuted = () => {
+    if (document.documentElement?.getAttribute('data-blb-suite-e2e-diagnostics') === 'true') {
+      document.documentElement.setAttribute('data-blb-suite-content-script-executed', 'true');
+    }
+  };
+  if (document.documentElement) markContentScriptExecuted();
+  else document.addEventListener('DOMContentLoaded', markContentScriptExecuted, {once:true});
 } catch (_) {}
 (async function () {
 // Lightweight test/diagnostic marker: content-script injection is distinct from
