@@ -44,7 +44,7 @@ test('Substack selection parser preserves the second chapter-qualified 2 Corinth
   });
 
   expect(result).toEqual([
-    { book: '2 Corinthians', chapter: 1, verse: 22 },
-    { book: '2 Corinthians', chapter: 5, verse: 5 }
+    { book: '2 corinthians', chapter: 1, verse: 22 },
+    { book: '2 corinthians', chapter: 5, verse: 5 }
   ]);
 });
