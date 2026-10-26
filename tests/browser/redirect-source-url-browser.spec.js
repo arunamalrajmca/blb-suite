@@ -52,7 +52,7 @@ if ([draggableButtonStart, draggableButtonEnd].some(i => i < 0) ||
 const sourcePageMultiVerseCode =
   contentSource.slice(draggableButtonStart, draggableButtonEnd) +
   sourcePageModuleSource +
-  '\\nBLBSourcePageCollectorModule.initialize({ normalizeSelectionText, parseRef, normalizeSourceBibleBook, resolveBibleReference, blbUrl, formatSourceBibleBookName, isSuiteEnabled, makeBlbMultiVerseButtonDraggable });';
+  '\nBLBSourcePageCollectorModule.initialize({ normalizeSelectionText, parseRef, normalizeSourceBibleBook, resolveBibleReference, blbUrl, formatSourceBibleBookName, isSuiteEnabled, makeBlbMultiVerseButtonDraggable });';
 
 async function loadSourcePageMultiVerse(page, sourceUrl, enabled = true) {
   await loadProductionRedirect(page, sourceUrl);
