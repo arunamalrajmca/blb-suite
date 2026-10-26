@@ -61,11 +61,12 @@ jobs:
         with:
           node-version: 22
       - name: Cache Playwright browsers
+        id: playwright-cache
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm download data
@@ -80,7 +81,7 @@ jobs:
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
       - name: Install Playwright Chromium
         run: npx playwright install chromium
-        if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
+        if: ${{ needs.change-detection.outputs.group_a_required == 'true' && steps.playwright-cache.outputs.cache-hit != 'true' }}
       - name: Grant test-only generic host access
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
