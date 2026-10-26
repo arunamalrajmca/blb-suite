@@ -162,4 +162,36 @@ test.describe('Study Sessions backup and restore', () => {
     await page.close();
   });
 
+
+  test('preserves saved Study topics, sessions, and notes across an extension reload', async ({ context, extensionId, extensionWorker, extensionStorage }) => {
+    await extensionStorage.clear();
+    const page = await openPopup(context, extensionId);
+    const topic = 'Upgrade preservation ' + Date.now();
+    await send(page, { type: 'blbSuiteStartStudyTopic', title: topic, note: 'Keep this note after updating' });
+    await send(page, { type: 'blbSuiteStopStudyRecording' });
+    await extensionWorker.evaluate(() => chrome.storage.local.set({
+      masterEnabled: false,
+      redirectEnabled: true,
+      pageSelectionButtonSites: { 'example.com': true }
+    }));
+
+    const before = await readStudyBackupData(extensionWorker);
+    expect(before.studyTopics).toContain(topic.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' '));
+    expect(before.studySessions.length).toBeGreaterThan(0);
+
+    const reloadedWorker = context.waitForEvent('serviceworker', { timeout: 15000 });
+    await extensionWorker.evaluate(() => chrome.runtime.reload());
+    const workerAfterReload = await reloadedWorker;
+    const after = await workerAfterReload.evaluate(keys => chrome.storage.local.get(keys), BACKUP_KEYS);
+    expect(after).toEqual(before);
+    expect(await workerAfterReload.evaluate(() => chrome.storage.local.get([
+      'masterEnabled', 'redirectEnabled', 'pageSelectionButtonSites'
+    ]))).toEqual({
+      masterEnabled: false,
+      redirectEnabled: true,
+      pageSelectionButtonSites: { 'example.com': true }
+    });
+    await page.close();
+  });
+
 });
