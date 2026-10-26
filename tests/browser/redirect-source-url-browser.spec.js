@@ -5,21 +5,18 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const contentSource = read('extension/content.js');
-const parseStart = contentSource.indexOf('function parseRef(text) {');
-const redirectStart = contentSource.indexOf('function redirectBibleSite() {', parseStart);
-const redirectEnd = contentSource.indexOf('\nfunction redirectBlbNet() {', redirectStart);
-const decodeStart = contentSource.indexOf('function decodeSafe(v) {');
-const bookKeyStart = contentSource.indexOf('function bookKey(value) {');
-if ([parseStart, redirectStart, redirectEnd, decodeStart, bookKeyStart].some(i => i < 0)) {
-  throw new Error('Could not locate production source redirect helpers');
-}
+const sourceRedirectModuleSource = read('extension/source-bible-redirects.js');
+const sourcePageModuleSource = read('extension/source-page-collector.js');
+const buttonDragModuleSource = read('extension/multiverse-button-drag.js');
 const gateStart = contentSource.indexOf('const REDIRECT_HOSTS = new Set([');
 const gateEnd = contentSource.indexOf('// MultiVerse native-copy enhancement is initialized', gateStart);
 if (gateStart < 0 || gateEnd < 0) throw new Error('Could not locate production content-side redirect gate');
-const productionRedirectHelpers =
-  contentSource.slice(bookKeyStart, parseStart) +
-  contentSource.slice(parseStart, redirectStart) +
-  contentSource.slice(redirectStart, redirectEnd);
+const productionRedirectGate = contentSource.slice(gateStart, gateEnd);
+const productionRedirectHelpers = sourceRedirectModuleSource + '\n' + [
+  'function openBlbDestinationFromContent(url) { window.__openedBlbUrl = url; }',
+  'const { bookKey, decodeSafe, blbUrl, normalizeSourceBibleBook, formatSourceBibleBookName, parseRef, validateSourceBibleReference, parseChristianityBibleLink, christianityBibleLinkTarget, redirectBibleSite, theKingsBibleLinkTarget } = BLBSourceBibleRedirectModule.create({ books: BOOKS, shared: BLBShared, locationApi: location, resolveBibleBook, resolveBibleReference, openBlbDestinationFromContent });'
+].join('\\n');
+
 const productionRedirectGate = contentSource.slice(gateStart, gateEnd);
 
 async function loadProductionRedirect(page, sourceUrl) {
@@ -39,20 +36,10 @@ async function loadProductionRedirect(page, sourceUrl) {
   await page.addScriptTag({ content: productionRedirectHelpers });
   // Stub only the extension APIs and unrelated BLB-native handler. The hostname
   // gate and redirectBibleSite() call below are copied verbatim from production.
-  await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) } } }; function redirectBlbNet() { return false; } function openBlbDestinationFromContent(url) { window.__openedBlbUrl = url; }' });
+  await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) } } }; function redirectBlbNet() { return false; }' });
 }
 
-const draggableButtonStart = contentSource.indexOf('function makeBlbMultiVerseButtonDraggable(button');
-const draggableButtonEnd = contentSource.indexOf('// The feature module is loaded before this content script by manifest order.', draggableButtonStart);
-const sourcePageModuleSource = read('extension/source-page-collector.js');
-if ([draggableButtonStart, draggableButtonEnd].some(i => i < 0) ||
-    !sourcePageModuleSource.includes('BLBSourcePageCollectorModule')) {
-  throw new Error('Could not locate draggable-button or extracted source-page MultiVerse module');
-}
-const sourcePageMultiVerseCode =
-  contentSource.slice(draggableButtonStart, draggableButtonEnd) +
-  sourcePageModuleSource +
-  '\nBLBSourcePageCollectorModule.initialize({ normalizeSelectionText, parseRef, normalizeSourceBibleBook, resolveBibleReference, blbUrl, formatSourceBibleBookName, isSuiteEnabled, makeBlbMultiVerseButtonDraggable });';
+const sourcePageMultiVerseCode = buttonDragModuleSource + sourcePageModuleSource + '\nconst makeBlbMultiVerseButtonDraggable = BLBMultiVerseButtonDragModule.create({ documentApi: document, windowApi: window, chromeApi: chrome, getComputedStyleFn: getComputedStyle, MutationObserverCtor: MutationObserver }).makeBlbMultiVerseButtonDraggable;\nBLBSourcePageCollectorModule.initialize({ normalizeSelectionText, parseRef, normalizeSourceBibleBook, resolveBibleReference, blbUrl, formatSourceBibleBookName, isSuiteEnabled, makeBlbMultiVerseButtonDraggable });';
 
 async function loadSourcePageMultiVerse(page, sourceUrl, enabled = true) {
   await loadProductionRedirect(page, sourceUrl);
