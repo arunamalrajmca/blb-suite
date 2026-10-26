@@ -166,10 +166,6 @@ jobs:
             file: tests/browser/research-dom-smoke.spec.js
             grep: 'D14|D16|D18|D19|D20|D21|D22|D23|D25|D41|D42|D43|D44|D45|D46|D47|D48|D49|D50|D51|D52|D53|D54|D55|D56|D57|D58|D59|D60'
     steps:
-      - name: ⏱ Workflow ETA — start
-        uses: $/.github/actions/workflow-eta
-        with:
-          phase: start
       - name: Checkout
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         uses: actions/checkout@v4
@@ -224,28 +220,6 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 14
-      - name: ⏱ Workflow ETA — finish
-        if: ${{ always() }}
-        uses: $/.github/actions/workflow-eta
-        with:
-          phase: finish
-
-
-  browser-e2e-features:
-    name: BROWSER E2E — FEATURES
-    # Do not start feature tests until every reference group has passed.
-    # A failed reference group skips this job instead of running more tests.
-    needs:
-      - change-detection
-      - browser-e2e
-    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: ⏱ Workflow ETA — start
-        uses: $/.github/actions/workflow-eta
-        with:
-          phase: start
       - name: Checkout
         uses: actions/checkout@v4
         with:
@@ -292,31 +266,6 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 14
-      - name: ⏱ Workflow ETA — finish
-        if: ${{ always() }}
-        uses: $/.github/actions/workflow-eta
-        with:
-          phase: finish
-
-  browser-e2e-summary:
-    name: browser-e2e
-    needs:
-      - change-detection
-      - verse-context-regression
-      - browser-e2e
-      - browser-e2e-features
-    if: ${{ always() }}
-    runs-on: ubuntu-latest
-    permissions:
-      statuses: write
-    steps:
-      - name: ⏱ Workflow ETA — start
-        uses: $/.github/actions/workflow-eta
-        with:
-          phase: start
-
-      # One shell predicate determines both the published commit status and
-      # the job result, preventing the status and required-check logic drifting.
       - name: Validate all applicable browser suites and publish final status
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -413,8 +362,3 @@ jobs:
 
           echo "$description"
 
-      - name: ⏱ Workflow ETA — finish
-        if: ${{ always() }}
-        uses: $/.github/actions/workflow-eta
-        with:
-          phase: finish
