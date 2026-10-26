@@ -9,11 +9,11 @@ on:
     types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
-# Keep each commit's gate independent so a newer PR commit receives a
-# pending status immediately instead of waiting behind an older commit's run.
+# Keep one active run per PR: newer commits supersede outdated PR runs.
+# Pushes to main and manual runs keep their own ref-based group and are not cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.sha }}
-  cancel-in-progress: false
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   change-detection:
