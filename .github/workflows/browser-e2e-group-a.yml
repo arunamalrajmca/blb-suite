@@ -100,6 +100,14 @@ jobs:
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/kings-bible-collector-behavior.spec.js') }}
         run: npx playwright test tests/browser/kings-bible-collector-behavior.spec.js
 
+      - name: Run popup site-feature defaults regressions
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/site-feature-defaults.spec.js') }}
+        run: npx playwright test tests/browser/site-feature-defaults.spec.js
+
+      - name: Run Study Sessions popup UI regressions
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/study-session-popup-ui-regression.spec.js') }}
+        run: npx playwright test tests/browser/study-session-popup-ui-regression.spec.js
+
       - name: Run Study Sessions lifecycle regressions
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/feature-lifecycle-regressions.spec.js') }}
         run: npx playwright test tests/browser/feature-lifecycle-regressions.spec.js
