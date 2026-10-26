@@ -87,7 +87,8 @@ if (!importMatch) {
     'background-host-policy.js',
     'background-content-script-registry.js',
     'background-content-script-activation.js',
-    'background-multiverse-tracking.js'
+    'background-multiverse-tracking.js',
+    'background-blb-destination-manager.js'
   ];
   const positions = required.map(name => imports.indexOf(name));
   if (positions.some(index => index < 0)
@@ -103,9 +104,10 @@ if (!importMatch) {
   }
 }
 
-const dynamicFilesMatch = background.match(/const BLB_CONTENT_SCRIPT_FILES = \[([\s\S]*?)\];/);
+const hostPolicy = read('extension/background-host-policy.js');
+const dynamicFilesMatch = hostPolicy.match(/const contentScriptFiles = \[([\s\S]*?)\];/);
 if (!dynamicFilesMatch) {
-  fail('runtime-injected content scripts declare their dependency list');
+  fail('runtime-injected content scripts declare their dependency list in host policy');
 } else {
   const dynamicFiles = [...dynamicFilesMatch[1].matchAll(/['\"]([^'\"]+\.js)['\"]/g)].map(match => match[1]);
   const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'selection-text.js', 'multiverse-button-drag.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-navigation-links.js', 'blb-new-tab-links.js', 'blb-multiverse-handoff.js', 'blb-passive-new-tab.js', 'content.js'];
@@ -136,6 +138,31 @@ if (!background.includes('BLBBackgroundMultiVerseTrackingModule.create({')
   fail('service worker initializes tracking module with explicit dependencies');
 } else {
   pass('service-worker tracking module receives explicit dependencies');
+}
+
+
+const destinationManager = read('extension/background-blb-destination-manager.js');
+if (!destinationManager.includes('BLBBackgroundBlbDestinationManagerModule')
+    || !destinationManager.includes('pendingBlbDestinationOperations')
+    || !destinationManager.includes('findExisting')
+    || !destinationManager.includes('create')) {
+  fail('BLB destination identity locking is isolated behind its module API');
+} else {
+  pass('BLB destination identity manager retains single-owner operation locking');
+}
+if (!background.includes('BLBBackgroundBlbDestinationManagerModule.create({')
+    || !background.includes('chromeApi:chrome')) {
+  fail('service worker initializes destination manager with explicit Chrome API');
+} else {
+  pass('service-worker destination manager receives explicit Chrome API');
+}
+if (!background.includes('chrome.tabs.onRemoved.addListener(')
+    || !background.includes('chrome.tabs.onUpdated.addListener(')
+    || !background.includes('chrome.runtime.onInstalled.addListener(')
+    || !background.includes('chrome.alarms.onAlarm.addListener(')) {
+  fail('service-worker event listeners remain registered in background.js');
+} else {
+  pass('service-worker lifecycle and event listeners remain in background.js');
 }
 
 const content = read('extension/content.js');
