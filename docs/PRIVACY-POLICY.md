@@ -33,7 +33,6 @@ The extension does not send user data to the developer or to advertising, analyt
 
 When the user requests a search or opens a Bible destination, the extension may navigate the browser to the requested third-party website, including Blue Letter Bible and other supported Bible websites. A query, selected reference, or reference list included in such a navigation is therefore received by that destination website under that website's own privacy policy.
 
-The optional Ask AI command requests the optional `https://chatgpt.com/*` host permission when the user enters an Ask AI query. If the user grants that permission, the extension may place the query in the ChatGPT composer and submit it. If permission is declined or unavailable, the extension does not open ChatGPT or another window and does not hand the query off. The user can retry the command after changing permissions. When a query is submitted through the extension, it is processed by ChatGPT under OpenAI's applicable terms and privacy policy. ChatGPT access is not required to install or use the extension's other features.
 
 The extension's `b cs` case-sensitive KJV matching uses the bundled verified original-case KJV corpus locally. Matching itself is performed inside the extension.
 

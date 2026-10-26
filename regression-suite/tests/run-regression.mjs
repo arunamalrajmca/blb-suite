@@ -57,7 +57,7 @@ test('manifest-referenced files exist', () => {
 });
 test('no optional host-permission regression', () => {
   const m = JSON.parse(read('manifest.json'));
-  assert.deepEqual(m.optional_host_permissions, ['http://*/*','https://*/*','https://chatgpt.com/*']);
+  assert.deepEqual(m.optional_host_permissions, ['http://*/*','https://*/*']);
 });
 
 test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse collector', () => {
@@ -87,24 +87,12 @@ test('Rediscover, Sagacity, and TSK use optional access and dynamic injection on
   assert(m.optional_host_permissions.includes('https://*/*'), 'existing optional HTTPS access must remain available');
 });
 
-test('Ask AI requests ChatGPT access in the omnibox gesture and does nothing when denied', () => {
+test('Ask AI omnibox feature and ChatGPT host permission are removed', () => {
   const m = JSON.parse(read('manifest.json'));
   const source = read('background.js');
-  assert(m.optional_host_permissions.includes('https://chatgpt.com/*'), 'ChatGPT origin must be optional');
-  // Chrome resolves already-granted origins without an extra prompt. Keep the
-  // request in the user gesture and stop without navigation if access is denied.
-  const requestText = "chrome.permissions.request({origins:['https://chatgpt.com/*']}";
-  assert(source.includes(requestText), 'Ask AI must request the ChatGPT origin in the omnibox gesture');
-  const askAiHandlerStart = source.lastIndexOf('const askAiMatch', source.indexOf(requestText));
-  const permissionRequestIndex = source.indexOf(requestText);
-  const deniedReturnIndex = source.indexOf('if (query && !hostAccessGranted)', permissionRequestIndex);
-  const tabUpdateIndex = source.indexOf('await chrome.tabs.update({url:', permissionRequestIndex);
-  assert(askAiHandlerStart >= 0 && permissionRequestIndex > askAiHandlerStart, 'Ask AI permission request must be inside its handler');
-  assert(deniedReturnIndex > permissionRequestIndex && tabUpdateIndex > deniedReturnIndex, 'Denied access must return before tab navigation');
-  assert(source.includes(String.raw`normalized.match(/^askai(?:\s+(.*))?$/i)`), 'Ask AI command parser must recognize a query after whitespace');
-  assert(!source.includes("chrome.runtime.getURL('askai-permission.html')"), 'Denied access must not open an extension fallback page');
-  assert(source.includes("const handoffUrl = 'https://chatgpt.com/?q=' + encodeURIComponent(query)"), 'Ask AI must preserve query handoff for permitted-access fallback');
-  assert(source.includes("await chrome.tabs.update(tabId, {url:handoffUrl})"), 'Ask AI must fall back if script injection fails after access is granted');
+  assert(!m.optional_host_permissions.includes('https://chatgpt.com/*'), 'ChatGPT host permission must be removed');
+  assert(!source.includes('askai'), 'Ask AI command parser and handler must be removed');
+  assert(!source.includes('chatgpt.com'), 'ChatGPT composer injection and navigation must be removed');
 });
 
 // Syntax checks for all JS source files.
@@ -622,7 +610,7 @@ test('Study Sessions download paths remain wired', () => {
 test('b dict routes bare, multiword, and invalid input home; one alphabetic word to Webster entry', () => {
   const bg = read('background.js');
   const start = bg.indexOf('const dictMatch = normalized.match');
-  const end = bg.indexOf('  // A dedicated prefix routes to ChatGPT', start);
+  const end = bg.indexOf('  if (/^cs\\s+/i.test(normalized)) {', start);
   assert(start >= 0 && end > start, 'dictionary omnibox route missing');
   const route = bg.slice(start, end);
   assert(route.includes('dictMatch = normalized.match'), 'dict prefix parser missing');
