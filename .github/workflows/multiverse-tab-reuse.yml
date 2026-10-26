@@ -73,7 +73,6 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Install Chromium for Playwright
-        if: ${{ steps.playwright-cache.outputs.cache-hit != 'true' }}
         run: npx playwright install chromium
 
       - name: Run MultiVerse tab reuse regression suite
