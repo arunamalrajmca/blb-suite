@@ -804,9 +804,10 @@ async function refreshDoubleClickBlb() {
       ? data.doubleClickBlbSites : {};
     const hasExplicitPreference = Object.prototype.hasOwnProperty.call(sites, siteKey);
     doubleClickDiagnostic('settings-storage-read', {siteKey, hasExplicitPreference, storedValue:sites[siteKey]});
-    doubleClickDiagnostic('default-status-request', {siteKey, hasExplicitPreference});
-    const defaultEnabled = await getSiteDefaultEnabled();
-    doubleClickDiagnostic('default-status-response', {siteKey, defaultEnabled});
+    // An explicit site preference overrides the default, so do not wait on
+    // the background default-status message when the answer is already known.
+    const defaultEnabled = hasExplicitPreference ? false : await getSiteDefaultEnabled();
+    doubleClickDiagnostic('default-status-result', {siteKey, hasExplicitPreference, defaultEnabled});
     doubleClickBlbEnabled = hasExplicitPreference ? sites[siteKey] === true : defaultEnabled;
     if (doubleClickBlbEnabled) enableDoubleClickBlb();
     else disableDoubleClickBlb();
