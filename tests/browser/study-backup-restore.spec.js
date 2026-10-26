@@ -109,4 +109,57 @@ test.describe('Study Sessions backup and restore', () => {
     expect(state.topics.some(value => value.startsWith('Temporary Replacement'))).toBe(false);
     await page.close();
   });
+
+  test('exports a valid Study-only backup without leaking extension settings', async ({ context, extensionId, extensionWorker, extensionStorage }) => {
+    await extensionStorage.clear();
+    const page = await openPopup(context, extensionId);
+    const topic = 'Export backup topic ' + Date.now();
+    await send(page, { type: 'blbSuiteStartStudyTopic', title: topic, note: 'Exported note' });
+    await extensionWorker.evaluate(() => chrome.storage.local.set({
+      masterEnabled: false,
+      redirectEnabled: true,
+      pageSelectionButtonSites: { 'example.com': true },
+      doubleClickSites: { 'example.org': true }
+    }));
+
+    await page.addInitScript(() => {
+      window.__capturedStudyBackup = null;
+      const originalCreateObjectURL = URL.createObjectURL.bind(URL);
+      URL.createObjectURL = blob => {
+        if (blob instanceof Blob && blob.type === 'application/json') {
+          blob.text().then(text => { window.__capturedStudyBackup = text; });
+        }
+        return originalCreateObjectURL(blob);
+      };
+    });
+    await page.reload();
+    await page.locator('#studyBackupMenuButton').click();
+    await expect(page.locator('#exportStudyBackup')).toBeEnabled();
+    const downloadPromise = page.waitForEvent('download');
+    await page.locator('#exportStudyBackup').click();
+    const download = await downloadPromise;
+    expect(download.suggestedFilename()).toMatch(/^BLB-Suite-Study-Backup-\\d{4}-\\d{2}-\\d{2}\\.json$/);
+    await expect(page.locator('#studyStatus')).toContainText('Study backup exported');
+    await expect.poll(() => page.evaluate(() => window.__capturedStudyBackup)).not.toBeNull();
+
+    const backup = JSON.parse(await page.evaluate(() => window.__capturedStudyBackup));
+    expect(backup).toMatchObject({
+      format: 'blb-suite-study-backup',
+      schemaVersion: 1,
+      study: {
+        studyTopics: expect.arrayContaining([topic.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ')])
+      }
+    });
+    expect(backup.exportedAt).toEqual(expect.any(String));
+    expect(backup.study.studySessions).toEqual(expect.any(Array));
+    expect(backup.study.studySelectedTopic).toEqual(expect.any(String));
+    expect(backup).not.toHaveProperty('masterEnabled');
+    expect(backup).not.toHaveProperty('redirectEnabled');
+    expect(backup.study).not.toHaveProperty('masterEnabled');
+    expect(backup.study).not.toHaveProperty('redirectEnabled');
+    expect(backup.study).not.toHaveProperty('pageSelectionButtonSites');
+    expect(backup.study).not.toHaveProperty('doubleClickSites');
+    await page.close();
+  });
+
 });
