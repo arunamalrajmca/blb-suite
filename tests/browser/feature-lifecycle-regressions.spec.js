@@ -280,7 +280,7 @@ test('Study Sessions auto-stop respects the inactivity threshold and preserves p
   expect(state.studyPausedTopic).toBe(normalizedTopic);
   const saved = state.studySessions.find(session => session.id === sessionId);
   expect(saved).toBeTruthy();
-  expect(saved.notes).toContain('Keep this note');
+  expect(saved.notes).toContain('Keep This Note');
 });
 
 test('Study Sessions auto-stop can be disabled without stopping an inactive recording', async ({ extensionWorker, extensionStorage }) => {
