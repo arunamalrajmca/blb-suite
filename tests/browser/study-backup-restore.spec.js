@@ -181,16 +181,12 @@ test.describe('Study Sessions backup and restore', () => {
     expect(before.studyTopics).toContain(topic.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' '));
     expect(before.studySessions.length).toBeGreaterThan(0);
 
-    // Trigger reload from the extension page rather than from the service worker
-    // being torn down. Then wait for the extension page to be replaced/reloaded.
-    const reloadRequested = page.evaluate(() => chrome.runtime.reload());
-    await reloadRequested.catch(() => {});
-    await expect.poll(async () => {
-      const workers = context.serviceWorkers();
-      return workers.some(worker => worker.url().includes(extensionId));
-    }, { timeout: 20000 }).toBe(true);
-    const workerAfterReload = context.serviceWorkers().find(worker => worker.url().includes(extensionId));
-    expect(workerAfterReload, 'extension service worker should be available after reload').toBeTruthy();
+    // Request the extension reload from the popup page. The page may be torn
+    // down as part of reload, so don't await its evaluate() promise.
+    const reloadedWorkerPromise = context.waitForEvent('serviceworker', { timeout: 20000 });
+    void page.evaluate(() => chrome.runtime.reload()).catch(() => {});
+    const workerAfterReload = await reloadedWorkerPromise;
+    expect(workerAfterReload.url()).toContain(extensionId);
     const after = await workerAfterReload.evaluate(keys => chrome.storage.local.get(keys), BACKUP_KEYS);
     expect(after).toEqual(before);
     expect(await workerAfterReload.evaluate(() => chrome.storage.local.get([
