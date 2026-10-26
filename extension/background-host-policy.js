@@ -36,6 +36,24 @@ globalThis.BLBBackgroundHostPolicyModule = Object.freeze({
       scriptTaggerFiles,
       bibleRefRangeFiles,
       redirectHostnames,
+      isHttpPageUrl(url) {
+        return /^https?:\\/\\//i.test(String(url || ''));
+      },
+      originPatternForUrl(url) {
+        try {
+          const u = new URL(String(url || ''));
+          if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
+          return `${u.protocol}//${u.hostname}/*`;
+        } catch (_) {
+          return '';
+        }
+      },
+      async hasHostAccessForTab(tab, chromeApi) {
+        const pattern = this.originPatternForUrl(tab?.url);
+        if (!pattern || !chromeApi?.permissions?.contains) return false;
+        try { return await chromeApi.permissions.contains({origins:[pattern]}); }
+        catch (_) { return false; }
+      },
       isRedirectHostname(hostname, normalizeSiteHostname) {
         return redirectHostnames.has(normalizeSiteHostname(String(hostname || '')));
       },

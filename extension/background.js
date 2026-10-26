@@ -3034,24 +3034,15 @@ function contentScriptFilesForTab(tab, data) {
 }
 
 function isHttpPageUrl(url) {
-  return /^https?:\/\//i.test(String(url || ''));
+  return BLB_BACKGROUND_HOST_POLICY.isHttpPageUrl(url);
 }
 
 function originPatternForUrl(url) {
-  try {
-    const u = new URL(String(url || ''));
-    if (u.protocol !== 'http:' && u.protocol !== 'https:') return '';
-    return `${u.protocol}//${u.hostname}/*`;
-  } catch (_) {
-    return '';
-  }
+  return BLB_BACKGROUND_HOST_POLICY.originPatternForUrl(url);
 }
 
 async function hasHostAccessForTab(tab) {
-  const pattern = originPatternForUrl(tab?.url);
-  if (!pattern || !chrome.permissions?.contains) return false;
-  try { return await chrome.permissions.contains({origins:[pattern]}); }
-  catch (_) { return false; }
+  return BLB_BACKGROUND_HOST_POLICY.hasHostAccessForTab(tab, chrome);
 }
 
 const contentScriptInjectionLocks = new Map();

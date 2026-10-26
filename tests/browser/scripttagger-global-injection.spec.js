@@ -146,7 +146,7 @@ test('global redirect uses the minimal handlers on ordinary sites and the full b
   context.contentScriptFilesForTab = (tab, data) => policy.contentScriptFilesForTab(tab, data, {
     hostnameFromTabUrl: context.hostnameFromTabUrl,
     normalizeSiteHostname: context.normalizeSiteHostname,
-    isSensitiveSiteHostname: value => context.BLBShared.isSensitiveSiteHostname(value)
+    isSensitiveSiteHostname: value => /(?:bank|banking|banker|credit.?union|financial|finance|hospital|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)/i.test(String(value || ''))
   });
   // Rediscover and Sagacity use the existing full content bundle because it
   // contains the current-page MultiVerse collector. They still use dynamic,

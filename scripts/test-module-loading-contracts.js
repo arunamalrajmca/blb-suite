@@ -233,6 +233,14 @@ if (!background.includes('BLB_BACKGROUND_HOST_POLICY.contentScriptFilesForTab(ta
   pass('background service worker delegates tab injection policy to the module');
 }
 
+if (!hostPolicy.includes('originPatternForUrl(url)')
+    || !hostPolicy.includes('hasHostAccessForTab(tab, chromeApi)')
+    || !background.includes('BLB_BACKGROUND_HOST_POLICY.hasHostAccessForTab(tab, chrome)')) {
+  fail('host permission and URL-pattern checks remain behind the background policy module');
+} else {
+  pass('host permission and URL-pattern checks remain behind the background policy module');
+}
+
 const referenceCore = read('extension/reference-core.js');
 if (!referenceCore.includes('function normalizeBibleReferenceText')
     || !referenceCore.includes('function resolveBibleReference')) {
