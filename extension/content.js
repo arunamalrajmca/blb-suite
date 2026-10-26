@@ -626,9 +626,6 @@ globalThis.BLBMultiVerseCopyLinksModule?.initialize({
 });
 
 // ---------- BLB Auto Hyperlinker ----------
-const formatBlbTextToHtml = rawText =>
-  globalThis.BLBAutoHyperlinkModule?.format(rawText, BLBShared.urls.blbHome) || null;
-
 globalThis.BLBAutoHyperlinkModule?.initialize({
   isSuiteEnabled,
   getCachedEnabled: () => suiteEnabled,

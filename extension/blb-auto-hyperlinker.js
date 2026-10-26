@@ -4,6 +4,7 @@ globalThis.BLBAutoHyperlinkModule = Object.freeze({
   initialize({ isSuiteEnabled, getCachedEnabled, blbHostname, blbHomeUrl }) {
     if (!location.hostname.endsWith(blbHostname)
         || /(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)$/i.test(location.pathname)) return;
+    const format = rawText => globalThis.BLBAutoHyperlinkModule.format(rawText, blbHomeUrl);
       // The copy event must be handled synchronously. Awaiting storage state inside
       // the event handler lets the browser finish its normal copy operation before
       // preventDefault() runs, which loses the HTML clipboard payload used by
@@ -12,7 +13,7 @@ globalThis.BLBAutoHyperlinkModule = Object.freeze({
       document.addEventListener("copy",e=>{
         if (!getCachedEnabled()) return;
         const text=window.getSelection()?.toString()||"";
-        const html=format(text, blbHomeUrl);
+        const html=format(text);
         if (!html || !e.clipboardData) return;
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -24,7 +25,7 @@ globalThis.BLBAutoHyperlinkModule = Object.freeze({
         const original=navigator.clipboard.writeText.bind(navigator.clipboard);
         navigator.clipboard.writeText=async text=>{
           if (!(await isSuiteEnabled())) return original(text);
-          const html=format(text, blbHomeUrl);
+          const html=format(text);
           if (!html) return original(text);
           const handler=e=>{
             e.clipboardData.setData("text/html",html);

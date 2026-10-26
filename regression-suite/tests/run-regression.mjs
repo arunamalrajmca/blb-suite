@@ -534,7 +534,6 @@ test('BLB new-tab and Copy-as-link contracts remain wired', () => {
   const autoHyperlinker = read('blb-auto-hyperlinker.js');
   assert(content.includes('modifyLinks'), 'BLB link modifier missing');
   assert(content.includes('target="_blank"'), 'BLB new-tab target missing');
-  assert(content.includes('formatBlbTextToHtml'), 'HTML clipboard formatter bridge missing');
   assert(content.includes('BLBAutoHyperlinkModule?.initialize({'), 'HTML clipboard module initialization missing');
   assert(autoHyperlinker.includes('format(rawText, blbHomeUrl)'), 'HTML clipboard formatter missing');
   assert(autoHyperlinker.includes('setData("text/html"'), 'HTML clipboard write missing');
