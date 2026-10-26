@@ -71,6 +71,7 @@
         "multiverse-copy-links.js",
         "blb-auto-hyperlinker.js",
         "blb-parse-popup-links.js",
+        "blb-passive-new-tab.js",
         "content.js"
       ],
       "run_at": "document_start"

@@ -34,6 +34,7 @@ const expectedContentScripts = [
   'multiverse-copy-links.js',
   'blb-auto-hyperlinker.js',
   'blb-parse-popup-links.js',
+  'blb-passive-new-tab.js',
   'content.js'
 ];
 const contentEntry = (manifest.content_scripts || []).find(entry =>
@@ -98,7 +99,7 @@ if (!dynamicFilesMatch) {
   fail('runtime-injected content scripts declare their dependency list');
 } else {
   const dynamicFiles = [...dynamicFilesMatch[1].matchAll(/['\"]([^'\"]+\.js)['\"]/g)].map(match => match[1]);
-  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'content.js'];
+  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-passive-new-tab.js', 'content.js'];
   const positions = requiredDynamic.map(name => dynamicFiles.indexOf(name));
   if (positions.some(index => index < 0)
       || positions.some((index, i) => i > 0 && index <= positions[i - 1])) {
@@ -152,6 +153,21 @@ if (!content.includes('BLBParsePopupLinksModule?.initialize({')) {
   fail('content script initializes the parse-popup feature module');
 } else {
   pass('content script initializes the parse-popup feature module');
+}
+
+const passiveNewTab = read('extension/blb-passive-new-tab.js');
+if (!passiveNewTab.includes('BLBPassiveNewTabModule')
+    || !passiveNewTab.includes('MutationObserver')
+    || !passiveNewTab.includes('requestAnimationFrame')
+    || !passiveNewTab.includes('link.target="_blank"')) {
+  fail('passive BLB new-tab targeting remains in its feature module');
+} else {
+  pass('passive BLB new-tab targeting remains in its feature module');
+}
+if (!content.includes('BLBPassiveNewTabModule?.initialize({')) {
+  fail('content script initializes passive new-tab targeting');
+} else {
+  pass('content script initializes passive new-tab targeting');
 }
 
 const referenceCore = read('extension/reference-core.js');

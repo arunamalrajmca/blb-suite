@@ -3025,6 +3025,7 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'multiverse-copy-links.js',
   'blb-auto-hyperlinker.js',
   'blb-parse-popup-links.js',
+  'blb-passive-new-tab.js',
   'content.js'
 ];
 

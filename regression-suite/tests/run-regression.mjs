@@ -527,6 +527,14 @@ test('BLB native-event interception remains explicitly scoped', () => {
   assert(!dbl.includes('stopPropagation()'), 'double-click resolver must not stop native propagation');
   assert(!dbl.includes('stopImmediatePropagation()'), 'double-click resolver must not stop native propagation');
 });
+test('passive BLB verse links retain observer-driven new-tab targets', () => {
+  const content = read('content.js');
+  const passive = read('blb-passive-new-tab.js');
+  assert(content.includes('BLBPassiveNewTabModule?.initialize({'), 'passive new-tab module initialization missing');
+  assert(passive.includes('MutationObserver'), 'passive verse-link observer missing');
+  assert(passive.includes('requestAnimationFrame'), 'passive verse-link scheduling missing');
+  assert(passive.includes('link.target="_blank"'), 'passive verse links must retain new-tab targets');
+});
 test('BLB new-tab and Copy-as-link contracts remain wired', () => {
   const content = read('content.js');
   const autoHyperlinker = read('blb-auto-hyperlinker.js');
