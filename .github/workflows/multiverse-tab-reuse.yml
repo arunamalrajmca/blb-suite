@@ -1,6 +1,8 @@
 name: MultiVerse tab reuse regression
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
     paths:
@@ -21,8 +23,26 @@ permissions:
   contents: read
 
 jobs:
+  change-detection:
+    name: Select browser specs for this change
+    runs-on: ubuntu-latest
+    outputs:
+      full_browser_suite: ${{ steps.select.outputs.full_browser_suite }}
+      changed_specs: ${{ steps.select.outputs.changed_specs }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Select browser specs
+        id: select
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/select-browser-specs.mjs "$BASE_SHA"
+
   multiverse-tab-reuse:
     name: MultiVerse tab reuse and 22-batch persistence
+    needs: change-detection
+    if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/multiverse-tab-reuse.spec.js') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -34,6 +54,13 @@ jobs:
         with:
           node-version: 22
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
       - name: Cache npm download data
         uses: actions/cache@v4
         with:
@@ -45,7 +72,7 @@ jobs:
         run: npm install --no-audit --no-fund
 
       - name: Install Chromium for Playwright
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       - name: Run MultiVerse tab reuse regression suite
         run: npx playwright test tests/browser/multiverse-tab-reuse.spec.js --workers=1

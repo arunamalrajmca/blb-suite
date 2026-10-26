@@ -9,48 +9,68 @@ on:
     types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
+# Keep each commit's gate independent so a newer PR commit receives a
+# pending status immediately instead of waiting behind an older commit's run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
 
 jobs:
   change-detection:
     name: Select requested CI suite
     runs-on: ubuntu-latest
+    permissions:
+      statuses: write
     outputs:
-      runtime_changed: ${{ steps.select.outputs.runtime_changed }}
-      browser_e2e_required: ${{ steps.select.outputs.browser_e2e_required }}
+      runtime_changed: ${{ steps.classify.outputs.runtime_changed }}
+      full_browser_suite: ${{ steps.browser-select.outputs.full_browser_suite }}
+      changed_specs: ${{ steps.browser-select.outputs.changed_specs }}
+      extension_spec_required: ${{ steps.browser-select.outputs.extension_spec_required }}
+      browser_e2e_required: ${{ steps.browser-select.outputs.reference_required }}
     steps:
+      # Publish a pending commit status before classification or browser tests.
+      # Configure this exact context ("browser-e2e") as a required check on main.
+      - name: Publish browser-e2e pending status
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATUS_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error \
+            -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "${{ github.api_url }}/repos/${{ github.repository }}/statuses/$STATUS_SHA" \
+            -d '{"state":"pending","target_url":"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}","description":"Browser E2E validation is running","context":"browser-e2e"}'
       - name: Checkout for change classification
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Classify changed files
-        id: select
+        id: classify
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
-          LABELS: ${{ toJSON(github.event.pull_request.labels) }}
         shell: bash
         run: |
           set -euo pipefail
           BASE="$BASE_SHA"
           if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then
-            RUNTIME_CHANGED=true
+            echo "runtime_changed=true" >> "$GITHUB_OUTPUT"
           else
-            CLASSIFY_OUTPUT="$(node scripts/classify-ci-changes.mjs "$BASE")"
-            RUNTIME_CHANGED="$(sed -n 's/^runtime_changed=//p' <<< "$CLASSIFY_OUTPUT" | head -n1)"
+            node scripts/classify-ci-changes.mjs "$BASE"
           fi
-          echo "runtime_changed=$RUNTIME_CHANGED" >> "$GITHUB_OUTPUT"
-          if [[ "$RUNTIME_CHANGED" == "true" || "${{ github.event_name }}" == "workflow_dispatch" ]] || jq -e 'any(.[]; .name == "ci-run-all" or .name == "ci-run-references")' <<< "$LABELS" >/dev/null; then
-            echo "browser_e2e_required=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "browser_e2e_required=false" >> "$GITHUB_OUTPUT"
-          fi
+      - name: Select browser specs for this change
+        id: browser-select
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/select-browser-specs.mjs "$BASE_SHA"
 
   verse-context-regression:
     name: BROWSER E2E — generic verse-context gate
     needs: change-detection
-    if: ${{ needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -62,6 +82,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Cache Playwright browsers
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
       - name: Cache npm downloads
         uses: actions/cache@v4
         with:
@@ -72,7 +100,7 @@ jobs:
       - name: Install dependencies
         run: npm install --prefer-offline
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
       - name: Grant test-only generic host access
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
       - name: Read manifest version
@@ -100,7 +128,7 @@ jobs:
   browser-e2e:
     name: BROWSER E2E — References — ${{ matrix.group }}
     needs: [change-detection, verse-context-regression]
-    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && needs.verse-context-regression.result == 'success' }}
+    if: ${{ always() && (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.verse-context-regression.result == 'success' || needs.change-detection.outputs.extension_spec_required == 'false') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -143,14 +171,25 @@ jobs:
         with:
           phase: start
       - name: Checkout
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
       - name: Setup Node
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Cache Playwright browsers
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
       - name: Cache npm downloads
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         uses: actions/cache@v4
         with:
           path: ~/.npm
@@ -158,15 +197,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
       - name: Install dependencies
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         run: npm install --prefer-offline
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
+        run: npx playwright install chromium
       - name: Grant test-only generic host access
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
       - name: Read manifest version
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         id: version
         run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
       - name: Run Browser E2E — ${{ matrix.group }}
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: npx playwright test "${{ matrix.file || 'tests/browser/extension.spec.js' }}" --grep "${{ matrix.grep }}"
@@ -194,7 +238,7 @@ jobs:
     needs:
       - change-detection
       - browser-e2e
-    if: ${{ needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch' }}
+    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -210,6 +254,14 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Cache Playwright browsers
+        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
       - name: Cache npm downloads
         uses: actions/cache@v4
         with:
@@ -220,7 +272,7 @@ jobs:
       - name: Install dependencies
         run: npm install --prefer-offline
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
       - name: Grant test-only generic host access
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
       - name: Read manifest version
@@ -250,6 +302,7 @@ jobs:
     name: browser-e2e
     needs:
       - change-detection
+      - verse-context-regression
       - browser-e2e
       - browser-e2e-features
     if: ${{ always() }}
@@ -261,32 +314,104 @@ jobs:
         uses: $/.github/actions/workflow-eta
         with:
           phase: start
-      - name: Publish browser-e2e commit status
-        if: ${{ always() }}
+
+      # One shell predicate determines both the published commit status and
+      # the job result, preventing the status and required-check logic drifting.
+      - name: Validate all applicable browser suites and publish final status
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATUS_SHA: ${{ github.sha }}
-          STATUS_STATE: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || (needs.browser-e2e.result == 'skipped' && needs.change-detection.outputs.browser_e2e_required == 'false')) && (needs.browser-e2e-features.result == 'success' || (needs.browser-e2e-features.result == 'skipped' && needs.change-detection.outputs.browser_e2e_required == 'false')) && 'success' || 'failure' }}
-          STATUS_DESCRIPTION: ${{ needs.change-detection.result == 'success' && (needs.browser-e2e.result == 'success' || (needs.browser-e2e.result == 'skipped' && needs.change-detection.outputs.browser_e2e_required == 'false')) && (needs.browser-e2e-features.result == 'success' || (needs.browser-e2e-features.result == 'skipped' && needs.change-detection.outputs.browser_e2e_required == 'false')) && 'browser E2E passed or not applicable' || 'browser E2E failed' }}
+          TARGET_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          EVENT_NAME: ${{ github.event_name }}
+          CHANGE_RESULT: ${{ needs.change-detection.result }}
+          REFERENCE_REQUIRED: ${{ needs.change-detection.outputs.browser_e2e_required }}
+          EXTENSION_SPEC_REQUIRED: ${{ needs.change-detection.outputs.extension_spec_required }}
+          FULL_BROWSER_SUITE: ${{ needs.change-detection.outputs.full_browser_suite }}
+          CHANGED_SPECS: ${{ needs.change-detection.outputs.changed_specs }}
+          VERSE_CONTEXT_RESULT: ${{ needs.verse-context-regression.result }}
+          REFERENCE_MATRIX_RESULT: ${{ needs.browser-e2e.result }}
+          FEATURES_RESULT: ${{ needs.browser-e2e-features.result }}
         shell: bash
         run: |
+          set -euo pipefail
+
+          failed=0
+          reasons=()
+
+          if [[ "$CHANGE_RESULT" != "success" ]]; then
+            failed=1
+            reasons+=("change detection: $CHANGE_RESULT")
+          fi
+
+          reference_expected=false
+          if [[ "$REFERENCE_REQUIRED" == "true" || "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            reference_expected=true
+          fi
+
+          verse_context_expected=false
+          if [[ "$reference_expected" == true && ( "$FULL_BROWSER_SUITE" == "true" || ",$CHANGED_SPECS," == *",tests/browser/extension.spec.js,"* ) ]]; then
+            verse_context_expected=true
+          fi
+
+          if [[ "$verse_context_expected" == true ]]; then
+            if [[ "$VERSE_CONTEXT_RESULT" != "success" ]]; then
+              failed=1
+              reasons+=("verse-context regression was required but was $VERSE_CONTEXT_RESULT")
+            fi
+          elif [[ "$VERSE_CONTEXT_RESULT" == "failure" || "$VERSE_CONTEXT_RESULT" == "cancelled" ]]; then
+            failed=1
+            reasons+=("verse-context regression: $VERSE_CONTEXT_RESULT")
+          fi
+
+          if [[ "$reference_expected" == true ]]; then
+            if [[ "$REFERENCE_MATRIX_RESULT" != "success" ]]; then
+              failed=1
+              reasons+=("reference matrix was required but was $REFERENCE_MATRIX_RESULT")
+            fi
+          elif [[ "$REFERENCE_MATRIX_RESULT" == "failure" || "$REFERENCE_MATRIX_RESULT" == "cancelled" ]]; then
+            failed=1
+            reasons+=("reference matrix: $REFERENCE_MATRIX_RESULT")
+          fi
+
+          features_expected=false
+          if [[ "$reference_expected" == true && ( "$FULL_BROWSER_SUITE" == "true" || ",$CHANGED_SPECS," == *",tests/browser/extension.spec.js,"* ) ]]; then
+            features_expected=true
+          fi
+
+          if [[ "$features_expected" == true ]]; then
+            if [[ "$FEATURES_RESULT" != "success" ]]; then
+              failed=1
+              reasons+=("feature suite was required but was $FEATURES_RESULT")
+            fi
+          elif [[ "$FEATURES_RESULT" == "failure" || "$FEATURES_RESULT" == "cancelled" ]]; then
+            failed=1
+            reasons+=("feature suite: $FEATURES_RESULT")
+          fi
+
+          if [[ "$failed" == 0 ]]; then
+            state=success
+            description="All applicable browser E2E suites passed"
+          else
+            state=failure
+            description="Browser E2E validation incomplete or failed"
+            printf 'Browser E2E gate failed:\n'
+            printf ' - %s\n' "${reasons[@]}"
+          fi
+
+          payload=$(printf '{"state":"%s","target_url":"%s","description":"%s","context":"browser-e2e"}' "$state" "$TARGET_URL" "$description")
           curl --fail-with-body --silent --show-error \
             -X POST \
             -H "Authorization: Bearer $GH_TOKEN" \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            "https://api.github.com/repos/${{ github.repository }}/statuses/$STATUS_SHA" \
-            -d "{\"state\":\"$STATUS_STATE\",\"target_url\":\"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}\",\"description\":\"$STATUS_DESCRIPTION\",\"context\":\"browser-e2e\"}"
+            "${{ github.api_url }}/repos/${{ github.repository }}/statuses/$STATUS_SHA" \
+            -d "$payload"
 
-      - name: Require all browser E2E suites to pass
-        shell: bash
-        run: |
-          if [ "${{ needs.change-detection.result }}" != "success" ] || [ "${{ needs.browser-e2e.result }}" = "failure" ] || [ "${{ needs.browser-e2e.result }}" = "cancelled" ] || ( [ "${{ needs.browser-e2e.result }}" = "skipped" ] && [ "${{ needs.change-detection.outputs.runtime_changed }}" != "false" ] ) || [ "${{ needs.browser-e2e-features.result }}" = "failure" ] || [ "${{ needs.browser-e2e-features.result }}" = "cancelled" ] || ( [ "${{ needs.browser-e2e-features.result }}" = "skipped" ] && [ "${{ needs.change-detection.outputs.runtime_changed }}" != "false" ] ); then
-            echo "References matrix: ${{ needs.browser-e2e.result }}"
-            echo "Features: ${{ needs.browser-e2e-features.result }}"
+          if [[ "$failed" != 0 ]]; then
             exit 1
           fi
-          echo "All applicable browser E2E suites passed."
+
+          echo "$description"
 
       - name: ⏱ Workflow ETA — finish
         if: ${{ always() }}
