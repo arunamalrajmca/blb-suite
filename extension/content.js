@@ -443,12 +443,6 @@ function getDoubleClickSelection(event) {
 
 function handleDoubleClickBlb(event) {
   try {
-    try {
-      const debugRoot = event?.target?.closest?.('article,main,[role="article"],[role="main"],.article-content') || document.documentElement;
-      debugRoot?.setAttribute('data-blb-doubleclick-debug-entered', 'true');
-      debugRoot?.setAttribute('data-blb-doubleclick-debug-state', JSON.stringify({suiteEnabled, doubleClickBlbEnabled, doubleClickSettingsReady}));
-    } catch (_) {}
-
     if (!suiteEnabled || isSensitiveSiteHostname(location.hostname) || isDoubleClickExcludedTarget(event.target)) return;
 
     // Chromium may dispatch dblclick before the new word selection has replaced
@@ -702,19 +696,13 @@ function handleDoubleClickBlb(event) {
           tabBehavior:{activeIfNew:false,activateExisting:true}
         });
         return true;
-      } catch (error) {
-        try {
-          const debugRoot = event?.target?.closest?.('article,main,[role="article"],[role="main"],.article-content') || document.documentElement;
-          debugRoot?.setAttribute('data-blb-doubleclick-debug-error', String(error?.stack || error));
-        } catch (_) {}
+      } catch (_) {
         return false;
       }
     };
 
     requestAnimationFrame(dispatch);
-  } catch (error) {
-    try { document.documentElement?.setAttribute('data-blb-doubleclick-debug-error', String(error?.stack || error)); } catch (_) {}
-  }
+  } catch (_) {}
 }
 
 function enableDoubleClickBlb() {
