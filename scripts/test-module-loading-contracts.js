@@ -91,7 +91,8 @@ if (!importMatch) {
     'background-multiverse-tracking.js',
     'background-blb-destination-manager.js',
     'background-study-session-model.js',
-    'background-study-pdf-export.js'
+    'background-study-pdf-export.js',
+    'background-bible-input.js'
   ];
   const positions = required.map(name => imports.indexOf(name));
   if (positions.some(index => index < 0)
@@ -225,6 +226,25 @@ if (!content.includes('BLBDoubleClickContextModule.create({')
   fail('content script initializes the context module with explicit DOM and reference dependencies');
 } else {
   pass('double-click context module receives explicit DOM and reference dependencies');
+}
+
+
+const bibleInput = read('extension/background-bible-input.js');
+if (!bibleInput.includes('BLBBackgroundBibleInputModule')
+    || !bibleInput.includes('parseInput')
+    || !bibleInput.includes('findBestBookMatch')
+    || !bibleInput.includes('parseSearchInputForFallback')
+    || !bibleInput.includes('isObviouslyGibberishQuery')
+    || /chrome(?:Api)?\.(?:tabs|runtime|alarms|contextMenus)\.[A-Za-z]+\.addListener/.test(bibleInput)) {
+  fail('Bible-input parsing is isolated from tab side effects and service-worker listeners');
+} else {
+  pass('Bible-input parser and fallback-search normalization remain in a pure module');
+}
+if (!background.includes('BLBBackgroundBibleInputModule.create({')
+    || !background.includes('normalizeBooleanOperatorsOutsideQuotes')) {
+  fail('background initializes Bible-input parsing with explicit shared dependencies');
+} else {
+  pass('Bible-input module receives explicit parser dependencies');
 }
 
 const content = read('extension/content.js');
