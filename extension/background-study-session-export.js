@@ -115,8 +115,45 @@ globalThis.BLBBackgroundStudySessionExportModule = Object.freeze({
       if (dateRaw) result = result.filter(s => s.date === dateRaw);
       return result;
     }
-    
-    
-    return Object.freeze({studyBookDisplayName, studyBookCanonicalKey, displayStudyDate, studySessionText, studySessionTopics, parseStudyFilter, filterStudySessions});
+
+    // Build the export artifact as pure data. The service worker remains the
+    // sole owner of storage reads and chrome.downloads.download.
+    function buildStudySessionExport(allSessions, filterText = '') {
+      const sessions = filterStudySessions(allSessions || [], filterText);
+      if (!sessions.length) return null;
+      const topicFilter = parseStudyFilter(filterText, 'topic');
+      const dateFilter = parseStudyFilter(filterText, 'date');
+      const safeFilenamePart = value => String(value || '').trim().replace(/[\\/:*?"<>|]/g, '-').replace(/\\s+/g, ' ').replace(/\\.+$/g, '').trim();
+      const compactDate = iso => {
+        const m = String(iso || '').match(/^(\\d{4})-(\\d{2})-(\\d{2})$/);
+        return m ? `${m[2]}${m[3]}${m[1]}` : safeFilenamePart(iso);
+      };
+      let filename, content;
+      if (topicFilter) {
+        filename = `BLB_Suite_Notes_${safeFilenamePart(topicFilter)}.pdf`;
+        content = [`TITLE: ${topicFilter}`, '', ...sessions.map(studySessionText)].join('\\n');
+      } else if (dateFilter) {
+        filename = `BLB_Suite_Notes_${compactDate(dateFilter)}.pdf`;
+        const blocks = [];
+        const byDate = new Map();
+        for (const session of sessions) {
+          const date = session.date || session.dateLabel || dateFilter;
+          if (!byDate.has(date)) byDate.set(date, []);
+          byDate.get(date).push(session);
+        }
+        for (const [date, dateSessions] of byDate) {
+          blocks.push(`DATE GROUP: ${displayStudyDate(date)}`, ...dateSessions.map(studySessionText), '');
+        }
+        content = [`TITLE: Bible Study - ${displayStudyDate(dateFilter)}`, '', ...blocks].join('\\n');
+      } else {
+        const topics = studySessionTopics(sessions);
+        const intro = ['TITLE: KJV Scripture Tools - Bible Study Sessions', '', 'TOPICS', ...topics.map(t => `- ${t}`), ''];
+        content = intro.concat(sessions.map(studySessionText)).join('\\n');
+        filename = 'KJV Scripture Tools All Notes.pdf';
+      }
+      return {filename, content};
+    }
+
+    return Object.freeze({studyBookDisplayName, studyBookCanonicalKey, displayStudyDate, studySessionText, studySessionTopics, parseStudyFilter, filterStudySessions, buildStudySessionExport});
   }
 });

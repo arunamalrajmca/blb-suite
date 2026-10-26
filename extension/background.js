@@ -853,7 +853,7 @@ function sortStudyRefs(refs) {
   );
 }
 
-const { studyBookDisplayName, studyBookCanonicalKey, displayStudyDate, studySessionText, studySessionTopics, parseStudyFilter, filterStudySessions } = BLBStudySessionExport;
+const { studyBookDisplayName, studyBookCanonicalKey, displayStudyDate, studySessionText, studySessionTopics, parseStudyFilter, filterStudySessions, buildStudySessionExport } = BLBStudySessionExport;
 
 const BLBStudyPdfExport = globalThis.BLBStudyPdfExportModule.create({studyBookDisplayName});
 function buildStudySessionsPdf(content, options = {}) {
@@ -862,39 +862,11 @@ function buildStudySessionsPdf(content, options = {}) {
 
 async function exportStudySessions(filterText='') {
   const data = await getStudySessions();
-  const sessions = filterStudySessions(data.sessions, filterText);
-  if (!sessions.length) return false;
-  const topicFilter = parseStudyFilter(filterText, 'topic');
-  const dateFilter = parseStudyFilter(filterText, 'date');
-  const safeFilenamePart = value => String(value || '').trim().replace(/[\\/:*?"<>|]/g, '-').replace(/\s+/g, ' ').replace(/\.+$/g, '').trim();
-  const displayDate = displayStudyDate;
-  const compactDate = iso => { const m = String(iso || '').match(/^(\d{4})-(\d{2})-(\d{2})$/); return m ? `${m[2]}${m[3]}${m[1]}` : safeFilenamePart(iso); };
-  let filename, content;
-  if (topicFilter) {
-      filename = `BLB_Suite_Notes_${safeFilenamePart(topicFilter)}.pdf`;
-    content = [`TITLE: ${topicFilter}`, '', ...sessions.map(studySessionText)].join('\n');
-  } else if (dateFilter) {
-    filename = `BLB_Suite_Notes_${compactDate(dateFilter)}.pdf`;
-    const blocks = [];
-    const byDate = new Map();
-    for (const session of sessions) {
-      const date = session.date || session.dateLabel || dateFilter;
-      if (!byDate.has(date)) byDate.set(date, []);
-      byDate.get(date).push(session);
-    }
-    for (const [date, dateSessions] of byDate) {
-      blocks.push(`DATE GROUP: ${displayDate(date)}`, ...dateSessions.map(studySessionText), '');
-    }
-    content = [`TITLE: Bible Study - ${displayDate(dateFilter)}`, '', ...blocks].join('\n');
-  } else {
-    const topics = studySessionTopics(sessions);
-    const intro = ['TITLE: KJV Scripture Tools - Bible Study Sessions', '', 'TOPICS', ...topics.map(t=>`- ${t}`), ''];
-    content = intro.concat(sessions.map(studySessionText)).join('\n');
-    filename = 'KJV Scripture Tools All Notes.pdf';
-  }
-  const url = `data:application/pdf;base64,${buildStudySessionsPdf(content)}`;
+  const artifact = buildStudySessionExport(data.sessions, filterText);
+  if (!artifact) return false;
+  const url = `data:application/pdf;base64,${buildStudySessionsPdf(artifact.content)}`;
   return new Promise(resolve => {
-    chrome.downloads.download({url, filename, saveAs:false}, downloadId => {
+    chrome.downloads.download({url, filename:artifact.filename, saveAs:false}, downloadId => {
       if (chrome.runtime.lastError || downloadId == null) { console.error('KJV Scripture Tools: study-session export failed', chrome.runtime.lastError?.message || 'unknown error'); resolve(false); return; }
       resolve(true);
     });

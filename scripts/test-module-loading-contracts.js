@@ -99,10 +99,17 @@ const studySessionExport = read('extension/background-study-session-export.js');
 if (!studySessionExport.includes('BLBBackgroundStudySessionExportModule')
     || !studySessionExport.includes('studySessionText')
     || !studySessionExport.includes('filterStudySessions')
-    || !studySessionExport.includes('sortStudyRefs')) {
+    || !studySessionExport.includes('sortStudyRefs')
+    || !studySessionExport.includes('buildStudySessionExport')
+    || studySessionExport.includes('chrome.downloads.download')) {
   fail('Study Session export formatting and filtering are isolated from Chrome I/O');
 } else {
   pass('Study Session export formatting and filtering use an explicit pure-module contract');
+}
+if (!read('extension/background.js').includes('buildStudySessionExport(data.sessions, filterText)')) {
+  fail('background delegates Study Session export formatting to the pure export module');
+} else {
+  pass('background retains storage/download ownership while delegating export formatting');
 }
 if (!read('extension/background.js').includes('chrome.downloads.download({url, filename, saveAs:false}')) {
   fail('Study Session download side effect remains in the service worker');
