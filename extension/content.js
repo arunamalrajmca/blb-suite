@@ -423,8 +423,7 @@ globalThis.BLBMultiVerseHandoffModule?.initialize({
 const { resolveNearestChapterContext } = globalThis.BLBDoubleClickReferenceContextModule.create({
   books:BOOKS,
   bookAliases:BOOK_ALIASES,
-  resolveBibleReference,
-  resolveNearestChapterContext
+  resolveBibleReference
 });
 
 const BLBDoubleClickContext = globalThis.BLBDoubleClickContextModule.create({
@@ -440,7 +439,8 @@ const BLBDoubleClickContext = globalThis.BLBDoubleClickContextModule.create({
   getDoubleClickTargetElement,
   resolveBibleBook,
   resolveBibleReferenceText,
-  resolveBibleReference
+  resolveBibleReference,
+  resolveNearestChapterContext
 });
 const { normalizeDoubleClickToken, getAdjacentBoundaryText, getSelectionContextPosition, resolveBibleReferenceFromContextWindow, getContextualBibleReference, getStandaloneBookReference, isBibleVersionCodeToken, getDoubleClickBlockContextReference } = BLBDoubleClickContext;
 
