@@ -117,10 +117,20 @@ test.describe('core user-visible E2E', () => {
       // Avoid coupling this regression to temporary DOM diagnostic attributes:
       // assert the user-visible destination, which proves both the adjacent
       // verse number and the latest valid chapter context were resolved.
-      await expect.poll(async () => extensionWorker.evaluate(path =>
-        chrome.tabs.query({}).then(tabs =>
-          tabs.some(tab => String(tab.url || '').includes(path))
-        ), expectedPath), { timeout: 5000, intervals: [100, 200, 300] }).toBe(true);
+      try {
+        await expect.poll(async () => extensionWorker.evaluate(path =>
+          chrome.tabs.query({}).then(tabs =>
+            tabs.some(tab => String(tab.url || '').includes(path))
+          ), expectedPath), { timeout: 5000, intervals: [100, 200, 300] }).toBe(true);
+      } catch (error) {
+        const diagnostics = await page.evaluate(() => ({
+          lastHandlerDiagnostic: document.documentElement?.getAttribute('data-blb-suite-dblclick-last-diagnostic'),
+          diagnosticsEnabled: document.documentElement?.getAttribute('data-blb-suite-e2e-diagnostics'),
+          pageText: document.querySelector('#generic-verse-context-article')?.textContent?.slice(0,500) || ''
+        }));
+        console.error('Double-click failure diagnostics', JSON.stringify({selector, expectedPath, diagnostics}));
+        throw error;
+      }
       await activateBlbTabForPath(extensionWorker, expectedPath, {
         fragment: selector,
         selector: '#generic-verse-context-article',

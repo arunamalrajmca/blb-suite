@@ -448,6 +448,7 @@ function doubleClickDiagnostic(stage, details = {}) {
     if (document.documentElement?.getAttribute('data-blb-suite-e2e-diagnostics') !== 'true') return;
     const entry = {stage, at:Date.now(), hostname:location.hostname, ...details};
     window.__blbSuiteDoubleClickDiagnosticV1 = entry;
+    document.documentElement?.setAttribute('data-blb-suite-dblclick-last-diagnostic', JSON.stringify(entry));
     console.info('[BLB double-click diagnostic]', JSON.stringify(entry));
   } catch (_) {}
 }
