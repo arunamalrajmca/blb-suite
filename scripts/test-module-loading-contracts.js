@@ -94,7 +94,8 @@ if (!importMatch) {
     'background-study-session-model.js',
     'background-study-pdf-export.js',
     'background-bible-input.js',
-    'background-pdf-reference-extractor.js'
+    'background-pdf-reference-extractor.js',
+    'background-selection-context-menu.js'
   ];
   const positions = required.map(name => imports.indexOf(name));
   if (positions.some(index => index < 0)
@@ -285,6 +286,26 @@ if (!content.includes('BLBPageSelectionClassifierModule.create({')
   fail('content initializes page-selection classifier with explicit resolver dependencies');
 } else {
   pass('page-selection classifier receives explicit reference dependencies');
+}
+
+
+const selectionContextMenu = read('extension/background-selection-context-menu.js');
+if (!selectionContextMenu.includes('BLBBackgroundSelectionContextMenuModule')
+    || !selectionContextMenu.includes('syncWebSelectionContextMenuVisibility')
+    || !selectionContextMenu.includes('syncPdfSelectionContextMenuVisibility')
+    || !selectionContextMenu.includes('selectionMenuOperation')
+    || /chrome(?:Api)?\.(?:tabs|runtime|alarms|contextMenus)\.[A-Za-z]+\.addListener/.test(selectionContextMenu)) {
+  fail('selection context-menu policy and state are isolated without owning service-worker listeners');
+} else {
+  pass('selection context-menu module owns visibility policy while leaving listener registration outside');
+}
+if (!background.includes('chrome.tabs.onActivated.addListener(')
+    || !background.includes('chrome.tabs.onUpdated.addListener(')
+    || !background.includes('chrome.contextMenus.onClicked.addListener(')
+    || !background.includes('BLBBackgroundSelectionContextMenuModule.create({')) {
+  fail('service-worker tab/context-menu listeners remain registered after module initialization');
+} else {
+  pass('service-worker tab and context-menu listener registration remains in background.js');
 }
 
 const content = read('extension/content.js');
