@@ -51,3 +51,61 @@ test('Study Sessions popup starts recording, saves a note, and stops without los
 
   await page.close();
 });
+
+test('Study Sessions popup pauses and resumes the selected recording without creating duplicate history', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  const topic = 'Popup pause resume ' + Date.now();
+  const normalizedTopic = topic.split(' ').map(word =>
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  ).join(' ');
+
+  await page.locator('#studyTopic').fill(topic);
+  await page.locator('#startTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Recording started');
+
+  await page.locator('#startTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Recording paused');
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get(['currentStudySessionId', 'studyPausedTopic', 'studySessions']);
+    return {
+      currentStudySessionId: state.currentStudySessionId ?? null,
+      pausedTopic: state.studyPausedTopic,
+      sessions: state.studySessions.length
+    };
+  })).toMatchObject({ currentStudySessionId: null, pausedTopic: normalizedTopic, sessions: 1 });
+
+  await expect(page.locator('#resumeStudy')).toBeVisible();
+  await page.locator('#resumeStudy').click();
+  await expect(page.locator('#studyStatus')).toContainText('Recording started');
+  const resumed = await extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get(['currentStudySessionId', 'studySessions']);
+    return { active: Boolean(state.currentStudySessionId), count: state.studySessions.length };
+  });
+  expect(resumed).toEqual({ active: true, count: 1 });
+
+  await page.locator('#stopTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Last Recording Stopped');
+  await page.close();
+});
+
+test('Study Sessions popup rejects an empty topic without starting a recording', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+
+  await page.locator('#startTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Enter a topic first.');
+  const state = await extensionWorker.evaluate(() => chrome.storage.local.get([
+    'currentStudySessionId', 'studySessions'
+  ]));
+  expect(state.currentStudySessionId ?? null).toBeNull();
+  expect(state.studySessions ?? []).toHaveLength(0);
+  await page.close();
+});
+
