@@ -3020,6 +3020,7 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'book-aliases.js',
   'reference-core.js',
   'kings-bible-collector.js',
+  'webster-collector.js',
   'content.js'
 ];
 
