@@ -75,3 +75,25 @@ test('Substack selection parser does not absorb the next book number as a verse'
     { book: '2 thessalonians', chapter: 2, verse: 13 }
   ]);
 });
+
+// Regression for all numbered-book prefixes: the leading 1, 2, or 3 in
+// the next book name must not be reused as a truncated prior verse.
+test('Substack selection parser respects 1, 2, and 3 at numbered-book boundaries', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    const selected = '(Rom. 1:16, 1 Sam. 3:14, 2 Kings 2:12, 3 John 1:4)';
+    return extractBibleRefsFromSelectedTextUncached(selected).flatMap(ref => {
+      const verses = [];
+      for (let verse = ref.from; verse <= ref.to; verse++) {
+        verses.push({ book: ref.book, chapter: ref.chapter, verse });
+      }
+      return verses;
+    });
+  });
+
+  expect(result).toEqual([
+    { book: 'romans', chapter: 1, verse: 16 },
+    { book: '1 samuel', chapter: 3, verse: 14 },
+    { book: '2 kings', chapter: 2, verse: 12 },
+    { book: '3 john', chapter: 1, verse: 4 }
+  ]);
+});
