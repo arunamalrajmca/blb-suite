@@ -54,7 +54,7 @@ globalThis.BLBBackgroundContentScriptActivationModule = Object.freeze({
               const response = await chromeApi.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
               if (response?.ok === true) {
                 if (files.includes('redirect-scripttagger.js')) {
-                  await chromeApi.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
+                  await chromeApi.scripting.executeScript({target:{tabId}, files:scriptTaggerContentScriptFiles});
                 }
                 return true;
               }
@@ -77,7 +77,7 @@ globalThis.BLBBackgroundContentScriptActivationModule = Object.freeze({
                 const response = await chromeApi.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
                 if (response?.ok === true) {
                   if (files.includes('redirect-scripttagger.js')) {
-                    await chromeApi.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
+                    await chromeApi.scripting.executeScript({target:{tabId}, files:scriptTaggerContentScriptFiles});
                   }
                   return true;
                 }
