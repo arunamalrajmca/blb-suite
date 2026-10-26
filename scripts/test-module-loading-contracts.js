@@ -34,6 +34,7 @@ const expectedContentScripts = [
   'multiverse-copy-links.js',
   'blb-auto-hyperlinker.js',
   'blb-parse-popup-links.js',
+  'blb-navigation-links.js',
   'blb-passive-new-tab.js',
   'content.js'
 ];
@@ -99,7 +100,7 @@ if (!dynamicFilesMatch) {
   fail('runtime-injected content scripts declare their dependency list');
 } else {
   const dynamicFiles = [...dynamicFilesMatch[1].matchAll(/['\"]([^'\"]+\.js)['\"]/g)].map(match => match[1]);
-  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-passive-new-tab.js', 'content.js'];
+  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-navigation-links.js', 'blb-passive-new-tab.js', 'content.js'];
   const positions = requiredDynamic.map(name => dynamicFiles.indexOf(name));
   if (positions.some(index => index < 0)
       || positions.some((index, i) => i > 0 && index <= positions[i - 1])) {
@@ -168,6 +169,21 @@ if (!content.includes('BLBPassiveNewTabModule?.initialize({')) {
   fail('content script initializes passive new-tab targeting');
 } else {
   pass('content script initializes passive new-tab targeting');
+}
+
+const navigationLinks = read('extension/blb-navigation-links.js');
+if (!navigationLinks.includes('BLBNavigationLinksModule')
+    || !navigationLinks.includes('blbSuiteOpenMultiVerseVerse')
+    || !navigationLinks.includes('Criteria Search ordinary verse links')
+    || !navigationLinks.includes('stopImmediatePropagation()')) {
+  fail('MultiVerse and Criteria Search navigation handlers remain in their feature module');
+} else {
+  pass('MultiVerse and Criteria Search navigation handlers remain in their feature module');
+}
+if (!content.includes('BLBNavigationLinksModule?.initialize({')) {
+  fail('content script initializes the BLB navigation feature module');
+} else {
+  pass('content script initializes the BLB navigation feature module');
 }
 
 const referenceCore = read('extension/reference-core.js');

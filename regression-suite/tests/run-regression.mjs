@@ -527,6 +527,14 @@ test('BLB native-event interception remains explicitly scoped', () => {
   assert(!dbl.includes('stopPropagation()'), 'double-click resolver must not stop native propagation');
   assert(!dbl.includes('stopImmediatePropagation()'), 'double-click resolver must not stop native propagation');
 });
+test('BLB MultiVerse and Criteria Search navigation remain explicitly scoped', () => {
+  const content = read('content.js');
+  const navigation = read('blb-navigation-links.js');
+  assert(content.includes('BLBNavigationLinksModule?.initialize({'), 'BLB navigation module initialization missing');
+  assert(navigation.includes('blbSuiteOpenMultiVerseVerse'), 'MultiVerse verse navigation message missing');
+  assert(navigation.includes('Criteria Search ordinary verse links'), 'Criteria Search verse handler missing');
+  assert(navigation.includes('link.closest?.(".parse-popup")'), 'Criteria Search ordinary handler must exclude parse-popup links');
+});
 test('passive BLB verse links retain observer-driven new-tab targets', () => {
   const content = read('content.js');
   const passive = read('blb-passive-new-tab.js');
