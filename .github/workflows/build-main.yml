@@ -13,10 +13,6 @@ jobs:
     steps:
       - name: Checkout Main
         uses: actions/checkout@v4
-      - name: ⏱ Workflow ETA — start
-        uses: ./.github/actions/workflow-eta
-        with:
-          phase: start
       - name: Build Main ZIP
         run: |
           mkdir -p dist
@@ -35,8 +31,3 @@ jobs:
             dist/*.zip
             dist/*.sha256
           retention-days: 7
-      - name: ⏱ Workflow ETA — finish
-        if: ${{ always() }}
-        uses: ./.github/actions/workflow-eta
-        with:
-          phase: finish
