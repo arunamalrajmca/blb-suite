@@ -1,6 +1,13 @@
 const { test, expect } = require('./fixtures');
 
-test('hostname text never enables Show on BLB by default', async ({ extensionWorker }) => {
+async function createExtensionMessagePage(context, extensionId) {
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  return page;
+}
+
+test('hostname text never enables Show on BLB by default', async ({ context, extensionId }) => {
+  const messagePage = await createExtensionMessagePage(context, extensionId);
   const hostnames = [
     'bible.com',
     'www.bible.com',
@@ -10,7 +17,7 @@ test('hostname text never enables Show on BLB by default', async ({ extensionWor
     'example.com'
   ];
 
-  const results = await extensionWorker.evaluate(async (hosts) => {
+  const results = await messagePage.evaluate(async (hosts) => {
     const output = {};
     for (const hostname of hosts) {
       output[hostname] = await chrome.runtime.sendMessage({
@@ -27,8 +34,9 @@ test('hostname text never enables Show on BLB by default', async ({ extensionWor
 });
 
 
-test('sensitive-site feature toggles are blocked even when the user has opted in', async ({ extensionWorker }) => {
-  const results = await extensionWorker.evaluate(async () => {
+test('sensitive-site feature toggles are blocked even when the user has opted in', async ({ context, extensionId }) => {
+  const messagePage = await createExtensionMessagePage(context, extensionId);
+  const results = await messagePage.evaluate(async () => {
     const cases = [
       'https://secure.bank.example/',
       'https://www.hdfcbank.com/',
@@ -68,24 +76,27 @@ test('sensitive-site feature toggles are blocked even when the user has opted in
   expect(results['https://example.com/']).not.toMatchObject({ blockedSensitiveSite: true });
 });
 
-test('BLB permits Show on BLB only and never enables Double-click', async ({ extensionWorker }) => {
-  const result = await extensionWorker.evaluate(async () => {
+test('BLB permits Show on BLB only and never enables Double-click', async ({ context, extensionId, extensionWorker }) => {
+  const messagePage = await createExtensionMessagePage(context, extensionId);
+  await extensionWorker.evaluate(async () => {
     await chrome.storage.local.set({masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}});
-    const pageButton = await chrome.runtime.sendMessage({
-      type:'blbSuitePrepareSiteFeatureToggle',
-      origin:'https://www.blueletterbible.org/*',
-      feature:'pageButton',
-      otherFeatureEnabled:true
-    });
-    const storedAfterPageButton = await chrome.storage.local.get({pageSelectionButtonSites:{},doubleClickBlbSites:{}});
-    const doubleClick = await chrome.runtime.sendMessage({
-      type:'blbSuitePrepareSiteFeatureToggle',
-      origin:'https://www.blueletterbible.org/*',
-      feature:'doubleClick',
-      otherFeatureEnabled:true
-    });
-    return {pageButton,storedAfterPageButton,doubleClick};
   });
+  const pageButton = await messagePage.evaluate(async () => chrome.runtime.sendMessage({
+    type:'blbSuitePrepareSiteFeatureToggle',
+    origin:'https://www.blueletterbible.org/*',
+    feature:'pageButton',
+    otherFeatureEnabled:true
+  }));
+  const storedAfterPageButton = await extensionWorker.evaluate(async () =>
+    chrome.storage.local.get({pageSelectionButtonSites:{},doubleClickBlbSites:{}})
+  );
+  const doubleClick = await messagePage.evaluate(async () => chrome.runtime.sendMessage({
+    type:'blbSuitePrepareSiteFeatureToggle',
+    origin:'https://www.blueletterbible.org/*',
+    feature:'doubleClick',
+    otherFeatureEnabled:true
+  }));
+  const result = {pageButton,storedAfterPageButton,doubleClick};
   expect(result.pageButton).toMatchObject({ok:true});
   expect(result.storedAfterPageButton.pageSelectionButtonSites['blueletterbible.org']).toBe(true);
   expect(result.storedAfterPageButton.doubleClickBlbSites['blueletterbible.org']).toBe(false);
