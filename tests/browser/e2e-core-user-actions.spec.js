@@ -156,6 +156,37 @@ test.describe('core user-action E2E coverage', () => {
     expect(captured.html).not.toContain('blueletterbible.org/kjv/jhn/3/16/');
   });
 
+
+  test('copying typed MultiVerse references preserves the exact input text', async ({ page, context, extensionStorage }) => {
+    await extensionStorage.set({ masterEnabled: true });
+    await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><body><textarea id="mvText">John 3:16, Romans 8:1-3</textarea><button id="copyButton" data-clipboard-text="(John 3:16)">Copy</button><a href="https://www.blueletterbible.org/kjv/jhn/3/16/">John 3:16</a></body></html>'
+    }));
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: 'https://www.blueletterbible.org' });
+    await page.goto('https://www.blueletterbible.org/tools/MultiVerse.cfm', { waitUntil: 'domcontentloaded' });
+    await page.locator('#mvText').evaluate(el => {
+      el.focus();
+      el.select();
+      if (!document.execCommand('copy')) throw new Error("document.execCommand('copy') returned false");
+    });
+
+    const captured = await page.evaluate(async () => {
+      await new Promise(resolve => setTimeout(resolve, 50));
+      const items = await navigator.clipboard.read();
+      let html = '';
+      let plain = '';
+      for (const item of items) {
+        if (item.types.includes('text/html')) html = await (await item.getType('text/html')).text();
+        if (item.types.includes('text/plain')) plain = await (await item.getType('text/plain')).text();
+      }
+      return { html, plain };
+    });
+    expect(captured.plain).toBe('John 3:16, Romans 8:1-3');
+    expect(captured.html).not.toContain('blueletterbible.org/kjv/jhn/3/16/');
+  });
+
   test('BLB verse links inside parse popups open in a new tab', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true });
     // Parse-popup interception is BLB-host-specific, so serve a deterministic
