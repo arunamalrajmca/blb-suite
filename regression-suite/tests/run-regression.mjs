@@ -586,7 +586,7 @@ test('MultiVerse creation/reuse path remains wired', () => {
 });
 section('features');
 test('Webster 1828 path remains wired', () => {
-  const content = read('content.js'), webster = read('webster-collector.js'), bg = read('background.js');
+  const content = read('content.js'), webster = read('webster-collector.js'), sourceCollector = read('source-page-collector.js'), bg = read('background.js');
   assert(webster.includes('webstersdictionary1828.com'), 'Webster host missing');
   assert(webster.includes('collectWebsterBibleRefs'), 'Webster collector missing');
   assert(webster.includes('blbSuiteOpenBackgroundUrl'), 'Webster opener missing');
