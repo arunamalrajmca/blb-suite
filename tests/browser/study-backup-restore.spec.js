@@ -138,7 +138,7 @@ test.describe('Study Sessions backup and restore', () => {
     const downloadPromise = page.waitForEvent('download');
     await page.locator('#exportStudyBackup').click();
     const download = await downloadPromise;
-    expect(download.suggestedFilename()).toMatch(/^BLB-Suite-Study-Backup-\\d{4}-\\d{2}-\\d{2}\\.json$/);
+    expect(download.suggestedFilename()).toMatch(/^BLB-Suite-Study-Backup-\d{4}-\d{2}-\d{2}\.json$/);
     await expect(page.locator('#studyStatus')).toContainText('Study backup exported');
     await expect.poll(() => page.evaluate(() => window.__capturedStudyBackup)).not.toBeNull();
 
