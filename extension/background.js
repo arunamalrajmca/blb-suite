@@ -4260,24 +4260,24 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // Comma-separated verses. For consecutive verses such as 9,10 or 9,10,11,
   // treat the selection as one continuous range. For non-consecutive verses,
   // open each verse separately in BLB MultiVerse.
-  const colonCommaRe = /(?<![A-Za-z0-9])((?:[1-3]\\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\\s*(\\d+)\\s*:\\s*(\\d+)((?:\\s*,\\s*\\d+(?:\\s*:\\s*\\d+)?(?:\\s*-\\s*\\d+)?)+)(?![A-Za-z0-9])/gi;
+  const colonCommaRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)((?:\s*,\s*\d+(?:\s*:\s*\d+)?(?:\s*-\s*\d+)?)+)(?![A-Za-z0-9])/gi;
   while ((m = colonCommaRe.exec(source))) {
     if (isShadowedBookMatch(m.index)) continue;
     const book = resolveBook(m[1].trim());
     if (!book) continue;
     let currentChapter = Number(m[2]);
     const firstVerse = Number(m[3]);
-    const rangeText = String(m[4] || '').replace(/^,\\s*/, '');
+    const rangeText = String(m[4] || '').replace(/^,\s*/, '');
     const ranges = [{ chapter: currentChapter, from: firstVerse, to: firstVerse }];
     for (const tokenRaw of rangeText.split(',')) {
       const token = tokenRaw.trim();
-      let item = token.match(/^(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?$/);
+      let item = token.match(/^(\d+)\s*:\s*(\d+)(?:\s*-\s*(\d+))?$/);
       if (item) {
         currentChapter = Number(item[1]);
         ranges.push({chapter:currentChapter, from:Number(item[2]), to:Number(item[3] || item[2])});
         continue;
       }
-      item = token.match(/^(\\d+)(?:\\s*-\\s*(\\d+))?$/);
+      item = token.match(/^(\d+)(?:\s*-\s*(\d+))?$/);
       if (item) ranges.push({chapter:currentChapter, from:Number(item[1]), to:Number(item[2] || item[1])});
     }
 
