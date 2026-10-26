@@ -27,7 +27,7 @@ class VerifyStorePackageTests(unittest.TestCase):
             "manifest_version": 3, "name": "KJV Scripture Tools", "version": "5.2.51.99",
             "permissions": ["storage"],
             "host_permissions": ["https://www.blueletterbible.org/*"],
-            "optional_host_permissions": ["http://*/*", "https://*/*", "https://chatgpt.com/*"],
+            "optional_host_permissions": ["http://*/*", "https://*/*"],
             "background": {"service_worker": "background.js"},
             "options_page": "Tutorial.html",
             "icons": {"16": "icons/icon16.png", "48": "icons/icon48.png", "128": "icons/icon128.png"},
