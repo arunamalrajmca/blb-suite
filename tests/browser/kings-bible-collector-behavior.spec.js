@@ -73,6 +73,68 @@ function collectorFor(type, anchors) {
     }, url);
 }
 
+
+function allPagesCollectorFor(pages, startUrl) {
+  const start = contentSource.indexOf('function collectKingsBibleReferences(');
+  const end = contentSource.indexOf('\n  function showKingsBibleStatus(', start);
+  expect(start, 'Kings Bible collector must exist').toBeGreaterThan(-1);
+  expect(end, 'Kings Bible all-pages collector boundary must exist').toBeGreaterThan(start);
+  const collectorSource = contentSource.slice(start, end);
+  const location = new URL(startUrl);
+  const fetched = [];
+  const context = {
+    kingsBibleEntryType: 'concordance',
+    BOOKS: books,
+    URL,
+    location,
+    document: pages.get(startUrl),
+    normalizeSelectionText,
+    parseRef,
+    resolveBibleReference,
+    blbUrl,
+    fetch: async url => {
+      fetched.push(url);
+      const page = pages.get(url);
+      return page
+        ? { ok: true, text: async () => '<mocked page>' }
+        : { ok: false, text: async () => '' };
+    },
+    DOMParser: class {
+      parseFromString() {
+        const url = fetched[fetched.length - 1];
+        return pages.get(url);
+      }
+    }
+  };
+  vm.runInNewContext(collectorSource + '\nthis.__collectAll = collectAllKingsBibleReferences;', context);
+  return { collect: () => context.__collectAll(), fetched };
+}
+
+function makeConcordancePage({ entries = [], pageLinks = [], pageNumbers = [] } = {}) {
+  const entryAnchors = entries.map(entry => makeAnchor({
+    href: entry.href,
+    text: entry.text || '',
+    className: 'concordanceitem'
+  }));
+  const paginationAnchors = pageNumbers.map(number => makeAnchor({
+    href: '#',
+    text: String(number)
+  }));
+  const otherAnchors = pageLinks.map(link => makeAnchor({
+    href: link.href,
+    text: link.text
+  }));
+  const allAnchors = [...entryAnchors, ...paginationAnchors, ...otherAnchors];
+  return {
+    querySelectorAll(selector) {
+      if (selector === 'ul.pagination li.current-page a') return paginationAnchors;
+      if (selector === 'a[href]') return allAnchors;
+      if (selector.includes('concordanceitem')) return entryAnchors;
+      return [];
+    }
+  };
+}
+
 test.describe("The King's Bible MultiVerse collector behavior", () => {
   test('Concordance uses the structured Bible URL when a caption is malformed and deduplicates equivalent targets', () => {
     const collect = collectorFor('concordance', [
@@ -132,4 +194,39 @@ test.describe("The King's Bible MultiVerse collector behavior", () => {
     });
     expect(refs[0].url).toBe('https://www.blueletterbible.org/kjv/judges/6/15/17/');
   });
+
+  test('Concordance fetches numbered pages, deduplicates references across pages, and respects the page cap', async () => {
+    const startUrl = 'https://www.thekingsbible.com/Concordance/faith/1';
+    const secondUrl = 'https://www.thekingsbible.com/Concordance/faith/2';
+    const thirdUrl = 'https://www.thekingsbible.com/Concordance/faith/3';
+    const firstPage = makeConcordancePage({
+      entries: [
+        { href: '/Bible/1/1?verse=1', text: 'Genesis 1:1' }
+      ],
+      pageNumbers: [1, 2, 3],
+      pageLinks: [{ href: '/Concordance/faith/2', text: 'Next' }]
+    });
+    const secondPage = makeConcordancePage({
+      entries: [
+        { href: '/Bible/1/1?verse=1', text: 'Genesis 1:1 duplicate' },
+        { href: '/Bible/2/4?verse=14', text: 'Exodus 4:14' }
+      ],
+      pageNumbers: [1, 2, 3],
+      pageLinks: [{ href: '/Concordance/faith/3', text: '3' }]
+    });
+    const thirdPage = makeConcordancePage({
+      entries: [{ href: '/Bible/7/6?verse=15', text: 'Judges 6:15' }],
+      pageNumbers: [1, 2, 3]
+    });
+    const pages = new Map([[startUrl, firstPage], [secondUrl, secondPage], [thirdUrl, thirdPage]]);
+    const harness = allPagesCollectorFor(pages, startUrl);
+
+    const refs = await harness.collect();
+    expect(refs.map(ref => ref.text)).toEqual(['Genesis 1:1', 'Exodus 4:14', 'Judges 6:15']);
+    expect(new Set(refs.map(ref => ref.url)).size).toBe(3);
+    expect(harness.fetched).toContain(secondUrl);
+    expect(harness.fetched).toContain(thirdUrl);
+    expect(harness.fetched.filter(url => url === secondUrl)).toHaveLength(1);
+  });
+
 });
