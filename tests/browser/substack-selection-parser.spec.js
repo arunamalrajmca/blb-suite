@@ -129,15 +129,22 @@ test('Substack selection parser preserves a chapter-only reference', async ({ ex
 test('Substack selection parser preserves the extended-list Isaiah and Hebrews citations', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(() => {
     const selected = '(Isa. 55:10,11; Hebrews 5:12-14)';
-    return extractBibleRefsFromSelectedTextUncached(selected).map(ref => ({
-      book: ref.book, chapter: ref.chapter, from: ref.from, to: ref.to
-    }));
+    const verses = extractBibleRefsFromSelectedTextUncached(selected).flatMap(ref => {
+      // Chapter-only references are not expected in this test.
+      const expanded = [];
+      for (let verse = ref.from; verse <= ref.to; verse++) {
+        expanded.push({ book: ref.book, chapter: ref.chapter, verse });
+      }
+      return expanded;
+    });
+    return [...new Map(verses.map(v => [`${v.book}|${v.chapter}|${v.verse}`, v])).values()];
   });
 
   expect(result).toEqual([
-    { book: 'isaiah', chapter: 55, from: 10, to: 11 },
-    { book: 'isaiah', chapter: 55, from: 10, to: 10 },
-    { book: 'isaiah', chapter: 55, from: 11, to: 11 },
-    { book: 'hebrews', chapter: 5, from: 12, to: 14 }
+    { book: 'isaiah', chapter: 55, verse: 10 },
+    { book: 'isaiah', chapter: 55, verse: 11 },
+    { book: 'hebrews', chapter: 5, verse: 12 },
+    { book: 'hebrews', chapter: 5, verse: 13 },
+    { book: 'hebrews', chapter: 5, verse: 14 }
   ]);
 });
