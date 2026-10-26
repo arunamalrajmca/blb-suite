@@ -28,21 +28,48 @@ jobs:
     if: github.event.workflow_run.conclusion == 'failure'
     runs-on: ubuntu-latest
     steps:
-      - name: Cancel queued and in-progress runs for the failed branch
+      - name: Cancel only sibling runs for the same PR commit
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
-          FAILED_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          FAILED_SHA: ${{ github.event.workflow_run.head_sha }}
+          FAILED_EVENT: ${{ github.event.workflow_run.event }}
+          FAILED_PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
         shell: bash
         run: |
           set -euo pipefail
-          response="$(gh api --paginate --slurp "repos/$REPOSITORY/actions/runs?branch=$FAILED_BRANCH&per_page=100" 2>/dev/null || true)"
-          [[ -n "$response" ]] || exit 0
-          run_ids="$(printf '%s' "$response" | jq -r --arg failed "$FAILED_RUN_ID" '[.[] | .workflow_runs[]? | select((.id | tostring) != $failed) | select(.status == "in_progress" or .status == "queued") | .id] | unique | .[]' 2>/dev/null || true)"
-          [[ -n "$run_ids" ]] || exit 0
+
+          # Fail closed: never cancel branch-wide runs, main runs, or runs whose
+          # pull-request association is unavailable.
+          if [[ "$FAILED_EVENT" != "pull_request" || -z "${FAILED_PR_NUMBER:-}" || -z "$FAILED_SHA" ]]; then
+            echo "No unambiguous PR/commit identity; leaving other runs untouched."
+            exit 0
+          fi
+
+          response="$(gh api --paginate --slurp "repos/$REPOSITORY/actions/runs?head_sha=$FAILED_SHA&per_page=100" 2>/dev/null || true)"
+          [[ -n "$response" ]] || { echo "Could not list runs; no cancellations attempted."; exit 0; }
+
+          run_ids="$(printf '%s' "$response" | jq -r \
+            --arg failed "$FAILED_RUN_ID" \
+            --arg sha "$FAILED_SHA" \
+            --arg pr "$FAILED_PR_NUMBER" \
+            '[.[] | .workflow_runs[]? |
+              select((.id | tostring) != $failed) |
+              select(.head_sha == $sha and .event == "pull_request") |
+              select(.status == "in_progress" or .status == "queued") |
+              select(any(.pull_requests[]?; (.number | tostring) == $pr)) |
+              .id] | unique | .[]' 2>/dev/null || true)"
+
+          if [[ -z "$run_ids" ]]; then
+            echo "No queued or in-progress sibling runs for PR #$FAILED_PR_NUMBER at $FAILED_SHA."
+            exit 0
+          fi
+
           while IFS= read -r run_id; do
             [[ -n "$run_id" ]] || continue
-            echo "Cancelling run $run_id on branch $FAILED_BRANCH after failure of run $FAILED_RUN_ID"
-            gh api --method POST "repos/$REPOSITORY/actions/runs/$run_id/cancel" || true
+            echo "Cancelling sibling run $run_id for PR #$FAILED_PR_NUMBER at $FAILED_SHA after failure of run $FAILED_RUN_ID."
+            gh api --method POST "repos/$REPOSITORY/actions/runs/$run_id/cancel" || {
+              echo "Cancellation request failed for run $run_id; continuing."
+            }
           done <<< "$run_ids"
