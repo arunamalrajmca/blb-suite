@@ -127,7 +127,10 @@ if (!multiverseTracking.includes('BLBBackgroundMultiVerseTrackingModule')
     || !multiverseTracking.includes('pendingUpdate')
     || !multiverseTracking.includes('canonicalMultiVerseSet')
     || !multiverseTracking.includes('blbSuiteMultiVerseTabSets')
-    || /chrome(?:Api)?\\.(?:tabs|runtime|alarms|contextMenus)\\.[A-Za-z]+\\.addListener/.test(multiverseTracking)) {
+    || !multiverseTracking.includes('expandMultiVerseRefsToVerses')
+    || !multiverseTracking.includes('compactMultiVerseVerses')
+    || !multiverseTracking.includes('maxVerses = 200')
+    || /chrome(?:Api)?\.(?:tabs|runtime|alarms|contextMenus)\.[A-Za-z]+\.addListener/.test(multiverseTracking)) {
   fail('MultiVerse tracking is isolated without moving service-worker event listeners');
 } else {
   pass('MultiVerse tracking module owns canonicalization and serialized storage only');
