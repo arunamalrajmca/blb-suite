@@ -97,3 +97,63 @@ test('Substack selection parser respects 1, 2, and 3 at numbered-book boundaries
     { book: '3 john', chapter: 1, verse: 4 }
   ]);
 });
+
+
+// Regression for the original cross-chapter false positive: the chapter number
+// in "Psalms 1:2, 105:1" must not be reinterpreted as verse 105 in Psalm 1,
+// then clamped to Psalm 1:6.
+test('Substack selection parser does not reinterpret a later chapter as a verse', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    const selected = '(Psalms 1:2, 105:1)';
+    return extractBibleRefsFromSelectedTextUncached(selected).flatMap(ref => {
+      const verses = [];
+      for (let verse = ref.from; verse <= ref.to; verse++) {
+        verses.push({ book: ref.book, chapter: ref.chapter, verse });
+      }
+      return verses;
+    });
+  });
+
+  expect(result).toEqual([
+    { book: 'psalms', chapter: 1, verse: 2 },
+    { book: 'psalms', chapter: 105, verse: 1 }
+  ]);
+});
+
+// Regression for source references whose verse number exceeds the chapter.
+// The shared normalizer's established behavior is to clamp to the chapter's
+// last verse, so 1 Thessalonians 1:16 should resolve to 1 Thessalonians 1:10.
+test('Substack selection parser clamps an out-of-range verse to the chapter end', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    return extractBibleRefsFromSelectedTextUncached('(1 Thess. 1:16)').map(ref => ({
+      book: ref.book,
+      chapter: ref.chapter,
+      from: ref.from,
+      to: ref.to
+    }));
+  });
+
+  expect(result).toEqual([
+    { book: '1 thessalonians', chapter: 1, from: 10, to: 10 }
+  ]);
+});
+
+// Regression for malformed numeric-prefix matches: a parser must not truncate
+// a valid verse such as 16 to 1 or 11 to 1/2 at a numeric token boundary.
+test('Substack selection parser never truncates a multi-digit verse number', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    const selected = '(Rom. 15:16; 1 Cor. 6:11)';
+    return extractBibleRefsFromSelectedTextUncached(selected).map(ref => ({
+      book: ref.book,
+      chapter: ref.chapter,
+      from: ref.from,
+      to: ref.to,
+      text: ref.text
+    }));
+  });
+
+  expect(result).toEqual([
+    { book: 'romans', chapter: 15, from: 16, to: 16, text: 'Rom. 15:16' },
+    { book: '1 corinthians', chapter: 6, from: 11, to: 11, text: '1 Cor. 6:11' }
+  ]);
+});
