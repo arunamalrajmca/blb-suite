@@ -83,7 +83,8 @@ if (!importMatch) {
     'book-aliases.js',
     'reference-core.js',
     'background-host-policy.js',
-    'background-content-script-registry.js'
+    'background-content-script-registry.js',
+    'background-content-script-activation.js'
   ];
   const positions = required.map(name => imports.indexOf(name));
   if (positions.some(index => index < 0)
@@ -250,6 +251,16 @@ if (!registry.includes('BLBBackgroundContentScriptRegistryModule')
   fail('runtime content-script registration is isolated behind its registry module');
 } else {
   pass('runtime content-script registration is isolated behind its registry module');
+}
+
+const activation = read('extension/background-content-script-activation.js');
+if (!activation.includes('BLBBackgroundContentScriptActivationModule')
+    || !activation.includes('contentScriptInjectionLocks')
+    || !activation.includes('blbSuiteRefreshSiteFeatures')
+    || !background.includes('BLB_BACKGROUND_CONTENT_SCRIPT_ACTIVATION.ensureContentScriptInTab')) {
+  fail('per-tab content-script activation remains isolated behind its module API');
+} else {
+  pass('per-tab content-script activation remains isolated behind its module API');
 }
 
 const referenceCore = read('extension/reference-core.js');

@@ -1,4 +1,4 @@
-importScripts('regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js', 'background-host-policy.js', 'background-content-script-registry.js');
+importScripts('regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js', 'background-host-policy.js', 'background-content-script-registry.js', 'background-content-script-activation.js');
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
@@ -3045,14 +3045,6 @@ async function hasHostAccessForTab(tab) {
   return BLB_BACKGROUND_HOST_POLICY.hasHostAccessForTab(tab, chrome);
 }
 
-const contentScriptInjectionLocks = new Map();
-
-const BLB_BACKGROUND_SCRIPT_REGISTRY = globalThis.BLBBackgroundContentScriptRegistryModule.create({
-  chromeApi: chrome,
-  originPatternForUrl,
-  defaultContentScriptFiles: BLB_CONTENT_SCRIPT_FILES
-});
-
 function runtimeContentScriptIdForPattern(pattern) {
   return BLB_BACKGROUND_SCRIPT_REGISTRY.runtimeContentScriptIdForPattern(pattern);
 }
@@ -3065,108 +3057,22 @@ async function unregisterRuntimeContentScriptForPattern(pattern) {
   return BLB_BACKGROUND_SCRIPT_REGISTRY.unregisterRuntimeContentScriptForPattern(pattern);
 }
 
+const BLB_BACKGROUND_CONTENT_SCRIPT_ACTIVATION = globalThis.BLBBackgroundContentScriptActivationModule.create({
+  chromeApi: chrome,
+  isHttpPageUrl,
+  hasHostAccessForTab,
+  shouldInjectContentScriptForTab,
+  contentScriptFilesForTab,
+  ensureRuntimeContentScriptRegistered,
+  normalizeSiteHostname,
+  hostnameFromTabUrl,
+  scriptTaggerContentScriptFiles: SCRIPT_TAGGER_CONTENT_SCRIPT_FILES
+});
+
 async function ensureContentScriptInTab(tabId) {
-  if (!Number.isInteger(tabId) || tabId < 0) return false;
-  const existing = contentScriptInjectionLocks.get(tabId);
-  if (existing) return existing;
-
-  const operation = (async () => {
-    try {
-      const tab = await chrome.tabs.get(tabId);
-      if (!isHttpPageUrl(tab?.url)) return false;
-      if (!(await hasHostAccessForTab(tab))) return false;
-
-      // Read settings only after permission is confirmed. A toggle may be
-      // written while Chrome's permission prompt is closing, so re-read the
-      // feature gates immediately before deciding which scripts to activate.
-      const settings = await chrome.storage.local.get({
-        masterEnabled:true,
-        pageSelectionButtonSites:{},
-        doubleClickBlbSites:{},
-        redirectEnabled:false
-      });
-      if (settings.masterEnabled === false) return false;
-      if (!(await shouldInjectContentScriptForTab(tab, settings))) return false;
-      const files = contentScriptFilesForTab(tab, settings);
-      if (!files.length) return false;
-
-      await ensureRuntimeContentScriptRegistered(tab, files);
-
-      // A newly enabled site may already be open, so install the MAIN-world
-      // guard in that current document too. The registration above covers
-      // future navigations; the script's own marker makes this idempotent.
-      if (['christianity.com','gotquestions.org','crosswalk.com','enduringword.com'].includes(normalizeSiteHostname(hostnameFromTabUrl(tab.url))) &&
-          files.includes('content.js')) {
-        try {
-          await chrome.scripting.executeScript({
-            target:{tabId},
-            files:['redirect-christianity-main-world.js'],
-            world:'MAIN'
-          });
-        } catch (_) {
-          return false;
-        }
-      }
-
-      // First refresh an already-installed content script. If it responds,
-      // its feature gates have been re-read from storage and no reinjection is
-      // needed. If it does not respond (for example after an extension reload),
-      // inject the current bundle and then refresh the newly installed gates.
-      if (files.includes('content.js')) {
-        try {
-          const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
-          if (response?.ok === true) {
-            if (files.includes('redirect-scripttagger.js')) {
-              await chrome.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
-            }
-            return true;
-          }
-        } catch (_) {}
-      }
-
-      try {
-        await chrome.scripting.executeScript({target:{tabId}, files});
-      } catch (_) {
-        return false;
-      }
-
-      if (files.includes('content.js')) {
-        // A successful executeScript call can race the content script's
-        // asynchronous storage initialization. Retry the refresh once after
-        // the initial message, and don't mistake a missing response for a
-        // verified activation.
-        for (let attempt = 0; attempt < 2; attempt++) {
-          try {
-            const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
-            if (response?.ok === true) {
-              if (files.includes('redirect-scripttagger.js')) {
-                await chrome.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
-              }
-              return true;
-            }
-          } catch (_) {}
-        }
-        // Injection succeeded, but the content script didn't acknowledge its
-        // feature refresh. Report failure so the caller can retry instead of
-        // silently claiming the activation completed.
-        return false;
-      }
-
-      return true;
-    } catch (_) {
-      return false;
-    }
-  })();
-
-  contentScriptInjectionLocks.set(tabId, operation);
-  try {
-    return await operation;
-  } finally {
-    if (contentScriptInjectionLocks.get(tabId) === operation) {
-      contentScriptInjectionLocks.delete(tabId);
-    }
-  }
+  return BLB_BACKGROUND_CONTENT_SCRIPT_ACTIVATION.ensureContentScriptInTab(tabId);
 }
+
 function isTrustedExtensionSender(sender) {
   return !!sender && sender.id === chrome.runtime.id;
 }
