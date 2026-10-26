@@ -34,7 +34,7 @@ test('Study Sessions popup starts recording, saves a note, and stops without los
     const state = await chrome.storage.local.get(['currentStudySessionId', 'studySessions']);
     const session = state.studySessions.find(item => item.id === state.currentStudySessionId);
     return session?.notes || [];
-  })).toContain('Note Saved Through The Visible Popup Controls');
+  })).toContain('Note Saved Through the Visible Popup Controls');
 
   await page.locator('#stopTopic').click();
   await expect(page.locator('#studyStatus')).toContainText('Last Recording Stopped');
@@ -46,7 +46,7 @@ test('Study Sessions popup starts recording, saves a note, and stops without los
   expect(finalState.studySelectedTopic).toBe('');
   expect(finalState.studySessions.some(session =>
     session.topic === normalizedTopic &&
-    session.notes.includes('Note Saved Through The Visible Popup Controls')
+    session.notes.includes('Note Saved Through the Visible Popup Controls')
   )).toBe(true);
 
   await page.close();
