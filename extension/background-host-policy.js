@@ -8,6 +8,7 @@ globalThis.BLBBackgroundHostPolicyModule = Object.freeze({
       'book-aliases.js',
       'reference-core.js',
       'source-bible-redirects.js',
+      'source-site-click-redirects.js',
       'kings-bible-collector.js',
       'webster-collector.js',
       'source-page-collector.js',

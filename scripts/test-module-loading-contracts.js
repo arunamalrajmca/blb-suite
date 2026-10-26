@@ -29,6 +29,7 @@ const expectedContentScripts = [
   'book-aliases.js',
   'reference-core.js',
   'source-bible-redirects.js',
+  'source-site-click-redirects.js',
   'kings-bible-collector.js',
   'webster-collector.js',
   'source-page-collector.js',
@@ -81,6 +82,16 @@ if (!read('extension/double-click-context.js').includes('resolveNearestChapterCo
   fail('double-click context delegates nearest chapter resolution to the pure module');
 } else {
   pass('double-click context delegates chapter matching to its pure module');
+}
+
+const sourceSiteClickRedirects = read('extension/source-site-click-redirects.js');
+if (!sourceSiteClickRedirects.includes('BLBSourceSiteClickRedirectsModule')
+    || !sourceSiteClickRedirects.includes('blbSuiteOpenWebsterMultiVerse')
+    || !sourceSiteClickRedirects.includes('theKingsBibleLinkTarget')
+    || !sourceSiteClickRedirects.includes('getCachedSuiteEnabled()')) {
+  fail('source-specific click redirect listeners are isolated behind an explicit module API');
+} else {
+  pass('source-specific click redirects retain explicit dependencies and master-setting gate');
 }
 
 const background = read('extension/background.js');
