@@ -45,7 +45,7 @@ test('Study Sessions popup starts recording, saves a note, and stops without los
   expect(finalState.currentStudySessionId).toBeNull();
   expect(finalState.studySelectedTopic).toBe('');
   expect(finalState.studySessions.some(session =>
-    session.topic === normalizedTopic &&
+    session.title === normalizedTopic &&
     session.notes.includes('Note Saved Through the Visible Popup Controls')
   )).toBe(true);
 
