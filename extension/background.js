@@ -1,4 +1,4 @@
-importScripts('regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js', 'background-host-policy.js', 'background-content-script-registry.js', 'background-content-script-activation.js', 'background-multiverse-tracking.js', 'background-blb-destination-manager.js', 'background-study-session-model.js', 'background-study-session-export.js', 'background-study-pdf-export.js', 'background-omnibox-search.js', 'background-bible-input.js', 'background-pdf-reference-extractor.js', 'background-selection-context-menu.js', 'background-kjv-selection-normalization.js');
+importScripts('regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js', 'background-host-policy.js', 'background-content-script-registry.js', 'background-content-script-activation.js', 'background-multiverse-tracking.js', 'background-blb-destination-manager.js', 'background-study-session-model.js', 'background-study-session-storage.js', 'background-study-session-export.js', 'background-study-pdf-export.js', 'background-omnibox-search.js', 'background-bible-input.js', 'background-pdf-reference-extractor.js', 'background-selection-context-menu.js', 'background-kjv-selection-normalization.js');
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
@@ -73,23 +73,11 @@ async function notifyStudyUiChanged() {
   try { await chrome.runtime.sendMessage({type:'blbSuiteStudyUiChanged'}); } catch (_) {}
 }
 
-async function saveStudySessions(sessions, extra = {}) {
-  const cleaned = sanitizeStudySessions(sessions);
-  await chrome.storage.local.set({studySessions:cleaned.sessions, ...extra});
-  void notifyStudyUiChanged();
-  return cleaned.sessions;
-}
-
-async function getStudySessions() {
-  const data = await chrome.storage.local.get({studySessions:[], currentStudySessionId:null});
-  const cleaned = sanitizeStudySessions(Array.isArray(data.studySessions) ? data.studySessions : []);
-  if (cleaned.changed) await chrome.storage.local.set({studySessions:cleaned.sessions});
-  return {
-    sessions:cleaned.sessions,
-    currentId: data.currentStudySessionId || null,
-    savedTopics: Array.isArray(data.studyTopics) ? data.studyTopics : []
-  };
-}
+const { saveStudySessions, getStudySessions } = globalThis.BLBBackgroundStudySessionStorageModule.create({
+  chromeApi:chrome,
+  sanitizeStudySessions,
+  notifyStudyUiChanged
+});
 
 const STUDY_AUTOSTOP_ALARM = 'blb-study-auto-stop';
 const STUDY_AUTOSTOP_DEFAULT_MINUTES = 15;

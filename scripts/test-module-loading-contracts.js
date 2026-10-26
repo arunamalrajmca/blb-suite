@@ -109,6 +109,20 @@ if (!read('extension/background.js').includes('chrome.downloads.download({url, f
   pass('Study Session download side effect remains in the service worker');
 }
 
+const studySessionStorage = read('extension/background-study-session-storage.js');
+if (!studySessionStorage.includes('BLBBackgroundStudySessionStorageModule')
+    || !studySessionStorage.includes('chrome.storage.local.get')
+    || !studySessionStorage.includes('sanitizeStudySessions')) {
+  fail('Study Session storage adapter owns sanitized read/write persistence');
+} else {
+  pass('Study Session storage adapter owns sanitized read/write persistence');
+}
+if (!read('extension/background.js').includes('chrome.alarms.onAlarm.addListener')) {
+  fail('Study Session alarm event listener remains registered in background.js');
+} else {
+  pass('Study Session alarm event listener remains registered in background.js');
+}
+
 const background = read('extension/background.js');
 
 const kjvSelectionNormalization = read('extension/background-kjv-selection-normalization.js');
@@ -155,6 +169,7 @@ if (!importMatch) {
     'background-multiverse-tracking.js',
     'background-blb-destination-manager.js',
     'background-study-session-model.js',
+  'background-study-session-storage.js',
   'background-study-session-export.js',
     'background-study-pdf-export.js',
     'background-omnibox-search.js',
