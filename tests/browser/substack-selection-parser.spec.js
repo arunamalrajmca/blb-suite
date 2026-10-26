@@ -27,3 +27,24 @@ test('Substack selection parser preserves all disjoint Romans 6 verse ranges', a
     { book: 'romans', chapter: 6, verse: 22 }
   ]);
 });
+
+
+// Regression for selecting point 75 on Substack and invoking BLB Suite.
+// Both references are explicitly chapter-qualified: "2 Cor. 1:22, 5:5".
+test('Substack selection parser preserves the second chapter-qualified 2 Corinthians reference', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    const selected = '<p><strong>75. </strong><span>He is God’s earnest, the non-refundable deposit, if you will, of God’s purchased possession forever </span><strong>(2 Cor. 1:22, 5:5)</strong><span>.</span></p>';
+    return extractBibleRefsFromSelectedTextUncached(selected).flatMap(ref => {
+      const verses = [];
+      for (let verse = ref.from; verse <= ref.to; verse++) {
+        verses.push({ book: ref.book, chapter: ref.chapter, verse });
+      }
+      return verses;
+    });
+  });
+
+  expect(result).toEqual([
+    { book: '2 Corinthians', chapter: 1, verse: 22 },
+    { book: '2 Corinthians', chapter: 5, verse: 5 }
+  ]);
+});
