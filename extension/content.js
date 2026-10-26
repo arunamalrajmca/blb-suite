@@ -1037,4 +1037,5 @@ chrome.storage.onChanged.addListener((changes, area) => {
       console.error('[BLB content-script initialization error]', error);
     }
   } catch (_) {}
+  throw error;
 });
