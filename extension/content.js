@@ -629,42 +629,16 @@ globalThis.BLBMultiVerseCopyLinksModule?.initialize({
 const formatBlbTextToHtml = rawText =>
   globalThis.BLBAutoHyperlinkModule?.format(rawText, BLBShared.urls.blbHome) || null;
 
+globalThis.BLBAutoHyperlinkModule?.initialize({
+  isSuiteEnabled,
+  getCachedEnabled: () => suiteEnabled,
+  blbHostname: BLB_HOSTNAME,
+  blbHomeUrl: BLBShared.urls.blbHome
+});
+
 if (location.hostname.endsWith(BLB_HOSTNAME) &&
     !/(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)$/i.test(location.pathname)) {
-  // The copy event must be handled synchronously. Awaiting storage state inside
-  // the event handler lets the browser finish its normal copy operation before
-  // preventDefault() runs, which loses the HTML clipboard payload used by
-  // Word/Google Docs "Paste as link" behavior. The content script already
-  // maintains suiteEnabled through storage.onChanged, so use that cached value.
-  document.addEventListener("copy",e=>{
-    if (!suiteEnabled) return;
-    const text=window.getSelection()?.toString()||"";
-    const html=formatBlbTextToHtml(text);
-    if (!html || !e.clipboardData) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    e.clipboardData.setData("text/html",html);
-    e.clipboardData.setData("text/plain",text);
-  },true);
-
-  if (navigator.clipboard?.writeText) {
-    const original=navigator.clipboard.writeText.bind(navigator.clipboard);
-    navigator.clipboard.writeText=async text=>{
-      if (!(await isSuiteEnabled())) return original(text);
-      const html=formatBlbTextToHtml(text);
-      if (!html) return original(text);
-      const handler=e=>{
-        e.clipboardData.setData("text/html",html);
-        e.clipboardData.setData("text/plain",text);
-        e.preventDefault();
-      };
-      document.addEventListener("copy",handler,true);
-      document.execCommand("copy");
-      document.removeEventListener("copy",handler,true);
-    };
-  }
-
-  // ---------- BLB Parsing Popup New Tab ----------
+// ---------- BLB Parsing Popup New Tab ----------
 // Keep parsing-popup links working on both normal BLB verse pages and
 // Criteria Search pages. A stable window name prevents repeated clicks from
 // opening duplicate tabs; the same tab is reused for the same destination.

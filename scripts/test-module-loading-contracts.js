@@ -125,16 +125,18 @@ if (!content.includes('BLBMultiVerseCopyLinksModule?.initialize({')
 
 const autoHyperlinker = read('extension/blb-auto-hyperlinker.js');
 if (!autoHyperlinker.includes('BLBAutoHyperlinkModule')
-    || !autoHyperlinker.includes('function format(rawText, blbHomeUrl)')
+    || !autoHyperlinker.includes('format(rawText, blbHomeUrl)')
+    || !autoHyperlinker.includes('initialize({ isSuiteEnabled, getCachedEnabled, blbHostname, blbHomeUrl })')
     || !autoHyperlinker.includes('text-decoration:underline')) {
   fail('BLB auto-hyperlink formatter is isolated behind its feature-module API');
 } else {
   pass('BLB auto-hyperlink formatter retains its HTML-link contract');
 }
-if (!content.includes('BLBAutoHyperlinkModule?.format(rawText, BLBShared.urls.blbHome)')) {
-  fail('content script delegates auto-hyperlink formatting to the feature module');
+if (!content.includes('BLBAutoHyperlinkModule?.initialize({')
+    || !autoHyperlinker.includes('document.addEventListener("copy"')) {
+  fail('content script initializes the extracted BLB copy-link feature module');
 } else {
-  pass('content script delegates auto-hyperlink formatting');
+  pass('BLB copy-link event lifecycle is owned by its feature module');
 }
 
 const referenceCore = read('extension/reference-core.js');
