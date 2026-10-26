@@ -28,6 +28,7 @@ const expectedContentScripts = [
   'books.js',
   'book-aliases.js',
   'reference-core.js',
+  'source-bible-redirects.js',
   'kings-bible-collector.js',
   'webster-collector.js',
   'source-page-collector.js',
@@ -347,6 +348,24 @@ if (!background.includes('BLBBackgroundOmniboxSearchModule.create({')
   fail('background initializes omnibox helpers before dependent Bible-input parsing');
 } else {
   pass('Omnibox module initialization precedes dependent Bible-input parser');
+}
+
+
+const sourceRedirects = read('extension/source-bible-redirects.js');
+if (!sourceRedirects.includes('BLBSourceBibleRedirectModule')
+    || !sourceRedirects.includes('function redirectBibleSite')
+    || !sourceRedirects.includes('function redirectBlbNet')
+    || !sourceRedirects.includes('parseChristianityBibleLink')
+    || /addEventListener\(['"](?:click|dblclick|mousedown|mouseup)/.test(sourceRedirects)) {
+  fail('Bible-site URL parsing and redirect decisions are isolated from DOM click listeners');
+} else {
+  pass('Bible-site redirect module owns parsers and page-load decisions only');
+}
+if (!content.includes('BLBSourceBibleRedirectModule.create({')
+    || !content.includes('openBlbDestinationFromContent')) {
+  fail('content initializes source redirects with explicit destination opener');
+} else {
+  pass('source redirect module receives the destination opener explicitly');
 }
 
 const content = read('extension/content.js');

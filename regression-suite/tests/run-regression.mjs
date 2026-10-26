@@ -461,7 +461,7 @@ test('expected PDF limitation remains documented by test policy', () => {
 });
 
 test('Official KJB redirect parser supports chapter and verse URLs', () => {
-  const content = read('content.js');
+  const content = read('source-bible-redirects.js');
   const start = content.indexOf('if (host==="officialkingjamesbible.com")');
   const end = content.indexOf('\n  if (host==="bibleportal.com")', start);
   assert(start >= 0 && end > start, 'Official KJB redirect block missing');
@@ -471,7 +471,7 @@ test('Official KJB redirect parser supports chapter and verse URLs', () => {
 });
 
 test('Bible redirect parser contracts cover every supported Bible redirect grammar', () => {
-  const content = read('content.js');
+  const content = read('source-bible-redirects.js');
   const start = content.indexOf('function redirectBibleSite');
   const end = content.indexOf('\nfunction ', start + 10);
   assert(start >= 0 && end > start, 'Bible redirect parser block missing');
@@ -496,12 +496,12 @@ test('Bible redirect parser contracts cover every supported Bible redirect gramm
   assert(content.includes('function redirectBlbNet'), 'BLB NET redirect parser missing');
   assert(content.includes('const REDIRECT_HOSTS'), 'redirect host table missing');
 });test('external redirect coverage includes every supported redirect host', () => {
-  const content = read('content.js');
+  const content = read('content.js'), sourceRedirects = read('source-bible-redirects.js');
   const hostPolicy = read('background-host-policy.js');
-  for (const host of ['bible.com','biblegateway.com','bibleref.com','biblehub.com','kingjamesbibleonline.org','kjbo.org','kjv.site','officialkingjamesbible.com','bibleportal.com','webstersdictionary1828.com']) assert(content.includes(host), `redirect host missing: ${host}`);
+  for (const host of ['bible.com','biblegateway.com','bibleref.com','biblehub.com','kingjamesbibleonline.org','kjbo.org','kjv.site','officialkingjamesbible.com','bibleportal.com','webstersdictionary1828.com']) assert(content.includes(host) || sourceRedirects.includes(host), `redirect host missing: ${host}`);
   assert(content.includes('BLB_HOSTNAME') && hostPolicy.includes('blbHostname'), 'BLB hostname must remain in the normalized redirect host policies');
-  assert(content.includes('function redirectBibleSite'), 'Bible-site redirect parser missing');
-  assert(content.includes('function redirectBlbNet'), 'BLB NET redirect missing');
+  assert(sourceRedirects.includes('function redirectBibleSite'), 'Bible-site redirect parser missing');
+  assert(sourceRedirects.includes('function redirectBlbNet'), 'BLB NET redirect missing');
   assert(content.includes('const REDIRECT_HOSTS'), 'content redirect host table missing');
 });
 test('BLB native-event interception remains explicitly scoped', () => {
