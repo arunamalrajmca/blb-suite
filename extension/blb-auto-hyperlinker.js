@@ -8,11 +8,11 @@ globalThis.BLBAutoHyperlinkModule = Object.freeze({
       // the event handler lets the browser finish its normal copy operation before
       // preventDefault() runs, which loses the HTML clipboard payload used by
       // Word/Google Docs "Paste as link" behavior. The content script already
-      // maintains getCachedEnabled() through storage.onChanged, so use that cached value.
+      // maintains the cached Suite-enabled state through storage.onChanged.
       document.addEventListener("copy",e=>{
         if (!getCachedEnabled()) return;
         const text=window.getSelection()?.toString()||"";
-        const html=format(text);
+        const html=format(text, blbHomeUrl);
         if (!html || !e.clipboardData) return;
         e.preventDefault();
         e.stopImmediatePropagation();
@@ -24,7 +24,7 @@ globalThis.BLBAutoHyperlinkModule = Object.freeze({
         const original=navigator.clipboard.writeText.bind(navigator.clipboard);
         navigator.clipboard.writeText=async text=>{
           if (!(await isSuiteEnabled())) return original(text);
-          const html=format(text);
+          const html=format(text, blbHomeUrl);
           if (!html) return original(text);
           const handler=e=>{
             e.clipboardData.setData("text/html",html);
