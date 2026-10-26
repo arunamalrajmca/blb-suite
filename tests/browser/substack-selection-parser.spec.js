@@ -63,7 +63,7 @@ test('Substack selection parser does not absorb the next book number as a verse'
     return extractBibleRefsFromSelectedTextUncached(selected).flatMap(ref => {
       const verses = [];
       for (let verse = ref.from; verse <= ref.to; verse++) {
-        verses.push({ book: ref.book, chapter: ref.chapter, verse });
+        verses.push({ book: ref.book, chapter: ref.chapter, verse, text: ref.text });
       }
       return verses;
     });
