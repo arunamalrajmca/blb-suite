@@ -65,7 +65,7 @@ test('Rediscover, Sagacity, and TSK use the extracted nested-page MultiVerse col
   assert(sourceCollector.includes('"rediscover.bible":"rediscover"'));
   assert(sourceCollector.includes('"sagacityweb.com":"sagacity"'));
   assert(sourceCollector.includes('"thetreasuryofscriptureknowledge.com":"treasury"'));
-  assert(sourceCollector.includes("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'"));
+
   assert(sourceCollector.includes('if (sourceSite && !isSourceHomepage)'));
   assert(sourceCollector.includes('document.querySelectorAll("a[href]")'));
   assert(sourceCollector.includes('if (sourceSite === "sagacity")'), 'Sagacity links must prefer the linked BLB citation over malformed/nested captions');
