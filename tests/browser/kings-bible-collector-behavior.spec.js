@@ -4,7 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '../..');
-const contentSource = fs.readFileSync(path.join(root, 'extension/content.js'), 'utf8');
+const contentSource = fs.readFileSync(path.join(root, 'extension/kings-bible-collector.js'), 'utf8');
 
 const books = [
   { name: 'Genesis', bookNumber: 1 },
