@@ -98,3 +98,13 @@ if (fs.existsSync(popupPath)) {
   if (/Feature Guide|guidePdf|Tutorial\.pdf/i.test(popup + '\n' + popupScript)) fail('retired PDF guide UI/code reference remains');
   else pass('no retired PDF guide UI/code references');
 }
+
+const moduleContractTest = cp.spawnSync(process.execPath, [
+  path.join(__dirname, 'test-module-loading-contracts.js')
+], { encoding: 'utf8' });
+if (moduleContractTest.stdout) process.stdout.write(moduleContractTest.stdout);
+if (moduleContractTest.status !== 0) {
+  fail('module-loading contract checks failed\\n' + (moduleContractTest.stderr || ''));
+} else {
+  pass('module-loading and shared-reference contracts validated');
+}
