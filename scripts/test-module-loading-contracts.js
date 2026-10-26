@@ -82,7 +82,8 @@ if (!importMatch) {
     'books.js',
     'book-aliases.js',
     'reference-core.js',
-    'background-host-policy.js'
+    'background-host-policy.js',
+    'background-content-script-registry.js'
   ];
   const positions = required.map(name => imports.indexOf(name));
   if (positions.some(index => index < 0)
@@ -239,6 +240,16 @@ if (!hostPolicy.includes('originPatternForUrl(url)')
   fail('host permission and URL-pattern checks remain behind the background policy module');
 } else {
   pass('host permission and URL-pattern checks remain behind the background policy module');
+}
+
+const registry = read('extension/background-content-script-registry.js');
+if (!registry.includes('BLBBackgroundContentScriptRegistryModule')
+    || !registry.includes('ensureRuntimeContentScriptRegistered')
+    || !registry.includes('unregisterRuntimeContentScriptForPattern')
+    || !background.includes('BLB_BACKGROUND_SCRIPT_REGISTRY.ensureRuntimeContentScriptRegistered')) {
+  fail('runtime content-script registration is isolated behind its registry module');
+} else {
+  pass('runtime content-script registration is isolated behind its registry module');
 }
 
 const referenceCore = read('extension/reference-core.js');

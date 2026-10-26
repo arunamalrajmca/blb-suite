@@ -1,4 +1,4 @@
-importScripts('regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js', 'background-host-policy.js');
+importScripts('regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js', 'background-host-policy.js', 'background-content-script-registry.js');
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
@@ -3047,80 +3047,22 @@ async function hasHostAccessForTab(tab) {
 
 const contentScriptInjectionLocks = new Map();
 
+const BLB_BACKGROUND_SCRIPT_REGISTRY = globalThis.BLBBackgroundContentScriptRegistryModule.create({
+  chromeApi: chrome,
+  originPatternForUrl,
+  defaultContentScriptFiles: BLB_CONTENT_SCRIPT_FILES
+});
+
 function runtimeContentScriptIdForPattern(pattern) {
-  const raw = String(pattern || '');
-  let hash = 2166136261;
-  for (let i = 0; i < raw.length; i++) {
-    hash ^= raw.charCodeAt(i);
-    hash = Math.imul(hash, 16777619);
-  }
-  return `blb-suite-runtime-${(hash >>> 0).toString(36)}`;
+  return BLB_BACKGROUND_SCRIPT_REGISTRY.runtimeContentScriptIdForPattern(pattern);
 }
 
 async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCRIPT_FILES) {
-  const pattern = originPatternForUrl(tab?.url);
-  if (!pattern || !Array.isArray(files) || !files.length || !chrome.scripting?.registerContentScripts) return false;
-  const id = runtimeContentScriptIdForPattern(pattern);
-  try {
-    const existing = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
-    if (!existing.length) {
-      await chrome.scripting.registerContentScripts([{
-        id,
-        matches:[pattern],
-        js:files,
-        runAt:'document_start',
-        persistAcrossSessions:true
-      }]);
-    } else if (JSON.stringify(existing[0].js || []) !== JSON.stringify(files)) {
-      await chrome.scripting.updateContentScripts({
-        ids:[id],
-        js:files,
-        runAt:'document_start'
-      });
-    }
-
-    // Christianity.com can attach native click handlers in the page's MAIN
-    // world. Register a tiny early guard separately; it delegates passage
-    // validation/opening to content.js and cancels native navigation only
-    // when the isolated-world resolver claims the link.
-    let hostname = '';
-    try { hostname = new URL(tab.url).hostname.toLowerCase().replace(/^www\./, ''); } catch (_) {}
-    if (['christianity.com','gotquestions.org','crosswalk.com','enduringword.com'].includes(hostname) && files.includes('content.js')) {
-      const mainWorldId = `${id}-main-world`;
-      const mainWorldFiles = ['redirect-christianity-main-world.js'];
-      const registeredMain = await chrome.scripting.getRegisteredContentScripts({ids:[mainWorldId]});
-      if (!registeredMain.length) {
-        await chrome.scripting.registerContentScripts([{
-          id:mainWorldId,
-          matches:[pattern],
-          js:mainWorldFiles,
-          runAt:'document_start',
-          world:'MAIN',
-          persistAcrossSessions:true
-        }]);
-      } else if (JSON.stringify(registeredMain[0].js || []) !== JSON.stringify(mainWorldFiles) ||
-                 registeredMain[0].world !== 'MAIN') {
-        await chrome.scripting.updateContentScripts({
-          ids:[mainWorldId],
-          js:mainWorldFiles,
-          runAt:'document_start',
-          world:'MAIN'
-        });
-      }
-    }
-    return true;
-  } catch (_) {
-    return false;
-  }
+  return BLB_BACKGROUND_SCRIPT_REGISTRY.ensureRuntimeContentScriptRegistered(tab, files);
 }
 
 async function unregisterRuntimeContentScriptForPattern(pattern) {
-  const id = runtimeContentScriptIdForPattern(pattern);
-  try {
-    if (chrome.scripting?.unregisterContentScripts) {
-      await chrome.scripting.unregisterContentScripts({ids:[id]});
-    }
-  } catch (_) {}
+  return BLB_BACKGROUND_SCRIPT_REGISTRY.unregisterRuntimeContentScriptForPattern(pattern);
 }
 
 async function ensureContentScriptInTab(tabId) {
