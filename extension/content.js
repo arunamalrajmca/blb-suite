@@ -1214,6 +1214,7 @@ globalThis.BLBWebsterCollectorModule?.initialize({
   parseRef,
   blbUrl,
   isSuiteEnabled,
+  isSuiteEnabledNow: () => suiteEnabled,
   isModifiedLinkActivation,
   makeBlbMultiVerseButtonDraggable
 });
