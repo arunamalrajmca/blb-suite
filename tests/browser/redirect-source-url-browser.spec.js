@@ -809,9 +809,9 @@ if (!kingsBibleModuleSource.includes("function collectKingsBibleReferences(") ||
   throw new Error("Could not locate the extracted King's Bible collector module");
 }
 const kingsBibleMultiVerseCode =
-  contentSource.slice(draggableButtonStart, draggableButtonEnd) +
+  buttonDragModuleSource +
   kingsBibleModuleSource +
-  '\nBLBKingsBibleCollector.initialize({ BOOKS, normalizeSelectionText, parseRef, resolveBibleReference, blbUrl, isSuiteEnabled, makeBlbMultiVerseButtonDraggable });';
+  '\nconst makeBlbMultiVerseButtonDraggable = BLBMultiVerseButtonDragModule.create({ documentApi: document, windowApi: window, chromeApi: chrome, getComputedStyleFn: getComputedStyle, MutationObserverCtor: MutationObserver }).makeBlbMultiVerseButtonDraggable;\nBLBKingsBibleCollector.initialize({ BOOKS, normalizeSelectionText, parseRef, resolveBibleReference, blbUrl, isSuiteEnabled, makeBlbMultiVerseButtonDraggable });';
 
 async function loadKingsBibleMultiVerse(page, sourceUrl, pages) {
   const sourceOrigin = new URL(sourceUrl).origin;
