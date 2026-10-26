@@ -112,16 +112,7 @@ test.describe('Study Sessions backup and restore', () => {
 
   test('exports a valid Study-only backup without leaking extension settings', async ({ context, extensionId, extensionWorker, extensionStorage }) => {
     await extensionStorage.clear();
-    const page = await openPopup(context, extensionId);
-    const topic = 'Export backup topic ' + Date.now();
-    await send(page, { type: 'blbSuiteStartStudyTopic', title: topic, note: 'Exported note' });
-    await extensionWorker.evaluate(() => chrome.storage.local.set({
-      masterEnabled: false,
-      redirectEnabled: true,
-      pageSelectionButtonSites: { 'example.com': true },
-      doubleClickSites: { 'example.org': true }
-    }));
-
+    const page = await context.newPage();
     await page.addInitScript(() => {
       window.__capturedStudyBackup = null;
       const originalCreateObjectURL = URL.createObjectURL.bind(URL);
@@ -132,7 +123,16 @@ test.describe('Study Sessions backup and restore', () => {
         return originalCreateObjectURL(blob);
       };
     });
-    await page.reload();
+    await page.goto('chrome-extension://' + extensionId + '/popup.html');
+    const topic = 'Export backup topic ' + Date.now();
+    await send(page, { type: 'blbSuiteStartStudyTopic', title: topic, note: 'Exported note' });
+    await extensionWorker.evaluate(() => chrome.storage.local.set({
+      masterEnabled: false,
+      redirectEnabled: true,
+      pageSelectionButtonSites: { 'example.com': true },
+      doubleClickSites: { 'example.org': true }
+    }));
+
     await page.locator('#studyBackupMenuButton').click();
     await expect(page.locator('#exportStudyBackup')).toBeEnabled();
     const downloadPromise = page.waitForEvent('download');
