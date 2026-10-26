@@ -86,7 +86,8 @@ if (!importMatch) {
     'reference-core.js',
     'background-host-policy.js',
     'background-content-script-registry.js',
-    'background-content-script-activation.js'
+    'background-content-script-activation.js',
+    'background-multiverse-tracking.js'
   ];
   const positions = required.map(name => imports.indexOf(name));
   if (positions.some(index => index < 0)
@@ -116,6 +117,25 @@ if (!dynamicFilesMatch) {
   } else {
     pass('runtime-injected content scripts retain feature module dependency order');
   }
+}
+
+
+const multiverseTracking = read('extension/background-multiverse-tracking.js');
+if (!multiverseTracking.includes('BLBBackgroundMultiVerseTrackingModule')
+    || !multiverseTracking.includes('pendingUpdate')
+    || !multiverseTracking.includes('canonicalMultiVerseSet')
+    || !multiverseTracking.includes('blbSuiteMultiVerseTabSets')
+    || /chrome(?:Api)?\\.(?:tabs|runtime|alarms|contextMenus)\\.[A-Za-z]+\\.addListener/.test(multiverseTracking)) {
+  fail('MultiVerse tracking is isolated without moving service-worker event listeners');
+} else {
+  pass('MultiVerse tracking module owns canonicalization and serialized storage only');
+}
+if (!background.includes('BLBBackgroundMultiVerseTrackingModule.create({')
+    || !background.includes('chromeApi:chrome')
+    || !background.includes('canonicalStoredRef')) {
+  fail('service worker initializes tracking module with explicit dependencies');
+} else {
+  pass('service-worker tracking module receives explicit dependencies');
 }
 
 const content = read('extension/content.js');
