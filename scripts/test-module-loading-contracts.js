@@ -69,6 +69,7 @@ if (!contentEntry) {
 }
 
 const background = read('extension/background.js');
+const content = read('extension/content.js');
 const importMatch = background.match(/^\s*importScripts\(([^;]+)\);/);
 if (!importMatch) {
   fail('background service worker begins with its classic importScripts bootstrap');
@@ -367,8 +368,6 @@ if (!content.includes('BLBSourceBibleRedirectModule.create({')
 } else {
   pass('source redirect module receives the destination opener explicitly');
 }
-
-const content = read('extension/content.js');
 
 const dragModule = read('extension/multiverse-button-drag.js');
 if (!dragModule.includes('BLBMultiVerseButtonDragModule')
