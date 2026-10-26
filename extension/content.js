@@ -125,20 +125,9 @@ function openBlbDestinationFromContent(url) {
   });
 }
 
-function normalizeSelectionText(s) {
-  return String(s || '')
-    // Facebook and some rich-text sites can insert invisible bidirectional
-    // formatting marks around Bible references. They are presentation-only
-    // characters and must not become part of the reference token.
-    .replace(/[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '')
-    .replace(/[\u00A0\u2007\u202F]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function norm(s) {
-  return normalizeSelectionText(s).toLowerCase().replace(/[_]/g,"-").replace(/[.]/g,"").replace(/\s+/g,"-").replace(/-+/g,"-");
-}
+// Keep existing call sites stable while delegating pure normalization to its module.
+const normalizeSelectionText = value => BLBSelectionTextModule.normalize(value);
+const norm = value => BLBSelectionTextModule.normalizeKey(value);
 function bookKey(value) {
   const book = resolveBibleBook(value);
   return book ? book.urlKey : null;
