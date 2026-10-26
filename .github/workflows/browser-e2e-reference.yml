@@ -99,7 +99,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
       - name: Install dependencies
-        run: npm install --prefer-offline
+        run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
         run: npx playwright install chromium
       - name: Grant test-only generic host access
@@ -196,7 +196,7 @@ jobs:
             ${{ runner.os }}-npm-
       - name: Install dependencies
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
-        run: npm install --prefer-offline
+        run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         run: npx playwright install chromium
@@ -260,7 +260,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
       - name: Install dependencies
-        run: npm install --prefer-offline
+        run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
         run: npx playwright install chromium
       - name: Grant test-only generic host access
