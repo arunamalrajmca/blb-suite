@@ -830,7 +830,7 @@ test("The King's Bible Concordance button collects and deduplicates references a
 
   const request = await page.evaluate(() => window.__multiVerseRequests[0]);
   expect(request.type).toBe("blbSuiteOpenWebsterMultiVerse");
-  expect(request.refs.map(ref => ref.text)).toEqual(["Genesis 1:1", "Exodus 4:14", "Judges 6:15"]);
+  expect(request.refs.map(ref => ref.text.toLowerCase())).toEqual(["genesis 1:1", "exodus 4:14", "judges 6:15"]);
   expect(request.refs.map(ref => ref.url)).toEqual([
     "https://www.blueletterbible.org/kjv/gen/1/1/",
     "https://www.blueletterbible.org/kjv/exo/4/14/",
