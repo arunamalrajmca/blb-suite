@@ -430,7 +430,10 @@ const BLBDoubleClickContext = globalThis.BLBDoubleClickContextModule.create({
   normalizeSelectionText,
   parseRef,
   validateSourceBibleReference,
-  getDoubleClickTargetElement
+  getDoubleClickTargetElement,
+  resolveBibleBook,
+  resolveBibleReferenceText,
+  resolveBibleReference
 });
 const { normalizeDoubleClickToken, getAdjacentBoundaryText, getSelectionContextPosition, resolveBibleReferenceFromContextWindow, getContextualBibleReference, getStandaloneBookReference, isBibleVersionCodeToken, getDoubleClickBlockContextReference } = BLBDoubleClickContext;
 

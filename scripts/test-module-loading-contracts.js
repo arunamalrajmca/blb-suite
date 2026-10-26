@@ -250,7 +250,9 @@ if (!doubleClickContext.includes('BLBDoubleClickContextModule')
 if (!content.includes('BLBDoubleClickContextModule.create({')
     || !content.includes('NodeCtor:Node')
     || !content.includes('validateSourceBibleReference')
-    || !content.includes('getDoubleClickTargetElement')) {
+    || !content.includes('getDoubleClickTargetElement')
+    || !content.includes('resolveBibleReferenceText')
+    || !content.includes('resolveBibleReference')) {
   fail('content script initializes the context module with explicit DOM and reference dependencies');
 } else {
   pass('double-click context module receives explicit DOM and reference dependencies');
