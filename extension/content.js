@@ -736,14 +736,30 @@ function handleDoubleClickBlb(event) {
           book:contextualReference.book, chapter:contextualReference.chapter,
           from:contextualReference.from, to:contextualReference.to
         });
-        safeRuntimeSendMessage({
+        const destinationMessage = {
           type:'blbSuiteOpenSelectionText',
           text:selection,
           contextualReference,
           contextualReferenceResolved:true,
           requestId,
           tabBehavior:{activeIfNew:false,activateExisting:true}
-        });
+        };
+        try {
+          let responseSettled = false;
+          const responsePromise = chrome.runtime.sendMessage(destinationMessage);
+          Promise.resolve(responsePromise).then(response => {
+            responseSettled = true;
+            doubleClickDiagnostic('destination-response', {requestId, response});
+          }, error => {
+            responseSettled = true;
+            doubleClickDiagnostic('destination-response-error', {requestId, error:String(error)});
+          });
+          setTimeout(() => {
+            if (!responseSettled) doubleClickDiagnostic('destination-response-still-pending', {requestId, waitMs:2000});
+          }, 2000);
+        } catch (error) {
+          doubleClickDiagnostic('destination-send-error', {requestId, error:String(error)});
+        }
         return true;
       } catch (_) {
         return false;

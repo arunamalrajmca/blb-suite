@@ -2120,6 +2120,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blbSuiteOpenSelectionText') {
+    console.info('[BLB double-click diagnostic]', JSON.stringify({stage:'background-selection-message-received', requestId:message.requestId, senderTabId:sender?.tab?.id ?? null, text:String(message.text || ''), contextualUrl:message.contextualReference?.url || null}));
     if (!(await isSuiteEnabled())) {
       sendResponse({ok:false});
       return true;
@@ -2186,7 +2187,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return true;
       }
       if (message.contextualReference?.url && selectedRefs.length < 2) {
+        console.info('[BLB double-click diagnostic]', JSON.stringify({stage:'background-contextual-open-start', requestId:message.requestId, url:message.contextualReference.url, selectedRefsCount:selectedRefs.length}));
         await openSelectedPdfBibleRefs(text, behavior, message.contextualReference);
+        console.info('[BLB double-click diagnostic]', JSON.stringify({stage:'background-contextual-open-finished', requestId:message.requestId, url:message.contextualReference.url}));
         sendResponse({ok:true, contextual:true});
         return true;
       }
