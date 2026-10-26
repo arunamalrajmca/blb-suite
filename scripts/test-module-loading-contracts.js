@@ -35,6 +35,7 @@ const expectedContentScripts = [
   'blb-auto-hyperlinker.js',
   'blb-parse-popup-links.js',
   'blb-navigation-links.js',
+  'blb-new-tab-links.js',
   'blb-passive-new-tab.js',
   'content.js'
 ];
@@ -100,7 +101,7 @@ if (!dynamicFilesMatch) {
   fail('runtime-injected content scripts declare their dependency list');
 } else {
   const dynamicFiles = [...dynamicFilesMatch[1].matchAll(/['\"]([^'\"]+\.js)['\"]/g)].map(match => match[1]);
-  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-navigation-links.js', 'blb-passive-new-tab.js', 'content.js'];
+  const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'multiverse-copy-links.js', 'blb-auto-hyperlinker.js', 'blb-parse-popup-links.js', 'blb-navigation-links.js', 'blb-new-tab-links.js', 'blb-passive-new-tab.js', 'content.js'];
   const positions = requiredDynamic.map(name => dynamicFiles.indexOf(name));
   if (positions.some(index => index < 0)
       || positions.some((index, i) => i > 0 && index <= positions[i - 1])) {
@@ -184,6 +185,21 @@ if (!content.includes('BLBNavigationLinksModule?.initialize({')) {
   fail('content script initializes the BLB navigation feature module');
 } else {
   pass('content script initializes the BLB navigation feature module');
+}
+
+const newTabLinks = read('extension/blb-new-tab-links.js');
+if (!newTabLinks.includes('BLBNewTabLinksModule')
+    || !newTabLinks.includes('a.nowrap')
+    || !newTabLinks.includes('stopImmediatePropagation()')
+    || !newTabLinks.includes('requestAnimationFrame')) {
+  fail('normal BLB new-tab and native-link handoff remains in its feature module');
+} else {
+  pass('normal BLB new-tab and native-link handoff remains in its feature module');
+}
+if (!content.includes('BLBNewTabLinksModule?.initialize({')) {
+  fail('content script initializes normal BLB new-tab feature module');
+} else {
+  pass('content script initializes normal BLB new-tab feature module');
 }
 
 const referenceCore = read('extension/reference-core.js');

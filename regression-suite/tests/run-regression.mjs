@@ -527,6 +527,14 @@ test('BLB native-event interception remains explicitly scoped', () => {
   assert(!dbl.includes('stopPropagation()'), 'double-click resolver must not stop native propagation');
   assert(!dbl.includes('stopImmediatePropagation()'), 'double-click resolver must not stop native propagation');
 });
+test('normal BLB new-tab behavior remains isolated from dedicated pages', () => {
+  const content = read('content.js');
+  const newTab = read('blb-new-tab-links.js');
+  assert(content.includes('BLBNewTabLinksModule?.initialize({'), 'normal new-tab module initialization missing');
+  assert(newTab.includes('a.nowrap'), 'normal BLB native-link handoff missing');
+  assert(newTab.includes('stopImmediatePropagation()'), 'normal BLB click handoff must retain event isolation');
+  assert(newTab.includes('requestAnimationFrame'), 'normal BLB link processing must remain scheduled');
+});
 test('BLB MultiVerse and Criteria Search navigation remain explicitly scoped', () => {
   const content = read('content.js');
   const navigation = read('blb-navigation-links.js');
