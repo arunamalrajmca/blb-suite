@@ -92,7 +92,7 @@ const dynamicFilesMatch = background.match(/const BLB_CONTENT_SCRIPT_FILES = \[(
 if (!dynamicFilesMatch) {
   fail('runtime-injected content scripts declare their dependency list');
 } else {
-  const dynamicFiles = [...dynamicFilesMatch[1].matchAll(/['\"]([^'\"]+\\.js)['\"]/g)].map(match => match[1]);
+  const dynamicFiles = [...dynamicFilesMatch[1].matchAll(/['\"]([^'\"]+\.js)['\"]/g)].map(match => match[1]);
   const requiredDynamic = ['reference-core.js', 'kings-bible-collector.js', 'content.js'];
   const positions = requiredDynamic.map(name => dynamicFiles.indexOf(name));
   if (positions.some(index => index < 0)
