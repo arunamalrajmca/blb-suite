@@ -7,8 +7,10 @@ try {
       document.documentElement.setAttribute('data-blb-suite-content-script-executed', 'true');
     }
   };
-  if (document.documentElement) markContentScriptExecuted();
-  else document.addEventListener('DOMContentLoaded', markContentScriptExecuted, {once:true});
+  // The root element usually exists already at document_start, before the page
+  // init script's DOMContentLoaded marker is set. Always check again at ready.
+  document.addEventListener('DOMContentLoaded', markContentScriptExecuted, {once:true});
+  markContentScriptExecuted();
 } catch (_) {}
 (async function () {
 // Lightweight test/diagnostic marker: content-script injection is distinct from
