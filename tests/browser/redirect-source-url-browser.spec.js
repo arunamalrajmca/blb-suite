@@ -44,14 +44,15 @@ async function loadProductionRedirect(page, sourceUrl) {
 
 const draggableButtonStart = contentSource.indexOf('function makeBlbMultiVerseButtonDraggable(button');
 const draggableButtonEnd = contentSource.indexOf('// The feature module is loaded before this content script by manifest order.', draggableButtonStart);
-const sourcePageMultiVerseStart = contentSource.indexOf('// ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------');
-const sourcePageMultiVerseEnd = contentSource.indexOf('// ---------- BLB MultiVerse hand-off ----------', sourcePageMultiVerseStart);
-if ([draggableButtonStart, draggableButtonEnd, sourcePageMultiVerseStart, sourcePageMultiVerseEnd].some(i => i < 0)) {
-  throw new Error('Could not locate draggable-button or source-page MultiVerse implementation');
+const sourcePageModuleSource = read('extension/source-page-collector.js');
+if ([draggableButtonStart, draggableButtonEnd].some(i => i < 0) ||
+    !sourcePageModuleSource.includes('BLBSourcePageCollectorModule')) {
+  throw new Error('Could not locate draggable-button or extracted source-page MultiVerse module');
 }
 const sourcePageMultiVerseCode =
   contentSource.slice(draggableButtonStart, draggableButtonEnd) +
-  contentSource.slice(sourcePageMultiVerseStart, sourcePageMultiVerseEnd);
+  sourcePageModuleSource +
+  '\\nBLBSourcePageCollectorModule.initialize({ normalizeSelectionText, parseRef, normalizeSourceBibleBook, resolveBibleReference, blbUrl, formatSourceBibleBookName, isSuiteEnabled, makeBlbMultiVerseButtonDraggable });';
 
 async function loadSourcePageMultiVerse(page, sourceUrl, enabled = true) {
   await loadProductionRedirect(page, sourceUrl);
