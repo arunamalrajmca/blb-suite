@@ -88,7 +88,8 @@ if (!importMatch) {
     'background-content-script-registry.js',
     'background-content-script-activation.js',
     'background-multiverse-tracking.js',
-    'background-blb-destination-manager.js'
+    'background-blb-destination-manager.js',
+    'background-study-session-model.js'
   ];
   const positions = required.map(name => imports.indexOf(name));
   if (positions.some(index => index < 0)
@@ -166,6 +167,25 @@ if (!background.includes('chrome.tabs.onRemoved.addListener(')
   fail('service-worker event listeners remain registered in background.js');
 } else {
   pass('service-worker lifecycle and event listeners remain in background.js');
+}
+
+
+const studyModel = read('extension/background-study-session-model.js');
+if (!studyModel.includes('BLBBackgroundStudySessionModelModule')
+    || !studyModel.includes('sanitizeStudySessions')
+    || !studyModel.includes('canonicalStoredRef')
+    || !studyModel.includes('titleCaseStudyNote')
+    || /chrome(?:Api)?\.(?:tabs|runtime|alarms|contextMenus)\.[A-Za-z]+\.addListener/.test(studyModel)) {
+  fail('study-session model is isolated from storage and service-worker event registration');
+} else {
+  pass('study-session canonicalization and cleanup remain in a pure model module');
+}
+if (!background.includes('BLBBackgroundStudySessionModelModule.create({')
+    || !background.includes('bookAliases:BOOK_ALIASES')
+    || !background.includes('const { studyDateInfo, createStudySession')) {
+  fail('service worker initializes the study model before storage operations');
+} else {
+  pass('study-session model is initialized before dependent storage operations');
 }
 
 const content = read('extension/content.js');
