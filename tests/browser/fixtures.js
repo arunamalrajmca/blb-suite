@@ -15,7 +15,8 @@ const testHosts = [
   'https://www.gotquestions.org/*',
   'https://www.christianity.com/*',
   'https://www.crosswalk.com/*',
-  'https://www.enduringword.com/*'
+  'https://www.enduringword.com/*',
+  'https://www.supplyofgrace.com/*'
 ];
 
 const test = base.extend({
