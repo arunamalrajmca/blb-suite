@@ -209,6 +209,16 @@ if (multiVerseReferenceTest.status !== 0) {
   pass('MultiVerse reference helper contracts validated');
 }
 
+const studySessionNormalizationTest = cp.spawnSync(process.execPath, [
+  path.join(__dirname, 'test-study-session-normalization.js')
+], { encoding: 'utf8' });
+if (studySessionNormalizationTest.stdout) process.stdout.write(studySessionNormalizationTest.stdout);
+if (studySessionNormalizationTest.status !== 0) {
+  fail('Study Sessions normalization contract tests failed\\n' + (studySessionNormalizationTest.stderr || ''));
+} else {
+  pass('Study Sessions normalization contracts validated');
+}
+
 const studySessionExportTest = cp.spawnSync(process.execPath, [
   path.join(__dirname, 'test-study-session-export.js')
 ], { encoding: 'utf8' });
