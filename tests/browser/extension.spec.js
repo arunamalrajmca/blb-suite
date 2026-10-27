@@ -146,6 +146,11 @@ test.describe('core user-visible E2E', () => {
           contentScriptInitComplete: document.documentElement?.getAttribute('data-blb-suite-content-script-init-complete'),
           contentScriptError: document.documentElement?.getAttribute('data-blb-suite-content-script-error'),
           lastHandlerDiagnostic: document.documentElement?.getAttribute('data-blb-suite-dblclick-last-diagnostic'),
+          handlerDiagnosticHistory: (() => {
+            try {
+              return JSON.parse(document.documentElement?.getAttribute('data-blb-suite-dblclick-diagnostic-history') || '[]');
+            } catch (_) { return []; }
+          })(),
           diagnosticsEnabled: document.documentElement?.getAttribute('data-blb-suite-e2e-diagnostics'),
           pageText: document.querySelector('#generic-verse-context-article')?.textContent?.slice(0,500) || ''
         }));
