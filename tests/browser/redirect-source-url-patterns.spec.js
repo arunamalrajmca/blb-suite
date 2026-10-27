@@ -71,6 +71,13 @@ test.describe('source Bible URL syntax regression coverage', () => {
       .toBe('https://www.blueletterbible.org/kjv/1jo/3/16-17/');
   });
 
+  test("The King's Bible direct chapter and selected-verse URLs redirect to BLB KJV", () => {
+    expect(runSourceRedirect('https://www.thekingsbible.com/Bible/43/3').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/jhn/3/1/');
+    expect(runSourceRedirect('https://www.thekingsbible.com/Bible/43/3?verse=16').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/jhn/3/16/');
+  });
+
   test('King James Bible Online preserves underscore-separated same-chapter ranges', () => {
     expect(runSourceRedirect('https://kingjamesbibleonline.org/John-3-16_3-17/').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/jhn/3/16-17/');
