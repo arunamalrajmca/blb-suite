@@ -52,7 +52,6 @@ const reasons = [];
 for (const path of changed) {
   if (nonRuntimePath(path)) continue;
   if ((path === "package.json" || path === "extension/manifest.json") && sameExceptVersion(path)) continue;
-  if (path === "package.json" && sameExceptSelectorTestScript()) continue;
   runtimeChanged = true;
   reasons.push(path);
 }
