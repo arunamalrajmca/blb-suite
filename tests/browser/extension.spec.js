@@ -76,13 +76,9 @@ async function expectSourceCollectorAfterSiteOptIn({ page, extensionStorage, ext
   });
 
   // CI grants these four origins as test-only required host permissions before
-  // Chromium starts. This test covers collector initialization after access and
-  // the site preference are present; Chrome's optional-permission prompt cannot
-  // be reliably automated in headless Chromium.
-  await expect.poll(async () => extensionWorker.evaluate(pattern =>
-    chrome.permissions.contains({ origins: [pattern] }), originPattern
-  ), { timeout: 10000 }).toBe(true);
-
+  // Chromium starts. Verify the actual user-facing collector rather than querying
+  // permissions.contains(), which does not reliably reflect injected test-host
+  // permissions in this headless extension setup.
   await page.route(`https://www.${site.host}/**`, route => route.fulfill({
     status: 200,
     contentType: 'text/html; charset=utf-8',
