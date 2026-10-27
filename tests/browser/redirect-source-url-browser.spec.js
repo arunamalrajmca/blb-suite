@@ -15,10 +15,11 @@ const gateStart = contentSource.indexOf('const REDIRECT_HOSTS = new Set([');
 const gateEnd = contentSource.indexOf('// MultiVerse hand-off runs as a dedicated feature module.', gateStart);
 if (gateStart < 0 || gateEnd < 0) throw new Error('Could not locate production content-side redirect gate');
 const productionRedirectHelpers = contentSource.slice(bookKeyStart, redirectStart) + sourceRedirectModule + `
-const redirectBibleSite = globalThis.BLBSourceBibleRedirectModule.initialize({
+globalThis.__sourceBibleRedirect = globalThis.BLBSourceBibleRedirectModule.initialize({
   BLBShared, BOOKS, bookKey, parseChristianityBibleLink, validateSourceBibleReference,
   parseRef, decodeSafe, blbUrl, openBlbDestinationFromContent
-});`;
+});
+function redirectBibleSite() { return globalThis.__sourceBibleRedirect(); }`;
 const productionRedirectGate = contentSource.slice(gateStart, gateEnd);
 
 async function loadProductionRedirect(page, sourceUrl) {
