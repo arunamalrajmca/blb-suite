@@ -199,6 +199,16 @@ if (singleWordSelectionNormalizationTest.status !== 0) {
   pass('single-word selection normalization contracts validated');
 }
 
+const multiVerseReferenceTest = cp.spawnSync(process.execPath, [
+  path.join(__dirname, 'test-multiverse-reference-helpers.js')
+], { encoding: 'utf8' });
+if (multiVerseReferenceTest.stdout) process.stdout.write(multiVerseReferenceTest.stdout);
+if (multiVerseReferenceTest.status !== 0) {
+  fail('MultiVerse reference helper tests failed\\n' + (multiVerseReferenceTest.stderr || ''));
+} else {
+  pass('MultiVerse reference helper contracts validated');
+}
+
 const studySessionExportTest = cp.spawnSync(process.execPath, [
   path.join(__dirname, 'test-study-session-export.js')
 ], { encoding: 'utf8' });
