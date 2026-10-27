@@ -499,6 +499,7 @@ test('Bible redirect parser contracts cover every supported Bible redirect gramm
 });
 test('BLB native-event interception remains explicitly scoped', () => {
   const content = read('content.js');
+  const verseNavigation = read('blb-verse-link-navigation.js');
   const popup = read('blb-parse-popup.js');
 
   assert(popup.includes('const handleParsePopupLink'), 'parse-popup handler missing from its feature module');
@@ -506,11 +507,13 @@ test('BLB native-event interception remains explicitly scoped', () => {
   assert(popup.includes('preventDefault()'), 'parse-popup override must retain its intentional native-navigation override');
   assert(popup.includes('stopImmediatePropagation()'), 'parse-popup override must retain event isolation');
 
-  const nowrapStart = content.indexOf('const a=e.target.closest?.("a.nowrap")');
-  const nowrapEnd = content.indexOf('},true);', nowrapStart);
-  assert(nowrapStart >= 0 && nowrapEnd > nowrapStart, 'nowrap click handler missing');
-  const nowrap = content.slice(nowrapStart, nowrapEnd + 7);
-  assert(nowrap.includes('if (!a) return'), 'nowrap click override must reject unrelated clicks');
+  const nowrapStart = verseNavigation.indexOf('const link = event.target.closest?.("a.nowrap")');
+  const nowrapEnd = verseNavigation.indexOf('}, true);', nowrapStart);
+  assert(nowrapStart >= 0 && nowrapEnd > nowrapStart, 'nowrap click handler missing from verse-link navigation module');
+  const nowrap = verseNavigation.slice(nowrapStart, nowrapEnd + 8);
+  assert(nowrap.includes('if (!link) return'), 'nowrap click override must reject unrelated clicks');
+  assert(verseNavigation.includes('if (!isSuiteEnabledNow() || isModifiedLinkActivation(event)) return;'), 'nowrap override must preserve master-switch and modified-click behavior');
+  assert(nowrap.includes('event.preventDefault()') && nowrap.includes('event.stopImmediatePropagation()'), 'nowrap override must preserve scoped native-event interception');
 
   const selectionStart = content.indexOf('function handleBlbPageSelectionMouseDown');
   const selectionEnd = content.indexOf('function getPageSelectionSiteKey', selectionStart);
@@ -530,6 +533,7 @@ test('BLB native-event interception remains explicitly scoped', () => {
 });
 test('BLB new-tab and Copy-as-link contracts remain wired', () => {
   const content = read('content.js');
+  const verseNavigation = read('blb-verse-link-navigation.js');
   const autoHyperlinker = read('blb-auto-hyperlinker.js');
   const passiveNewTab = read('blb-passive-new-tab-targets.js');
   const draggableButton = read('blb-draggable-button.js');
@@ -539,8 +543,9 @@ test('BLB new-tab and Copy-as-link contracts remain wired', () => {
   assert(content.includes('BLBDraggableButtonModule?.makeBlbMultiVerseButtonDraggable'), 'draggable-button module is not wired');
   assert(draggableButton.includes('positionWriteQueue'), 'draggable-button position writes are not serialized');
   assert(draggableButton.includes('Reset button position'), 'draggable-button reset control missing');
-  assert(content.includes('modifyLinks'), 'BLB link modifier missing');
-  assert(content.includes('target="_blank"'), 'BLB new-tab target missing');
+  assert(content.includes('BLBVerseLinkNavigationModule?.initialize'), 'verse-link navigation module is not initialized');
+  assert(verseNavigation.includes('function modifyLinks(container)'), 'BLB link modifier missing from verse-link navigation module');
+  assert(verseNavigation.includes('link.target = "_blank"'), 'BLB new-tab target missing from verse-link navigation module');
   assert(autoHyperlinker.includes('formatBlbTextToHtml'), 'HTML clipboard formatter missing');
   assert(autoHyperlinker.includes('setData("text/html"'), 'HTML clipboard write missing');
   assert(autoHyperlinker.includes('setData("text/plain"'), 'plain-text clipboard fallback missing');
