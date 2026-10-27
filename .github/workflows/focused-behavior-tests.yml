@@ -14,7 +14,6 @@ on:
       - 'tests/browser/webster-collector-behavior.spec.js'
       - 'tests/browser/case-sensitive-routing-behavior.spec.js'
       - 'package.json'
-      - 'package-lock.json'
       - 'playwright.config.js'
       - '.github/workflows/focused-behavior-tests.yml'
 
