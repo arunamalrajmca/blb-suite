@@ -14,12 +14,12 @@ const cases = [
   [null, ''],
   ['', ''],
   ['  FAITH   AND   HOPE ', 'faith and hope'],
-  ['faith\\u00A0and\\u202Fhope', 'faith and hope'],
-  ['faith\\u200B and\\uFEFF hope', 'faith and hope'],
+  ['faith\u00A0and\u202Fhope', 'faith and hope'],
+  ['faith\u200B and\uFEFF hope', 'faith and hope'],
   ['“Grace”—works!', 'grace works'],
   ["Jesus’s ‘word’", "jesus's 'word'"],
   ['John 3:16-17', 'john 3 16-17'],
-  ['faith\\n\\tand hope', 'faith and hope']
+  ['faith\n\tand hope', 'faith and hope']
 ];
 for (const [input, expected] of cases) assert.equal(normalize(input), expected, JSON.stringify(input));
 console.log('PASS: Omnibox search normalization contracts');
