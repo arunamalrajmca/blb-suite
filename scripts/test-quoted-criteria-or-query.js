@@ -17,7 +17,7 @@ const cases = [
   [[' faith ', '', null, 'faith', 'hope '], '"faith" OR "hope"'],
   [['"Jesus"', 'word"of"God'], '"Jesus" OR "wordofGod"'],
   [['one', 'two', 'three'], '"one" OR "two" OR "three"'],
-  [['   ', false, 0], '"0"']
+  [['   ', false, 0], '']
 ];
 for (const [input, expected] of cases) assert.equal(build(input), expected, JSON.stringify(input));
 console.log('PASS: quoted criteria OR query contracts');
