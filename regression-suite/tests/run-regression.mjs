@@ -593,6 +593,19 @@ test('Webster 1828 path remains wired', () => {
   assert(content.includes('BLBWebsterCollectorModule') && content.includes('BLBWebsterCollector'), 'Webster module initialization and master-setting refresh hook missing');
   assert(bg.includes('blbSuiteOpenWebsterMultiVerse'), 'Webster MultiVerse handler missing');
 });
+test('Source-page Bible-reference collector remains wired', () => {
+  const content = read('content.js'), collector = read('source-page-collector.js');
+  const manifest = JSON.parse(read('manifest.json')), bg = read('background.js');
+  for (const host of ['christianity.com', 'gotquestions.org', 'crosswalk.com', 'enduringword.com', 'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com']) {
+    assert(collector.includes(host), `source-page collector host missing: ${host}`);
+  }
+  assert(content.includes('BLBSourcePageCollectorModule?.initialize'), 'content script does not initialize the source-page collector');
+  assert(collector.includes('collectSourcePageBibleReferences'), 'source-page reference collector missing');
+  assert(collector.includes('blbSuiteOpenWebsterMultiVerse'), 'source-page MultiVerse opener missing');
+  const entry = (manifest.content_scripts || []).find(item => (item.js || []).includes('content.js'));
+  assert(entry && entry.js.indexOf('source-page-collector.js') < entry.js.indexOf('content.js'), 'manifest must load source-page collector before content.js');
+  assert(bg.includes("'source-page-collector.js'"), 'runtime injection list must include source-page collector');
+});
 section('features');
 test('Study Sessions command surface remains wired', () => {
   const bg = read('background.js'), popup = read('popup.js');
