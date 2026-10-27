@@ -37,9 +37,9 @@ const specs = new Set();
 // Shared-core, test-infrastructure, package, manifest, and unknown production
 // changes remain conservative and may require the full applicable browser suite.
 const forceFull = alwaysFull || changed.some(path =>
-  path.startsWith("scripts/")
+  (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js")
   || path.startsWith("regression-suite/")
-  || (path.startsWith("tests/") && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path))
+  || (path.startsWith("tests/") && !/^tests\/selector\//.test(path) && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path))
   || path === "package.json"
   || path === "package-lock.json"
   || path === "playwright.config.js"
@@ -164,7 +164,10 @@ const featureSpecs = [
 const ignoredNonRuntime = path =>
   /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/))/.test(path)
   || /^(?:store-assets\/|assets\/store\/|extension\/(?:icons|store-assets)\/)/.test(path)
-  || /^extension\/(?:Tutorial\.html|Tutorial\.js|THIRD-PARTY-NOTICES\.txt)$/.test(path);
+  || /^extension\/(?:Tutorial\.html|Tutorial\.js|THIRD-PARTY-NOTICES\.txt)$/.test(path)
+  || /^scripts\/(?:classify-ci-changes|select-browser-specs)\.mjs$/.test(path)
+  || path === "scripts/test-ci-routing-selector.js"
+  || /^tests\/selector\//.test(path);
 
 let unknownRuntime = false;
 const hasRuntimeChangeAlongsideBrowserSpec = changed.some(path =>
