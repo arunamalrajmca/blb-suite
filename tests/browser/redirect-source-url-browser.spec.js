@@ -6,15 +6,17 @@ const root = path.resolve(__dirname, '../..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const contentSource = read('extension/content.js');
 const sourceRedirectModuleSource = read('extension/source-bible-redirects.js');
+const sourceSiteClickModuleSource = read('extension/source-site-click-redirects.js');
 const sourcePageModuleSource = read('extension/source-page-collector.js');
 const buttonDragModuleSource = read('extension/multiverse-button-drag.js');
 const gateStart = contentSource.indexOf('const REDIRECT_HOSTS = new Set([');
 const gateEnd = contentSource.indexOf('// MultiVerse native-copy enhancement is initialized', gateStart);
 if (gateStart < 0 || gateEnd < 0) throw new Error('Could not locate production content-side redirect gate');
 const productionRedirectGate = contentSource.slice(gateStart, gateEnd);
-const productionRedirectHelpers = sourceRedirectModuleSource + '\n' + [
+const productionRedirectHelpers = sourceRedirectModuleSource + '\n' + sourceSiteClickModuleSource + '\n' + [
   'function openBlbDestinationFromContent(url) { window.__openedBlbUrl = url; }',
-  'const { bookKey, decodeSafe, blbUrl, normalizeSourceBibleBook, formatSourceBibleBookName, parseRef, validateSourceBibleReference, parseChristianityBibleLink, christianityBibleLinkTarget, redirectBibleSite, theKingsBibleLinkTarget } = BLBSourceBibleRedirectModule.create({ books: BOOKS, shared: BLBShared, locationApi: location, resolveBibleBook, resolveBibleReference, openBlbDestinationFromContent });'
+  'const { bookKey, decodeSafe, blbUrl, normalizeSourceBibleBook, formatSourceBibleBookName, parseRef, validateSourceBibleReference, parseChristianityBibleLink, christianityBibleLinkTarget, redirectBibleSite, theKingsBibleLinkTarget } = BLBSourceBibleRedirectModule.create({ books: BOOKS, shared: BLBShared, locationApi: location, resolveBibleBook, resolveBibleReference, openBlbDestinationFromContent });',
+  'function installChristianityLinkRedirect(isEnabled) { BLBSourceSiteClickRedirectsModule.initialize({ windowApi:window, documentApi:document, locationApi:location, chromeApi:chrome, books:BOOKS, resolveBibleReference, blbUrl, christianityBibleLinkTarget, parseRef, theKingsBibleLinkTarget, openBlbDestinationFromContent, isModifiedLinkActivation:event => Boolean(event && (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)), isSuiteEnabled:async () => true, getCachedSuiteEnabled:() => true, isSourceRedirectEnabled:isEnabled }); }'
 ].join('\n');
 
 
