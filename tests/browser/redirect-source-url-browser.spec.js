@@ -5,7 +5,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const contentSource = read('extension/content.js');
-const sourceRedirectModule = read('extension/source-bible-redirect.js').replace('location.replace(target);', 'globalThis.__redirectedTo = target;');
+const sourceRedirectModule = read('extension/source-bible-redirect.js').replaceAll('location.replace(target);', 'globalThis.__redirectedTo = target;');
 const draggableButtonModule = read('extension/blb-draggable-button.js');
 const redirectStart = contentSource.indexOf('const redirectBibleSite = globalThis.BLBSourceBibleRedirectModule.initialize({');
 const decodeStart = contentSource.indexOf('function decodeSafe(v) {');
