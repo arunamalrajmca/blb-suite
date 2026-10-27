@@ -20,6 +20,6 @@ for (const [input, expected] of [
   ["LORD'S", "lord's"],
   ['well-being', 'well-being'],
   ['3:16', ''],
-  ['John 3:16', 'john 3:16']
+  ['John 3:16', 'john']
 ]) assert.equal(normalize(input), expected, JSON.stringify(input));
 console.log('PASS: single-word selection normalization contracts');
