@@ -12,7 +12,7 @@ const backgroundSource = fs.readFileSync(path.join(root, 'extension/background.j
 function loadRouting() {
   const context = {};
   context.self = context;
-  vm.runInNewContext(wordsSource, context, { filename: 'kjv-case-sensitive-words.js' });
+  vm.runInNewContext(wordsSource + '\\nthis.KJV_CASE_SENSITIVE_WORDS = KJV_CASE_SENSITIVE_WORDS;', context, { filename: 'kjv-case-sensitive-words.js' });
   vm.runInNewContext(routingSource, context, { filename: 'case-sensitive-routing.js' });
   return context;
 }
