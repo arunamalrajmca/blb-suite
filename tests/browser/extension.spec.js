@@ -1631,6 +1631,7 @@ test.describe('Alt+B toggle enforcement', () => {
   test('Facebook directional-format Revelation 20:1-10 resolves the whole range from book-name double-click', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => document.documentElement?.setAttribute('data-blb-suite-e2e-diagnostics', 'true'));
     await page.waitForTimeout(1000);
 
     // Facebook can expose Bible references with directional-format controls and
@@ -1660,6 +1661,8 @@ test.describe('Alt+B toggle enforcement', () => {
       console.error('Facebook Revelation directional-format diagnostics: ' + JSON.stringify({
         fixture: await page.locator('#blb-e2e-facebook-revelation-bidi').evaluate(el => el.outerHTML),
         selectedText: await page.evaluate(() => window.getSelection?.().toString() || ''),
+        lastHandlerDiagnostic: await page.evaluate(() => document.documentElement?.getAttribute('data-blb-suite-dblclick-last-diagnostic')),
+        handlerDiagnosticHistory: await page.evaluate(() => { try { return JSON.parse(document.documentElement?.getAttribute('data-blb-suite-dblclick-diagnostic-history') || '[]'); } catch (_) { return []; } }),
         tabs: await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.map(tab => ({ id: tab.id, url: tab.url, pendingUrl: tab.pendingUrl }))))
       }));
       throw error;
