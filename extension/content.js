@@ -1659,7 +1659,7 @@ function handleDoubleClickBlb(event) {
         // Re-read the native selection on every frame until Chromium commits
         // the current double-click. The physical event coordinates remain the
         // authoritative target while the Selection is settling.
-        let selection=getDoubleClickSelection(event);
+        let selection=normalizeSelectionText(getDoubleClickSelection(event)).normalize('NFKC');
         // On double-click, Chromium may still expose the previous word's
         // non-empty Selection. For the narrowly supported verse-context
         // gesture, the physical event target is authoritative: use its exact
