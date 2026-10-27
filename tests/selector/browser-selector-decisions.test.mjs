@@ -155,3 +155,19 @@ test("non-version package.json edits classify as runtime without crashing", () =
     assert.match(output, /package\.json/);
   });
 });
+
+test("stale omnibox module paths remain unknown runtime changes", () => {
+  for (const path of [
+    "extension/omnibox-boolean-operators.js",
+    "extension/omnibox-search-normalization.js"
+  ]) {
+    withFixture((root, base) => {
+      commitChange(root, path, "// newly added path with no current feature mapping\\n");
+      const output = select(root, base);
+      assert.match(output, /full_browser_suite=true/);
+      assert.match(output, /group_a_required=true/);
+      assert.match(output, /group_b_required=true/);
+      assert.match(output, /reference_required=true/);
+    });
+  }
+});
