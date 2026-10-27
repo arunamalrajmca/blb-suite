@@ -1832,48 +1832,30 @@ chrome.runtime.onMessage.addListener((message, sender) => {
 
 const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
-// Serialize MultiVerse POST scheduling while creating all destination tabs immediately.
-// Reserve submission timestamps in one shared FIFO queue, but never sleep inside the
-// extension service worker: Chrome can delay worker timers dramatically under load.
-// Each handoff page waits until its reserved timestamp before submitting its POST.
+// Reserve MultiVerse POST slots synchronously in the service-worker message event.
+// Chrome's MV3 message response channel can remain pending when an async response is
+// deferred through a promise chain. The listener itself runs to completion on the
+// single JS event loop, so calculating/updating this shared timestamp synchronously
+// preserves FIFO admission and immediately closes the message channel with a reply.
+// Each handoff page performs the scheduled wait; the service worker never sleeps.
 const MULTIVERSE_POST_MIN_INTERVAL_MS = 1500;
 let lastMultiVersePostScheduledAt = 0;
-let pendingMultiVersePostSlot = Promise.resolve();
 
-// Keep queue admission in its own message listener. The general async router
-// handles many unrelated operations; isolating this timing-sensitive response
-// avoids coupling queue delivery to that router's async dispatch path.
-// All MultiVerse submissions use one shared FIFO schedule and one interval, regardless of source.
-function grantMultiVersePostSlot(minimumIntervalMs, tabId = null, queuedAt = Date.now()) {
-  const slot = pendingMultiVersePostSlot.then(() => {
-    const queueStartedAt = Date.now();
-    const scheduledAt = Math.max(queueStartedAt, lastMultiVersePostScheduledAt + minimumIntervalMs);
-    const intervalWaitMs = scheduledAt - queueStartedAt;
-    lastMultiVersePostScheduledAt = scheduledAt;
-    console.info(
-      '[BLB MV timing] stage=queue-slot-reserved' +
-      ' tabId=' + tabId +
-      ' queuedAt=' + queuedAt +
-      ' queueStartedAt=' + queueStartedAt +
-      ' scheduledAt=' + scheduledAt +
-      ' totalQueueAdmissionMs=' + (queueStartedAt - queuedAt) +
-      ' intervalWaitMs=' + intervalWaitMs
-    );
-    return {ok:true, submitAt:scheduledAt};
-  });
-  pendingMultiVersePostSlot = slot.then(() => undefined, () => undefined);
-  return slot;
-}
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type !== 'blbSuiteAcquireMultiVersePostSlot') return false;
   const queuedAt = Date.now();
   const tabId = sender?.tab?.id ?? null;
-  console.info('[BLB MV timing]', {stage:'queue-request-received', tabId, queuedAt});
-  grantMultiVersePostSlot(MULTIVERSE_POST_MIN_INTERVAL_MS, tabId, queuedAt).then(
-    response => sendResponse(response),
-    error => sendResponse({ok:false, error:String(error)})
-  );
-  return true;
+  const scheduledAt = Math.max(queuedAt, lastMultiVersePostScheduledAt + MULTIVERSE_POST_MIN_INTERVAL_MS);
+  lastMultiVersePostScheduledAt = scheduledAt;
+  console.info('[BLB MV timing]', {
+    stage:'queue-slot-reserved',
+    tabId,
+    queuedAt,
+    scheduledAt,
+    intervalWaitMs:scheduledAt - queuedAt
+  });
+  sendResponse({ok:true, submitAt:scheduledAt});
+  return false;
 });
 // Expose listener registration state for browser-test diagnostics only.
 globalThis.__blbSuiteQueuePostListenerRegisteredV1 = true;
