@@ -4,10 +4,10 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-const source = fs.readFileSync(path.join(__dirname, '../extension/omnibox-gibberish-filter.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../extension/omnibox-search-helpers.js'), 'utf8');
 const context = { globalThis: {} };
 vm.runInNewContext(source, context, { filename: 'omnibox-gibberish-filter.js' });
-const isGibberish = context.globalThis.BLBOmniboxGibberishFilter?.isObviouslyGibberishQuery;
+const isGibberish = context.globalThis.BLBOmniboxSearchHelpers?.isObviouslyGibberishQuery;
 assert.equal(typeof isGibberish, 'function', 'module must expose the gibberish filter');
 
 const cases = [

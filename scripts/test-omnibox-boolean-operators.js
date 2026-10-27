@@ -3,10 +3,10 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-const source = fs.readFileSync(path.join(__dirname, '../extension/omnibox-boolean-operators.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../extension/omnibox-search-helpers.js'), 'utf8');
 const context = { globalThis: {} };
 vm.runInNewContext(source, context, { filename: 'omnibox-boolean-operators.js' });
-const api = context.globalThis.BLBOmniboxBooleanOperators;
+const api = context.globalThis.BLBOmniboxSearchHelpers;
 assert.equal(typeof api?.normalizeBooleanOperatorsOutsideQuotes, 'function');
 assert.equal(typeof api?.hasUnquotedBooleanOperator, 'function');
 for (const [input, expected] of [

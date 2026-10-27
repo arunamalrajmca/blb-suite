@@ -4,10 +4,10 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-const source = fs.readFileSync(path.join(__dirname, '../extension/omnibox-search-normalization.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../extension/omnibox-search-helpers.js'), 'utf8');
 const context = { globalThis: {} };
 vm.runInNewContext(source, context, { filename: 'omnibox-search-normalization.js' });
-const normalize = context.globalThis.BLBOmniboxSearchNormalization?.normalizeOmniboxSearchPhrase;
+const normalize = context.globalThis.BLBOmniboxSearchHelpers?.normalizeOmniboxSearchPhrase;
 assert.equal(typeof normalize, 'function', 'module must expose the normalizer');
 
 const cases = [

@@ -86,12 +86,8 @@ try {
   // Extracted modules must expose their documented global registration objects
   // before content.js executes. Check the global API rather than internal bodies.
   const moduleContracts = [
-    ['extension/single-word-selection-normalization.js', 'global.BLBSingleWordSelectionNormalization ='],
-    ['extension/selection-marker-stripping.js', 'global.BLBSelectionMarkerStripping ='],
-    ['extension/selection-text-normalization.js', 'global.BLBSelectionTextNormalization ='],
-    ['extension/omnibox-gibberish-filter.js', 'global.BLBOmniboxGibberishFilter ='],
-    ['extension/omnibox-boolean-operators.js', 'global.BLBOmniboxBooleanOperators ='],
-    ['extension/omnibox-search-normalization.js', 'global.BLBOmniboxSearchNormalization ='],
+    ['extension/selection-text-helpers.js', 'global.BLBSelectionTextHelpers ='],
+    ['extension/omnibox-search-helpers.js', 'global.BLBOmniboxSearchHelpers ='],
     ['extension/kings-bible-collector.js', 'globalThis.BLBKingsBibleCollector ='],
     ['extension/webster-collector.js', 'globalThis.BLBWebsterCollectorModule ='],
     ['extension/source-page-collector.js', 'globalThis.BLBSourcePageCollectorModule ='],
