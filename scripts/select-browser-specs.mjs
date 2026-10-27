@@ -105,6 +105,10 @@ const featureSpecs = [
     specs: ["tests/browser/kings-bible-collector-behavior.spec.js"]
   },
   {
+    paths: ["extension/webster-collector.js"],
+    specs: ["tests/browser/webster-collector-behavior.spec.js"]
+  },
+  {
     paths: ["extension/source-page-collector.js"],
     specs: ["tests/browser/extension.spec.js"]
   },
@@ -230,6 +234,7 @@ const values = {
     "tests/browser/redirect-source-url-browser.spec.js",
     "tests/browser/e2e-core-user-actions.spec.js",
     "tests/browser/kings-bible-collector-behavior.spec.js",
+    "tests/browser/webster-collector-behavior.spec.js",
     "tests/browser/feature-lifecycle-regressions.spec.js",
     "tests/browser/study-backup-restore.spec.js",
     "tests/browser/extension.spec.js",
