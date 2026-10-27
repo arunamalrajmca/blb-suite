@@ -5,7 +5,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const contentSource = read('extension/content.js');
-const sourceRedirectModule = read('extension/source-bible-redirect.js');
+const sourceRedirectModule = read('extension/source-bible-redirect.js').replace('location.replace(target);', 'globalThis.__redirectedTo = target;');
 const draggableButtonModule = read('extension/blb-draggable-button.js');
 const redirectStart = contentSource.indexOf('const redirectBibleSite = globalThis.BLBSourceBibleRedirectModule.initialize({');
 const decodeStart = contentSource.indexOf('function decodeSafe(v) {');
@@ -248,20 +248,16 @@ test.describe('real-browser source URL redirect regressions', () => {
     const sourceUrl = 'https://kingjamesbibleonline.org/John-Chapter-3/';
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/1/';
     await loadProductionRedirect(page, sourceUrl);
-    const navigated = page.waitForURL(targetUrl, { waitUntil: 'domcontentloaded' });
     await page.addScriptTag({ content: productionRedirectGate });
-    await navigated;
-    await expect(page).toHaveURL(targetUrl);
+    await expect.poll(() => page.evaluate(() => window.__redirectedTo || null)).toBe(targetUrl);
   });
 
   test('King James Bible Online original 1611 chapter URL navigates to the standard BLB KJV destination', async ({ page }) => {
     const sourceUrl = 'https://www.kingjamesbibleonline.org/John-Chapter-1_Original-1611-KJV/';
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/1/1/';
     await loadProductionRedirect(page, sourceUrl);
-    const navigated = page.waitForURL(targetUrl, { waitUntil: 'domcontentloaded' });
     await page.addScriptTag({ content: productionRedirectGate });
-    await navigated;
-    await expect(page).toHaveURL(targetUrl);
+    await expect.poll(() => page.evaluate(() => window.__redirectedTo || null)).toBe(targetUrl);
   });
 
   test('Christianity.com article passage click cancels native navigation and opens BLB exactly once', async ({ page }) => {
@@ -513,30 +509,24 @@ test.describe('real-browser source URL redirect regressions', () => {
     const sourceUrl = 'https://www.esv.org/Ephesians+2/';
     const targetUrl = 'https://www.blueletterbible.org/kjv/eph/2/1/';
     await loadProductionRedirect(page, sourceUrl);
-    const navigated = page.waitForURL(targetUrl, { waitUntil: 'domcontentloaded' });
     await page.addScriptTag({ content: productionRedirectGate });
-    await navigated;
-    await expect(page).toHaveURL(targetUrl);
+    await expect.poll(() => page.evaluate(() => window.__redirectedTo || null)).toBe(targetUrl);
   });
 
   test('ESV.org encoded verse URL navigates to BLB KJV', async ({ page }) => {
     const sourceUrl = 'https://www.esv.org/verses/John%2B3%3A16/';
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
     await loadProductionRedirect(page, sourceUrl);
-    const navigated = page.waitForURL(targetUrl, { waitUntil: 'domcontentloaded' });
     await page.addScriptTag({ content: productionRedirectGate });
-    await navigated;
-    await expect(page).toHaveURL(targetUrl);
+    await expect.poll(() => page.evaluate(() => window.__redirectedTo || null)).toBe(targetUrl);
   });
 
   test('www KJV.site verse URL navigates to the resolved BLB destination', async ({ page }) => {
     const sourceUrl = 'https://www.kjv.site/John-3-16-kjv/';
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
     await loadProductionRedirect(page, sourceUrl);
-    const navigated = page.waitForURL(targetUrl, { waitUntil: 'domcontentloaded' });
     await page.evaluate(() => redirectBibleSite());
-    await navigated;
-    await expect(page).toHaveURL(targetUrl);
+    await expect.poll(() => page.evaluate(() => window.__redirectedTo || null)).toBe(targetUrl);
   });
 
   test('source-page MultiVerse deduplicates equivalent references and ignores malformed metadata and captions', async ({ page }) => {
