@@ -110,6 +110,15 @@ try {
   }
   console.log('PASS: extracted content modules register explicit global APIs');
 
+  const validator = read('scripts/validate-build.js');
+  assert.ok(!(manifest.optional_host_permissions || []).includes('https://chatgpt.com/*'),
+    'removed Ask AI feature must not restore ChatGPT optional host access');
+  assert.doesNotMatch(validator, /https:\/\/chatgpt\.com\/\*/,
+    'build validator must not require ChatGPT optional access after Ask AI removal');
+  assert.doesNotMatch(validator, /Ask AI requests ChatGPT access/,
+    'build validator comments must not describe the removed Ask AI feature');
+  console.log('PASS: build-validator host-permission expectations match the removed Ask AI feature');
+
   console.log('All extraction safety contracts passed.');
 } catch (error) {
   console.error('FAIL: extraction safety contracts:', error.stack || error.message);

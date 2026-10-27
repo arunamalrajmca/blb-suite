@@ -26,7 +26,9 @@ assert.equal(typeof resolveBibleReference, 'function');
 assert.equal(typeof resolveDirectBibleReference, 'function');
 
 function tuples(input) {
-  return resolveBibleReferenceText(input).map(({ book, chapter, from, to }) => [book, chapter, from, to]);
+  return JSON.parse(JSON.stringify(
+    resolveBibleReferenceText(input).map(({ book, chapter, from, to }) => [book, chapter, from, to])
+  ));
 }
 
 // Full references, verse ranges, and Unicode dash normalization.

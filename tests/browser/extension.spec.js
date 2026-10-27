@@ -67,18 +67,74 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
   await expect(page.locator('body')).toBeVisible();
 });
 
-test('source-page collector initializes on a commentary article', async ({ page, extensionStorage }) => {
-  await extensionStorage.set({ masterEnabled: true });
-  await page.route('https://www.gotquestions.org/**', route => route.fulfill({
+async function expectSourceCollectorAfterSiteOptIn({ page, extensionStorage, extensionWorker, site }) {
+  await extensionStorage.set({
+    masterEnabled: true,
+    pageSelectionButtonSites: { [site.host]: true },
+    doubleClickBlbSites: {}
+  });
+
+  // The browser fixture adds these hosts to a worker-scoped test copy before
+  // Chromium starts, so this checks the user-facing collector under real injection.
+  await page.route(`https://www.${site.host}/**`, route => route.fulfill({
     status: 200,
     contentType: 'text/html; charset=utf-8',
-    body: '<!doctype html><html><head><title>Fixture article</title></head><body><main><h1>Fixture article</h1><a href="https://www.gotquestions.org/John-3-16.html">John 3:16</a></main></body></html>'
+    body: `<!doctype html><html><head><title>Fixture article</title></head><body><main><h1>Fixture article</h1><a href="https://www.${site.host}/John-3-16.html">John 3:16</a></main></body></html>`
   }));
-  await page.goto('https://www.gotquestions.org/fixture-article.html', { waitUntil: 'domcontentloaded' });
-  const button = page.locator('#blb-suite-gotquestions-multiverse');
-  await expect(button).toBeVisible({ timeout: 10000 });
+  await page.goto(`https://www.${site.host}/fixture-article.html`, { waitUntil: 'domcontentloaded' });
+
+  await expect.poll(async () => extensionWorker.evaluate(host => chrome.storage.local.get({
+    pageSelectionButtonSites: {}
+  }).then(saved => saved.pageSelectionButtonSites?.[host] === true), site.host
+  ), { timeout: 10000 }).toBe(true);
+
+  const button = page.locator(`#blb-suite-${site.key}-multiverse`);
+  try {
+    await expect(button).toBeVisible({ timeout: 10000 });
+  } catch (error) {
+    // Content scripts run in Chrome's isolated world, so page.evaluate() cannot
+    // see their window markers. Inspect that same isolated world via scripting
+    // to distinguish injection, module loading, and collector initialization.
+    const diagnostics = await extensionWorker.evaluate(async ({ host, expectedButtonId }) => {
+      const url = `https://www.${host}/fixture-article.html`;
+      const tabs = await chrome.tabs.query({ url });
+      const stored = await chrome.storage.local.get({ masterEnabled: true });
+      const permissions = await chrome.permissions.getAll();
+      if (!tabs[0]?.id) return { tabFound: false, stored, permissions };
+      try {
+        const [injected] = await chrome.scripting.executeScript({
+          target: { tabId: tabs[0].id },
+          world: 'ISOLATED',
+          func: ({ expectedButtonId }) => ({
+            fileExecuted: window.__blbSuiteContentScriptFileExecutedV3 === true,
+            initializerEntered: window.__blbSuiteContentScriptLoadedV2 === true,
+            collectorModuleType: typeof globalThis.BLBSourcePageCollectorModule,
+            buttonPresent: Boolean(document.getElementById(expectedButtonId)),
+            readyState: document.readyState,
+            hostname: location.hostname,
+            pathname: location.pathname
+          }),
+          args: [{ expectedButtonId }]
+        });
+        return { tabFound: true, stored, permissions, isolatedWorld: injected?.result };
+      } catch (injectionError) {
+        return { tabFound: true, stored, permissions, diagnosticInjectionError: String(injectionError) };
+      }
+    }, { host: site.host, expectedButtonId: `blb-suite-${site.key}-multiverse` });
+    throw new Error(`${error.message}\nSource-page collector diagnostics: ${JSON.stringify(diagnostics)}`);
+  }
   await expect(button).toHaveText('Open Bible References in BLB');
-});
+}
+for (const site of [
+  { host: 'gotquestions.org', key: 'gotquestions' },
+  { host: 'christianity.com', key: 'christianity' },
+  { host: 'crosswalk.com', key: 'crosswalk' },
+  { host: 'enduringword.com', key: 'enduringword' }
+]) {
+  test(`source-page collector initializes on ${site.host} after site access is enabled`, async ({ page, context, extensionId, extensionStorage, extensionWorker }) => {
+    await expectSourceCollectorAfterSiteOptIn({ page, context, extensionId, extensionStorage, extensionWorker, site });
+  });
+}
 
 test.describe('core user-visible E2E', () => {
   // Run the generic article verse-context regression first. In serial mode, any
@@ -481,6 +537,17 @@ test.describe('core user-visible E2E', () => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
+    // Start with no BLB tabs so a stale tab from an earlier gesture cannot
+    // obscure which destination this click actually opened.
+    await extensionWorker.evaluate(() => chrome.tabs.query({}).then(async tabs => {
+      for (const tab of tabs) {
+        try {
+          if (new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org') && tab.id != null) {
+            await chrome.tabs.remove(tab.id);
+          }
+        } catch (_) {}
+      }
+    }));
     await page.evaluate(() => {
       const fixture = document.createElement('div');
       fixture.id = 'blb-e2e-substack-corinthians-reference';
@@ -696,6 +763,11 @@ test.describe('core user-visible E2E', () => {
         const fixture = document.createElement('div');
         fixture.id = 'blb-e2e-dom-pattern';
         fixture.innerHTML = html;
+        // Keep nested social-style links realistic without letting the fixture's
+        // placeholder href navigate away before the double-click assertions run.
+        fixture.addEventListener('click', (event) => {
+          if (event.target instanceof Element && event.target.closest('a[href]')) event.preventDefault();
+        });
         document.body.appendChild(fixture);
       }, pattern.html);
 
@@ -893,12 +965,12 @@ test.describe('core user-visible E2E', () => {
     await page.evaluate(() => {
       const el = document.createElement('p');
       el.id = 'blb-e2e-doubleclick-criteria-words';
-      el.innerHTML = '<span>Jesus</span> <span>faith</span> <span>Grace</span> <span>people</span>';
+      el.innerHTML = '<span>Jesus</span> <span>faith</span> <span>Grace</span> <span>people</span> <span>is</span>';
       el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
       document.body.appendChild(el);
     });
 
-    for (const word of ['Jesus', 'faith', 'Grace', 'people']) {
+    for (const word of ['Jesus', 'faith', 'Grace', 'people', 'is']) {
       const target = page.locator('#blb-e2e-doubleclick-criteria-words span', { hasText: word });
       await target.dblclick();
       await expect.poll(() => extensionWorker.evaluate((expected) => chrome.tabs.query({}).then(tabs =>

@@ -38,10 +38,10 @@ assert.deepEqual(Array.from(h.expandMultiVerseRefsToVerses([
   { bookNumber: 19, chapter: 1, from: 4, to: 6 }
 ])).map(v => v.from), [2, 3, 4, 5, 6], 'overlapping refs expand without duplicate verses');
 
-assert.deepEqual(h.getContinuousSameChapterRange([
+assert.deepEqual({ ...h.getContinuousSameChapterRange([
   { bookNumber: 43, chapter: 3, from: 16, to: 17 },
   { bookNumber: 43, chapter: 3, from: 18, to: 18 }
-]), { bookNumber: 43, chapter: 3, from: 16, to: 18, version: 'kjv' });
+]) }, { bookNumber: 43, chapter: 3, from: 16, to: 18, version: 'kjv' });
 assert.equal(h.getContinuousSameChapterRange([
   { bookNumber: 43, chapter: 3, from: 16, to: 17 },
   { bookNumber: 43, chapter: 3, from: 20, to: 21 }

@@ -1659,7 +1659,7 @@ function handleDoubleClickBlb(event) {
         // Re-read the native selection on every frame until Chromium commits
         // the current double-click. The physical event coordinates remain the
         // authoritative target while the Selection is settling.
-        let selection=getDoubleClickSelection(event);
+        let selection=normalizeSelectionText(getDoubleClickSelection(event)).normalize('NFKC');
         // On double-click, Chromium may still expose the previous word's
         // non-empty Selection. For the narrowly supported verse-context
         // gesture, the physical event target is authoritative: use its exact
@@ -1770,22 +1770,26 @@ function handleDoubleClickBlb(event) {
         );
         const isPrefixedBookName=hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
         const isBookName=!hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
-        // For explicit verse cues, preserve the physical event target. The generic caret-target helper can return a nearby/stale element, which prevents the post-level resolver from finding the containing message. Other gestures retain the existing target selection behavior.
-        const cueElement = [event.target instanceof Element ? event.target : event.target?.parentElement,
-          getDoubleClickTargetElement(event)].find(candidate =>
-            /^(?:v|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
-          );
-        const contextualTarget=isVerseContextWord
-          ? (cueElement || (event.target instanceof Element ? event.target : (event.target?.parentElement || event.target)))
-          : (getDoubleClickTargetElement(event)||event.target);
-
-        // A suffix such as "Peter" or "Sam" can be part of a numbered book
+        // A suffix such as "Peter" or "Cor" can be part of a numbered book
         // name. Only enter contextual matching when the complete nearby prefix
         // resolves to a real Bible book; arbitrary words remain fast-rejected.
         const possibleNumberedBookSuffix=/^(?:Sam(?:uel)?|Kings|Kgs?|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)$/i.test(selection);
+
+        // For explicit verse cues and numbered-book suffixes, prefer the
+        // physical event target where needed. The generic caret-target helper
+        // can return a nearby/stale element on pages with inline citation spans.
+        const cueElement = [physicalTarget, getDoubleClickTargetElement(event)].find(candidate =>
+          /^(?:v|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
+        );
+        const contextualTarget = possibleNumberedBookSuffix
+          ? physicalTarget
+          : (isVerseContextWord
+            ? (cueElement || getDoubleClickTargetElement(event) || event.target)
+            : (getDoubleClickTargetElement(event) || event.target));
         const isRomanBookPrefix=/^(?:I|II|III)$/i.test(selection);
         let hasValidNearbyBookPrefix=false;
         let hasValidNearbyRomanBookPrefix=false;
+        let numberedSuffixReference=null;
         if ((possibleNumberedBookSuffix||isRomanBookPrefix) && !hasNumericPrefix) {
           try {
             const contextNode=contextualTarget instanceof Element
@@ -1803,6 +1807,22 @@ function handleDoubleClickBlb(event) {
             hasValidNearbyRomanBookPrefix=!!(completeBook
               && isRomanBookPrefix
               && match[1].toUpperCase()===selection.toUpperCase());
+
+            // A numbered-book suffix such as "Cor" may be the clicked part of
+            // a chapter-only citation ("1 Cor. 13"). Resolve that exact nearby
+            // citation directly instead of letting the generic DOM resolver
+            // borrow an unrelated reference from an ancestor or stale selection.
+            if (completeBook && possibleNumberedBookSuffix
+                && match[2].toLowerCase()===selection.toLowerCase()
+                && /^[1-3]$/.test(match[1])) {
+              const afterBook=contextText.slice(match.index+match[0].length);
+              const chapterMatch=afterBook.match(/^\s*\.?\s*(\d{1,3})\b/);
+              const chapter=chapterMatch ? Number(chapterMatch[1]) : 0;
+              if (chapter>0) {
+                const resolvedBook=resolveBibleBook(prefixNumber+' '+match[2]);
+                if (resolvedBook) numberedSuffixReference=resolveBibleReference(resolvedBook.name,chapter,1,1);
+              }
+            }
           } catch (_) {}
         }
         // "verse" is not guaranteed to be in the local KJV word index on
@@ -1846,9 +1866,10 @@ function handleDoubleClickBlb(event) {
           event?.target?.closest?.('p,li,td,th,blockquote,article,section,div')?.textContent||''
         ) : '';
         const isStandaloneNumericBook=isNumericBookCandidate && standaloneBook && blockText===selection;
-        const contextualReference=isNumberedListSerial && standaloneBook
-          ? standaloneBook
-          : (isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook));
+        const contextualReference=numberedSuffixReference
+          || (isNumberedListSerial && standaloneBook
+            ? standaloneBook
+            : (isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook)));
         if (!contextualReference) {
           // A version abbreviation alone is not a KJV word-search request.
           if (isBibleVersionCode) return true;

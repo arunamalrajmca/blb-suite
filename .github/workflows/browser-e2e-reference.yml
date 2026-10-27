@@ -202,7 +202,7 @@ jobs:
         run: npx playwright install chromium
       - name: Grant test-only generic host access
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
-        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); const hosts=['https://example.com/*','https://www.gotquestions.org/*','https://www.christianity.com/*','https://www.crosswalk.com/*','https://www.enduringword.com/*']; m.host_permissions=[...(m.host_permissions||[]),...hosts]; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),...hosts]; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
       - name: Read manifest version
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
         id: version
