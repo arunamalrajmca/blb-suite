@@ -7,7 +7,8 @@
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
-    "test:static": "node scripts/validate-build.js"
+    "test:static": "node scripts/validate-build.js",
+    "test:focused-behavior": "playwright test tests/browser/webster-collector-behavior.spec.js tests/browser/case-sensitive-routing-behavior.spec.js"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0"
