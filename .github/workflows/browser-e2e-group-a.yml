@@ -130,11 +130,11 @@ jobs:
 
       # Keep the Facebook-style DOM regression in this targeted suite so range-context fixes are exercised on branch pushes.
       - name: Run Facebook nested reference token regression
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         run: npx playwright test tests/browser/extension.spec.js --grep 'Facebook nested dir-auto reference resolves from book, chapter, and verse-range gestures'
 
       - name: Run Supply of Grace Ephesians chapter-context regression
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         run: npx playwright test tests/browser/extension.spec.js --grep 'Supply of Grace Substack Ephesians chapter context does not fall back to Ephesians 1:1'
 
       - name: Run every test in changed browser spec files
@@ -158,5 +158,5 @@ jobs:
           npx playwright test "${specs[@]}"
 
       - name: Run Facebook Revelation directional-format range regression
-        if: ${{ always() && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) }}
+        if: ${{ always() && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         run: npx playwright test tests/browser/extension.spec.js --grep 'Facebook directional-format Revelation 20:1-10 resolves the whole range from book-name double-click'
