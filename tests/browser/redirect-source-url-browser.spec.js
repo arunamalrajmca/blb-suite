@@ -19,7 +19,7 @@ globalThis.__sourceBibleRedirect = globalThis.BLBSourceBibleRedirectModule.initi
   BLBShared, BOOKS, bookKey, parseChristianityBibleLink, validateSourceBibleReference,
   parseRef, decodeSafe, blbUrl, openBlbDestinationFromContent
 });
-function redirectBibleSite() { return globalThis.__sourceBibleRedirect(); }`;
+globalThis.redirectBibleSite = globalThis.__sourceBibleRedirect;`;
 const productionRedirectGate = contentSource.slice(gateStart, gateEnd);
 
 async function loadProductionRedirect(page, sourceUrl) {
