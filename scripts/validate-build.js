@@ -198,3 +198,13 @@ if (singleWordSelectionNormalizationTest.status !== 0) {
 } else {
   pass('single-word selection normalization contracts validated');
 }
+
+const quotedCriteriaOrQueryTest = cp.spawnSync(process.execPath, [
+  path.join(__dirname, 'test-quoted-criteria-or-query.js')
+], { encoding: 'utf8' });
+if (quotedCriteriaOrQueryTest.stdout) process.stdout.write(quotedCriteriaOrQueryTest.stdout);
+if (quotedCriteriaOrQueryTest.status !== 0) {
+  fail('quoted criteria OR query tests failed\\n' + (quotedCriteriaOrQueryTest.stderr || ''));
+} else {
+  pass('quoted criteria OR query contracts validated');
+}
