@@ -4,14 +4,10 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 function loadBooleanHelpers() {
-  const source = fs.readFileSync(path.join(__dirname, '../../extension/background.js'), 'utf8');
-  const normalizeMatch = source.match(/function normalizeBooleanOperatorsOutsideQuotes\(value\) \{[\s\S]*?\n\}/);
-  const detectMatch = source.match(/function hasUnquotedBooleanOperator\(value\) \{[\s\S]*?\n\}/);
-  if (!normalizeMatch || !detectMatch) throw new Error('Boolean-operator helpers not found in background.js');
-  return vm.runInNewContext(
-    normalizeMatch[0] + '\n' + detectMatch[0] + '; ({ normalizeBooleanOperatorsOutsideQuotes, hasUnquotedBooleanOperator })',
-    {}
-  );
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/omnibox-boolean-operators.js'), 'utf8');
+  const context = { globalThis: {} };
+  vm.runInNewContext(source, context, { filename: 'omnibox-boolean-operators.js' });
+  return context.globalThis.BLBOmniboxBooleanOperators;
 }
 
 test('case-insensitive standalone Boolean words are uppercased outside quoted text only', () => {
