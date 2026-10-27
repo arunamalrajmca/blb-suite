@@ -108,7 +108,7 @@ for (const site of [
   { host: 'crosswalk.com', key: 'crosswalk' },
   { host: 'enduringword.com', key: 'enduringword' }
 ]) {
-  test(`source-page collector initializes on ${site.host} after site access is enabled`, async ({ page, context, extensionStorage, extensionWorker }) => {
+  test(`source-page collector initializes on ${site.host} after site access is enabled`, async ({ page, context, extensionId, extensionStorage, extensionWorker }) => {
     await expectSourceCollectorAfterSiteOptIn({ page, context, extensionId, extensionStorage, extensionWorker, site });
   });
 }
