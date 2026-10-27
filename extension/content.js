@@ -1775,13 +1775,9 @@ function handleDoubleClickBlb(event) {
         // resolves to a real Bible book; arbitrary words remain fast-rejected.
         const possibleNumberedBookSuffix=/^(?:Sam(?:uel)?|Kings|Kgs?|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)$/i.test(selection);
 
-        // For explicit verse cues and numbered-book suffixes, preserve the
-        // physical event target. The generic caret-target helper can return a
-        // nearby/stale element on pages with inline citation spans, which makes
-        // the contextual resolver inspect an unrelated paragraph/reference.
-        const physicalTarget = event.target instanceof Element
-          ? event.target
-          : (event.target?.parentElement || event.target);
+        // For explicit verse cues and numbered-book suffixes, prefer the
+        // physical event target where needed. The generic caret-target helper
+        // can return a nearby/stale element on pages with inline citation spans.
         const cueElement = [physicalTarget, getDoubleClickTargetElement(event)].find(candidate =>
           /^(?:v|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
         );
