@@ -178,3 +178,13 @@ if (selectionTextNormalizationTest.status !== 0) {
 } else {
   pass('selection-text normalization contracts validated');
 }
+
+const selectionMarkerStrippingTest = cp.spawnSync(process.execPath, [
+  path.join(__dirname, 'test-selection-marker-stripping.js')
+], { encoding: 'utf8' });
+if (selectionMarkerStrippingTest.stdout) process.stdout.write(selectionMarkerStrippingTest.stdout);
+if (selectionMarkerStrippingTest.status !== 0) {
+  fail('selection-marker stripping tests failed\\n' + (selectionMarkerStrippingTest.stderr || ''));
+} else {
+  pass('selection-marker stripping contracts validated');
+}
