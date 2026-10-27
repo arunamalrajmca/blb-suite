@@ -129,6 +129,16 @@ if (crossFeatureContractTest.status !== 0) {
   pass('cross-feature integration contracts validated');
 }
 
+const omniboxBooleanOperatorsTest = cp.spawnSync(process.execPath, [
+  path.join(__dirname, 'test-omnibox-boolean-operators.js')
+], { encoding: 'utf8' });
+if (omniboxBooleanOperatorsTest.stdout) process.stdout.write(omniboxBooleanOperatorsTest.stdout);
+if (omniboxBooleanOperatorsTest.status !== 0) {
+  fail('Omnibox Boolean operator tests failed\\n' + (omniboxBooleanOperatorsTest.stderr || ''));
+} else {
+  pass('Omnibox Boolean operator contracts validated');
+}
+
 const omniboxNormalizationTest = cp.spawnSync(process.execPath, [
   path.join(__dirname, 'test-omnibox-search-normalization.js')
 ], { encoding: 'utf8' });
