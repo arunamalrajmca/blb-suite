@@ -33,6 +33,7 @@ function fixture() {
   put(root, "scripts/classify-ci-changes.mjs", classifierSource);
   put(root, "package.json", JSON.stringify({ name: "fixture", version: "1.0.0", scripts: { test: "before" } }) + "\n");
   put(root, "extension/omnibox-search-helpers.js");
+  put(root, "extension/source-page-collector.js");
   put(root, "tests/browser/omnibox-boolean-operators.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/e2e-core-user-actions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/fixtures.js");
@@ -67,6 +68,17 @@ test("mapped feature implementation selects its focused behavioral spec", () => 
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /changed_specs=tests\/browser\/omnibox-boolean-operators\.spec\.js/);
     assert.match(output, /group_a_required=true/);
+  });
+});
+
+test("source-page collector selects its existing collector initialization coverage", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/source-page-collector.js", "// changed collector\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /changed_specs=tests\/browser\/extension\.spec\.js/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=false/);
   });
 });
 
