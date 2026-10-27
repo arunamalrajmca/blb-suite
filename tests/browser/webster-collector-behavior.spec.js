@@ -7,11 +7,11 @@ const root = path.resolve(__dirname, '../..');
 const source = fs.readFileSync(path.join(root, 'extension/webster-collector.js'), 'utf8');
 
 function normalizeSelectionText(value) {
-  return String(value || '').replace(/\\s+/g, ' ').trim();
+  return String(value || '').replace(/\s+/g, ' ').trim();
 }
 
 function parseRef(value) {
-  const match = normalizeSelectionText(value).match(/^(John|Romans)\\s+(\\d+):(\\d+)(?:-(\\d+))?$/i);
+  const match = normalizeSelectionText(value).match(/^(John|Romans)\s+(\d+):(\d+)(?:-(\d+))?$/i);
   if (!match) return null;
   const chapter = Number(match[2]);
   const from = Number(match[3]);
@@ -44,7 +44,7 @@ function makeCollector(anchors) {
     parseRef,
     blbUrl
   };
-  vm.runInNewContext(source.slice(start, end) + '\\nthis.__collect = collectWebsterBibleRefs;', context);
+  vm.runInNewContext(source.slice(start, end) + '\nthis.__collect = collectWebsterBibleRefs;', context);
   return context.__collect;
 }
 
@@ -68,7 +68,7 @@ function makeCapture({ hostname = 'webstersdictionary1828.com', pathname = '/dic
     } } },
     isSuiteEnabled: async () => enabled
   };
-  vm.runInNewContext(source.slice(start, end) + '\\nthis.__capture = captureWebsterWord;', context);
+  vm.runInNewContext(source.slice(start, end) + '\nthis.__capture = captureWebsterWord;', context);
   return { capture: context.__capture, messages };
 }
 
