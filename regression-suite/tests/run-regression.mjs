@@ -405,7 +405,7 @@ section('features');
 // Case-sensitive core + corpus.
 const csCtx = loadPure(['case-sensitive-search-core.js','kjv-corpus-original-case.js','kjv-corpus-case-verse-index.js']);
 const omniboxCtx = loadPure(['books.js','kjv-corpus-verses.js','kjv-corpus-word-verse-index.js']);
-vm.runInContext(read('omnibox-search-normalization.js'), omniboxCtx, {filename:'omnibox-search-normalization.js'});
+vm.runInContext(read('omnibox-search-helpers.js'), omniboxCtx, {filename:'omnibox-search-helpers.js'});
 const omniboxBgSource = read('background.js');
 const omniboxHelperStart = omniboxBgSource.indexOf('function normalizeOmniboxSearchPhrase');
 const omniboxHelperEnd = omniboxBgSource.indexOf('\nasync function handleBCommand', omniboxHelperStart);
