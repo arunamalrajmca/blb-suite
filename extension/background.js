@@ -1875,6 +1875,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   );
   return true;
 });
+// Expose listener registration state for browser-test diagnostics only.
+globalThis.__blbSuiteQueuePostListenerRegisteredV1 = true;
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;
@@ -2437,6 +2439,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   })();
   return true;
 });
+globalThis.__blbSuiteAsyncMessageRouterRegisteredV1 = true;
 
 // Keep the original BLB /net fallback as a fast main-frame redirect.
 const dynamicRules = [

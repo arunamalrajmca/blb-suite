@@ -7,6 +7,12 @@
   const handoffStartedAt = Date.now();
   const logTiming = details => {
     const entry = {...details, pageUrl:location.href, at:Date.now()};
+    // Keep the last milestone inspectable even when a background tab's timer or console is throttled.
+    try {
+      document.documentElement?.setAttribute('data-blb-mv-handoff-stage', String(entry.stage || 'unknown'));
+      document.documentElement?.setAttribute('data-blb-mv-handoff-diagnostic', JSON.stringify(entry));
+      if (status) status.setAttribute('data-blb-mv-handoff-stage', String(entry.stage || 'unknown'));
+    } catch (_) {}
     console.info('[BLB MV timing]', JSON.stringify(entry));
     // Mirror handoff milestones into the service-worker console so all tabs
     // can be diagnosed from the single Inspect target.

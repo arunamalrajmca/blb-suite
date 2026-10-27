@@ -103,6 +103,13 @@ test('independent MultiVerse commands start opening tabs without waiting for ear
 
 test('MultiVerse reuses both 200-verse batches when the same selection is repeated or reordered', async ({ context, extensionWorker }) => {
   const submittedPayloads = [];
+  const handoffConsoleDiagnostics = [];
+  const watchHandoffPage = page => page.on('console', message => {
+    const text = message.text();
+    if (text.includes('[BLB MV timing]')) handoffConsoleDiagnostics.push(text);
+  });
+  for (const page of context.pages()) watchHandoffPage(page);
+  context.on('page', watchHandoffPage);
   await context.route('https://www.blueletterbible.org/**', route => {
     if (route.request().method() === 'POST') {
       const body = new URLSearchParams(route.request().postData() || '');
@@ -136,7 +143,22 @@ test('MultiVerse reuses both 200-verse batches when the same selection is repeat
   // The same and reordered selections must reuse their reservations even if
   // the initial POST handoffs have not both completed. Waiting here would mask
   // a race that can create duplicate tabs during the handoff navigation.
-  await expect.poll(() => submittedPayloads.length, { timeout: 20000 }).toBe(2);
+  try {
+    await expect.poll(() => submittedPayloads.length, { timeout: 20000 }).toBe(2);
+  } catch (error) {
+    const backgroundDiagnostics = await extensionWorker.evaluate(() => ({
+      queuePostListenerRegistered: globalThis.__blbSuiteQueuePostListenerRegisteredV1 === true,
+      asyncMessageRouterRegistered: globalThis.__blbSuiteAsyncMessageRouterRegisteredV1 === true
+    }));
+    const tabs = await getTrackedMultiVerseTabs(extensionWorker, first.tabIds);
+    throw new Error(String(error) + '\nMultiVerse handoff diagnostics: ' + JSON.stringify({
+      submittedPayloadCount: submittedPayloads.length,
+      submittedPayloads,
+      backgroundDiagnostics,
+      tabs,
+      handoffConsoleDiagnostics
+    }, null, 2));
+  }
 
   const trackedTabs = await getTrackedMultiVerseTabs(extensionWorker, first.tabIds);
   expect(new Set(trackedTabs.map(tab => tab.id))).toEqual(new Set(first.tabIds));

@@ -149,7 +149,11 @@ test.describe('core user-visible E2E', () => {
           diagnosticsEnabled: document.documentElement?.getAttribute('data-blb-suite-e2e-diagnostics'),
           pageText: document.querySelector('#generic-verse-context-article')?.textContent?.slice(0,500) || ''
         }));
-        console.error('Double-click failure diagnostics', JSON.stringify({selector, expectedPath, diagnostics}));
+        const backgroundDiagnostics = await extensionWorker.evaluate(() => ({
+          queuePostListenerRegistered: globalThis.__blbSuiteQueuePostListenerRegisteredV1 === true,
+          asyncMessageRouterRegistered: globalThis.__blbSuiteAsyncMessageRouterRegisteredV1 === true
+        }));
+        console.error('Double-click failure diagnostics', JSON.stringify({selector, expectedPath, diagnostics, backgroundDiagnostics}));
         throw error;
       }
       await activateBlbTabForPath(extensionWorker, expectedPath, {
