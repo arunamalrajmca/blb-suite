@@ -109,8 +109,8 @@ test("browser fixture changes select broad coverage", () => {
 
 test("CI selector and selector-test changes do not force browser E2E", () => {
   withFixture((root, base) => {
-    commitChange(root, "scripts/select-browser-specs.mjs", selectorSource + "\\n// CI-only edit\\n");
-    commitChange(root, "tests/selector/another-selector-test.test.mjs", "// selector-only edit\\n");
+    commitChange(root, "scripts/select-browser-specs.mjs", selectorSource + "\n// CI-only edit\n");
+    commitChange(root, "tests/selector/another-selector-test.test.mjs", "// selector-only edit\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /group_a_required=false/);
