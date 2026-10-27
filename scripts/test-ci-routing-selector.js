@@ -75,6 +75,7 @@ try {
   for (const file of fixtures) write(file);
   write('extension/kings-bible-collector.js');
   write('extension/multiverse-tool-view.js');
+  write('extension/blb-parse-popup.js');
   write('extension/redirect-bibleref-ranges.js');
   write('extension/redirect-christianity-main-world.js');
   write('extension/redirect-scripttagger.js');
@@ -119,6 +120,7 @@ try {
   const extractedFeatureCases = [
     ['extension/multiverse-copy.js', 'multiverse-tab-reuse.spec.js'],
     ['extension/multiverse-tool-view.js', 'e2e-core-user-actions.spec.js'],
+    ['extension/blb-parse-popup.js', 'e2e-core-user-actions.spec.js'],
     ['extension/study-reference-capture.js', 'feature-lifecycle-regressions.spec.js'],
     ['extension/criteria-search-navigation.js', 'e2e-core-user-actions.spec.js'],
     ['extension/blb-auto-hyperlinker.js', 'feature-lifecycle-regressions.spec.js'],
