@@ -4,6 +4,16 @@ run-name: HARD-GATE â€” PR #${{ github.event.pull_request.number || 'main' }} â€
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'extension/**'
+      - 'regression-suite/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'playwright.config.js'
+      - 'playwright.config.ts'
+      - '.github/workflows/browser-tests.yml'
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened, labeled]
