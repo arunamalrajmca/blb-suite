@@ -5,22 +5,20 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const contentSource = read('extension/content.js');
+const sourceRedirectModule = read('extension/source-bible-redirect.js');
 const draggableButtonModule = read('extension/blb-draggable-button.js');
-const parseStart = contentSource.indexOf('function parseRef(text) {');
-const redirectStart = contentSource.indexOf('function redirectBibleSite() {', parseStart);
-const redirectEnd = contentSource.indexOf('\nfunction redirectBlbNet() {', redirectStart);
+const redirectStart = contentSource.indexOf('const redirectBibleSite = globalThis.BLBSourceBibleRedirectModule.initialize({');
 const decodeStart = contentSource.indexOf('function decodeSafe(v) {');
 const bookKeyStart = contentSource.indexOf('function bookKey(value) {');
-if ([parseStart, redirectStart, redirectEnd, decodeStart, bookKeyStart].some(i => i < 0)) {
-  throw new Error('Could not locate production source redirect helpers');
-}
+if ([redirectStart, decodeStart, bookKeyStart].some(i => i < 0)) throw new Error('Could not locate production source redirect helpers');
 const gateStart = contentSource.indexOf('const REDIRECT_HOSTS = new Set([');
 const gateEnd = contentSource.indexOf('// MultiVerse hand-off runs as a dedicated feature module.', gateStart);
 if (gateStart < 0 || gateEnd < 0) throw new Error('Could not locate production content-side redirect gate');
-const productionRedirectHelpers =
-  contentSource.slice(bookKeyStart, parseStart) +
-  contentSource.slice(parseStart, redirectStart) +
-  contentSource.slice(redirectStart, redirectEnd);
+const productionRedirectHelpers = contentSource.slice(bookKeyStart, redirectStart) + sourceRedirectModule + `
+const redirectBibleSite = globalThis.BLBSourceBibleRedirectModule.initialize({
+  BLBShared, BOOKS, bookKey, parseChristianityBibleLink, validateSourceBibleReference,
+  parseRef, decodeSafe, blbUrl, openBlbDestinationFromContent
+});`;
 const productionRedirectGate = contentSource.slice(gateStart, gateEnd);
 
 async function loadProductionRedirect(page, sourceUrl) {
