@@ -85,6 +85,7 @@ try {
   write('extension/background.js');
   write('extension/content.js');
   write('extension/reference-core.js');
+  write('extension/book-aliases.js');
   write('extension/unmapped-feature.js');
   const base = commit('base fixture');
 
