@@ -3,6 +3,15 @@ name: MultiVerse tab reuse regression
 on:
   push:
     branches: [main]
+    paths:
+      - 'extension/**'
+      - 'tests/browser/multiverse-tab-reuse.spec.js'
+      - 'tests/browser/fixtures.js'
+      - 'playwright.config.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'scripts/select-browser-specs.mjs'
+      - '.github/workflows/multiverse-tab-reuse.yml'
   pull_request:
     branches: [main]
     paths:
@@ -12,6 +21,7 @@ on:
       - 'playwright.config.js'
       - 'package.json'
       - 'package-lock.json'
+      - 'scripts/select-browser-specs.mjs'
       - '.github/workflows/multiverse-tab-reuse.yml'
   workflow_dispatch:
 
