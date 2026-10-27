@@ -197,13 +197,13 @@ try {
     'mixed runtime change must include its changed browser regression spec');
   console.log('PASS: mixed runtime and browser-spec changes run the edited regression spec');
 
-  // Changes to the selector/test infrastructure must remain conservative.
+  // CI selector infrastructure changes are validated by the package gate and must not launch browser E2E.
   resetScenario(base);
   write('scripts/select-browser-specs.mjs', '// selector infrastructure change\n');
   commit('change selector infrastructure');
   result = selectorResult(base);
-  assertValue(result, 'full_browser_suite', true, 'selector infrastructure');
-  console.log('PASS: selector infrastructure changes force broad browser coverage');
+  assertValue(result, 'full_browser_suite', false, 'selector infrastructure');
+  console.log('PASS: selector infrastructure changes do not launch browser E2E');
 
   console.log('All CI routing selector contract checks passed.');
 } catch (error) {
