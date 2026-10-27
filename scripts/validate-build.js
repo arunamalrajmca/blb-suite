@@ -129,6 +129,16 @@ if (crossFeatureContractTest.status !== 0) {
   pass('cross-feature integration contracts validated');
 }
 
+const omniboxGibberishFilterTest = cp.spawnSync(process.execPath, [
+  path.join(__dirname, 'test-omnibox-gibberish-filter.js')
+], { encoding: 'utf8' });
+if (omniboxGibberishFilterTest.stdout) process.stdout.write(omniboxGibberishFilterTest.stdout);
+if (omniboxGibberishFilterTest.status !== 0) {
+  fail('Omnibox gibberish-filter tests failed\\n' + (omniboxGibberishFilterTest.stderr || ''));
+} else {
+  pass('Omnibox gibberish-filter contracts validated');
+}
+
 const omniboxBooleanOperatorsTest = cp.spawnSync(process.execPath, [
   path.join(__dirname, 'test-omnibox-boolean-operators.js')
 ], { encoding: 'utf8' });
