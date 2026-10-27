@@ -70,6 +70,7 @@ try {
     'tests/browser/omnibox-boolean-operators.spec.js',
     'tests/browser/kings-bible-collector-behavior.spec.js',
     'tests/browser/webster-collector-behavior.spec.js',
+    'tests/browser/case-sensitive-routing-behavior.spec.js',
     'tests/browser/performance.spec.js',
     'tests/browser/test-only.spec.js'
   ];
@@ -195,6 +196,18 @@ try {
   assertValue(result, 'full_browser_suite', false, 'browser test only');
   assert.equal(result.values.changed_specs, '', 'browser test-only changes should not select production E2E');
   console.log('PASS: browser-spec-only edits do not trigger feature E2E');
+
+  // Focused behavior spec-only edits are handled by their dedicated workflow, not broad E2E groups.
+  resetScenario(base);
+  write('tests/browser/case-sensitive-routing-behavior.spec.js', '// focused test edit\\n');
+  commit('change focused case-sensitive behavior test');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', false, 'focused behavior spec only');
+  assertValue(result, 'group_a_required', false, 'focused behavior spec only');
+  assertValue(result, 'group_b_required', false, 'focused behavior spec only');
+  assertValue(result, 'reference_required', false, 'focused behavior spec only');
+  assert.equal(result.values.changed_specs, '', 'focused test-only changes should not select broad E2E specs');
+  console.log('PASS: focused behavior spec edits avoid broad E2E groups');
 
   // Mixed production + browser-spec edits must run the edited spec too.
   // Test-only edits stay skipped, but a runtime change must not silently skip

@@ -217,7 +217,10 @@ const mappedSpecs = new Set([
   "tests/browser/multiverse-tab-reuse.spec.js",
   "tests/browser/performance.spec.js",
   "tests/browser/site-feature-defaults.spec.js",
-  "tests/browser/study-session-popup-ui-regression.spec.js"
+  "tests/browser/study-session-popup-ui-regression.spec.js",
+  "tests/browser/webster-collector-behavior.spec.js",
+  "tests/browser/case-sensitive-routing-behavior.spec.js",
+  "tests/browser/test-only.spec.js"
 ]);
 const separatelyManagedSpecs = new Set(["tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/performance.spec.js"]);
 const unmapped = selected.filter(path => !mappedSpecs.has(path) && !separatelyManagedSpecs.has(path));
