@@ -5,25 +5,26 @@ const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '../..');
 const content = fs.readFileSync(path.join(root, 'extension/content.js'), 'utf8');
+const sourceCollector = fs.readFileSync(path.join(root, 'extension/source-page-collector.js'), 'utf8');
 
 test('Rediscover, Sagacity, and TSK use the existing current-page MultiVerse collector', () => {
-  expect(content).toContain('"rediscover.bible":"rediscover"');
-  expect(content).toContain('"sagacityweb.com":"sagacity"');
-  expect(content).toContain('"thetreasuryofscriptureknowledge.com":"treasury"');
-  expect(content).toContain("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'");
-  expect(content).toContain('if (sourceSite && !isSourceHomepage)');
-  expect(content).toContain('document.querySelectorAll("a[href]")');
-  expect(content).toContain('openSourcePageBibleReferencesInMultiVerse');
+  expect(sourceCollector).toContain('"rediscover.bible":"rediscover"');
+  expect(sourceCollector).toContain('"sagacityweb.com":"sagacity"');
+  expect(sourceCollector).toContain('"thetreasuryofscriptureknowledge.com":"treasury"');
+  expect(sourceCollector).toContain('"thetreasuryofscriptureknowledge.com":"treasury"');
+  expect(sourceCollector).toContain('if (sourceSite && !isSourceHomepage)');
+  expect(sourceCollector).toContain('document.querySelectorAll("a[href]")');
+  expect(sourceCollector).toContain('openSourcePageBibleReferencesInMultiVerse');
 });
 
 test('Sagacity collector recovers full references from BLB preSearch URLs', () => {
-  expect(content).toContain('if (sourceSite === "sagacity")');
-  expect(content).toContain('targetUrl.searchParams.get("Criteria")');
-  expect(content).toContain('targetHost === "blueletterbible.org"');
-  expect(content).toContain('/^\\/search\\/preSearch\\.cfm$/i.test(targetUrl.pathname)');
-  expect(content).toContain('String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")');
+  expect(sourceCollector).toContain('if (sourceSite === "sagacity")');
+  expect(sourceCollector).toContain('targetUrl.searchParams.get("Criteria")');
+  expect(sourceCollector).toContain('targetHost === "blueletterbible.org"');
+  expect(sourceCollector).toContain('/^\\/search\\/preSearch\\.cfm$/i.test(targetUrl.pathname)');
+  expect(sourceCollector).toContain('String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")');
   expect(content).toContain('if (/^Matt\\.?$/i.test(value)) return "Matthew";');
-  expect(content).toContain('normalizeSourceBibleBook(sagacityCriteriaReference.book)');
+  expect(sourceCollector).toContain('normalizeSourceBibleBook(sagacityCriteriaReference.book)');
 });
 
 test('Sagacity dotted BLB Criteria resolves Matt. 12.37 as Matthew 12:37', () => {
@@ -51,7 +52,7 @@ test('Sagacity dotted BLB Criteria resolves Matt. 12.37 as Matthew 12:37', () =>
 });
 
 test('Sagacity BLB Criteria remains a fallback and does not replace valid captions', () => {
-  const collector = content.slice(content.indexOf('function collectSourcePageBibleReferences'));
+  const collector = sourceCollector.slice(sourceCollector.indexOf('function collectSourcePageBibleReferences'));
   const captionFallback = collector.indexOf('if (!parsed) parsed = parseRef(label);');
   const criteriaFallback = collector.indexOf('if (!parsed) parsed = sagacityCriteriaReference;');
   const resolutionFallback = collector.indexOf('if (!resolved && sourceSite === "sagacity" && sagacityCriteriaReference)');
@@ -68,7 +69,7 @@ test('Sagacity browser collector captures Matt. 12:37 from malformed nested BLB 
     expect(end).toBeGreaterThan(start + 2);
     return source.slice(start, end);
   };
-  const collectorStart = content.indexOf('function collectSourcePageBibleReferences()');
+  const collectorStart = sourceCollector.indexOf('function collectSourcePageBibleReferences()');
   expect(collectorStart).toBeGreaterThan(-1);
   const collectorEnd = content.indexOf('\n    }\n\n    function showSourcePageMultiVerseStatus', collectorStart);
   expect(collectorEnd).toBeGreaterThan(collectorStart);
