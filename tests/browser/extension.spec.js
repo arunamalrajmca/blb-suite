@@ -67,14 +67,40 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
   await expect(page.locator('body')).toBeVisible();
 });
 
-test('source-page collector initializes on a commentary article', async ({ page, extensionStorage }) => {
-  await extensionStorage.set({ masterEnabled: true });
+test('source-page collector initializes on a commentary article after site access is enabled', async ({ page, context, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    pageSelectionButtonSites: {},
+    doubleClickBlbSites: {}
+  });
   await page.route('https://www.gotquestions.org/**', route => route.fulfill({
     status: 200,
     contentType: 'text/html; charset=utf-8',
     body: '<!doctype html><html><head><title>Fixture article</title></head><body><main><h1>Fixture article</h1><a href="https://www.gotquestions.org/John-3-16.html">John 3:16</a></main></body></html>'
   }));
   await page.goto('https://www.gotquestions.org/fixture-article.html', { waitUntil: 'domcontentloaded' });
+
+  // External sites are covered by optional host permissions. Enable the feature
+  // through the real extension popup so chrome.permissions.request runs in a
+  // user gesture, matching the supported user setup instead of assuming that
+  // optional access is granted in a fresh test profile.
+  const popupPromise = context.waitForEvent('page');
+  await extensionWorker.evaluate(async () => {
+    if (!chrome.action?.openPopup) throw new Error('chrome.action.openPopup is unavailable in this browser');
+    await chrome.action.openPopup();
+  });
+  const popup = await popupPromise;
+  await expect(popup.locator('#pageButton')).toBeVisible();
+  await popup.locator('#pageButton').check();
+
+  await expect.poll(async () => extensionWorker.evaluate(() =>
+    chrome.permissions.contains({ origins: ['https://www.gotquestions.org/*'] })
+  ), { timeout: 10000 }).toBe(true);
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const saved = await chrome.storage.local.get({ pageSelectionButtonSites: {} });
+    return saved.pageSelectionButtonSites?.['gotquestions.org'] === true;
+  }), { timeout: 10000 }).toBe(true);
+
   const button = page.locator('#blb-suite-gotquestions-multiverse');
   await expect(button).toBeVisible({ timeout: 10000 });
   await expect(button).toHaveText('Open Bible References in BLB');
