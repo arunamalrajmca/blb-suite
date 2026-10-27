@@ -460,6 +460,19 @@ function doubleClickDiagnostic(stage, details = {}) {
     const entry = {stage, at:Date.now(), hostname:location.hostname, ...details};
     window.__blbSuiteDoubleClickDiagnosticV1 = entry;
     document.documentElement?.setAttribute('data-blb-suite-dblclick-last-diagnostic', JSON.stringify(entry));
+    // Keep a bounded DOM-visible history because the isolated content-script
+    // world cannot be read directly by Playwright. This is active only when
+    // the test explicitly enables data-blb-suite-e2e-diagnostics.
+    const historyAttribute = 'data-blb-suite-dblclick-diagnostic-history';
+    let history = [];
+    try {
+      const prior = document.documentElement?.getAttribute(historyAttribute);
+      history = prior ? JSON.parse(prior) : [];
+      if (!Array.isArray(history)) history = [];
+    } catch (_) { history = []; }
+    history.push(entry);
+    if (history.length > 40) history = history.slice(-40);
+    document.documentElement?.setAttribute(historyAttribute, JSON.stringify(history));
     console.info('[BLB double-click diagnostic]', JSON.stringify(entry));
   } catch (_) {}
 }
