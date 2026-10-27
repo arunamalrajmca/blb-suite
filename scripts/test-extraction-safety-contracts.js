@@ -86,25 +86,25 @@ try {
   // Extracted modules must expose their documented global registration objects
   // before content.js executes. Check the global API rather than internal bodies.
   const moduleContracts = [
-    ['extension/kings-bible-collector.js', /globalThis\\.BLBKingsBibleCollector\\s*=/],
-    ['extension/webster-collector.js', /globalThis\\.BLBWebsterCollectorModule\\s*=/],
-    ['extension/source-page-collector.js', /globalThis\\.BLBSourcePageCollectorModule\\s*=/],
-    ['extension/source-bible-redirect.js', /global\\.BLBSourceBibleRedirectModule\\s*=/],
-    ['extension/multiverse-copy.js', /root\\.BLBMultiVerseCopyModule\\s*=/],
-    ['extension/study-reference-capture.js', /global\\.BLBStudyReferenceCaptureModule\\s*=/],
-    ['extension/criteria-search-navigation.js', /global\\.BLBCriteriaSearchNavigationModule\\s*=/],
-    ['extension/blb-auto-hyperlinker.js', /global\\.BLBAutoHyperlinkerModule\\s*=/],
-    ['extension/blb-passive-new-tab-targets.js', /global\\.BLBPassiveNewTabTargetsModule\\s*=/],
-    ['extension/blb-draggable-button.js', /global\\.BLBDraggableButtonModule\\s*=/],
-    ['extension/blb-parse-popup.js', /global\\.BLBParsePopupModule\\s*=/],
-    ['extension/blb-verse-link-navigation.js', /global\\.BLBVerseLinkNavigationModule\\s*=/],
-    ['extension/blb-page-selection-button.js', /global\\.BLBPageSelectionButtonModule\\s*=/],
-    ['extension/multiverse-handoff.js', /global\\.BLBMultiVerseHandoffModule\\s*=/],
-    ['extension/multiverse-tool-view.js', /global\\.BLBMultiVerseToolViewModule\\s*=/]
+    ['extension/kings-bible-collector.js', 'globalThis.BLBKingsBibleCollector ='],
+    ['extension/webster-collector.js', 'globalThis.BLBWebsterCollectorModule ='],
+    ['extension/source-page-collector.js', 'globalThis.BLBSourcePageCollectorModule ='],
+    ['extension/source-bible-redirect.js', 'global.BLBSourceBibleRedirectModule ='],
+    ['extension/multiverse-copy.js', 'root.BLBMultiVerseCopyModule ='],
+    ['extension/study-reference-capture.js', 'global.BLBStudyReferenceCaptureModule ='],
+    ['extension/criteria-search-navigation.js', 'global.BLBCriteriaSearchNavigationModule ='],
+    ['extension/blb-auto-hyperlinker.js', 'global.BLBAutoHyperlinkerModule ='],
+    ['extension/blb-passive-new-tab-targets.js', 'global.BLBPassiveNewTabTargetsModule ='],
+    ['extension/blb-draggable-button.js', 'global.BLBDraggableButtonModule ='],
+    ['extension/blb-parse-popup.js', 'global.BLBParsePopupModule ='],
+    ['extension/blb-verse-link-navigation.js', 'global.BLBVerseLinkNavigationModule ='],
+    ['extension/blb-page-selection-button.js', 'global.BLBPageSelectionButtonModule ='],
+    ['extension/multiverse-handoff.js', 'global.BLBMultiVerseHandoffModule ='],
+    ['extension/multiverse-tool-view.js', 'global.BLBMultiVerseToolViewModule =']
   ];
   for (const [file, contract] of moduleContracts) {
     assert.ok(fs.existsSync(path.join(root, file)), 'expected extracted module exists: ' + file);
-    assert.match(read(file), contract, 'module must register its global API: ' + file);
+    assert.ok(read(file).includes(contract), 'module must register its global API: ' + file);
   }
   console.log('PASS: extracted content modules register explicit global APIs');
 
