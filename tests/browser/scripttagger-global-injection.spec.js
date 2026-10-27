@@ -151,7 +151,7 @@ test('global redirect uses the minimal handlers on ordinary sites and the full b
     {url:'https://sagacityweb.com/article'},
     {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}
   ))).toEqual([
-    'regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','multiverse-copy.js','study-reference-capture.js','criteria-search-navigation.js','blb-auto-hyperlinker.js','blb-passive-new-tab-targets.js', 'blb-draggable-button.js','content.js','redirect-scripttagger.js','redirect-bibleref-ranges.js'
+    'regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','multiverse-copy.js','study-reference-capture.js','criteria-search-navigation.js','blb-auto-hyperlinker.js','blb-passive-new-tab-targets.js', 'blb-draggable-button.js','multiverse-tool-view.js','content.js','redirect-scripttagger.js','redirect-bibleref-ranges.js'
   ]);
 
   expect(Array.from(context.contentScriptFilesForTab(
