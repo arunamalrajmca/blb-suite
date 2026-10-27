@@ -5,26 +5,63 @@ on:
     paths:
       - 'tests/browser/webster-collector-behavior.spec.js'
       - 'tests/browser/case-sensitive-routing-behavior.spec.js'
-      - 'extension/kjv-case-sensitive-words.js'
-      - 'package.json'
-      - 'playwright.config.js'
       - '.github/workflows/focused-behavior-tests.yml'
   push:
     branches: [main]
     paths:
       - 'tests/browser/webster-collector-behavior.spec.js'
       - 'tests/browser/case-sensitive-routing-behavior.spec.js'
-      - 'extension/kjv-case-sensitive-words.js'
-      - 'package.json'
-      - 'playwright.config.js'
       - '.github/workflows/focused-behavior-tests.yml'
 
 permissions:
   contents: read
 
 jobs:
+  change-detection:
+    name: Avoid duplicate focused browser runs
+    runs-on: ubuntu-latest
+    outputs:
+      runtime_changed: ${{ steps.classify.outputs.runtime_changed }}
+      full_browser_suite: ${{ steps.select.outputs.full_browser_suite }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Classify runtime changes
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="$BASE_SHA"
+          if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then
+            echo "runtime_changed=true" >> "$GITHUB_OUTPUT"
+          else
+            node scripts/classify-ci-changes.mjs "$BASE"
+          fi
+      - name: Check whether the main browser suite covers this change
+        id: select
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="$BASE_SHA"
+          if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then
+            echo "full_browser_suite=true" >> "$GITHUB_OUTPUT"
+          else
+            node scripts/select-browser-specs.mjs "$BASE"
+          fi
+
   focused-behavior:
     name: Focused behavior tests
+    needs: change-detection
+    # Runtime changes are covered by the feature selector or full browser suite.
+    # Keep this workflow for test-only edits, which intentionally do not trigger
+    # feature E2E jobs on their own.
+    if: ${{ needs.change-detection.outputs.runtime_changed == 'false' && needs.change-detection.outputs.full_browser_suite == 'false' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
