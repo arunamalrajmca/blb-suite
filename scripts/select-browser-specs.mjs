@@ -233,6 +233,7 @@ const values = {
     "tests/browser/e2e-core-user-actions.spec.js",
     "tests/browser/kings-bible-collector-behavior.spec.js",
     "tests/browser/webster-collector-behavior.spec.js",
+    "tests/browser/case-sensitive-routing-behavior.spec.js",
     "tests/browser/feature-lifecycle-regressions.spec.js",
     "tests/browser/study-backup-restore.spec.js",
     "tests/browser/extension.spec.js",
