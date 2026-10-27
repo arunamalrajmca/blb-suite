@@ -965,7 +965,7 @@ test.describe('core user-visible E2E', () => {
     await page.evaluate(() => {
       const el = document.createElement('p');
       el.id = 'blb-e2e-doubleclick-criteria-words';
-      el.innerHTML = '<span>Jesus</span> <span>faith</span> <span>Grace</span> <span>people</span>';
+      el.innerHTML = '<span>Jesus</span> <span>faith</span> <span>Grace</span> <span>people</span> <span>is</span>';
       el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
       document.body.appendChild(el);
     });
