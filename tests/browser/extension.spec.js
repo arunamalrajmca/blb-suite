@@ -898,7 +898,7 @@ test.describe('core user-visible E2E', () => {
       document.body.appendChild(el);
     });
 
-    for (const word of ['Jesus', 'faith', 'Grace', 'people']) {
+    for (const word of ['Jesus', 'faith', 'Grace', 'people', 'is']) {
       const target = page.locator('#blb-e2e-doubleclick-criteria-words span', { hasText: word });
       await target.dblclick();
       await expect.poll(() => extensionWorker.evaluate((expected) => chrome.tabs.query({}).then(tabs =>
