@@ -69,6 +69,7 @@
         "webster-collector.js",
         "source-page-collector.js",
         "multiverse-copy.js",
+        "study-reference-capture.js",
         "content.js"
       ],
       "run_at": "document_start"
