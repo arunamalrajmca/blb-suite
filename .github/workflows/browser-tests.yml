@@ -56,6 +56,8 @@ jobs:
         run: |
           VERSION=$(node -p "require('./extension/manifest.json').version")
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+      - name: Validate extension build and module contracts
+        run: node scripts/validate-build.js
       - name: Run deterministic regression gate — package
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
