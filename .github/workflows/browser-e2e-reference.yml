@@ -35,6 +35,7 @@ jobs:
       runtime_changed: ${{ steps.classify.outputs.runtime_changed }}
       full_browser_suite: ${{ steps.browser-select.outputs.full_browser_suite }}
       changed_specs: ${{ steps.browser-select.outputs.changed_specs }}
+      changed_browser_specs: ${{ steps.browser-select.outputs.changed_browser_specs }}
       extension_spec_required: ${{ steps.browser-select.outputs.extension_spec_required }}
       browser_e2e_required: ${{ steps.browser-select.outputs.reference_required }}
     steps:
@@ -80,7 +81,7 @@ jobs:
   verse-context-regression:
     name: BROWSER E2E — generic verse-context gate
     needs: change-detection
-    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) }}
+    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -94,7 +95,7 @@ jobs:
           node-version: 22
       - name: Cache Playwright browsers
         id: playwright-cache
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) && (matrix.file || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
@@ -139,7 +140,7 @@ jobs:
   browser-e2e:
     name: BROWSER E2E — References — ${{ matrix.group }}
     needs: [change-detection, verse-context-regression]
-    if: ${{ always() && (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.verse-context-regression.result == 'success' || needs.change-detection.outputs.extension_spec_required == 'false') }}
+    if: ${{ always() && (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.verse-context-regression.result == 'success' || needs.change-detection.outputs.extension_spec_required == 'false' || contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -178,18 +179,18 @@ jobs:
             grep: 'D14|D16|D18|D19|D20|D21|D22|D23|D25|D41|D42|D43|D44|D45|D46|D47|D48|D49|D50|D51|D52|D53|D54|D55|D56|D57|D58|D59|D60'
     steps:
       - name: Checkout
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) && (matrix.file || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
       - name: Setup Node
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) && (matrix.file || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Cache Playwright browsers
         id: playwright-cache
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) && (matrix.file || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
@@ -197,7 +198,7 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm downloads
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) && (matrix.file || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
         uses: actions/cache@v4
         with:
           path: ~/.npm
@@ -205,20 +206,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
       - name: Install dependencies
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) && (matrix.file || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) && (matrix.file || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
         run: npx playwright install chromium
       - name: Grant test-only generic host access
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) && (matrix.file || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); const hosts=['https://example.com/*','https://www.gotquestions.org/*','https://www.christianity.com/*','https://www.crosswalk.com/*','https://www.enduringword.com/*']; m.host_permissions=[...(m.host_permissions||[]),...hosts]; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),...hosts]; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
       - name: Read manifest version
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) && (matrix.file || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
         id: version
         run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
       - name: Run Browser E2E — ${{ matrix.group }}
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) && (matrix.file || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: npx playwright test "${{ matrix.file || 'tests/browser/extension.spec.js' }}" --grep "${{ matrix.grep }}"
@@ -241,7 +242,7 @@ jobs:
     needs:
       - change-detection
       - browser-e2e
-    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) }}
+    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -255,7 +256,7 @@ jobs:
           node-version: 22
       - name: Cache Playwright browsers
         id: playwright-cache
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) && (matrix.file || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
@@ -319,6 +320,7 @@ jobs:
           EXTENSION_SPEC_REQUIRED: ${{ needs.change-detection.outputs.extension_spec_required }}
           FULL_BROWSER_SUITE: ${{ needs.change-detection.outputs.full_browser_suite }}
           CHANGED_SPECS: ${{ needs.change-detection.outputs.changed_specs }}
+          CHANGED_BROWSER_SPECS: ${{ needs.change-detection.outputs.changed_browser_specs }}
           VERSE_CONTEXT_RESULT: ${{ needs.verse-context-regression.result }}
           REFERENCE_MATRIX_RESULT: ${{ needs.browser-e2e.result }}
           FEATURES_RESULT: ${{ needs.browser-e2e-features.result }}
@@ -340,7 +342,7 @@ jobs:
           fi
 
           verse_context_expected=false
-          if [[ "$reference_expected" == true && ( "$FULL_BROWSER_SUITE" == "true" || ",$CHANGED_SPECS," == *",tests/browser/extension.spec.js,"* ) ]]; then
+          if [[ "$reference_expected" == true && ( "$FULL_BROWSER_SUITE" == "true" || ",$CHANGED_SPECS," == *",tests/browser/extension.spec.js,"* ) && ",$CHANGED_BROWSER_SPECS," != *",tests/browser/extension.spec.js,"* ]]; then
             verse_context_expected=true
           fi
 
@@ -355,7 +357,7 @@ jobs:
           fi
 
           if [[ "$reference_expected" == true ]]; then
-            if [[ "$REFERENCE_MATRIX_RESULT" != "success" ]]; then
+            if [[ "$REFERENCE_MATRIX_RESULT" != "success" && ! ( "$REFERENCE_MATRIX_RESULT" == "skipped" && ",$CHANGED_BROWSER_SPECS," == *",tests/browser/extension.spec.js,"* ) ]]; then
               failed=1
               reasons+=("reference matrix was required but was $REFERENCE_MATRIX_RESULT")
             fi
@@ -365,7 +367,7 @@ jobs:
           fi
 
           features_expected=false
-          if [[ "$reference_expected" == true && ( "$FULL_BROWSER_SUITE" == "true" || ",$CHANGED_SPECS," == *",tests/browser/extension.spec.js,"* ) ]]; then
+          if [[ "$reference_expected" == true && ( "$FULL_BROWSER_SUITE" == "true" || ",$CHANGED_SPECS," == *",tests/browser/extension.spec.js,"* ) && ",$CHANGED_BROWSER_SPECS," != *",tests/browser/extension.spec.js,"* ]]; then
             features_expected=true
           fi
 
