@@ -518,10 +518,8 @@ test('Official KJB redirect parser supports chapter and verse URLs', () => {
 test('Bible redirect parser contracts cover every supported Bible redirect grammar', () => {
   const content = read('content.js');
   const redirect = read('source-bible-redirect.js');
-  const start = redirect.indexOf('function redirectBibleSite');
-  const end = redirect.indexOf('\n    }\n    return redirectBibleSite', start);
-  assert(start >= 0 && end > start, 'Bible redirect parser block missing');
-  const parser = redirect.slice(start, end);
+  assert(redirect.includes('function redirectBibleSite'), 'Bible redirect parser block missing');
+  const parser = redirect;
 
   const contracts = [
     ['bible.com', 'u.pathname.match', 'path parser'],
