@@ -3023,6 +3023,7 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'webster-collector.js',
   'source-page-collector.js',
   'multiverse-copy.js',
+  'study-reference-capture.js',
   'content.js'
 ];
 
