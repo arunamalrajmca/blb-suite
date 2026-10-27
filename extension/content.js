@@ -1789,6 +1789,7 @@ function handleDoubleClickBlb(event) {
         const isRomanBookPrefix=/^(?:I|II|III)$/i.test(selection);
         let hasValidNearbyBookPrefix=false;
         let hasValidNearbyRomanBookPrefix=false;
+        let numberedSuffixReference=null;
         if ((possibleNumberedBookSuffix||isRomanBookPrefix) && !hasNumericPrefix) {
           try {
             const contextNode=contextualTarget instanceof Element
@@ -1806,6 +1807,22 @@ function handleDoubleClickBlb(event) {
             hasValidNearbyRomanBookPrefix=!!(completeBook
               && isRomanBookPrefix
               && match[1].toUpperCase()===selection.toUpperCase());
+
+            // A numbered-book suffix such as "Cor" may be the clicked part of
+            // a chapter-only citation ("1 Cor. 13"). Resolve that exact nearby
+            // citation directly instead of letting the generic DOM resolver
+            // borrow an unrelated reference from an ancestor or stale selection.
+            if (completeBook && possibleNumberedBookSuffix
+                && match[2].toLowerCase()===selection.toLowerCase()
+                && /^[1-3]$/.test(match[1])) {
+              const afterBook=contextText.slice(match.index+match[0].length);
+              const chapterMatch=afterBook.match(/^\\s*\\.?\\s*(\\d{1,3})\\b/);
+              const chapter=chapterMatch ? Number(chapterMatch[1]) : 0;
+              if (chapter>0) {
+                const resolvedBook=resolveBibleBook(prefixNumber+' '+match[2]);
+                if (resolvedBook) numberedSuffixReference=resolveBibleReference(resolvedBook.name,chapter,1,1);
+              }
+            }
           } catch (_) {}
         }
         // "verse" is not guaranteed to be in the local KJV word index on
@@ -1849,9 +1866,10 @@ function handleDoubleClickBlb(event) {
           event?.target?.closest?.('p,li,td,th,blockquote,article,section,div')?.textContent||''
         ) : '';
         const isStandaloneNumericBook=isNumericBookCandidate && standaloneBook && blockText===selection;
-        const contextualReference=isNumberedListSerial && standaloneBook
-          ? standaloneBook
-          : (isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook));
+        const contextualReference=numberedSuffixReference
+          || (isNumberedListSerial && standaloneBook
+            ? standaloneBook
+            : (isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook)));
         if (!contextualReference) {
           // A version abbreviation alone is not a KJV word-search request.
           if (isBibleVersionCode) return true;
