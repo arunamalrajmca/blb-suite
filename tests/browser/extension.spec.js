@@ -67,6 +67,19 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
   await expect(page.locator('body')).toBeVisible();
 });
 
+test('source-page collector initializes on a commentary article', async ({ page, extensionStorage }) => {
+  await extensionStorage.set({ masterEnabled: true });
+  await page.route('https://www.gotquestions.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>Fixture article</title></head><body><main><h1>Fixture article</h1><a href="https://www.gotquestions.org/John-3-16.html">John 3:16</a></main></body></html>'
+  }));
+  await page.goto('https://www.gotquestions.org/fixture-article.html', { waitUntil: 'domcontentloaded' });
+  const button = page.locator('#blb-suite-gotquestions-multiverse');
+  await expect(button).toBeVisible({ timeout: 10000 });
+  await expect(button).toHaveText('Open Bible References in BLB');
+});
+
 test.describe('core user-visible E2E', () => {
   // Run the generic article verse-context regression first. In serial mode, any
   // failure skips the legacy tests in this suite for a faster feedback loop;

@@ -3021,6 +3021,7 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'reference-core.js',
   'kings-bible-collector.js',
   'webster-collector.js',
+  'source-page-collector.js',
   'content.js'
 ];
 

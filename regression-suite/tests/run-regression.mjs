@@ -61,18 +61,17 @@ test('no optional host-permission regression', () => {
 });
 
 test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse collector', () => {
-  const content = read('content.js');
-  assert(content.includes('"rediscover.bible":"rediscover"'));
-  assert(content.includes('"sagacityweb.com":"sagacity"'));
-  assert(content.includes('"thetreasuryofscriptureknowledge.com":"treasury"'));
-  assert(content.includes("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'"));
-  assert(content.includes('if (sourceSite && !isSourceHomepage)'));
-  assert(content.includes('document.querySelectorAll("a[href]")'));
-  assert(content.includes('if (sourceSite === "sagacity")'), 'Sagacity links must prefer the linked BLB citation over malformed/nested captions');
-  assert(content.includes('targetUrl.searchParams.get("Criteria")'), 'Sagacity links must recover the full citation from BLB Criteria');
-  assert(content.includes('targetHost === "blueletterbible.org"'), 'Criteria extraction must be restricted to BLB links');
-  assert(content.includes('/^\\/search\\/preSearch\\.cfm$/i.test(targetUrl.pathname)'), 'Criteria extraction must be limited to the BLB preSearch endpoint');
-  assert(content.includes('String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")'), 'plus signs in BLB Criteria must decode to spaces');
+  const collector = read('source-page-collector.js');
+  assert(collector.includes('"rediscover.bible":"rediscover"'));
+  assert(collector.includes('"sagacityweb.com":"sagacity"'));
+  assert(collector.includes('"thetreasuryofscriptureknowledge.com":"treasury"'));
+  assert(collector.includes('if (sourceSite && !isSourceHomepage)'));
+  assert(collector.includes('document.querySelectorAll("a[href]")'));
+  assert(collector.includes('if (sourceSite === "sagacity")'), 'Sagacity links must prefer the linked BLB citation over malformed/nested captions');
+  assert(collector.includes('targetUrl.searchParams.get("Criteria")'), 'Sagacity links must recover the full citation from BLB Criteria');
+  assert(collector.includes('targetHost === "blueletterbible.org"'), 'Criteria extraction must be restricted to BLB links');
+  assert(collector.includes('/^\\/search\\/preSearch\\.cfm$/i.test(targetUrl.pathname)'), 'Criteria extraction must be limited to the BLB preSearch endpoint');
+  assert(collector.includes('String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")'), 'plus signs in BLB Criteria must decode to spaces');
   const background = read('background.js');
   assert(background.includes("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'"));
 });
@@ -592,6 +591,19 @@ test('Webster 1828 path remains wired', () => {
   assert(webster.includes('blbSuiteOpenBackgroundUrl'), 'Webster opener missing');
   assert(content.includes('BLBWebsterCollectorModule') && content.includes('BLBWebsterCollector'), 'Webster module initialization and master-setting refresh hook missing');
   assert(bg.includes('blbSuiteOpenWebsterMultiVerse'), 'Webster MultiVerse handler missing');
+});
+test('Source-page Bible-reference collector remains wired', () => {
+  const content = read('content.js'), collector = read('source-page-collector.js');
+  const manifest = JSON.parse(read('manifest.json')), bg = read('background.js');
+  for (const host of ['christianity.com', 'gotquestions.org', 'crosswalk.com', 'enduringword.com', 'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com']) {
+    assert(collector.includes(host), `source-page collector host missing: ${host}`);
+  }
+  assert(content.includes('BLBSourcePageCollectorModule?.initialize'), 'content script does not initialize the source-page collector');
+  assert(collector.includes('collectSourcePageBibleReferences'), 'source-page reference collector missing');
+  assert(collector.includes('blbSuiteOpenWebsterMultiVerse'), 'source-page MultiVerse opener missing');
+  const entry = (manifest.content_scripts || []).find(item => (item.js || []).includes('content.js'));
+  assert(entry && entry.js.indexOf('source-page-collector.js') < entry.js.indexOf('content.js'), 'manifest must load source-page collector before content.js');
+  assert(bg.includes("'source-page-collector.js'"), 'runtime injection list must include source-page collector');
 });
 section('features');
 test('Study Sessions command surface remains wired', () => {
