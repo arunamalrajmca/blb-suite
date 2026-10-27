@@ -12,7 +12,6 @@ on:
       - Require latest main ancestry
       - ZIP Integrity
       - Audit Chrome Web Store submission assets
-      - Generate Chrome Web Store screenshots
       - Verify Chrome Web Store assets
       - Verify Chrome Web Store submission tools
     types: [completed]
