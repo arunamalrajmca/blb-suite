@@ -275,7 +275,6 @@ test.describe('real-browser source URL redirect regressions', () => {
       // A page listener may preventDefault before the extension sees the click.
       window.addEventListener('click', event => event.preventDefault(), true);
     });
-    await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
     await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
     await page.evaluate(() => {
       window.__openedBlbCount = 0;
@@ -291,6 +290,9 @@ test.describe('real-browser source URL redirect regressions', () => {
         location.reload();
       });
     });
+    // Initialize after the test wraps the opener so the module captures the
+    // instrumented callback and can verify the exactly-once contract.
+    await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
     await page.locator('#bible-passage span').click();
     await expect.poll(() => page.evaluate(() => window.__openedBlbUrl || null)).toBe(targetUrl);
     await expect.poll(() => page.evaluate(() => window.__openedBlbCount)).toBe(1);
