@@ -61,18 +61,18 @@ test('no optional host-permission regression', () => {
 });
 
 test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse collector', () => {
-  const content = read('content.js');
-  assert(content.includes('"rediscover.bible":"rediscover"'));
-  assert(content.includes('"sagacityweb.com":"sagacity"'));
-  assert(content.includes('"thetreasuryofscriptureknowledge.com":"treasury"'));
-  assert(content.includes("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'"));
-  assert(content.includes('if (sourceSite && !isSourceHomepage)'));
-  assert(content.includes('document.querySelectorAll("a[href]")'));
-  assert(content.includes('if (sourceSite === "sagacity")'), 'Sagacity links must prefer the linked BLB citation over malformed/nested captions');
-  assert(content.includes('targetUrl.searchParams.get("Criteria")'), 'Sagacity links must recover the full citation from BLB Criteria');
-  assert(content.includes('targetHost === "blueletterbible.org"'), 'Criteria extraction must be restricted to BLB links');
-  assert(content.includes('/^\\/search\\/preSearch\\.cfm$/i.test(targetUrl.pathname)'), 'Criteria extraction must be limited to the BLB preSearch endpoint');
-  assert(content.includes('String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")'), 'plus signs in BLB Criteria must decode to spaces');
+  const collector = read('source-page-collector.js');
+  assert(collector.includes('"rediscover.bible":"rediscover"'));
+  assert(collector.includes('"sagacityweb.com":"sagacity"'));
+  assert(collector.includes('"thetreasuryofscriptureknowledge.com":"treasury"'));
+  assert(collector.includes("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'"));
+  assert(collector.includes('if (sourceSite && !isSourceHomepage)'));
+  assert(collector.includes('document.querySelectorAll("a[href]")'));
+  assert(collector.includes('if (sourceSite === "sagacity")'), 'Sagacity links must prefer the linked BLB citation over malformed/nested captions');
+  assert(collector.includes('targetUrl.searchParams.get("Criteria")'), 'Sagacity links must recover the full citation from BLB Criteria');
+  assert(collector.includes('targetHost === "blueletterbible.org"'), 'Criteria extraction must be restricted to BLB links');
+  assert(collector.includes('/^\\/search\\/preSearch\\.cfm$/i.test(targetUrl.pathname)'), 'Criteria extraction must be limited to the BLB preSearch endpoint');
+  assert(collector.includes('String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")'), 'plus signs in BLB Criteria must decode to spaces');
   const background = read('background.js');
   assert(background.includes("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'"));
 });
