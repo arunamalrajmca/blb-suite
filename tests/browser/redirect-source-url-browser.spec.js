@@ -42,22 +42,29 @@ async function loadProductionRedirect(page, sourceUrl) {
   await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) } } }; function redirectBlbNet() { return false; } function openBlbDestinationFromContent(url) { window.__openedBlbUrl = url; }' });
 }
 
-const draggableButtonStart = contentSource.indexOf('function makeBlbMultiVerseButtonDraggable(button');
-const draggableButtonEnd = contentSource.indexOf('// The feature module is loaded before this content script by manifest order.', draggableButtonStart);
-const sourcePageMultiVerseStart = contentSource.indexOf('// ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------');
-const sourcePageMultiVerseEnd = contentSource.indexOf('// ---------- BLB MultiVerse hand-off ----------', sourcePageMultiVerseStart);
-if ([draggableButtonStart, draggableButtonEnd, sourcePageMultiVerseStart, sourcePageMultiVerseEnd].some(i => i < 0)) {
-  throw new Error('Could not locate draggable-button or source-page MultiVerse implementation');
+const sourcePageMultiVerseCode = read('extension/source-page-collector.js');
+
+async function initializeSourcePageMultiVerse(page) {
+  await initializeSourcePageMultiVerse(page);
+  await page.addScriptTag({ content: `BLBSourcePageCollectorModule.initialize({
+    normalizeSelectionText,
+    parseRef,
+    normalizeSourceBibleBook,
+    resolveBibleReference,
+    blbUrl,
+    formatSourceBibleBookName,
+    isSuiteEnabled,
+    // Dragging is unrelated to collection behavior; keep this focused browser
+    // harness deterministic while the real module's button lifecycle is tested.
+    makeBlbMultiVerseButtonDraggable: () => {}
+  });` });
 }
-const sourcePageMultiVerseCode =
-  contentSource.slice(draggableButtonStart, draggableButtonEnd) +
-  contentSource.slice(sourcePageMultiVerseStart, sourcePageMultiVerseEnd);
 
 async function loadSourcePageMultiVerse(page, sourceUrl, enabled = true) {
   await loadProductionRedirect(page, sourceUrl);
   await page.addScriptTag({ content: 'function normalizeSelectionText(s) { return String(s || "").replace(/\\s+/g, " ").trim(); }' });
   await page.addScriptTag({ content: 'window.__localStorageValues = window.__localStorageValues || {}; window.isSuiteEnabled = async () => ' + JSON.stringify(enabled) + '; window.chrome = { storage: { local: { get: async defaults => Object.assign({}, defaults || {}, window.__localStorageValues, { redirectEnabled: true }), set: async values => Object.assign(window.__localStorageValues, values), remove: async key => { for (const k of (Array.isArray(key) ? key : [key])) delete window.__localStorageValues[k]; } }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async message => { window.__multiVerseRequests = (window.__multiVerseRequests || []).concat([message]); return { ok: true }; } } };' });
-  await page.addScriptTag({ content: sourcePageMultiVerseCode });
+  await initializeSourcePageMultiVerse(page);
   if (enabled) await page.waitForSelector('button[id$="-multiverse"]');
 }
 
