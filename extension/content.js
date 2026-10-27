@@ -633,7 +633,9 @@ globalThis.BLBAutoHyperlinkerModule?.initialize({
   isSuiteEnabled
 });
 
-// ---------- BLB Parsing Popup New Tab ----------
+if (location.hostname.endsWith(BLB_HOSTNAME) &&
+    !/(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)$/i.test(location.pathname)) {
+  // ---------- BLB Parsing Popup New Tab ----------
 // Keep parsing-popup links working on both normal BLB verse pages and
 // Criteria Search pages. A stable window name prevents repeated clicks from
 // opening duplicate tabs; the same tab is reused for the same destination.
