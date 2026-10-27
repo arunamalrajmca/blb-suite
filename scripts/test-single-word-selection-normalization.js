@@ -4,10 +4,10 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-const source = fs.readFileSync(path.join(__dirname, '../extension/single-word-selection-normalization.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../extension/selection-text-helpers.js'), 'utf8');
 const context = { globalThis: {} };
 vm.runInNewContext(source, context, { filename: 'single-word-selection-normalization.js' });
-const normalize = context.globalThis.BLBSingleWordSelectionNormalization?.normalizeSingleWordForKjvVocabulary;
+const normalize = context.globalThis.BLBSelectionTextHelpers?.normalizeSingleWordForKjvVocabulary;
 assert.equal(typeof normalize, 'function', 'module must expose the single-word normalizer');
 
 for (const [input, expected] of [
