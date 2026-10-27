@@ -5,6 +5,11 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const contentSource = read('extension/content.js');
+const draggableButtonStart = contentSource.indexOf('function makeBlbMultiVerseButtonDraggable(button');
+const draggableButtonEnd = contentSource.indexOf('// The Webster feature module is loaded before this content script.', draggableButtonStart);
+if (draggableButtonStart < 0 || draggableButtonEnd < 0) {
+  throw new Error('Could not locate production MultiVerse drag helper');
+}
 const parseStart = contentSource.indexOf('function parseRef(text) {');
 const redirectStart = contentSource.indexOf('function redirectBibleSite() {', parseStart);
 const redirectEnd = contentSource.indexOf('\nfunction redirectBlbNet() {', redirectStart);
@@ -219,7 +224,7 @@ test.describe('real-browser source URL redirect regressions', () => {
       await loadProductionRedirect(page, source.url);
       await page.addScriptTag({ content: 'function normalizeSelectionText(s) { return String(s || "").replace(/\\s+/g, " ").trim(); }' });
       await page.addScriptTag({ content: 'window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async () => ({ redirectEnabled: true }) }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async () => ({ ok: true }) } };' });
-      await page.addScriptTag({ content: sourcePageMultiVerseCode });
+      await initializeSourcePageMultiVerse(page);
       await page.waitForTimeout(100);
       await expect(page.locator(source.button)).toHaveCount(0);
       await expect(page).toHaveURL(source.url);
