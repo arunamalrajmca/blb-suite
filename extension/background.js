@@ -3028,6 +3028,7 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'blb-auto-hyperlinker.js',
   'blb-passive-new-tab-targets.js',
   'blb-draggable-button.js',
+  'blb-parse-popup.js',
   'multiverse-tool-view.js',
   'content.js'
 ];
