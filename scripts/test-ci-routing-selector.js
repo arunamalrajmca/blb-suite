@@ -114,6 +114,26 @@ try {
   assert(result.values.changed_specs.includes('site-feature-defaults.spec.js'));
   console.log('PASS: popup feature selects its mapped regression coverage');
 
+  // Newly extracted feature modules select their established focused browser coverage.
+  const extractedFeatureCases = [
+    ['extension/multiverse-copy.js', 'multiverse-tab-reuse.spec.js'],
+    ['extension/study-reference-capture.js', 'feature-lifecycle-regressions.spec.js'],
+    ['extension/criteria-search-navigation.js', 'e2e-core-user-actions.spec.js'],
+    ['extension/blb-auto-hyperlinker.js', 'feature-lifecycle-regressions.spec.js'],
+    ['extension/blb-passive-new-tab-targets.js', 'e2e-core-user-actions.spec.js'],
+    ['extension/blb-draggable-button.js', 'rediscover-sagacity-button.spec.js']
+  ];
+  for (const [file, expectedSpec] of extractedFeatureCases) {
+    resetScenario(base);
+    write(file, '// changed extracted feature module\n');
+    commit('change extracted feature module ' + path.basename(file));
+    result = selectorResult(base);
+    assertValue(result, 'full_browser_suite', false, file);
+    assert(result.values.changed_specs.includes(expectedSpec),
+      file + ' should select ' + expectedSpec + ', got ' + result.values.changed_specs);
+    console.log('PASS: ' + path.basename(file) + ' selects focused browser coverage');
+  }
+
   // Shared runtime/bootstrap changes must force the full applicable suite.
   resetScenario(base);
   write('extension/reference-core.js', '// shared-core change\n');
