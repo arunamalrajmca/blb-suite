@@ -16,7 +16,8 @@ if (gateStart < 0 || gateEnd < 0) throw new Error('Could not locate production c
 const productionRedirectHelpers = contentSource.slice(sourceHelperStart, redirectStart) + sourceRedirectModule + `
 globalThis.__sourceBibleRedirect = globalThis.BLBSourceBibleRedirectModule.initialize({
   BLBShared, BOOKS, bookKey, parseChristianityBibleLink, validateSourceBibleReference,
-  parseRef, decodeSafe, blbUrl, openBlbDestinationFromContent
+  parseRef, decodeSafe, blbUrl,
+  openBlbDestinationFromContent: url => { globalThis.__openedBlbUrl = url; }
 });
 globalThis.redirectBibleSite = globalThis.__sourceBibleRedirect;`;
 // The source URL adapter is exercised directly; production setting/host gating is covered by regression and injection tests.
