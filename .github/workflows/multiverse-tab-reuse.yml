@@ -98,3 +98,11 @@ jobs:
             playwright-report/
           if-no-files-found: ignore
           retention-days: 7
+
+  cancel-sibling-runs:
+    name: Cancel sibling runs after failure
+    if: ${{ failure() }}
+    needs: [change-detection, multiverse-tab-reuse]
+    permissions:
+      actions: write
+    uses: ./.github/workflows/cancel-sibling-runs-on-failure.yml
