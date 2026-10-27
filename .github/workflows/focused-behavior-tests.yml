@@ -34,5 +34,7 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install --no-package-lock
+      - name: Install Chromium for extension browser tests
+        run: npx playwright install --with-deps chromium
       - name: Run focused behavior tests
         run: npx playwright test tests/browser/webster-collector-behavior.spec.js tests/browser/case-sensitive-routing-behavior.spec.js
