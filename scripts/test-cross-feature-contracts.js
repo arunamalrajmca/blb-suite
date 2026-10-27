@@ -11,6 +11,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const contentScript = read('extension/content.js');
+const pageSelectionButton = read('extension/blb-page-selection-button.js');
 const background = read('extension/background.js');
 const popup = read('extension/popup.js');
 const handoff = read('extension/multiverse-post.js');
@@ -56,9 +57,9 @@ try {
   // Selection/settings boundary: background resolves contextual selections,
   // content serves the request, and popup settings use the same background API.
   has(background, /type:\s*['"]blbSuiteResolveContextualSelection['"]/, 'background requests contextual selection resolution');
-  has(contentScript, /message\?\.type === ['"]blbSuiteResolveContextualSelection['"]/, 'content script handles contextual selection resolution');
+  has(pageSelectionButton, /message\?\.type === ['"]blbSuiteResolveContextualSelection['"]/, 'page-selection module handles contextual selection resolution');
   has(background, /type:\s*['"]blbSuiteRefreshSiteFeatures['"]/, 'background refreshes content-script site features');
-  has(contentScript, /message\?\.type === ['"]blbSuiteRefreshSiteFeatures['"]/, 'content script handles feature refresh requests');
+  has(pageSelectionButton, /message\?\.type === ['"]blbSuiteRefreshSiteFeatures['"]/, 'page-selection module handles feature refresh requests');
   has(popup, /type:\s*['"]blbSuitePrepareSiteFeatureToggle['"]/, 'popup routes per-site toggles through the background policy');
   has(background, /message\.type === ['"]blbSuitePrepareSiteFeatureToggle['"]/, 'background validates per-site toggle requests');
   has(background, /isSensitiveSiteHostname\(originHost\)/, 'background blocks sensitive-site feature opt-ins');
