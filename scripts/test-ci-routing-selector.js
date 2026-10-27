@@ -183,6 +183,19 @@ try {
   assert.equal(result.values.changed_specs, '', 'browser test-only changes should not select production E2E');
   console.log('PASS: browser-spec-only edits do not trigger feature E2E');
 
+  // Mixed production + browser-spec edits must run the edited spec too.
+  // Test-only edits stay skipped, but a runtime change must not silently skip
+  // the regression test added alongside that runtime change.
+  resetScenario(base);
+  write('extension/book-aliases.js', '// runtime alias change\n');
+  write('tests/browser/extension.spec.js', '// runtime regression test\n');
+  commit('change runtime and related browser spec');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', true, 'runtime plus browser spec');
+  assert(result.values.changed_browser_specs.includes('tests/browser/extension.spec.js'),
+    'mixed runtime change must include its changed browser regression spec');
+  console.log('PASS: mixed runtime and browser-spec changes run the edited regression spec');
+
   // Changes to the selector/test infrastructure must remain conservative.
   resetScenario(base);
   write('scripts/select-browser-specs.mjs', '// selector infrastructure change\n');
