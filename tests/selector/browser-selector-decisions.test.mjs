@@ -132,12 +132,13 @@ test("non-version package.json edits classify as runtime without crashing", () =
       name: "fixture",
       version: "1.0.0",
       scripts: { test: "after" }
-    }) + "\\n");
+    }) + "\n");
     const output = execFileSync("node", ["scripts/classify-ci-changes.mjs", base], {
       cwd: root,
       encoding: "utf8"
     });
     assert.match(output, /runtime_changed=true/);
-    assert.match(output, /runtime_or_unknown_paths:/);\n    assert.match(output, /package\\.json/);
+    assert.match(output, /runtime_or_unknown_paths:/);
+    assert.match(output, /package\.json/);
   });
 });
