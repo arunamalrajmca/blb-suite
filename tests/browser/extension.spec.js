@@ -84,8 +84,11 @@ async function expectSourceCollectorAfterSiteOptIn({ page, context, extensionId,
   // popup. Open the packaged popup page as a tab and emulate the active website
   // tab that a real action popup sees. Keep the checkbox click real so Chrome's
   // optional-host permission request still runs from a user gesture.
-  const popup = await context.newPage();
-  await popup.addInitScript(targetUrl => {
+  // Install the shim at context level before creating/navigating the
+  // extension page. Playwright's page-level init script can run too late for
+  // extension documents in headless Chromium, after popup.js has read tabs.
+  await context.addInitScript(targetUrl => {
+    if (location.protocol !== 'chrome-extension:' || typeof chrome === 'undefined' || !chrome.tabs) return;
     const originalQuery = chrome.tabs.query.bind(chrome.tabs);
     Object.defineProperty(chrome.tabs, 'query', {
       configurable: true,
@@ -103,6 +106,7 @@ async function expectSourceCollectorAfterSiteOptIn({ page, context, extensionId,
       }
     });
   }, `https://www.${site.host}/fixture-article.html`);
+  const popup = await context.newPage();
   await popup.goto(`chrome-extension://${extensionId}/popup.html`);
   await expect(popup.locator('#pageButton')).toBeVisible();
   await popup.locator('#pageButton').check();
