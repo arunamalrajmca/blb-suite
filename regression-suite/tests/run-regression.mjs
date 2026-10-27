@@ -83,6 +83,25 @@ test('MultiVerse hand-off module loads before content and retains pending-refere
   assert(handoff.includes('blbSuiteMultiVersePending') && handoff.includes('waitForExpectedMultiVerseResults'), 'MultiVerse page must remain hidden until expected results are visible');
 });
 
+test('source Bible redirect module loads before content and preserves explicit dependencies', () => {
+  const manifest = JSON.parse(read('manifest.json'));
+  const scripts = manifest.content_scripts.flatMap(item => item.js || []);
+  const background = read('background.js');
+  const runtimeStart = background.indexOf('const BLB_CONTENT_SCRIPT_FILES = [');
+  const runtimeEnd = background.indexOf('\\n];', runtimeStart);
+  assert(runtimeStart >= 0 && runtimeEnd > runtimeStart, 'runtime content-script list missing');
+  const runtimeFiles = background.slice(runtimeStart, runtimeEnd).replace(/\\/\\/.*$/gm, '');
+  for (const list of [scripts.join('\\n'), runtimeFiles]) {
+    assert(list.includes('source-bible-redirect.js'), 'source Bible redirect module missing from script list');
+    assert(list.indexOf('source-bible-redirect.js') < list.indexOf('content.js'), 'source Bible redirect module must load before content.js');
+  }
+  const module = read('source-bible-redirect.js');
+  assert(module.includes('global.BLBSourceBibleRedirectModule = { initialize }'), 'source Bible redirect module registration missing');
+  for (const dependency of ['parseChristianityBibleLink', 'validateSourceBibleReference', 'parseRef', 'decodeSafe', 'blbUrl', 'openBlbDestinationFromContent']) {
+    assert(module.includes(dependency), 'source Bible redirect dependency missing: ' + dependency);
+  }
+});
+
 test('manifest-referenced files exist', () => {
   const m = JSON.parse(read('manifest.json'));
   const refs = [m.background?.service_worker, m.options_page, ...(m.content_scripts||[]).flatMap(x=>x.js||[]), ...Object.values(m.icons||{}), m.action?.default_popup].filter(Boolean);
