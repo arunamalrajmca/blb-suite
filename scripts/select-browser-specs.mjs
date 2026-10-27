@@ -84,6 +84,10 @@ const featureSpecs = [
     specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js"]
   },
   {
+    paths: ["extension/multiverse-tool-view.js"],
+    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js"]
+  },
+  {
     paths: ["extension/study-reference-capture.js"],
     specs: ["tests/browser/extension.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js"]
   },

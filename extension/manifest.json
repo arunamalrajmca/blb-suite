@@ -74,6 +74,7 @@
         "blb-auto-hyperlinker.js",
         "blb-passive-new-tab-targets.js",
         "blb-draggable-button.js",
+        "multiverse-tool-view.js",
         "content.js"
       ],
       "run_at": "document_start"
