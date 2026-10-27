@@ -633,6 +633,18 @@ globalThis.BLBAutoHyperlinkerModule?.initialize({
   isSuiteEnabled
 });
 
+// BLB parsing-popup navigation remains an independent feature module.
+if (location.hostname.endsWith(BLB_HOSTNAME) &&
+    !/(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)$/i.test(location.pathname)) {
+  globalThis.BLBParsePopupModule?.initialize({
+    BLB_HOSTNAME,
+    BLBShared,
+    isSuiteEnabledNow: () => suiteEnabled,
+    isModifiedLinkActivation,
+    openBlbDestinationFromContent
+  });
+}
+
 // BLB verse-link navigation is isolated in a classic-script feature module.
 globalThis.BLBVerseLinkNavigationModule?.initialize({
   BLB_HOSTNAME,
