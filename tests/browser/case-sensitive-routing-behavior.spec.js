@@ -75,3 +75,62 @@ test.describe('KJV case-sensitive word-set and routing behavior', () => {
     expect(backgroundSource.includes('shouldUseCaseSensitiveRouting')).toBe(true);
   });
 });
+
+test('MV3 worker routes a real exact-case KJV word to its single matching verse', async ({ extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true });
+  const beforeIds = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+  );
+
+  // Derive the expected destination from the packaged original-case corpus,
+  // then exercise the real omnibox entry point in the running extension worker.
+  const expected = await extensionWorker.evaluate(() => {
+    const matches = BLBCaseSensitiveCore.searchCaseSensitiveCorpus(
+      'Fathers',
+      KJV_CORPUS_ORIGINAL_CASE,
+      KJV_CORPUS_CASE_VERSE_INDEX
+    );
+    if (matches.length !== 1) return { count: matches.length };
+    const entry = matches[0];
+    const book = BOOKS.find(item => Number(item.bookNumber) === Number(entry[0]));
+    return {
+      count: matches.length,
+      text: entry[3],
+      url: book
+        ? 'https://www.blueletterbible.org/kjv/' + book.urlKey + '/' + entry[1] + '/' + entry[2] + '/'
+        : null
+    };
+  });
+  expect(expected.count, 'the exact-case fixture term should resolve to one KJV verse').toBe(1);
+  expect(expected.text.split(/[^A-Za-z]+/).includes('Fathers'),
+    'the selected original-case verse must contain the requested capitalization').toBe(true);
+  expect(expected.url).toMatch(/^https:\/\/www\.blueletterbible\.org\/kjv\//);
+
+  try {
+    await extensionWorker.evaluate(async () => {
+      await handleOmniboxCommand('cs Fathers', 'newBackgroundTab');
+    });
+
+    await expect.poll(async () => extensionWorker.evaluate(({ beforeIds, expectedUrl }) =>
+      chrome.tabs.query({}).then(tabs => tabs.some(tab =>
+        !beforeIds.includes(tab.id) &&
+        String(tab.url || tab.pendingUrl || '') === expectedUrl
+      ))
+    , { beforeIds, expectedUrl: expected.url }), {
+      timeout: 10000,
+      intervals: [100, 200, 300]
+    }).toBe(true);
+  } finally {
+    await extensionWorker.evaluate(({ beforeIds, expectedUrl }) =>
+      chrome.tabs.query({}).then(async tabs => {
+        for (const tab of tabs) {
+          if (!beforeIds.includes(tab.id) &&
+              String(tab.url || tab.pendingUrl || '') === expectedUrl &&
+              Number.isInteger(tab.id)) {
+            await chrome.tabs.remove(tab.id).catch(() => {});
+          }
+        }
+      })
+    , { beforeIds, expectedUrl: expected.url });
+  }
+});
