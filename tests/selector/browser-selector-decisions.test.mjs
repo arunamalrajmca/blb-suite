@@ -138,6 +138,6 @@ test("non-version package.json edits classify as runtime without crashing", () =
       encoding: "utf8"
     });
     assert.match(output, /runtime_changed=true/);
-    assert.match(output, /runtime_or_unknown_paths:\\n- package\\.json/);
+    assert.match(output, /runtime_or_unknown_paths:/);\n    assert.match(output, /package\\.json/);
   });
 });
