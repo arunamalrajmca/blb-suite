@@ -534,9 +534,13 @@ test('BLB new-tab and Copy-as-link contracts remain wired', () => {
   const content = read('content.js');
   const autoHyperlinker = read('blb-auto-hyperlinker.js');
   const passiveNewTab = read('blb-passive-new-tab-targets.js');
+  const draggableButton = read('blb-draggable-button.js');
   assert(content.includes('BLBPassiveNewTabTargetsModule?.initialize'), 'passive new-tab module is not initialized');
   assert(passiveNewTab.includes('applyPassiveNewTabTargets'), 'passive new-tab target handler missing');
   assert(passiveNewTab.includes('MutationObserver'), 'passive new-tab dynamic-link observer missing');
+  assert(content.includes('BLBDraggableButtonModule?.makeBlbMultiVerseButtonDraggable'), 'draggable-button module is not wired');
+  assert(draggableButton.includes('positionWriteQueue'), 'draggable-button position writes are not serialized');
+  assert(draggableButton.includes('Reset button position'), 'draggable-button reset control missing');
   assert(content.includes('modifyLinks'), 'BLB link modifier missing');
   assert(content.includes('target="_blank"'), 'BLB new-tab target missing');
   assert(autoHyperlinker.includes('formatBlbTextToHtml'), 'HTML clipboard formatter missing');
