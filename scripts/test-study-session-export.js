@@ -4,7 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const source = fs.readFileSync(path.join(__dirname, '..', 'extension', 'study-session-export.js'), 'utf8');
-const context = { Map, Set, String, Number, Array, RegExp };
+const context = { Map, Set, String, Number, Array, RegExp, btoa: value => Buffer.from(value, 'binary').toString('base64') };
 vm.createContext(context);
 vm.runInContext(source, context);
 
