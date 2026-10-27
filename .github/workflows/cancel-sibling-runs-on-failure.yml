@@ -1,33 +1,23 @@
 name: Cancel sibling workflow runs after failure
 
 on:
-  workflow_run:
-    workflows:
-      - BLB Suite BROWSER E2E — GROUP A
-      - BLB Suite BROWSER E2E — GROUP B
-      - BLB Suite BROWSER E2E — PERFORMANCE
-      - BLB Suite BROWSER E2E — REFERENCES & DOUBLE-CLICK
-      - BLB Suite HARD-GATE
-      - MultiVerse tab reuse regression
-      - Require latest main ancestry
-    types: [completed]
+  workflow_call:
 
 permissions:
   actions: write
 
 jobs:
   cancel-siblings:
-    if: github.event.workflow_run.conclusion == 'failure'
     runs-on: ubuntu-latest
     steps:
       - name: Cancel only sibling runs for the same PR commit
         env:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
-          FAILED_RUN_ID: ${{ github.event.workflow_run.id }}
-          FAILED_SHA: ${{ github.event.workflow_run.head_sha }}
-          FAILED_EVENT: ${{ github.event.workflow_run.event }}
-          FAILED_PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          FAILED_RUN_ID: ${{ github.run_id }}
+          FAILED_SHA: ${{ github.sha }}
+          FAILED_EVENT: ${{ github.event_name }}
+          FAILED_PR_NUMBER: ${{ github.event.pull_request.number }}
         shell: bash
         run: |
           set -euo pipefail

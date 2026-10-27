@@ -144,3 +144,11 @@ jobs:
             exit 1
           fi
           echo "All applicable regression groups passed."
+
+  cancel-sibling-runs:
+    name: Cancel sibling runs after failure
+    if: ${{ failure() }}
+    needs: [change-detection, regression-package, regression-behavioral, regression-gate-summary]
+    permissions:
+      actions: write
+    uses: ./.github/workflows/cancel-sibling-runs-on-failure.yml
