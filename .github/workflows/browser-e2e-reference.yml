@@ -357,7 +357,7 @@ jobs:
           fi
 
           if [[ "$reference_expected" == true ]]; then
-            if [[ "$REFERENCE_MATRIX_RESULT" != "success" && !( "$REFERENCE_MATRIX_RESULT" == "skipped" && ",$CHANGED_BROWSER_SPECS," == *",tests/browser/extension.spec.js,"* ) ]]; then
+            if [[ "$REFERENCE_MATRIX_RESULT" != "success" && ! ( "$REFERENCE_MATRIX_RESULT" == "skipped" && ",$CHANGED_BROWSER_SPECS," == *",tests/browser/extension.spec.js,"* ) ]]; then
               failed=1
               reasons+=("reference matrix was required but was $REFERENCE_MATRIX_RESULT")
             fi
