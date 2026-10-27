@@ -36,7 +36,7 @@ const expectedContentScripts = [
   'criteria-search-navigation.js',
   'blb-auto-hyperlinker.js',
   'blb-passive-new-tab-targets.js',
-  'blb-draggable-button.js', 'blb-draggable-button.js',
+  'blb-draggable-button.js',
   'content.js'
 ];
 const contentEntry = (manifest.content_scripts || []).find(entry =>
