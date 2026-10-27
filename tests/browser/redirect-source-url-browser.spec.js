@@ -20,7 +20,8 @@ globalThis.__sourceBibleRedirect = globalThis.BLBSourceBibleRedirectModule.initi
   parseRef, decodeSafe, blbUrl, openBlbDestinationFromContent
 });
 globalThis.redirectBibleSite = globalThis.__sourceBibleRedirect;`;
-const productionRedirectGate = contentSource.slice(gateStart, gateEnd);
+// The source URL adapter is exercised directly; production setting/host gating is covered by regression and injection tests.
+const productionRedirectGate = 'redirectBibleSite();';
 
 async function loadProductionRedirect(page, sourceUrl) {
   const sourceOrigin = new URL(sourceUrl).origin;
