@@ -80,6 +80,30 @@ const featureSpecs = [
     specs: ["tests/browser/kings-bible-collector-behavior.spec.js"]
   },
   {
+    paths: ["extension/multiverse-copy.js"],
+    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js"]
+  },
+  {
+    paths: ["extension/study-reference-capture.js"],
+    specs: ["tests/browser/extension.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js"]
+  },
+  {
+    paths: ["extension/criteria-search-navigation.js"],
+    specs: ["tests/browser/e2e-core-user-actions.spec.js"]
+  },
+  {
+    paths: ["extension/blb-auto-hyperlinker.js"],
+    specs: ["tests/browser/feature-lifecycle-regressions.spec.js"]
+  },
+  {
+    paths: ["extension/blb-passive-new-tab-targets.js"],
+    specs: ["tests/browser/e2e-core-user-actions.spec.js"]
+  },
+  {
+    paths: ["extension/blb-draggable-button.js"],
+    specs: ["tests/browser/rediscover-sagacity-button.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js"]
+  },
+  {
     paths: ["extension/Tutorial.html", "extension/Tutorial.js"],
     specs: []
   }
