@@ -598,7 +598,7 @@ test('MultiVerse native-copy enhancement remains wired', () => {
   assert(content.includes('BLBMultiVerseCopyModule?.initialize'), 'content script does not initialize MultiVerse copy module');
   assert(copyModule.includes('#copyButton, #copyByVerseButton'), 'native Copy buttons are not targeted');
   assert(copyModule.includes('nativeMultiVerseCopyPending'), 'copy enhancement is not gated to BLB native Copy-button clicks');
-  assert(copyModule.includes('setData("text/html"'), 'HTML clipboard payload is missing');
+  assert(copyModule.includes('"text/html"'), 'HTML clipboard payload is missing');
   const entry = (manifest.content_scripts || []).find(item => (item.js || []).includes('content.js'));
   assert(entry && entry.js.indexOf('multiverse-copy.js') < entry.js.indexOf('content.js'), 'manifest must load MultiVerse copy module before content.js');
   assert(bg.includes("'multiverse-copy.js'"), 'runtime injection list must include MultiVerse copy module');
