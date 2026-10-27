@@ -68,17 +68,14 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
 });
 
 async function expectSourceCollectorAfterSiteOptIn({ page, extensionStorage, extensionWorker, site }) {
-  const originPattern = `https://www.${site.host}/*`;
   await extensionStorage.set({
     masterEnabled: true,
     pageSelectionButtonSites: { [site.host]: true },
     doubleClickBlbSites: {}
   });
 
-  // CI grants these four origins as test-only required host permissions before
-  // Chromium starts. Verify the actual user-facing collector rather than querying
-  // permissions.contains(), which does not reliably reflect injected test-host
-  // permissions in this headless extension setup.
+  // The browser fixture adds these hosts to a worker-scoped test copy before
+  // Chromium starts, so this checks the user-facing collector under real injection.
   await page.route(`https://www.${site.host}/**`, route => route.fulfill({
     status: 200,
     contentType: 'text/html; charset=utf-8',
@@ -124,7 +121,7 @@ async function expectSourceCollectorAfterSiteOptIn({ page, extensionStorage, ext
         return { tabFound: true, stored, permissions, diagnosticInjectionError: String(injectionError) };
       }
     }, { host: site.host, expectedButtonId: `blb-suite-${site.key}-multiverse` });
-    throw new Error(`${error.message}\nGotQuestions collector diagnostics: ${JSON.stringify(diagnostics)}`);
+    throw new Error(`${error.message}\nSource-page collector diagnostics: ${JSON.stringify(diagnostics)}`);
   }
   await expect(button).toHaveText('Open Bible References in BLB');
 }
@@ -134,7 +131,7 @@ for (const site of [
   { host: 'crosswalk.com', key: 'crosswalk' },
   { host: 'enduringword.com', key: 'enduringword' }
 ]) {
-  (site.host === 'gotquestions.org' ? test.only : test)(`source-page collector initializes on ${site.host} after site access is enabled`, async ({ page, context, extensionId, extensionStorage, extensionWorker }) => {
+  test(`source-page collector initializes on ${site.host} after site access is enabled`, async ({ page, context, extensionId, extensionStorage, extensionWorker }) => {
     await expectSourceCollectorAfterSiteOptIn({ page, context, extensionId, extensionStorage, extensionWorker, site });
   });
 }
