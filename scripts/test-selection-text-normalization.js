@@ -10,7 +10,23 @@ vm.runInNewContext(source, context, { filename: 'selection-text-normalization.js
 const normalize = context.globalThis.BLBSelectionTextHelpers?.normalizeSelectedScriptureText;
 assert.equal(typeof normalize, 'function', 'module must expose the selection text normalizer');
 
+// Build invisible Unicode characters by code point so these fixtures test the actual
+// characters rather than depending on source-file escape spelling.
+const nbsp = String.fromCharCode(0x00a0);
+const figureSpace = String.fromCharCode(0x2007);
+const narrowNbsp = String.fromCharCode(0x202f);
+const zeroWidthSpace = String.fromCharCode(0x200b);
+const bidiStart = String.fromCharCode(0x202e);
+const bidiEnd = String.fromCharCode(0x202c);
+const lineSeparator = String.fromCharCode(0x2028);
+const paragraphSeparator = String.fromCharCode(0x2029);
+
 for (const [input, expected] of [
+  [`John${nbsp}3:16${figureSpace}3:17`, 'John 3:16 3:17'],
+  [`John${narrowNbsp}3:16`, 'John 3:16'],
+  [`John${zeroWidthSpace} 3:16`, 'John 3:16'],
+  [`${bidiStart}John 3:16${bidiEnd}`, 'John 3:16'],
+  [`faith${lineSeparator}and${paragraphSeparator}hope`, 'faith and hope'],
   [null, ''],
   ['', ''],
   ['  John   3:16  ', 'John 3:16'],
