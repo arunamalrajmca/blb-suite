@@ -2339,7 +2339,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   }
 
   if (changes.pageSelectionButtonSites && suiteEnabled) {
-    refreshBlbPageSelectionButton();
+    blbPageSelectionButton.refresh();
   }
 
   if (changes.doubleClickBlbSites) {
