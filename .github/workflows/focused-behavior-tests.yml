@@ -35,4 +35,4 @@ jobs:
       - name: Install dependencies
         run: npm install --no-package-lock
       - name: Run focused behavior tests
-        run: npm run test:focused-behavior
+        run: npx playwright test tests/browser/webster-collector-behavior.spec.js tests/browser/case-sensitive-routing-behavior.spec.js
