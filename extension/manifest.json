@@ -72,6 +72,7 @@
         "study-reference-capture.js",
         "criteria-search-navigation.js",
         "blb-auto-hyperlinker.js",
+        "blb-passive-new-tab-targets.js",
         "content.js"
       ],
       "run_at": "document_start"

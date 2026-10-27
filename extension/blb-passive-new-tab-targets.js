@@ -1,0 +1,60 @@
+// Owns passive target="_blank" hints for dynamic/native BLB verse links.
+(function (global) {
+  function initialize({ BLB_HOSTNAME, isSuiteEnabledNow }) {
+    if (!location.hostname.endsWith(BLB_HOSTNAME)) return;
+
+  const applyPassiveNewTabTargets = (root=document) => {
+    if (!isSuiteEnabledNow()) return;
+    const apply = link => {
+      if (!link || !link.href) return;
+      if (/\/kjv\/[^/]+\/\d+\/\d+(?:\/|$)/i.test(link.href)) {
+        link.target="_blank";
+      }
+    };
+    if (root.matches?.("a[href]")) apply(root);
+    root.querySelectorAll?.("a[href]").forEach(apply);
+  };
+
+  const schedulePassiveNewTabTargets = (() => {
+    let scheduled=false;
+    const pending=[];
+    return (root=null) => {
+      if (root) pending.push(root);
+      if (scheduled) return;
+      scheduled=true;
+      requestAnimationFrame(() => {
+        scheduled=false;
+        if (!isSuiteEnabledNow()) { pending.length=0; return; }
+        if (!pending.length) {
+          applyPassiveNewTabTargets();
+          return;
+        }
+        const roots=pending.splice(0,pending.length);
+        const seen=new Set();
+        for (const root of roots) {
+          if (!root || seen.has(root) || !root.isConnected) continue;
+          seen.add(root);
+          applyPassiveNewTabTargets(root);
+        }
+      });
+    };
+  })();
+
+  const passiveNewTabObserver=new MutationObserver(mutations => {
+    for (const mutation of mutations) {
+      for (const node of mutation.addedNodes) {
+        if (node.nodeType===1) schedulePassiveNewTabTargets(node);
+      }
+    }
+  });
+  passiveNewTabObserver.observe(document.documentElement,{childList:true,subtree:true});
+
+  if (document.readyState==="loading") {
+    document.addEventListener("DOMContentLoaded",() => schedulePassiveNewTabTargets());
+  } else {
+    schedulePassiveNewTabTargets();
+  }
+  }
+
+  global.BLBPassiveNewTabTargetsModule = Object.freeze({ initialize });
+})(globalThis);
