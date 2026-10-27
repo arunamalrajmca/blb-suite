@@ -41,21 +41,6 @@ function sameExceptVersion(path) {
     return JSON.stringify(a) === JSON.stringify(b);
   } catch { return false; }
 }
-function sameExceptSelectorTestScript() {
-  const before = readAt(base, "package.json");
-  const after = readAt("HEAD", "package.json");
-  if (before === null || after === null) return false;
-  try {
-    const a = JSON.parse(before);
-    const b = JSON.parse(after);
-    const scriptA = a.scripts?.["test:selector"];
-    const scriptB = b.scripts?.["test:selector"];
-    if (scriptA !== undefined || typeof scriptB !== "string") return false;
-    delete a.scripts["test:selector"];
-    delete b.scripts["test:selector"];
-    return JSON.stringify(a) === JSON.stringify(b);
-  } catch { return false; }
-}
 function nonRuntimePath(path) {
   return /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/)|tests\/selector\/|scripts\/(?:classify-ci-changes|select-browser-specs)\.mjs$)/i.test(path)
     || /^tests\/browser\/[^/]+\.spec\.js$/i.test(path)
