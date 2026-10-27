@@ -1661,6 +1661,10 @@ test.describe('Alt+B toggle enforcement', () => {
       console.error('Facebook Revelation directional-format diagnostics: ' + JSON.stringify({
         fixture: await page.locator('#blb-e2e-facebook-revelation-bidi').evaluate(el => el.outerHTML),
         selectedText: await page.evaluate(() => window.getSelection?.().toString() || ''),
+        contentScriptExecuted: await page.evaluate(() => document.documentElement?.getAttribute('data-blb-suite-content-script-executed')),
+        contentScriptInitComplete: await page.evaluate(() => document.documentElement?.getAttribute('data-blb-suite-content-script-init-complete')),
+        contentScriptError: await page.evaluate(() => document.documentElement?.getAttribute('data-blb-suite-content-script-error')),
+        doubleClickInitReached: await page.evaluate(() => document.documentElement?.getAttribute('data-blb-suite-double-click-init-reached')),
         lastHandlerDiagnostic: await page.evaluate(() => document.documentElement?.getAttribute('data-blb-suite-dblclick-last-diagnostic')),
         handlerDiagnosticHistory: await page.evaluate(() => { try { return JSON.parse(document.documentElement?.getAttribute('data-blb-suite-dblclick-diagnostic-history') || '[]'); } catch (_) { return []; } }),
         tabs: await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.map(tab => ({ id: tab.id, url: tab.url, pendingUrl: tab.pendingUrl }))))
