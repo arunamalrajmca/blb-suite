@@ -5,11 +5,7 @@ const path = require('node:path');
 const root = path.resolve(__dirname, '../..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const contentSource = read('extension/content.js');
-const draggableButtonStart = contentSource.indexOf('function makeBlbMultiVerseButtonDraggable(button');
-const draggableButtonEnd = contentSource.indexOf('// The Webster feature module is loaded before this content script.', draggableButtonStart);
-if (draggableButtonStart < 0 || draggableButtonEnd < 0) {
-  throw new Error('Could not locate production MultiVerse drag helper');
-}
+const draggableButtonModule = read('extension/blb-draggable-button.js');
 const parseStart = contentSource.indexOf('function parseRef(text) {');
 const redirectStart = contentSource.indexOf('function redirectBibleSite() {', parseStart);
 const redirectEnd = contentSource.indexOf('\nfunction redirectBlbNet() {', redirectStart);
@@ -50,7 +46,8 @@ async function loadProductionRedirect(page, sourceUrl) {
 const sourcePageMultiVerseCode = read('extension/source-page-collector.js');
 
 async function initializeSourcePageMultiVerse(page) {
-  await page.addScriptTag({ content: contentSource.slice(draggableButtonStart, draggableButtonEnd) });
+  await page.addScriptTag({ content: draggableButtonModule });
+  await page.addScriptTag({ content: 'const makeBlbMultiVerseButtonDraggable = globalThis.BLBDraggableButtonModule.makeBlbMultiVerseButtonDraggable;' });
   await page.addScriptTag({ content: sourcePageMultiVerseCode });
   await page.addScriptTag({ content: `BLBSourcePageCollectorModule.initialize({
     normalizeSelectionText,
