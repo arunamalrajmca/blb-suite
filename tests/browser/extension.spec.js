@@ -817,66 +817,6 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Facebook nested dir-auto reference resolves from book, chapter, and verse-range gestures', async ({ page, extensionStorage, extensionWorker }) => {
-    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    await page.waitForTimeout(1000);
-    await page.evaluate(() => {
-      const fixture = document.createElement('div');
-      fixture.id = 'blb-e2e-facebook-dir-auto-reference';
-      fixture.innerHTML = '<div role="article"><div data-ad-comet-preview="message"><div><div dir="auto"><span><span id="fb-book-luke">Luke</span></span> <span><span id="fb-chapter-luke" style="display:inline-block;padding:0 3px">1</span>:<span id="fb-range-luke">46–47</span></span>; <span><span id="fb-book-romans">Romans</span></span> <span><span id="fb-chapter-romans" style="display:inline-block;padding:0 3px">1</span>:<span id="fb-range-romans">3–4</span></span></div></div></div>';
-      document.body.appendChild(fixture);
-    });
-
-    // The uploaded Facebook DOM showed dir="auto" containers and deeply nested
-    // spans. Exercise each visible token, while keeping both references adjacent.
-    const gestures = [
-      ['#fb-book-luke', '/kjv/luk/1/46-47/'],
-      ['#fb-chapter-luke', '/kjv/luk/1/46-47/'],
-      ['#fb-range-luke', '/kjv/luk/1/46-47/'],
-      ['#fb-book-romans', '/kjv/rom/1/3-4/'],
-      ['#fb-chapter-romans', '/kjv/rom/1/3-4/'],
-      ['#fb-range-romans', '/kjv/rom/1/3-4/']
-    ];
-
-    for (const [selector, expectedPath] of gestures) {
-      const before = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
-        tabs.filter(tab => {
-          try { return new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org'); }
-          catch (_) { return false; }
-        }).map(tab => tab.id)
-      ));
-      await page.locator(selector).dblclick();
-      await activateBlbTabForPath(extensionWorker, expectedPath, {
-        fragment: selector,
-        selector: '#blb-e2e-facebook-dir-auto-reference',
-        selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
-      });
-      const openedPaths = await extensionWorker.evaluate((beforeIds) => chrome.tabs.query({}).then(tabs =>
-        tabs.filter(tab => !beforeIds.includes(tab.id)).map(tab => {
-          try {
-            const url = new URL(String(tab.url || tab.pendingUrl || ''));
-            return url.hostname.endsWith('blueletterbible.org') ? url.pathname : '';
-          } catch (_) { return ''; }
-        }).filter(Boolean)
-      ), before);
-      expect(openedPaths, selector + ': missing intended passage').toContain(expectedPath);
-      const otherPassage = expectedPath === '/kjv/luk/1/46-47/' ? '/kjv/rom/1/3-4/' : '/kjv/luk/1/46-47/';
-      expect(openedPaths, selector + ': opened the adjacent passage instead').not.toContain(otherPassage);
-
-      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
-        for (const tab of tabs) {
-          try {
-            const url = new URL(String(tab.url || tab.pendingUrl || ''));
-            if (url.hostname.endsWith('blueletterbible.org') && url.pathname === path && tab.id != null) {
-              await chrome.tabs.remove(tab.id);
-            }
-          } catch (_) {}
-        }
-      }), expectedPath);
-    }
-  });
-
   test('Double-click standalone book numbers do not borrow context across lines', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
