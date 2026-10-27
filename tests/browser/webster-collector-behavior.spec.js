@@ -136,7 +136,7 @@ test.describe('Webster collector behavior', () => {
       });
       return handoffUrl;
     }, { timeout: 15000 }).toContain('/multiverse-post.html?mvText=');
-    expect(new URL(handoffUrl).searchParams.get('mvText')).toBe('John 3:16; Romans 8:1');
+    expect(new URL(handoffUrl).searchParams.get('mvText')).toBe('john 3:16; romans 8:1');
   });
 
   test('recreates the collector button after the page replaces its body', async ({ page, extensionStorage }) => {
