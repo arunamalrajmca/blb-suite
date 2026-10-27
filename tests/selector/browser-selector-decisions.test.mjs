@@ -4,7 +4,6 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
 
 const selectorSource = readFileSync(
   new URL("../../scripts/select-browser-specs.mjs", import.meta.url),
