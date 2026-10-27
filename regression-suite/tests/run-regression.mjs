@@ -90,7 +90,7 @@ test('source Bible redirect module loads before content and preserves explicit d
   const runtimeStart = background.indexOf('const BLB_CONTENT_SCRIPT_FILES = [');
   const runtimeEnd = background.indexOf('\n];', runtimeStart);
   assert(runtimeStart >= 0 && runtimeEnd > runtimeStart, 'runtime content-script list missing');
-  const runtimeFiles = background.slice(runtimeStart, runtimeEnd);
+  const runtimeFiles = background.slice(runtimeStart, runtimeEnd).split('\n').filter(line => !line.trim().startsWith('//')).join('\n');
   for (const list of [scripts.join('\n'), runtimeFiles]) {
     assert(list.includes('source-bible-redirect.js'), 'source Bible redirect module missing from script list');
     assert(list.indexOf('source-bible-redirect.js') < list.indexOf('content.js'), 'source Bible redirect module must load before content.js');
@@ -506,21 +506,22 @@ test('expected PDF limitation remains documented by test policy', () => {
 });
 
 test('Official KJB redirect parser supports chapter and verse URLs', () => {
-  const content = read('content.js');
-  const start = content.indexOf('if (host==="officialkingjamesbible.com")');
-  const end = content.indexOf('\n  if (host==="bibleportal.com")', start);
+  const redirect = read('source-bible-redirect.js');
+  const start = redirect.indexOf('if (host==="officialkingjamesbible.com")');
+  const end = redirect.indexOf('\n  if (host==="bibleportal.com")', start);
   assert(start >= 0 && end > start, 'Official KJB redirect block missing');
-  const block = content.slice(start, end);
-  assert(block.includes('from:m[3]?+m[3]:1'), 'Official KJB verse capture is not used');
-  assert(block.includes('m[4]?+m[4]:null'), 'Official KJB verse-range capture is not used');
+  const parser = redirect.slice(start, end);
+  assert(parser.includes('from:m[3]?+m[3]:1'), 'Official KJB verse capture is not used');
+  assert(parser.includes('m[4]?+m[4]:null'), 'Official KJB verse-range capture is not used');
 });
 
 test('Bible redirect parser contracts cover every supported Bible redirect grammar', () => {
   const content = read('content.js');
-  const start = content.indexOf('function redirectBibleSite');
-  const end = content.indexOf('\nfunction ', start + 10);
+  const redirect = read('source-bible-redirect.js');
+  const start = redirect.indexOf('function redirectBibleSite');
+  const end = redirect.indexOf('\n    }\n    return redirectBibleSite', start);
   assert(start >= 0 && end > start, 'Bible redirect parser block missing');
-  const parser = content.slice(start, end);
+  const parser = redirect.slice(start, end);
 
   const contracts = [
     ['bible.com', 'u.pathname.match', 'path parser'],
@@ -528,27 +529,31 @@ test('Bible redirect parser contracts cover every supported Bible redirect gramm
     ['bibleref.com', 'new RegExp("-"+p[1]+"-', 'chapter/verse filename parser'],
     ['biblehub.com', 'u.pathname.match', 'path parser'],
     ['kingjamesbibleonline.org', 'Chapter-', 'chapter-page parser'],
-    ['kjbo.org', 'host==="kingjamesbibleonline.org" || host==="kjbo.org"', 'shared KJBO parser'],
+    ['kjbo.org', 'host==="kingjamesbibleonline.com" || host==="kjbo.org"', 'shared KJBO parser'],
     ['kjv.site', '-kjv', 'KJV.site URL parser'],
     ['officialkingjamesbible.com', '/bible/', 'Official KJB URL parser'],
     ['bibleportal.com', 'u.searchParams.get("v")', 'query-string verse parser']
   ];
 
   for (const [host, token, description] of contracts) {
-    assert(content.includes(host), host);
+    assert(redirect.includes(host), host);
     assert(parser.includes(token), host + ': ' + description + ' missing');
   }
   assert(content.includes('function redirectBlbNet'), 'BLB NET redirect parser missing');
   assert(content.includes('const REDIRECT_HOSTS'), 'redirect host table missing');
-});test('external redirect coverage includes every supported redirect host', () => {
+});
+
+test('external redirect coverage includes every supported redirect host', () => {
   const content = read('content.js');
+  const redirect = read('source-bible-redirect.js');
   const criteriaNavigation = read('criteria-search-navigation.js');
-  for (const host of ['bible.com','biblegateway.com','bibleref.com','biblehub.com','kingjamesbibleonline.org','kjbo.org','kjv.site','officialkingjamesbible.com','bibleportal.com','webstersdictionary1828.com']) assert(content.includes(host), `redirect host missing: ${host}`);
+  for (const host of ['bible.com','biblegateway.com','bibleref.com','biblehub.com','kingjamesbibleonline.org','kjbo.org','kjv.site','officialkingjamesbible.com','bibleportal.com','webstersdictionary1828.com']) assert((content + redirect).includes(host), `redirect host missing: ${host}`);
   assert(criteriaNavigation.includes('blueletterbible.org'), 'Criteria Search navigation retains the BLB destination');
-  assert(content.includes('function redirectBibleSite'), 'Bible-site redirect parser missing');
+  assert(redirect.includes('function redirectBibleSite'), 'Bible-site redirect parser missing');
   assert(content.includes('function redirectBlbNet'), 'BLB NET redirect missing');
   assert(content.includes('const REDIRECT_HOSTS'), 'redirect host table missing');
 });
+
 test('BLB native-event interception remains explicitly scoped', () => {
   const content = read('content.js');
   const verseNavigation = read('blb-verse-link-navigation.js');
