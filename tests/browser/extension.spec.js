@@ -67,41 +67,21 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
   await expect(page.locator('body')).toBeVisible();
 });
 
-async function expectSourceCollectorAfterSiteOptIn({ page, context, extensionId, extensionStorage, extensionWorker, site }) {
+async function expectSourceCollectorAfterSiteOptIn({ page, extensionStorage, extensionWorker, site }) {
+  const originPattern = `https://www.${site.host}/*`;
   await extensionStorage.set({
     masterEnabled: true,
-    pageSelectionButtonSites: {},
+    pageSelectionButtonSites: { [site.host]: true },
     doubleClickBlbSites: {}
   });
 
-  const originPattern = `https://www.${site.host}/*`;
-  // Headless Chromium does not expose chrome.action.openPopup() as a normal
-  // Playwright page. Use a test-only extension-page button to make the optional
-  // permission request from a genuine user gesture, then persist the same
-  // preference the popup uses. This isolates permission/collector coverage from
-  // the browser-specific action-popup lifecycle.
-  const permissionHarness = await context.newPage();
-  await permissionHarness.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: 'domcontentloaded' });
-  await permissionHarness.evaluate(({ originPattern, host }) => {
-    const button = document.createElement('button');
-    button.id = 'test-grant-source-site';
-    button.textContent = 'Grant source-site access';
-    button.addEventListener('click', async () => {
-      const granted = await chrome.permissions.request({ origins: [originPattern] });
-      if (!granted) {
-        document.body.dataset.permissionResult = 'denied';
-        return;
-      }
-      const saved = await chrome.storage.local.get({ pageSelectionButtonSites: {} });
-      const sites = { ...saved.pageSelectionButtonSites, [host]: true };
-      await chrome.storage.local.set({ pageSelectionButtonSites: sites });
-      document.body.dataset.permissionResult = 'granted';
-    });
-    document.body.appendChild(button);
-  }, { originPattern, host: site.host });
-  await permissionHarness.locator('#test-grant-source-site').click();
-  await expect(permissionHarness.locator('body')).toHaveAttribute('data-permission-result', 'granted');
-  await permissionHarness.close();
+  // CI grants these four origins as test-only required host permissions before
+  // Chromium starts. This test covers collector initialization after access and
+  // the site preference are present; Chrome's optional-permission prompt cannot
+  // be reliably automated in headless Chromium.
+  await expect.poll(async () => extensionWorker.evaluate(pattern =>
+    chrome.permissions.contains({ origins: [pattern] }), originPattern
+  ), { timeout: 10000 }).toBe(true);
 
   await page.route(`https://www.${site.host}/**`, route => route.fulfill({
     status: 200,
@@ -110,9 +90,6 @@ async function expectSourceCollectorAfterSiteOptIn({ page, context, extensionId,
   }));
   await page.goto(`https://www.${site.host}/fixture-article.html`, { waitUntil: 'domcontentloaded' });
 
-  await expect.poll(async () => extensionWorker.evaluate(pattern =>
-    chrome.permissions.contains({ origins: [pattern] }), originPattern
-  ), { timeout: 10000 }).toBe(true);
   await expect.poll(async () => extensionWorker.evaluate(host => chrome.storage.local.get({
     pageSelectionButtonSites: {}
   }).then(saved => saved.pageSelectionButtonSites?.[host] === true), site.host
@@ -122,7 +99,6 @@ async function expectSourceCollectorAfterSiteOptIn({ page, context, extensionId,
   await expect(button).toBeVisible({ timeout: 10000 });
   await expect(button).toHaveText('Open Bible References in BLB');
 }
-
 for (const site of [
   { host: 'gotquestions.org', key: 'gotquestions' },
   { host: 'christianity.com', key: 'christianity' },
