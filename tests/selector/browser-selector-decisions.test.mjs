@@ -31,7 +31,7 @@ function fixture() {
   git(root, "config", "user.name", "Selector test");
   put(root, "scripts/select-browser-specs.mjs", selectorSource);
   put(root, "scripts/classify-ci-changes.mjs", classifierSource);
-  put(root, "package.json", JSON.stringify({ name: "fixture", version: "1.0.0", scripts: { test: "before" } }) + "\\n");
+  put(root, "package.json", JSON.stringify({ name: "fixture", version: "1.0.0", scripts: { test: "before" } }) + "\n");
   put(root, "extension/omnibox-search-helpers.js");
   put(root, "tests/browser/omnibox-boolean-operators.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/e2e-core-user-actions.spec.js", "import { test } from '@playwright/test';\n");
