@@ -4,10 +4,10 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-const source = fs.readFileSync(path.join(__dirname, '../extension/selection-text-normalization.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../extension/selection-text-helpers.js'), 'utf8');
 const context = { globalThis: {} };
 vm.runInNewContext(source, context, { filename: 'selection-text-normalization.js' });
-const normalize = context.globalThis.BLBSelectionTextNormalization?.normalizeSelectedScriptureText;
+const normalize = context.globalThis.BLBSelectionTextHelpers?.normalizeSelectedScriptureText;
 assert.equal(typeof normalize, 'function', 'module must expose the selection text normalizer');
 
 for (const [input, expected] of [
