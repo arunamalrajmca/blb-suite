@@ -155,8 +155,6 @@ test.describe('core user-visible E2E', () => {
           pageText: document.querySelector('#generic-verse-context-article')?.textContent?.slice(0,500) || ''
         }));
         const backgroundDiagnostics = await extensionWorker.evaluate(() => ({
-          startupStage: globalThis.__blbSuiteBackgroundStartupStageV1 || null,
-          startupError: globalThis.__blbSuiteBackgroundStartupErrorV1 || null,
           queuePostListenerRegistered: globalThis.__blbSuiteQueuePostListenerRegisteredV1 === true,
           asyncMessageRouterRegistered: globalThis.__blbSuiteAsyncMessageRouterRegisteredV1 === true
         }));
