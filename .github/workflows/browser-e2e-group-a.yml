@@ -160,3 +160,11 @@ jobs:
       - name: Run Facebook Revelation directional-format range regression
         if: ${{ always() && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         run: npx playwright test tests/browser/extension.spec.js --grep 'Facebook directional-format Revelation 20:1-10 resolves the whole range from book-name double-click'
+
+  cancel-sibling-runs:
+    name: Cancel sibling runs after failure
+    if: ${{ failure() }}
+    needs: [change-detection, core-group-a]
+    permissions:
+      actions: write
+    uses: ./.github/workflows/cancel-sibling-runs-on-failure.yml
