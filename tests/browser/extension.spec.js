@@ -83,10 +83,6 @@ async function expectSourceCollectorAfterSiteOptIn({ page, context, extensionId,
   // Open the real action popup while the fixture page is the active tab.
   // Opening popup.html as an ordinary tab changes the active tab that popup.js
   // reads and makes its site toggle disappear; do not simulate that lifecycle.
-  if (typeof (await extensionWorker.evaluate(() => typeof chrome.action?.openPopup)) !== 'string' ||
-      await extensionWorker.evaluate(() => typeof chrome.action?.openPopup) !== 'function') {
-    throw new Error('chrome.action.openPopup is unavailable in this browser test runtime');
-  }
   const popupPromise = context.waitForEvent('page');
   await extensionWorker.evaluate(async () => chrome.action.openPopup());
   const popup = await popupPromise;
