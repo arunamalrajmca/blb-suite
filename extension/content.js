@@ -632,6 +632,7 @@ globalThis.BLBAutoHyperlinkerModule?.initialize({
   isSuiteEnabledNow: () => suiteEnabled,
   isSuiteEnabled
 });
+}
 
 // ---------- BLB Parsing Popup New Tab ----------
 // Keep parsing-popup links working on both normal BLB verse pages and
