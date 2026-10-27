@@ -4,6 +4,16 @@ run-name: E2E-B Clipboard/Links — PR #${{ github.event.pull_request.number || 
 on:
   push:
     branches: [ main ]
+    paths:
+      - 'extension/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'regression-suite/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'playwright.config.js'
+      - 'playwright.config.ts'
+      - '.github/workflows/browser-e2e-group-b.yml'
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened, labeled]
