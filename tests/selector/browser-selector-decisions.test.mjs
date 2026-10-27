@@ -36,6 +36,7 @@ function fixture() {
   put(root, "extension/source-page-collector.js");
   put(root, "tests/browser/omnibox-boolean-operators.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/e2e-core-user-actions.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/extension.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/fixtures.js");
   git(root, "add", ".");
   git(root, "commit", "-qm", "baseline");
