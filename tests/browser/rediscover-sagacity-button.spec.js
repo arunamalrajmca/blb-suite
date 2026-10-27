@@ -11,7 +11,6 @@ test('Rediscover, Sagacity, and TSK use the existing current-page MultiVerse col
   expect(sourceCollector).toContain('"rediscover.bible":"rediscover"');
   expect(sourceCollector).toContain('"sagacityweb.com":"sagacity"');
   expect(sourceCollector).toContain('"thetreasuryofscriptureknowledge.com":"treasury"');
-  expect(sourceCollector).toContain('"thetreasuryofscriptureknowledge.com":"treasury"');
   expect(sourceCollector).toContain('if (sourceSite && !isSourceHomepage)');
   expect(sourceCollector).toContain('document.querySelectorAll("a[href]")');
   expect(sourceCollector).toContain('openSourcePageBibleReferencesInMultiVerse');
@@ -71,9 +70,9 @@ test('Sagacity browser collector captures Matt. 12:37 from malformed nested BLB 
   };
   const collectorStart = sourceCollector.indexOf('function collectSourcePageBibleReferences()');
   expect(collectorStart).toBeGreaterThan(-1);
-  const collectorEnd = content.indexOf('\n    }\n\n    function showSourcePageMultiVerseStatus', collectorStart);
+  const collectorEnd = sourceCollector.indexOf('\n        function showSourcePageMultiVerseStatus', collectorStart);
   expect(collectorEnd).toBeGreaterThan(collectorStart);
-  const collectorSource = content.slice(collectorStart, collectorEnd + '\n    }'.length);
+  const collectorSource = sourceCollector.slice(collectorStart, collectorEnd);
 
   await page.setContent(`
     <main>
