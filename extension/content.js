@@ -1816,7 +1816,7 @@ function handleDoubleClickBlb(event) {
                 && match[2].toLowerCase()===selection.toLowerCase()
                 && /^[1-3]$/.test(match[1])) {
               const afterBook=contextText.slice(match.index+match[0].length);
-              const chapterMatch=afterBook.match(/^\\s*\\.?\\s*(\\d{1,3})\\b/);
+              const chapterMatch=afterBook.match(/^\s*\.?\s*(\d{1,3})\b/);
               const chapter=chapterMatch ? Number(chapterMatch[1]) : 0;
               if (chapter>0) {
                 const resolvedBook=resolveBibleBook(prefixNumber+' '+match[2]);
