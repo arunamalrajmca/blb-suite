@@ -58,7 +58,7 @@ test('page-selection module load order is explicit in manifest and runtime injec
   const runtimeFilesEnd = background.indexOf('\n];', runtimeFilesStart);
   assert(runtimeFilesStart >= 0 && runtimeFilesEnd > runtimeFilesStart, 'runtime content-script list missing');
   const runtimeFiles = background.slice(runtimeFilesStart, runtimeFilesEnd);
-  for (const list of [scripts.join('\n'), runtimeFiles]) {
+  for (const list of [scripts.join('\n'), runtimeFiles.replace(/\/\/.*$/gm, '')]) {
     assert(list.includes('blb-page-selection-button.js'), 'page-selection module missing from script list');
     assert(list.indexOf('blb-page-selection-button.js') < list.indexOf('content.js'), 'page-selection module must load before content.js');
   }
