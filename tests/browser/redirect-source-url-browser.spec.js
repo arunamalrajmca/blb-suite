@@ -50,7 +50,7 @@ async function loadProductionRedirect(page, sourceUrl) {
 const sourcePageMultiVerseCode = read('extension/source-page-collector.js');
 
 async function initializeSourcePageMultiVerse(page) {
-  await initializeSourcePageMultiVerse(page);
+  await page.addScriptTag({ content: sourcePageMultiVerseCode });
   await page.addScriptTag({ content: `BLBSourcePageCollectorModule.initialize({
     normalizeSelectionText,
     parseRef,
