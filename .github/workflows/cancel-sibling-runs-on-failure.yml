@@ -10,10 +10,6 @@ on:
       - BLB Suite HARD-GATE
       - MultiVerse tab reuse regression
       - Require latest main ancestry
-      - ZIP Integrity
-      - Audit Chrome Web Store submission assets
-      - Verify Chrome Web Store assets
-      - Verify Chrome Web Store submission tools
     types: [completed]
 
 permissions:
