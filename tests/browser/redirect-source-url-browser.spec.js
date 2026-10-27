@@ -248,11 +248,34 @@ test.describe('real-browser source URL redirect regressions', () => {
     const sourceUrl = 'https://kingjamesbibleonline.org/John-Chapter-3/';
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/1/';
     await loadProductionRedirect(page, sourceUrl);
-    await page.addScriptTag({ content: 'window.__redirectResult = redirectBibleSite();' });
-    await expect.poll(() => page.evaluate(() => window.__redirectedTo || null), {
-      message: 'redirectBibleSite() should resolve the KJBO chapter URL; result=' +
-        JSON.stringify(await page.evaluate(() => ({ result: window.__redirectResult, href: location.href, shared: Boolean(window.BLBShared), target: window.__redirectedTo })))
-    }).toBe(targetUrl);
+    await page.evaluate(() => {
+      window.__redirectHarnessError = null;
+      try {
+        if (typeof window.BLBSourceBibleRedirectModule?.initialize !== 'function') {
+          throw new Error('source redirect module was not installed');
+        }
+        window.__redirectResult = window.__sourceBibleRedirect();
+      } catch (error) {
+        window.__redirectHarnessError = String(error && (error.stack || error.message) || error);
+      }
+    });
+    await expect.poll(() => page.evaluate(() => ({
+      target: window.__redirectedTo || null,
+      result: window.__redirectResult ?? null,
+      error: window.__redirectHarnessError
+    })), {
+      message: 'KJBO chapter redirect diagnostic: ' +
+        JSON.stringify(await page.evaluate(() => ({
+          result: window.__redirectResult,
+          error: window.__redirectHarnessError,
+          href: location.href,
+          module: typeof window.BLBSourceBibleRedirectModule,
+          redirect: typeof window.__sourceBibleRedirect,
+          shared: Boolean(window.BLBShared),
+          books: typeof BOOKS,
+          target: window.__redirectedTo
+        })))
+    }).toMatchObject({ target: targetUrl, error: null });
   });
 
   test('King James Bible Online original 1611 chapter URL navigates to the standard BLB KJV destination', async ({ page }) => {
