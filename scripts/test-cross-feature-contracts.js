@@ -44,7 +44,7 @@ try {
   // consume only after verification, and retain the background-owned POST slot.
   ordered(multiverseHandoffModule, [
     [/blbSuiteGetPendingMultiVerseRefs/, 'pending-reference read'],
-    [/const actual\s*=\s*normalizeSelectionText\(/, 'rendered input verification'],
+    [/actual\s*=\s*String\(primary\.value/, 'rendered input verification'],
     [/blbSuiteConsumePendingMultiVerseRefs/, 'pending-reference consume']
   ], 'MultiVerse handoff reads, verifies, then consumes pending references');
   has(background, /blbSuiteGetPendingMultiVerseRefs/, 'background exposes pending MultiVerse references');
