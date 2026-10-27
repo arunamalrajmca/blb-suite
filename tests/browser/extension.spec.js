@@ -85,6 +85,12 @@ async function expectSourceCollectorAfterSiteOptIn({ page, context, extensionId,
   // The checkbox interaction below remains a real Playwright user gesture.
   const popup = await context.newPage();
   await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  // A popup URL opened as a tab becomes the active tab in headless Chromium,
+  // unlike a real action popup which reads the underlying website tab. Restore
+  // the article tab as active, then reload the extension page in the background
+  // so popup.js reads the correct host before enabling the per-site feature.
+  await page.bringToFront();
+  await popup.reload();
   await expect(popup.locator('#pageButton')).toBeVisible();
   await popup.locator('#pageButton').check();
 
