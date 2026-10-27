@@ -50,6 +50,21 @@ test('content-script coverage includes web + local HTML/PDF', () => {
   for (const expected of ['file:///*.pdf','file:///*.html','file:///*.htm']) assert(matches.includes(expected), expected);
   assert(!matches.includes('http://*/*') && !matches.includes('https://*/*'), 'arbitrary HTTP/HTTPS hosts must not be permanent content-script matches');
 });
+test('page-selection module load order is explicit in manifest and runtime injection', () => {
+  const manifest = JSON.parse(read('manifest.json'));
+  const scripts = manifest.content_scripts.flatMap(item => item.js || []);
+  const background = read('background.js');
+  const runtimeFilesStart = background.indexOf('const BLB_CONTENT_SCRIPT_FILES = [');
+  const runtimeFilesEnd = background.indexOf('\n];', runtimeFilesStart);
+  assert(runtimeFilesStart >= 0 && runtimeFilesEnd > runtimeFilesStart, 'runtime content-script list missing');
+  const runtimeFiles = background.slice(runtimeFilesStart, runtimeFilesEnd);
+  for (const list of [scripts.join('\n'), runtimeFiles.replace(/\/\/.*$/gm, '')]) {
+    assert(list.includes('blb-page-selection-button.js'), 'page-selection module missing from script list');
+    assert(list.indexOf('blb-page-selection-button.js') < list.indexOf('content.js'), 'page-selection module must load before content.js');
+  }
+  assert(read('blb-page-selection-button.js').includes('global.BLBPageSelectionButtonModule = { initialize }'), 'page-selection module registration missing');
+});
+
 test('manifest-referenced files exist', () => {
   const m = JSON.parse(read('manifest.json'));
   const refs = [m.background?.service_worker, m.options_page, ...(m.content_scripts||[]).flatMap(x=>x.js||[]), ...Object.values(m.icons||{}), m.action?.default_popup].filter(Boolean);
@@ -515,10 +530,11 @@ test('BLB native-event interception remains explicitly scoped', () => {
   assert(verseNavigation.includes('if (!isSuiteEnabledNow() || isModifiedLinkActivation(event)) return;'), 'nowrap override must preserve master-switch and modified-click behavior');
   assert(nowrap.includes('event.preventDefault()') && nowrap.includes('event.stopImmediatePropagation()'), 'nowrap override must preserve scoped native-event interception');
 
-  const selectionStart = content.indexOf('function handleBlbPageSelectionMouseDown');
-  const selectionEnd = content.indexOf('function getPageSelectionSiteKey', selectionStart);
+  const pageSelection = read('blb-page-selection-button.js');
+  const selectionStart = pageSelection.indexOf('function handleBlbPageSelectionMouseDown');
+  const selectionEnd = pageSelection.indexOf('function enableBlbPageButtonMonitoring', selectionStart);
   assert(selectionStart >= 0 && selectionEnd > selectionStart, 'selection-monitoring block missing');
-  const selection = content.slice(selectionStart, selectionEnd);
+  const selection = pageSelection.slice(selectionStart, selectionEnd);
   assert(!selection.includes('preventDefault()'), 'selection monitoring must not cancel native events');
   assert(!selection.includes('stopPropagation()'), 'selection monitoring must not stop native propagation');
   assert(!selection.includes('stopImmediatePropagation()'), 'selection monitoring must not stop native propagation');
@@ -554,7 +570,7 @@ test('context-menu Show on BLB wiring remains present', () => {
   const bg = read('background.js'), content = read('content.js');
   assert(bg.includes('contextMenus'), 'contextMenus API wiring missing');
   assert(bg.includes('blbSuiteOpenSelectionText'), 'context-menu selection opener missing');
-  assert(content.includes('blbSuiteSyncSelectionContextMenu'), 'context-menu synchronization missing');
+  assert(read('blb-page-selection-button.js').includes('blbSuiteSyncSelectionContextMenu'), 'context-menu synchronization missing');
 });
 test('Alt+B selection path remains wired', () => {
   const bg = read('background.js');
@@ -585,10 +601,12 @@ test('Double-click citation handling validates book labels and preserves noncons
 });
 test('Show on BLB floating button path remains wired', () => {
   const content = read('content.js');
-  assert(content.includes('BLB_PAGE_BUTTON_ID'), 'floating button missing');
-  assert(content.includes('addBlbPageSelectionButton'), 'button creation missing');
-  assert(content.includes('updateBlbPageSelectionButtonFromSelection'), 'selection update path missing');
-  assert(content.includes('blbSuiteOpenSelectionText'), 'button opener missing');
+  const pageSelection = read('blb-page-selection-button.js');
+  assert(content.includes('BLBPageSelectionButtonModule.initialize'), 'page-selection module is not initialized');
+  assert(pageSelection.includes('BLB_PAGE_BUTTON_ID'), 'floating button missing');
+  assert(pageSelection.includes('addBlbPageSelectionButton'), 'button creation missing');
+  assert(pageSelection.includes('updateBlbPageSelectionButtonFromSelection'), 'selection update path missing');
+  assert(pageSelection.includes('blbSuiteOpenSelectionText'), 'button opener missing');
 });
 section('selection');
 test('MultiVerse creation/reuse path remains wired', () => {
