@@ -3027,6 +3027,7 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'criteria-search-navigation.js',
   'blb-auto-hyperlinker.js',
   'blb-passive-new-tab-targets.js',
+  'blb-draggable-button.js',
   'content.js'
 ];
 
