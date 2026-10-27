@@ -80,17 +80,30 @@ async function expectSourceCollectorAfterSiteOptIn({ page, context, extensionId,
   }));
   await page.goto(`https://www.${site.host}/fixture-article.html`, { waitUntil: 'domcontentloaded' });
 
-  // Open the packaged popup page in the test context. chrome.action.openPopup()
-  // is not consistently supported by the headless Chromium used in CI.
-  // The checkbox interaction below remains a real Playwright user gesture.
+  // Headless Chromium does not consistently support opening the real action
+  // popup. Open the packaged popup page as a tab and emulate the active website
+  // tab that a real action popup sees. Keep the checkbox click real so Chrome's
+  // optional-host permission request still runs from a user gesture.
   const popup = await context.newPage();
+  await popup.addInitScript(targetUrl => {
+    const originalQuery = chrome.tabs.query.bind(chrome.tabs);
+    Object.defineProperty(chrome.tabs, 'query', {
+      configurable: true,
+      writable: true,
+      value(query, callback) {
+        if (query?.active && query?.currentWindow) {
+          const tabs = [{ id: 1, active: true, url: targetUrl, title: 'Fixture article' }];
+          if (typeof callback === 'function') {
+            callback(tabs);
+            return;
+          }
+          return Promise.resolve(tabs);
+        }
+        return originalQuery(query, callback);
+      }
+    });
+  }, `https://www.${site.host}/fixture-article.html`);
   await popup.goto(`chrome-extension://${extensionId}/popup.html`);
-  // A popup URL opened as a tab becomes the active tab in headless Chromium,
-  // unlike a real action popup which reads the underlying website tab. Restore
-  // the article tab as active, then reload the extension page in the background
-  // so popup.js reads the correct host before enabling the per-site feature.
-  await page.bringToFront();
-  await popup.reload();
   await expect(popup.locator('#pageButton')).toBeVisible();
   await popup.locator('#pageButton').check();
 
