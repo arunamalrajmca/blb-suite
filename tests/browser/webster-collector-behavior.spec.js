@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -101,6 +101,65 @@ test.describe('Webster collector behavior', () => {
       { type: 'blbSuiteStudyCaptureActive' },
       { type: 'blbSuiteCaptureStudySearchTerm', term: 'faith and hope' }
     ]);
+  });
+
+
+
+  test('renders the collector button and opens collected references in MultiVerse', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({
+      masterEnabled: true,
+      redirectEnabled: false
+    });
+    await page.route('https://webstersdictionary1828.com/**', route => route.fulfill({
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      body: `<!doctype html><html><head><title>Webster fixture</title></head><body>
+        <main>
+          <h1>Faith</h1>
+          <a class="bible" href="https://www.blueletterbible.org/kjv/jhn/3/16/">John 3:16</a>
+          <a class="bible" href="https://www.blueletterbible.org/kjv/rom/8/1/">Romans 8:1</a>
+        </main>
+      </body></html>`
+    }));
+    await page.goto('https://webstersdictionary1828.com/dictionary/Faith', { waitUntil: 'domcontentloaded' });
+
+    const button = page.locator('#blb-suite-webster-multiverse');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await button.click();
+
+    let handoffUrl = '';
+    await expect.poll(async () => {
+      handoffUrl = await extensionWorker.evaluate(async () => {
+        const tabs = await chrome.tabs.query({});
+        return tabs.map(tab => tab.url || tab.pendingUrl || '')
+          .find(url => url.includes('/multiverse-post.html?mvText=')) || '';
+      });
+      return handoffUrl;
+    }, { timeout: 15000 }).toContain('/multiverse-post.html?mvText=');
+    expect(new URL(handoffUrl).searchParams.get('mvText')).toBe('john 3:16; romans 8:1');
+  });
+
+  test('recreates the collector button after the page replaces its body', async ({ page, extensionStorage }) => {
+    await extensionStorage.set({
+      masterEnabled: true,
+      redirectEnabled: false
+    });
+    await page.route('https://webstersdictionary1828.com/**', route => route.fulfill({
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      body: '<!doctype html><html><head><title>Webster body fixture</title></head><body><main>Faith</main></body></html>'
+    }));
+    await page.goto('https://webstersdictionary1828.com/dictionary/Faith', { waitUntil: 'domcontentloaded' });
+    const button = page.locator('#blb-suite-webster-multiverse');
+    await expect(button).toBeVisible({ timeout: 10000 });
+
+    await page.evaluate(() => {
+      document.body.remove();
+      const replacement = document.createElement('body');
+      replacement.innerHTML = '<main>Rebuilt Webster entry</main>';
+      document.documentElement.appendChild(replacement);
+    });
+    await expect(page.locator('#blb-suite-webster-multiverse')).toBeVisible({ timeout: 10000 });
   });
 
   test('fails closed for disabled capture and non-entry routes', async () => {
