@@ -86,21 +86,21 @@ try {
   // Extracted modules must expose their documented global registration objects
   // before content.js executes. Check the global API rather than internal bodies.
   const moduleContracts = [
-    ['extension/kings-bible-collector.js', /globalThis\.BLBKingsBibleCollector\s*=|globalThis\.BLBKingsBibleCollector\s*\|\|/],
-    ['extension/webster-collector.js', /globalThis\.BLBWebsterCollector\s*=|globalThis\.BLBWebsterCollector\s*\|\|/],
-    ['extension/source-page-collector.js', /globalThis\.BLBSourcePageCollectorModule\s*=|globalThis\.BLBSourcePageCollectorModule\s*\|\|/],
-    ['extension/source-bible-redirect.js', /globalThis\.BLBSourceBibleRedirectModule\s*=|globalThis\.BLBSourceBibleRedirectModule\s*\|\|/],
-    ['extension/multiverse-copy.js', /globalThis\.BLBMultiVerseCopyModule\s*=|globalThis\.BLBMultiVerseCopyModule\s*\|\|/],
-    ['extension/study-reference-capture.js', /globalThis\.BLBStudyReferenceCaptureModule\s*=|globalThis\.BLBStudyReferenceCaptureModule\s*\|\|/],
-    ['extension/criteria-search-navigation.js', /globalThis\.BLBCriteriaSearchNavigationModule\s*=|globalThis\.BLBCriteriaSearchNavigationModule\s*\|\|/],
-    ['extension/blb-auto-hyperlinker.js', /globalThis\.BLBAutoHyperlinkerModule\s*=|globalThis\.BLBAutoHyperlinkerModule\s*\|\|/],
-    ['extension/blb-passive-new-tab-targets.js', /globalThis\.BLBPassiveNewTabTargetsModule\s*=|globalThis\.BLBPassiveNewTabTargetsModule\s*\|\|/],
-    ['extension/blb-draggable-button.js', /globalThis\.BLBDraggableButtonModule\s*=|globalThis\.BLBDraggableButtonModule\s*\|\|/],
-    ['extension/blb-parse-popup.js', /globalThis\.BLBParsePopupModule\s*=|globalThis\.BLBParsePopupModule\s*\|\|/],
-    ['extension/blb-verse-link-navigation.js', /globalThis\.BLBVerseLinkNavigationModule\s*=|globalThis\.BLBVerseLinkNavigationModule\s*\|\|/],
-    ['extension/blb-page-selection-button.js', /globalThis\.BLBPageSelectionButtonModule\s*=|globalThis\.BLBPageSelectionButtonModule\s*\|\|/],
-    ['extension/multiverse-handoff.js', /globalThis\.BLBMultiVerseHandoffModule\s*=|globalThis\.BLBMultiVerseHandoffModule\s*\|\|/],
-    ['extension/multiverse-tool-view.js', /globalThis\.BLBMultiVerseToolViewModule\s*=|globalThis\.BLBMultiVerseToolViewModule\s*\|\|/]
+    ['extension/kings-bible-collector.js', /globalThis\\.BLBKingsBibleCollector\\s*=/],
+    ['extension/webster-collector.js', /globalThis\\.BLBWebsterCollectorModule\\s*=/],
+    ['extension/source-page-collector.js', /globalThis\\.BLBSourcePageCollectorModule\\s*=/],
+    ['extension/source-bible-redirect.js', /global\\.BLBSourceBibleRedirectModule\\s*=/],
+    ['extension/multiverse-copy.js', /root\\.BLBMultiVerseCopyModule\\s*=/],
+    ['extension/study-reference-capture.js', /global\\.BLBStudyReferenceCaptureModule\\s*=/],
+    ['extension/criteria-search-navigation.js', /global\\.BLBCriteriaSearchNavigationModule\\s*=/],
+    ['extension/blb-auto-hyperlinker.js', /global\\.BLBAutoHyperlinkerModule\\s*=/],
+    ['extension/blb-passive-new-tab-targets.js', /global\\.BLBPassiveNewTabTargetsModule\\s*=/],
+    ['extension/blb-draggable-button.js', /global\\.BLBDraggableButtonModule\\s*=/],
+    ['extension/blb-parse-popup.js', /global\\.BLBParsePopupModule\\s*=/],
+    ['extension/blb-verse-link-navigation.js', /global\\.BLBVerseLinkNavigationModule\\s*=/],
+    ['extension/blb-page-selection-button.js', /global\\.BLBPageSelectionButtonModule\\s*=/],
+    ['extension/multiverse-handoff.js', /global\\.BLBMultiVerseHandoffModule\\s*=/],
+    ['extension/multiverse-tool-view.js', /global\\.BLBMultiVerseToolViewModule\\s*=/]
   ];
   for (const [file, contract] of moduleContracts) {
     assert.ok(fs.existsSync(path.join(root, file)), 'expected extracted module exists: ' + file);
