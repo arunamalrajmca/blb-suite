@@ -84,6 +84,15 @@ test('MV3 worker routes a real exact-case KJV word to its single matching verse'
 
   // Derive the expected destination from the packaged original-case corpus,
   // then exercise the real omnibox entry point in the running extension worker.
+  const runtimeRouting = await extensionWorker.evaluate(() => ({
+    generatedWordPresent: KJV_CASE_SENSITIVE_WORDS.has('fathers'),
+    routingSelected: shouldUseCaseSensitiveRouting('Fathers')
+  }));
+  expect(runtimeRouting.generatedWordPresent,
+    'the generated set must be loaded in the live MV3 worker').toBe(true);
+  expect(runtimeRouting.routingSelected,
+    'the live worker must select exact-case routing for a generated word').toBe(true);
+
   const expected = await extensionWorker.evaluate(() => {
     const matches = BLBCaseSensitiveCore.searchCaseSensitiveCorpus(
       'Fathers',

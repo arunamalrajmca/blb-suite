@@ -5,6 +5,7 @@ on:
     paths:
       - 'tests/browser/webster-collector-behavior.spec.js'
       - 'tests/browser/case-sensitive-routing-behavior.spec.js'
+      - 'extension/kjv-case-sensitive-words.js'
       - 'package.json'
       - 'playwright.config.js'
       - '.github/workflows/focused-behavior-tests.yml'
@@ -13,6 +14,7 @@ on:
     paths:
       - 'tests/browser/webster-collector-behavior.spec.js'
       - 'tests/browser/case-sensitive-routing-behavior.spec.js'
+      - 'extension/kjv-case-sensitive-words.js'
       - 'package.json'
       - 'playwright.config.js'
       - '.github/workflows/focused-behavior-tests.yml'

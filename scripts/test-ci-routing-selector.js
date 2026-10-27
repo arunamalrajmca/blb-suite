@@ -75,6 +75,7 @@ try {
     'tests/browser/test-only.spec.js'
   ];
   for (const file of fixtures) write(file);
+  write('extension/kjv-case-sensitive-words.js');
   write('extension/kings-bible-collector.js');
   write('extension/webster-collector.js');
   write('extension/multiverse-tool-view.js');
@@ -121,6 +122,21 @@ try {
   assert(result.values.changed_specs.includes('webster-collector-behavior.spec.js'));
   assert(!result.values.changed_specs.includes('popup'), 'Webster collector should not pull in unrelated popup tests');
   console.log('PASS: Webster collector selects focused browser coverage');
+
+
+  // The generated case-sensitive word set now has live MV3 routing coverage.
+  // Its edits should run the focused case-sensitive browser spec, not the full suite.
+  resetScenario(base);
+  write('extension/kjv-case-sensitive-words.js', '// changed generated KJV case-sensitive word set\\n');
+  commit('change generated KJV case-sensitive word set');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', false, 'KJV case-sensitive word set');
+  assert(result.values.changed_specs.includes('tests/browser/case-sensitive-routing-behavior.spec.js'),
+    'KJV word-set changes must select the live browser routing regression');
+  assertValue(result, 'group_a_required', false, 'KJV case-sensitive word set');
+  assertValue(result, 'group_b_required', false, 'KJV case-sensitive word set');
+  assertValue(result, 'reference_required', false, 'KJV case-sensitive word set');
+  console.log('PASS: KJV case-sensitive word set selects focused browser routing coverage');
 
   // A popup-only feature stays focused as well.
   resetScenario(base);
