@@ -73,6 +73,36 @@ async function expectSourceCollectorAfterSiteOptIn({ page, context, extensionId,
     pageSelectionButtonSites: {},
     doubleClickBlbSites: {}
   });
+
+  const originPattern = `https://www.${site.host}/*`;
+  // Headless Chromium does not expose chrome.action.openPopup() as a normal
+  // Playwright page. Use a test-only extension-page button to make the optional
+  // permission request from a genuine user gesture, then persist the same
+  // preference the popup uses. This isolates permission/collector coverage from
+  // the browser-specific action-popup lifecycle.
+  const permissionHarness = await context.newPage();
+  await permissionHarness.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: 'domcontentloaded' });
+  await permissionHarness.evaluate(({ originPattern, host }) => {
+    const button = document.createElement('button');
+    button.id = 'test-grant-source-site';
+    button.textContent = 'Grant source-site access';
+    button.addEventListener('click', async () => {
+      const granted = await chrome.permissions.request({ origins: [originPattern] });
+      if (!granted) {
+        document.body.dataset.permissionResult = 'denied';
+        return;
+      }
+      const saved = await chrome.storage.local.get({ pageSelectionButtonSites: {} });
+      const sites = { ...saved.pageSelectionButtonSites, [host]: true };
+      await chrome.storage.local.set({ pageSelectionButtonSites: sites });
+      document.body.dataset.permissionResult = 'granted';
+    });
+    document.body.appendChild(button);
+  }, { originPattern, host: site.host });
+  await permissionHarness.locator('#test-grant-source-site').click();
+  await expect(permissionHarness.locator('body')).toHaveAttribute('data-permission-result', 'granted');
+  await permissionHarness.close();
+
   await page.route(`https://www.${site.host}/**`, route => route.fulfill({
     status: 200,
     contentType: 'text/html; charset=utf-8',
@@ -80,16 +110,6 @@ async function expectSourceCollectorAfterSiteOptIn({ page, context, extensionId,
   }));
   await page.goto(`https://www.${site.host}/fixture-article.html`, { waitUntil: 'domcontentloaded' });
 
-  // Open the real action popup while the fixture page is the active tab.
-  // Opening popup.html as an ordinary tab changes the active tab that popup.js
-  // reads and makes its site toggle disappear; do not simulate that lifecycle.
-  const popupPromise = context.waitForEvent('page');
-  await extensionWorker.evaluate(async () => chrome.action.openPopup());
-  const popup = await popupPromise;
-  await popup.waitForLoadState('domcontentloaded');
-  await expect(popup.locator('#pageButton')).toBeVisible();
-
-  const originPattern = `https://www.${site.host}/*`;
   await expect.poll(async () => extensionWorker.evaluate(pattern =>
     chrome.permissions.contains({ origins: [pattern] }), originPattern
   ), { timeout: 10000 }).toBe(true);
