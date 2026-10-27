@@ -158,13 +158,13 @@ test('global redirect uses the minimal handlers on ordinary sites and the full b
     {url:'https://www.biblegateway.com/passage/?search=John+3%3A16'},
     {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}
   ))).toEqual([
-    'regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','multiverse-copy.js','study-reference-capture.js','criteria-search-navigation.js','blb-auto-hyperlinker.js','blb-passive-new-tab-targets.js', 'blb-draggable-button.js','content.js','redirect-scripttagger.js','redirect-bibleref-ranges.js'
+    'regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','multiverse-copy.js','study-reference-capture.js','criteria-search-navigation.js','blb-auto-hyperlinker.js','blb-passive-new-tab-targets.js', 'blb-draggable-button.js','multiverse-tool-view.js','content.js','redirect-scripttagger.js','redirect-bibleref-ranges.js'
   ]);
 
   expect(Array.from(context.contentScriptFilesForTab(
     {url:'https://sagacityweb.com/article'},
     {redirectEnabled:false,pageSelectionButtonSites:{'sagacityweb.com':true},doubleClickBlbSites:{}}
-  ))).toEqual(['regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','multiverse-copy.js','study-reference-capture.js','criteria-search-navigation.js','blb-auto-hyperlinker.js','blb-passive-new-tab-targets.js', 'blb-draggable-button.js','content.js']);
+  ))).toEqual(['regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','multiverse-copy.js','study-reference-capture.js','criteria-search-navigation.js','blb-auto-hyperlinker.js','blb-passive-new-tab-targets.js', 'blb-draggable-button.js','multiverse-tool-view.js','content.js']);
 });
 
 async function runMinimalScriptTaggerClick(settings, eventOverrides = {}) {
