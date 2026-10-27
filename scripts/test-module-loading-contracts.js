@@ -71,6 +71,7 @@ if (!importMatch) {
 } else {
   const imports = [...importMatch[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(match => match[1]);
   const required = [
+    'study-session-normalization.js',
     'multiverse-reference-helpers.js',
     'study-session-export.js',
     'selection-text-helpers.js',
