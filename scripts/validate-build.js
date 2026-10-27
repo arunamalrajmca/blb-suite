@@ -188,3 +188,13 @@ if (selectionMarkerStrippingTest.status !== 0) {
 } else {
   pass('selection-marker stripping contracts validated');
 }
+
+const singleWordSelectionNormalizationTest = cp.spawnSync(process.execPath, [
+  path.join(__dirname, 'test-single-word-selection-normalization.js')
+], { encoding: 'utf8' });
+if (singleWordSelectionNormalizationTest.stdout) process.stdout.write(singleWordSelectionNormalizationTest.stdout);
+if (singleWordSelectionNormalizationTest.status !== 0) {
+  fail('single-word selection normalization tests failed\\n' + (singleWordSelectionNormalizationTest.stderr || ''));
+} else {
+  pass('single-word selection normalization contracts validated');
+}
