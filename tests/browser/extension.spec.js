@@ -537,6 +537,17 @@ test.describe('core user-visible E2E', () => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
+    // Start with no BLB tabs so a stale tab from an earlier gesture cannot
+    // obscure which destination this click actually opened.
+    await extensionWorker.evaluate(() => chrome.tabs.query({}).then(async tabs => {
+      for (const tab of tabs) {
+        try {
+          if (new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org') && tab.id != null) {
+            await chrome.tabs.remove(tab.id);
+          }
+        } catch (_) {}
+      }
+    }));
     await page.evaluate(() => {
       const fixture = document.createElement('div');
       fixture.id = 'blb-e2e-substack-corinthians-reference';
