@@ -5,6 +5,16 @@ on:
   pull_request:
     branches: [ main ]
     types: [opened, synchronize, reopened, labeled]
+    paths:
+      - 'extension/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'regression-suite/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'playwright.config.js'
+      - 'playwright.config.ts'
+      - '.github/workflows/browser-e2e-performance.yml'
   workflow_dispatch:
 
 concurrency:
