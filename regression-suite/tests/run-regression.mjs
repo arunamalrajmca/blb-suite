@@ -490,7 +490,9 @@ test('Bible redirect parser contracts cover every supported Bible redirect gramm
   assert(content.includes('const REDIRECT_HOSTS'), 'redirect host table missing');
 });test('external redirect coverage includes every supported redirect host', () => {
   const content = read('content.js');
-  for (const host of ['bible.com','biblegateway.com','bibleref.com','biblehub.com','kingjamesbibleonline.org','kjbo.org','kjv.site','officialkingjamesbible.com','bibleportal.com','webstersdictionary1828.com','blueletterbible.org']) assert(content.includes(host), `redirect host missing: ${host}`);
+  const criteriaNavigation = read('criteria-search-navigation.js');
+  for (const host of ['bible.com','biblegateway.com','bibleref.com','biblehub.com','kingjamesbibleonline.org','kjbo.org','kjv.site','officialkingjamesbible.com','bibleportal.com','webstersdictionary1828.com']) assert(content.includes(host), `redirect host missing: ${host}`);
+  assert(criteriaNavigation.includes('blueletterbible.org'), 'Criteria Search navigation retains the BLB destination');
   assert(content.includes('function redirectBibleSite'), 'Bible-site redirect parser missing');
   assert(content.includes('function redirectBlbNet'), 'BLB NET redirect missing');
   assert(content.includes('const REDIRECT_HOSTS'), 'redirect host table missing');
