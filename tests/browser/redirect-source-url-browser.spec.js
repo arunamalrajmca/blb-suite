@@ -248,8 +248,11 @@ test.describe('real-browser source URL redirect regressions', () => {
     const sourceUrl = 'https://kingjamesbibleonline.org/John-Chapter-3/';
     const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/1/';
     await loadProductionRedirect(page, sourceUrl);
-    await page.addScriptTag({ content: productionRedirectGate });
-    await expect.poll(() => page.evaluate(() => window.__redirectedTo || null)).toBe(targetUrl);
+    await page.addScriptTag({ content: 'window.__redirectResult = redirectBibleSite();' });
+    await expect.poll(() => page.evaluate(() => window.__redirectedTo || null), {
+      message: 'redirectBibleSite() should resolve the KJBO chapter URL; result=' +
+        JSON.stringify(await page.evaluate(() => ({ result: window.__redirectResult, href: location.href, shared: Boolean(window.BLBShared), target: window.__redirectedTo })))
+    }).toBe(targetUrl);
   });
 
   test('King James Bible Online original 1611 chapter URL navigates to the standard BLB KJV destination', async ({ page }) => {
