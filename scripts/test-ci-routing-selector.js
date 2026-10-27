@@ -121,6 +121,9 @@ try {
   assertValue(result, 'full_browser_suite', false, 'Webster collector');
   assert(result.values.changed_specs.includes('webster-collector-behavior.spec.js'));
   assert(!result.values.changed_specs.includes('popup'), 'Webster collector should not pull in unrelated popup tests');
+  assertValue(result, 'group_a_required', true, 'Webster collector');
+  assertValue(result, 'group_b_required', false, 'Webster collector');
+  assertValue(result, 'reference_required', false, 'Webster collector');
   console.log('PASS: Webster collector selects focused browser coverage');
 
 
@@ -133,7 +136,7 @@ try {
   assertValue(result, 'full_browser_suite', false, 'KJV case-sensitive word set');
   assert(result.values.changed_specs.includes('tests/browser/case-sensitive-routing-behavior.spec.js'),
     'KJV word-set changes must select the live browser routing regression');
-  assertValue(result, 'group_a_required', false, 'KJV case-sensitive word set');
+  assertValue(result, 'group_a_required', true, 'KJV case-sensitive word set');
   assertValue(result, 'group_b_required', false, 'KJV case-sensitive word set');
   assertValue(result, 'reference_required', false, 'KJV case-sensitive word set');
   console.log('PASS: KJV case-sensitive word set selects focused browser routing coverage');
