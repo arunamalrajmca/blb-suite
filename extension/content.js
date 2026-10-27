@@ -1785,9 +1785,11 @@ function handleDoubleClickBlb(event) {
         const cueElement = [physicalTarget, getDoubleClickTargetElement(event)].find(candidate =>
           /^(?:v|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
         );
-        const contextualTarget = (isVerseContextWord || possibleNumberedBookSuffix)
-          ? (cueElement || physicalTarget)
-          : (getDoubleClickTargetElement(event) || event.target);
+        const contextualTarget = possibleNumberedBookSuffix
+          ? physicalTarget
+          : (isVerseContextWord
+            ? (cueElement || getDoubleClickTargetElement(event) || event.target)
+            : (getDoubleClickTargetElement(event) || event.target));
         const isRomanBookPrefix=/^(?:I|II|III)$/i.test(selection);
         let hasValidNearbyBookPrefix=false;
         let hasValidNearbyRomanBookPrefix=false;
