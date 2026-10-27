@@ -50,6 +50,7 @@ async function loadProductionRedirect(page, sourceUrl) {
 const sourcePageMultiVerseCode = read('extension/source-page-collector.js');
 
 async function initializeSourcePageMultiVerse(page) {
+  await page.addScriptTag({ content: contentSource.slice(draggableButtonStart, draggableButtonEnd) });
   await page.addScriptTag({ content: sourcePageMultiVerseCode });
   await page.addScriptTag({ content: `BLBSourcePageCollectorModule.initialize({
     normalizeSelectionText,
@@ -59,9 +60,7 @@ async function initializeSourcePageMultiVerse(page) {
     blbUrl,
     formatSourceBibleBookName,
     isSuiteEnabled,
-    // Dragging is unrelated to collection behavior; keep this focused browser
-    // harness deterministic while the real module's button lifecycle is tested.
-    makeBlbMultiVerseButtonDraggable: () => {}
+    makeBlbMultiVerseButtonDraggable
   });` });
 }
 
