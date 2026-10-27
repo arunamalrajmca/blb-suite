@@ -8,13 +8,12 @@ const contentSource = read('extension/content.js');
 const sourceRedirectModule = read('extension/source-bible-redirect.js').replaceAll('location.replace(target);', 'globalThis.__redirectedTo = target;');
 const draggableButtonModule = read('extension/blb-draggable-button.js');
 const redirectStart = contentSource.indexOf('const redirectBibleSite = globalThis.BLBSourceBibleRedirectModule.initialize({');
-const decodeStart = contentSource.indexOf('function decodeSafe(v) {');
-const bookKeyStart = contentSource.indexOf('function bookKey(value) {');
-if ([redirectStart, decodeStart, bookKeyStart].some(i => i < 0)) throw new Error('Could not locate production source redirect helpers');
+const sourceHelperStart = contentSource.indexOf('function normalizeBlbDestinationUrl(url) {');
+if ([redirectStart, sourceHelperStart].some(i => i < 0)) throw new Error('Could not locate production source redirect helpers');
 const gateStart = contentSource.indexOf('const REDIRECT_HOSTS = new Set([');
 const gateEnd = contentSource.indexOf('// MultiVerse hand-off runs as a dedicated feature module.', gateStart);
 if (gateStart < 0 || gateEnd < 0) throw new Error('Could not locate production content-side redirect gate');
-const productionRedirectHelpers = contentSource.slice(bookKeyStart, redirectStart) + sourceRedirectModule + `
+const productionRedirectHelpers = contentSource.slice(sourceHelperStart, redirectStart) + sourceRedirectModule + `
 globalThis.__sourceBibleRedirect = globalThis.BLBSourceBibleRedirectModule.initialize({
   BLBShared, BOOKS, bookKey, parseChristianityBibleLink, validateSourceBibleReference,
   parseRef, decodeSafe, blbUrl, openBlbDestinationFromContent
