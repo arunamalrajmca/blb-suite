@@ -88,10 +88,10 @@ test('source Bible redirect module loads before content and preserves explicit d
   const scripts = manifest.content_scripts.flatMap(item => item.js || []);
   const background = read('background.js');
   const runtimeStart = background.indexOf('const BLB_CONTENT_SCRIPT_FILES = [');
-  const runtimeEnd = background.indexOf('\\n];', runtimeStart);
+  const runtimeEnd = background.indexOf('\n];', runtimeStart);
   assert(runtimeStart >= 0 && runtimeEnd > runtimeStart, 'runtime content-script list missing');
-  const runtimeFiles = background.slice(runtimeStart, runtimeEnd).replace(/\\/\\/.*$/gm, '');
-  for (const list of [scripts.join('\\n'), runtimeFiles]) {
+  const runtimeFiles = background.slice(runtimeStart, runtimeEnd);
+  for (const list of [scripts.join('\n'), runtimeFiles]) {
     assert(list.includes('source-bible-redirect.js'), 'source Bible redirect module missing from script list');
     assert(list.indexOf('source-bible-redirect.js') < list.indexOf('content.js'), 'source Bible redirect module must load before content.js');
   }
