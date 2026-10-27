@@ -9,6 +9,10 @@ const selectorSource = readFileSync(
   new URL("../../scripts/select-browser-specs.mjs", import.meta.url),
   "utf8"
 );
+const classifierSource = readFileSync(
+  new URL("../../scripts/classify-ci-changes.mjs", import.meta.url),
+  "utf8"
+);
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -26,6 +30,8 @@ function fixture() {
   git(root, "config", "user.email", "selector-test@example.invalid");
   git(root, "config", "user.name", "Selector test");
   put(root, "scripts/select-browser-specs.mjs", selectorSource);
+  put(root, "scripts/classify-ci-changes.mjs", classifierSource);
+  put(root, "package.json", JSON.stringify({ name: "fixture", version: "1.0.0", scripts: { test: "before" } }) + "\\n");
   put(root, "extension/omnibox-search-helpers.js");
   put(root, "tests/browser/omnibox-boolean-operators.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/e2e-core-user-actions.spec.js", "import { test } from '@playwright/test';\n");
@@ -117,5 +123,21 @@ test("CI selector and selector-test changes do not force browser E2E", () => {
     assert.match(output, /group_a_required=false/);
     assert.match(output, /group_b_required=false/);
     assert.match(output, /reference_required=false/);
+  });
+});
+
+test("non-version package.json edits classify as runtime without crashing", () => {
+  withFixture((root, base) => {
+    commitChange(root, "package.json", JSON.stringify({
+      name: "fixture",
+      version: "1.0.0",
+      scripts: { test: "after" }
+    }) + "\\n");
+    const output = execFileSync("node", ["scripts/classify-ci-changes.mjs", base], {
+      cwd: root,
+      encoding: "utf8"
+    });
+    assert.match(output, /runtime_changed=true/);
+    assert.match(output, /runtime_or_unknown_paths:\\n- package\\.json/);
   });
 });
