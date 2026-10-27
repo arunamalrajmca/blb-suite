@@ -219,6 +219,16 @@ if (studySessionNormalizationTest.status !== 0) {
   pass('Study Sessions normalization contracts validated');
 }
 
+const referenceCoreCharacterizationTest = cp.spawnSync(process.execPath, [
+  path.join(__dirname, 'test-reference-core-characterization.js')
+], { encoding: 'utf8' });
+if (referenceCoreCharacterizationTest.stdout) process.stdout.write(referenceCoreCharacterizationTest.stdout);
+if (referenceCoreCharacterizationTest.status !== 0) {
+  fail('shared Bible-reference characterization tests failed\\n' + (referenceCoreCharacterizationTest.stderr || ''));
+} else {
+  pass('shared Bible-reference parsing and resolution contracts validated');
+}
+
 const studySessionExportTest = cp.spawnSync(process.execPath, [
   path.join(__dirname, 'test-study-session-export.js')
 ], { encoding: 'utf8' });
