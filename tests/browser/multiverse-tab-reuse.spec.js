@@ -147,8 +147,6 @@ test('MultiVerse reuses both 200-verse batches when the same selection is repeat
     await expect.poll(() => submittedPayloads.length, { timeout: 20000 }).toBe(2);
   } catch (error) {
     const backgroundDiagnostics = await extensionWorker.evaluate(() => ({
-      startupStage: globalThis.__blbSuiteBackgroundStartupStageV1 || null,
-      startupError: globalThis.__blbSuiteBackgroundStartupErrorV1 || null,
       queuePostListenerRegistered: globalThis.__blbSuiteQueuePostListenerRegisteredV1 === true,
       asyncMessageRouterRegistered: globalThis.__blbSuiteAsyncMessageRouterRegisteredV1 === true
     }));
