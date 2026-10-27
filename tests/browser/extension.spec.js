@@ -763,6 +763,11 @@ test.describe('core user-visible E2E', () => {
         const fixture = document.createElement('div');
         fixture.id = 'blb-e2e-dom-pattern';
         fixture.innerHTML = html;
+        // Keep nested social-style links realistic without letting the fixture's
+        // placeholder href navigate away before the double-click assertions run.
+        fixture.addEventListener('click', (event) => {
+          if (event.target instanceof Element && event.target.closest('a[href]')) event.preventDefault();
+        });
         document.body.appendChild(fixture);
       }, pattern.html);
 
