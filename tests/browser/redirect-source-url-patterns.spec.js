@@ -13,10 +13,9 @@ const decodeStart = source.indexOf('function decodeSafe(v) {');
 const bookKeyStart = source.indexOf('function bookKey(value) {');
 const parseStart = source.indexOf('function parseRef(text) {', decodeStart);
 const blbUrlStart = source.indexOf('function blbUrl(', decodeStart);
-const redirectStart = source.indexOf('function redirectBibleSite() {', parseStart);
-const redirectEnd = source.indexOf('\nfunction redirectBlbNet() {', redirectStart);
+const redirectStart = source.indexOf('const redirectBibleSite = globalThis.BLBSourceBibleRedirectModule.initialize({', parseStart);
 if ([decodeStart, bookKeyStart, blbUrlStart, parseStart, redirectStart].some(index => index < 0)) {
-  throw new Error('Could not locate source-site redirect functions in extension/content.js');
+  throw new Error('Could not locate source-site redirect helpers in extension/content.js');
 }
 // Exercise the production book table, alias resolver, reference validator, and URL builder.
 const helpers = sharedPatternsSource + '\n' + booksSource + '\n' + aliasesSource + '\n' + referenceCoreSource + '\n' +
