@@ -67,7 +67,7 @@ test('popup loads from extension package', async ({ page, extensionId }) => {
   await expect(page.locator('body')).toBeVisible();
 });
 
-async function expectSourceCollectorAfterSiteOptIn({ page, context, extensionStorage, extensionWorker, site }) {
+async function expectSourceCollectorAfterSiteOptIn({ page, context, extensionId, extensionStorage, extensionWorker, site }) {
   await extensionStorage.set({
     masterEnabled: true,
     pageSelectionButtonSites: {},
@@ -80,14 +80,11 @@ async function expectSourceCollectorAfterSiteOptIn({ page, context, extensionSto
   }));
   await page.goto(`https://www.${site.host}/fixture-article.html`, { waitUntil: 'domcontentloaded' });
 
-  // External sites use optional host permissions. Enable the feature through
-  // the real extension popup so permissions.request runs in a user gesture.
-  const popupPromise = context.waitForEvent('page');
-  await extensionWorker.evaluate(async () => {
-    if (!chrome.action?.openPopup) throw new Error('chrome.action.openPopup is unavailable in this browser');
-    await chrome.action.openPopup();
-  });
-  const popup = await popupPromise;
+  // Open the packaged popup page in the test context. chrome.action.openPopup()
+  // is not consistently supported by the headless Chromium used in CI.
+  // The checkbox interaction below remains a real Playwright user gesture.
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
   await expect(popup.locator('#pageButton')).toBeVisible();
   await popup.locator('#pageButton').check();
 
@@ -112,7 +109,7 @@ for (const site of [
   { host: 'enduringword.com', key: 'enduringword' }
 ]) {
   test(`source-page collector initializes on ${site.host} after site access is enabled`, async ({ page, context, extensionStorage, extensionWorker }) => {
-    await expectSourceCollectorAfterSiteOptIn({ page, context, extensionStorage, extensionWorker, site });
+    await expectSourceCollectorAfterSiteOptIn({ page, context, extensionId, extensionStorage, extensionWorker, site });
   });
 }
 
