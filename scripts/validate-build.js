@@ -28,9 +28,9 @@ if (!fs.existsSync(manifestPath)) {
   if (!(m.permissions || []).includes('tabs')) fail('tabs permission missing');
   else pass('tabs permission present');
 
-  // Broad website access and ChatGPT access are intentionally optional.
+  // Broad website access is intentionally optional.
   // Keep only BLB as a required host; site features request optional access
-  // after the user enables them, and Ask AI requests ChatGPT access on demand.
+  // after the user enables them.
   const hosts = m.host_permissions || [];
   if (hosts.includes('http://*/*') || hosts.includes('https://*/*')) {
     fail('broad wildcard host access must remain optional');
@@ -41,7 +41,7 @@ if (!fs.existsSync(manifestPath)) {
   }
 
   const optionalHosts = m.optional_host_permissions || [];
-  for (const pattern of ['http://*/*', 'https://*/*', 'https://chatgpt.com/*']) {
+  for (const pattern of ['http://*/*', 'https://*/*']) {
     if (optionalHosts.includes(pattern)) pass(`optional host permission present: ${pattern}`);
     else fail(`optional host permission missing: ${pattern}`);
   }
