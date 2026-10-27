@@ -42,7 +42,7 @@ function sameExceptVersion(path) {
   } catch { return false; }
 }
 function nonRuntimePath(path) {
-  return /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/)|tests\/selector\/|scripts\/(?:classify-ci-changes|select-browser-specs)\.mjs$)/i.test(path)
+  return /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/)|tests\/selector\/|scripts\/(?:classify-ci-changes|select-browser-specs)\.mjs$|scripts\/test-ci-routing-selector\.js)/i.test(path)
     || /^tests\/browser\/[^/]+\.spec\.js$/i.test(path)
     || /^(store-assets\/|assets\/store\/|extension\/(icons|store-assets)\/)/i.test(path);
 }
