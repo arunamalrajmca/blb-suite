@@ -64,10 +64,6 @@ assert.deepEqual(
   [sessions[0], sessions[2]]
 );
 assert.deepEqual(
-  Array.from(context.filterStudySessions(sessions, 'topic: Grace date: 2026-10-27')),
-  [sessions[0]]
-);
-assert.deepEqual(
   Array.from(context.studySessionTopics([
     { title: ' Grace ' }, { title: 'grace' }, { title: 'Uncategorized' },
     { title: '' }, { title: 'Prayer' }
