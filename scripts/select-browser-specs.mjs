@@ -167,8 +167,17 @@ const ignoredNonRuntime = path =>
   || /^extension\/(?:Tutorial\.html|Tutorial\.js|THIRD-PARTY-NOTICES\.txt)$/.test(path);
 
 let unknownRuntime = false;
+const hasRuntimeChangeAlongsideBrowserSpec = changed.some(path =>
+  !ignoredNonRuntime(path) && !browserSpecPattern.test(path)
+);
 for (const path of changed) {
-  if (ignoredNonRuntime(path) || /^tests\/browser\/[^/]+\.spec\.js$/.test(path)) continue;
+  if (browserSpecPattern.test(path)) {
+    // A test-only edit must not trigger E2E by itself, but when production code
+    // changes in the same diff, run the changed spec alongside mapped coverage.
+    if (hasRuntimeChangeAlongsideBrowserSpec && existingBrowserSpecs.has(path)) changedBrowserSpecs.push(path);
+    continue;
+  }
+  if (ignoredNonRuntime(path)) continue;
   const mapped = featureSpecs.find(group => group.paths.includes(path));
   if (mapped) {
     for (const spec of mapped.specs) specs.add(spec);
