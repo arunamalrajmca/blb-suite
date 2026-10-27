@@ -527,7 +527,7 @@ test('Bible redirect parser contracts cover every supported Bible redirect gramm
     ['bibleref.com', 'new RegExp("-"+p[1]+"-', 'chapter/verse filename parser'],
     ['biblehub.com', 'u.pathname.match', 'path parser'],
     ['kingjamesbibleonline.org', 'Chapter-', 'chapter-page parser'],
-    ['kjbo.org', 'host==="kingjamesbibleonline.com" || host==="kjbo.org"', 'shared KJBO parser'],
+    ['kjbo.org', 'host==="kingjamesbibleonline.org" || host==="kjbo.org"', 'shared KJBO parser'],
     ['kjv.site', '-kjv', 'KJV.site URL parser'],
     ['officialkingjamesbible.com', '/bible/', 'Official KJB URL parser'],
     ['bibleportal.com', 'u.searchParams.get("v")', 'query-string verse parser']
