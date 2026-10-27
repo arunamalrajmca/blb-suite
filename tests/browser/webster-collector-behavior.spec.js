@@ -13,11 +13,15 @@ function normalizeSelectionText(value) {
 function parseRef(value) {
   const match = normalizeSelectionText(value).match(/^(John|Romans)\\s+(\\d+):(\\d+)(?:-(\\d+))?$/i);
   if (!match) return null;
+  const chapter = Number(match[2]);
+  const from = Number(match[3]);
+  const to = match[4] ? Number(match[4]) : null;
+  if (chapter < 1 || from < 1 || (to != null && to < from)) return null;
   return {
     book: match[1][0].toUpperCase() + match[1].slice(1).toLowerCase(),
-    chapter: Number(match[2]),
-    from: Number(match[3]),
-    to: match[4] ? Number(match[4]) : null
+    chapter,
+    from,
+    to
   };
 }
 
