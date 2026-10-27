@@ -128,3 +128,13 @@ if (crossFeatureContractTest.status !== 0) {
 } else {
   pass('cross-feature integration contracts validated');
 }
+
+const extractionSafetyTest = cp.spawnSync(process.execPath, [
+  path.join(__dirname, 'test-extraction-safety-contracts.js')
+], { encoding: 'utf8' });
+if (extractionSafetyTest.stdout) process.stdout.write(extractionSafetyTest.stdout);
+if (extractionSafetyTest.status !== 0) {
+  fail('extraction safety contract checks failed\\n' + (extractionSafetyTest.stderr || ''));
+} else {
+  pass('manifest, dependency order, and module registration safety validated');
+}
