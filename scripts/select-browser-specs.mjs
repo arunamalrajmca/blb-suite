@@ -243,8 +243,7 @@ const values = {
   group_b_required: String(has(
     "tests/browser/redirect-hostnames.spec.js",
     "tests/browser/blb-non-kjv-redirect.spec.js",
-    "tests/browser/scripttagger-global-injection.spec.js",
-    "tests/browser/e2e-core-user-actions.spec.js"
+    "tests/browser/scripttagger-global-injection.spec.js"
   )),
   reference_required: String(has(
     "tests/browser/extension.spec.js",

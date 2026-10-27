@@ -34,6 +34,7 @@ function fixture() {
   put(root, "package.json", JSON.stringify({ name: "fixture", version: "1.0.0", scripts: { test: "before" } }) + "\n");
   put(root, "extension/omnibox-search-helpers.js");
   put(root, "extension/source-page-collector.js");
+  put(root, "extension/criteria-search-navigation.js");
   put(root, "extension/webster-collector.js");
   put(root, "extension/kjv-case-sensitive-words.js");
   put(root, "tests/browser/webster-collector-behavior.spec.js", "import { test } from '@playwright/test';\n");
@@ -108,6 +109,18 @@ test("source-page collector selects its existing collector initialization covera
     assert.match(output, /changed_specs=tests\/browser\/extension\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
+  });
+});
+
+test("Criteria Search navigation selects the complete core spec in Group A only", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/criteria-search-navigation.js", "// changed navigation\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /changed_specs=tests\/browser\/e2e-core-user-actions\.spec\.js/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=false/);
+    assert.match(output, /reference_required=false/);
   });
 });
 
