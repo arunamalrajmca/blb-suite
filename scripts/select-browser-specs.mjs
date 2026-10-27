@@ -13,7 +13,8 @@ import { appendFileSync } from "node:fs";
 const base = process.argv[2];
 const event = process.env.GITHUB_EVENT_NAME || "";
 const ref = process.env.GITHUB_REF || "";
-const alwaysFull = event === "workflow_dispatch" || (event === "push" && ref === "refs/heads/main");
+// Main pushes should select coverage from the pushed diff, just like PRs. Keep a full run for manual dispatches and first pushes where GitHub provides an all-zero before SHA.
+const alwaysFull = event === "workflow_dispatch" || (event === "push" && ref === "refs/heads/main" && (!base || /^0+$/.test(base)));
 const run = (args) => execFileSync("git", args, { encoding: "utf8" }).trimEnd();
 let changed = [];
 if (!alwaysFull) {
@@ -59,6 +60,26 @@ const forceFull = alwaysFull || changed.some(path =>
 // Explicit, conservative file-to-feature map. Mapped files only narrow browser
 // coverage when the implementation is genuinely feature-scoped.
 const featureSpecs = [
+  {
+    paths: ["extension/omnibox-search-helpers.js"],
+    specs: ["tests/browser/omnibox-boolean-operators.spec.js"]
+  },
+  {
+    paths: ["extension/selection-text-helpers.js"],
+    specs: ["tests/browser/extension.spec.js", "tests/browser/e2e-core-user-actions.spec.js"]
+  },
+  {
+    paths: ["extension/study-session-export.js"],
+    specs: ["tests/browser/study-backup-restore.spec.js", "tests/browser/study-session-popup-ui-regression.spec.js"]
+  },
+  {
+    paths: ["extension/study-session-normalization.js"],
+    specs: ["tests/browser/study-session-popup-ui-regression.spec.js", "tests/browser/study-backup-restore.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js"]
+  },
+  {
+    paths: ["extension/multiverse-reference-helpers.js"],
+    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js"]
+  },
   {
     paths: ["extension/redirect-bibleref-ranges.js", "extension/redirect-christianity-main-world.js"],
     specs: ["tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-source-url-browser.spec.js", "tests/browser/redirect-hostnames.spec.js", "tests/browser/blb-non-kjv-redirect.spec.js"]
