@@ -7,8 +7,7 @@
     "test": "playwright test",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui",
-    "test:static": "node scripts/validate-build.js",
-    "test:selector": "node --test tests/selector/*.test.mjs"
+    "test:static": "node scripts/validate-build.js"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0"
