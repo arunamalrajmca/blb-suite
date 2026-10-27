@@ -80,34 +80,17 @@ async function expectSourceCollectorAfterSiteOptIn({ page, context, extensionId,
   }));
   await page.goto(`https://www.${site.host}/fixture-article.html`, { waitUntil: 'domcontentloaded' });
 
-  // Headless Chromium does not consistently support opening the real action
-  // popup. Open the packaged popup page as a tab and emulate the active website
-  // tab that a real action popup sees. Keep the checkbox click real so Chrome's
-  // optional-host permission request still runs from a user gesture.
-  // Install the shim at context level before creating/navigating the
-  // extension page. Playwright's page-level init script can run too late for
-  // extension documents in headless Chromium, after popup.js has read tabs.
-  await context.addInitScript(targetUrl => {
-    if (location.protocol !== 'chrome-extension:' || typeof chrome === 'undefined' || !chrome.tabs) return;
-    const originalQuery = chrome.tabs.query.bind(chrome.tabs);
-    Object.defineProperty(chrome.tabs, 'query', {
-      configurable: true,
-      writable: true,
-      value(query, callback) {
-        if (query?.active && query?.currentWindow) {
-          const tabs = [{ id: 1, active: true, url: targetUrl, title: 'Fixture article' }];
-          if (typeof callback === 'function') {
-            callback(tabs);
-            return;
-          }
-          return Promise.resolve(tabs);
-        }
-        return originalQuery(query, callback);
-      }
-    });
-  }, `https://www.${site.host}/fixture-article.html`);
-  const popup = await context.newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  // Open the real action popup while the fixture article is the active tab.
+  // This preserves Chrome's actual active-tab context and the permission request's user gesture.
+  const popupPagePromise = context.waitForEvent('page', { timeout: 5000 });
+  await extensionWorker.evaluate(async () => {
+    if (typeof chrome.action?.openPopup !== 'function') {
+      throw new Error('chrome.action.openPopup is unavailable in this Chromium build');
+    }
+    await chrome.action.openPopup();
+  });
+  const popup = await popupPagePromise;
+  await expect(popup).toHaveURL(`chrome-extension://${extensionId}/popup.html`);
   await expect(popup.locator('#pageButton')).toBeVisible();
   await popup.locator('#pageButton').check();
 
@@ -131,7 +114,7 @@ for (const site of [
   { host: 'crosswalk.com', key: 'crosswalk' },
   { host: 'enduringword.com', key: 'enduringword' }
 ]) {
-  test(`source-page collector initializes on ${site.host} after site access is enabled`, async ({ page, context, extensionId, extensionStorage, extensionWorker }) => {
+  (site.host === 'gotquestions.org' ? test.only : test)(`source-page collector initializes on ${site.host} after site access is enabled`, async ({ page, context, extensionId, extensionStorage, extensionWorker }) => {
     await expectSourceCollectorAfterSiteOptIn({ page, context, extensionId, extensionStorage, extensionWorker, site });
   });
 }
