@@ -404,3 +404,10 @@ jobs:
 
           echo "$description"
 
+  cancel-sibling-runs:
+    name: Cancel sibling runs after failure
+    if: ${{ failure() }}
+    needs: [change-detection, verse-context-regression, browser-e2e, browser-e2e-features, browser-e2e-summary]
+    permissions:
+      actions: write
+    uses: ./.github/workflows/cancel-sibling-runs-on-failure.yml
