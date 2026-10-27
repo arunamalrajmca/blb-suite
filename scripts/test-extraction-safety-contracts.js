@@ -86,6 +86,7 @@ try {
   // Extracted modules must expose their documented global registration objects
   // before content.js executes. Check the global API rather than internal bodies.
   const moduleContracts = [
+    ['extension/quoted-criteria-or-query.js', 'global.BLBQuotedCriteriaOrQuery ='],
     ['extension/single-word-selection-normalization.js', 'global.BLBSingleWordSelectionNormalization ='],
     ['extension/selection-marker-stripping.js', 'global.BLBSelectionMarkerStripping ='],
     ['extension/selection-text-normalization.js', 'global.BLBSelectionTextNormalization ='],
