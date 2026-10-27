@@ -1804,7 +1804,13 @@ const BLB_BACKGROUND_CONTENT_SCRIPT_ACTIVATION = globalThis.BLBBackgroundContent
   contentScriptFilesForTab,
   ensureRuntimeContentScriptRegistered,
   normalizeSiteHostname,
-  hostnameFromTabUrl,
+  // The selection-context module exports its own hostnameFromTabUrl helper
+  // later in this file. Avoid reading that lexical binding during startup,
+  // before the module is initialized.
+  hostnameFromTabUrl: url => {
+    try { return normalizeSiteHostname(new URL(String(url || '')).hostname); }
+    catch (_) { return ''; }
+  },
   scriptTaggerContentScriptFiles: SCRIPT_TAGGER_CONTENT_SCRIPT_FILES
 });
 
