@@ -164,7 +164,8 @@ const featureSpecs = [
 const ignoredNonRuntime = path =>
   /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/))/.test(path)
   || /^(?:store-assets\/|assets\/store\/|extension\/(?:icons|store-assets)\/)/.test(path)
-  || /^extension\/(?:Tutorial\.html|Tutorial\.js|THIRD-PARTY-NOTICES\.txt)$/.test(path);
+  || /^extension\/(?:Tutorial\.html|Tutorial\.js|THIRD-PARTY-NOTICES\.txt)$/.test(path)
+  || /^scripts\/(?:classify-ci-changes|select-browser-specs)\.mjs$/.test(path);
 
 let unknownRuntime = false;
 const hasRuntimeChangeAlongsideBrowserSpec = changed.some(path =>
