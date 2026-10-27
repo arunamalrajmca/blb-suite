@@ -92,7 +92,40 @@ async function expectSourceCollectorAfterSiteOptIn({ page, extensionStorage, ext
   ), { timeout: 10000 }).toBe(true);
 
   const button = page.locator(`#blb-suite-${site.key}-multiverse`);
-  await expect(button).toBeVisible({ timeout: 10000 });
+  try {
+    await expect(button).toBeVisible({ timeout: 10000 });
+  } catch (error) {
+    // Content scripts run in Chrome's isolated world, so page.evaluate() cannot
+    // see their window markers. Inspect that same isolated world via scripting
+    // to distinguish injection, module loading, and collector initialization.
+    const diagnostics = await extensionWorker.evaluate(async ({ host, expectedButtonId }) => {
+      const url = `https://www.${host}/fixture-article.html`;
+      const tabs = await chrome.tabs.query({ url });
+      const stored = await chrome.storage.local.get({ masterEnabled: true });
+      const permissions = await chrome.permissions.getAll();
+      if (!tabs[0]?.id) return { tabFound: false, stored, permissions };
+      try {
+        const [injected] = await chrome.scripting.executeScript({
+          target: { tabId: tabs[0].id },
+          world: 'ISOLATED',
+          func: ({ expectedButtonId }) => ({
+            fileExecuted: window.__blbSuiteContentScriptFileExecutedV3 === true,
+            initializerEntered: window.__blbSuiteContentScriptLoadedV2 === true,
+            collectorModuleType: typeof globalThis.BLBSourcePageCollectorModule,
+            buttonPresent: Boolean(document.getElementById(expectedButtonId)),
+            readyState: document.readyState,
+            hostname: location.hostname,
+            pathname: location.pathname
+          }),
+          args: [{ expectedButtonId }]
+        });
+        return { tabFound: true, stored, permissions, isolatedWorld: injected?.result };
+      } catch (injectionError) {
+        return { tabFound: true, stored, permissions, diagnosticInjectionError: String(injectionError) };
+      }
+    }, { host: site.host, expectedButtonId: `blb-suite-${site.key}-multiverse` });
+    throw new Error(`${error.message}\nGotQuestions collector diagnostics: ${JSON.stringify(diagnostics)}`);
+  }
   await expect(button).toHaveText('Open Bible References in BLB');
 }
 for (const site of [
