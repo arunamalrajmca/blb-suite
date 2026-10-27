@@ -71,6 +71,10 @@ if (!importMatch) {
 } else {
   const imports = [...importMatch[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(match => match[1]);
   const required = [
+    'multiverse-reference-helpers.js',
+    'study-session-export.js',
+    'selection-text-helpers.js',
+    'omnibox-search-helpers.js',
     'regex-patterns.js',
     'kjv-corpus-word-index.js',
     'kjv-corpus-word-verse-index.js',
