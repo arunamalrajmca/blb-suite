@@ -3030,6 +3030,7 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'blb-draggable-button.js',
   'blb-parse-popup.js',
   'blb-verse-link-navigation.js',
+  'blb-page-selection-button.js',
   'multiverse-tool-view.js',
   'content.js'
 ];
