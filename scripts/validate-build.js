@@ -129,6 +129,16 @@ if (crossFeatureContractTest.status !== 0) {
   pass('cross-feature integration contracts validated');
 }
 
+const omniboxNormalizationTest = cp.spawnSync(process.execPath, [
+  path.join(__dirname, 'test-omnibox-search-normalization.js')
+], { encoding: 'utf8' });
+if (omniboxNormalizationTest.stdout) process.stdout.write(omniboxNormalizationTest.stdout);
+if (omniboxNormalizationTest.status !== 0) {
+  fail('Omnibox search normalization tests failed\\n' + (omniboxNormalizationTest.stderr || ''));
+} else {
+  pass('Omnibox search normalization contracts validated');
+}
+
 const extractionSafetyTest = cp.spawnSync(process.execPath, [
   path.join(__dirname, 'test-extraction-safety-contracts.js')
 ], { encoding: 'utf8' });
