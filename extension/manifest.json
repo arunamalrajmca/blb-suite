@@ -71,6 +71,7 @@
         "multiverse-copy.js",
         "study-reference-capture.js",
         "criteria-search-navigation.js",
+        "blb-auto-hyperlinker.js",
         "content.js"
       ],
       "run_at": "document_start"

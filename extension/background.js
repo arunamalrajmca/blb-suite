@@ -3025,6 +3025,7 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'multiverse-copy.js',
   'study-reference-capture.js',
   'criteria-search-navigation.js',
+  'blb-auto-hyperlinker.js',
   'content.js'
 ];
 
