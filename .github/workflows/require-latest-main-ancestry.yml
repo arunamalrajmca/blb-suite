@@ -1,9 +1,6 @@
 name: Require latest main ancestry
 
 on:
-  push:
-    branches:
-      - main
   pull_request:
     branches:
       - main
