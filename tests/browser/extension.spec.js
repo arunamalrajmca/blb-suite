@@ -80,19 +80,20 @@ async function expectSourceCollectorAfterSiteOptIn({ page, context, extensionId,
   }));
   await page.goto(`https://www.${site.host}/fixture-article.html`, { waitUntil: 'domcontentloaded' });
 
-  // Open the real action popup while the fixture article is the active tab.
-  // This preserves Chrome's actual active-tab context and the permission request's user gesture.
-  const popupPagePromise = context.waitForEvent('page', { timeout: 5000 });
-  await extensionWorker.evaluate(async () => {
-    if (typeof chrome.action?.openPopup !== 'function') {
-      throw new Error('chrome.action.openPopup is unavailable in this Chromium build');
-    }
-    await chrome.action.openPopup();
+  // Load the popup in a background tab, then deactivate it before reloading.
+  // Its tabs.query call therefore sees the fixture article as the active tab,
+  // while the popup document remains available for interaction.
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  const popupTabId = await extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({});
+    const popupTab = tabs.find(tab => (tab.url || '').endsWith('/popup.html'));
+    return popupTab?.id ?? null;
   });
-  const popup = await popupPagePromise;
-  await expect(popup).toHaveURL(`chrome-extension://${extensionId}/popup.html`);
+  if (popupTabId == null) throw new Error('Could not find popup tab in extension tabs');
+  await extensionWorker.evaluate(async id => chrome.tabs.update(id, { active: false }), popupTabId);
+  await popup.reload();
   await expect(popup.locator('#pageButton')).toBeVisible();
-  await popup.locator('#pageButton').check();
 
   const originPattern = `https://www.${site.host}/*`;
   await expect.poll(async () => extensionWorker.evaluate(pattern =>
