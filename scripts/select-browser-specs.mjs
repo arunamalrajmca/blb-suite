@@ -37,9 +37,9 @@ const specs = new Set();
 // Shared-core, test-infrastructure, package, manifest, and unknown production
 // changes remain conservative and may require the full applicable browser suite.
 const forceFull = alwaysFull || changed.some(path =>
-  path.startsWith("scripts/")
+  (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs)\.mjs$/.test(path))
   || path.startsWith("regression-suite/")
-  || (path.startsWith("tests/") && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path))
+  || (path.startsWith("tests/") && !/^tests\/selector\//.test(path) && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path))
   || path === "package.json"
   || path === "package-lock.json"
   || path === "playwright.config.js"
