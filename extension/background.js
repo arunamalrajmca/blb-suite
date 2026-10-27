@@ -1,4 +1,4 @@
-importScripts('omnibox-search-normalization.js', 'regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js');
+importScripts('omnibox-boolean-operators.js', 'omnibox-search-normalization.js', 'regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js');
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
@@ -1967,78 +1967,11 @@ async function seedStudyTestData() {
 }
 
 function normalizeBooleanOperatorsOutsideQuotes(value) {
-  const text = String(value || '');
-  let result = '';
-  let quote = '';
-  let escaped = false;
-  for (let i = 0; i < text.length;) {
-    const ch = text[i];
-    if (escaped) {
-      result += ch;
-      escaped = false;
-      i++;
-      continue;
-    }
-    if (ch === '\\') {
-      result += ch;
-      escaped = true;
-      i++;
-      continue;
-    }
-    if (quote) {
-      result += ch;
-      if (ch === quote) quote = '';
-      i++;
-      continue;
-    }
-    // An apostrophe inside a word (for example LORD'S) is not a
-    // quote delimiter; otherwise it can hide a later Boolean operator.
-    const isWordApostrophe = ch === "'" &&
-      i > 0 && i + 1 < text.length &&
-      /[A-Za-z0-9]/.test(text[i - 1]) &&
-      /[A-Za-z0-9]/.test(text[i + 1]);
-    if ((ch === '"' || ch === "'") && !isWordApostrophe) {
-      quote = ch;
-      result += ch;
-      i++;
-      continue;
-    }
-    if (/[A-Za-z]/.test(ch) && (i === 0 || !/[A-Za-z0-9_]/.test(text[i - 1]))) {
-      const match = text.slice(i).match(/^(and|not|or)(?![A-Za-z0-9_])/i);
-      if (match) {
-        result += match[0].toUpperCase();
-        i += match[0].length;
-        continue;
-      }
-    }
-    result += ch;
-    i++;
-  }
-  return result;
+  return BLBOmniboxBooleanOperators.normalizeBooleanOperatorsOutsideQuotes(value);
 }
 
 function hasUnquotedBooleanOperator(value) {
-  const text = String(value || '');
-  let quote = '';
-  let escaped = false;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if (escaped) { escaped = false; continue; }
-    if (ch === '\\') { escaped = true; continue; }
-    if (quote) { if (ch === quote) quote = ''; continue; }
-    // Do not interpret possessive apostrophes as opening quotes:
-    // LORD'S AND GOD must still detect the unquoted AND operator.
-    const isWordApostrophe = ch === "'" &&
-      i > 0 && i + 1 < text.length &&
-      /[A-Za-z0-9]/.test(text[i - 1]) &&
-      /[A-Za-z0-9]/.test(text[i + 1]);
-    if ((ch === '"' || ch === "'") && !isWordApostrophe) { quote = ch; continue; }
-    if (/[A-Za-z]/.test(ch) && (i === 0 || !/[A-Za-z0-9_]/.test(text[i - 1]))) {
-      const match = text.slice(i).match(/^(AND|NOT|OR)(?![A-Za-z0-9_])/i);
-      if (match) return true;
-    }
-  }
-  return false;
+  return BLBOmniboxBooleanOperators.hasUnquotedBooleanOperator(value);
 }
 
 function normalizeOmniboxSearchPhrase(value) {
