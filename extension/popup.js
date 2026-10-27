@@ -320,6 +320,7 @@ async function syncSelectedTopic(topic) {
 
 async function loadSelectedTopic() {
   const data = await chrome.storage.local.get({[SELECTED_TOPIC_STORAGE_KEY]: ''});
+  if (topicInputEdited) return;
   topicInput.value = titleCase(data[SELECTED_TOPIC_STORAGE_KEY] || '');
 }
 
@@ -637,10 +638,12 @@ async function refreshStudyState() {
   if (!response?.ok) return;
   studyState = response;
   const globallySelectedTopic = titleCase(selectedData[SELECTED_TOPIC_STORAGE_KEY] || '');
-  if (globallySelectedTopic) {
+  // Initialization can overlap with a fast user edit. Saved state must not
+  // overwrite text the user has already entered into the topic field.
+  if (!topicInputEdited && globallySelectedTopic) {
     topicInput.value = globallySelectedTopic;
     noteInput.value = '';
-  } else if (studyState.pausedReason === 'inactivity' && studyState.pausedTopic) {
+  } else if (!topicInputEdited && studyState.pausedReason === 'inactivity' && studyState.pausedTopic) {
     topicInput.value = titleCase(studyState.pausedTopic);
     noteInput.value = '';
   }
@@ -948,6 +951,8 @@ async function clearTopicSelectionInput() {
 }
 
 let topicPersistTimer = null;
+// Preserve input entered while asynchronous popup initialization is still reading saved state.
+let topicInputEdited = false;
 
 function queueTopicPersistence() {
   const topic = titleCase(topicInput.value);
@@ -975,6 +980,7 @@ async function persistTopicValue(topic) {
 }
 
 topicInput.addEventListener('input', async () => {
+  topicInputEdited = true;
   clearActionStatus();
   if (!topicInput.value.trim() && studyState.recording) {
     await clearTopicSelectionInput();

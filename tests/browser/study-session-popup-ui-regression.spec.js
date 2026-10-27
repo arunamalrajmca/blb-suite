@@ -18,6 +18,7 @@ test('Study Sessions popup starts recording, saves a note, and stops without los
   ).join(' ');
 
   await page.locator('#studyTopic').fill(topic);
+  await expect(page.locator('#startTopic')).toBeEnabled();
   await page.locator('#startTopic').click();
   await expect(page.locator('#studyStatus')).toContainText('Recording started');
 
@@ -64,6 +65,7 @@ test('Study Sessions popup pauses and restarts the selected recording without cr
   ).join(' ');
 
   await page.locator('#studyTopic').fill(topic);
+  await expect(page.locator('#startTopic')).toBeEnabled();
   await page.locator('#startTopic').click();
   await expect(page.locator('#studyStatus')).toContainText('Recording started');
 
