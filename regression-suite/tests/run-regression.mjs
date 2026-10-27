@@ -592,6 +592,17 @@ test('Webster 1828 path remains wired', () => {
   assert(content.includes('BLBWebsterCollectorModule') && content.includes('BLBWebsterCollector'), 'Webster module initialization and master-setting refresh hook missing');
   assert(bg.includes('blbSuiteOpenWebsterMultiVerse'), 'Webster MultiVerse handler missing');
 });
+test('MultiVerse native-copy enhancement remains wired', () => {
+  const content = read('content.js'), copyModule = read('multiverse-copy.js');
+  const manifest = JSON.parse(read('manifest.json')), bg = read('background.js');
+  assert(content.includes('BLBMultiVerseCopyModule?.initialize'), 'content script does not initialize MultiVerse copy module');
+  assert(copyModule.includes('#copyButton, #copyByVerseButton'), 'native Copy buttons are not targeted');
+  assert(copyModule.includes('nativeMultiVerseCopyPending'), 'copy enhancement is not gated to BLB native Copy-button clicks');
+  assert(copyModule.includes('setData("text/html"'), 'HTML clipboard payload is missing');
+  const entry = (manifest.content_scripts || []).find(item => (item.js || []).includes('content.js'));
+  assert(entry && entry.js.indexOf('multiverse-copy.js') < entry.js.indexOf('content.js'), 'manifest must load MultiVerse copy module before content.js');
+  assert(bg.includes("'multiverse-copy.js'"), 'runtime injection list must include MultiVerse copy module');
+});
 test('Source-page Bible-reference collector remains wired', () => {
   const content = read('content.js'), collector = read('source-page-collector.js');
   const manifest = JSON.parse(read('manifest.json')), bg = read('background.js');
