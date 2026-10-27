@@ -1,4 +1,14 @@
+// Startup diagnostics retained only for the active service-worker lifetime.
+try {
+  globalThis.__blbSuiteBackgroundStartupStageV1 = 'before-importScripts';
+  self.addEventListener('error', event => {
+    const detail = String(event?.message || event?.error?.stack || event?.error || 'unknown background error');
+    globalThis.__blbSuiteBackgroundStartupErrorV1 = detail.slice(0, 1600);
+    console.error('[BLB background startup error]', detail);
+  });
+} catch (_) {}
 importScripts('regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js', 'background-host-policy.js', 'background-content-script-registry.js', 'background-content-script-activation.js', 'background-multiverse-tracking.js', 'background-blb-destination-manager.js', 'background-study-session-model.js', 'background-study-session-storage.js', 'background-study-session-export.js', 'background-study-pdf-export.js', 'background-omnibox-search.js', 'background-bible-input.js', 'background-pdf-reference-extractor.js', 'background-selection-context-menu.js', 'background-kjv-selection-normalization.js');
+globalThis.__blbSuiteBackgroundStartupStageV1 = 'after-importScripts';
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
@@ -75,6 +85,7 @@ async function notifyStudyUiChanged() {
   try { await chrome.runtime.sendMessage({type:'blbSuiteStudyUiChanged'}); } catch (_) {}
 }
 
+globalThis.__blbSuiteBackgroundStartupStageV1 = 'after-core-module-initialization';
 const { saveStudySessions, getStudySessions } = globalThis.BLBBackgroundStudySessionStorageModule.create({
   chromeApi:chrome,
   sanitizeStudySessions,
@@ -1380,6 +1391,7 @@ async function handleOmniboxCommand(text, disposition) {
   return handleBCommand(text, disposition || 'currentTab');
 }
 chrome.omnibox.onInputEntered.addListener(handleOmniboxCommand);
+globalThis.__blbSuiteBackgroundStartupStageV1 = 'after-omnibox-listener';
 
 // Canonicalize BLB destination URLs before checking open tabs. BLB may normalize
 // trailing slashes, hashes, or query presentation after navigation, so comparing
@@ -1608,6 +1620,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
+globalThis.__blbSuiteBackgroundStartupStageV1 = 'after-tab-lifecycle-listeners';
 // ScriptTagger has a stricter destination identity than the general BLB
 // manager: verse links must never collapse onto another verse's tab. Keep its
 // own key namespace, but serialize the complete lookup/create operation using
@@ -1799,6 +1812,7 @@ async function ensureContentScriptInTab(tabId) {
   return BLB_BACKGROUND_CONTENT_SCRIPT_ACTIVATION.ensureContentScriptInTab(tabId);
 }
 
+globalThis.__blbSuiteBackgroundStartupStageV1 = 'before-runtime-message-listeners';
 function isTrustedExtensionSender(sender) {
   return !!sender && sender.id === chrome.runtime.id;
 }
@@ -1859,6 +1873,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 // Expose listener registration state for browser-test diagnostics only.
 globalThis.__blbSuiteQueuePostListenerRegisteredV1 = true;
+globalThis.__blbSuiteBackgroundStartupStageV1 = 'after-multiverse-queue-listener';
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;
@@ -2422,6 +2437,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
 });
 globalThis.__blbSuiteAsyncMessageRouterRegisteredV1 = true;
+globalThis.__blbSuiteBackgroundStartupStageV1 = 'after-async-message-router';
 
 // Keep the original BLB /net fallback as a fast main-frame redirect.
 const dynamicRules = [
