@@ -68,6 +68,8 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
       - name: Validate extension build and module contracts
         run: node scripts/validate-build.js
+      - name: Run browser selector decision tests
+        run: npm run test:selector
       - name: Run deterministic regression gate — package
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
