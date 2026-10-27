@@ -14,6 +14,7 @@ const contentScript = read('extension/content.js');
 const background = read('extension/background.js');
 const popup = read('extension/popup.js');
 const handoff = read('extension/multiverse-post.js');
+const multiverseHandoffModule = read('extension/multiverse-handoff.js');
 const manifest = JSON.parse(read('extension/manifest.json'));
 
 function has(source, pattern, description) {
@@ -41,7 +42,7 @@ try {
 
   // MultiVerse page handoff contract: read refs, verify the rendered input,
   // consume only after verification, and retain the background-owned POST slot.
-  ordered(contentScript, [
+  ordered(multiverseHandoffModule, [
     [/blbSuiteGetPendingMultiVerseRefs/, 'pending-reference read'],
     [/const actual\s*=\s*normalizeSelectionText\(/, 'rendered input verification'],
     [/blbSuiteConsumePendingMultiVerseRefs/, 'pending-reference consume']
