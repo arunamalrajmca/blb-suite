@@ -27,6 +27,7 @@ on:
       - 'playwright.config.js'
       - 'playwright.config.ts'
       - '.github/workflows/cancel-sibling-runs-on-failure.yml'
+      - '.github/workflows/browser-e2e-group-b.yml'
   workflow_dispatch:
 
 concurrency:
