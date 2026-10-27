@@ -96,36 +96,36 @@ jobs:
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
       - name: Run source URL parser regressions
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/redirect-source-url-patterns.spec.js') }}
         run: npx playwright test tests/browser/redirect-source-url-patterns.spec.js
 
       - name: Run omnibox reference boundary regressions
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/omnibox-boolean-operators.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/omnibox-boolean-operators.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/omnibox-boolean-operators.spec.js') }}
         run: npx playwright test tests/browser/omnibox-boolean-operators.spec.js --grep 'omnibox reference boundaries'
       - name: Run source URL browser redirect regressions
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-source-url-browser.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-source-url-browser.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/redirect-source-url-browser.spec.js') }}
         run: npx playwright test tests/browser/redirect-source-url-browser.spec.js
       - name: Run Group A
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/e2e-core-user-actions.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/e2e-core-user-actions.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/e2e-core-user-actions.spec.js') }}
         run: npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep 'Alt.B command path opens an exact selected Bible reference'
       - name: Run King's Bible collector behavior regressions
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/kings-bible-collector-behavior.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/kings-bible-collector-behavior.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/kings-bible-collector-behavior.spec.js') }}
         run: npx playwright test tests/browser/kings-bible-collector-behavior.spec.js
 
       - name: Run popup site-feature defaults regressions
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/site-feature-defaults.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/site-feature-defaults.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/site-feature-defaults.spec.js') }}
         run: npx playwright test tests/browser/site-feature-defaults.spec.js
 
       - name: Run Study Sessions popup UI regressions
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/study-session-popup-ui-regression.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/study-session-popup-ui-regression.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/study-session-popup-ui-regression.spec.js') }}
         run: npx playwright test tests/browser/study-session-popup-ui-regression.spec.js
 
       - name: Run Study Sessions lifecycle regressions
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/feature-lifecycle-regressions.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/feature-lifecycle-regressions.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/feature-lifecycle-regressions.spec.js') }}
         run: npx playwright test tests/browser/feature-lifecycle-regressions.spec.js
 
       - name: Run Study Sessions backup and restore regressions
-        if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/study-backup-restore.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/study-backup-restore.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/study-backup-restore.spec.js') }}
         run: npx playwright test tests/browser/study-backup-restore.spec.js
 
       # Keep the Facebook-style DOM regression in this targeted suite so range-context fixes are exercised on branch pushes.
