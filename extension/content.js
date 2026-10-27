@@ -1770,19 +1770,24 @@ function handleDoubleClickBlb(event) {
         );
         const isPrefixedBookName=hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
         const isBookName=!hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
-        // For explicit verse cues, preserve the physical event target. The generic caret-target helper can return a nearby/stale element, which prevents the post-level resolver from finding the containing message. Other gestures retain the existing target selection behavior.
-        const cueElement = [event.target instanceof Element ? event.target : event.target?.parentElement,
-          getDoubleClickTargetElement(event)].find(candidate =>
-            /^(?:v|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
-          );
-        const contextualTarget=isVerseContextWord
-          ? (cueElement || (event.target instanceof Element ? event.target : (event.target?.parentElement || event.target)))
-          : (getDoubleClickTargetElement(event)||event.target);
-
-        // A suffix such as "Peter" or "Sam" can be part of a numbered book
+        // A suffix such as "Peter" or "Cor" can be part of a numbered book
         // name. Only enter contextual matching when the complete nearby prefix
         // resolves to a real Bible book; arbitrary words remain fast-rejected.
         const possibleNumberedBookSuffix=/^(?:Sam(?:uel)?|Kings|Kgs?|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)$/i.test(selection);
+
+        // For explicit verse cues and numbered-book suffixes, preserve the
+        // physical event target. The generic caret-target helper can return a
+        // nearby/stale element on pages with inline citation spans, which makes
+        // the contextual resolver inspect an unrelated paragraph/reference.
+        const physicalTarget = event.target instanceof Element
+          ? event.target
+          : (event.target?.parentElement || event.target);
+        const cueElement = [physicalTarget, getDoubleClickTargetElement(event)].find(candidate =>
+          /^(?:v|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
+        );
+        const contextualTarget = (isVerseContextWord || possibleNumberedBookSuffix)
+          ? (cueElement || physicalTarget)
+          : (getDoubleClickTargetElement(event) || event.target);
         const isRomanBookPrefix=/^(?:I|II|III)$/i.test(selection);
         let hasValidNearbyBookPrefix=false;
         let hasValidNearbyRomanBookPrefix=false;
