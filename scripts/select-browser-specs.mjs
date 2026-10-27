@@ -64,6 +64,10 @@ const featureSpecs = [
     specs: ["tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-source-url-browser.spec.js", "tests/browser/redirect-hostnames.spec.js", "tests/browser/blb-non-kjv-redirect.spec.js"]
   },
   {
+    paths: ["extension/source-bible-redirect.js"],
+    specs: ["tests/browser/redirect-source-url-browser.spec.js", "tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-hostnames.spec.js"]
+  },
+  {
     paths: ["extension/redirect-scripttagger.js"],
     specs: ["tests/browser/scripttagger-global-injection.spec.js"]
   },
