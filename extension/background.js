@@ -1,4 +1,4 @@
-importScripts('selection-text-normalization.js', 'omnibox-gibberish-filter.js', 'omnibox-boolean-operators.js', 'omnibox-search-normalization.js', 'regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js');
+importScripts('selection-marker-stripping.js', 'selection-text-normalization.js', 'omnibox-gibberish-filter.js', 'omnibox-boolean-operators.js', 'omnibox-search-normalization.js', 'regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js');
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
@@ -4322,19 +4322,7 @@ function normalizeSelectedScriptureText(selectionText) {
 }
 
 function stripLeadingSelectionMarkers(selectionText) {
-  let source = String(selectionText || '').trim();
-  let previous = '';
-  while (source && source !== previous) {
-    previous = source;
-    source = source.replace(/^(?:[*_~]+\s*)+/, '');
-      source = source.replace(/\s*(?:[*_~]+)+$/, '');
-    source = source.replace(/^(?:[•◦▪▫‣⁃·●○■□◆◇◉◌–—]\s*)+/, '');
-    source = source.replace(/^Verse\s+\d+\s*[.):-]\s*/i, '');
-    source = source.replace(/^(?:\d+|[A-HJ-Za-hj-z])[.):-]\s+(?=\S)/, '');
-    // Lowercase Roman-numeral outline markers only. Preserve uppercase I.
-    source = source.replace(/^(?:i|ii|iii|iv|v|vi|vii|viii|ix|x|xi|xii|xiii|xiv|xv|xvi|xvii|xviii|xix|xx)[.):-]\s+(?=\S)/, '');
-  }
-  return source.trim();
+  return globalThis.BLBSelectionMarkerStripping.stripLeadingSelectionMarkers(selectionText);
 }
 
 function isKjvVocabularySelection(selectionText) {
