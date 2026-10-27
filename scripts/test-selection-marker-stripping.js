@@ -4,10 +4,10 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
-const source = fs.readFileSync(path.join(__dirname, '../extension/selection-marker-stripping.js'), 'utf8');
+const source = fs.readFileSync(path.join(__dirname, '../extension/selection-text-helpers.js'), 'utf8');
 const context = { globalThis: {} };
 vm.runInNewContext(source, context, { filename: 'selection-marker-stripping.js' });
-const strip = context.globalThis.BLBSelectionMarkerStripping?.stripLeadingSelectionMarkers;
+const strip = context.globalThis.BLBSelectionTextHelpers?.stripLeadingSelectionMarkers;
 assert.equal(typeof strip, 'function', 'module must expose marker stripping');
 
 for (const [input, expected] of [
