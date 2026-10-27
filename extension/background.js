@@ -3026,6 +3026,7 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'study-reference-capture.js',
   'criteria-search-navigation.js',
   'blb-auto-hyperlinker.js',
+  'blb-passive-new-tab-targets.js',
   'content.js'
 ];
 
