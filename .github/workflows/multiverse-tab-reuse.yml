@@ -39,6 +39,7 @@ jobs:
     outputs:
       full_browser_suite: ${{ steps.select.outputs.full_browser_suite }}
       changed_specs: ${{ steps.select.outputs.changed_specs }}
+      changed_browser_specs: ${{ steps.select.outputs.changed_browser_specs }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -52,7 +53,7 @@ jobs:
   multiverse-tab-reuse:
     name: MultiVerse tab reuse and 22-batch persistence
     needs: change-detection
-    if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/multiverse-tab-reuse.spec.js') }}
+    if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/multiverse-tab-reuse.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/multiverse-tab-reuse.spec.js') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
