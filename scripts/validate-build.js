@@ -198,3 +198,13 @@ if (singleWordSelectionNormalizationTest.status !== 0) {
 } else {
   pass('single-word selection normalization contracts validated');
 }
+
+const studySessionExportTest = cp.spawnSync(process.execPath, [
+  path.join(__dirname, 'test-study-session-export.js')
+], { encoding: 'utf8' });
+if (studySessionExportTest.stdout) process.stdout.write(studySessionExportTest.stdout);
+if (studySessionExportTest.status !== 0) {
+  fail('Study Sessions export contract tests failed\\n' + (studySessionExportTest.stderr || ''));
+} else {
+  pass('Study Sessions export contracts validated');
+}
