@@ -65,6 +65,24 @@ test('page-selection module load order is explicit in manifest and runtime injec
   assert(read('blb-page-selection-button.js').includes('global.BLBPageSelectionButtonModule = { initialize }'), 'page-selection module registration missing');
 });
 
+test('MultiVerse hand-off module loads before content and retains pending-reference safeguards', () => {
+  const manifest = JSON.parse(read('manifest.json'));
+  const scripts = manifest.content_scripts.flatMap(item => item.js || []);
+  const background = read('background.js');
+  const runtimeStart = background.indexOf('const BLB_CONTENT_SCRIPT_FILES = [');
+  const runtimeEnd = background.indexOf('\n];', runtimeStart);
+  assert(runtimeStart >= 0 && runtimeEnd > runtimeStart, 'runtime content-script list missing');
+  const runtimeFiles = background.slice(runtimeStart, runtimeEnd).replace(/\/\/.*$/gm, '');
+  for (const list of [scripts.join('\n'), runtimeFiles]) {
+    assert(list.includes('multiverse-handoff.js'), 'MultiVerse hand-off module missing from script list');
+    assert(list.indexOf('multiverse-handoff.js') < list.indexOf('content.js'), 'MultiVerse hand-off must load before content.js');
+  }
+  const handoff = read('multiverse-handoff.js');
+  assert(handoff.includes('global.BLBMultiVerseHandoffModule = { initialize }'), 'MultiVerse hand-off module registration missing');
+  assert(handoff.includes('blbSuiteGetPendingMultiVerseRefs') && handoff.includes('blbSuiteConsumePendingMultiVerseRefs'), 'pending MultiVerse reference hand-off is incomplete');
+  assert(handoff.includes('blbSuiteMultiVersePending') && handoff.includes('waitForExpectedMultiVerseResults'), 'MultiVerse page must remain hidden until expected results are visible');
+});
+
 test('manifest-referenced files exist', () => {
   const m = JSON.parse(read('manifest.json'));
   const refs = [m.background?.service_worker, m.options_page, ...(m.content_scripts||[]).flatMap(x=>x.js||[]), ...Object.values(m.icons||{}), m.action?.default_popup].filter(Boolean);
