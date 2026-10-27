@@ -512,7 +512,7 @@ test('BLB native-event interception remains explicitly scoped', () => {
   assert(nowrapStart >= 0 && nowrapEnd > nowrapStart, 'nowrap click handler missing from verse-link navigation module');
   const nowrap = verseNavigation.slice(nowrapStart, nowrapEnd + 8);
   assert(nowrap.includes('if (!link) return'), 'nowrap click override must reject unrelated clicks');
-  assert(nowrap.includes('isModifiedLinkActivation(event)'), 'nowrap override must preserve modified-click behavior');
+  assert(verseNavigation.includes('if (!isSuiteEnabledNow() || isModifiedLinkActivation(event)) return;'), 'nowrap override must preserve master-switch and modified-click behavior');
   assert(nowrap.includes('event.preventDefault()') && nowrap.includes('event.stopImmediatePropagation()'), 'nowrap override must preserve scoped native-event interception');
 
   const selectionStart = content.indexOf('function handleBlbPageSelectionMouseDown');
