@@ -168,3 +168,13 @@ if (extractionSafetyTest.status !== 0) {
 } else {
   pass('manifest, dependency order, and module registration safety validated');
 }
+
+const selectionTextNormalizationTest = cp.spawnSync(process.execPath, [
+  path.join(__dirname, 'test-selection-text-normalization.js')
+], { encoding: 'utf8' });
+if (selectionTextNormalizationTest.stdout) process.stdout.write(selectionTextNormalizationTest.stdout);
+if (selectionTextNormalizationTest.status !== 0) {
+  fail('selection-text normalization tests failed\\n' + (selectionTextNormalizationTest.stderr || ''));
+} else {
+  pass('selection-text normalization contracts validated');
+}

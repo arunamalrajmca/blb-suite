@@ -86,6 +86,7 @@ try {
   // Extracted modules must expose their documented global registration objects
   // before content.js executes. Check the global API rather than internal bodies.
   const moduleContracts = [
+    ['extension/selection-text-normalization.js', 'global.BLBSelectionTextNormalization ='],
     ['extension/omnibox-gibberish-filter.js', 'global.BLBOmniboxGibberishFilter ='],
     ['extension/omnibox-boolean-operators.js', 'global.BLBOmniboxBooleanOperators ='],
     ['extension/omnibox-search-normalization.js', 'global.BLBOmniboxSearchNormalization ='],
