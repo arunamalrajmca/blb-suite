@@ -61,6 +61,10 @@ const forceFull = alwaysFull || changed.some(path =>
 // coverage when the implementation is genuinely feature-scoped.
 const featureSpecs = [
   {
+    paths: ["extension/kjv-case-sensitive-words.js"],
+    specs: ["tests/browser/case-sensitive-routing-behavior.spec.js"]
+  },
+  {
     paths: ["extension/omnibox-search-helpers.js"],
     specs: ["tests/browser/omnibox-boolean-operators.spec.js"]
   },
