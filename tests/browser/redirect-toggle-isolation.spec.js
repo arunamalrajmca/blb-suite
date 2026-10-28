@@ -62,18 +62,25 @@ test.describe('independent site feature permissions and global redirects', () =>
     ]);
     expect(await hasSiteFeatureHostAccess('https://sagacityweb.com/*')).toBe(true);
   });
-  test('turning either site feature ON or OFF applies the paired preference', () => {
-    const start = popup.indexOf('async function setSiteFeaturesEnabled(on) {');
-    const end = popup.indexOf("\nasync function handlePageButtonToggle(on)", start);
+
+  test('each site feature toggle routes through the independent permission handler', () => {
+    const start = popup.indexOf('async function setIndependentSiteFeature(feature, on) {');
+    const end = popup.indexOf('\nasync function handlePageButtonToggle(on)', start);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const handler = popup.slice(start, end);
-    expect(handler).toContain('setPageButton(!!on)');
-    expect(handler).toContain('setDoubleClick(!!on)');
-    expect(popup.slice(popup.indexOf('async function handlePageButtonToggle(on) {'), popup.indexOf("\ndocument.getElementById('pageButton').addEventListener")))
-      .toContain('setSiteFeaturesEnabled(on)');
-    expect(popup.slice(popup.indexOf('async function handleDoubleClickToggle(on) {'), popup.indexOf("\ndocument.getElementById('pageButton').addEventListener")))
-      .toContain('setSiteFeaturesEnabled(on)');
+    expect(handler).toContain("setPageButton(!!on)");
+    expect(handler).toContain("setDoubleClick(!!on)");
+    expect(handler).toContain("pinSiteFeatureChoice(feature, otherFeatureEnabled)");
+
+    const pageHandlerStart = popup.indexOf('async function handlePageButtonToggle(on) {');
+    const doubleHandlerStart = popup.indexOf('async function handleDoubleClickToggle(on) {');
+    const listenerStart = popup.indexOf("\ndocument.getElementById('pageButton').addEventListener", doubleHandlerStart);
+    expect(pageHandlerStart).toBeGreaterThanOrEqual(0);
+    expect(doubleHandlerStart).toBeGreaterThan(pageHandlerStart);
+    expect(listenerStart).toBeGreaterThan(doubleHandlerStart);
+    expect(popup.slice(pageHandlerStart, doubleHandlerStart)).toContain("setIndependentSiteFeature('pageButton', on)");
+    expect(popup.slice(doubleHandlerStart, listenerStart)).toContain("setIndependentSiteFeature('doubleClick', on)");
   });
 
   test('existing broad permission is reused without requesting a redundant site grant', async () => {
