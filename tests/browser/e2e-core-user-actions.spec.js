@@ -621,7 +621,7 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
     el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;text-align:start;';
     // Match the real-world DOM: the citation is plain text in one parent,
     // followed by a nested, focusable "See less" control.
-    el.appendChild(document.createTextNode('Romans 10:9, 10'));
+    el.appendChild(document.createTextNode('Romans 10:9,10'));
     const seeLess = document.createElement('div');
     seeLess.className = 'x1i10hfl xjbqb8w x1ejq31n x18oe1m7 x1sy0etr xstzfhl x972fbf x10w94by x1qhh985 x14e42zd x9f619 x1ypdohk xt0psk2 x3ct3a4 xdj266r x14z9mp xat24cr x1lziwak xexx8yu xyri2b2 x18d9i69 x1c1uobl x16tdsg8 x1hl2dhg xggy1nq x1a2a7pz xkrqix3 x1sur9pj xzsf02u x1s688f';
     seeLess.setAttribute('role', 'button');
