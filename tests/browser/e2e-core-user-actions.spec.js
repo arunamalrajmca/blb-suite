@@ -467,7 +467,9 @@ test('Double-Click on numbered-list labels maps book numbers and ignores serials
     wrap.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
     for (const [number, text, id] of cases) {
       const row = document.createElement('p');
-      row.innerHTML = '<strong><span id="' + id + '">' + number + '.</span></strong> ' + text;
+      // Keep the list punctuation adjacent but outside the selectable
+      // number token, as native double-click word selection normally does.
+      row.innerHTML = '<strong><span id="' + id + '">' + number + '</span>.</strong> ' + text;
       wrap.appendChild(row);
     }
 
