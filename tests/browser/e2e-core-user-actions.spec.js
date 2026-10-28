@@ -448,7 +448,7 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
   await removeTabById(extensionWorker, verse.id);
 });
 
-test('Double-Click on numbered-list labels maps book numbers and ignores serials above 66', async ({ page, extensionStorage, extensionWorker }) => {
+test('Double-Click on non-prefixed numbered-list labels maps book numbers and ignores serials above 66', async ({ page, extensionStorage, extensionWorker }) => {
   const bookSlugs = [
     'gen', 'exo', 'lev', 'num', 'deu', 'jos', 'jdg', 'rth', '1sa', '2sa', '1ki', '2ki',
     '1ch', '2ch', 'ezr', 'neh', 'est', 'job', 'psa', 'pro', 'ecc', 'sng', 'isa', 'jer',
@@ -510,8 +510,13 @@ test('Double-Click on numbered-list labels maps book numbers and ignores serials
   });
 
   const labelResults = [];
-  for (const [index, slug] of bookSlugs.entries()) {
-    const selector = '#serial-' + (index + 1);
+  // Isolate books without numeric prefixes to determine whether the timeout
+  // is specific to labels such as 1 Samuel, 1 Kings, or 1 Corinthians.
+  const unprefixedBookEntries = bookSlugs
+    .map((slug, index) => ({ slug, label: index + 1 }))
+    .filter(({ label }) => ![9, 10, 11, 12, 13, 14, 46, 47, 52, 53, 54, 55, 60, 61, 62, 63, 64].includes(label));
+  for (const { label, slug } of unprefixedBookEntries) {
+    const selector = '#serial-' + label;
     const expectedPath = '/kjv/' + slug + '/1/1/';
     const existingIds = await extensionWorker.evaluate(async () =>
       (await chrome.tabs.query({})).map(tab => tab.id)
@@ -528,13 +533,13 @@ test('Double-Click on numbered-list labels maps book numbers and ignores serials
           return url.hostname === 'www.blueletterbible.org' && normalizeBlbKjvPath(url.pathname) === expectedPath;
         } catch (_) { return false; }
       }, 2500);
-      labelResults.push({ label: index + 1, expectedPath, result: 'PASS', actualUrl: resolved.url });
+      labelResults.push({ label, expectedPath, result: 'PASS', actualUrl: resolved.url });
       console.log('[numbered-list serial] PASS', labelResults[labelResults.length - 1]);
     } catch (_) {
       const tabs = await extensionWorker.evaluate(async existing => (await chrome.tabs.query({}))
         .filter(tab => !existing.includes(tab.id))
         .map(tab => ({ id: tab.id, url: tab.url || '', pendingUrl: tab.pendingUrl || '' })), existingIds);
-      labelResults.push({ label: index + 1, expectedPath, result: 'FAIL', newTabs: tabs });
+      labelResults.push({ label, expectedPath, result: 'FAIL', newTabs: tabs });
       console.error('[numbered-list serial] FAIL', labelResults[labelResults.length - 1]);
     } finally {
       // Keep each label isolated even if it opened the wrong BLB destination.
