@@ -132,6 +132,10 @@ jobs:
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/blb-auto-hyperlinker.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/blb-auto-hyperlinker.spec.js') }}
         run: npx playwright test tests/browser/blb-auto-hyperlinker.spec.js
 
+      - name: Run draggable button behavior regressions
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/blb-draggable-button.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/blb-draggable-button.spec.js') }}
+        run: npx playwright test tests/browser/blb-draggable-button.spec.js
+
       - name: Run Webster collector behavior regressions
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/webster-collector-behavior.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/webster-collector-behavior.spec.js') }}
         run: npx playwright test tests/browser/webster-collector-behavior.spec.js
