@@ -254,16 +254,7 @@ test.describe('core user-action E2E coverage', () => {
 
     const button = page.locator('#blb-suite-page-selection-button');
     await expect(button).toBeVisible({ timeout: 10000 });
-    console.log('[DEBUG contiguous range parser]', await extensionWorker.evaluate(() => ({
-      refs: extractBibleRefsFromSelectedTextUncached('Romans 10:9 and Romans 10:10')
-        .map(ref => ({book:ref.book,bookNumber:ref.bookNumber,chapter:ref.chapter,from:ref.from,to:ref.to,text:ref.text,url:ref.url})),
-      direct: getDirectSelectedReference('Romans 10:9 and Romans 10:10')
-    })));
     await button.click();
-    await page.waitForTimeout(1000);
-    console.log('[DEBUG contiguous range tabs]', await extensionWorker.evaluate(() =>
-      chrome.tabs.query({}).then(tabs => tabs.map(tab => ({id:tab.id,url:tab.url,pendingUrl:tab.pendingUrl})))
-    ));
 
     const rangeTab = await waitForTab(extensionWorker, tab => {
       try {
