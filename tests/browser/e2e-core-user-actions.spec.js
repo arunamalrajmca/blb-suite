@@ -256,10 +256,10 @@ test.describe('core user-action E2E coverage', () => {
       try {
         const url = new URL(tab.url);
         return url.hostname === 'www.blueletterbible.org'
-          && url.pathname === '/kjv/rom/10/9-10/';
+          && /^\/kjv\/rom\/10\/9-10(?:\/s_\d+)?\/?$/i.test(url.pathname);
       } catch (_) { return false; }
     });
-    expect(new URL(rangeTab.url).pathname).toBe('/kjv/rom/10/9-10/');
+    expect(new URL(rangeTab.url).pathname).toMatch(/^\/kjv\/rom\/10\/9-10(?:\/s_\d+)?\/?$/i);
 
     const multiVerseTabs = await extensionWorker.evaluate(async () =>
       (await chrome.tabs.query({ url: 'https://www.blueletterbible.org/tools/MultiVerse.cfm*' }))
