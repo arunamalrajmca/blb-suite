@@ -487,6 +487,9 @@ test('Double-Click on numbered-list labels maps book numbers and ignores serials
     ['#serial-65', '/kjv/jud/1/1/'],
     ['#serial-66', '/kjv/rev/1/1/']
   ]) {
+    // Clear any prior native selection so each iteration tests the current
+    // physical double-click, not a selection left by the preceding label.
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
     console.log('[numbered-list serial] starting', { selector, expectedPath });
     await page.locator(selector).dblclick();
     let resolved;
