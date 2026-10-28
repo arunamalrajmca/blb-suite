@@ -32,6 +32,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Read manifest version
+        id: version
+        shell: bash
+        run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
+
+      - name: Grant test-only generic host access
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
+
       - name: Validate extension build and module contracts
         id: build
         continue-on-error: true
@@ -52,26 +60,36 @@ jobs:
       - name: Run every browser spec without CI selector filtering
         id: browser
         continue-on-error: true
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: npx playwright test
 
       - name: Run package regression group
         id: package
         continue-on-error: true
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: node regression-suite/tests/run-regression.mjs extension --group=package
 
       - name: Run resolver regression group
         id: resolver
         continue-on-error: true
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: node regression-suite/tests/run-regression.mjs extension --group=resolver
 
       - name: Run selection regression group
         id: selection
         continue-on-error: true
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: node regression-suite/tests/run-regression.mjs extension --group=selection
 
       - name: Run features regression group
         id: features
         continue-on-error: true
+        env:
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: node regression-suite/tests/run-regression.mjs extension --group=features
 
       - name: Report every audit result
