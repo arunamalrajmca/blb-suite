@@ -51,11 +51,24 @@ test('enabled Criteria Search Strong popup opens the lexicon and its Strong sear
 test('global Suite OFF preserves native same-tab Criteria Search popup navigation', async ({
   page, context, extensionStorage, extensionWorker
 }) => {
+  // The persistent extension test context can retain tabs opened by the
+  // preceding case. Close those first so their content scripts cannot race
+  // with this global-OFF setting check.
+  await extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' });
+    await Promise.all(tabs.map(tab => chrome.tabs.remove(tab.id).catch(() => {})));
+  });
   await extensionStorage.clear();
   await extensionStorage.set({ masterEnabled: false });
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({ masterEnabled: true })).masterEnabled
+  )).toBe(false);
   await serveCriteriaSearch(context);
   await page.goto(SEARCH_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({ masterEnabled: true })).masterEnabled
+  )).toBe(false);
 
   const before = await getBlbTabs(extensionWorker);
   const sourceTab = before.find(tab => tab.url === SEARCH_URL);
