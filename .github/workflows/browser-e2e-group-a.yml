@@ -107,14 +107,14 @@ jobs:
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
       - name: Run source URL parser regressions
-        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/redirect-source-url-patterns.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/redirect-source-url-patterns.spec.js') && !(needs.change-detection.outputs.browser_e2e_required == 'true' && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js'))) }}
         run: npx playwright test tests/browser/redirect-source-url-patterns.spec.js
 
       - name: Run omnibox behavior regressions
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/omnibox-boolean-operators.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/omnibox-boolean-operators.spec.js') }}
         run: npx playwright test tests/browser/omnibox-boolean-operators.spec.js
       - name: Run source URL browser redirect regressions
-        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-source-url-browser.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/redirect-source-url-browser.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-source-url-browser.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/redirect-source-url-browser.spec.js') && !(needs.change-detection.outputs.browser_e2e_required == 'true' && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-source-url-browser.spec.js'))) }}
         run: npx playwright test tests/browser/redirect-source-url-browser.spec.js
 
       - name: Run source-page collector initialization regressions
@@ -205,11 +205,28 @@ jobs:
         if: ${{ needs.change-detection.outputs.changed_browser_specs != '' }}
         env:
           CHANGED_BROWSER_SPECS: ${{ needs.change-detection.outputs.changed_browser_specs }}
+          REFERENCE_GATE_REQUIRED: ${{ needs.change-detection.outputs.browser_e2e_required }}
         shell: bash
         run: |
           set -euo pipefail
-          IFS=',' read -r -a specs <<< "$CHANGED_BROWSER_SPECS"
-          npx playwright test "${specs[@]}"
+          IFS=',' read -r -a changed_specs <<< "$CHANGED_BROWSER_SPECS"
+          specs=()
+          for spec in "${changed_specs[@]}"; do
+            case "$spec" in
+              tests/browser/redirect-source-url-patterns.spec.js|tests/browser/redirect-source-url-browser.spec.js|tests/browser/redirect-hostnames.spec.js|tests/browser/blb-non-kjv-redirect.spec.js)
+                if [[ "$REFERENCE_GATE_REQUIRED" == "true" ]]; then
+                  echo "Delegating $spec to the required browser-e2e gate."
+                  continue
+                fi
+                ;;
+            esac
+            specs+=("$spec")
+          done
+          if (("${#specs[@]}" > 0)); then
+            npx playwright test "${specs[@]}"
+          else
+            echo "All changed browser specs are covered by the required browser-e2e gate."
+          fi
 
       - name: Run changed browser specs without a dedicated workflow step
         if: ${{ needs.change-detection.outputs.unmapped_specs != '' }}
