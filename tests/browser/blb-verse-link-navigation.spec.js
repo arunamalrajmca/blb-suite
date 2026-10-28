@@ -1,5 +1,9 @@
 const { test, expect } = require('./fixtures');
 
+// Both tests share the worker-scoped extension context and storage. Keep their
+// opposite master-toggle states from racing each other.
+test.describe.configure({ mode: 'serial' });
+
 const HOME_URL = 'https://www.blueletterbible.org/';
 const BVERSE_URL = 'https://www.blueletterbible.org/lexicon/g25/kjv/tr/0-1/';
 const NOWRAP_URL = 'https://www.blueletterbible.org/lexicon/g3056/kjv/tr/0-1/';
