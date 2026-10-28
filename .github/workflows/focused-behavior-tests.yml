@@ -9,6 +9,7 @@ on:
       - 'tests/browser/study-reference-capture.spec.js'
       - 'tests/browser/study-session-export.spec.js'
       - 'tests/browser/multiverse-tool-view.spec.js'
+      - 'tests/browser/multiverse-handoff.spec.js'
       - 'tests/browser/case-sensitive-routing-behavior.spec.js'
       - '.github/workflows/focused-behavior-tests.yml'
 
@@ -67,7 +68,7 @@ jobs:
           if [[ -n "$BASE" && ! "$BASE" =~ ^0+$ ]]; then
             while IFS= read -r path; do
               case "$path" in
-                tests/browser/webster-collector-behavior.spec.js|tests/browser/case-sensitive-routing-behavior.spec.js|tests/browser/blb-auto-hyperlinker.spec.js|tests/browser/blb-draggable-button.spec.js|tests/browser/study-reference-capture.spec.js|tests/browser/study-session-export.spec.js|tests/browser/multiverse-tool-view.spec.js)
+                tests/browser/webster-collector-behavior.spec.js|tests/browser/case-sensitive-routing-behavior.spec.js|tests/browser/blb-auto-hyperlinker.spec.js|tests/browser/blb-draggable-button.spec.js|tests/browser/study-reference-capture.spec.js|tests/browser/study-session-export.spec.js|tests/browser/multiverse-tool-view.spec.js|tests/browser/multiverse-handoff.spec.js)
                   if [[ -f "$path" ]]; then FOCUSED+=("$path"); fi
                   ;;
               esac
