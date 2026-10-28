@@ -663,18 +663,74 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
       x: Number(root.dataset.testClickX), y: Number(root.dataset.testClickY)
     }));
     await page.mouse.dblclick(clickPoint.x, clickPoint.y);
-    const selectionDiagnostic = await page.evaluate(() => {
+    const selectionDiagnostic = await page.evaluate(({ x, y }) => {
       const root = document.querySelector('#blb-e2e-comma-verse-list');
       const selection = window.getSelection();
+      let caret = null;
+      try {
+        let range = document.caretRangeFromPoint?.(x, y) || null;
+        if (!range && document.caretPositionFromPoint) {
+          const position = document.caretPositionFromPoint(x, y);
+          if (position?.offsetNode) {
+            range = document.createRange();
+            range.setStart(position.offsetNode, position.offset);
+            range.collapse(true);
+          }
+        }
+        if (range) {
+          let node = range.startContainer;
+          let offset = range.startOffset;
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            const children = node.childNodes;
+            const right = children[Math.min(offset, children.length)] || null;
+            const left = offset > 0 ? children[offset - 1] : null;
+            const findText = (current, reverse = false) => {
+              if (!current) return null;
+              if (current.nodeType === Node.TEXT_NODE && current.nodeValue) return current;
+              const descendants = [...(current.childNodes || [])];
+              if (reverse) descendants.reverse();
+              for (const child of descendants) {
+                const found = findText(child, reverse);
+                if (found) return found;
+              }
+              return null;
+            };
+            const rightText = findText(right);
+            const leftText = findText(left, true);
+            if (rightText) { node = rightText; offset = 0; }
+            else if (leftText) { node = leftText; offset = node.nodeValue.length; }
+          }
+          if (node.nodeType === Node.TEXT_NODE) {
+            const value = node.nodeValue || '';
+            const isWordChar = char => /[A-Za-z0-9.'’\\u2019\\u2010-\\u2015\\u2212-]/.test(char || '');
+            let start = offset;
+            let end = offset;
+            while (start > 0 && isWordChar(value[start - 1])) start--;
+            while (end < value.length && isWordChar(value[end])) end++;
+            if (end === start && offset > 0 && isWordChar(value[offset - 1])) {
+              start = offset - 1;
+              end = offset;
+              while (start > 0 && isWordChar(value[start - 1])) start--;
+              while (end < value.length && isWordChar(value[end])) end++;
+            }
+            caret = { nodeText: value, offset, token: value.slice(start, end), charAtOffset: value[offset] || '', charBeforeOffset: value[offset - 1] || '' };
+          } else {
+            caret = { nodeType: node.nodeType, offset };
+          }
+        }
+      } catch (error) {
+        caret = { error: String(error) };
+      }
       return {
         targetText: root?.textContent || '',
         nativeSelection: selection?.toString() || '',
         anchorText: selection?.anchorNode?.textContent || '',
         focusText: selection?.focusNode?.textContent || '',
         anchorOffset: selection?.anchorOffset ?? null,
-        focusOffset: selection?.focusOffset ?? null
+        focusOffset: selection?.focusOffset ?? null,
+        physicalCaret: caret
       };
-    });
+    }, clickPoint);
     console.log('[comma verse-range double-click] native selection:', { target: target.label, ...selectionDiagnostic });
     const range = await waitForTab(extensionWorker, tab => {
       try {
