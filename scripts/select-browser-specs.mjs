@@ -45,7 +45,6 @@ const forceFull = alwaysFull || changed.some(path =>
   || path === "playwright.config.js"
   || path === "playwright.config.ts"
   || path === "extension/manifest.json"
-  || path === "extension/background.js"
   || path === "extension/content.js"
   || path === "extension/reference-core.js"
   || path === "extension/regex-patterns.js"
