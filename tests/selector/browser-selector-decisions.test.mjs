@@ -35,6 +35,7 @@ function fixture(selector = selectorSource) {
   put(root, "extension/content.js");
   put(root, "extension/popup.js");
   put(root, "extension/popup.html");
+  put(root, "extension/redirect-scripttagger.js");
   put(root, "extension/omnibox-search-helpers.js");
   put(root, "extension/multiverse-copy.js");
   put(root, "extension/multiverse-handoff.js");
@@ -68,6 +69,7 @@ function fixture(selector = selectorSource) {
   put(root, "tests/browser/feature-lifecycle-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/extension.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/redirect-toggle-isolation.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/scripttagger-global-injection.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/site-feature-defaults.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/study-session-popup-ui-regression.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/study-backup-restore.spec.js", "import { test } from '@playwright/test';\n");
@@ -139,6 +141,18 @@ test("site-feature fail-closed behavior runs in the required gate for popup and 
     assert.match(contentOutput, /changed_specs=.*redirect-toggle-isolation\.spec\.js/);
     assert.match(contentOutput, /group_b_required=true/);
     assert.match(contentOutput, /reference_required=true/);
+  });
+});
+
+test("mixed Group B runtime and unrelated browser-spec edits still run the changed spec", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/redirect-scripttagger.js", "// changed redirect injection\n");
+    commitChange(root, "tests/browser/redirect-toggle-isolation.spec.js", "// changed unrelated browser test\n");
+    const output = select(root, base);
+    assert.match(output, /changed_specs=tests\/browser\/scripttagger-global-injection\.spec\.js/);
+    assert.match(output, /changed_browser_specs=tests\/browser\/redirect-toggle-isolation\.spec\.js/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=true/);
   });
 });
 
