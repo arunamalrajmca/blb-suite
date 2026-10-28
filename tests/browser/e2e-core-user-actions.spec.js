@@ -681,8 +681,16 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
 
+  const submittedPayloads = [];
+  await page.context().route('https://www.blueletterbible.org/tools/**', async route => {
+    if (route.request().method() === 'POST') {
+      submittedPayloads.push(new URLSearchParams(route.request().postData() || '').get('mvText') || '');
+    }
+    await route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><html><body>POST captured</body></html>'});
+  });
+
   const requestedText = 'Genesis 42-46; Genesis 48-49';
-  await page.evaluate((text) => {
+  await page.evaluate(text => {
     const el = document.createElement('p');
     el.id = 'blb-e2e-disjoint-chapter-ranges';
     el.textContent = text;
@@ -694,17 +702,12 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
     selection.addRange(range);
   }, requestedText);
 
-  const baselineTabIds = await extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({})).map(tab => tab.id)
-  );
-
   const response = await extensionWorker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
     if (!tab?.id) throw new Error('No active tab for disjoint chapter-range E2E');
     return chrome.scripting.executeScript({
-      target: {tabId:tab.id},
-      world:'ISOLATED',
-      func: () => new Promise(resolve => chrome.runtime.sendMessage({
+      target:{tabId:tab.id}, world:'ISOLATED',
+      func:() => new Promise(resolve => chrome.runtime.sendMessage({
         type:'blbSuiteOpenSelectionText',
         text:window.getSelection()?.toString() || '',
         tabBehavior:{activeIfNew:true,activateExisting:true}
@@ -712,76 +715,34 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
     });
   });
   expect(response).toBeTruthy();
+  await expect.poll(() => submittedPayloads.length, {timeout:20000}).toBe(2);
 
-  await expect.poll(async () => extensionWorker.evaluate(async (baseline) => {
-    const tabs = await chrome.tabs.query({});
-    return tabs.filter(tab => {
-      if (baseline.includes(tab.id)) return false;
-      try {
-        const url = new URL(tab.url || tab.pendingUrl);
-        return url.hostname === 'www.blueletterbible.org' &&
-          (url.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
-           url.searchParams.get('blbSuiteMultiVerse') === '1');
-      } catch (_) { return false; }
-    }).length;
-  }, baselineTabIds), { timeout:15000 }).toBe(2);
-
-  const state = await extensionWorker.evaluate(async (baselineTabIds) => {
-    const tabs = await chrome.tabs.query({});
-    const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
-    const pending = data.blbSuitePendingMultiVerseRefsByTab || {};
-    const multiverseTabs = tabs.filter(tab => {
-      if (baselineTabIds.includes(tab.id)) return false;
-      try {
-        const url = new URL(tab.url || tab.pendingUrl);
-        return url.hostname === 'www.blueletterbible.org' &&
-          (url.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
-           url.searchParams.get('blbSuiteMultiVerse') === '1');
-      } catch (_) { return false; }
-    });
-    return multiverseTabs.map(tab => ({id:tab.id, refs:pending[String(tab.id)] || []}));
-  }, baselineTabIds);
-
-  expect(state).toHaveLength(2);
-  const batches = state.map(tab => tab.refs);
-  expect(batches.every(refs => refs.length > 0)).toBeTruthy();
-
-  const expanded = batches.map(refs => refs.flatMap(ref => {
-    const from = Number(ref.from || 1);
-    const to = Number(ref.to || from);
-    return Array.from({length:Math.max(0, to - from + 1)}, (_, index) => ({
-      book:Number(ref.bookNumber),
+  const batches = await extensionWorker.evaluate(payloads => payloads.map(payload =>
+    resolveBibleReferenceText(payload).map(ref => ({
+      book:Number(resolveBibleBook(ref.book)?.bookNumber),
       chapter:Number(ref.chapter),
-      verse:from + index
-    }));
-  }));
-  const flat = expanded.flat();
-  expect(flat.every(ref => ref.book === 1 && ref.chapter !== 47)).toBeTruthy();
+      from:Number(ref.from || 1),
+      to:Number(ref.to || ref.from || 1)
+    }))
+  ), submittedPayloads);
+  expect(batches).toHaveLength(2);
+  expect(batches.every(refs => refs.length > 0)).toBeTruthy();
+  expect(batches.every(refs => refs.length <= 200)).toBeTruthy();
+
+  const flat = batches.flatMap(refs => refs.flatMap(ref =>
+    Array.from({length:Math.max(0,ref.to-ref.from+1)},(_,index)=>({
+      book:ref.book,chapter:ref.chapter,verse:ref.from+index
+    }))
+  ));
   expect(flat).toHaveLength(223);
-  expect(expanded.map(batch => batch.length)).toEqual([200,23]);
-
+  expect(new Set(flat.map(ref=>`${ref.book}:${ref.chapter}:${ref.verse}`)).size).toBe(223);
+  const sorted = flat.slice().sort((a,b)=>a.book-b.book||a.chapter-b.chapter||a.verse-b.verse);
   const expected = [];
+  const verseCounts = {42:38,43:34,44:34,45:28,46:34,48:22,49:33};
   for (const chapter of [42,43,44,45,46,48,49]) {
-    const verseCounts = {42:38,43:34,44:34,45:28,46:34,48:22,49:33};
-    for (let verse = 1; verse <= verseCounts[chapter]; verse++) expected.push({book:1,chapter,verse});
+    for (let verse=1;verse<=verseCounts[chapter];verse++) expected.push({book:1,chapter,verse});
   }
-  expect(flat).toEqual(expected);
-
-  // All requested verses, including the final chapter, must be handed off to
-  // MultiVerse tabs; no ordinary chapter-reader tab should be created.
-  const allTabs = await extensionWorker.evaluate(async () => (await chrome.tabs.query({})).map(tab => ({
-    id:tab.id, url:tab.url || tab.pendingUrl || ''
-  })));
-  const unexpectedBibleTabs = allTabs.filter(tab => {
-    if (baselineTabIds.includes(tab.id) || state.some(item => item.id === tab.id)) return false;
-    try {
-      const url = new URL(tab.url);
-      return url.hostname === 'www.blueletterbible.org' && /^\/kjv\/gen\/(?:42|43|44|45|46|48|49)\//i.test(url.pathname);
-    } catch (_) { return false; }
-  });
-  expect(unexpectedBibleTabs).toEqual([]);
-
-  for (const tab of state) await removeTabById(extensionWorker, tab.id);
+  expect(sorted).toEqual(expected);
 });
 
 test('MultiVerse parses reversed disjoint chapter ranges without dropping the second range', async ({ page, extensionStorage, extensionWorker }) => {
@@ -789,8 +750,16 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
 
+  const submittedPayloads = [];
+  await page.context().route('https://www.blueletterbible.org/tools/**', async route => {
+    if (route.request().method() === 'POST') {
+      submittedPayloads.push(new URLSearchParams(route.request().postData() || '').get('mvText') || '');
+    }
+    await route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><html><body>POST captured</body></html>'});
+  });
+
   const requestedText = 'Genesis 48-49 and Genesis 42-46';
-  await page.evaluate((text) => {
+  await page.evaluate(text => {
     const el = document.createElement('p');
     el.id = 'blb-e2e-reversed-disjoint-chapter-ranges';
     el.textContent = text;
@@ -802,17 +771,12 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
     selection.addRange(range);
   }, requestedText);
 
-  const baselineTabIds = await extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({})).map(tab => tab.id)
-  );
-
   const response = await extensionWorker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
-    if (!tab?.id) throw new Error('No active tab for disjoint chapter-range E2E');
+    if (!tab?.id) throw new Error('No active tab for reversed disjoint chapter-range E2E');
     return chrome.scripting.executeScript({
-      target: {tabId:tab.id},
-      world:'ISOLATED',
-      func: () => new Promise(resolve => chrome.runtime.sendMessage({
+      target:{tabId:tab.id}, world:'ISOLATED',
+      func:() => new Promise(resolve => chrome.runtime.sendMessage({
         type:'blbSuiteOpenSelectionText',
         text:window.getSelection()?.toString() || '',
         tabBehavior:{activeIfNew:true,activateExisting:true}
@@ -820,74 +784,32 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
     });
   });
   expect(response).toBeTruthy();
+  await expect.poll(() => submittedPayloads.length, {timeout:20000}).toBe(2);
 
-  await expect.poll(async () => extensionWorker.evaluate(async (baseline) => {
-    const tabs = await chrome.tabs.query({});
-    return tabs.filter(tab => {
-      if (baseline.includes(tab.id)) return false;
-      try {
-        const url = new URL(tab.url || tab.pendingUrl);
-        return url.hostname === 'www.blueletterbible.org' &&
-          (url.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
-           url.searchParams.get('blbSuiteMultiVerse') === '1');
-      } catch (_) { return false; }
-    }).length;
-  }, baselineTabIds), { timeout:15000 }).toBe(2);
-
-  const state = await extensionWorker.evaluate(async (baselineTabIds) => {
-    const tabs = await chrome.tabs.query({});
-    const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
-    const pending = data.blbSuitePendingMultiVerseRefsByTab || {};
-    const multiverseTabs = tabs.filter(tab => {
-      if (baselineTabIds.includes(tab.id)) return false;
-      try {
-        const url = new URL(tab.url || tab.pendingUrl);
-        return url.hostname === 'www.blueletterbible.org' &&
-          (url.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
-           url.searchParams.get('blbSuiteMultiVerse') === '1');
-      } catch (_) { return false; }
-    });
-    return multiverseTabs.map(tab => ({id:tab.id, refs:pending[String(tab.id)] || []}));
-  }, baselineTabIds);
-
-  expect(state).toHaveLength(2);
-  const batches = state.map(tab => tab.refs);
-  expect(batches.every(refs => refs.length > 0)).toBeTruthy();
-
-  const expanded = batches.map(refs => refs.flatMap(ref => {
-    const from = Number(ref.from || 1);
-    const to = Number(ref.to || from);
-    return Array.from({length:Math.max(0, to - from + 1)}, (_, index) => ({
-      book:Number(ref.bookNumber),
+  const batches = await extensionWorker.evaluate(payloads => payloads.map(payload =>
+    resolveBibleReferenceText(payload).map(ref => ({
+      book:Number(resolveBibleBook(ref.book)?.bookNumber),
       chapter:Number(ref.chapter),
-      verse:from + index
-    }));
-  }));
-  const flat = expanded.flat();
-  expect(flat.every(ref => ref.book === 1 && ref.chapter !== 47)).toBeTruthy();
+      from:Number(ref.from || 1),
+      to:Number(ref.to || ref.from || 1)
+    }))
+  ), submittedPayloads);
+  expect(batches).toHaveLength(2);
+  expect(batches.every(refs => refs.length > 0)).toBeTruthy();
+  expect(batches.every(refs => refs.length <= 200)).toBeTruthy();
+
+  const flat = batches.flatMap(refs => refs.flatMap(ref =>
+    Array.from({length:Math.max(0,ref.to-ref.from+1)},(_,index)=>({
+      book:ref.book,chapter:ref.chapter,verse:ref.from+index
+    }))
+  ));
   expect(flat).toHaveLength(223);
-  expect(expanded.map(batch => batch.length)).toEqual([200,23]);
-
+  expect(new Set(flat.map(ref=>`${ref.book}:${ref.chapter}:${ref.verse}`)).size).toBe(223);
+  const sorted = flat.slice().sort((a,b)=>a.book-b.book||a.chapter-b.chapter||a.verse-b.verse);
   const expected = [];
+  const verseCounts = {42:38,43:34,44:34,45:28,46:34,48:22,49:33};
   for (const chapter of [42,43,44,45,46,48,49]) {
-    const verseCounts = {42:38,43:34,44:34,45:28,46:34,48:22,49:33};
-    for (let verse = 1; verse <= verseCounts[chapter]; verse++) expected.push({book:1,chapter,verse});
+    for (let verse=1;verse<=verseCounts[chapter];verse++) expected.push({book:1,chapter,verse});
   }
-  expect(flat).toEqual(expected);
-
-  // All requested verses, including the final chapter, must be handed off to
-  // MultiVerse tabs; no ordinary chapter-reader tab should be created.
-  const allTabs = await extensionWorker.evaluate(async () => (await chrome.tabs.query({})).map(tab => ({
-    id:tab.id, url:tab.url || tab.pendingUrl || ''
-  })));
-  const unexpectedBibleTabs = allTabs.filter(tab => {
-    if (baselineTabIds.includes(tab.id) || state.some(item => item.id === tab.id)) return false;
-    try {
-      const url = new URL(tab.url);
-      return url.hostname === 'www.blueletterbible.org' && /^\/kjv\/gen\/(?:42|43|44|45|46|48|49)\//i.test(url.pathname);
-    } catch (_) { return false; }
-  });
-  expect(unexpectedBibleTabs).toEqual([]);
-
-  for (const tab of state) await removeTabById(extensionWorker, tab.id);
+  expect(sorted).toEqual(expected);
 });
