@@ -45,6 +45,7 @@ jobs:
       changed_browser_specs: ${{ steps.select.outputs.changed_browser_specs }}
       unmapped_specs: ${{ steps.select.outputs.unmapped_specs }}
       group_a_required: ${{ steps.select.outputs.group_a_required }}
+      browser_e2e_required: ${{ steps.select.outputs.reference_required }}
     steps:
       - uses: actions/checkout@v4
         with:
