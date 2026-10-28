@@ -61,6 +61,10 @@ const forceFull = alwaysFull || changed.some(path =>
 // coverage when the implementation is genuinely feature-scoped.
 const featureSpecs = [
   {
+    paths: ["extension/content.js"],
+    specs: ["tests/browser/redirect-toggle-isolation.spec.js"]
+  },
+  {
     paths: ["extension/kjv-case-sensitive-words.js"],
     specs: ["tests/browser/case-sensitive-routing-behavior.spec.js"]
   },
@@ -102,7 +106,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/popup.html", "extension/popup.js"],
-    specs: ["tests/browser/site-feature-defaults.spec.js", "tests/browser/study-session-popup-ui-regression.spec.js", "tests/browser/study-backup-restore.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js"]
+    specs: ["tests/browser/site-feature-defaults.spec.js", "tests/browser/study-session-popup-ui-regression.spec.js", "tests/browser/study-backup-restore.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/redirect-toggle-isolation.spec.js"]
   },
   {
     paths: ["extension/kings-bible-collector.js"],
@@ -228,7 +232,8 @@ const mappedSpecs = new Set([
   "tests/browser/webster-collector-behavior.spec.js",
   "tests/browser/blb-auto-hyperlinker.spec.js",
   "tests/browser/blb-draggable-button.spec.js",
-  "tests/browser/case-sensitive-routing-behavior.spec.js"
+  "tests/browser/case-sensitive-routing-behavior.spec.js",
+  "tests/browser/redirect-toggle-isolation.spec.js"
 ]);
 const separatelyManagedSpecs = new Set(["tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/performance.spec.js"]);
 const unmapped = selected.filter(path => !mappedSpecs.has(path) && !separatelyManagedSpecs.has(path));
@@ -266,6 +271,7 @@ const values = {
   group_b_required: String(has(
     "tests/browser/redirect-hostnames.spec.js",
     "tests/browser/blb-non-kjv-redirect.spec.js",
+    "tests/browser/redirect-toggle-isolation.spec.js",
     "tests/browser/scripttagger-global-injection.spec.js"
   )),
   reference_required: String(has(
@@ -274,7 +280,8 @@ const values = {
     "tests/browser/rediscover-sagacity-button.spec.js",
     "tests/browser/research-dom-smoke.spec.js",
     "tests/browser/redirect-source-url-patterns.spec.js",
-    "tests/browser/redirect-source-url-browser.spec.js"
+    "tests/browser/redirect-source-url-browser.spec.js",
+    "tests/browser/redirect-toggle-isolation.spec.js"
   ))
 };
 const output = process.env.GITHUB_OUTPUT;
