@@ -4,10 +4,10 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 function loadBooleanHelpers() {
-  const source = fs.readFileSync(path.join(__dirname, '../../extension/omnibox-boolean-operators.js'), 'utf8');
+  const source = fs.readFileSync(path.join(__dirname, '../../extension/omnibox-search-helpers.js'), 'utf8');
   const context = { globalThis: {} };
-  vm.runInNewContext(source, context, { filename: 'omnibox-boolean-operators.js' });
-  return context.globalThis.BLBOmniboxBooleanOperators;
+  vm.runInNewContext(source, context, { filename: 'omnibox-search-helpers.js' });
+  return context.globalThis.BLBOmniboxSearchHelpers;
 }
 
 test('case-insensitive standalone Boolean words are uppercased outside quoted text only', () => {
