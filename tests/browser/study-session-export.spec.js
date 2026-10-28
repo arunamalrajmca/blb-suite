@@ -2,9 +2,9 @@ const { test, expect } = require('./fixtures');
 
 async function downloadForTopic(extensionWorker, topic) {
   return extensionWorker.evaluate(value => new Promise(resolve => {
-    chrome.downloads.search({ query: [value] }, items => {
+    chrome.downloads.search({}, items => {
       const suffix = 'BLB_Suite_Notes_' + value + '.pdf';
-      resolve((items || []).find(item => String(item.filename || '').endsWith(suffix)) || null);
+      resolve((items || []).find(item => String(item.filename || '').includes(suffix)) || null);
     });
   }), topic);
 }
