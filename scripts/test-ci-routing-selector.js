@@ -73,6 +73,7 @@ try {
     'tests/browser/blb-auto-hyperlinker.spec.js',
     'tests/browser/blb-draggable-button.spec.js',
     'tests/browser/study-reference-capture.spec.js',
+    'tests/browser/study-session-export.spec.js',
     'tests/browser/case-sensitive-routing-behavior.spec.js',
     'tests/browser/performance.spec.js',
     'tests/browser/test-only.spec.js'
