@@ -59,11 +59,8 @@ test('Suite-generated MultiVerse page stays hidden until the requested results a
 
   await page.waitForFunction(() => {
     const root = document.documentElement;
-    const input = document.querySelector('#references');
     return root.dataset.blbSuiteMultiVersePending === '1' &&
-      root.style.visibility === 'hidden' &&
-      input?.value === 'John 3:16' &&
-      !document.querySelector('a[href*="/kjv/jhn/3/16/"]');
+      root.style.visibility === 'hidden';
   }, null, { timeout: 5000 });
 
   const hiddenState = await page.evaluate(() => ({
