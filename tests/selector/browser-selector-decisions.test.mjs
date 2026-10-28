@@ -304,6 +304,16 @@ test("test-only browser edits run only the changed spec in the focused workflow"
   assert.match(workflow, /needs\.change-detection\.outputs\.focused_specs != ''/);
 });
 
+test("MultiVerse tab-reuse spec-only edits use the focused workflow without starting its runtime workflow", () => {
+  const workflow = readFileSync(
+    new URL("../../.github/workflows/multiverse-tab-reuse.yml", import.meta.url),
+    "utf8"
+  );
+  assert.doesNotMatch(workflow, /^\s*-\s*['"]tests\/browser\/multiverse-tab-reuse\.spec\.js['"]/m);
+  assert.match(workflow, /^\s*-\s*['"]extension\/\*\*['"]/m);
+  assert.match(workflow, /tests\/browser\/fixtures\.js/);
+});
+
 test("required browser-e2e gate executes selected redirect specs without duplicate Group A/B runs", () => {
   const referenceWorkflow = readFileSync(
     new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url),
