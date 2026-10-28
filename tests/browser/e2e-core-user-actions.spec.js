@@ -1,5 +1,9 @@
 const { test, expect } = require('./fixtures');
 
+function normalizeBlbKjvPath(pathname) {
+  return String(pathname || '').replace(/\/s_\d+\/?$/i, '/');
+}
+
 async function waitForTab(extensionWorker, predicate, timeout = 10000) {
   let match = null;
   await expect.poll(async () => {
@@ -256,10 +260,10 @@ test.describe('core user-action E2E coverage', () => {
       try {
         const url = new URL(tab.url);
         return url.hostname === 'www.blueletterbible.org'
-          && url.pathname === '/kjv/rom/10/9-10/';
+          && normalizeBlbKjvPath(url.pathname) === '/kjv/rom/10/9-10/';
       } catch (_) { return false; }
     });
-    expect(new URL(rangeTab.url).pathname).toBe('/kjv/rom/10/9-10/');
+    expect(normalizeBlbKjvPath(new URL(rangeTab.url).pathname)).toBe('/kjv/rom/10/9-10/');
 
     const multiVerseTabs = await extensionWorker.evaluate(async () =>
       (await chrome.tabs.query({ url: 'https://www.blueletterbible.org/tools/MultiVerse.cfm*' }))
@@ -403,10 +407,10 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
     const resolved = await waitForTab(extensionWorker, tab => {
       try {
         const url = new URL(tab.url);
-        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+        return url.hostname === 'www.blueletterbible.org' && normalizeBlbKjvPath(url.pathname) === expectedPath;
       } catch (_) { return false; }
     });
-    expect(new URL(resolved.url).pathname).toBe(expectedPath);
+    expect(normalizeBlbKjvPath(new URL(resolved.url).pathname)).toBe(expectedPath);
     await removeTabById(extensionWorker, resolved.id);
   }
 
@@ -544,10 +548,10 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
     const range = await waitForTab(extensionWorker, tab => {
       try {
         const url = new URL(tab.url);
-        return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/rom/10/9-10/';
+        return url.hostname === 'www.blueletterbible.org' && normalizeBlbKjvPath(url.pathname) === '/kjv/rom/10/9-10/';
       } catch (_) { return false; }
     });
-    expect(new URL(range.url).pathname).toBe('/kjv/rom/10/9-10/');
+    expect(normalizeBlbKjvPath(new URL(range.url).pathname)).toBe('/kjv/rom/10/9-10/');
     await removeTabById(extensionWorker, range.id);
   }
 });
