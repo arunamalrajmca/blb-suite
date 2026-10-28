@@ -36,6 +36,12 @@ const changedBrowserSpecs = [];
 const specs = new Set();
 // Shared-core, test-infrastructure, package, manifest, and unknown production
 // changes remain conservative and may require the full applicable browser suite.
+// Shared background changes remain broad by default. Narrow only the exact, isolated
+// omnibox runtime + regression-spec pair so an unrelated core E2E failure cannot
+// block that independently covered fix. Background-only or mixed changes stay full.
+const focusedOmniboxBackgroundChange = changed.length === 2
+  && changed.includes("extension/background.js")
+  && changed.includes("tests/browser/omnibox-command-routing.spec.js");
 const forceFull = alwaysFull || changed.some(path =>
   (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js")
   || path.startsWith("regression-suite/")
@@ -45,6 +51,7 @@ const forceFull = alwaysFull || changed.some(path =>
   || path === "playwright.config.js"
   || path === "playwright.config.ts"
   || path === "extension/manifest.json"
+  || (path === "extension/background.js" && !focusedOmniboxBackgroundChange)
   || path === "extension/content.js"
   || path === "extension/reference-core.js"
   || path === "extension/regex-patterns.js"
