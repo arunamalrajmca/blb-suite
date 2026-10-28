@@ -454,12 +454,27 @@ test('Double-Click on numbered-list labels maps book numbers and ignores serials
   await page.waitForTimeout(1000);
 
   await page.evaluate(() => {
+    const bookNames = [
+      'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy', 'Joshua', 'Judges', 'Ruth',
+      '1 Samuel', '2 Samuel', '1 Kings', '2 Kings', '1 Chronicles', '2 Chronicles', 'Ezra',
+      'Nehemiah', 'Esther', 'Job', 'Psalms', 'Proverbs', 'Ecclesiastes', 'Song of Solomon',
+      'Isaiah', 'Jeremiah', 'Lamentations', 'Ezekiel', 'Daniel', 'Hosea', 'Joel', 'Amos',
+      'Obadiah', 'Jonah', 'Micah', 'Nahum', 'Habakkuk', 'Zephaniah', 'Haggai', 'Zechariah',
+      'Malachi', 'Matthew', 'Mark', 'Luke', 'John', 'Acts', 'Romans', '1 Corinthians',
+      '2 Corinthians', 'Galatians', 'Ephesians', 'Philippians', 'Colossians', '1 Thessalonians',
+      '2 Thessalonians', '1 Timothy', '2 Timothy', 'Titus', 'Philemon', 'Hebrews', 'James',
+      '1 Peter', '2 Peter', '1 John', '2 John', '3 John', 'Jude', 'Revelation'
+    ];
+    const bookSlugs = [
+      'gen', 'exo', 'lev', 'num', 'deu', 'jos', 'jdg', 'rut', '1sa', '2sa', '1ki', '2ki',
+      '1ch', '2ch', 'ezr', 'neh', 'est', 'job', 'psa', 'pro', 'ecc', 'sng', 'isa', 'jer',
+      'lam', 'eze', 'dan', 'hos', 'joe', 'amo', 'oba', 'jon', 'mic', 'nah', 'hab', 'zep',
+      'hag', 'zec', 'mal', 'mat', 'mrk', 'luk', 'jhn', 'act', 'rom', '1co', '2co', 'gal',
+      'eph', 'php', 'col', '1th', '2th', '1ti', '2ti', 'tit', 'phm', 'heb', 'jas', '1pe',
+      '2pe', '1jo', '2jo', '3jo', 'jud', 'rev'
+    ];
     const cases = [
-      ['1', 'Genesis', 'serial-1'],
-      ['2', 'Exodus', 'serial-2'],
-      ['43', 'John', 'serial-43'],
-      ['65', 'Jude', 'serial-65'],
-      ['66', 'Revelation', 'serial-66'],
+      ...bookNames.map((name, index) => [String(index + 1), name, 'serial-' + (index + 1)]),
       ['67', 'Romans 1:16', 'serial-67'],
       ['176', 'Romans 1:16', 'serial-176'],
       ['177', 'Romans 1:16', 'serial-177'],
@@ -486,13 +501,9 @@ test('Double-Click on numbered-list labels maps book numbers and ignores serials
     document.body.append(wrap, refs);
   });
 
-  for (const [selector, expectedPath] of [
-    ['#serial-1', '/kjv/gen/1/1/'],
-    ['#serial-2', '/kjv/exo/1/1/'],
-    ['#serial-43', '/kjv/jhn/1/1/'],
-    ['#serial-65', '/kjv/jud/1/1/'],
-    ['#serial-66', '/kjv/rev/1/1/']
-  ]) {
+  for (const [index, slug] of bookSlugs.entries()) {
+    const selector = '#serial-' + (index + 1);
+    const expectedPath = '/kjv/' + slug + '/1/1/';
     // Clear any prior native selection so each iteration tests the current
     // physical double-click, not a selection left by the preceding label.
     await page.evaluate(() => window.getSelection()?.removeAllRanges());
