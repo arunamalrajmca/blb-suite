@@ -165,6 +165,9 @@ jobs:
           - group: redirect-toggle-isolation
             file: tests/browser/redirect-toggle-isolation.spec.js
             grep: '.*'
+          - group: multiverse-clipboard-reference-pattern
+            file: tests/browser/multiverse-clipboard-reference-pattern.spec.js
+            grep: '.*'
           - group: popup-master-toggle
             file: tests/browser/popup-master-toggle-regression.spec.js
             grep: '.*'

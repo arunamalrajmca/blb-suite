@@ -62,7 +62,10 @@ const forceFull = alwaysFull || changed.some(path =>
 const featureSpecs = [
   {
     paths: ["extension/content.js"],
-    specs: ["tests/browser/redirect-toggle-isolation.spec.js"]
+    specs: [
+      "tests/browser/redirect-toggle-isolation.spec.js",
+      "tests/browser/multiverse-clipboard-reference-pattern.spec.js"
+    ]
   },
   {
     paths: ["extension/background.js"],
@@ -244,6 +247,7 @@ const mappedSpecs = new Set([
   "tests/browser/blb-draggable-button.spec.js",
   "tests/browser/case-sensitive-routing-behavior.spec.js",
   "tests/browser/redirect-toggle-isolation.spec.js",
+  "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
   "tests/browser/popup-master-toggle-regression.spec.js",
   "tests/browser/facebook-selection-parser.spec.js",
   "tests/browser/substack-selection-parser.spec.js",
@@ -296,6 +300,7 @@ const values = {
     "tests/browser/redirect-source-url-patterns.spec.js",
     "tests/browser/redirect-source-url-browser.spec.js",
     "tests/browser/redirect-toggle-isolation.spec.js",
+    "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
     "tests/browser/popup-master-toggle-regression.spec.js",
     "tests/browser/facebook-selection-parser.spec.js",
     "tests/browser/substack-selection-parser.spec.js",
