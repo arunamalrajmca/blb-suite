@@ -130,7 +130,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/criteria-search-navigation.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js"]
+    specs: ["tests/browser/criteria-search-navigation.spec.js"]
   },
   {
     paths: ["extension/blb-auto-hyperlinker.js"],
@@ -221,6 +221,7 @@ const mappedSpecs = new Set([
   "tests/browser/blb-passive-new-tab-targets.spec.js",
   "tests/browser/source-page-collector-behavior.spec.js",
   "tests/browser/blb-verse-link-navigation.spec.js",
+  "tests/browser/criteria-search-navigation.spec.js",
   "tests/browser/performance.spec.js",
   "tests/browser/site-feature-defaults.spec.js",
   "tests/browser/study-session-popup-ui-regression.spec.js",
@@ -248,6 +249,7 @@ const values = {
     "tests/browser/blb-passive-new-tab-targets.spec.js",
     "tests/browser/source-page-collector-behavior.spec.js",
     "tests/browser/blb-verse-link-navigation.spec.js",
+    "tests/browser/criteria-search-navigation.spec.js",
     "tests/browser/kings-bible-collector-behavior.spec.js",
     "tests/browser/webster-collector-behavior.spec.js",
     "tests/browser/blb-auto-hyperlinker.spec.js",
