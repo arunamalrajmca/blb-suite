@@ -74,7 +74,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/study-session-export.js"],
-    specs: ["tests/browser/study-backup-restore.spec.js", "tests/browser/study-session-popup-ui-regression.spec.js"]
+    specs: ["tests/browser/study-session-export.spec.js"]
   },
   {
     paths: ["extension/study-session-normalization.js"],
@@ -207,6 +207,7 @@ const mappedSpecs = new Set([
   "tests/browser/feature-lifecycle-regressions.spec.js",
   "tests/browser/study-backup-restore.spec.js",
   "tests/browser/study-reference-capture.spec.js",
+  "tests/browser/study-session-export.spec.js",
   "tests/browser/extension.spec.js",
   "tests/browser/redirect-hostnames.spec.js",
   "tests/browser/blb-non-kjv-redirect.spec.js",
@@ -245,6 +246,7 @@ const values = {
     "tests/browser/feature-lifecycle-regressions.spec.js",
     "tests/browser/study-backup-restore.spec.js",
     "tests/browser/study-reference-capture.spec.js",
+    "tests/browser/study-session-export.spec.js",
     "tests/browser/extension.spec.js",
     "tests/browser/site-feature-defaults.spec.js",
     "tests/browser/study-session-popup-ui-regression.spec.js"
