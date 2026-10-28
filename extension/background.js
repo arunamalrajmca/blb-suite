@@ -1648,7 +1648,7 @@ async function handleBCommand(text, disposition = 'currentTab') {
     // rewritten. Verse zero is the one intentional lower-bound normalization.
     if (ch != null) {
       const numericChapter = Number(ch);
-      if (!Number.isInteger(numericChapter) || numericChapter < 1 || numericChapter > book.chapterCount) return;
+      if (!Number.isInteger(numericChapter) || numericChapter < 1) return;
       if (from != null && (!Number.isInteger(Number(from)) || Number(from) < 0)) return;
       if (to != null && (!Number.isInteger(Number(to)) || Number(to) < Number(from))) return;
     }
