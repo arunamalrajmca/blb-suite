@@ -308,7 +308,9 @@ test.describe('core user-action E2E coverage', () => {
 
     const multiVerse = await waitForTab(extensionWorker, tab => {
       try {
-        const url = new URL(tab.url);
+        // MultiVerse may briefly expose its extension POST helper as url
+        // while Chrome reports the BLB destination in pendingUrl.
+        const url = new URL(tab.pendingUrl || tab.url);
         return url.hostname === 'www.blueletterbible.org'
           && url.pathname === '/tools/MultiVerse.cfm';
       } catch (_) {
@@ -318,7 +320,7 @@ test.describe('core user-action E2E coverage', () => {
 
     const criteria = await waitForTab(extensionWorker, tab => {
       try {
-        const url = new URL(tab.url);
+        const url = new URL(tab.pendingUrl || tab.url);
         return url.hostname === 'www.blueletterbible.org'
           && url.pathname === '/search/search.cfm'
           && (url.searchParams.get('Criteria') || '').toLowerCase().includes('free gift');
@@ -327,8 +329,8 @@ test.describe('core user-action E2E coverage', () => {
       }
     });
 
-    expect(new URL(multiVerse.url).pathname).toBe('/tools/MultiVerse.cfm');
-    expect(new URL(criteria.url).searchParams.get('Criteria').toLowerCase()).toContain('free gift');
+    expect(new URL(multiVerse.pendingUrl || multiVerse.url).pathname).toBe('/tools/MultiVerse.cfm');
+    expect(new URL(criteria.pendingUrl || criteria.url).searchParams.get('Criteria').toLowerCase()).toContain('free gift');
 
     await removeTabById(extensionWorker, multiVerse.id);
     await removeTabById(extensionWorker, criteria.id);
