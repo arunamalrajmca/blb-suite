@@ -60,6 +60,7 @@ function fixture(selector = selectorSource) {
   put(root, "tests/browser/multiverse-handoff.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/blb-passive-new-tab-targets.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/source-page-collector-behavior.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/blb-verse-link-navigation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/feature-lifecycle-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/extension.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/fixtures.js");
@@ -215,15 +216,17 @@ test("MultiVerse handoff selects direct visibility coverage without unrelated su
   });
 });
 
-test("verse-link navigation selects popup-link behavior without unrelated Study lifecycle tests", () => {
+test("verse-link navigation selects direct link-target and click-routing behavior", () => {
   withFixture((root, base) => {
     commitChange(root, "extension/blb-verse-link-navigation.js", "// changed verse-link navigation\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=tests\/browser\/e2e-core-user-actions\.spec\.js/);
+    assert.match(output, /changed_specs=tests\/browser\/blb-verse-link-navigation\.spec\.js/);
+    assert.doesNotMatch(output, /e2e-core-user-actions\.spec\.js/);
     assert.doesNotMatch(output, /feature-lifecycle-regressions\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
+    assert.match(output, /reference_required=false/);
   });
 });
 
