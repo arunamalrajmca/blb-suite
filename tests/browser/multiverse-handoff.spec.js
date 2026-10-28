@@ -19,7 +19,6 @@ test('Suite-generated MultiVerse page stays hidden until the requested results a
   <input id="references" type="text">
   <button id="retrieve" type="button">Retrieve</button>
   <div id="results"><a href="${DEFAULT_RESULT_URL}">Genesis 1:1</a></div>
-  <h2>Advanced MultiVerse Search Options</h2>
   <script>
     window.retrieveCount = 0;
     document.getElementById('retrieve').addEventListener('click', () => {
@@ -59,8 +58,11 @@ test('Suite-generated MultiVerse page stays hidden until the requested results a
 
   await page.waitForFunction(() => {
     const root = document.documentElement;
+    const input = document.querySelector('#references');
     return root.dataset.blbSuiteMultiVersePending === '1' &&
-      root.style.visibility === 'hidden';
+      root.style.visibility === 'hidden' &&
+      input?.value === 'John 3:16' &&
+      !document.querySelector('a[href*="/kjv/jhn/3/16/"]');
   }, null, { timeout: 5000 });
 
   const hiddenState = await page.evaluate(() => ({
