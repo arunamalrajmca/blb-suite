@@ -70,6 +70,8 @@ try {
     'tests/browser/omnibox-boolean-operators.spec.js',
     'tests/browser/kings-bible-collector-behavior.spec.js',
     'tests/browser/webster-collector-behavior.spec.js',
+    'tests/browser/blb-auto-hyperlinker.spec.js',
+    'tests/browser/blb-draggable-button.spec.js',
     'tests/browser/case-sensitive-routing-behavior.spec.js',
     'tests/browser/performance.spec.js',
     'tests/browser/test-only.spec.js'
@@ -78,6 +80,8 @@ try {
   write('extension/kjv-case-sensitive-words.js');
   write('extension/kings-bible-collector.js');
   write('extension/webster-collector.js');
+  write('extension/blb-auto-hyperlinker.js');
+  write('extension/blb-draggable-button.js');
   write('extension/multiverse-tool-view.js');
   write('extension/blb-parse-popup.js');
   write('extension/blb-verse-link-navigation.js');
@@ -170,9 +174,9 @@ try {
     ['extension/blb-verse-link-navigation.js', 'e2e-core-user-actions.spec.js'],
     ['extension/study-reference-capture.js', 'feature-lifecycle-regressions.spec.js'],
     ['extension/criteria-search-navigation.js', 'e2e-core-user-actions.spec.js'],
-    ['extension/blb-auto-hyperlinker.js', 'feature-lifecycle-regressions.spec.js'],
+    ['extension/blb-auto-hyperlinker.js', 'blb-auto-hyperlinker.spec.js'],
     ['extension/blb-passive-new-tab-targets.js', 'e2e-core-user-actions.spec.js'],
-    ['extension/blb-draggable-button.js', 'rediscover-sagacity-button.spec.js']
+    ['extension/blb-draggable-button.js', 'blb-draggable-button.spec.js']
   ];
   for (const [file, expectedSpec] of extractedFeatureCases) {
     resetScenario(base);

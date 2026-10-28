@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - 'tests/browser/webster-collector-behavior.spec.js'
+      - 'tests/browser/blb-auto-hyperlinker.spec.js'
+      - 'tests/browser/blb-draggable-button.spec.js'
       - 'tests/browser/case-sensitive-routing-behavior.spec.js'
       - '.github/workflows/focused-behavior-tests.yml'
   push:
@@ -67,7 +69,7 @@ jobs:
           if [[ -n "$BASE" && ! "$BASE" =~ ^0+$ ]]; then
             while IFS= read -r path; do
               case "$path" in
-                tests/browser/webster-collector-behavior.spec.js|tests/browser/case-sensitive-routing-behavior.spec.js)
+                tests/browser/webster-collector-behavior.spec.js|tests/browser/case-sensitive-routing-behavior.spec.js|tests/browser/blb-auto-hyperlinker.spec.js|tests/browser/blb-draggable-button.spec.js)
                   if [[ -f "$path" ]]; then FOCUSED+=("$path"); fi
                   ;;
               esac
