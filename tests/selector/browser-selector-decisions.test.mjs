@@ -115,7 +115,7 @@ test("draggable-button source selects the focused spec that exercises drag, rest
     commitChange(root, "extension/blb-draggable-button.js", "// changed drag behavior\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=tests\/browser\/extension\.spec\.js/);
+    assert.match(output, /changed_specs=tests\/browser\/blb-draggable-button\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
   });
@@ -150,7 +150,7 @@ test("source-page collector selects its existing collector initialization covera
     commitChange(root, "extension/source-page-collector.js", "// changed collector\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=tests\/browser\/blb-draggable-button\.spec\.js/);
+    assert.match(output, /changed_specs=tests\/browser\/extension\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
   });
