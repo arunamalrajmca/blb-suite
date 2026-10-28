@@ -62,7 +62,7 @@ test.describe('remaining omnibox command routing', () => {
       'https://www.blueletterbible.org/kjv/rom/16/5/',
       'https://www.blueletterbible.org/kjv/rom/16/5/',
       'https://www.blueletterbible.org/kjv/rom/16/',
-      'https://www.blueletterbible.org/kjv/rom/5/25/'
+      'https://www.blueletterbible.org/kjv/rom/5/21/'
     ]);
   });
 
