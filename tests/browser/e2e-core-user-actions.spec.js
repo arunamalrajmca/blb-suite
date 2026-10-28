@@ -404,7 +404,7 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
 
   for (const [selector, expectedPath] of genericCases) {
     console.log('[numbered-list E2E] starting', { selector, expectedPath });
-    await page.locator(selector).dblclick();
+    await page.locator(selector).dblclick({ position: { x: 4, y: 10 } });
     console.log('[numbered-list serial] post-dblclick selection', await page.evaluate(() => ({
       selection: window.getSelection()?.toString() || '',
       activeElement: document.activeElement?.outerHTML?.slice(0, 240) || ''
@@ -471,10 +471,11 @@ test('Double-Click on numbered-list labels maps book numbers and ignores serials
     wrap.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
     for (const [number, text, id] of cases) {
       const row = document.createElement('p');
-      // Keep the number and list-label period in the same text node so
-      // Chromium's physical double-click and the extension's punctuation
-      // guard inspect the same token.
-      row.innerHTML = '<strong><span id="' + id + '">' + number + '.</span></strong> ' + text;
+      // Keep the serial, its period, and the following text in one text
+      // node. The physical double-click is positioned over the leading digits,
+      // matching real numbered-list prose without splitting the punctuation
+      // into a separate DOM text node.
+      row.innerHTML = '<strong id="' + id + '">' + number + '. ' + text + '</strong>';
       wrap.appendChild(row);
     }
 
