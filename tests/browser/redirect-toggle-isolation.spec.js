@@ -19,7 +19,8 @@ function runSiteAccessHelper(origins) {
 test.describe('site feature fail-closed guards', () => {
   test('global redirects default OFF when the saved setting is absent', () => {
     const source = fs.readFileSync(path.resolve(__dirname, '../../extension/content.js'), 'utf8');
-    expect(source).toContain('let websterRedirectEnabled = false;');
+    expect(source).toContain('let theKingsBibleRedirectEnabled = false;');
+    expect(source).toContain('let sourceBibleRedirectEnabled = false;');
     expect(source).toContain('chrome.storage.local.get({redirectEnabled:false})');
   });
 
@@ -36,9 +37,9 @@ test.describe('site feature fail-closed guards', () => {
   });
 
   test('Show on BLB disables its monitoring when site settings cannot be read', () => {
-    const source = fs.readFileSync(path.resolve(__dirname, '../../extension/content.js'), 'utf8');
+    const source = fs.readFileSync(path.resolve(__dirname, '../../extension/blb-page-selection-button.js'), 'utf8');
     const start = source.indexOf('async function refreshBlbPageSelectionButton() {');
-    const end = source.indexOf('\nif (!isBlbPageButtonExcludedSite())', start);
+    const end = source.indexOf('\n    if (!isBlbPageButtonExcludedSite()', start);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
     const handler = source.slice(start, end);
