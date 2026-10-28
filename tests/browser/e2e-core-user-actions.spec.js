@@ -467,12 +467,9 @@ const numberedListBookSlugs = [
   'eph', 'phl', 'col', '1th', '2th', '1ti', '2ti', 'tit', 'phm', 'heb', 'jas', '1pe',
   '2pe', '1jo', '2jo', '3jo', 'jde', 'rev'
 ];
-// Full list stays in the fixture to preserve each serial's real position. This pass
-// intentionally tests only non-prefixed books; numeric-prefix books are excluded.
-const excludedPrefixedBookLabels = new Set([9,10,11,12,13,14,46,47,52,53,54,55,60,61,62,63,64]);
-const unprefixedNumberedBookCases = numberedListBookSlugs
-  .map((slug,index)=>({label:index+1,slug,name:numberedListBookNames[index]}))
-  .filter(({label})=>label>45&&!excludedPrefixedBookLabels.has(label));
+// Test all 66 canonical book labels, including numeric-prefix book names.
+const numberedListBookCases = numberedListBookSlugs
+  .map((slug,index)=>({label:index+1,slug,name:numberedListBookNames[index]}));
 
 async function setupNumberedListSerialFixture({page,extensionStorage}) {
   await extensionStorage.set({masterEnabled:true,doubleClickBlbSites:{'example.com':true}});
@@ -497,7 +494,7 @@ async function setupNumberedListSerialFixture({page,extensionStorage}) {
   await expect(page.locator('#blb-e2e-numbered-list-serials')).toBeVisible();
 }
 
-async function checkUnprefixedBookGroup({page,extensionWorker},cases) {
+async function checkNumberedBookGroup({page,extensionWorker},cases) {
   const results=[];
   for(const {label,slug} of cases){
     const selector='#serial-'+label;
@@ -531,21 +528,21 @@ async function checkUnprefixedBookGroup({page,extensionWorker},cases) {
     }
   }
   console.log('[numbered-list serial] GROUP SUMMARY',JSON.stringify(results));
-  expect(results,'Every label in this group must be attempted').toHaveLength(cases.length);
-  expect(results.filter(item=>item.result==='PASS'),'Every label must resolve to its expected BLB path').toHaveLength(cases.length);
+  expect(results,'Every book label in this group must be attempted').toHaveLength(cases.length);
+  expect(results.filter(item=>item.result==='PASS'),'Every book label must resolve to its expected BLB path').toHaveLength(cases.length);
 }
 
 const numberedBookGroups=[];
-for(let index=0;index<unprefixedNumberedBookCases.length;index+=5)
-  numberedBookGroups.push(unprefixedNumberedBookCases.slice(index,index+5));
+for(let index=0;index<numberedListBookCases.length;index+=5)
+  numberedBookGroups.push(numberedListBookCases.slice(index,index+5));
 
 for(const groupCases of numberedBookGroups){
   const firstLabel=groupCases[0].label;
   const lastLabel=groupCases[groupCases.length-1].label;
-  test('Double-Click non-prefixed book labels '+firstLabel+'-'+lastLabel+' resolve to the correct BLB book',async({page,extensionStorage,extensionWorker})=>{
-    test.setTimeout(60000);
+  test('Double-Click numbered-list book labels '+firstLabel+'-'+lastLabel+' resolve to the correct BLB book',async({page,extensionStorage,extensionWorker})=>{
+    test.setTimeout(180000);
     await setupNumberedListSerialFixture({page,extensionStorage});
-    await checkUnprefixedBookGroup({page,extensionWorker},groupCases);
+    await checkNumberedBookGroup({page,extensionWorker},groupCases);
   });
 }
 
