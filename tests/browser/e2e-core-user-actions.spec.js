@@ -678,8 +678,8 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
         return url.hostname === 'www.blueletterbible.org' && normalizeBlbKjvPath(url.pathname) === '/kjv/rom/10/9-10/';
       } catch (_) { return false; }
     }, 30000);
-    console.log('[comma verse-range double-click] matched tab:', { selector, url: range.url });
-    expect(normalizeBlbKjvPath(new URL(range.url).pathname), 'Target ' + selector + ' should open Romans 10:9-10').toBe('/kjv/rom/10/9-10/');
+    console.log('[comma verse-range double-click] matched tab:', { target: target.label, url: range.url });
+    expect(normalizeBlbKjvPath(new URL(range.url).pathname), 'Target ' + target.label + ' should open Romans 10:9-10').toBe('/kjv/rom/10/9-10/');
     await removeTabById(extensionWorker, range.id);
   }
 });
