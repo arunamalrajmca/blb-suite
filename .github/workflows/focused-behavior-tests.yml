@@ -22,6 +22,7 @@ jobs:
     outputs:
       runtime_changed: ${{ steps.classify.outputs.runtime_changed }}
       full_browser_suite: ${{ steps.select.outputs.full_browser_suite }}
+      changed_browser_specs: ${{ steps.select.outputs.changed_browser_specs }}
       focused_specs: ${{ steps.focused.outputs.focused_specs }}
     steps:
       - name: Check out repository
@@ -81,7 +82,7 @@ jobs:
     # Runtime changes are covered by the feature selector or full browser suite.
     # Keep this workflow for test-only edits, which intentionally do not trigger
     # feature E2E jobs on their own.
-    if: ${{ needs.change-detection.outputs.runtime_changed == 'false' && needs.change-detection.outputs.full_browser_suite == 'false' && needs.change-detection.outputs.focused_specs != '' }}
+    if: ${{ needs.change-detection.outputs.runtime_changed == 'false' && needs.change-detection.outputs.full_browser_suite == 'false' && needs.change-detection.outputs.changed_browser_specs == '' && needs.change-detection.outputs.focused_specs != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
