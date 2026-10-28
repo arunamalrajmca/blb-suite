@@ -171,6 +171,7 @@ try {
   // Newly extracted feature modules select their established focused browser coverage.
   const extractedFeatureCases = [
     ['extension/multiverse-copy.js', 'e2e-core-user-actions.spec.js'],
+    ['extension/multiverse-handoff.js', 'multiverse-tab-reuse.spec.js'],
     ['extension/multiverse-tool-view.js', 'e2e-core-user-actions.spec.js'],
     ['extension/blb-parse-popup.js', 'e2e-core-user-actions.spec.js'],
     ['extension/blb-verse-link-navigation.js', 'e2e-core-user-actions.spec.js'],
@@ -192,9 +193,13 @@ try {
       assert(!result.values.changed_specs.includes('tests/browser/multiverse-tab-reuse.spec.js'),
         file + ' must not select unrelated MultiVerse tab-reuse tests');
     }
-    if (file === 'extension/blb-verse-link-navigation.js') {
+    if (file === 'extension/blb-verse-link-navigation.js' || file === 'extension/multiverse-handoff.js') {
       assert(!result.values.changed_specs.includes('tests/browser/feature-lifecycle-regressions.spec.js'),
         file + ' must not select unrelated Study lifecycle tests');
+    }
+    if (file === 'extension/multiverse-handoff.js') {
+      assert(result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
+        file + ' must retain core MultiVerse handoff behavior coverage');
     }
     console.log('PASS: ' + path.basename(file) + ' selects focused browser coverage');
   }
