@@ -157,15 +157,25 @@ jobs:
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         run: npx playwright test tests/browser/extension.spec.js --grep 'source-page collector initializes on'
 
-      # Run the suspected failing gesture before the full core file. This is diagnostic only:
-      # do not fail-fast here; the complete core suite below remains authoritative and still reports failures.
-      - name: Diagnose numbered-list double-click before core regressions
+      # Repeat the previously intermittent two-tab selection test in fresh browser contexts.
+      # Preserve each attempt's result but continue so we can compare reproducibility.
+      - name: Diagnose reference-plus-prose selection in three isolated runs
         if: ${{ needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/e2e-core-user-actions.spec.js') }}
         continue-on-error: true
-        run: npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep "Double-Click on numbered-list labels maps book numbers and ignores serials above 66"
+        shell: bash
+        run: |
+          set +e
+          for attempt in 1 2 3; do
+            echo "===== isolated reference-plus-prose attempt $attempt/3 ====="
+            npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep "selection containing a reference and authored prose opens MultiVerse and Criteria Search"
+            result=$?
+            echo "===== isolated attempt $attempt exit code: $result ====="
+          done
+          exit 0
+      # Disable fail-fast for this core file so one intermittent failure does not hide later test results.
       - name: Run complete core user-action regressions
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/e2e-core-user-actions.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/e2e-core-user-actions.spec.js') }}
-        run: npx playwright test tests/browser/e2e-core-user-actions.spec.js
+        run: npx playwright test tests/browser/e2e-core-user-actions.spec.js --max-failures=0
       - name: Run King's Bible collector behavior regressions
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/kings-bible-collector-behavior.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/kings-bible-collector-behavior.spec.js') }}
         run: npx playwright test tests/browser/kings-bible-collector-behavior.spec.js
