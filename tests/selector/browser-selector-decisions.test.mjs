@@ -343,6 +343,23 @@ test("required browser-e2e gate executes selected redirect specs without duplica
   assert.match(groupB, /browser_e2e_required == 'true'/);
 });
 
+test("optional E2E workflows exclude selector-only scripts from their broad script filters", () => {
+  for (const workflowPath of [
+    "../../.github/workflows/browser-e2e-group-a.yml",
+    "../../.github/workflows/browser-e2e-group-b.yml"
+  ]) {
+    const workflow = readFileSync(new URL(workflowPath, import.meta.url), "utf8");
+    assert.match(workflow, /^\s*-\s*['"]scripts\/\*\*['"]/m);
+    for (const script of [
+      "classify-ci-changes.mjs",
+      "select-browser-specs.mjs",
+      "test-ci-routing-selector.js"
+    ]) {
+      assert.ok(workflow.includes("- '!scripts/" + script + "'"));
+    }
+  }
+});
+
 test("optional E2E workflows skip spec-only edits but retain shared-fixture triggers", () => {
   for (const workflowPath of [
     "../../.github/workflows/browser-e2e-group-a.yml",
