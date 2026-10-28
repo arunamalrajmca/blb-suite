@@ -162,6 +162,9 @@ jobs:
           - group: redirect-hostnames
             file: tests/browser/redirect-hostnames.spec.js
             grep: '.*'
+          - group: redirect-toggle-isolation
+            file: tests/browser/redirect-toggle-isolation.spec.js
+            grep: '.*'
           - group: blb-non-kjv-redirect
             file: tests/browser/blb-non-kjv-redirect.spec.js
             grep: '.*'
