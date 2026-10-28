@@ -1577,6 +1577,24 @@ function isNumberedListSerialDoubleClick(selectionText, event) {
   if (!Number.isSafeInteger(number) || number < 0) return false;
 
   try {
+    // Some Chromium double-click events expose a caret range that lands in the
+    // wrapper element rather than the label's text node. The physical event
+    // target still identifies the clicked label, so accept that exact target
+    // only when its own text is "<number>." and it begins its containing block.
+    const physicalTarget = event?.target instanceof Element
+      ? event.target
+      : (event?.target?.parentElement || null);
+    let candidate = physicalTarget;
+    for (let depth = 0; candidate && depth < 4; depth++, candidate = candidate.parentElement) {
+      if (normalizeSelectionText(candidate.textContent).normalize('NFKC') !== selectedNumber + '.') continue;
+      const block = candidate.parentElement?.closest?.('p,li,td,th,blockquote,article,section,div');
+      if (!block) continue;
+      const beforeLabel = document.createRange();
+      beforeLabel.selectNodeContents(block);
+      beforeLabel.setEnd(candidate, 0);
+      if (!normalizeSelectionText(beforeLabel.toString())) return true;
+    }
+
     let pointRange = null;
     if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
       if (typeof document.caretRangeFromPoint === 'function') {
