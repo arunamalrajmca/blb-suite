@@ -355,7 +355,7 @@ test("optional E2E workflows exclude selector-only scripts from their broad scri
       "select-browser-specs.mjs",
       "test-ci-routing-selector.js"
     ]) {
-      assert.match(workflow, new RegExp("['\"]!" + "scripts/" + script.replace(/[.*+?^\$\{\}()|[\]\\]/g, "\\test("optional E2E workflows skip spec-only edits but retain shared-fixture triggers", () => {") + "['\"]"));
+      assert.ok(workflow.includes("- '!scripts/" + script + "'"));
     }
   }
 });
