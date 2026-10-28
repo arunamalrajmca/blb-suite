@@ -267,11 +267,10 @@ const values = {
     "tests/browser/extension.spec.js",
     "tests/browser/site-feature-defaults.spec.js",
     "tests/browser/study-session-popup-ui-regression.spec.js"
-  ) || unmapped.length > 0),
+  ) || unmapped.length > 0 || changedBrowserSpecs.length > 0),
   group_b_required: String(has(
     "tests/browser/redirect-hostnames.spec.js",
     "tests/browser/blb-non-kjv-redirect.spec.js",
-    "tests/browser/redirect-toggle-isolation.spec.js",
     "tests/browser/scripttagger-global-injection.spec.js"
   )),
   reference_required: String(has(
