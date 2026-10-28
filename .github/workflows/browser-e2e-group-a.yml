@@ -188,6 +188,10 @@ jobs:
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/blb-verse-link-navigation.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/blb-verse-link-navigation.spec.js') }}
         run: npx playwright test tests/browser/blb-verse-link-navigation.spec.js
 
+      - name: Run Criteria Search navigation behavior regressions
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/criteria-search-navigation.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/criteria-search-navigation.spec.js') }}
+        run: npx playwright test tests/browser/criteria-search-navigation.spec.js
+
       # Keep the Facebook-style DOM regression in this targeted suite so range-context fixes are exercised on branch pushes.
       - name: Run Facebook nested reference token regression
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
