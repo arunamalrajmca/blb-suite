@@ -4,7 +4,8 @@
  *
  * Only changes that cannot affect extension behavior are exempt from the
  * expensive behavioral regression suites. Unknown paths are treated as runtime
- * changes. Packaging/manifest validation remains required regardless.
+ * changes. Package validation is required for runtime, packaging, classifier,
+ * selector-test, and workflow changes; clearly unrelated changes can skip it.
  */
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
@@ -47,17 +48,42 @@ function nonRuntimePath(path) {
     || /^(store-assets\/|assets\/store\/|extension\/(icons|store-assets)\/)/i.test(path);
 }
 
+// These paths implement or verify the policy/package checks themselves. Keep
+// package validation enabled for them even when they do not affect runtime.
+function packageValidationPath(path) {
+  return path.startsWith(".github/workflows/")
+    || path.startsWith("tests/selector/")
+    || path.startsWith("regression-suite/")
+    || path === "scripts/classify-ci-changes.mjs"
+    || path === "scripts/select-browser-specs.mjs"
+    || path === "scripts/test-ci-routing-selector.js"
+    || path === "scripts/validate-build.js"
+    || path === "package.json"
+    || path === "package-lock.json"
+    || path === "extension/manifest.json"
+    || path === "playwright.config.js"
+    || path === "playwright.config.ts";
+}
+
 let runtimeChanged = false;
+let packageValidationRequired = false;
 const reasons = [];
 for (const path of changed) {
+  if (packageValidationPath(path)) packageValidationRequired = true;
   if (nonRuntimePath(path)) continue;
-  if ((path === "package.json" || path === "extension/manifest.json") && sameExceptVersion(path)) continue;
+  if ((path === "package.json" || path === "extension/manifest.json") && sameExceptVersion(path)) {
+    // Version-only changes still need manifest/build/package validation.
+    packageValidationRequired = true;
+    continue;
+  }
   runtimeChanged = true;
+  packageValidationRequired = true;
   reasons.push(path);
 }
 
 const output = process.env.GITHUB_OUTPUT;
-if (output) appendFileSync(output, `runtime_changed=${runtimeChanged}\n`);
+if (output) appendFileSync(output, `runtime_changed=${runtimeChanged}\npackage_validation_required=${packageValidationRequired}\n`);
 console.log(`runtime_changed=${runtimeChanged}`);
+console.log(`package_validation_required=${packageValidationRequired}`);
 console.log(`changed_files=${changed.length}`);
 if (reasons.length) console.log(`runtime_or_unknown_paths:\n- ${reasons.join("\n- ")}`);
