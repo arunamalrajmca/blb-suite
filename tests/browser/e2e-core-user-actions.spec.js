@@ -636,6 +636,7 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
   // Give each extension-created tab up to 30 seconds to appear in slower CI runs.
   // Test the real text node, rather than artificial spans around each token.
   // Double-click several words in the citation to check context-based resolution.
+  const targetResults = [];
   for (const target of [
     { label: 'book name', word: 'Romans', occurrence: 0 },
     { label: 'chapter number', word: '10', occurrence: 0 },
@@ -782,19 +783,32 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
       };
     }, clickPoint);
     console.log('[comma verse-range double-click] native selection:', { target: target.label, ...selectionDiagnostic });
-    const range = await waitForTab(extensionWorker, tab => {
-      try {
-        const url = new URL(tab.url || tab.pendingUrl);
-        return url.hostname === 'www.blueletterbible.org' && normalizeBlbKjvPath(url.pathname) === '/kjv/rom/10/9-10/';
-      } catch (_) { return false; }
-    }, 30000);
-    console.log('[comma verse-range double-click] matched tab:', { target: target.label, url: range.url });
-    expect(normalizeBlbKjvPath(new URL(range.url).pathname), 'Target ' + target.label + ' should open Romans 10:9-10').toBe('/kjv/rom/10/9-10/');
-    await removeTabById(extensionWorker, range.id);
+    let range = null;
+    let failure = null;
+    try {
+      range = await waitForTab(extensionWorker, tab => {
+        try {
+          const url = new URL(tab.url || tab.pendingUrl);
+          return url.hostname === 'www.blueletterbible.org' && normalizeBlbKjvPath(url.pathname) === '/kjv/rom/10/9-10/';
+        } catch (_) { return false; }
+      }, 30000);
+      const actualPath = normalizeBlbKjvPath(new URL(range.url).pathname);
+      console.log('[comma verse-range double-click] matched tab:', { target: target.label, url: range.url });
+      targetResults.push({ target: target.label, expectedPath: '/kjv/rom/10/9-10/', actualPath, result: actualPath === '/kjv/rom/10/9-10/' ? 'PASS' : 'FAIL' });
+      if (actualPath !== '/kjv/rom/10/9-10/') failure = 'Unexpected path: ' + actualPath;
+      await removeTabById(extensionWorker, range.id);
+    } catch (error) {
+      failure = String(error?.message || error);
+      targetResults.push({ target: target.label, expectedPath: '/kjv/rom/10/9-10/', result: 'FAIL', error: failure });
+      console.error('[comma verse-range double-click] target failed; continuing diagnostics:', { target: target.label, failure });
+    }
     // Isolate each physical gesture: reset the page and native Selection so
     // a previous double-click cannot influence the next target's context.
     await installFixture();
   }
+  console.log('[comma verse-range double-click] all target results:', JSON.stringify(targetResults));
+  expect(targetResults, 'Every physical double-click target must open Romans 10:9-10').toHaveLength(4);
+  expect(targetResults.filter(result => result.result !== 'PASS'), 'Failed physical double-click targets').toEqual([]);
 });
 
 test('Double-Click resolves references through custom and framework-generated DOM containers', async ({ page, extensionStorage, extensionWorker }) => {
