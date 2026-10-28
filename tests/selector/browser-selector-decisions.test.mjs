@@ -40,6 +40,7 @@ function fixture(selector = selectorSource) {
   put(root, "extension/blb-auto-hyperlinker.js");
   put(root, "extension/blb-draggable-button.js");
   put(root, "extension/study-reference-capture.js");
+  put(root, "extension/study-session-export.js");
   put(root, "extension/criteria-search-navigation.js");
   put(root, "extension/webster-collector.js");
   put(root, "extension/kjv-case-sensitive-words.js");
@@ -47,6 +48,7 @@ function fixture(selector = selectorSource) {
   put(root, "tests/browser/blb-auto-hyperlinker.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/blb-draggable-button.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/study-reference-capture.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/study-session-export.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/case-sensitive-routing-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/omnibox-boolean-operators.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/e2e-core-user-actions.spec.js", "import { test } from '@playwright/test';\n");
@@ -173,6 +175,18 @@ test("verse-link navigation selects popup-link behavior without unrelated Study 
     assert.doesNotMatch(output, /feature-lifecycle-regressions\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
+  });
+});
+
+test("Study session export source selects its focused PDF download browser spec", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/study-session-export.js", "// changed Study PDF export\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /changed_specs=tests\/browser\/study-session-export\.spec\.js/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=false/);
+    assert.match(output, /reference_required=false/);
   });
 });
 
