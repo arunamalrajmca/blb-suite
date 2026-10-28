@@ -661,8 +661,27 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
         range.setStart(node, offset);
         range.setEnd(node, offset + requested.word.length);
         const rect = range.getBoundingClientRect();
-        root.dataset.testClickX = String(rect.left + rect.width / 2);
-        root.dataset.testClickY = String(rect.top + rect.height / 2);
+        // Use the exact word's text range and record the browser's hit-test
+        // before the gesture. This distinguishes a bad test coordinate from
+        // a double-click resolver failure.
+        const x = rect.left + rect.width / 2;
+        const y = rect.top + rect.height / 2;
+        const caretRange = document.caretRangeFromPoint?.(x, y) || null;
+        const hit = document.elementFromPoint(x, y);
+        root.dataset.testClickX = String(x);
+        root.dataset.testClickY = String(y);
+        root.dataset.testClickDiagnostic = JSON.stringify({
+          requested: requested.label,
+          requestedWord: requested.word,
+          requestedOffset: offset,
+          requestedText: node.textContent,
+          rangeRect: { left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width, height: rect.height },
+          hitTag: hit?.tagName || null,
+          hitText: hit?.textContent?.slice(0, 100) || '',
+          caretText: caretRange?.startContainer?.textContent || '',
+          caretOffset: caretRange?.startOffset ?? null,
+          caretChar: caretRange?.startContainer?.nodeType === Node.TEXT_NODE ? (caretRange.startContainer.textContent[caretRange.startOffset] || '') : ''
+        });
         return;
       }
       throw new Error('Could not find text target: ' + requested.label);
@@ -691,6 +710,7 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
         }, true);
       }
     });
+    console.log('[comma verse-range double-click] pre-gesture hit test:', await page.locator('#blb-e2e-comma-verse-list').getAttribute('data-test-click-diagnostic'));
     await page.mouse.dblclick(clickPoint.x, clickPoint.y);
     const selectionDiagnostic = await page.evaluate(({ x, y }) => {
       const root = document.querySelector('#blb-e2e-comma-verse-list');
