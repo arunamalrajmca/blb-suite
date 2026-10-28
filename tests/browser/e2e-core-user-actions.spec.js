@@ -470,7 +470,18 @@ test('Double-Click on numbered-list labels maps book numbers and ignores serials
     ['#serial-65', '/kjv/jud/1/1/'],
     ['#serial-66', '/kjv/rev/1/1/']
   ]) {
+    await page.evaluate(() => window.getSelection()?.removeAllRanges());
     await page.locator(selector).dblclick();
+    console.log('[numbered-list serial diagnostic]', await page.evaluate(() => {
+      const selection = window.getSelection();
+      const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+      return {
+        selection: selection?.toString() || '',
+        startNode: range?.startContainer?.nodeType === Node.TEXT_NODE ? range.startContainer.nodeValue : range?.startContainer?.nodeName || '',
+        startOffset: range?.startOffset ?? null,
+        targetText: document.querySelector('#blb-e2e-numbered-list-serials')?.innerText || ''
+      };
+    }));
     const resolved = await waitForTab(extensionWorker, tab => {
       try {
         const url = new URL(tab.url);
