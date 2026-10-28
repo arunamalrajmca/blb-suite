@@ -304,6 +304,35 @@ test("test-only browser edits run only the changed spec in the focused workflow"
   assert.match(workflow, /needs\.change-detection\.outputs\.focused_specs != ''/);
 });
 
+test("required browser-e2e gate executes selected redirect specs without duplicate Group A/B runs", () => {
+  const referenceWorkflow = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url),
+    "utf8"
+  );
+  const groupA = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-group-a.yml", import.meta.url),
+    "utf8"
+  );
+  const groupB = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-group-b.yml", import.meta.url),
+    "utf8"
+  );
+  for (const spec of [
+    "redirect-source-url-patterns",
+    "redirect-source-url-browser",
+    "redirect-hostnames",
+    "blb-non-kjv-redirect"
+  ]) {
+    assert.match(referenceWorkflow, new RegExp("file: tests/browser/" + spec + "\\.spec\\.js"));
+  }
+  assert.match(groupA, /REFERENCE_GATE_REQUIRED:/);
+  assert.match(groupA, /Delegating \$spec to the required browser-e2e gate/);
+  assert.match(groupA, /browser_e2e_required: \$\{\{ steps\.select\.outputs\.reference_required \}\}/);
+  assert.match(groupB, /browser_e2e_required: \$\{\{ steps\.select\.outputs\.reference_required \}\}/);
+  assert.match(groupA, /browser_e2e_required == 'true'/);
+  assert.match(groupB, /browser_e2e_required == 'true'/);
+});
+
 test("optional E2E workflows skip spec-only edits but retain shared-fixture triggers", () => {
   for (const workflowPath of [
     "../../.github/workflows/browser-e2e-group-a.yml",
