@@ -23,6 +23,7 @@ jobs:
     outputs:
       runtime_changed: ${{ steps.classify.outputs.runtime_changed }}
       full_browser_suite: ${{ steps.select.outputs.full_browser_suite }}
+      focused_specs: ${{ steps.focused.outputs.focused_specs }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
@@ -54,6 +55,26 @@ jobs:
           else
             node scripts/select-browser-specs.mjs "$BASE"
           fi
+      - name: Select only changed focused specs
+        id: focused
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          BASE="$BASE_SHA"
+          FOCUSED=()
+          if [[ -n "$BASE" && ! "$BASE" =~ ^0+$ ]]; then
+            while IFS= read -r path; do
+              case "$path" in
+                tests/browser/webster-collector-behavior.spec.js|tests/browser/case-sensitive-routing-behavior.spec.js)
+                  if [[ -f "$path" ]]; then FOCUSED+=("$path"); fi
+                  ;;
+              esac
+            done < <(git diff --name-only --diff-filter=ACDMRT "$BASE...HEAD")
+          fi
+          FOCUSED_SPECS="$(IFS=,; printf '%s' "${FOCUSED[*]}")"
+          echo "focused_specs=$FOCUSED_SPECS" >> "$GITHUB_OUTPUT"
 
   focused-behavior:
     name: Focused behavior tests
@@ -61,7 +82,7 @@ jobs:
     # Runtime changes are covered by the feature selector or full browser suite.
     # Keep this workflow for test-only edits, which intentionally do not trigger
     # feature E2E jobs on their own.
-    if: ${{ needs.change-detection.outputs.runtime_changed == 'false' && needs.change-detection.outputs.full_browser_suite == 'false' }}
+    if: ${{ needs.change-detection.outputs.runtime_changed == 'false' && needs.change-detection.outputs.full_browser_suite == 'false' && needs.change-detection.outputs.focused_specs != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -75,5 +96,11 @@ jobs:
         run: npm install --no-package-lock
       - name: Install Chromium for extension browser tests
         run: npx playwright install --with-deps chromium
-      - name: Run focused behavior tests
-        run: npx playwright test tests/browser/webster-collector-behavior.spec.js tests/browser/case-sensitive-routing-behavior.spec.js
+      - name: Run only changed focused behavior tests
+        env:
+          FOCUSED_SPECS: ${{ needs.change-detection.outputs.focused_specs }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          IFS=',' read -r -a specs <<< "$FOCUSED_SPECS"
+          npx playwright test "${specs[@]}"
