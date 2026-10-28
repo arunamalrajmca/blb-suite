@@ -6,13 +6,23 @@ function normalizeBlbKjvPath(pathname) {
 
 async function waitForTab(extensionWorker, predicate, timeout = 10000) {
   let match = null;
-  await expect.poll(async () => {
-    const tabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
-      items.map(tab => ({ id: tab.id, url: tab.url || tab.pendingUrl || '' }))
-    ));
-    match = tabs.find(predicate) || null;
-    return !!match;
-  }, { timeout }).toBeTruthy();
+  let lastTabs = [];
+  try {
+    await expect.poll(async () => {
+      lastTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
+        items.map(tab => ({
+          id: tab.id,
+          url: tab.url || tab.pendingUrl || '',
+          pendingUrl: tab.pendingUrl || ''
+        }))
+      ));
+      match = lastTabs.find(predicate) || null;
+      return !!match;
+    }, { timeout }).toBeTruthy();
+  } catch (error) {
+    console.error('[waitForTab] timed out; observed tabs:', JSON.stringify(lastTabs));
+    throw error;
+  }
   return match;
 }
 
