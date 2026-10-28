@@ -1828,11 +1828,7 @@ function handleDoubleClickBlb(event) {
         // "verse" is not guaranteed to be in the local KJV word index on
         // every build, but in a Facebook post it is the explicit cue for a
         // nearby verse number. Let the tightly gated post resolver inspect it.
-        // A native double-click selection over comma-separated verse numbers (for example, "9,10")
-        // is not itself a numeric token. Still run the DOM-context resolver so it can use the
-        // physical click position to identify the clicked number and resolve the full citation.
-        const isCommaSeparatedNumericSelection=/^\d{1,3}(?:\s*,\s*\d{1,3})+$/.test(selection);
-        const needsDomContext=isNumericBookCandidate||isCommaSeparatedNumericSelection||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord;
+        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord;
         const blockContext=needsDomContext
           ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
           : null;
