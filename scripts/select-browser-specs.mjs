@@ -126,7 +126,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/study-reference-capture.js"],
-    specs: ["tests/browser/extension.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js"]
+    specs: ["tests/browser/study-reference-capture.spec.js"]
   },
   {
     paths: ["extension/criteria-search-navigation.js"],
@@ -206,6 +206,7 @@ const mappedSpecs = new Set([
   "tests/browser/kings-bible-collector-behavior.spec.js",
   "tests/browser/feature-lifecycle-regressions.spec.js",
   "tests/browser/study-backup-restore.spec.js",
+  "tests/browser/study-reference-capture.spec.js",
   "tests/browser/extension.spec.js",
   "tests/browser/redirect-hostnames.spec.js",
   "tests/browser/blb-non-kjv-redirect.spec.js",
@@ -243,6 +244,7 @@ const values = {
     "tests/browser/case-sensitive-routing-behavior.spec.js",
     "tests/browser/feature-lifecycle-regressions.spec.js",
     "tests/browser/study-backup-restore.spec.js",
+    "tests/browser/study-reference-capture.spec.js",
     "tests/browser/extension.spec.js",
     "tests/browser/site-feature-defaults.spec.js",
     "tests/browser/study-session-popup-ui-regression.spec.js"

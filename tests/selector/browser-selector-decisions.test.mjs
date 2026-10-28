@@ -38,12 +38,14 @@ function fixture(selector = selectorSource) {
   put(root, "extension/source-page-collector.js");
   put(root, "extension/blb-auto-hyperlinker.js");
   put(root, "extension/blb-draggable-button.js");
+  put(root, "extension/study-reference-capture.js");
   put(root, "extension/criteria-search-navigation.js");
   put(root, "extension/webster-collector.js");
   put(root, "extension/kjv-case-sensitive-words.js");
   put(root, "tests/browser/webster-collector-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/blb-auto-hyperlinker.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/blb-draggable-button.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/study-reference-capture.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/case-sensitive-routing-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/omnibox-boolean-operators.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/e2e-core-user-actions.spec.js", "import { test } from '@playwright/test';\n");
@@ -145,6 +147,18 @@ test("parse-popup changes select popup-link coverage without unrelated tab-reuse
     assert.doesNotMatch(output, /multiverse-tab-reuse\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
+  });
+});
+
+test("Study reference capture source selects its focused browser behavior spec", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/study-reference-capture.js", "// changed Study reference capture\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /changed_specs=tests\/browser\/study-reference-capture\.spec\.js/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=false/);
+    assert.match(output, /reference_required=false/);
   });
 });
 

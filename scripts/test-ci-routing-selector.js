@@ -72,6 +72,7 @@ try {
     'tests/browser/webster-collector-behavior.spec.js',
     'tests/browser/blb-auto-hyperlinker.spec.js',
     'tests/browser/blb-draggable-button.spec.js',
+    'tests/browser/study-reference-capture.spec.js',
     'tests/browser/case-sensitive-routing-behavior.spec.js',
     'tests/browser/performance.spec.js',
     'tests/browser/test-only.spec.js'
@@ -172,7 +173,7 @@ try {
     ['extension/multiverse-tool-view.js', 'e2e-core-user-actions.spec.js'],
     ['extension/blb-parse-popup.js', 'e2e-core-user-actions.spec.js'],
     ['extension/blb-verse-link-navigation.js', 'e2e-core-user-actions.spec.js'],
-    ['extension/study-reference-capture.js', 'feature-lifecycle-regressions.spec.js'],
+    ['extension/study-reference-capture.js', 'study-reference-capture.spec.js'],
     ['extension/criteria-search-navigation.js', 'e2e-core-user-actions.spec.js'],
     ['extension/blb-auto-hyperlinker.js', 'blb-auto-hyperlinker.spec.js'],
     ['extension/blb-passive-new-tab-targets.js', 'e2e-core-user-actions.spec.js'],
