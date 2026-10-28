@@ -449,6 +449,14 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
 });
 
 test('Double-Click on numbered-list labels maps book numbers and ignores serials above 66', async ({ page, extensionStorage, extensionWorker }) => {
+  const bookSlugs = [
+    'gen', 'exo', 'lev', 'num', 'deu', 'jos', 'jdg', 'rut', '1sa', '2sa', '1ki', '2ki',
+    '1ch', '2ch', 'ezr', 'neh', 'est', 'job', 'psa', 'pro', 'ecc', 'sng', 'isa', 'jer',
+    'lam', 'eze', 'dan', 'hos', 'joe', 'amo', 'oba', 'jon', 'mic', 'nah', 'hab', 'zep',
+    'hag', 'zec', 'mal', 'mat', 'mrk', 'luk', 'jhn', 'act', 'rom', '1co', '2co', 'gal',
+    'eph', 'php', 'col', '1th', '2th', '1ti', '2ti', 'tit', 'phm', 'heb', 'jas', '1pe',
+    '2pe', '1jo', '2jo', '3jo', 'jud', 'rev'
+  ];
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
@@ -501,33 +509,46 @@ test('Double-Click on numbered-list labels maps book numbers and ignores serials
     document.body.append(wrap, refs);
   });
 
+  const labelResults = [];
   for (const [index, slug] of bookSlugs.entries()) {
     const selector = '#serial-' + (index + 1);
     const expectedPath = '/kjv/' + slug + '/1/1/';
-    // Clear any prior native selection so each iteration tests the current
-    // physical double-click, not a selection left by the preceding label.
+    const existingIds = await extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({})).map(tab => tab.id)
+    );
     await page.evaluate(() => window.getSelection()?.removeAllRanges());
     console.log('[numbered-list serial] starting', { selector, expectedPath });
     await page.locator(selector).dblclick({ position: { x: 4, y: 10 } });
-    let resolved;
+    let resolved = null;
     try {
       resolved = await waitForTab(extensionWorker, tab => {
+        if (existingIds.includes(tab.id)) return false;
         try {
           const url = new URL(tab.url);
           return url.hostname === 'www.blueletterbible.org' && normalizeBlbKjvPath(url.pathname) === expectedPath;
         } catch (_) { return false; }
-      });
-    } catch (error) {
-      const tabs = await extensionWorker.evaluate(async () => (await chrome.tabs.query({})).map(tab => ({
-        id: tab.id, url: tab.url || '', pendingUrl: tab.pendingUrl || ''
-      })));
-      console.error('[numbered-list serial] expected tab missing', { selector, expectedPath, tabs });
-      throw error;
+      }, 2500);
+      labelResults.push({ label: index + 1, expectedPath, result: 'PASS', actualUrl: resolved.url });
+      console.log('[numbered-list serial] PASS', labelResults[labelResults.length - 1]);
+    } catch (_) {
+      const tabs = await extensionWorker.evaluate(async existing => (await chrome.tabs.query({}))
+        .filter(tab => !existing.includes(tab.id))
+        .map(tab => ({ id: tab.id, url: tab.url || '', pendingUrl: tab.pendingUrl || '' })), existingIds);
+      labelResults.push({ label: index + 1, expectedPath, result: 'FAIL', newTabs: tabs });
+      console.error('[numbered-list serial] FAIL', labelResults[labelResults.length - 1]);
+    } finally {
+      // Keep each label isolated even if it opened the wrong BLB destination.
+      const newIds = await extensionWorker.evaluate(async existing => (await chrome.tabs.query({}))
+        .filter(tab => !existing.includes(tab.id) && (() => {
+          try { return new URL(tab.url || tab.pendingUrl || '').hostname === 'www.blueletterbible.org'; }
+          catch (_) { return false; }
+        })()).map(tab => tab.id), existingIds);
+      for (const id of newIds) await removeTabById(extensionWorker, id);
     }
-    console.log('[numbered-list serial] resolved', { selector, url: resolved.url });
-    expect(normalizeBlbKjvPath(new URL(resolved.url).pathname)).toBe(expectedPath);
-    await removeTabById(extensionWorker, resolved.id);
   }
+  console.log('[numbered-list serial] SUMMARY', JSON.stringify(labelResults));
+  expect(labelResults.filter(item => item.result === 'FAIL'), 'Numbered-list labels that failed').toEqual([]);
+
 
   // Serial numbers must not borrow the following Bible reference, including
   // values beyond the original 176-point article and invalid book numbers.
