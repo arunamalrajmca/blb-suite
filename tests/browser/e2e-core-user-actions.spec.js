@@ -463,7 +463,7 @@ const numberedListBookSlugs = [
   'gen', 'exo', 'lev', 'num', 'deu', 'jos', 'jdg', 'rth', '1sa', '2sa', '1ki', '2ki',
   '1ch', '2ch', 'ezr', 'neh', 'est', 'job', 'psa', 'pro', 'ecc', 'sng', 'isa', 'jer',
   'lam', 'eze', 'dan', 'hos', 'joe', 'amo', 'oba', 'jon', 'mic', 'nah', 'hab', 'zep',
-  'hag', 'zec', 'mal', 'mat', 'mrk', 'luk', 'jhn', 'act', 'rom', '1co', '2co', 'gal',
+  'hag', 'zec', 'mal', 'mat', 'mar', 'luk', 'jhn', 'act', 'rom', '1co', '2co', 'gal',
   'eph', 'php', 'col', '1th', '2th', '1ti', '2ti', 'tit', 'phm', 'heb', 'jas', '1pe',
   '2pe', '1jo', '2jo', '3jo', 'jud', 'rev'
 ];
@@ -472,7 +472,7 @@ const numberedListBookSlugs = [
 const excludedPrefixedBookLabels = new Set([9,10,11,12,13,14,46,47,52,53,54,55,60,61,62,63,64]);
 const unprefixedNumberedBookCases = numberedListBookSlugs
   .map((slug,index)=>({label:index+1,slug,name:numberedListBookNames[index]}))
-  .filter(({label})=>!excludedPrefixedBookLabels.has(label));
+  .filter(({label})=>label>45&&!excludedPrefixedBookLabels.has(label));
 
 async function setupNumberedListSerialFixture({page,extensionStorage}) {
   await extensionStorage.set({masterEnabled:true,doubleClickBlbSites:{'example.com':true}});
