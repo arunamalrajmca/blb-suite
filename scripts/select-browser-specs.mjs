@@ -158,7 +158,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/multiverse-handoff.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js"]
+    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js"]
   },
   {
     paths: ["extension/Tutorial.html", "extension/Tutorial.js"],

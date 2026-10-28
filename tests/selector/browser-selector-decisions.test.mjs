@@ -34,6 +34,7 @@ function fixture(selector = selectorSource) {
   put(root, "package.json", JSON.stringify({ name: "fixture", version: "1.0.0", scripts: { test: "before" } }) + "\n");
   put(root, "extension/omnibox-search-helpers.js");
   put(root, "extension/multiverse-copy.js");
+  put(root, "extension/multiverse-handoff.js");
   put(root, "extension/blb-parse-popup.js");
   put(root, "extension/blb-verse-link-navigation.js");
   put(root, "extension/source-page-collector.js");
@@ -163,6 +164,19 @@ test("Study reference capture source selects its focused browser behavior spec",
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
     assert.match(output, /reference_required=false/);
+  });
+});
+
+test("MultiVerse handoff selects core and tab-reuse coverage without Study lifecycle tests", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/multiverse-handoff.js", "// changed MultiVerse handoff\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /changed_specs=.*tests\/browser\/e2e-core-user-actions\.spec\.js/);
+    assert.match(output, /changed_specs=.*tests\/browser\/multiverse-tab-reuse\.spec\.js/);
+    assert.doesNotMatch(output, /feature-lifecycle-regressions\.spec\.js/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=false/);
   });
 });
 
