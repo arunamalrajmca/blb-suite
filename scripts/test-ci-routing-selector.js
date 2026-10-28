@@ -191,6 +191,10 @@ try {
       assert(!result.values.changed_specs.includes('tests/browser/multiverse-tab-reuse.spec.js'),
         file + ' must not select unrelated MultiVerse tab-reuse tests');
     }
+    if (file === 'extension/blb-verse-link-navigation.js') {
+      assert(!result.values.changed_specs.includes('tests/browser/feature-lifecycle-regressions.spec.js'),
+        file + ' must not select unrelated Study lifecycle tests');
+    }
     console.log('PASS: ' + path.basename(file) + ' selects focused browser coverage');
   }
 
