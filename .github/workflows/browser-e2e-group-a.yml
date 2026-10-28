@@ -207,6 +207,8 @@ jobs:
         env:
           CHANGED_BROWSER_SPECS: ${{ needs.change-detection.outputs.changed_browser_specs }}
           REFERENCE_GATE_REQUIRED: ${{ needs.change-detection.outputs.browser_e2e_required }}
+          FULL_BROWSER_SUITE: ${{ needs.change-detection.outputs.full_browser_suite }}
+          SELECTED_SPECS: ${{ needs.change-detection.outputs.changed_specs }}
         shell: bash
         run: |
           set -euo pipefail
@@ -215,7 +217,7 @@ jobs:
           for spec in "${changed_specs[@]}"; do
             case "$spec" in
               tests/browser/redirect-source-url-patterns.spec.js|tests/browser/redirect-source-url-browser.spec.js|tests/browser/redirect-hostnames.spec.js|tests/browser/blb-non-kjv-redirect.spec.js)
-                if [[ "$REFERENCE_GATE_REQUIRED" == "true" ]]; then
+                if [[ "$REFERENCE_GATE_REQUIRED" == "true" && ( "$FULL_BROWSER_SUITE" == "true" || ",$SELECTED_SPECS," == *",$spec,"* ) ]]; then
                   echo "Delegating $spec to the required browser-e2e gate."
                   continue
                 fi
