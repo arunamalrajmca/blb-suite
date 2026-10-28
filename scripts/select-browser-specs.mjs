@@ -158,7 +158,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/multiverse-handoff.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js"]
+    specs: ["tests/browser/multiverse-handoff.spec.js"]
   },
   {
     paths: ["extension/Tutorial.html", "extension/Tutorial.js"],
@@ -217,6 +217,7 @@ const mappedSpecs = new Set([
   "tests/browser/research-dom-smoke.spec.js",
   "tests/browser/multiverse-tab-reuse.spec.js",
   "tests/browser/multiverse-tool-view.spec.js",
+  "tests/browser/multiverse-handoff.spec.js",
   "tests/browser/performance.spec.js",
   "tests/browser/site-feature-defaults.spec.js",
   "tests/browser/study-session-popup-ui-regression.spec.js",
@@ -240,6 +241,7 @@ const values = {
     "tests/browser/redirect-source-url-browser.spec.js",
     "tests/browser/e2e-core-user-actions.spec.js",
     "tests/browser/multiverse-tool-view.spec.js",
+    "tests/browser/multiverse-handoff.spec.js",
     "tests/browser/kings-bible-collector-behavior.spec.js",
     "tests/browser/webster-collector-behavior.spec.js",
     "tests/browser/blb-auto-hyperlinker.spec.js",
