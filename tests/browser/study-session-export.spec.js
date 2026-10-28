@@ -27,19 +27,28 @@ test('selected Study Topic exports a PDF containing its saved reference and note
   await page.locator('#studyNote').press('Control+Enter');
   await expect(page.locator('#studyStatus')).toContainText('Note saved to');
 
-  const captured = await extensionWorker.evaluate(async () => {
-    const ref = await chrome.runtime.sendMessage({
-      type: 'blbSuiteCaptureStudyRefs',
-      refs: [{ urlKey: 'jhn', chapter: 3, from: 16, to: 16, version: 'kjv' }]
-    });
-    const search = await chrome.runtime.sendMessage({
-      type: 'blbSuiteCaptureStudySearchTerm',
-      term: 'grace'
-    });
-    return { ref, search };
-  });
-  expect(captured.ref?.ok).toBe(true);
-  expect(captured.search?.ok).toBe(true);
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>Study export fixture</title></head><body><main>Study export fixture</main></body></html>'
+  }));
+  const blbPage = await context.newPage();
+  await blbPage.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil: 'domcontentloaded' });
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get(['studySessions', 'currentStudySessionId']);
+    const session = state.studySessions.find(item => item.id === state.currentStudySessionId);
+    return session?.refs || [];
+  })).toContainEqual(expect.objectContaining({
+    book: 'john', chapter: 3, from: 16, to: 16, version: 'kjv'
+  }));
+
+  await blbPage.goto('https://www.blueletterbible.org/search/search.cfm?Criteria=grace', { waitUntil: 'domcontentloaded' });
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get(['studySessions', 'currentStudySessionId']);
+    const session = state.studySessions.find(item => item.id === state.currentStudySessionId);
+    return session?.searchTerms || [];
+  })).toContain('Grace');
+  await blbPage.close();
 
   await page.locator('#downloadMenuButton').click();
   await page.locator('#downloadTopic').click();
