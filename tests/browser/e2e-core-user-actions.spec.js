@@ -618,6 +618,19 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
   for (const selector of ['#comma-book', '#comma-chapter', '#comma-first-verse', '#comma-second-verse']) {
     console.log('[comma verse-range double-click] testing target:', selector);
     await page.locator(selector).dblclick();
+    const selectionDiagnostic = await page.evaluate((targetSelector) => {
+      const target = document.querySelector(targetSelector);
+      const selection = window.getSelection();
+      return {
+        targetText: target?.textContent || '',
+        nativeSelection: selection?.toString() || '',
+        anchorText: selection?.anchorNode?.textContent || '',
+        focusText: selection?.focusNode?.textContent || '',
+        anchorOffset: selection?.anchorOffset ?? null,
+        focusOffset: selection?.focusOffset ?? null
+      };
+    }, selector);
+    console.log('[comma verse-range double-click] native selection:', { selector, ...selectionDiagnostic });
     const range = await waitForTab(extensionWorker, tab => {
       try {
         const url = new URL(tab.url || tab.pendingUrl);
