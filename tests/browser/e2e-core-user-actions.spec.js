@@ -604,15 +604,18 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
   });
 
   // Every part of this citation belongs to the same consecutive verse range.
+  // Give each extension-created tab up to 30 seconds to appear in slower CI runs.
   for (const selector of ['#comma-book', '#comma-chapter', '#comma-first-verse', '#comma-second-verse']) {
+    console.log('[comma verse-range double-click] testing target:', selector);
     await page.locator(selector).dblclick();
     const range = await waitForTab(extensionWorker, tab => {
       try {
-        const url = new URL(tab.url);
+        const url = new URL(tab.url || tab.pendingUrl);
         return url.hostname === 'www.blueletterbible.org' && normalizeBlbKjvPath(url.pathname) === '/kjv/rom/10/9-10/';
       } catch (_) { return false; }
-    });
-    expect(normalizeBlbKjvPath(new URL(range.url).pathname)).toBe('/kjv/rom/10/9-10/');
+    }, 30000);
+    console.log('[comma verse-range double-click] matched tab:', { selector, url: range.url });
+    expect(normalizeBlbKjvPath(new URL(range.url).pathname), 'Target ' + selector + ' should open Romans 10:9-10').toBe('/kjv/rom/10/9-10/');
     await removeTabById(extensionWorker, range.id);
   }
 });
