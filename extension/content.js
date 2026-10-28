@@ -1569,8 +1569,11 @@ function getDoubleClickTargetElement(event) {
 // a period at the start of the block. This guard is specific to double-click.
 function isNumberedListSerialDoubleClick(selectionText, event) {
   const selected = normalizeSelectionText(selectionText).normalize('NFKC');
-  if (!/^\d+$/.test(selected)) return false;
-  const number = Number(selected);
+  // Chromium may include punctuation when selecting a numbered-list label such as "1.".
+  // Accept it only after the physical click confirms the number-plus-period label below.
+  const selectedNumber = selected.match(/^(\d+)\.?$/)?.[1] || '';
+  if (!selectedNumber) return false;
+  const number = Number(selectedNumber);
   if (!Number.isSafeInteger(number) || number < 0) return false;
 
   try {
@@ -1610,7 +1613,7 @@ function isNumberedListSerialDoubleClick(selectionText, event) {
     while (start > 0 && /\d/.test(value[start - 1])) start--;
     let end = start;
     while (end < value.length && /\d/.test(value[end])) end++;
-    if (start < 0 || value.slice(start, end) !== selected || value[end] !== '.') return false;
+    if (start < 0 || value.slice(start, end) !== selectedNumber || value[end] !== '.') return false;
 
     const block = node.parentElement?.closest?.('p,li,td,th,blockquote,article,section,div') || node.parentElement;
     if (!block) return false;
@@ -1686,6 +1689,8 @@ function handleDoubleClickBlb(event) {
         // valid standalone book gestures even when formatted as list labels.
         // This guard is double-click-only; floating-button and Alt+B are untouched.
         const isNumberedListSerial = isNumberedListSerialDoubleClick(selection, event);
+        // Strip punctuation only after the physical-position guard confirms a real list label.
+        if (isNumberedListSerial && /^\d+\.$/.test(selection)) selection = selection.slice(0, -1);
         if (isNumberedListSerial && (Number(selection) === 0 || Number(selection) > 66)) return true;
 
         // Strong's values are lexicon identifiers, not ordinary KJV words.
