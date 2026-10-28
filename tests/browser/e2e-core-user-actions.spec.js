@@ -621,7 +621,7 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
     el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;text-align:start;';
     // Match the real-world DOM: the citation is plain text in one parent,
     // followed by a nested, focusable "See less" control.
-    el.appendChild(document.createTextNode('Romans 10:9, 10 '));
+    el.appendChild(document.createTextNode('Romans 10:9, 10'));
     const seeLess = document.createElement('div');
     seeLess.className = 'x1i10hfl xjbqb8w x1ejq31n x18oe1m7 x1sy0etr xstzfhl x972fbf x10w94by x1qhh985 x14e42zd x9f619 x1ypdohk xt0psk2 x3ct3a4 xdj266r x14z9mp xat24cr x1lziwak xexx8yu xyri2b2 x18d9i69 x1c1uobl x16tdsg8 x1hl2dhg xggy1nq x1a2a7pz xkrqix3 x1sur9pj xzsf02u x1s688f';
     seeLess.setAttribute('role', 'button');
@@ -670,6 +670,27 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
     const clickPoint = await page.locator('#blb-e2e-comma-verse-list').evaluate(root => ({
       x: Number(root.dataset.testClickX), y: Number(root.dataset.testClickY)
     }));
+    await page.evaluate(() => {
+      window.__blbCommaDoubleClickEvents = [];
+      for (const type of ['mousedown', 'mouseup', 'dblclick']) {
+        document.addEventListener(type, event => {
+          const target = event.target instanceof Element ? event.target : event.target?.parentElement;
+          window.__blbCommaDoubleClickEvents.push({
+            type,
+            targetTag: target?.tagName || null,
+            targetText: target?.textContent?.slice(0, 100) || '',
+            ancestors: target ? Array.from((function* () {
+              let node = target;
+              while (node && node instanceof Element) {
+                yield node.tagName.toLowerCase() + (node.id ? '#' + node.id : '') + (node.classList?.length ? '.' + Array.from(node.classList).slice(0, 3).join('.') : '');
+                node = node.parentElement;
+              }
+            })()).slice(0, 8) : [],
+            selectionAtEvent: window.getSelection()?.toString() || ''
+          });
+        }, true);
+      }
+    });
     await page.mouse.dblclick(clickPoint.x, clickPoint.y);
     const selectionDiagnostic = await page.evaluate(({ x, y }) => {
       const root = document.querySelector('#blb-e2e-comma-verse-list');
@@ -731,6 +752,7 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
       }
       return {
         targetText: root?.textContent || '',
+        capturedEvents: window.__blbCommaDoubleClickEvents || [],
         nativeSelection: selection?.toString() || '',
         anchorText: selection?.anchorNode?.textContent || '',
         focusText: selection?.focusNode?.textContent || '',
