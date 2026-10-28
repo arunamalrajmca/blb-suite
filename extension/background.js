@@ -5218,7 +5218,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     if (selectionOnlyReferences) {
       const first = combinedRefs[0];
       const sameChapter = combinedRefs.every(ref =>
-        Number(ref.bookNumber) === Number(first.bookNumber) &&
+        String(ref.book || '').toLowerCase() === String(first.book || '').toLowerCase() &&
         Number(ref.chapter) === Number(first.chapter) &&
         ref.from != null &&
         Number.isInteger(Number(ref.from)) &&
