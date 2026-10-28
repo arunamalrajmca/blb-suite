@@ -450,7 +450,7 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
 
 test('Double-Click on numbered-list labels maps book numbers and ignores serials above 66', async ({ page, extensionStorage, extensionWorker }) => {
   const bookSlugs = [
-    'gen', 'exo', 'lev', 'num', 'deu', 'jos', 'jdg', 'rut', '1sa', '2sa', '1ki', '2ki',
+    'gen', 'exo', 'lev', 'num', 'deu', 'jos', 'jdg', 'rth', '1sa', '2sa', '1ki', '2ki',
     '1ch', '2ch', 'ezr', 'neh', 'est', 'job', 'psa', 'pro', 'ecc', 'sng', 'isa', 'jer',
     'lam', 'eze', 'dan', 'hos', 'joe', 'amo', 'oba', 'jon', 'mic', 'nah', 'hab', 'zep',
     'hag', 'zec', 'mal', 'mat', 'mrk', 'luk', 'jhn', 'act', 'rom', '1co', '2co', 'gal',
