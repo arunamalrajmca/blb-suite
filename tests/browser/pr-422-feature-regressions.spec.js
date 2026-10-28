@@ -127,7 +127,6 @@ test.describe("The King's Bible MultiVerse collector regressions", () => {
   });
 });
 
-test.describe('Gospel content and Study deletion safety regressions', () => {
   test('tutorial includes Gospel/right-division content and the recommended study links', () => {
     expect(tutorialSource).toContain('The Gospel of Salvation');
     expect(tutorialSource).toContain('1 Corinthians 15:1–4');
@@ -147,4 +146,3 @@ test.describe('Gospel content and Study deletion safety regressions', () => {
     expect(popupJsSource).toMatch(/if \(!confirm\([\s\S]*?\)\) return;[\s\S]{0,250}blbSuiteClearStudyTopic/);
     expect(popupJsSource).toMatch(/if \(!confirm\('Delete all Study data\?[\s\S]*?\)\) return;[\s\S]{0,180}blbSuiteClearStudy/);
   });
-});
