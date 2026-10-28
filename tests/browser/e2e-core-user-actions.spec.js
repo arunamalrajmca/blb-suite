@@ -478,10 +478,10 @@ test('Double-Click on numbered-list labels maps book numbers and ignores serials
     const resolved = await waitForTab(extensionWorker, tab => {
       try {
         const url = new URL(tab.url);
-        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+        return url.hostname === 'www.blueletterbible.org' && normalizeBlbKjvPath(url.pathname) === expectedPath;
       } catch (_) { return false; }
     });
-    expect(new URL(resolved.url).pathname).toBe(expectedPath);
+    expect(normalizeBlbKjvPath(new URL(resolved.url).pathname)).toBe(expectedPath);
     await removeTabById(extensionWorker, resolved.id);
   }
 
