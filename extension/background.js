@@ -5199,13 +5199,14 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       for (const ref of combinedRefs) {
         const label = String(ref.text || '').trim();
         if (!label) continue;
-        const escaped = label.replace(/[.*+?^${}()|[\\]\\]/g, '\\  if (combinedRefs.length >= 2) {
-    // Start the MultiVerse tab-opening path before doing any Criteria-query');
-        residual = residual.replace(new RegExp(escaped, 'i'), ' ');
+        const index = residual.toLowerCase().indexOf(label.toLowerCase());
+        if (index >= 0) {
+          residual = residual.slice(0, index) + ' ' + residual.slice(index + label.length);
+        }
       }
       return residual
-        .replace(/\\b(?:and|or)\\b/gi, ' ')
-        .replace(/[\\s,;&:()[\\].–—-]+/g, '')
+        .replace(/\b(?:and|or)\b/gi, ' ')
+        .replace(/[\s,;&:().\-–—]+/g, '')
         .length === 0;
     })();
     if (selectionOnlyReferences) {
