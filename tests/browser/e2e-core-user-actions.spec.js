@@ -606,31 +606,61 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
   await page.waitForTimeout(1000);
 
   await page.evaluate(() => {
-    const el = document.createElement('p');
+    const el = document.createElement('div');
     el.id = 'blb-e2e-comma-verse-list';
-    el.innerHTML = '<span id="comma-book">Romans</span> <span id="comma-chapter">10</span><span>:</span><span id="comma-first-verse">9,</span> <span id="comma-second-verse">10</span>';
-    el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    el.setAttribute('dir', 'auto');
+    el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;text-align:start;';
+    // Match the real-world DOM: the citation is plain text in one parent,
+    // followed by a nested, focusable "See less" control.
+    el.appendChild(document.createTextNode('Romans 10:9,10 '));
+    const seeLess = document.createElement('div');
+    seeLess.className = 'x1i10hfl xjbqb8w x1ejq31n x18oe1m7 x1sy0etr xstzfhl x972fbf x10w94by x1qhh985 x14e42zd x9f619 x1ypdohk xt0psk2 x3ct3a4 xdj266r x14z9mp xat24cr x1lziwak xexx8yu xyri2b2 x18d9i69 x1c1uobl x16tdsg8 x1hl2dhg xggy1nq x1a2a7pz xkrqix3 x1sur9pj xzsf02u x1s688f';
+    seeLess.setAttribute('role', 'button');
+    seeLess.setAttribute('tabindex', '0');
+    seeLess.textContent = 'See less';
+    el.appendChild(seeLess);
     document.body.appendChild(el);
   });
-
-  // Every part of this citation belongs to the same consecutive verse range.
   // Give each extension-created tab up to 30 seconds to appear in slower CI runs.
-  for (const selector of ['#comma-book', '#comma-chapter', '#comma-first-verse', '#comma-second-verse']) {
-    console.log('[comma verse-range double-click] testing target:', selector);
-    await page.locator(selector).dblclick();
-    const selectionDiagnostic = await page.evaluate((targetSelector) => {
-      const target = document.querySelector(targetSelector);
+  // Test the real text node, rather than artificial spans around each token.
+  // Double-click several words in the citation to check context-based resolution.
+  for (const targetText of ['Romans', '10', '9,10', '10']) {
+    console.log('[comma verse-range double-click] testing target text:', targetText);
+    // For plain text in the parent, use a DOM Range to target the requested word
+    // without adding markup that would change the text-node structure.
+    await page.locator('#blb-e2e-comma-verse-list').evaluate((root, word) => {
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        const offset = node.textContent.indexOf(word);
+        if (offset < 0) continue;
+        const range = document.createRange();
+        range.setStart(node, offset);
+        range.setEnd(node, offset + word.length);
+        const rect = range.getBoundingClientRect();
+        root.dataset.testClickX = String(rect.left + rect.width / 2);
+        root.dataset.testClickY = String(rect.top + rect.height / 2);
+        return;
+      }
+      throw new Error('Could not find text target: ' + word);
+    }, targetText);
+    const clickPoint = await page.locator('#blb-e2e-comma-verse-list').evaluate(root => ({
+      x: Number(root.dataset.testClickX), y: Number(root.dataset.testClickY)
+    }));
+    await page.mouse.dblclick(clickPoint.x, clickPoint.y);
+    const selectionDiagnostic = await page.evaluate(() => {
+      const root = document.querySelector('#blb-e2e-comma-verse-list');
       const selection = window.getSelection();
       return {
-        targetText: target?.textContent || '',
+        targetText: root?.textContent || '',
         nativeSelection: selection?.toString() || '',
         anchorText: selection?.anchorNode?.textContent || '',
         focusText: selection?.focusNode?.textContent || '',
         anchorOffset: selection?.anchorOffset ?? null,
         focusOffset: selection?.focusOffset ?? null
       };
-    }, selector);
-    console.log('[comma verse-range double-click] native selection:', { selector, ...selectionDiagnostic });
+    });
+    console.log('[comma verse-range double-click] native selection:', { targetText, ...selectionDiagnostic });
     const range = await waitForTab(extensionWorker, tab => {
       try {
         const url = new URL(tab.url || tab.pendingUrl);
