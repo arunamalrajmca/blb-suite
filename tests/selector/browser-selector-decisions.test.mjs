@@ -70,6 +70,7 @@ function fixture(selector = selectorSource) {
   put(root, "tests/browser/feature-lifecycle-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/extension.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/redirect-toggle-isolation.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/multiverse-clipboard-reference-pattern.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/popup-master-toggle-regression.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/facebook-selection-parser.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/substack-selection-parser.spec.js", "import { test } from '@playwright/test';\n");
@@ -157,6 +158,7 @@ test("site-feature fail-closed behavior runs in the required gate for popup and 
     const contentOutput = select(root, base);
     assert.match(contentOutput, /full_browser_suite=true/);
     assert.match(contentOutput, /changed_specs=.*redirect-toggle-isolation\.spec\.js/);
+    assert.match(contentOutput, /changed_specs=.*multiverse-clipboard-reference-pattern\.spec\.js/);
     assert.match(contentOutput, /group_b_required=true/);
     assert.match(contentOutput, /reference_required=true/);
   });
@@ -401,6 +403,7 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
     "redirect-hostnames",
     "blb-non-kjv-redirect",
     "redirect-toggle-isolation",
+    "multiverse-clipboard-reference-pattern",
     "popup-master-toggle-regression",
     "facebook-selection-parser",
     "substack-selection-parser",
