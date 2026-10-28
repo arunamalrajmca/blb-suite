@@ -8,20 +8,22 @@ test('Suite-generated MultiVerse page stays hidden until the requested results a
   page, context, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.clear();
-  const tabIds = await extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({})).map(tab => tab.id)
-  );
+  await extensionStorage.set({ masterEnabled: true });
   const refs = [{ book: 'John', chapter: 3, from: 16, to: 16 }];
-  const pending = Object.fromEntries(tabIds.map(id => [String(id), refs]));
-  await extensionStorage.set({
-    masterEnabled: true,
-    blbSuitePendingMultiVerseRefsByTab: pending
-  });
 
-  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
-    status: 200,
-    contentType: 'text/html; charset=utf-8',
-    body: `<!doctype html>
+  await context.route('https://www.blueletterbible.org/**', async route => {
+    const url = new URL(route.request().url());
+    if (url.pathname.toLowerCase() === '/tools/multiverse.cfm') {
+      // Seed refs while the navigation response is paused, before the content
+      // script's DOMContentLoaded handler can request them.
+      const tabIds = await extensionWorker.evaluate(async () =>
+        (await chrome.tabs.query({})).map(tab => tab.id)
+      );
+      const pending = Object.fromEntries(tabIds.map(id => [String(id), refs]));
+      await extensionStorage.set({ blbSuitePendingMultiVerseRefsByTab: pending });
+    }
+    const body = url.pathname.toLowerCase() === '/tools/multiverse.cfm'
+      ? `<!doctype html>
 <html>
 <head><title>MultiVerse handoff fixture</title></head>
 <body>
@@ -42,7 +44,13 @@ test('Suite-generated MultiVerse page stays hidden until the requested results a
   </script>
 </body>
 </html>`
-  }));
+      : '<!doctype html><html><head><title>MultiVerse result</title></head><body></body></html>';
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      body
+    });
+  });
 
   await page.goto(HANDOFF_URL, { waitUntil: 'domcontentloaded' });
 
