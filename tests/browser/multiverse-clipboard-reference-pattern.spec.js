@@ -7,7 +7,7 @@ test.describe('BLB MultiVerse native-copy reference recognition', () => {
     path.join(__dirname, '../../extension/multiverse-copy.js'),
     'utf8'
   );
-  const declaration = source.match(/const referencePattern\s*=\s*\/(.+?)\/([a-z]*);/s);
+  const declaration = source.match(/const referencePattern\s*=\s*\/((?:\\\\.|[^/])+)\/([a-z]*);/s);
 
   test('recognizes compact numbered-book abbreviations and preserves existing formats', () => {
     expect(declaration, 'MultiVerse referencePattern must be present in multiverse-copy.js').not.toBeNull();
