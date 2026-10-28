@@ -176,15 +176,18 @@ try {
 
   // Background changes have an explicit behavior map; do not override it with the full-suite fallback.
   resetScenario(base);
-  write('extension/background.js', '// changed omnibox/background behavior\\n');
-  commit('change mapped background behavior');
+  write('extension/background.js', '// isolated omnibox routing change\\n');
+  write('tests/browser/omnibox-command-routing.spec.js', '// matching omnibox regression\\n');
+  commit('change background omnibox routing with its focused regression');
   result = selectorResult(base);
-  assertValue(result, 'full_browser_suite', false, 'mapped background behavior');
+  assertValue(result, 'full_browser_suite', false, 'isolated background omnibox behavior');
   assert(result.values.changed_specs.includes('tests/browser/omnibox-command-routing.spec.js'),
     'background changes must select focused omnibox routing coverage');
+  assert(result.values.changed_browser_specs.includes('tests/browser/omnibox-command-routing.spec.js'),
+    'the explicitly paired omnibox regression must execute');
   assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
-    'background-only changes must not pull in unrelated core user-action regressions');
-  console.log('PASS: background changes honor focused browser coverage');
+    'isolated omnibox changes must not pull in unrelated core user-action regressions');
+  console.log('PASS: isolated background omnibox changes honor focused browser coverage');
 
   // A popup-only feature stays focused as well.
   resetScenario(base);
