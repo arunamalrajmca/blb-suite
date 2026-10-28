@@ -304,6 +304,16 @@ test("test-only browser edits run only the changed spec in the focused workflow"
   assert.match(workflow, /needs\.change-detection\.outputs\.focused_specs != ''/);
 });
 
+test("MultiVerse workflow excludes selector-only script changes", () => {
+  const workflow = readFileSync(
+    new URL("../../.github/workflows/multiverse-tab-reuse.yml", import.meta.url),
+    "utf8"
+  );
+  assert.doesNotMatch(workflow, /scripts\/select-browser-specs\.mjs/);
+  assert.match(workflow, /extension\/\*\*/);
+  assert.match(workflow, /tests\/browser\/fixtures\.js/);
+});
+
 test("MultiVerse tab-reuse spec-only edits use the focused workflow without starting its runtime workflow", () => {
   const workflow = readFileSync(
     new URL("../../.github/workflows/multiverse-tab-reuse.yml", import.meta.url),
