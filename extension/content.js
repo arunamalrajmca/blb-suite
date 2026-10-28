@@ -1689,6 +1689,10 @@ function handleDoubleClickBlb(event) {
         // valid standalone book gestures even when formatted as list labels.
         // This guard is double-click-only; floating-button and Alt+B are untouched.
         const isNumberedListSerial = isNumberedListSerialDoubleClick(selection, event);
+        // If Chromium included the trailing list-label period in the selected
+        // text, strip it only after the physical-position guard confirms a
+        // genuine numbered-list label. This lets 1.–66. retain book mapping.
+        if (isNumberedListSerial && /^\d+\.$/.test(selection)) selection = selection.slice(0, -1);
         if (isNumberedListSerial && (Number(selection) === 0 || Number(selection) > 66)) return true;
 
         // Strong's values are lexicon identifiers, not ordinary KJV words.
