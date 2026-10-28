@@ -33,6 +33,8 @@ function fixture(selector = selectorSource) {
   put(root, "scripts/classify-ci-changes.mjs", classifierSource);
   put(root, "package.json", JSON.stringify({ name: "fixture", version: "1.0.0", scripts: { test: "before" } }) + "\n");
   put(root, "extension/omnibox-search-helpers.js");
+  put(root, "extension/multiverse-copy.js");
+  put(root, "extension/blb-parse-popup.js");
   put(root, "extension/source-page-collector.js");
   put(root, "extension/blb-auto-hyperlinker.js");
   put(root, "extension/blb-draggable-button.js");
@@ -45,6 +47,7 @@ function fixture(selector = selectorSource) {
   put(root, "tests/browser/case-sensitive-routing-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/omnibox-boolean-operators.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/e2e-core-user-actions.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/multiverse-tab-reuse.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/extension.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/fixtures.js");
   git(root, "add", ".");
@@ -116,6 +119,30 @@ test("draggable-button source selects the focused spec that exercises drag, rest
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /changed_specs=tests\/browser\/blb-draggable-button\.spec\.js/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=false/);
+  });
+});
+
+test("MultiVerse copy changes select clipboard coverage without unrelated tab-reuse tests", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/multiverse-copy.js", "// changed MultiVerse clipboard behavior\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /changed_specs=tests\/browser\/e2e-core-user-actions\.spec\.js/);
+    assert.doesNotMatch(output, /multiverse-tab-reuse\.spec\.js/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=false/);
+  });
+});
+
+test("parse-popup changes select popup-link coverage without unrelated tab-reuse tests", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/blb-parse-popup.js", "// changed parse popup behavior\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /changed_specs=tests\/browser\/e2e-core-user-actions\.spec\.js/);
+    assert.doesNotMatch(output, /multiverse-tab-reuse\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
   });
