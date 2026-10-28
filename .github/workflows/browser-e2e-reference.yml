@@ -153,6 +153,18 @@ jobs:
           - group: paired-timothy-post
             file: tests/browser/shared-regex-patterns.spec.js
             grep: 'paired 1 & 2 Timothy whole-book shorthand reaches the final MultiVerse POST with every chapter'
+          - group: redirect-source-url-patterns
+            file: tests/browser/redirect-source-url-patterns.spec.js
+            grep: '.*'
+          - group: redirect-source-url-browser
+            file: tests/browser/redirect-source-url-browser.spec.js
+            grep: '.*'
+          - group: redirect-hostnames
+            file: tests/browser/redirect-hostnames.spec.js
+            grep: '.*'
+          - group: blb-non-kjv-redirect
+            file: tests/browser/blb-non-kjv-redirect.spec.js
+            grep: '.*'
           - group: grammar-token-coverage-ot
             grep: 'generic reference grammar — exhaustive token coverage — OT'
           - group: grammar-token-coverage-nt

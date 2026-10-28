@@ -44,6 +44,7 @@ jobs:
       changed_specs: ${{ steps.select.outputs.changed_specs }}
       changed_browser_specs: ${{ steps.select.outputs.changed_browser_specs }}
       group_b_required: ${{ steps.select.outputs.group_b_required }}
+      browser_e2e_required: ${{ steps.select.outputs.reference_required }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -102,10 +103,10 @@ jobs:
       - run: npx playwright install chromium
         if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
       - name: Run native redirect hostname regression tests
-        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-hostnames.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/redirect-hostnames.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-hostnames.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/redirect-hostnames.spec.js') && !(needs.change-detection.outputs.browser_e2e_required == 'true' && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-hostnames.spec.js'))) }}
         run: npx playwright test tests/browser/redirect-hostnames.spec.js
       - name: Run non-KJV BLB redirect regression tests
-        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/blb-non-kjv-redirect.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/blb-non-kjv-redirect.spec.js') }}
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/blb-non-kjv-redirect.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/blb-non-kjv-redirect.spec.js') && !(needs.change-detection.outputs.browser_e2e_required == 'true' && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/blb-non-kjv-redirect.spec.js'))) }}
         run: npx playwright test tests/browser/blb-non-kjv-redirect.spec.js
       - name: Run ScriptTagger injection and toggle regression tests
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/scripttagger-global-injection.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/scripttagger-global-injection.spec.js') }}
