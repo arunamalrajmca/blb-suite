@@ -50,7 +50,14 @@ test('MultiVerse KJV verse links retain native same-tab navigation when the Suit
   await extensionStorage.set({ masterEnabled: false });
   await installToolViewFixture(context);
   await page.goto(TOOL_URL, { waitUntil: 'domcontentloaded' });
+  // The extension content script caches the master toggle at document start.
+  // Reload after the storage write so this test exercises the disabled state
+  // deterministically rather than racing the initial settings read.
+  await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
+
+  const stored = await extensionWorker.evaluate(async () => chrome.storage.local.get({ masterEnabled: true }));
+  expect(stored.masterEnabled).toBe(false);
 
   const sourceTabs = await getBlbTabs(extensionWorker);
   const sourceTab = sourceTabs.find(tab => new URL(tab.url || tab.pendingUrl || '').pathname.toLowerCase() === '/tools/multiverse.cfm');
