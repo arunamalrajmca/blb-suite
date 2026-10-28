@@ -3,18 +3,7 @@ name: Focused behavior tests
 on:
   pull_request:
     paths:
-      - 'tests/browser/webster-collector-behavior.spec.js'
-      - 'tests/browser/blb-auto-hyperlinker.spec.js'
-      - 'tests/browser/blb-draggable-button.spec.js'
-      - 'tests/browser/study-reference-capture.spec.js'
-      - 'tests/browser/study-session-export.spec.js'
-      - 'tests/browser/multiverse-tool-view.spec.js'
-      - 'tests/browser/multiverse-handoff.spec.js'
-      - 'tests/browser/blb-passive-new-tab-targets.spec.js'
-      - 'tests/browser/source-page-collector-behavior.spec.js'
-      - 'tests/browser/blb-verse-link-navigation.spec.js'
-      - 'tests/browser/criteria-search-navigation.spec.js'
-      - 'tests/browser/case-sensitive-routing-behavior.spec.js'
+      - 'tests/browser/*.spec.js'
       - '.github/workflows/focused-behavior-tests.yml'
 
 permissions:
@@ -72,7 +61,7 @@ jobs:
           if [[ -n "$BASE" && ! "$BASE" =~ ^0+$ ]]; then
             while IFS= read -r path; do
               case "$path" in
-                tests/browser/webster-collector-behavior.spec.js|tests/browser/case-sensitive-routing-behavior.spec.js|tests/browser/blb-auto-hyperlinker.spec.js|tests/browser/blb-draggable-button.spec.js|tests/browser/study-reference-capture.spec.js|tests/browser/study-session-export.spec.js|tests/browser/multiverse-tool-view.spec.js|tests/browser/multiverse-handoff.spec.js|tests/browser/blb-passive-new-tab-targets.spec.js|tests/browser/source-page-collector-behavior.spec.js|tests/browser/blb-verse-link-navigation.spec.js|tests/browser/criteria-search-navigation.spec.js)
+                tests/browser/*.spec.js)
                   if [[ -f "$path" ]]; then FOCUSED+=("$path"); fi
                   ;;
               esac
@@ -85,8 +74,8 @@ jobs:
     name: Focused behavior tests
     needs: change-detection
     # Runtime changes are covered by the feature selector or full browser suite.
-    # Keep this workflow for test-only edits, which intentionally do not trigger
-    # feature E2E jobs on their own.
+    # Run only the changed browser spec for test-only edits. This avoids
+    # unrelated feature suites while still validating edited browser tests.
     if: ${{ needs.change-detection.outputs.runtime_changed == 'false' && needs.change-detection.outputs.full_browser_suite == 'false' && needs.change-detection.outputs.changed_specs == '' && needs.change-detection.outputs.focused_specs != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
