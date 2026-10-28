@@ -60,6 +60,7 @@ try {
     'tests/browser/e2e-core-user-actions.spec.js',
     'tests/browser/multiverse-tab-reuse.spec.js',
     'tests/browser/multiverse-tool-view.spec.js',
+    'tests/browser/multiverse-handoff.spec.js',
     'tests/browser/site-feature-defaults.spec.js',
     'tests/browser/study-session-popup-ui-regression.spec.js',
     'tests/browser/study-backup-restore.spec.js',
@@ -172,7 +173,7 @@ try {
   // Newly extracted feature modules select their established focused browser coverage.
   const extractedFeatureCases = [
     ['extension/multiverse-copy.js', 'e2e-core-user-actions.spec.js'],
-    ['extension/multiverse-handoff.js', 'multiverse-tab-reuse.spec.js'],
+    ['extension/multiverse-handoff.js', 'multiverse-handoff.spec.js'],
     ['extension/multiverse-tool-view.js', 'multiverse-tool-view.spec.js'],
     ['extension/blb-parse-popup.js', 'e2e-core-user-actions.spec.js'],
     ['extension/blb-verse-link-navigation.js', 'e2e-core-user-actions.spec.js'],
@@ -190,7 +191,7 @@ try {
     assertValue(result, 'full_browser_suite', false, file);
     assert(result.values.changed_specs.includes(expectedSpec),
       file + ' should select ' + expectedSpec + ', got ' + result.values.changed_specs);
-    if (['extension/multiverse-copy.js', 'extension/blb-parse-popup.js', 'extension/multiverse-tool-view.js'].includes(file)) {
+    if (['extension/multiverse-copy.js', 'extension/blb-parse-popup.js', 'extension/multiverse-tool-view.js', 'extension/multiverse-handoff.js'].includes(file)) {
       assert(!result.values.changed_specs.includes('tests/browser/multiverse-tab-reuse.spec.js'),
         file + ' must not select unrelated MultiVerse tab-reuse tests');
     }
@@ -199,8 +200,10 @@ try {
         file + ' must not select unrelated Study lifecycle tests');
     }
     if (file === 'extension/multiverse-handoff.js') {
-      assert(result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
-        file + ' must retain core MultiVerse handoff behavior coverage');
+      assert(result.values.changed_specs.includes('tests/browser/multiverse-handoff.spec.js'),
+        file + ' must select direct visibility behavior coverage');
+      assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
+        file + ' must not select unrelated generic core coverage');
     }
     console.log('PASS: ' + path.basename(file) + ' selects focused browser coverage');
   }
