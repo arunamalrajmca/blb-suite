@@ -64,6 +64,7 @@ try {
     'tests/browser/blb-passive-new-tab-targets.spec.js',
     'tests/browser/source-page-collector-behavior.spec.js',
     'tests/browser/blb-verse-link-navigation.spec.js',
+    'tests/browser/criteria-search-navigation.spec.js',
     'tests/browser/site-feature-defaults.spec.js',
     'tests/browser/study-session-popup-ui-regression.spec.js',
     'tests/browser/study-backup-restore.spec.js',
@@ -182,7 +183,7 @@ try {
     ['extension/blb-parse-popup.js', 'e2e-core-user-actions.spec.js'],
     ['extension/blb-verse-link-navigation.js', 'blb-verse-link-navigation.spec.js'],
     ['extension/study-reference-capture.js', 'study-reference-capture.spec.js'],
-    ['extension/criteria-search-navigation.js', 'e2e-core-user-actions.spec.js'],
+    ['extension/criteria-search-navigation.js', 'criteria-search-navigation.spec.js'],
     ['extension/blb-auto-hyperlinker.js', 'blb-auto-hyperlinker.spec.js'],
     ['extension/blb-passive-new-tab-targets.js', 'blb-passive-new-tab-targets.spec.js'],
     ['extension/source-page-collector.js', 'source-page-collector-behavior.spec.js'],
@@ -207,6 +208,10 @@ try {
     if (file === 'extension/blb-verse-link-navigation.js') {
       assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
         file + ' must select direct target and click-routing behavior coverage');
+    }
+    if (file === 'extension/criteria-search-navigation.js') {
+      assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
+        file + ' must select direct Criteria Search navigation behavior coverage');
     }
     if (file === 'extension/multiverse-handoff.js') {
       assert(result.values.changed_specs.includes('tests/browser/multiverse-handoff.spec.js'),
