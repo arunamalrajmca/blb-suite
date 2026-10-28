@@ -405,6 +405,10 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
   for (const [selector, expectedPath] of genericCases) {
     console.log('[numbered-list E2E] starting', { selector, expectedPath });
     await page.locator(selector).dblclick();
+    console.log('[numbered-list serial] post-dblclick selection', await page.evaluate(() => ({
+      selection: window.getSelection()?.toString() || '',
+      activeElement: document.activeElement?.outerHTML?.slice(0, 240) || ''
+    })));
     let resolved;
     try {
       resolved = await waitForTab(extensionWorker, tab => {
