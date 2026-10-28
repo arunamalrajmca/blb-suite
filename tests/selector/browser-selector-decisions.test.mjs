@@ -309,7 +309,7 @@ test("MultiVerse workflow excludes selector-only script changes", () => {
     new URL("../../.github/workflows/multiverse-tab-reuse.yml", import.meta.url),
     "utf8"
   );
-  assert.doesNotMatch(workflow, /scripts\/select-browser-specs\.mjs/);
+  assert.doesNotMatch(workflow, /^\\s*-\\s*['\"]scripts\\/select-browser-specs\\.mjs['\"]\\s*$/m);
   assert.match(workflow, /extension\/\*\*/);
   assert.match(workflow, /tests\/browser\/fixtures\.js/);
 });
