@@ -17,7 +17,7 @@ test('Suite-generated MultiVerse page stays hidden until the requested results a
 <body>
   <h2>MultiVerse Retrieval</h2>
   <input id="references" type="text">
-  <button id="retrieve" type="button">Retrieve</button>
+  <input id="retrieve" type="button" value="Retrieve">
   <div id="results"><a href="${DEFAULT_RESULT_URL}">Genesis 1:1</a></div>
   <script>
     window.retrieveCount = 0;
