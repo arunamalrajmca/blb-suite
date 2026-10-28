@@ -66,7 +66,13 @@ const featureSpecs = [
   },
   {
     paths: ["extension/background.js"],
-    specs: ["tests/browser/popup-master-toggle-regression.spec.js"]
+    specs: [
+      "tests/browser/popup-master-toggle-regression.spec.js",
+      "tests/browser/facebook-selection-parser.spec.js",
+      "tests/browser/substack-selection-parser.spec.js",
+      "tests/browser/omnibox-command-routing.spec.js",
+      "tests/browser/pdf-selection-regressions.spec.js"
+    ]
   },
   {
     paths: ["extension/kjv-case-sensitive-words.js"],
@@ -238,7 +244,11 @@ const mappedSpecs = new Set([
   "tests/browser/blb-draggable-button.spec.js",
   "tests/browser/case-sensitive-routing-behavior.spec.js",
   "tests/browser/redirect-toggle-isolation.spec.js",
-  "tests/browser/popup-master-toggle-regression.spec.js"
+  "tests/browser/popup-master-toggle-regression.spec.js",
+  "tests/browser/facebook-selection-parser.spec.js",
+  "tests/browser/substack-selection-parser.spec.js",
+  "tests/browser/omnibox-command-routing.spec.js",
+  "tests/browser/pdf-selection-regressions.spec.js"
 ]);
 const separatelyManagedSpecs = new Set(["tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/performance.spec.js"]);
 const unmapped = selected.filter(path => !mappedSpecs.has(path) && !separatelyManagedSpecs.has(path));
@@ -286,7 +296,11 @@ const values = {
     "tests/browser/redirect-source-url-patterns.spec.js",
     "tests/browser/redirect-source-url-browser.spec.js",
     "tests/browser/redirect-toggle-isolation.spec.js",
-    "tests/browser/popup-master-toggle-regression.spec.js"
+    "tests/browser/popup-master-toggle-regression.spec.js",
+    "tests/browser/facebook-selection-parser.spec.js",
+    "tests/browser/substack-selection-parser.spec.js",
+    "tests/browser/omnibox-command-routing.spec.js",
+    "tests/browser/pdf-selection-regressions.spec.js"
   ))
 };
 const output = process.env.GITHUB_OUTPUT;
