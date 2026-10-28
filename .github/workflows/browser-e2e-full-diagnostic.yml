@@ -1,0 +1,67 @@
+name: BLB Suite FULL BROWSER DIAGNOSTIC — NO SELECTOR SKIPS
+run-name: Full browser diagnostic — ${{ github.event.pull_request.number && format('PR #{0}', github.event.pull_request.number) || github.ref_name }} — Run ${{ github.run_number }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why is the full diagnostic being run?"
+        required: false
+        type: string
+        default: "Check whether failures reproduce when all browser specs run"
+  pull_request:
+    branches: [ main ]
+    types: [labeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-browser-diagnostic-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  full-browser-suite:
+    name: FULL BROWSER SUITE — ALL SPECS — NO SELECTOR
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.label.name == 'full-browser-diagnostic' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout requested revision
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install locked dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+      - name: Install Playwright Chromium and system dependencies
+        run: npx playwright install --with-deps chromium
+      - name: Grant test-only generic host access
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
+      - name: Record complete Playwright test inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p test-results
+          npx playwright test --list 2>&1 | tee test-results/full-suite-test-inventory.txt
+      - name: Run every browser test without selector routing or fail-fast
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Intentionally do not call the change classifier or browser-spec selector.
+          # Override playwright.config.js maxFailures: 1 so one failure cannot hide later failures.
+          npx playwright test --max-failures=0
+      - name: Upload full-suite diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: blb-suite-full-browser-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: warn
+          retention-days: 14
