@@ -293,6 +293,17 @@ test("Criteria Search navigation selects direct popup navigation behavior only",
   });
 });
 
+test("optional E2E workflows skip spec-only edits but retain shared-fixture triggers", () => {
+  for (const workflowPath of [
+    "../../.github/workflows/browser-e2e-group-a.yml",
+    "../../.github/workflows/browser-e2e-group-b.yml"
+  ]) {
+    const workflow = readFileSync(new URL(workflowPath, import.meta.url), "utf8");
+    assert.doesNotMatch(workflow, /^\s*-\s*['"]tests\/\*\*['"]/m);
+    assert.match(workflow, /^\s*-\s*['"]tests\/browser\/fixtures\.js['"]/m);
+  }
+});
+
 test("browser-spec-only edit does not launch feature E2E", () => {
   withFixture((root, base) => {
     commitChange(root, "tests/browser/omnibox-boolean-operators.spec.js", "// test-only edit\n");

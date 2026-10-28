@@ -6,7 +6,7 @@ on:
     branches: [ main ]
     paths:
       - 'extension/**'
-      - 'tests/**'
+      - 'tests/browser/fixtures.js'
       - 'scripts/**'
       - 'regression-suite/**'
       - 'package.json'
@@ -19,7 +19,7 @@ on:
     types: [opened, synchronize, reopened, labeled]
     paths:
       - 'extension/**'
-      - 'tests/**'
+      - 'tests/browser/fixtures.js'
       - 'scripts/**'
       - 'regression-suite/**'
       - 'package.json'
