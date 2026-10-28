@@ -403,13 +403,24 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
   ];
 
   for (const [selector, expectedPath] of genericCases) {
+    console.log('[numbered-list E2E] starting', { selector, expectedPath });
     await page.locator(selector).dblclick();
-    const resolved = await waitForTab(extensionWorker, tab => {
-      try {
-        const url = new URL(tab.url);
-        return url.hostname === 'www.blueletterbible.org' && normalizeBlbKjvPath(url.pathname) === expectedPath;
-      } catch (_) { return false; }
-    });
+    let resolved;
+    try {
+      resolved = await waitForTab(extensionWorker, tab => {
+        try {
+          const url = new URL(tab.url);
+          return url.hostname === 'www.blueletterbible.org' && normalizeBlbKjvPath(url.pathname) === expectedPath;
+        } catch (_) { return false; }
+      });
+    } catch (error) {
+      const tabs = await extensionWorker.evaluate(async () => (await chrome.tabs.query({})).map(tab => ({
+        id: tab.id, url: tab.url || '', pendingUrl: tab.pendingUrl || ''
+      })));
+      console.error('[numbered-list E2E] expected tab not found', { selector, expectedPath, tabs });
+      throw error;
+    }
+    console.log('[numbered-list E2E] resolved', { selector, url: resolved.url });
     expect(normalizeBlbKjvPath(new URL(resolved.url).pathname)).toBe(expectedPath);
     await removeTabById(extensionWorker, resolved.id);
   }
