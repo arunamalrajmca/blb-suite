@@ -230,7 +230,104 @@ test.describe('core user-action E2E coverage', () => {
 
     expect(page.url()).toBe(sourceUrl);
   });
-  test('continuous same-chapter multi-reference selection opens the normal chapter range', async ({ page, extensionStorage, extensionWorker }) => {
+  test('Double-Click on numbered-list labels maps book numbers and ignores serials above 66', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const cases = [
+      ['1', 'Genesis', 'serial-1'],
+      ['2', 'Exodus', 'serial-2'],
+      ['43', 'John', 'serial-43'],
+      ['65', 'Jude', 'serial-65'],
+      ['66', 'Revelation', 'serial-66'],
+      ['67', 'Romans 1:16', 'serial-67'],
+      ['176', 'Romans 1:16', 'serial-176'],
+      ['177', 'Romans 1:16', 'serial-177'],
+      ['250', 'Romans 1:16', 'serial-250'],
+      ['0', 'Romans 1:16', 'serial-0']
+    ];
+    const wrap = document.createElement('div');
+    wrap.id = 'blb-e2e-numbered-list-serials';
+    wrap.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    for (const [number, text, id] of cases) {
+      const row = document.createElement('p');
+      row.innerHTML = '<strong><span id="' + id + '">' + number + '.</span></strong> ' + text;
+      wrap.appendChild(row);
+    }
+
+    const refs = document.createElement('div');
+    refs.id = 'blb-e2e-numbered-list-legitimate-refs';
+    refs.style.cssText = 'position:fixed;left:24px;top:420px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    refs.innerHTML = '<p><span id="legit-1cor">1</span> Cor. 3:16</p><p><span id="legit-2thess">2</span> Thess. 1:3</p>';
+    document.body.append(wrap, refs);
+  });
+
+  for (const [selector, expectedPath] of [
+    ['#serial-1', '/kjv/gen/1/1/'],
+    ['#serial-2', '/kjv/exo/1/1/'],
+    ['#serial-43', '/kjv/jhn/1/1/'],
+    ['#serial-65', '/kjv/jud/1/1/'],
+    ['#serial-66', '/kjv/rev/1/1/']
+  ]) {
+    await page.locator(selector).dblclick();
+    const resolved = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.url);
+        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+      } catch (_) { return false; }
+    });
+    expect(new URL(resolved.url).pathname).toBe(expectedPath);
+    await removeTabById(extensionWorker, resolved.id);
+  }
+
+  // Serial numbers must not borrow the following Bible reference, including
+  // values beyond the original 176-point article and invalid book numbers.
+  for (const selector of ['#serial-67', '#serial-176', '#serial-177', '#serial-250', '#serial-0']) {
+    const existingIds = await extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({})).map(tab => tab.id)
+    );
+    await page.locator(selector).dblclick();
+    await page.waitForTimeout(700);
+    const newBlbTabs = await extensionWorker.evaluate(async existing =>
+      (await chrome.tabs.query({})).filter(tab => {
+        if (existing.includes(tab.id)) return false;
+        try { return new URL(tab.url).hostname === 'www.blueletterbible.org'; }
+        catch (_) { return false; }
+      }).map(tab => tab.url), existingIds
+    );
+    expect(newBlbTabs).toEqual([]);
+  }
+
+  // Numeric prefixes in genuine numbered Bible references must still resolve.
+  for (const [selector, expectedPath] of [
+    ['#legit-1cor', '/kjv/1co/3/16/'],
+    ['#legit-2thess', '/kjv/2th/1/3/']
+  ]) {
+    await page.locator(selector).dblclick();
+    const resolved = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.url);
+        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+      } catch (_) { return false; }
+    });
+    expect(new URL(resolved.url).pathname).toBe(expectedPath);
+    await removeTabById(extensionWorker, resolved.id);
+  }
+
+  // Numbers not followed by a list-label period are not classified as serials.
+  await page.evaluate(() => {
+    const p = document.createElement('p');
+    p.id = 'ordinary-number-without-period';
+    p.textContent = '250 items are listed here.';
+    document.body.appendChild(p);
+  });
+  const ordinaryNumber = page.locator('#ordinary-number-without-period');
+  await expect(ordinaryNumber).toContainText('250 items');
+});
+
+test('continuous same-chapter multi-reference selection opens the normal chapter range', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
@@ -429,102 +526,6 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
   await removeTabById(extensionWorker, verse.id);
 });
 
-test('Double-Click on numbered-list labels maps book numbers and ignores serials above 66', async ({ page, extensionStorage, extensionWorker }) => {
-  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
-  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(1000);
-
-  await page.evaluate(() => {
-    const cases = [
-      ['1', 'Genesis', 'serial-1'],
-      ['2', 'Exodus', 'serial-2'],
-      ['43', 'John', 'serial-43'],
-      ['65', 'Jude', 'serial-65'],
-      ['66', 'Revelation', 'serial-66'],
-      ['67', 'Romans 1:16', 'serial-67'],
-      ['176', 'Romans 1:16', 'serial-176'],
-      ['177', 'Romans 1:16', 'serial-177'],
-      ['250', 'Romans 1:16', 'serial-250'],
-      ['0', 'Romans 1:16', 'serial-0']
-    ];
-    const wrap = document.createElement('div');
-    wrap.id = 'blb-e2e-numbered-list-serials';
-    wrap.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
-    for (const [number, text, id] of cases) {
-      const row = document.createElement('p');
-      row.innerHTML = '<strong><span id="' + id + '">' + number + '.</span></strong> ' + text;
-      wrap.appendChild(row);
-    }
-
-    const refs = document.createElement('div');
-    refs.id = 'blb-e2e-numbered-list-legitimate-refs';
-    refs.style.cssText = 'position:fixed;left:24px;top:420px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
-    refs.innerHTML = '<p><span id="legit-1cor">1</span> Cor. 3:16</p><p><span id="legit-2thess">2</span> Thess. 1:3</p>';
-    document.body.append(wrap, refs);
-  });
-
-  for (const [selector, expectedPath] of [
-    ['#serial-1', '/kjv/gen/1/1/'],
-    ['#serial-2', '/kjv/exo/1/1/'],
-    ['#serial-43', '/kjv/jhn/1/1/'],
-    ['#serial-65', '/kjv/jud/1/1/'],
-    ['#serial-66', '/kjv/rev/1/1/']
-  ]) {
-    await page.locator(selector).dblclick();
-    const resolved = await waitForTab(extensionWorker, tab => {
-      try {
-        const url = new URL(tab.url);
-        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
-      } catch (_) { return false; }
-    });
-    expect(new URL(resolved.url).pathname).toBe(expectedPath);
-    await removeTabById(extensionWorker, resolved.id);
-  }
-
-  // Serial numbers must not borrow the following Bible reference, including
-  // values beyond the original 176-point article and invalid book numbers.
-  for (const selector of ['#serial-67', '#serial-176', '#serial-177', '#serial-250', '#serial-0']) {
-    const existingIds = await extensionWorker.evaluate(async () =>
-      (await chrome.tabs.query({})).map(tab => tab.id)
-    );
-    await page.locator(selector).dblclick();
-    await page.waitForTimeout(700);
-    const newBlbTabs = await extensionWorker.evaluate(async existing =>
-      (await chrome.tabs.query({})).filter(tab => {
-        if (existing.includes(tab.id)) return false;
-        try { return new URL(tab.url).hostname === 'www.blueletterbible.org'; }
-        catch (_) { return false; }
-      }).map(tab => tab.url), existingIds
-    );
-    expect(newBlbTabs).toEqual([]);
-  }
-
-  // Numeric prefixes in genuine numbered Bible references must still resolve.
-  for (const [selector, expectedPath] of [
-    ['#legit-1cor', '/kjv/1co/3/16/'],
-    ['#legit-2thess', '/kjv/2th/1/3/']
-  ]) {
-    await page.locator(selector).dblclick();
-    const resolved = await waitForTab(extensionWorker, tab => {
-      try {
-        const url = new URL(tab.url);
-        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
-      } catch (_) { return false; }
-    });
-    expect(new URL(resolved.url).pathname).toBe(expectedPath);
-    await removeTabById(extensionWorker, resolved.id);
-  }
-
-  // Numbers not followed by a list-label period are not classified as serials.
-  await page.evaluate(() => {
-    const p = document.createElement('p');
-    p.id = 'ordinary-number-without-period';
-    p.textContent = '250 items are listed here.';
-    document.body.appendChild(p);
-  });
-  const ordinaryNumber = page.locator('#ordinary-number-without-period');
-  await expect(ordinaryNumber).toContainText('250 items');
-});
 test('Double-Click anywhere in a consecutive comma-separated verse citation opens the full range', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
