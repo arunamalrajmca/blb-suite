@@ -64,7 +64,10 @@ jobs:
         continue-on-error: true
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: npx playwright test --max-failures=0
+          BLB_PERF_OUTPUT: ${{ runner.temp }}/blb-performance.jsonl
+        run: |
+          : > "$BLB_PERF_OUTPUT"
+          npx playwright test --max-failures=0
 
       - name: Restore production manifest before package checks
         if: always()
