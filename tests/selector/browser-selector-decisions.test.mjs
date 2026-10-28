@@ -61,6 +61,7 @@ function fixture(selector = selectorSource) {
   put(root, "tests/browser/blb-passive-new-tab-targets.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/source-page-collector-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/blb-verse-link-navigation.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/criteria-search-navigation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/feature-lifecycle-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/extension.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/fixtures.js");
@@ -279,12 +280,13 @@ test("source-page collector selects direct reference collection behavior coverag
   });
 });
 
-test("Criteria Search navigation selects the complete core spec in Group A only", () => {
+test("Criteria Search navigation selects direct popup navigation behavior only", () => {
   withFixture((root, base) => {
     commitChange(root, "extension/criteria-search-navigation.js", "// changed navigation\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=tests\/browser\/e2e-core-user-actions\.spec\.js/);
+    assert.match(output, /changed_specs=tests\/browser\/criteria-search-navigation\.spec\.js/);
+    assert.doesNotMatch(output, /e2e-core-user-actions\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
     assert.match(output, /reference_required=false/);
