@@ -1,29 +1,17 @@
+const path = require('path');
 const { test, expect } = require('./fixtures');
 
-const HANDOFF_URL = 'https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1';
+const HANDOFF_URL = 'https://example.com/tools/MultiVerse.cfm?blbSuiteMultiVerse=1';
 const DEFAULT_RESULT_URL = 'https://www.blueletterbible.org/kjv/gen/1/1/';
 const EXPECTED_RESULT_URL = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
 
 test('Suite-generated MultiVerse page stays hidden until the requested results appear', async ({
-  page, context, extensionStorage, extensionWorker
+  page, context
 }) => {
-  await extensionStorage.clear();
-  await extensionStorage.set({ masterEnabled: true });
-  const refs = [{ book: 'John', chapter: 3, from: 16, to: 16 }];
-
-  await context.route('https://www.blueletterbible.org/**', async route => {
-    const url = new URL(route.request().url());
-    if (url.pathname.toLowerCase() === '/tools/multiverse.cfm') {
-      // Seed refs while the navigation response is paused, before the content
-      // script's DOMContentLoaded handler can request them.
-      const tabIds = await extensionWorker.evaluate(async () =>
-        (await chrome.tabs.query({})).map(tab => tab.id)
-      );
-      const pending = Object.fromEntries(tabIds.map(id => [String(id), refs]));
-      await extensionStorage.set({ blbSuitePendingMultiVerseRefsByTab: pending });
-    }
-    const body = url.pathname.toLowerCase() === '/tools/multiverse.cfm'
-      ? `<!doctype html>
+  await context.route('https://example.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: `<!doctype html>
 <html>
 <head><title>MultiVerse handoff fixture</title></head>
 <body>
@@ -44,15 +32,30 @@ test('Suite-generated MultiVerse page stays hidden until the requested results a
   </script>
 </body>
 </html>`
-      : '<!doctype html><html><head><title>MultiVerse result</title></head><body></body></html>';
-    return route.fulfill({
-      status: 200,
-      contentType: 'text/html; charset=utf-8',
-      body
-    });
-  });
+  }));
 
   await page.goto(HANDOFF_URL, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    Object.defineProperty(window, 'chrome', {
+      configurable: true,
+      value: {
+        runtime: {
+          sendMessage: async message => {
+            if (message.type === 'blbSuiteGetPendingMultiVerseRefs') {
+              return { ok: true, refs: [{ book: 'John', chapter: 3, from: 16, to: 16 }] };
+            }
+            return { ok: true };
+          }
+        }
+      }
+    });
+  });
+  await page.addScriptTag({ path: path.join(__dirname, '../../extension/multiverse-handoff.js') });
+  await page.evaluate(() => window.BLBMultiVerseHandoffModule.initialize({
+    BLBShared: { hostnames: { blbWww: 'example.com' } },
+    isSuiteEnabled: async () => true,
+    resolveBibleBook: book => book === 'John' ? { urlKey: 'jhn' } : null
+  }));
 
   await page.waitForFunction(() => {
     const root = document.documentElement;
@@ -61,7 +64,7 @@ test('Suite-generated MultiVerse page stays hidden until the requested results a
       root.style.visibility === 'hidden' &&
       input?.value === 'John 3:16' &&
       !document.querySelector('a[href*="/kjv/jhn/3/16/"]');
-  }, null, { timeout: 10000 });
+  }, null, { timeout: 5000 });
 
   const hiddenState = await page.evaluate(() => ({
     visibility: document.documentElement.style.visibility,
@@ -84,7 +87,7 @@ test('Suite-generated MultiVerse page stays hidden until the requested results a
     visibility: document.documentElement.style.visibility,
     pending: document.documentElement.dataset.blbSuiteMultiVersePending || null,
     expectedResultPresent: Boolean(document.querySelector('a[href*="/kjv/jhn/3/16/"]'))
-  })), { timeout: 10000 }).toEqual({
+  })), { timeout: 5000 }).toEqual({
     visibility: '',
     pending: null,
     expectedResultPresent: true
