@@ -5185,11 +5185,33 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // term in parallel, then run the full classifier only for reconciliation.
   const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
   const wholeBookRefs = getSelectedWholeBookReferencesFromMixedText(text);
-  const combinedRefs = [...selectedRefs, ...wholeBookRefs].sort((a, b) => {
+  let combinedRefs = [...selectedRefs, ...wholeBookRefs].sort((a, b) => {
     const aIndex = text.toLowerCase().indexOf(String(a.text || '').toLowerCase());
     const bIndex = text.toLowerCase().indexOf(String(b.text || '').toLowerCase());
     return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
   });
+
+  // A continuous sequence of individual verses in one chapter is one normal
+  // BLB passage, not a MultiVerse collection. Keep non-contiguous or
+  // cross-chapter selections on the existing MultiVerse path.
+  if (combinedRefs.length >= 2) {
+    const first = combinedRefs[0];
+    const last = combinedRefs[combinedRefs.length - 1];
+    const sameChapter = combinedRefs.every(ref =>
+      ref.book === first.book &&
+      Number(ref.chapter) === Number(first.chapter) &&
+      Number.isInteger(Number(ref.from)) &&
+      Number(ref.from) === Number(ref.to)
+    );
+    const contiguous = sameChapter && combinedRefs.every((ref, index) =>
+      index === 0 || Number(ref.from) === Number(combinedRefs[index - 1].from) + 1
+    );
+    if (contiguous) {
+      const merged = resolveBibleReference(first.book, first.chapter, first.from, last.to);
+      if (merged?.url) combinedRefs = [merged];
+    }
+  }
+
   if (combinedRefs.length >= 2) {
     // Start the MultiVerse tab-opening path before doing any Criteria-query
     // extraction. The latter performs corpus lookups and scans the selected
