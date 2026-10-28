@@ -60,13 +60,13 @@ test('source-page collector parses, canonicalizes, and deduplicates linked Bible
   });
   expect(refs).toEqual([
     {
-      book: 'John',
+      book: 'john',
       chapter: 3,
       from: 16,
       url: 'https://www.blueletterbible.org/kjv/jhn/3/16/'
     },
     {
-      book: 'Romans',
+      book: 'romans',
       chapter: 8,
       from: 1,
       url: 'https://www.blueletterbible.org/kjv/rom/8/1/'
