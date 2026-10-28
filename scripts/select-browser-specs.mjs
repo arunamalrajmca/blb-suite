@@ -193,7 +193,10 @@ for (const path of changed) {
   if (!forceFull) unknownRuntime = true;
 }
 
-const full = forceFull || unknownRuntime;
+const missingMappedSpecs = [...specs].filter(path => !existingBrowserSpecs.has(path));
+// A stale mapping must never silently drop behavioral coverage. Fall back to
+// the full suite if any mapped target no longer exists in the checked-out tree.
+const full = forceFull || unknownRuntime || missingMappedSpecs.length > 0;
 const selected = [...specs].filter(path => existingBrowserSpecs.has(path)).sort();
 const mappedSpecs = new Set([
   "tests/browser/redirect-source-url-patterns.spec.js",
@@ -259,3 +262,4 @@ if (output) appendFileSync(output, Object.entries(values).map(([k,v]) => `${k}=$
 for (const [key,value] of Object.entries(values)) console.log(`${key}=${value}`);
 console.log(`changed_files=${changed.length}`);
 if (selected.length) console.log("selected_specs:\n- " + selected.join("\n- "));
+if (missingMappedSpecs.length) console.log("missing_mapped_specs:\n- " + missingMappedSpecs.join("\n- "));

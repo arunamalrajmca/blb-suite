@@ -24,12 +24,12 @@ function put(root, path, content = "// fixture\n") {
   writeFileSync(target, content);
 }
 
-function fixture() {
+function fixture(selector = selectorSource) {
   const root = mkdtempSync(join(tmpdir(), "blb-selector-test-"));
   git(root, "init", "-q");
   git(root, "config", "user.email", "selector-test@example.invalid");
   git(root, "config", "user.name", "Selector test");
-  put(root, "scripts/select-browser-specs.mjs", selectorSource);
+  put(root, "scripts/select-browser-specs.mjs", selector);
   put(root, "scripts/classify-ci-changes.mjs", classifierSource);
   put(root, "package.json", JSON.stringify({ name: "fixture", version: "1.0.0", scripts: { test: "before" } }) + "\n");
   put(root, "extension/omnibox-search-helpers.js");
@@ -62,8 +62,8 @@ function select(root, base) {
   });
 }
 
-function withFixture(run) {
-  const { root, base } = fixture();
+function withFixture(run, selector = selectorSource) {
+  const { root, base } = fixture(selector);
   try { run(root, base); } finally { rmSync(root, { recursive: true, force: true }); }
 }
 
@@ -75,6 +75,23 @@ test("mapped feature implementation selects its focused behavioral spec", () => 
     assert.match(output, /changed_specs=tests\/browser\/omnibox-boolean-operators\.spec\.js/);
     assert.match(output, /group_a_required=true/);
   });
+});
+
+test("missing mapped behavioral spec falls back to the full browser suite", () => {
+  const staleMapping = selectorSource.replace(
+    'specs: ["tests/browser/omnibox-boolean-operators.spec.js"]',
+    'specs: ["tests/browser/missing-feature.spec.js"]'
+  );
+  assert.notEqual(staleMapping, selectorSource, "fixture must replace the intended feature mapping");
+  withFixture((root, base) => {
+    commitChange(root, "extension/omnibox-search-helpers.js", "// changed\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=true/);
+    assert.match(output, /missing_mapped_specs:[\s\S]*missing-feature\.spec\.js/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=true/);
+    assert.match(output, /reference_required=true/);
+  }, staleMapping);
 });
 
 test("Webster collector source selects executable focused coverage in Group A", () => {
