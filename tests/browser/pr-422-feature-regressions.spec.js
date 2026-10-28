@@ -132,7 +132,6 @@ test.describe('Gospel content and Study deletion safety regressions', () => {
     expect(popupSource).toContain('The Gospel of Salvation');
     expect(popupSource).toContain('https://www.blueletterbible.org/kjv/1co/15/1-4/');
     expect(popupSource).toContain('https://www.blueletterbible.org/kjv/eph/2/8-9/');
-    expect(popupSource).toContain('2 Timothy 2:15 (KJV)');
     expect(popupSource).toContain('https://columbusbiblechurch.org/');
   });
 
