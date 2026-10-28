@@ -627,7 +627,7 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
   for (const target of [
     { label: 'book name', word: 'Romans', occurrence: 0 },
     { label: 'chapter number', word: '10', occurrence: 0 },
-    { label: 'first verse token', word: '9,10', occurrence: 0 },
+    { label: 'first verse number', word: '9', occurrence: 0 },
     { label: 'second verse number', word: '10', occurrence: 1 }
   ]) {
     console.log('[comma verse-range double-click] testing target:', target.label);
