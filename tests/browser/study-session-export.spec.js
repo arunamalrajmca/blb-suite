@@ -1,12 +1,13 @@
 const { test, expect } = require('./fixtures');
 
-async function downloadForTopic(extensionWorker, topic) {
-  return extensionWorker.evaluate(value => new Promise(resolve => {
-    chrome.downloads.search({}, items => {
-      const suffix = 'BLB_Suite_Notes_' + value + '.pdf';
-      resolve((items || []).find(item => String(item.filename || '').includes(suffix)) || null);
-    });
-  }), topic);
+async function allDownloads(extensionWorker) {
+  return extensionWorker.evaluate(() => new Promise(resolve => {
+    chrome.downloads.search({}, items => resolve((items || []).map(item => ({
+      filename: item.filename,
+      state: item.state,
+      url: item.url
+    }))));
+  }));
 }
 
 test('selected Study Topic exports a PDF containing its saved reference and note', async ({
@@ -54,13 +55,14 @@ test('selected Study Topic exports a PDF containing its saved reference and note
   await page.locator('#downloadTopic').click();
   await expect(page.locator('#studyStatus')).toContainText('PDF downloaded: ' + topic);
 
-  await expect.poll(async () => {
-    const item = await downloadForTopic(extensionWorker, topic);
-    return item?.state || null;
-  }).toBe('complete');
+  await expect.poll(async () => allDownloads(extensionWorker)).toContainEqual(
+    expect.objectContaining({ filename: expect.stringContaining('BLB_Suite_Notes_' + topic + '.pdf') })
+  );
 
-  const item = await downloadForTopic(extensionWorker, topic);
-  expect(item).not.toBeNull();
+  const downloads = await allDownloads(extensionWorker);
+  const item = downloads.find(entry => String(entry.filename || '').includes('BLB_Suite_Notes_' + topic + '.pdf'));
+  expect(item).not.toBeUndefined();
+  expect(item.state).toBe('complete');
   expect(item.filename).toContain('BLB_Suite_Notes_' + topic + '.pdf');
   expect(item.url).toMatch(/^data:application\/pdf;base64,/);
   const pdf = Buffer.from(item.url.split(',')[1], 'base64').toString('latin1');
