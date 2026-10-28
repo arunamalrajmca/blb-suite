@@ -142,7 +142,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/blb-draggable-button.js"],
-    specs: ["tests/browser/extension.spec.js"]
+    specs: ["tests/browser/blb-draggable-button.spec.js"]
   },
   {
     paths: ["extension/blb-parse-popup.js"],
@@ -219,6 +219,7 @@ const mappedSpecs = new Set([
   "tests/browser/study-session-popup-ui-regression.spec.js",
   "tests/browser/webster-collector-behavior.spec.js",
   "tests/browser/blb-auto-hyperlinker.spec.js",
+  "tests/browser/blb-draggable-button.spec.js",
   "tests/browser/case-sensitive-routing-behavior.spec.js"
 ]);
 const separatelyManagedSpecs = new Set(["tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/performance.spec.js"]);
@@ -238,6 +239,7 @@ const values = {
     "tests/browser/kings-bible-collector-behavior.spec.js",
     "tests/browser/webster-collector-behavior.spec.js",
     "tests/browser/blb-auto-hyperlinker.spec.js",
+    "tests/browser/blb-draggable-button.spec.js",
     "tests/browser/case-sensitive-routing-behavior.spec.js",
     "tests/browser/feature-lifecycle-regressions.spec.js",
     "tests/browser/study-backup-restore.spec.js",
