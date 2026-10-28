@@ -532,19 +532,14 @@ async function checkNumberedBookGroup({page,extensionWorker},cases) {
   expect(results.filter(item=>item.result==='PASS'),'Every book label must resolve to its expected BLB path').toHaveLength(cases.length);
 }
 
-const numberedBookGroups=[];
-for(let index=0;index<numberedListBookCases.length;index+=5)
-  numberedBookGroups.push(numberedListBookCases.slice(index,index+5));
-
-for(const groupCases of numberedBookGroups){
-  const firstLabel=groupCases[0].label;
-  const lastLabel=groupCases[groupCases.length-1].label;
-  test('Double-Click numbered-list book labels '+firstLabel+'-'+lastLabel+' resolve to the correct BLB book',async({page,extensionStorage,extensionWorker})=>{
-    test.setTimeout(180000);
-    await setupNumberedListSerialFixture({page,extensionStorage});
-    await checkNumberedBookGroup({page,extensionWorker},groupCases);
-  });
-}
+test('Double-Click numbered-list labels 1-66 resolve to all 66 correct BLB books',async({page,extensionStorage,extensionWorker})=>{
+  // A single longer test ensures every canonical book label is covered in one run.
+  // The helper records individual failures and continues so one bad slug does not
+  // prevent the remaining books from being checked.
+  test.setTimeout(600000);
+  await setupNumberedListSerialFixture({page,extensionStorage});
+  await checkNumberedBookGroup({page,extensionWorker},numberedListBookCases);
+});
 
 test('Double-Click on serials above 66 and zero does not borrow the following Bible reference',async({page,extensionStorage,extensionWorker})=>{
   test.setTimeout(30000);
