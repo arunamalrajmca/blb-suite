@@ -5197,8 +5197,14 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     const selectionOnlyReferences = (() => {
       let residual = text;
       for (const ref of combinedRefs) {
-        const label = String(ref.text || '').trim();
-        if (!label) continue;
+        const from = ref.from == null ? null : Number(ref.from);
+        const to = ref.to == null ? from : Number(ref.to);
+        const label = String(ref.text || '').trim() || (
+          from == null
+            ? String(ref.book) + ' ' + String(ref.chapter)
+            : String(ref.book) + ' ' + String(ref.chapter) + ':' + String(from) +
+              (to != null && to !== from ? '-' + String(to) : '')
+        );
         const index = residual.toLowerCase().indexOf(label.toLowerCase());
         if (index >= 0) {
           residual = residual.slice(0, index) + ' ' + residual.slice(index + label.length);
@@ -5214,6 +5220,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       const sameChapter = combinedRefs.every(ref =>
         Number(ref.bookNumber) === Number(first.bookNumber) &&
         Number(ref.chapter) === Number(first.chapter) &&
+        ref.from != null &&
         Number.isInteger(Number(ref.from)) &&
         Number.isInteger(Number(ref.to ?? ref.from))
       );
