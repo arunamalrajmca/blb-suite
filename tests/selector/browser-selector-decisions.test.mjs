@@ -382,7 +382,7 @@ test("MultiVerse tab-reuse spec-only edits use the focused workflow without star
   assert.match(workflow, /tests\/browser\/fixtures\.js/);
 });
 
-test("required browser-e2e gate executes selected redirect specs without duplicate Group A/B runs", () => {
+test("required browser-e2e gate executes selected dedicated specs without duplicate Group A/B runs", () => {
   const referenceWorkflow = readFileSync(
     new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url),
     "utf8"
@@ -408,6 +408,7 @@ test("required browser-e2e gate executes selected redirect specs without duplica
     "pdf-selection-regressions"
   ]) {
     assert.match(referenceWorkflow, new RegExp("file: tests/browser/" + spec + "\\.spec\\.js"));
+    assert.match(groupA, new RegExp("tests/browser/" + spec + "\\.spec\\.js"));
   }
   assert.match(groupA, /REFERENCE_GATE_REQUIRED:/);
   assert.match(groupA, /Delegating \$spec to the required browser-e2e gate/);
