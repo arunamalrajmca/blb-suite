@@ -59,6 +59,7 @@ try {
     'tests/browser/scripttagger-global-injection.spec.js',
     'tests/browser/e2e-core-user-actions.spec.js',
     'tests/browser/multiverse-tab-reuse.spec.js',
+    'tests/browser/multiverse-tool-view.spec.js',
     'tests/browser/site-feature-defaults.spec.js',
     'tests/browser/study-session-popup-ui-regression.spec.js',
     'tests/browser/study-backup-restore.spec.js',
