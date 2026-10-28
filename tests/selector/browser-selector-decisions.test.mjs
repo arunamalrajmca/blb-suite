@@ -32,6 +32,10 @@ function fixture(selector = selectorSource) {
   put(root, "scripts/select-browser-specs.mjs", selector);
   put(root, "scripts/classify-ci-changes.mjs", classifierSource);
   put(root, "package.json", JSON.stringify({ name: "fixture", version: "1.0.0", scripts: { test: "before" } }) + "\n");
+  put(root, "extension/content.js");
+  put(root, "extension/popup.js");
+  put(root, "extension/popup.html");
+  put(root, "extension/redirect-scripttagger.js");
   put(root, "extension/omnibox-search-helpers.js");
   put(root, "extension/multiverse-copy.js");
   put(root, "extension/multiverse-handoff.js");
@@ -64,6 +68,11 @@ function fixture(selector = selectorSource) {
   put(root, "tests/browser/criteria-search-navigation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/feature-lifecycle-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/extension.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/redirect-toggle-isolation.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/scripttagger-global-injection.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/site-feature-defaults.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/study-session-popup-ui-regression.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/study-backup-restore.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/fixtures.js");
   git(root, "add", ".");
   git(root, "commit", "-qm", "baseline");
@@ -114,6 +123,37 @@ test("missing mapped behavioral spec falls back to the full browser suite", () =
     assert.match(output, /group_b_required=true/);
     assert.match(output, /reference_required=true/);
   }, staleMapping);
+});
+
+test("site-feature fail-closed behavior runs in the required gate for popup and shared-content changes", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/popup.js", "// changed popup permissions\n");
+    const popupOutput = select(root, base);
+    assert.match(popupOutput, /full_browser_suite=false/);
+    assert.match(popupOutput, /changed_specs=.*redirect-toggle-isolation\.spec\.js/);
+    assert.match(popupOutput, /group_b_required=false/);
+    assert.match(popupOutput, /reference_required=true/);
+  });
+  withFixture((root, base) => {
+    commitChange(root, "extension/content.js", "// changed shared content behavior\n");
+    const contentOutput = select(root, base);
+    assert.match(contentOutput, /full_browser_suite=true/);
+    assert.match(contentOutput, /changed_specs=.*redirect-toggle-isolation\.spec\.js/);
+    assert.match(contentOutput, /group_b_required=true/);
+    assert.match(contentOutput, /reference_required=true/);
+  });
+});
+
+test("mixed Group B runtime and unrelated browser-spec edits still run the changed spec", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/redirect-scripttagger.js", "// changed redirect injection\n");
+    commitChange(root, "tests/browser/redirect-toggle-isolation.spec.js", "// changed unrelated browser test\n");
+    const output = select(root, base);
+    assert.match(output, /changed_specs=tests\/browser\/scripttagger-global-injection\.spec\.js/);
+    assert.match(output, /changed_browser_specs=tests\/browser\/redirect-toggle-isolation\.spec\.js/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=true/);
+  });
 });
 
 test("BLB auto-hyperlinker source selects its rich-clipboard browser spec", () => {
@@ -341,7 +381,8 @@ test("required browser-e2e gate executes selected redirect specs without duplica
     "redirect-source-url-patterns",
     "redirect-source-url-browser",
     "redirect-hostnames",
-    "blb-non-kjv-redirect"
+    "blb-non-kjv-redirect",
+    "redirect-toggle-isolation"
   ]) {
     assert.match(referenceWorkflow, new RegExp("file: tests/browser/" + spec + "\\.spec\\.js"));
   }

@@ -66,6 +66,7 @@ try {
     'tests/browser/blb-verse-link-navigation.spec.js',
     'tests/browser/criteria-search-navigation.spec.js',
     'tests/browser/site-feature-defaults.spec.js',
+    'tests/browser/redirect-toggle-isolation.spec.js',
     'tests/browser/study-session-popup-ui-regression.spec.js',
     'tests/browser/study-backup-restore.spec.js',
     'tests/browser/feature-lifecycle-regressions.spec.js',
