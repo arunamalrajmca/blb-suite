@@ -33,6 +33,7 @@ function fixture(selector = selectorSource) {
   put(root, "scripts/classify-ci-changes.mjs", classifierSource);
   put(root, "package.json", JSON.stringify({ name: "fixture", version: "1.0.0", scripts: { test: "before" } }) + "\n");
   put(root, "extension/content.js");
+  put(root, "extension/background.js");
   put(root, "extension/popup.js");
   put(root, "extension/popup.html");
   put(root, "extension/redirect-scripttagger.js");
@@ -69,6 +70,7 @@ function fixture(selector = selectorSource) {
   put(root, "tests/browser/feature-lifecycle-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/extension.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/redirect-toggle-isolation.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/popup-master-toggle-regression.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/scripttagger-global-injection.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/site-feature-defaults.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/study-session-popup-ui-regression.spec.js", "import { test } from '@playwright/test';\n");
@@ -131,8 +133,16 @@ test("site-feature fail-closed behavior runs in the required gate for popup and 
     const popupOutput = select(root, base);
     assert.match(popupOutput, /full_browser_suite=false/);
     assert.match(popupOutput, /changed_specs=.*redirect-toggle-isolation\.spec\.js/);
+    assert.match(popupOutput, /changed_specs=.*popup-master-toggle-regression\.spec\.js/);
     assert.match(popupOutput, /group_b_required=false/);
     assert.match(popupOutput, /reference_required=true/);
+  });
+  withFixture((root, base) => {
+    commitChange(root, "extension/background.js", "// changed shared background behavior\n");
+    const backgroundOutput = select(root, base);
+    assert.match(backgroundOutput, /full_browser_suite=true/);
+    assert.match(backgroundOutput, /changed_specs=.*popup-master-toggle-regression\.spec\.js/);
+    assert.match(backgroundOutput, /reference_required=true/);
   });
   withFixture((root, base) => {
     commitChange(root, "extension/content.js", "// changed shared content behavior\n");
@@ -382,7 +392,8 @@ test("required browser-e2e gate executes selected redirect specs without duplica
     "redirect-source-url-browser",
     "redirect-hostnames",
     "blb-non-kjv-redirect",
-    "redirect-toggle-isolation"
+    "redirect-toggle-isolation",
+    "popup-master-toggle-regression"
   ]) {
     assert.match(referenceWorkflow, new RegExp("file: tests/browser/" + spec + "\\.spec\\.js"));
   }
