@@ -65,6 +65,10 @@ const featureSpecs = [
     specs: ["tests/browser/redirect-toggle-isolation.spec.js"]
   },
   {
+    paths: ["extension/background.js"],
+    specs: ["tests/browser/popup-master-toggle-regression.spec.js"]
+  },
+  {
     paths: ["extension/kjv-case-sensitive-words.js"],
     specs: ["tests/browser/case-sensitive-routing-behavior.spec.js"]
   },
@@ -106,7 +110,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/popup.html", "extension/popup.js"],
-    specs: ["tests/browser/site-feature-defaults.spec.js", "tests/browser/study-session-popup-ui-regression.spec.js", "tests/browser/study-backup-restore.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/redirect-toggle-isolation.spec.js"]
+    specs: ["tests/browser/site-feature-defaults.spec.js", "tests/browser/study-session-popup-ui-regression.spec.js", "tests/browser/study-backup-restore.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/redirect-toggle-isolation.spec.js", "tests/browser/popup-master-toggle-regression.spec.js"]
   },
   {
     paths: ["extension/kings-bible-collector.js"],
@@ -233,7 +237,8 @@ const mappedSpecs = new Set([
   "tests/browser/blb-auto-hyperlinker.spec.js",
   "tests/browser/blb-draggable-button.spec.js",
   "tests/browser/case-sensitive-routing-behavior.spec.js",
-  "tests/browser/redirect-toggle-isolation.spec.js"
+  "tests/browser/redirect-toggle-isolation.spec.js",
+  "tests/browser/popup-master-toggle-regression.spec.js"
 ]);
 const separatelyManagedSpecs = new Set(["tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/performance.spec.js"]);
 const unmapped = selected.filter(path => !mappedSpecs.has(path) && !separatelyManagedSpecs.has(path));
@@ -280,7 +285,8 @@ const values = {
     "tests/browser/research-dom-smoke.spec.js",
     "tests/browser/redirect-source-url-patterns.spec.js",
     "tests/browser/redirect-source-url-browser.spec.js",
-    "tests/browser/redirect-toggle-isolation.spec.js"
+    "tests/browser/redirect-toggle-isolation.spec.js",
+    "tests/browser/popup-master-toggle-regression.spec.js"
   ))
 };
 const output = process.env.GITHUB_OUTPUT;
