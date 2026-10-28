@@ -39,12 +39,12 @@ test('active Study Topic captures the current KJV passage and deduplicates repea
 
   await expect.poll(async () => (await currentSession(extensionWorker))?.refs || []).toContainEqual(
     expect.objectContaining({
-      book: 'John',
+      book: 'john',
       chapter: 3,
       from: 16,
       to: 16,
       version: 'kjv',
-      text: 'John 3:16'
+      text: 'john 3:16'
     })
   );
 
