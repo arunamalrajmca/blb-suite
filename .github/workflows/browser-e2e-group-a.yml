@@ -168,6 +168,10 @@ jobs:
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/study-session-export.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/study-session-export.spec.js') }}
         run: npx playwright test tests/browser/study-session-export.spec.js
 
+      - name: Run MultiVerse tool-view behavior regressions
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/multiverse-tool-view.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/multiverse-tool-view.spec.js') }}
+        run: npx playwright test tests/browser/multiverse-tool-view.spec.js
+
       # Keep the Facebook-style DOM regression in this targeted suite so range-context fixes are exercised on branch pushes.
       - name: Run Facebook nested reference token regression
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}

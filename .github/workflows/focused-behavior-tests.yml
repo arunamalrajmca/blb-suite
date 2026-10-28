@@ -8,6 +8,7 @@ on:
       - 'tests/browser/blb-draggable-button.spec.js'
       - 'tests/browser/study-reference-capture.spec.js'
       - 'tests/browser/study-session-export.spec.js'
+      - 'tests/browser/multiverse-tool-view.spec.js'
       - 'tests/browser/case-sensitive-routing-behavior.spec.js'
       - '.github/workflows/focused-behavior-tests.yml'
 
@@ -21,6 +22,7 @@ jobs:
     outputs:
       runtime_changed: ${{ steps.classify.outputs.runtime_changed }}
       full_browser_suite: ${{ steps.select.outputs.full_browser_suite }}
+      changed_specs: ${{ steps.select.outputs.changed_specs }}
       focused_specs: ${{ steps.focused.outputs.focused_specs }}
     steps:
       - name: Check out repository
@@ -65,7 +67,7 @@ jobs:
           if [[ -n "$BASE" && ! "$BASE" =~ ^0+$ ]]; then
             while IFS= read -r path; do
               case "$path" in
-                tests/browser/webster-collector-behavior.spec.js|tests/browser/case-sensitive-routing-behavior.spec.js|tests/browser/blb-auto-hyperlinker.spec.js|tests/browser/blb-draggable-button.spec.js|tests/browser/study-reference-capture.spec.js|tests/browser/study-session-export.spec.js)
+                tests/browser/webster-collector-behavior.spec.js|tests/browser/case-sensitive-routing-behavior.spec.js|tests/browser/blb-auto-hyperlinker.spec.js|tests/browser/blb-draggable-button.spec.js|tests/browser/study-reference-capture.spec.js|tests/browser/study-session-export.spec.js|tests/browser/multiverse-tool-view.spec.js)
                   if [[ -f "$path" ]]; then FOCUSED+=("$path"); fi
                   ;;
               esac
@@ -80,7 +82,7 @@ jobs:
     # Runtime changes are covered by the feature selector or full browser suite.
     # Keep this workflow for test-only edits, which intentionally do not trigger
     # feature E2E jobs on their own.
-    if: ${{ needs.change-detection.outputs.runtime_changed == 'false' && needs.change-detection.outputs.full_browser_suite == 'false' && needs.change-detection.outputs.focused_specs != '' }}
+    if: ${{ needs.change-detection.outputs.runtime_changed == 'false' && needs.change-detection.outputs.full_browser_suite == 'false' && needs.change-detection.outputs.changed_specs == '' && needs.change-detection.outputs.focused_specs != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
