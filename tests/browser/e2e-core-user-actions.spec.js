@@ -474,25 +474,13 @@ test('Double-Click on numbered-list labels maps book numbers and ignores serials
     ['#serial-65', '/kjv/jud/1/1/'],
     ['#serial-66', '/kjv/rev/1/1/']
   ]) {
-    const beforeIds = await extensionWorker.evaluate(async () => (await chrome.tabs.query({})).map(tab => tab.id));
-    console.log('[numbered-list diagnostic] dblclick', selector, 'expected', expectedPath, 'before tab IDs', beforeIds);
     await page.locator(selector).dblclick();
-    let resolved;
-    try {
-      resolved = await waitForTab(extensionWorker, tab => {
-        try {
-          const url = new URL(tab.url);
-          return url.hostname === 'www.blueletterbible.org' && normalizeBlbKjvPath(url.pathname) === expectedPath;
-        } catch (_) { return false; }
-      });
-    } catch (error) {
-      const tabs = await extensionWorker.evaluate(async () => (await chrome.tabs.query({})).map(tab => ({
-        id: tab.id, url: tab.url || '', pendingUrl: tab.pendingUrl || ''
-      })));
-      console.error('[numbered-list diagnostic] no expected BLB tab', { selector, expectedPath, beforeIds, tabs });
-      throw error;
-    }
-    console.log('[numbered-list diagnostic] resolved', selector, resolved);
+    const resolved = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.url);
+        return url.hostname === 'www.blueletterbible.org' && normalizeBlbKjvPath(url.pathname) === expectedPath;
+      } catch (_) { return false; }
+    });
     expect(normalizeBlbKjvPath(new URL(resolved.url).pathname)).toBe(expectedPath);
     await removeTabById(extensionWorker, resolved.id);
   }
