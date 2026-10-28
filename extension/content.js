@@ -1832,7 +1832,7 @@ function handleDoubleClickBlb(event) {
         // when either verse number is double-clicked. Route that shape through the
         // existing positional DOM resolver, which uses the physical caret token to
         // identify the exact citation and can expand consecutive verses to a range.
-        const isCommaSeparatedNumericVerseSelection = /^\\d{1,3}\\s*,\\s*\\d{1,3}$/.test(selection);
+        const isCommaSeparatedNumericVerseSelection = /^\d{1,3}\s*,\s*\d{1,3}$/.test(selection);
         const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord||isCommaSeparatedNumericVerseSelection;
         const blockContext=needsDomContext
           ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
