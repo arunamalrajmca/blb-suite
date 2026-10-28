@@ -1,5 +1,9 @@
 const { test, expect } = require('./fixtures');
 
+// Both tests share the worker-scoped extension context and storage. Keep their
+// opposite master-toggle states from racing each other.
+test.describe.configure({ mode: 'serial' });
+
 const HOME_URL = 'https://www.blueletterbible.org/';
 const BVERSE_URL = 'https://www.blueletterbible.org/lexicon/g25/kjv/tr/0-1/';
 const NOWRAP_URL = 'https://www.blueletterbible.org/lexicon/g3056/kjv/tr/0-1/';
@@ -57,6 +61,11 @@ test('global Suite OFF leaves bVerse targets and ordinary nowrap navigation unch
   await extensionStorage.set({ masterEnabled: false });
   await serveBlbFixture(context);
   await page.goto(HOME_URL, { waitUntil: 'domcontentloaded' });
+  // Content scripts cache the master toggle at document start. Reload after
+  // navigation so the test cannot observe a transient pre-settings state.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const stored = await extensionWorker.evaluate(async () => chrome.storage.local.get({ masterEnabled: true }));
+  expect(stored.masterEnabled).toBe(false);
   await page.waitForTimeout(1000);
 
   await expect(page.locator('#verse-in-bverse')).not.toHaveAttribute('target', '_blank');
