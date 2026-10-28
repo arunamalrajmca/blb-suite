@@ -4,13 +4,13 @@ const path = require('path');
 
 test.describe('BLB MultiVerse native-copy reference recognition', () => {
   const source = fs.readFileSync(
-    path.join(__dirname, '../../extension/content.js'),
+    path.join(__dirname, '../../extension/multiverse-copy.js'),
     'utf8'
   );
-  const declaration = source.match(/const referencePattern\s*=\s*\/(.+?)\/([a-z]*);/s);
+  const declaration = source.match(/const referencePattern\s*=\s*\/([\s\S]*?)\/([a-z]*);/s);
 
   test('recognizes compact numbered-book abbreviations and preserves existing formats', () => {
-    expect(declaration, 'MultiVerse referencePattern must be present in content.js').not.toBeNull();
+    expect(declaration, 'MultiVerse referencePattern must be present in multiverse-copy.js').not.toBeNull();
     const referencePattern = new RegExp(declaration[1], declaration[2]);
 
     const samples = [
@@ -40,17 +40,15 @@ test.describe('BLB MultiVerse native-copy reference recognition', () => {
 
 test.describe('BLB MultiVerse clipboard scope', () => {
   const source = fs.readFileSync(
-    path.join(__dirname, '../../extension/content.js'),
+    path.join(__dirname, '../../extension/multiverse-copy.js'),
     'utf8'
   );
-  const blockStart = source.indexOf('// ---------- BLB MultiVerse native-copy hyperlink enhancement ----------');
-  const blockEnd = source.indexOf('// ---------- BLB Auto Hyperlinker ----------', blockStart);
-  const block = source.slice(blockStart, blockEnd);
+  
 
   test('only enhances copies initiated by BLB native Copy buttons', () => {
-    expect(block).toContain('nativeMultiVerseCopyPending = false');
-    expect(block).toMatch(/closest\?\.\("#copyButton, #copyByVerseButton"\)/);
-    expect(block).toMatch(/if \(!nativeMultiVerseCopyPending\) return;[\s\S]*?e\.preventDefault\(\)/);
-    expect(block).toContain('setTimeout(() => { nativeMultiVerseCopyPending = false; }, 0)');
+    expect(source).toContain('let nativeMultiVerseCopyPending = false');
+    expect(source).toMatch(/closest\?\.\("#copyButton, #copyByVerseButton"\)/);
+    expect(source).toMatch(/if \(!nativeMultiVerseCopyPending\) return;[\s\S]*?e\.preventDefault\(\)/);
+    expect(source).toContain('setTimeout(() => { nativeMultiVerseCopyPending = false; }, 0)');
   });
 });
