@@ -224,7 +224,7 @@ function resolveBibleReferenceText(text, options = {}) {
     add(match.book, Number(m[2]), null, null, match.text);
   }
 
-  const oneChapterRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)(?:\s*[-–—]\s*(-?\d+))?(?!\s*[:.]\s*-?\d)(?!\s+-?\d)(?![A-Za-z0-9])/gi;
+  const oneChapterRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)(?:\s*[-–—]\s*(-?\d+))?(?!\s*[:.]\s*-?\d)(?!\s+-?\d(?!\s*\.\s+[A-Z]))(?![A-Za-z0-9])/gi;
   while ((m = oneChapterRe.exec(source))) {
     if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
     const match = resolveBibleBookCapture(m);
