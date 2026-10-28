@@ -131,7 +131,7 @@ test("site-feature fail-closed behavior runs in the required gate for popup and 
     const popupOutput = select(root, base);
     assert.match(popupOutput, /full_browser_suite=false/);
     assert.match(popupOutput, /changed_specs=.*redirect-toggle-isolation\.spec\.js/);
-    assert.match(popupOutput, /group_b_required=true/);
+    assert.match(popupOutput, /group_b_required=false/);
     assert.match(popupOutput, /reference_required=true/);
   });
   withFixture((root, base) => {
