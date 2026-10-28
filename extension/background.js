@@ -5216,45 +5216,29 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
         .length === 0;
     })();
     if (selectionOnlyReferences) {
-      const first = combinedRefs[0];
-      const sameChapter = combinedRefs.every(ref =>
-        String(ref.book || '').toLowerCase() === String(first.book || '').toLowerCase() &&
-        Number(ref.chapter) === Number(first.chapter) &&
-        ref.from != null &&
-        Number.isInteger(Number(ref.from)) &&
-        Number.isInteger(Number(ref.to ?? ref.from))
-      );
-      if (sameChapter) {
-        const ordered = combinedRefs.slice().sort((a, b) =>
-          Number(a.from) - Number(b.from) || Number(a.to ?? a.from) - Number(b.to ?? b.from)
+      // Reuse the shared canonicalizer before range detection: extracted
+      // selection refs contain book/chapter/from/to/url but may not have
+      // bookNumber or version, both of which the helper requires.
+      const canonicalRefs = canonicalMultiVerseSet(combinedRefs).refs;
+      const continuousRange = getContinuousSameChapterRange(canonicalRefs);
+      if (continuousRange) {
+        const book = bookData.find(item =>
+          Number(item.bookNumber) === Number(continuousRange.bookNumber)
         );
-        let coveredThrough = Number(ordered[0].to ?? ordered[0].from);
-        let contiguous = true;
-        for (const ref of ordered.slice(1)) {
-          const from = Number(ref.from);
-          const to = Number(ref.to ?? ref.from);
-          if (from > coveredThrough + 1) {
-            contiguous = false;
-            break;
-          }
-          coveredThrough = Math.max(coveredThrough, to);
-        }
-        if (contiguous) {
-          const range = resolveBibleReference(
-            first.book,
-            Number(first.chapter),
-            Number(ordered[0].from),
-            coveredThrough
+        const range = book && resolveBibleReference(
+          book.name,
+          continuousRange.chapter,
+          continuousRange.from,
+          continuousRange.to
+        );
+        if (range?.url) {
+          await recordStudyRefs(combinedRefs.map(ref => parseBlbKjvUrlToStudyRef(ref.url)).filter(Boolean));
+          await openBlbDestination(
+            range.url,
+            !!tabBehavior.activeIfNew,
+            !!tabBehavior.activateExisting
           );
-          if (range?.url) {
-            await recordStudyRefs(combinedRefs.map(ref => parseBlbKjvUrlToStudyRef(ref.url)).filter(Boolean));
-            await openBlbDestination(
-              range.url,
-              !!tabBehavior.activeIfNew,
-              !!tabBehavior.activateExisting
-            );
-            return;
-          }
+          return;
         }
       }
     }
