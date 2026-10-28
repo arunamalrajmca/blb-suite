@@ -47,14 +47,16 @@ test('MultiVerse KJV verse links retain native same-tab navigation when the Suit
   page, context, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.clear();
-  await extensionStorage.set({ masterEnabled: false });
   await installToolViewFixture(context);
   await page.goto(TOOL_URL, { waitUntil: 'domcontentloaded' });
-  // The extension content script caches the master toggle at document start.
-  // Reload after the storage write so this test exercises the disabled state
-  // deterministically rather than racing the initial settings read.
+  // Let extension startup finish before overriding the default, then reload
+  // so the content script reads the explicitly disabled state.
+  await page.waitForTimeout(300);
+  await extensionStorage.set({ masterEnabled: false });
   await page.reload({ waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(1000);
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({ masterEnabled: true })).masterEnabled
+  )).toBe(false);
 
   const stored = await extensionWorker.evaluate(async () => chrome.storage.local.get({ masterEnabled: true }));
   expect(stored.masterEnabled).toBe(false);
