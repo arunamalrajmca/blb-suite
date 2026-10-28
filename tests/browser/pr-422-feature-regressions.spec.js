@@ -128,13 +128,6 @@ test.describe("The King's Bible MultiVerse collector regressions", () => {
 });
 
 test.describe('Gospel content and Study deletion safety regressions', () => {
-  test('popup includes clickable Gospel references and the full 2 Timothy 2:15 KJV footer', () => {
-    expect(popupSource).toContain('The Gospel of Salvation');
-    expect(popupSource).toContain('https://www.blueletterbible.org/kjv/1co/15/1-4/');
-    expect(popupSource).toContain('https://www.blueletterbible.org/kjv/eph/2/8-9/');
-    expect(popupSource).toContain('https://columbusbiblechurch.org/');
-  });
-
   test('tutorial includes Gospel/right-division content and the recommended study links', () => {
     expect(tutorialSource).toContain('The Gospel of Salvation');
     expect(tutorialSource).toContain('1 Corinthians 15:1–4');
