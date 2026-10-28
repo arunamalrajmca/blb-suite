@@ -1828,7 +1828,12 @@ function handleDoubleClickBlb(event) {
         // "verse" is not guaranteed to be in the local KJV word index on
         // every build, but in a Facebook post it is the explicit cue for a
         // nearby verse number. Let the tightly gated post resolver inspect it.
-        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord;
+        // Chromium can select the entire comma-separated token pair (for example, "9,10")
+        // when either verse number is double-clicked. Route that shape through the
+        // existing positional DOM resolver, which uses the physical caret token to
+        // identify the exact citation and can expand consecutive verses to a range.
+        const isCommaSeparatedNumericVerseSelection = /^\\d{1,3}\\s*,\\s*\\d{1,3}$/.test(selection);
+        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord||isCommaSeparatedNumericVerseSelection;
         const blockContext=needsDomContext
           ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
           : null;
