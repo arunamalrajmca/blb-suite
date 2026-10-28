@@ -292,14 +292,20 @@ test.describe('core user-action E2E coverage', () => {
     await page.evaluate(() => {
       const el = document.createElement('p');
       el.id = 'blb-e2e-paragraph-two-tab';
-      el.textContent = 'Philippians 2:12 and John 3:16 — free gift';
+      // Model rich-text pages where the visible selection spans nested inline
+      // elements and the mouse event originates at the deepest clicked node.
+      el.innerHTML = '<span dir="auto"><span class="post-text"><span>Philippians</span> <span><strong>2:12</strong></span> and <span>John</span> <span><strong>3:16</strong></span> — <span>free</span> <span id="blb-e2e-selection-leaf">gift</span></span></span>';
       document.body.appendChild(el);
       const range = document.createRange();
       range.selectNodeContents(el);
       const selection = window.getSelection();
       selection.removeAllRanges();
       selection.addRange(range);
-      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      // Bubble from the leaf element as a real mouseup would, rather than
+      // dispatching an event whose target is document.
+      document.querySelector('#blb-e2e-selection-leaf').dispatchEvent(
+        new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window })
+      );
     });
 
     const button = page.locator('#blb-suite-page-selection-button');
