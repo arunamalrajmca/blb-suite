@@ -118,7 +118,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/multiverse-copy.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js"]
+    specs: ["tests/browser/e2e-core-user-actions.spec.js"]
   },
   {
     paths: ["extension/multiverse-tool-view.js"],
@@ -146,7 +146,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/blb-parse-popup.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js"]
+    specs: ["tests/browser/e2e-core-user-actions.spec.js"]
   },
   {
     paths: ["extension/blb-verse-link-navigation.js"],
