@@ -170,9 +170,9 @@ try {
     ['extension/blb-verse-link-navigation.js', 'e2e-core-user-actions.spec.js'],
     ['extension/study-reference-capture.js', 'feature-lifecycle-regressions.spec.js'],
     ['extension/criteria-search-navigation.js', 'e2e-core-user-actions.spec.js'],
-    ['extension/blb-auto-hyperlinker.js', 'feature-lifecycle-regressions.spec.js'],
+    ['extension/blb-auto-hyperlinker.js', 'blb-auto-hyperlinker.spec.js'],
     ['extension/blb-passive-new-tab-targets.js', 'e2e-core-user-actions.spec.js'],
-    ['extension/blb-draggable-button.js', 'rediscover-sagacity-button.spec.js']
+    ['extension/blb-draggable-button.js', 'blb-draggable-button.spec.js']
   ];
   for (const [file, expectedSpec] of extractedFeatureCases) {
     resetScenario(base);
