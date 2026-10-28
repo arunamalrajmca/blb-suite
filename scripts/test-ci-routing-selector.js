@@ -62,6 +62,7 @@ try {
     'tests/browser/multiverse-tool-view.spec.js',
     'tests/browser/multiverse-handoff.spec.js',
     'tests/browser/blb-passive-new-tab-targets.spec.js',
+    'tests/browser/source-page-collector-behavior.spec.js',
     'tests/browser/site-feature-defaults.spec.js',
     'tests/browser/study-session-popup-ui-regression.spec.js',
     'tests/browser/study-backup-restore.spec.js',
@@ -183,6 +184,7 @@ try {
     ['extension/criteria-search-navigation.js', 'e2e-core-user-actions.spec.js'],
     ['extension/blb-auto-hyperlinker.js', 'blb-auto-hyperlinker.spec.js'],
     ['extension/blb-passive-new-tab-targets.js', 'blb-passive-new-tab-targets.spec.js'],
+    ['extension/source-page-collector.js', 'source-page-collector-behavior.spec.js'],
     ['extension/blb-draggable-button.js', 'blb-draggable-button.spec.js']
   ];
   for (const [file, expectedSpec] of extractedFeatureCases) {
@@ -210,6 +212,10 @@ try {
     if (file === 'extension/blb-passive-new-tab-targets.js') {
       assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
         file + ' must select direct passive-target behavior coverage');
+    }
+    if (file === 'extension/source-page-collector.js') {
+      assert(!result.values.changed_specs.includes('tests/browser/extension.spec.js'),
+        file + ' must select direct source-page collection behavior coverage');
     }
     console.log('PASS: ' + path.basename(file) + ' selects focused browser coverage');
   }
