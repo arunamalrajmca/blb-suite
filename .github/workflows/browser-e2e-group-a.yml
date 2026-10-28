@@ -222,7 +222,7 @@ jobs:
           specs=()
           for spec in "${changed_specs[@]}"; do
             case "$spec" in
-              tests/browser/redirect-source-url-patterns.spec.js|tests/browser/redirect-source-url-browser.spec.js|tests/browser/redirect-hostnames.spec.js|tests/browser/blb-non-kjv-redirect.spec.js|tests/browser/redirect-toggle-isolation.spec.js|tests/browser/popup-master-toggle-regression.spec.js)
+              tests/browser/redirect-source-url-patterns.spec.js|tests/browser/redirect-source-url-browser.spec.js|tests/browser/redirect-hostnames.spec.js|tests/browser/blb-non-kjv-redirect.spec.js|tests/browser/redirect-toggle-isolation.spec.js|tests/browser/popup-master-toggle-regression.spec.js|tests/browser/facebook-selection-parser.spec.js|tests/browser/substack-selection-parser.spec.js|tests/browser/omnibox-command-routing.spec.js|tests/browser/pdf-selection-regressions.spec.js)
                 if [[ "$REFERENCE_GATE_REQUIRED" == "true" && ( "$FULL_BROWSER_SUITE" == "true" || ",$SELECTED_SPECS," == *",$spec,"* ) ]]; then
                   echo "Delegating $spec to the required browser-e2e gate."
                   continue
