@@ -1660,6 +1660,9 @@ function handleDoubleClickBlb(event) {
         // the current double-click. The physical event coordinates remain the
         // authoritative target while the Selection is settling.
         let selection=normalizeSelectionText(getDoubleClickSelection(event)).normalize('NFKC');
+        // Chromium can include a trailing comma with a verse token (for example, the `9,` span in `Romans 10:9, 10`).
+        // Classify that token as the numeric verse so it reaches the position-aware citation resolver.
+        selection=selection.replace(/^(\d+)[,;:]$/,'$1');
         // On double-click, Chromium may still expose the previous word's
         // non-empty Selection. For the narrowly supported verse-context
         // gesture, the physical event target is authoritative: use its exact
