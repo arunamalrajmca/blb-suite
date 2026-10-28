@@ -35,6 +35,7 @@ function fixture(selector = selectorSource) {
   put(root, "extension/omnibox-search-helpers.js");
   put(root, "extension/multiverse-copy.js");
   put(root, "extension/multiverse-handoff.js");
+  put(root, "extension/multiverse-tool-view.js");
   put(root, "extension/blb-parse-popup.js");
   put(root, "extension/blb-verse-link-navigation.js");
   put(root, "extension/source-page-collector.js");
@@ -54,6 +55,7 @@ function fixture(selector = selectorSource) {
   put(root, "tests/browser/omnibox-boolean-operators.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/e2e-core-user-actions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/multiverse-tab-reuse.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/multiverse-tool-view.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/feature-lifecycle-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/extension.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/fixtures.js");
@@ -161,6 +163,20 @@ test("Study reference capture source selects its focused browser behavior spec",
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /changed_specs=tests\/browser\/study-reference-capture\.spec\.js/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=false/);
+    assert.match(output, /reference_required=false/);
+  });
+});
+
+test("MultiVerse tool-view changes select direct click-routing coverage only", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/multiverse-tool-view.js", "// changed MultiVerse tool-view routing\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /changed_specs=tests\/browser\/multiverse-tool-view\.spec\.js/);
+    assert.doesNotMatch(output, /e2e-core-user-actions\.spec\.js/);
+    assert.doesNotMatch(output, /multiverse-tab-reuse\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
     assert.match(output, /reference_required=false/);
