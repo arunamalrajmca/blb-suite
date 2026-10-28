@@ -168,6 +168,18 @@ jobs:
           - group: popup-master-toggle
             file: tests/browser/popup-master-toggle-regression.spec.js
             grep: '.*'
+          - group: facebook-selection-parser
+            file: tests/browser/facebook-selection-parser.spec.js
+            grep: '.*'
+          - group: substack-selection-parser
+            file: tests/browser/substack-selection-parser.spec.js
+            grep: '.*'
+          - group: omnibox-command-routing
+            file: tests/browser/omnibox-command-routing.spec.js
+            grep: '.*'
+          - group: pdf-selection-regressions
+            file: tests/browser/pdf-selection-regressions.spec.js
+            grep: '.*'
           - group: blb-non-kjv-redirect
             file: tests/browser/blb-non-kjv-redirect.spec.js
             grep: '.*'

@@ -71,6 +71,10 @@ function fixture(selector = selectorSource) {
   put(root, "tests/browser/extension.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/redirect-toggle-isolation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/popup-master-toggle-regression.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/facebook-selection-parser.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/substack-selection-parser.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/omnibox-command-routing.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/pdf-selection-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/scripttagger-global-injection.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/site-feature-defaults.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/study-session-popup-ui-regression.spec.js", "import { test } from '@playwright/test';\n");
@@ -142,6 +146,10 @@ test("site-feature fail-closed behavior runs in the required gate for popup and 
     const backgroundOutput = select(root, base);
     assert.match(backgroundOutput, /full_browser_suite=true/);
     assert.match(backgroundOutput, /changed_specs=.*popup-master-toggle-regression\.spec\.js/);
+    assert.match(backgroundOutput, /changed_specs=.*facebook-selection-parser\.spec\.js/);
+    assert.match(backgroundOutput, /changed_specs=.*substack-selection-parser\.spec\.js/);
+    assert.match(backgroundOutput, /changed_specs=.*omnibox-command-routing\.spec\.js/);
+    assert.match(backgroundOutput, /changed_specs=.*pdf-selection-regressions\.spec\.js/);
     assert.match(backgroundOutput, /reference_required=true/);
   });
   withFixture((root, base) => {
@@ -374,7 +382,7 @@ test("MultiVerse tab-reuse spec-only edits use the focused workflow without star
   assert.match(workflow, /tests\/browser\/fixtures\.js/);
 });
 
-test("required browser-e2e gate executes selected redirect specs without duplicate Group A/B runs", () => {
+test("required browser-e2e gate executes selected dedicated specs without duplicate Group A/B runs", () => {
   const referenceWorkflow = readFileSync(
     new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url),
     "utf8"
@@ -393,9 +401,14 @@ test("required browser-e2e gate executes selected redirect specs without duplica
     "redirect-hostnames",
     "blb-non-kjv-redirect",
     "redirect-toggle-isolation",
-    "popup-master-toggle-regression"
+    "popup-master-toggle-regression",
+    "facebook-selection-parser",
+    "substack-selection-parser",
+    "omnibox-command-routing",
+    "pdf-selection-regressions"
   ]) {
     assert.match(referenceWorkflow, new RegExp("file: tests/browser/" + spec + "\\.spec\\.js"));
+    assert.match(groupA, new RegExp("tests/browser/" + spec + "\\.spec\\.js"));
   }
   assert.match(groupA, /REFERENCE_GATE_REQUIRED:/);
   assert.match(groupA, /Delegating \$spec to the required browser-e2e gate/);
