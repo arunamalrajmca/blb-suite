@@ -1,0 +1,110 @@
+name: BLB Suite — Manual Full Test Audit
+run-name: Full Test Audit — ${{ github.ref_name }} — Run ${{ github.run_number }} — Attempt ${{ github.run_attempt }}
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-test-audit-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  full-test-audit:
+    name: Run every browser spec and regression group
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout selected ref
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate extension build and module contracts
+        id: build
+        continue-on-error: true
+        run: node scripts/validate-build.js
+
+      - name: Run browser selector decision tests
+        id: selector
+        continue-on-error: true
+        run: node --test tests/selector/*.test.mjs
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      # Deliberately bypass select-browser-specs.mjs, changed-file routing,
+      # group routing, and workflow-level spec filters. Playwright receives the
+      # entire tests/browser suite in one command. Its own explicit test.skip()
+      # conditions remain visible in the report.
+      - name: Run every browser spec without CI selector filtering
+        id: browser
+        continue-on-error: true
+        run: npx playwright test
+
+      - name: Run package regression group
+        id: package
+        continue-on-error: true
+        run: node regression-suite/tests/run-regression.mjs extension --group=package
+
+      - name: Run resolver regression group
+        id: resolver
+        continue-on-error: true
+        run: node regression-suite/tests/run-regression.mjs extension --group=resolver
+
+      - name: Run selection regression group
+        id: selection
+        continue-on-error: true
+        run: node regression-suite/tests/run-regression.mjs extension --group=selection
+
+      - name: Run features regression group
+        id: features
+        continue-on-error: true
+        run: node regression-suite/tests/run-regression.mjs extension --group=features
+
+      - name: Report every audit result
+        if: always()
+        shell: bash
+        env:
+          BUILD: ${{ steps.build.outcome }}
+          SELECTOR: ${{ steps.selector.outcome }}
+          BROWSER: ${{ steps.browser.outcome }}
+          PACKAGE: ${{ steps.package.outcome }}
+          RESOLVER: ${{ steps.resolver.outcome }}
+          SELECTION: ${{ steps.selection.outcome }}
+          FEATURES: ${{ steps.features.outcome }}
+        run: |
+          {
+            echo "## Manual full-test audit"
+            echo
+            echo "| Suite | Result |"
+            echo "|---|---|"
+            echo "| Build validation | $BUILD |"
+            echo "| Selector contract tests | $SELECTOR |"
+            echo "| All Playwright browser specs | $BROWSER |"
+            echo "| Regression package | $PACKAGE |"
+            echo "| Regression resolver | $RESOLVER |"
+            echo "| Regression selection | $SELECTION |"
+            echo "| Regression features | $FEATURES |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          failed=0
+          for result in "$BUILD" "$SELECTOR" "$BROWSER" "$PACKAGE" "$RESOLVER" "$SELECTION" "$FEATURES"; do
+            if [[ "$result" != "success" ]]; then failed=1; fi
+          done
+          if [[ "$failed" -ne 0 ]]; then
+            echo "One or more audit suites failed; see the individual step logs above."
+            exit 1
+          fi
