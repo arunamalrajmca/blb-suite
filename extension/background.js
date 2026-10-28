@@ -5190,6 +5190,67 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
   });
   if (combinedRefs.length >= 2) {
+    // If the selection contains only consecutive verses from one chapter,
+    // open the normal BLB range URL instead of creating a MultiVerse request.
+    // Keep multi-book, cross-chapter, gapped, and prose-bearing selections on
+    // the existing MultiVerse path.
+    const selectionOnlyReferences = (() => {
+      let residual = text;
+      for (const ref of combinedRefs) {
+        const label = String(ref.text || '').trim();
+        if (!label) continue;
+        const escaped = label.replace(/[.*+?^${}()|[\\]\\]/g, '\\  if (combinedRefs.length >= 2) {
+    // Start the MultiVerse tab-opening path before doing any Criteria-query');
+        residual = residual.replace(new RegExp(escaped, 'i'), ' ');
+      }
+      return residual
+        .replace(/\\b(?:and|or)\\b/gi, ' ')
+        .replace(/[\\s,;&:()[\\].–—-]+/g, '')
+        .length === 0;
+    })();
+    if (selectionOnlyReferences) {
+      const first = combinedRefs[0];
+      const sameChapter = combinedRefs.every(ref =>
+        Number(ref.bookNumber) === Number(first.bookNumber) &&
+        Number(ref.chapter) === Number(first.chapter) &&
+        Number.isInteger(Number(ref.from)) &&
+        Number.isInteger(Number(ref.to ?? ref.from))
+      );
+      if (sameChapter) {
+        const ordered = combinedRefs.slice().sort((a, b) =>
+          Number(a.from) - Number(b.from) || Number(a.to ?? a.from) - Number(b.to ?? b.from)
+        );
+        let coveredThrough = Number(ordered[0].to ?? ordered[0].from);
+        let contiguous = true;
+        for (const ref of ordered.slice(1)) {
+          const from = Number(ref.from);
+          const to = Number(ref.to ?? ref.from);
+          if (from > coveredThrough + 1) {
+            contiguous = false;
+            break;
+          }
+          coveredThrough = Math.max(coveredThrough, to);
+        }
+        if (contiguous) {
+          const range = resolveBibleReference(
+            first.book,
+            Number(first.chapter),
+            Number(ordered[0].from),
+            coveredThrough
+          );
+          if (range?.url) {
+            await recordStudyRefs(combinedRefs.map(ref => parseBlbKjvUrlToStudyRef(ref.url)).filter(Boolean));
+            await openBlbDestination(
+              range.url,
+              !!tabBehavior.activeIfNew,
+              !!tabBehavior.activateExisting
+            );
+            return;
+          }
+        }
+      }
+    }
+
     // Start the MultiVerse tab-opening path before doing any Criteria-query
     // extraction. The latter performs corpus lookups and scans the selected
     // text synchronously; on PDF selections it must not sit in front of the
