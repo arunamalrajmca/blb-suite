@@ -1643,12 +1643,13 @@ async function handleBCommand(text, disposition = 'currentTab') {
   if (book) {
     let ch=parsed.chapter, from=parsed.fromVerse, to=parsed.toVerse;
 
-    // Omnibox references share verse-boundary normalization with redirects,
-    // but malformed chapters and descending ranges must not be silently
-    // rewritten. Verse zero is the one intentional lower-bound normalization.
+    // Reject malformed/lower-bound-invalid chapters and descending ranges,
+    // but let the shared resolver clamp excessive chapter and verse numbers
+    // to the book/chapter boundary. In particular, an input such as
+    // "Romans 185 5" should navigate to Romans 16:5 instead of being dropped.
     if (ch != null) {
       const numericChapter = Number(ch);
-      if (!Number.isInteger(numericChapter) || numericChapter < 1 || numericChapter > book.chapterCount) return;
+      if (!Number.isInteger(numericChapter) || numericChapter < 1) return;
       if (from != null && (!Number.isInteger(Number(from)) || Number(from) < 0)) return;
       if (to != null && (!Number.isInteger(Number(to)) || Number(to) < Number(from))) return;
     }
