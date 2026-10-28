@@ -57,6 +57,11 @@ test('global Suite OFF leaves bVerse targets and ordinary nowrap navigation unch
   await extensionStorage.set({ masterEnabled: false });
   await serveBlbFixture(context);
   await page.goto(HOME_URL, { waitUntil: 'domcontentloaded' });
+  // Content scripts cache the master toggle at document start. Reload after
+  // navigation so the test cannot observe a transient pre-settings state.
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  const stored = await extensionWorker.evaluate(async () => chrome.storage.local.get({ masterEnabled: true }));
+  expect(stored.masterEnabled).toBe(false);
   await page.waitForTimeout(1000);
 
   await expect(page.locator('#verse-in-bverse')).not.toHaveAttribute('target', '_blank');
