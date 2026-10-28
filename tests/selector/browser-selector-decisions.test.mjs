@@ -212,3 +212,56 @@ test("stale omnibox module paths remain unknown runtime changes", () => {
     });
   }
 });
+
+
+function classify(root, base) {
+  return execFileSync("node", ["scripts/classify-ci-changes.mjs", base], {
+    cwd: root,
+    encoding: "utf8"
+  });
+}
+
+test("documentation-only changes can skip package validation", () => {
+  withFixture((root, base) => {
+    commitChange(root, "docs/ci-policy.md", "Documentation only.\n");
+    const output = classify(root, base);
+    assert.match(output, /runtime_changed=false/);
+    assert.match(output, /package_validation_required=false/);
+  });
+});
+
+test("browser-spec-only changes can skip package validation", () => {
+  withFixture((root, base) => {
+    commitChange(root, "tests/browser/omnibox-boolean-operators.spec.js", "// spec-only change\n");
+    const output = classify(root, base);
+    assert.match(output, /runtime_changed=false/);
+    assert.match(output, /package_validation_required=false/);
+  });
+});
+
+test("workflow changes always require package validation", () => {
+  withFixture((root, base) => {
+    commitChange(root, ".github/workflows/browser-tests.yml", "name: changed workflow\n");
+    const output = classify(root, base);
+    assert.match(output, /runtime_changed=false/);
+    assert.match(output, /package_validation_required=true/);
+  });
+});
+
+test("selector policy tests always require package validation", () => {
+  withFixture((root, base) => {
+    commitChange(root, "tests/selector/new-policy.test.mjs", "// selector policy test\n");
+    const output = classify(root, base);
+    assert.match(output, /runtime_changed=false/);
+    assert.match(output, /package_validation_required=true/);
+  });
+});
+
+test("unknown runtime changes require package validation and behavioral coverage", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/new-runtime-module.js", "// runtime change\n");
+    const output = classify(root, base);
+    assert.match(output, /runtime_changed=true/);
+    assert.match(output, /package_validation_required=true/);
+  });
+});
