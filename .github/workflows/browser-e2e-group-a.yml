@@ -175,7 +175,7 @@ jobs:
       # Disable fail-fast for this core file so one intermittent failure does not hide later test results.
       - name: Run complete core user-action regressions
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/e2e-core-user-actions.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/e2e-core-user-actions.spec.js') }}
-        run: npx playwright test tests/browser/e2e-core-user-actions.spec.js --max-failures=0
+        run: npx playwright test tests/browser/e2e-core-user-actions.spec.js
       - name: Run King's Bible collector behavior regressions
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/kings-bible-collector-behavior.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/kings-bible-collector-behavior.spec.js') }}
         run: npx playwright test tests/browser/kings-bible-collector-behavior.spec.js
