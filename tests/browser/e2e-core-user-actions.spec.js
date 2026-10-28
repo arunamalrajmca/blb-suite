@@ -992,6 +992,26 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
     }).length;
   }, baselineTabIds), { timeout:15000 }).toBe(2);
 
+  // A tab URL can appear before the extension has persisted that tab's verse batch.
+  // Wait for the actual hand-off state, not merely tab creation, in both ordering cases.
+  await expect.poll(async () => extensionWorker.evaluate(async (baseline) => {
+    const tabs = await chrome.tabs.query({});
+    const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
+    const pending = data.blbSuitePendingMultiVerseRefsByTab || {};
+    const multiverseTabs = tabs.filter(tab => {
+      if (baseline.includes(tab.id)) return false;
+      try {
+        const url = new URL(tab.url || tab.pendingUrl);
+        return url.hostname === 'www.blueletterbible.org' &&
+          (url.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
+           url.searchParams.get('blbSuiteMultiVerse') === '1');
+      } catch (_) { return false; }
+    });
+    return multiverseTabs.length === 2 && multiverseTabs.every(tab =>
+      Array.isArray(pending[String(tab.id)]) && pending[String(tab.id)].length > 0
+    );
+  }, baselineTabIds), { timeout:15000 }).toBe(true);
+
   const state = await extensionWorker.evaluate(async (baselineTabIds) => {
     const tabs = await chrome.tabs.query({});
     const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
@@ -1099,6 +1119,26 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
       } catch (_) { return false; }
     }).length;
   }, baselineTabIds), { timeout:15000 }).toBe(2);
+
+  // A tab URL can appear before the extension has persisted that tab's verse batch.
+  // Wait for the actual hand-off state, not merely tab creation, in both ordering cases.
+  await expect.poll(async () => extensionWorker.evaluate(async (baseline) => {
+    const tabs = await chrome.tabs.query({});
+    const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
+    const pending = data.blbSuitePendingMultiVerseRefsByTab || {};
+    const multiverseTabs = tabs.filter(tab => {
+      if (baseline.includes(tab.id)) return false;
+      try {
+        const url = new URL(tab.url || tab.pendingUrl);
+        return url.hostname === 'www.blueletterbible.org' &&
+          (url.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
+           url.searchParams.get('blbSuiteMultiVerse') === '1');
+      } catch (_) { return false; }
+    });
+    return multiverseTabs.length === 2 && multiverseTabs.every(tab =>
+      Array.isArray(pending[String(tab.id)]) && pending[String(tab.id)].length > 0
+    );
+  }, baselineTabIds), { timeout:15000 }).toBe(true);
 
   const state = await extensionWorker.evaluate(async (baselineTabIds) => {
     const tabs = await chrome.tabs.query({});
