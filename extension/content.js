@@ -1569,8 +1569,11 @@ function getDoubleClickTargetElement(event) {
 // a period at the start of the block. This guard is specific to double-click.
 function isNumberedListSerialDoubleClick(selectionText, event) {
   const selected = normalizeSelectionText(selectionText).normalize('NFKC');
-  if (!/^\d+$/.test(selected)) return false;
-  const number = Number(selected);
+  // Some Chromium double-click selections include punctuation in a label such
+  // as "1.". Accept it only when the physical click confirms a list label.
+  const selectedNumber = selected.match(/^(\d+)\.?$/)?.[1] || '';
+  if (!selectedNumber) return false;
+  const number = Number(selectedNumber);
   if (!Number.isSafeInteger(number) || number < 0) return false;
 
   try {
@@ -1610,7 +1613,7 @@ function isNumberedListSerialDoubleClick(selectionText, event) {
     while (start > 0 && /\d/.test(value[start - 1])) start--;
     let end = start;
     while (end < value.length && /\d/.test(value[end])) end++;
-    if (start < 0 || value.slice(start, end) !== selected || value[end] !== '.') return false;
+    if (start < 0 || value.slice(start, end) !== selectedNumber || value[end] !== '.') return false;
 
     const block = node.parentElement?.closest?.('p,li,td,th,blockquote,article,section,div') || node.parentElement;
     if (!block) return false;
