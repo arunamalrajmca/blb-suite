@@ -293,6 +293,17 @@ test("Criteria Search navigation selects direct popup navigation behavior only",
   });
 });
 
+test("test-only browser edits run only the changed spec in the focused workflow", () => {
+  const workflow = readFileSync(
+    new URL("../../.github/workflows/focused-behavior-tests.yml", import.meta.url),
+    "utf8"
+  );
+  assert.match(workflow, /^\s*-\s*['"]tests\/browser\/\*\.spec\.js['"]/m);
+  assert.match(workflow, /tests\/browser\/\*\.spec\.js\)/);
+  assert.match(workflow, /needs\.change-detection\.outputs\.runtime_changed == 'false'/);
+  assert.match(workflow, /needs\.change-detection\.outputs\.focused_specs != ''/);
+});
+
 test("optional E2E workflows skip spec-only edits but retain shared-fixture triggers", () => {
   for (const workflowPath of [
     "../../.github/workflows/browser-e2e-group-a.yml",
