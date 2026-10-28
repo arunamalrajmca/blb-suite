@@ -598,7 +598,7 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
   await page.evaluate(() => {
     const el = document.createElement('p');
     el.id = 'blb-e2e-comma-verse-list';
-    el.innerHTML = '<span id="comma-book">Romans</span> <span id="comma-chapter">10</span><span>:</span><span id="comma-first-verse">9,</span><span id="comma-second-verse">10</span>';
+    el.innerHTML = '<span id="comma-book">Romans</span> <span id="comma-chapter">10</span><span>:</span><span id="comma-first-verse">9,</span> <span id="comma-second-verse">10</span>';
     el.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
     document.body.appendChild(el);
   });
