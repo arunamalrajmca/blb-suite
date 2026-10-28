@@ -602,6 +602,7 @@ test('Ordinary numbers without a list-label period are not classified as serials
 
 test('Double-Click anywhere in a consecutive comma-separated verse citation opens the full range', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+  const installFixture = async () => {
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
 
@@ -621,6 +622,9 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
     el.appendChild(seeLess);
     document.body.appendChild(el);
   });
+  };
+  await installFixture();
+
   // Give each extension-created tab up to 30 seconds to appear in slower CI runs.
   // Test the real text node, rather than artificial spans around each token.
   // Double-click several words in the citation to check context-based resolution.
@@ -681,6 +685,9 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
     console.log('[comma verse-range double-click] matched tab:', { target: target.label, url: range.url });
     expect(normalizeBlbKjvPath(new URL(range.url).pathname), 'Target ' + target.label + ' should open Romans 10:9-10').toBe('/kjv/rom/10/9-10/');
     await removeTabById(extensionWorker, range.id);
+    // Isolate each physical gesture: reset the page and native Selection so
+    // a previous double-click cannot influence the next target's context.
+    await installFixture();
   }
 });
 
