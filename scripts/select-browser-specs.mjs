@@ -138,7 +138,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/blb-passive-new-tab-targets.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js"]
+    specs: ["tests/browser/blb-passive-new-tab-targets.spec.js"]
   },
   {
     paths: ["extension/blb-draggable-button.js"],
@@ -218,6 +218,7 @@ const mappedSpecs = new Set([
   "tests/browser/multiverse-tab-reuse.spec.js",
   "tests/browser/multiverse-tool-view.spec.js",
   "tests/browser/multiverse-handoff.spec.js",
+  "tests/browser/blb-passive-new-tab-targets.spec.js",
   "tests/browser/performance.spec.js",
   "tests/browser/site-feature-defaults.spec.js",
   "tests/browser/study-session-popup-ui-regression.spec.js",
@@ -242,6 +243,7 @@ const values = {
     "tests/browser/e2e-core-user-actions.spec.js",
     "tests/browser/multiverse-tool-view.spec.js",
     "tests/browser/multiverse-handoff.spec.js",
+    "tests/browser/blb-passive-new-tab-targets.spec.js",
     "tests/browser/kings-bible-collector-behavior.spec.js",
     "tests/browser/webster-collector-behavior.spec.js",
     "tests/browser/blb-auto-hyperlinker.spec.js",
