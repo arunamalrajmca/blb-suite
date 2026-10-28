@@ -172,7 +172,7 @@ try {
   const extractedFeatureCases = [
     ['extension/multiverse-copy.js', 'e2e-core-user-actions.spec.js'],
     ['extension/multiverse-handoff.js', 'multiverse-tab-reuse.spec.js'],
-    ['extension/multiverse-tool-view.js', 'e2e-core-user-actions.spec.js'],
+    ['extension/multiverse-tool-view.js', 'multiverse-tool-view.spec.js'],
     ['extension/blb-parse-popup.js', 'e2e-core-user-actions.spec.js'],
     ['extension/blb-verse-link-navigation.js', 'e2e-core-user-actions.spec.js'],
     ['extension/study-reference-capture.js', 'study-reference-capture.spec.js'],
@@ -189,7 +189,7 @@ try {
     assertValue(result, 'full_browser_suite', false, file);
     assert(result.values.changed_specs.includes(expectedSpec),
       file + ' should select ' + expectedSpec + ', got ' + result.values.changed_specs);
-    if (['extension/multiverse-copy.js', 'extension/blb-parse-popup.js'].includes(file)) {
+    if (['extension/multiverse-copy.js', 'extension/blb-parse-popup.js', 'extension/multiverse-tool-view.js'].includes(file)) {
       assert(!result.values.changed_specs.includes('tests/browser/multiverse-tab-reuse.spec.js'),
         file + ' must not select unrelated MultiVerse tab-reuse tests');
     }
