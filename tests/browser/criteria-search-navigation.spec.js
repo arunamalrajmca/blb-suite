@@ -62,6 +62,16 @@ test('global Suite OFF preserves native same-tab Criteria Search popup navigatio
   expect(sourceTab).toBeTruthy();
 
   await page.locator('#strong-popup-link').click();
+  await page.waitForTimeout(500);
+  const diagnostics = await extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get({ masterEnabled: true });
+    const tabs = await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' });
+    return {
+      masterEnabled: state.masterEnabled,
+      tabs: tabs.map(tab => ({ id: tab.id, url: tab.url || tab.pendingUrl || '' }))
+    };
+  });
+  console.log('Criteria Search global-OFF navigation diagnostics:', JSON.stringify(diagnostics));
   await expect(page).toHaveURL(STRONG_URL);
 
   const after = await getBlbTabs(extensionWorker);
