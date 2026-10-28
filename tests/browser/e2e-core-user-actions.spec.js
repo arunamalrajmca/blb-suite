@@ -496,6 +496,15 @@ test('Double-Click on numbered-list labels maps book numbers and ignores serials
     await page.evaluate(() => window.getSelection()?.removeAllRanges());
     console.log('[numbered-list serial] starting', { selector, expectedPath });
     await page.locator(selector).dblclick();
+    console.log('[numbered-list serial diagnostic]', await page.evaluate(() => {
+      const selection = window.getSelection();
+      const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+      return {
+        selection: selection?.toString() || '',
+        startNode: range?.startContainer?.nodeType === Node.TEXT_NODE ? range.startContainer.nodeValue : range?.startContainer?.nodeName || '',
+        startOffset: range?.startOffset ?? null
+      };
+    }));
     let resolved;
     try {
       resolved = await waitForTab(extensionWorker, tab => {
