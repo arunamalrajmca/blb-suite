@@ -36,6 +36,36 @@ test.describe('remaining omnibox command routing', () => {
     ]);
   });
 
+
+  test('excessive chapter and verse numbers clamp through the omnibox reference resolver', async ({ extensionWorker }) => {
+    const result = await extensionWorker.evaluate(async () => {
+      const originalUpdate = chrome.tabs.update;
+      const originalRecordStudyEntry = recordStudyEntry;
+      const navigations = [];
+      chrome.tabs.update = async details => {
+        navigations.push(details.url);
+        return {};
+      };
+      recordStudyEntry = async () => {};
+      try {
+        for (const input of ['Romans 185 5', 'Romans 16 5', 'Romans 185', 'Romans 5 185']) {
+          await handleBCommand(input, 'currentTab');
+        }
+        return navigations;
+      } finally {
+        chrome.tabs.update = originalUpdate;
+        recordStudyEntry = originalRecordStudyEntry;
+      }
+    });
+
+    expect(result).toEqual([
+      'https://www.blueletterbible.org/kjv/rom/16/5/',
+      'https://www.blueletterbible.org/kjv/rom/16/5/',
+      'https://www.blueletterbible.org/kjv/rom/16/',
+      'https://www.blueletterbible.org/kjv/rom/5/25/'
+    ]);
+  });
+
   test('cs command is gated by the master switch and forwards the disposition', async ({ extensionWorker }) => {
     const result = await extensionWorker.evaluate(async () => {
       const originalIsSuiteEnabled = isSuiteEnabled;
