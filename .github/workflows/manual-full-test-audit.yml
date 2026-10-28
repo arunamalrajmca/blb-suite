@@ -36,6 +36,9 @@ jobs:
         shell: bash
         run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
 
+      - name: Preserve production manifest for package checks
+        run: cp extension/manifest.json "$RUNNER_TEMP/blb-manifest-original.json"
+
       - name: Grant test-only generic host access
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
 
@@ -61,7 +64,11 @@ jobs:
         continue-on-error: true
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: npx playwright test
+        run: npx playwright test --max-failures=0
+
+      - name: Restore production manifest before package checks
+        if: always()
+        run: cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json
 
       - name: Run package regression group
         id: package
