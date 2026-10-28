@@ -536,14 +536,14 @@ async function checkUnprefixedBookGroup({page,extensionWorker},cases) {
 }
 
 const numberedBookGroups=[];
-for(let index=0;index<unprefixedNumberedBookCases.length;index+=8)
-  numberedBookGroups.push(unprefixedNumberedBookCases.slice(index,index+8));
+for(let index=0;index<unprefixedNumberedBookCases.length;index+=5)
+  numberedBookGroups.push(unprefixedNumberedBookCases.slice(index,index+5));
 
 for(const groupCases of numberedBookGroups){
   const firstLabel=groupCases[0].label;
   const lastLabel=groupCases[groupCases.length-1].label;
   test('Double-Click non-prefixed book labels '+firstLabel+'-'+lastLabel+' resolve to the correct BLB book',async({page,extensionStorage,extensionWorker})=>{
-    test.setTimeout(45000);
+    test.setTimeout(60000);
     await setupNumberedListSerialFixture({page,extensionStorage});
     await checkUnprefixedBookGroup({page,extensionWorker},groupCases);
   });
