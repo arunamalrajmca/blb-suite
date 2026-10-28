@@ -404,7 +404,7 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
 
   for (const [selector, expectedPath] of genericCases) {
     console.log('[numbered-list E2E] starting', { selector, expectedPath });
-    await page.locator(selector).dblclick({ position: { x: 4, y: 10 } });
+    await page.locator(selector).dblclick();
     console.log('[numbered-list serial] post-dblclick selection', await page.evaluate(() => ({
       selection: window.getSelection()?.toString() || '',
       activeElement: document.activeElement?.outerHTML?.slice(0, 240) || ''
@@ -497,7 +497,7 @@ test('Double-Click on numbered-list labels maps book numbers and ignores serials
     // physical double-click, not a selection left by the preceding label.
     await page.evaluate(() => window.getSelection()?.removeAllRanges());
     console.log('[numbered-list serial] starting', { selector, expectedPath });
-    await page.locator(selector).dblclick();
+    await page.locator(selector).dblclick({ position: { x: 4, y: 10 } });
     let resolved;
     try {
       resolved = await waitForTab(extensionWorker, tab => {
