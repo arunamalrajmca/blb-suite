@@ -87,7 +87,7 @@ test.describe("The King's Bible entry-page click handling", () => {
   test('handles visible book references, abbreviated data-bible IDs, verse ranges, and Judges source IDs', () => {
     expect(kingsBibleCollectorSource).toContain('element.getAttribute("data-bible")');
     expect(kingsBibleCollectorSource).toContain('const abbreviatedLabel = /^\\d+:\\d+(?:-\\d+)?$/');
-    expect(kingsBibleCollectorSource).toContain('const range = label.match(/^\\d+:(\\d+)-(\\d+)$/)');
+    expect(kingsBibleCollectorSource).toContain('const range = label.match(/^(\\d+):(\\d+)-(\\d+)$/)');
     expect(kingsBibleCollectorSource).toContain('bookCode === "65"');
     expect(kingsBibleCollectorSource).toContain('resolveBibleReference(bookName, chapter, from, to)');
   });
