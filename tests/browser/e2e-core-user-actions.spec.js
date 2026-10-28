@@ -820,11 +820,18 @@ test('Double-Click resolves references through custom and framework-generated DO
     const host = document.createElement('div');
     host.id = 'blb-e2e-custom-dom-context';
     host.style.cssText = 'position:fixed;left:24px;top:320px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    // Unknown/custom elements are inline by default in Chromium. These wrappers
+    // represent separate framework-rendered content rows, so give them explicit
+    // block layout instead of accidentally concatenating "Genesis 50Romans 16Acts 17"
+    // into one invalid citation string in the fixture.
+    const style = document.createElement('style');
+    style.textContent = '#blb-e2e-custom-dom-context article-card, #blb-e2e-custom-dom-context framework-line, #blb-e2e-custom-dom-context x-text-row { display: block; margin-bottom: 8px; }';
     host.innerHTML = [
       '<article-card><span>Genesis</span> <ref-token><strong id="custom-gen50">50</strong></ref-token></article-card>',
       '<framework-line><span>Romans</span> <inline-ref><em id="custom-rom16">16</em></inline-ref></framework-line>',
       '<x-text-row><span>Acts</span> <x-reference><b id="custom-acts17">17</b></x-reference></x-text-row>'
     ].join('');
+    document.head.appendChild(style);
     document.body.appendChild(host);
   });
 
