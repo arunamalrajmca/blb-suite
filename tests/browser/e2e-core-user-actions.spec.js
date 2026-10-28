@@ -624,26 +624,37 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
   // Give each extension-created tab up to 30 seconds to appear in slower CI runs.
   // Test the real text node, rather than artificial spans around each token.
   // Double-click several words in the citation to check context-based resolution.
-  for (const targetText of ['Romans', '10', '9,10', '10']) {
-    console.log('[comma verse-range double-click] testing target text:', targetText);
-    // For plain text in the parent, use a DOM Range to target the requested word
-    // without adding markup that would change the text-node structure.
-    await page.locator('#blb-e2e-comma-verse-list').evaluate((root, word) => {
+  for (const target of [
+    { label: 'book name', word: 'Romans', occurrence: 0 },
+    { label: 'chapter number', word: '10', occurrence: 0 },
+    { label: 'first verse token', word: '9,10', occurrence: 0 },
+    { label: 'second verse number', word: '10', occurrence: 1 }
+  ]) {
+    console.log('[comma verse-range double-click] testing target:', target.label);
+    // Use a DOM Range to locate the word without adding markup that would
+    // change the real-world plain-text node structure.
+    await page.locator('#blb-e2e-comma-verse-list').evaluate((root, requested) => {
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       let node;
+      let seen = 0;
       while ((node = walker.nextNode())) {
-        const offset = node.textContent.indexOf(word);
+        let offset = -1;
+        let searchFrom = 0;
+        while ((searchFrom = node.textContent.indexOf(requested.word, searchFrom)) >= 0) {
+          if (seen++ === requested.occurrence) { offset = searchFrom; break; }
+          searchFrom += requested.word.length;
+        }
         if (offset < 0) continue;
         const range = document.createRange();
         range.setStart(node, offset);
-        range.setEnd(node, offset + word.length);
+        range.setEnd(node, offset + requested.word.length);
         const rect = range.getBoundingClientRect();
         root.dataset.testClickX = String(rect.left + rect.width / 2);
         root.dataset.testClickY = String(rect.top + rect.height / 2);
         return;
       }
-      throw new Error('Could not find text target: ' + word);
-    }, targetText);
+      throw new Error('Could not find text target: ' + requested.label);
+    }, target);
     const clickPoint = await page.locator('#blb-e2e-comma-verse-list').evaluate(root => ({
       x: Number(root.dataset.testClickX), y: Number(root.dataset.testClickY)
     }));
@@ -660,7 +671,7 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
         focusOffset: selection?.focusOffset ?? null
       };
     });
-    console.log('[comma verse-range double-click] native selection:', { targetText, ...selectionDiagnostic });
+    console.log('[comma verse-range double-click] native selection:', { target: target.label, ...selectionDiagnostic });
     const range = await waitForTab(extensionWorker, tab => {
       try {
         const url = new URL(tab.url || tab.pendingUrl);
