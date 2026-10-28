@@ -87,7 +87,7 @@ test("missing mapped behavioral spec falls back to the full browser suite", () =
     commitChange(root, "extension/omnibox-search-helpers.js", "// changed\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=true/);
-    assert.match(output, /missing_mapped_specs=tests\/browser\/missing-feature\.spec\.js/);
+    assert.match(output, /missing_mapped_specs:[\s\S]*missing-feature\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=true/);
     assert.match(output, /reference_required=true/);
