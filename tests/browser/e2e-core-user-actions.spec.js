@@ -464,8 +464,8 @@ const numberedListBookSlugs = [
   '1ch', '2ch', 'ezr', 'neh', 'est', 'job', 'psa', 'pro', 'ecc', 'sng', 'isa', 'jer',
   'lam', 'eze', 'dan', 'hos', 'joe', 'amo', 'oba', 'jon', 'mic', 'nah', 'hab', 'zep',
   'hag', 'zec', 'mal', 'mat', 'mar', 'luk', 'jhn', 'act', 'rom', '1co', '2co', 'gal',
-  'eph', 'php', 'col', '1th', '2th', '1ti', '2ti', 'tit', 'phm', 'heb', 'jas', '1pe',
-  '2pe', '1jo', '2jo', '3jo', 'jud', 'rev'
+  'eph', 'phl', 'col', '1th', '2th', '1ti', '2ti', 'tit', 'phm', 'heb', 'jas', '1pe',
+  '2pe', '1jo', '2jo', '3jo', 'jde', 'rev'
 ];
 // Full list stays in the fixture to preserve each serial's real position. This pass
 // intentionally tests only non-prefixed books; numeric-prefix books are excluded.
