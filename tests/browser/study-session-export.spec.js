@@ -17,7 +17,7 @@ test('selected Study Topic exports a PDF containing its saved reference and note
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
 
   const topic = 'Export Regression ' + Date.now();
-  const note = 'Study export integration note';
+  const note = 'Study Export Integration Note';
   await page.locator('#studyTopic').fill(topic);
   await expect(page.locator('#startTopic')).toBeEnabled();
   await page.locator('#startTopic').click();
