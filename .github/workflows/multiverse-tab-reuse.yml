@@ -9,7 +9,6 @@ on:
       - 'playwright.config.js'
       - 'package.json'
       - 'package-lock.json'
-      - '.github/workflows/multiverse-tab-reuse.yml'
   pull_request:
     branches: [main]
     paths:
