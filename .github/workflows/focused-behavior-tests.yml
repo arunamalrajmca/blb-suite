@@ -4,7 +4,6 @@ on:
   pull_request:
     paths:
       - 'tests/browser/*.spec.js'
-      - '.github/workflows/focused-behavior-tests.yml'
 
 permissions:
   contents: read
