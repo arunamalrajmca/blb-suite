@@ -366,24 +366,15 @@ test("test-only browser edits reuse the required reference workflow classifier",
   assert.match(workflow, /npx playwright test "\$\{specs\[@\]\}"/);
 });
 
-test("MultiVerse workflow excludes selector-only script changes", () => {
+test("MultiVerse tab-reuse regressions share the Group A runner with conservative full-suite coverage", () => {
   const workflow = readFileSync(
-    new URL("../../.github/workflows/multiverse-tab-reuse.yml", import.meta.url),
+    new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url),
     "utf8"
   );
-  assert.doesNotMatch(workflow, /^\s*-\s*['"]scripts\/select-browser-specs\.mjs['"]\s*$/m);
-  assert.match(workflow, /extension\/\*\*/);
-  assert.match(workflow, /tests\/browser\/fixtures\.js/);
-});
-
-test("MultiVerse tab-reuse spec-only edits use the focused workflow without starting its runtime workflow", () => {
-  const workflow = readFileSync(
-    new URL("../../.github/workflows/multiverse-tab-reuse.yml", import.meta.url),
-    "utf8"
-  );
-  assert.doesNotMatch(workflow, /^\s*-\s*['"]tests\/browser\/multiverse-tab-reuse\.spec\.js['"]/m);
-  assert.match(workflow, /^\s*-\s*['"]extension\/\*\*['"]/m);
-  assert.match(workflow, /tests\/browser\/fixtures\.js/);
+  assert.match(workflow, /Run MultiVerse tab reuse and 22-batch persistence regressions/);
+  assert.match(workflow, /needs\.change-detection\.outputs\.full_browser_suite == 'true'[\s\S]*?contains\(needs\.change-detection\.outputs\.changed_specs, 'tests\/browser\/multiverse-tab-reuse\.spec\.js'\)/);
+  assert.match(workflow, /!contains\(needs\.change-detection\.outputs\.changed_browser_specs, 'tests\/browser\/multiverse-tab-reuse\.spec\.js'\)/);
+  assert.match(workflow, /npx playwright test tests\/browser\/multiverse-tab-reuse\.spec\.js --workers=1/);
 });
 
 test("required browser-e2e gate executes selected dedicated specs without duplicate Group A/B runs", () => {
