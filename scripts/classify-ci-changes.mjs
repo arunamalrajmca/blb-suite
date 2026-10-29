@@ -43,7 +43,7 @@ function sameExceptVersion(path) {
   } catch { return false; }
 }
 function nonRuntimePath(path) {
-  return /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/)|tests\/selector\/|scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$|scripts\/test-ci-routing-selector\.js)/i.test(path)
+  return /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/)|tests\/selector\/|scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs|scripts\/reference-e2e-matrix\.json$|scripts\/test-ci-routing-selector\.js)/i.test(path)
     || /^tests\/browser\/[^/]+\.spec\.js$/i.test(path)
     || /^(store-assets\/|assets\/store\/|extension\/(icons|store-assets)\/)/i.test(path);
 }
@@ -57,6 +57,7 @@ function packageValidationPath(path) {
     || path === "scripts/classify-ci-changes.mjs"
     || path === "scripts/select-browser-specs.mjs"
     || path === "scripts/select-reference-matrix.mjs"
+    || path === "scripts/reference-e2e-matrix.json"
     || path === "scripts/test-ci-routing-selector.js"
     || path === "scripts/validate-build.js"
     || path === "package.json"
