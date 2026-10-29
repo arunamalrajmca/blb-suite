@@ -2904,13 +2904,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({...result, contextual:true, multiVerse:true, actionSource:'double-click'});
           return true;
         }
-        if (message.contextualReference?.url) {
+        const doubleClickSelectedRefs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(text));
+        if (message.contextualReference?.url && doubleClickSelectedRefs.length < 2) {
           await openSelectedPdfBibleRefs(text, behavior, message.contextualReference);
           sendResponse({ok:true, contextual:true, actionSource:'double-click'});
           return true;
         }
         const doubleClickBookOnly = getSelectedBookOnlyReference(normalizeSelectedScriptureText(text));
-        if (doubleClickBookOnly?.url) {
+        if (doubleClickBookOnly?.url && !message.contextualReference?.url) {
           await recordStudyRefs([parseBlbKjvUrlToStudyRef(doubleClickBookOnly.url)].filter(Boolean));
           await openBlbDestination(doubleClickBookOnly.url, !!behavior.activeIfNew, !!behavior.activateExisting);
           sendResponse({ok:true, bookOnly:true, actionSource:'double-click'});
