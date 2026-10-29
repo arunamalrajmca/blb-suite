@@ -416,9 +416,11 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
   assert.match(groupB, /browser_e2e_required == 'true'/);
 });
 
-test("optional E2E workflows exclude selector-only scripts from their broad script filters", () => {
+test("optional E2E workflows exclude selector-only and store-only scripts from broad triggers", () => {
   for (const workflowPath of [
-    "../../.github/workflows/browser-e2e-groups.yml"
+    "../../.github/workflows/browser-e2e-groups.yml",
+    "../../.github/workflows/browser-e2e-reference.yml",
+    "../../.github/workflows/browser-e2e-performance.yml"
   ]) {
     const workflow = readFileSync(new URL(workflowPath, import.meta.url), "utf8");
     assert.match(workflow, /^\s*-\s*['"]scripts\/\*\*['"]/m);
@@ -426,11 +428,25 @@ test("optional E2E workflows exclude selector-only scripts from their broad scri
       "classify-ci-changes.mjs",
       "select-browser-specs.mjs",
       "select-reference-matrix.mjs",
-      "test-ci-routing-selector.js"
+      "test-ci-routing-selector.js",
+      "verify-store-assets.py",
+      "verify-store-branding.py",
+      "verify-store-package.py",
+      "verify-store-submission-assets.py"
     ]) {
-      assert.ok(workflow.includes("- '!scripts/" + script + "'"));
+      assert.ok(workflow.includes("- '!scripts/" + script + "'"), workflowPath + " must exclude " + script);
     }
-    assert.ok(workflow.includes("- '!scripts/reference-e2e-matrix.json'"), "matrix metadata should not trigger optional Group A/B workflows");
+    if (/^\s*-\s*['"]tests\/\*\*['"]/m.test(workflow)) {
+      for (const testFile of [
+        "test_verify_store_package.py",
+        "test_verify_store_submission_assets.py"
+      ]) {
+        assert.ok(workflow.includes("- '!tests/" + testFile + "'"), workflowPath + " must exclude " + testFile);
+      }
+    } else {
+      assert.doesNotMatch(workflow, /^\s*-\s*['"]tests\/\*\*['"]/m, workflowPath + " must not add a broad tests/** trigger");
+    }
+    assert.ok(workflow.includes("- '!scripts/reference-e2e-matrix.json'"), "matrix metadata should not trigger optional E2E workflows");
   }
 });
 
@@ -568,6 +584,39 @@ test("browser-spec-only changes can skip package validation", () => {
     assert.match(output, /runtime_changed=false/);
     assert.match(output, /package_validation_required=false/);
   });
+});
+
+test("dedicated store-only verifiers and tests skip HARD-GATE runtime/package suites", () => {
+  for (const path of [
+    "scripts/verify-store-assets.py",
+    "scripts/verify-store-branding.py",
+    "scripts/verify-store-package.py",
+    "scripts/verify-store-submission-assets.py",
+    "tests/test_verify_store_package.py",
+    "tests/test_verify_store_submission_assets.py"
+  ]) {
+    withFixture((root, base) => {
+      commitChange(root, path, "# dedicated store verification change\\n");
+      const output = classify(root, base);
+      assert.match(output, /runtime_changed=false/, path + " must not trigger browser regression matrices");
+      assert.match(output, /package_validation_required=false/, path + " is validated by its dedicated workflow");
+    });
+  }
+});
+
+test("shared runtime changes retain broad HARD-GATE coverage", () => {
+  for (const path of [
+    "extension/background.js",
+    "extension/content.js",
+    "extension/reference-core.js"
+  ]) {
+    withFixture((root, base) => {
+      commitChange(root, path, "// shared runtime change\\n");
+      const output = classify(root, base);
+      assert.match(output, /runtime_changed=true/, path + " must trigger behavioral regression coverage");
+      assert.match(output, /package_validation_required=true/, path + " must retain package validation");
+    });
+  }
 });
 
 test("workflow changes always require package validation", () => {
