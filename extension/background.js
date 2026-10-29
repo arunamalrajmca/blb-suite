@@ -6011,3 +6011,4 @@ installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,curre
   .then(tabs => syncPdfSelectionContextMenuVisibility(tabs[0]))
   .catch(() => {}));
 refreshStudyAutoStopAlarm().catch(()=>{});
+// CI routing validation only: harmless comment to exercise conservative shared-core selection.
