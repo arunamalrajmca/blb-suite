@@ -56,6 +56,7 @@ function packageValidationPath(path) {
     || path.startsWith("regression-suite/")
     || path === "scripts/classify-ci-changes.mjs"
     || path === "scripts/select-browser-specs.mjs"
+    || path === "scripts/select-reference-matrix.mjs"
     || path === "scripts/test-ci-routing-selector.js"
     || path === "scripts/validate-build.js"
     || path === "package.json"
