@@ -12,8 +12,9 @@ async function waitForTab(extensionWorker, predicate, timeout = 10000) {
       lastTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
         items.map(tab => ({
           id: tab.id,
-          url: tab.url || tab.pendingUrl || '',
-          pendingUrl: tab.pendingUrl || ''
+          url: tab.url || '',
+          pendingUrl: tab.pendingUrl || '',
+          urls: [tab.url, tab.pendingUrl].filter(Boolean)
         }))
       ));
       match = lastTabs.find(predicate) || null;
@@ -957,19 +958,20 @@ test('chapter-only ranges expand across all chapters and open MultiVerse', async
       });
     });
 
-    const multiVerse = await waitForTab(extensionWorker, tab => {
+    const isMultiVerseUrl = value => {
       try {
-        const url = new URL(tab.url || tab.pendingUrl);
+        const url = new URL(value);
         return url.hostname === 'www.blueletterbible.org' &&
           (url.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
            url.searchParams.get('blbSuiteMultiVerse') === '1');
       } catch (_) { return false; }
-    });
-    expect(new URL(multiVerse.url || multiVerse.pendingUrl).hostname).toBe('www.blueletterbible.org');
-    expect(
-      new URL(multiVerse.url || multiVerse.pendingUrl).pathname.toLowerCase() === '/tools/multiverse.cfm' ||
-      new URL(multiVerse.url || multiVerse.pendingUrl).searchParams.get('blbSuiteMultiVerse') === '1'
-    ).toBeTruthy();
+    };
+    const multiVerse = await waitForTab(extensionWorker, tab =>
+      (tab.urls || [tab.url, tab.pendingUrl]).some(isMultiVerseUrl)
+    );
+    const destinationUrl = (multiVerse.urls || [multiVerse.url, multiVerse.pendingUrl]).find(isMultiVerseUrl);
+    expect(destinationUrl, 'MultiVerse destination should be present in the current or pending tab URL').toBeTruthy();
+    expect(new URL(destinationUrl).hostname).toBe('www.blueletterbible.org');
     await removeTabById(extensionWorker, multiVerse.id);
   }
 });
