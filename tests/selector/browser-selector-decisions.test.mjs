@@ -394,13 +394,10 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
     "utf8"
   ));
   const groupA = readFileSync(
-    new URL("../../.github/workflows/browser-e2e-group-a.yml", import.meta.url),
+    new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url),
     "utf8"
   );
-  const groupB = readFileSync(
-    new URL("../../.github/workflows/browser-e2e-group-b.yml", import.meta.url),
-    "utf8"
-  );
+  const groupB = groupA;
   for (const spec of [
     "redirect-source-url-patterns",
     "redirect-source-url-browser",
@@ -428,8 +425,7 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
 
 test("optional E2E workflows exclude selector-only scripts from their broad script filters", () => {
   for (const workflowPath of [
-    "../../.github/workflows/browser-e2e-group-a.yml",
-    "../../.github/workflows/browser-e2e-group-b.yml"
+    "../../.github/workflows/browser-e2e-groups.yml"
   ]) {
     const workflow = readFileSync(new URL(workflowPath, import.meta.url), "utf8");
     assert.match(workflow, /^\s*-\s*['"]scripts\/\*\*['"]/m);
@@ -445,44 +441,20 @@ test("optional E2E workflows exclude selector-only scripts from their broad scri
   }
 });
 
-test("Group A/B workflow triggers exclude known feature files owned by the other group", () => {
-  const groupA = readFileSync(new URL("../../.github/workflows/browser-e2e-group-a.yml", import.meta.url), "utf8");
-  const groupB = readFileSync(new URL("../../.github/workflows/browser-e2e-group-b.yml", import.meta.url), "utf8");
-  assert.ok(groupA.includes("      - 'extension/**'"), "Group A must retain the broad runtime fallback");
-  assert.ok(groupB.includes("      - 'extension/**'"), "Group B must retain the broad runtime fallback");
-  assert.ok(groupA.includes("- '!extension/redirect-scripttagger.js'"), "ScriptTagger-only changes should not start Group A");
-  for (const file of [
-    "kjv-case-sensitive-words.js",
-    "omnibox-search-helpers.js",
-    "selection-text-helpers.js",
-    "study-session-export.js",
-    "study-session-normalization.js",
-    "multiverse-reference-helpers.js",
-    "popup.html",
-    "popup.js",
-    "kings-bible-collector.js",
-    "webster-collector.js",
-    "source-page-collector.js",
-    "multiverse-copy.js",
-    "multiverse-tool-view.js",
-    "study-reference-capture.js",
-    "criteria-search-navigation.js",
-    "blb-auto-hyperlinker.js",
-    "blb-passive-new-tab-targets.js",
-    "blb-draggable-button.js",
-    "blb-parse-popup.js",
-    "blb-verse-link-navigation.js",
-    "blb-page-selection-button.js",
-    "multiverse-handoff.js"
-  ]) {
-    assert.ok(groupB.includes("- '!extension/" + file + "'"), "Group A-only change should not start Group B: " + file);
-  }
+test("combined Group A/B workflow classifies once and retains broad runtime fallback", () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
+  assert.ok(workflow.includes("      - 'extension/**'"), "combined workflow must retain the broad runtime fallback");
+  assert.equal((workflow.match(/^  change-detection:/gm) || []).length, 1, "both groups must share one classifier job");
+  assert.ok(workflow.includes("group_a_required: ${{ steps.select.outputs.group_a_required }}"));
+  assert.ok(workflow.includes("group_b_required: ${{ steps.select.outputs.group_b_required }}"));
+  assert.ok(workflow.includes("if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}"));
+  assert.ok(workflow.includes("if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}"));
+  assert.match(workflow, /tests\/browser\/scripttagger-global-injection\.spec\.js/);
 });
 
 test("optional E2E workflows skip spec-only edits but retain shared-fixture triggers", () => {
   for (const workflowPath of [
-    "../../.github/workflows/browser-e2e-group-a.yml",
-    "../../.github/workflows/browser-e2e-group-b.yml"
+    "../../.github/workflows/browser-e2e-groups.yml"
   ]) {
     const workflow = readFileSync(new URL(workflowPath, import.meta.url), "utf8");
     assert.doesNotMatch(workflow, /^\s*-\s*['"]tests\/\*\*['"]/m);

@@ -1,12 +1,9 @@
-name: BLB Suite BROWSER E2E — GROUP A
-run-name: E2E-A Reference — PR #${{ github.event.pull_request.number || 'main' }} — Run ${{ github.run_number }}
-
+name: BLB Suite BROWSER E2E — GROUP A + GROUP B
 on:
   push:
     branches: [ main ]
     paths:
       - 'extension/**'
-      - '!extension/redirect-scripttagger.js'
       - 'tests/browser/fixtures.js'
       - 'scripts/**'
       - '!scripts/classify-ci-changes.mjs'
@@ -24,7 +21,6 @@ on:
     types: [opened, synchronize, reopened, labeled]
     paths:
       - 'extension/**'
-      - '!extension/redirect-scripttagger.js'
       - 'tests/browser/fixtures.js'
       - 'scripts/**'
       - '!scripts/classify-ci-changes.mjs'
@@ -54,6 +50,7 @@ jobs:
       changed_browser_specs: ${{ steps.select.outputs.changed_browser_specs }}
       unmapped_specs: ${{ steps.select.outputs.unmapped_specs }}
       group_a_required: ${{ steps.select.outputs.group_a_required }}
+      group_b_required: ${{ steps.select.outputs.group_b_required }}
       browser_e2e_required: ${{ steps.select.outputs.reference_required }}
     steps:
       - uses: actions/checkout@v4
@@ -273,10 +270,56 @@ jobs:
         if: ${{ always() && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         run: npx playwright test tests/browser/extension.spec.js --grep 'Facebook directional-format Revelation 20:1-10 resolves the whole range from book-name double-click'
 
+  core-group-b:
+    needs: change-detection
+    # Skip the runner entirely when the selector says this group is irrelevant.
+    if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
+    name: BROWSER E2E — GROUP B — CLIPBOARD/LINKS
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
+        with:
+          node-version: 22
+      - name: Cache Playwright browsers
+        id: playwright-cache
+        if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+      - name: Cache npm download data
+        if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node22-npm-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-npm-
+      - run: npm install --prefer-offline --no-audit --no-fund
+        if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
+      - run: npx playwright install chromium
+        if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
+      - name: Run native redirect hostname regression tests
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-hostnames.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/redirect-hostnames.spec.js') && !(needs.change-detection.outputs.browser_e2e_required == 'true' && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-hostnames.spec.js'))) }}
+        run: npx playwright test tests/browser/redirect-hostnames.spec.js
+      - name: Run non-KJV BLB redirect regression tests
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/blb-non-kjv-redirect.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/blb-non-kjv-redirect.spec.js') && !(needs.change-detection.outputs.browser_e2e_required == 'true' && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/blb-non-kjv-redirect.spec.js'))) }}
+        run: npx playwright test tests/browser/blb-non-kjv-redirect.spec.js
+      - name: Run ScriptTagger injection and toggle regression tests
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/scripttagger-global-injection.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/scripttagger-global-injection.spec.js') }}
+        run: npx playwright test tests/browser/scripttagger-global-injection.spec.js
+
   cancel-sibling-runs:
     name: Cancel sibling runs after failure
     if: ${{ failure() && github.event_name == 'pull_request' }}
-    needs: [change-detection, core-group-a]
+    needs: [change-detection, core-group-a, core-group-b]
     permissions:
       actions: write
     uses: ./.github/workflows/cancel-sibling-runs-on-failure.yml
