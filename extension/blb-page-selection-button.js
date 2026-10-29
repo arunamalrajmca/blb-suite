@@ -249,15 +249,11 @@
           text,
           contextualReference: blbPageButtonContextualReference || null,
           directUrl: blbPageButtonDirectUrl || null,
-          // A single-token floating-button action should follow the same fast path
-          // as double-click: do not re-scan page context after the selection has
-          // already been accepted as a word. Multi-word selections still resolve
-          // adjacent references through the normal background path.
-          // Only mark context as resolved when the button actually has a
-          // contextual reference. A standalone alias such as "Jn" must still
-          // reach the shared background resolver, which handles book aliases
-          // and can recover nearby verse context if the local fast path missed it.
-          contextualReferenceResolved: !blbPageButtonContextualReference && !/\s/.test(text) && !resolveBibleBook(text) && !Object.prototype.hasOwnProperty.call(BOOK_ALIASES || {}, text.trim().toLowerCase()),
+          // Show on BLB shares the background selection-resolution path with
+          // Alt+B. Mark context resolved only when this button has an actual
+          // contextual reference; token shape alone does not prove resolution.
+          // Double-click keeps its own invocation-specific fast path in content.js.
+          contextualReferenceResolved: !!blbPageButtonContextualReference,
           tabBehavior:{activeIfNew:true,activateExisting:true}
         });
         clearBlbPageSelectionAfterAction();
