@@ -1495,10 +1495,12 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const refBook = resolveBibleBook(ref.book);
       if (!refBook || nearestSelectedBookPosition == null) continue;
       if (selectedBook && selectedBook.urlKey !== refBook.urlKey) continue;
-      const normalizedRefText = normalizeSelectionText(ref.text || '').normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-');
-      // Parsed references can preserve a Roman-prefix alias ("I Thessalonians")
-      // even though the resolved book is canonicalized as "1 Thessalonians".
-      // Check aliases for this same book as well as its canonical display name.
+      // Match the book label against the actual DOM source occurrence, not
+      // ref.text: the parser canonicalizes aliases (for example, source "jn"
+      // becomes "John"), which loses the clicked alias's original position.
+      const normalizedSourceText = normalizeSelectionText(normalizedMatchSource || '').normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-');
+      // Keep aliases for this resolved book, but locate them in source text
+      // and constrain them to this exact parsed reference occurrence.
       const bookLabels = [refBook.name, ...Object.entries(BOOK_ALIASES || {})
         .filter(([, targetBook]) => {
           const aliasBook = resolveBibleBook(targetBook);
@@ -1510,11 +1512,13 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         const escapedLabel = label.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
         const pattern = new RegExp('(?<![A-Za-z0-9])' + escapedLabel + '(?![A-Za-z0-9])', 'ig');
         let match;
-        while ((match = pattern.exec(normalizedRefText))) {
-          bookMatches.push({text: match[0], index: match.index});
+        while ((match = pattern.exec(normalizedSourceText))) {
+          const insideOccurrence = occurrences.some(occurrence =>
+            match.index >= occurrence.start && match.index + match[0].length <= occurrence.end
+          );
+          if (insideOccurrence) bookMatches.push({text: match[0], index: match.index});
         }
       }
-      if (!bookMatches.length) continue;
 
       // For a split book name, align the clicked token's position with the
       // matching canonical or alias label. This handles prefix clicks ("1"),
