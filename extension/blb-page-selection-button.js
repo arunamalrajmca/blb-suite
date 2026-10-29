@@ -253,7 +253,11 @@
           // as double-click: do not re-scan page context after the selection has
           // already been accepted as a word. Multi-word selections still resolve
           // adjacent references through the normal background path.
-          contextualReferenceResolved: !blbPageButtonContextualReference && !/\\s/.test(text),
+          // Only mark context as resolved when the button actually has a
+          // contextual reference. A standalone alias such as "Jn" must still
+          // reach the shared background resolver, which handles book aliases
+          // and can recover nearby verse context if the local fast path missed it.
+          contextualReferenceResolved: !!blbPageButtonContextualReference,
           tabBehavior:{activeIfNew:true,activateExisting:true}
         });
         clearBlbPageSelectionAfterAction();
