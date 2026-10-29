@@ -448,8 +448,8 @@ test("optional E2E workflows exclude selector-only scripts from their broad scri
 test("Group A/B workflow triggers exclude known feature files owned by the other group", () => {
   const groupA = readFileSync(new URL("../../.github/workflows/browser-e2e-group-a.yml", import.meta.url), "utf8");
   const groupB = readFileSync(new URL("../../.github/workflows/browser-e2e-group-b.yml", import.meta.url), "utf8");
-  assert.match(groupA, /^\\s*-\\s*['"]extension\\/\\*\\*['"]/m, "Group A must retain the broad runtime fallback");
-  assert.match(groupB, /^\\s*-\\s*['"]extension\\/\\*\\*['"]/m, "Group B must retain the broad runtime fallback");
+  assert.ok(groupA.includes("      - 'extension/**'"), "Group A must retain the broad runtime fallback");
+  assert.ok(groupB.includes("      - 'extension/**'"), "Group B must retain the broad runtime fallback");
   assert.ok(groupA.includes("- '!extension/redirect-scripttagger.js'"), "ScriptTagger-only changes should not start Group A");
   for (const file of [
     "kjv-case-sensitive-words.js",
