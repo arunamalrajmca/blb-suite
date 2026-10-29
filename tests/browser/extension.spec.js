@@ -1388,6 +1388,50 @@ test.describe('core user-visible E2E', () => {
   // 66-book × multi-variant copy here doubled the release runtime and could hit
   // the 4-minute per-test timeout without adding coverage.
 
+  test('Nested prefixed-book DOM uses the physical token when native selection is stale', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await setupDoubleClickReferencePage(page, extensionStorage,
+      '<article id="nested-prefixed-reference"><p><span><span>I</span></span> <span><span id="nested-thessalonians">Thessalonians</span></span> <span>2</span>:<span>13</span></p></article>'
+    );
+    const beforeIds = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id)));
+
+    // Reproduce the failure mode: leave an unrelated native selection in place,
+    // then dispatch a double-click at the real physical location of the book
+    // suffix. This isolates event-target/caret resolution from selection timing.
+    await page.locator('#nested-thessalonians').evaluate(element => {
+      const stale = document.createRange();
+      stale.selectNodeContents(document.querySelector('#blb-e2e-focused-root'));
+      stale.setStart(document.body.firstChild || element, 0);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      const staleWord = [...document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)]
+        .find(node => /^(?:the)$/i.test((node.nodeValue || '').trim()));
+      if (staleWord) {
+        const range = document.createRange();
+        range.selectNodeContents(staleWord);
+        selection.addRange(range);
+      } else {
+        const range = document.createRange();
+        range.selectNodeContents(element);
+        selection.addRange(range);
+      }
+      const rect = element.getBoundingClientRect();
+      element.dispatchEvent(new MouseEvent('dblclick', {
+        bubbles: true, cancelable: true,
+        clientX: rect.left + rect.width / 2,
+        clientY: rect.top + rect.height / 2
+      }));
+    });
+
+    await expect.poll(async () => extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+      tabs.filter(tab => !before.includes(tab.id)).map(tab => {
+        try {
+          const url = new URL(String(tab.url || tab.pendingUrl || ''));
+          return url.hostname.endsWith('blueletterbible.org') ? url.pathname : '';
+        } catch (_) { return ''; }
+      }).filter(Boolean)
+    ), beforeIds), { timeout: 5000, intervals: [100, 200, 300] }).toContain('/kjv/1th/2/13/');
+  });
+
   test('All 66 canonical books resolve correctly through the shared reference resolver', async ({ extensionWorker }) => {
     const results = await extensionWorker.evaluate(() => BOOKS.map(book => {
       const text = `${book.name} 1:1`;
