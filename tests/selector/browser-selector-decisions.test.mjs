@@ -645,3 +645,22 @@ test("unknown runtime changes require package validation and behavioral coverage
     assert.match(output, /package_validation_required=true/);
   });
 });
+
+test("same-condition extension reference regressions share one Playwright invocation without losing grep coverage", () => {
+  const referenceWorkflow = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url),
+    "utf8"
+  );
+  const groupsWorkflow = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url),
+    "utf8"
+  );
+
+  assert.match(referenceWorkflow, /Run both verse-context regressions in one Playwright invocation/);
+  assert.match(referenceWorkflow, /Generic article verse cues follow the latest explicit chapter context\\|Article verse cues resolve context outside Facebook/);
+  assert.doesNotMatch(referenceWorkflow, /Run generic verse-context regression first|Run real Supply of Grace cross-site regression/);
+
+  assert.match(groupsWorkflow, /Run Facebook and Supply of Grace reference-context regressions/);
+  assert.match(groupsWorkflow, /Facebook nested dir-auto reference resolves from book, chapter, and verse-range gestures\\|Supply of Grace Substack Ephesians chapter context does not fall back to Ephesians 1:1/);
+  assert.doesNotMatch(groupsWorkflow, /Run Facebook nested reference token regression|Run Supply of Grace Ephesians chapter-context regression/);
+});
