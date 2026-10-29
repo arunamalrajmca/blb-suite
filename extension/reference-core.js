@@ -242,7 +242,13 @@ function resolveBibleReferenceText(text, options = {}) {
   while ((m = spacedRe.exec(source))) {
     if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
     const match = resolveBibleBookCapture(m);
-    if (match) add(match.book, Number(m[2]), Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), match.text);
+    if (!match) continue;
+    const chapter = Number(m[2]);
+    // This legacy spaced-reference pass must apply the same one-chapter-book
+    // guard as the other passes; otherwise "Philemon 25\n3. The Ancient..."
+    // can still be interpreted as Philemon 25:3 after the earlier guard skips it.
+    if (match.book.chapterCount === 1 && chapter !== 1) continue;
+    add(match.book, chapter, Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), match.text);
   }
 
   // Expand abbreviated entries in reference lists in source order. Processing
