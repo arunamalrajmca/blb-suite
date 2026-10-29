@@ -192,7 +192,7 @@ const ignoredNonRuntime = path =>
   /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/))/.test(path)
   || /^(?:store-assets\/|assets\/store\/|extension\/(?:icons|store-assets)\/)/.test(path)
   || /^extension\/(?:Tutorial\.html|Tutorial\.js|THIRD-PARTY-NOTICES\.txt)$/.test(path)
-  || /^scripts\/(?:classify-ci-changes|select-browser-specs)\.mjs$/.test(path)
+  || /^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path)
   || path === "scripts/test-ci-routing-selector.js"
   || path === "scripts/reference-e2e-matrix.json"
   || /^tests\/selector\//.test(path);
