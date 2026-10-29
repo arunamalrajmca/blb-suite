@@ -1430,22 +1430,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     const selectedBook = resolveBibleBook(selected);
     const selectedBookPositions = [];
     if (selected && !/\s/.test(selected)) {
-      const escapedSelected = selected.replace(/[.*+?^$()|[\]\\]/g, '\\    const selectedBook = resolveBibleBook(selected);
-    const selectedBookPositions = [];
-    if (selectedBook) {
       const escapedSelected = selected.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
-      const selectedPattern = new RegExp('(?<![A-Za-z0-9])' + escapedSelected + '(?![A-Za-z0-9])', 'gi');
-      let selectedMatch;
-      while ((selectedMatch = selectedPattern.exec(normalizedMatchSource))) {
-        selectedBookPositions.push(selectedMatch.index);
-        if (!selectedMatch[0].length) selectedPattern.lastIndex++;
-      }
-    }
-    const nearestSelectedBookPosition = selectedBookPositions.length
-      ? selectedBookPositions.reduce((best, position) =>
-          Math.abs(position - selectionStart) < Math.abs(best - selectionStart) ? position : best,
-        selectedBookPositions[0])
-      : null;');
       const selectedPattern = new RegExp('(?<![A-Za-z0-9])' + escapedSelected + '(?![A-Za-z0-9])', 'gi');
       let selectedMatch;
       while ((selectedMatch = selectedPattern.exec(normalizedMatchSource))) {
@@ -1522,23 +1507,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         .map(([alias]) => alias)];
       const bookMatches = [];
       for (const label of [...new Set(bookLabels)]) {
-        const escapedLabel = label.replace(/[.*+?^$()|[\]\\]/g, '\\      const normalizedRefText = normalizeSelectionText(ref.text || '').normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-');
-      const escapedRefBook = refBook.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
-      const bookInRef = new RegExp('(?<![A-Za-z0-9])' + escapedRefBook + '(?![A-Za-z0-9])', 'i').exec(normalizedRefText);
-      if (!bookInRef) continue;
-
-      // When a numbered book is rendered as separate tokens, Chromium selects
-      // only the clicked suffix ("Corinthians" in "1 Corinthians"). The
-      // selected token's position is therefore inside the canonical book label,
-      // not at its beginning. Align the fallback with that token offset instead
-      // of requiring the click to land on the prefix character.
-      const selectedOffsetInBook = bookInRef[0].toLowerCase().indexOf(selected.toLowerCase());
-      if (selectedOffsetInBook < 0) continue;
-      for (const occurrence of occurrences) {
-        if (occurrence.start + bookInRef.index + selectedOffsetInBook === nearestSelectedBookPosition) {
-          return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
-        }
-      }');
+        const escapedLabel = label.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
         const pattern = new RegExp('(?<![A-Za-z0-9])' + escapedLabel + '(?![A-Za-z0-9])', 'ig');
         let match;
         while ((match = pattern.exec(normalizedRefText))) {
