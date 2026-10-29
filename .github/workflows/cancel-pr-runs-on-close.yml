@@ -1,0 +1,67 @@
+name: Cancel PR workflow runs on close
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [ closed ]
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "Closed PR number whose queued/in-progress runs should be cancelled"
+        required: true
+        type: number
+
+permissions:
+  actions: write
+  pull-requests: read
+
+jobs:
+  cancel-pr-runs:
+    name: Cancel remaining runs for closed PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Cancel queued and running workflows for this PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prNumber = context.eventName === "workflow_dispatch"
+              ? Number(context.payload.inputs.pr_number)
+              : context.payload.pull_request.number;
+
+            if (!Number.isInteger(prNumber) || prNumber < 1) {
+              core.setFailed("A valid PR number is required.");
+              return;
+            }
+
+            const runs = await github.paginate(
+              github.rest.actions.listWorkflowRunsForRepo,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                event: "pull_request",
+                per_page: 100
+              }
+            );
+
+            const candidates = runs.filter(run =>
+              run.id !== context.runId &&
+              ["queued", "in_progress", "waiting", "pending", "requested"].includes(run.status) &&
+              Array.isArray(run.pull_requests) &&
+              run.pull_requests.some(pr => pr.number === prNumber)
+            );
+
+            for (const run of candidates) {
+              core.info(`Cancelling run ${run.id} (${run.name}), status=${run.status}`);
+              try {
+                await github.rest.actions.cancelWorkflowRun({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  run_id: run.id
+                });
+              } catch (error) {
+                // A run may finish between listing and cancellation. Treat that as benign.
+                core.warning(`Could not cancel run ${run.id}: ${error.message}`);
+              }
+            }
+
+            core.info(`Requested cancellation for ${candidates.length} queued/in-progress run(s) associated with PR #${prNumber}.`);
