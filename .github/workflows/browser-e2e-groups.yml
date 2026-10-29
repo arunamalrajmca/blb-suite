@@ -270,14 +270,10 @@ jobs:
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/criteria-search-navigation.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/criteria-search-navigation.spec.js') }}
         run: npx playwright test tests/browser/criteria-search-navigation.spec.js
 
-      # Keep the Facebook-style DOM regression in this targeted suite so range-context fixes are exercised on branch pushes.
-      - name: Run Facebook nested reference token regression
+      # Keep both reference-context regressions in this targeted suite so range/context fixes are exercised on branch pushes.
+      - name: Run Facebook and Supply of Grace reference-context regressions
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
-        run: npx playwright test tests/browser/extension.spec.js --grep 'Facebook nested dir-auto reference resolves from book, chapter, and verse-range gestures'
-
-      - name: Run Supply of Grace Ephesians chapter-context regression
-        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
-        run: npx playwright test tests/browser/extension.spec.js --grep 'Supply of Grace Substack Ephesians chapter context does not fall back to Ephesians 1:1'
+        run: npx playwright test tests/browser/extension.spec.js --grep 'Facebook nested dir-auto reference resolves from book, chapter, and verse-range gestures|Supply of Grace Substack Ephesians chapter context does not fall back to Ephesians 1:1'
 
       - name: Run changed browser specs without a dedicated workflow step
         if: ${{ needs.change-detection.outputs.unmapped_specs != '' }}

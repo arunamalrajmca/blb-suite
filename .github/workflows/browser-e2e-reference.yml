@@ -164,14 +164,10 @@ jobs:
       - name: Read manifest version
         id: version
         run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
-      - name: Run generic verse-context regression first
+      - name: Run both verse-context regressions in one Playwright invocation
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: npx playwright test tests/browser/extension.spec.js --grep 'Generic article verse cues follow the latest explicit chapter context'
-      - name: Run real Supply of Grace cross-site regression
-        env:
-          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: npx playwright test tests/browser/extension.spec.js --grep 'Article verse cues resolve context outside Facebook'
+        run: npx playwright test tests/browser/extension.spec.js --grep 'Generic article verse cues follow the latest explicit chapter context|Article verse cues resolve context outside Facebook'
       - name: Upload generic verse-context diagnostics
         if: always()
         uses: actions/upload-artifact@v4
