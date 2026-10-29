@@ -213,7 +213,13 @@ function resolveBibleReferenceText(text, options = {}) {
   while ((m = colonRe.exec(source))) {
     if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
     const match = resolveBibleBookCapture(m);
-    if (match) add(match.book, Number(m[2]), Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), match.text);
+    if (!match) continue;
+    const chapter = Number(m[2]);
+    // A one-chapter book followed by two numbers is not a valid "chapter verse"
+    // reference unless the chapter is 1. This prevents numbered prose after a
+    // verse from being clamped to an unrelated verse in Philemon or Jude.
+    if (match.book.chapterCount === 1 && chapter !== 1) continue;
+    add(match.book, chapter, Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), match.text);
   }
 
   const chapterOnlyRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)(?!\s*[:.]\s*-?\d)(?!\s+-?\d)(?=$|[\s,.;:!?\)\]\}])/gi;
@@ -224,7 +230,7 @@ function resolveBibleReferenceText(text, options = {}) {
     add(match.book, Number(m[2]), null, null, match.text);
   }
 
-  const oneChapterRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)(?:\s*[-–—]\s*(-?\d+))?(?!\s*[:.]\s*-?\d)(?!\s+-?\d)(?![A-Za-z0-9])/gi;
+  const oneChapterRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)(?:\s*[-–—]\s*(-?\d+))?(?!\s*[:.]\s*-?\d)(?!\s+-?\d(?!\s*\.\s+[A-Z]))(?![A-Za-z0-9])/gi;
   while ((m = oneChapterRe.exec(source))) {
     if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
     const match = resolveBibleBookCapture(m);
@@ -236,7 +242,13 @@ function resolveBibleReferenceText(text, options = {}) {
   while ((m = spacedRe.exec(source))) {
     if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
     const match = resolveBibleBookCapture(m);
-    if (match) add(match.book, Number(m[2]), Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), match.text);
+    if (!match) continue;
+    const chapter = Number(m[2]);
+    // This legacy spaced-reference pass must apply the same one-chapter-book
+    // guard as the other passes; otherwise "Philemon 25\n3. The Ancient..."
+    // can still be interpreted as Philemon 25:3 after the earlier guard skips it.
+    if (match.book.chapterCount === 1 && chapter !== 1) continue;
+    add(match.book, chapter, Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), match.text);
   }
 
   // Expand abbreviated entries in reference lists in source order. Processing
