@@ -192,17 +192,17 @@ jobs:
         include: ${{ fromJSON(needs.change-detection.outputs.reference_matrix) }}
     steps:
       - name: Checkout
-        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
+        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
       - name: Setup Node
-        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
+        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         uses: actions/setup-node@v4
         with:
           node-version: 22
       - name: Cache Playwright browsers
-        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
+        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         id: playwright-cache
         uses: actions/cache@v4
         with:
@@ -211,7 +211,7 @@ jobs:
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm downloads
-        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
+        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         uses: actions/cache@v4
         with:
           path: ~/.npm
@@ -219,20 +219,20 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-
       - name: Install dependencies
-        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
+        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Playwright Chromium
-        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
+        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         run: npx playwright install chromium
       - name: Grant test-only generic host access
-        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
+        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); const hosts=['https://example.com/*','https://www.gotquestions.org/*','https://www.christianity.com/*','https://www.crosswalk.com/*','https://www.enduringword.com/*']; m.host_permissions=[...(m.host_permissions||[]),...hosts]; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),...hosts]; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
       - name: Read manifest version
-        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
+        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         id: version
         run: echo "version=$(node -p 'require("./extension/manifest.json").version')" >> "$GITHUB_OUTPUT"
       - name: Run Browser E2E — ${{ matrix.group }}
-        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
+        if: ${{ matrix.file || matrix.files || (matrix.group == 'extension-spec-reference-coverage' && needs.change-detection.outputs.runtime_changed == 'true' && contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: npx playwright test ${{ matrix.files && join(matrix.files, ' ') || matrix.file || 'tests/browser/extension.spec.js' }} --grep "${{ matrix.grep }}"
