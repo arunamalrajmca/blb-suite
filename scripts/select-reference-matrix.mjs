@@ -15,6 +15,9 @@ export function validateReferenceMatrix(entries) {
   if (entries.some(entry => entry.file !== undefined && typeof entry.file !== "string")) {
     throw new Error("Reference matrix file values must be strings when provided");
   }
+  if (entries.some(entry => entry.files !== undefined && (!Array.isArray(entry.files) || entry.files.length === 0 || entry.files.some(file => typeof file !== "string" || !file) || entry.file !== undefined))) {
+    throw new Error("Reference matrix files must be a non-empty string array and cannot be combined with file");
+  }
   if (new Set(entries.map(entry => entry.group)).size !== entries.length) {
     throw new Error("Reference matrix group names must be unique");
   }
@@ -27,10 +30,12 @@ export function selectReferenceMatrix(entries, { full = false, changedSpecs = ""
   const selected = new Set(String(changedSpecs).split(",").filter(Boolean));
   const changedBrowser = new Set(String(changedBrowserSpecs).split(",").filter(Boolean));
   return entries.filter(entry => {
-    const spec = entry.file || "tests/browser/extension.spec.js";
-    // Preserve the prior step-level predicate exactly: generic extension.spec
-    // matrix entries are omitted when that spec itself was edited alongside runtime.
-    return selected.has(spec) && (Boolean(entry.file) || !changedBrowser.has("tests/browser/extension.spec.js"));
+    const specs = entry.files || [entry.file || "tests/browser/extension.spec.js"];
+    // A batched entry is selected when any included spec changes. Generic
+    // extension.spec entries remain excluded when that spec itself was edited
+    // alongside runtime, matching the prior step-level predicate.
+    return specs.some(spec => selected.has(spec)) &&
+      (Boolean(entry.file || entry.files) || !changedBrowser.has("tests/browser/extension.spec.js"));
   });
 }
 
