@@ -37,7 +37,6 @@ on:
       - 'package-lock.json'
       - 'playwright.config.js'
       - 'playwright.config.ts'
-      - '.github/workflows/cancel-sibling-runs-on-failure.yml'
       - '.github/workflows/browser-e2e-group-a.yml'
   workflow_dispatch:
 
