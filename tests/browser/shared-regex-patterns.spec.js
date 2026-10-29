@@ -230,11 +230,11 @@ test('mixed reference selection keeps the paired Timothy book shorthand visible 
   ]);
   expect(result.normalized).toContain('1 & 2 Timothy');
   expect(result.wholeBooks.length).toBeGreaterThan(0);
-  expect(result.wholeBooks[0][0]).toBe('1 Timothy');
-  expect(result.wholeBooks.some(ref => ref[0] === '2 Timothy')).toBe(true);
-  expect(result.wholeBooks.filter(ref => ref[0] === '1 Timothy').map(ref => ref[1]))
+  expect(result.wholeBooks[0][0]).toBe('1 timothy');
+  expect(result.wholeBooks.some(ref => ref[0] === '2 timothy')).toBe(true);
+  expect(result.wholeBooks.filter(ref => ref[0] === '1 timothy').map(ref => ref[1]))
     .toEqual(Array.from({length: 6}, (_, index) => index + 1));
-  expect(result.wholeBooks.filter(ref => ref[0] === '2 Timothy').map(ref => ref[1]))
+  expect(result.wholeBooks.filter(ref => ref[0] === '2 timothy').map(ref => ref[1]))
     .toEqual(Array.from({length: 4}, (_, index) => index + 1));
 });
 
