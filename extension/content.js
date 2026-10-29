@@ -1868,7 +1868,13 @@ function handleDoubleClickBlb(event) {
               const afterBook=contextText.slice(match.index+match[0].length);
               const chapterMatch=afterBook.match(/^\s*\.?\s*(\d{1,3})\b/);
               const chapter=chapterMatch ? Number(chapterMatch[1]) : 0;
-              if (chapter>0) {
+              // This fallback is only for chapter-only citations such as
+              // "1 Cor. 13", where verse 1 is intentional. For a citation that
+              // includes a verse ("1 Corinthians 3:16", "1 Cor. 3.16", or
+              // "1 Cor. 3 16"), leave resolution to the positional block
+              // resolver; otherwise this fallback incorrectly forces verse 1.
+              const hasExplicitVerse = /^\s*\.?\s*\d{1,3}\s*(?::|\.|\s)\s*\d{1,3}\b/.test(afterBook);
+              if (chapter>0 && !hasExplicitVerse) {
                 const resolvedBook=resolveBibleBook(prefixNumber+' '+match[2]);
                 if (resolvedBook) numberedSuffixReference=resolveBibleReference(resolvedBook.name,chapter,1,1);
               }
