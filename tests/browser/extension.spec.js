@@ -153,24 +153,43 @@ test.describe('core user-visible E2E', () => {
     // before installing the fixture and dispatching the first double-click.
     await page.waitForTimeout(1000);
 
-    // Use a normal article DOM on example.com, not Facebook markup or a live
-    // social-media post. The fixture reproduces only the relevant text pattern.
+    // Add a generic article fixture without replacing document.body's HTML.
+    // Build it with DOM APIs so this test does not depend on body.innerHTML
+    // replacement or erase the page structure created by the browser fixture.
     await page.evaluate(() => {
-      document.body.innerHTML = `
-        <main>
-          <article id="generic-verse-context-article" class="article-content">
-            <p>Chapter reference: 1 Kings 18.</p>
-            <p><span id="generic-verse-42">verse</span> 42.</p>
-            <p><span id="generic-verse-44">Verse</span> 44.</p>
-            <p><span id="generic-verse-46">verses</span> 46.</p>
-            <p>The next chapter is 1 Kings 19.</p>
-            <p><span id="generic-verse-18">verse</span> 18.</p>
-            <p>Psalm 119.</p>
-            <p><span id="generic-verse-176">v</span> 176.</p>
-            <p><span id="generic-verse-177">verses</span> 177.</p>
-            <p>An unrelated number: <span id="generic-unrelated-number">7000</span>.</p>
-          </article>
-        </main>`;
+      const main = document.createElement('main');
+      const article = document.createElement('article');
+      article.id = 'generic-verse-context-article';
+      article.className = 'article-content';
+
+      const addParagraph = (...parts) => {
+        const paragraph = document.createElement('p');
+        for (const part of parts) {
+          if (typeof part === 'string') {
+            paragraph.appendChild(document.createTextNode(part));
+          } else {
+            const cue = document.createElement('span');
+            cue.id = part.id;
+            cue.textContent = part.text;
+            paragraph.appendChild(cue);
+          }
+        }
+        article.appendChild(paragraph);
+      };
+
+      addParagraph('Chapter reference: 1 Kings 18.');
+      addParagraph({ id: 'generic-verse-42', text: 'verse' }, ' 42.');
+      addParagraph({ id: 'generic-verse-44', text: 'Verse' }, ' 44.');
+      addParagraph({ id: 'generic-verse-46', text: 'verses' }, ' 46.');
+      addParagraph('The next chapter is 1 Kings 19.');
+      addParagraph({ id: 'generic-verse-18', text: 'verse' }, ' 18.');
+      addParagraph('Psalm 119.');
+      addParagraph({ id: 'generic-verse-176', text: 'v' }, ' 176.');
+      addParagraph({ id: 'generic-verse-177', text: 'verses' }, ' 177.');
+      addParagraph('An unrelated number: ', { id: 'generic-unrelated-number', text: '7000' }, '.');
+
+      main.appendChild(article);
+      document.body.appendChild(main);
     });
 
     const article = page.locator('#generic-verse-context-article');
