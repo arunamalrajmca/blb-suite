@@ -1067,7 +1067,15 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
   expect(state).toHaveLength(2);
   expect(state.every(tab => tab.mvText.length > 0)).toBeTruthy();
 
-  const expanded = state.map(tab => expandGenesisMultiVerseHandoff(tab.mvText));
+  // Chrome tab enumeration is not a batch-order guarantee; restore the
+  // canonical reference order before checking that the split has no gaps.
+  const expanded = state
+    .map(tab => expandGenesisMultiVerseHandoff(tab.mvText))
+    .sort((a, b) => {
+      const firstA = a[0] || {chapter:0, verse:0};
+      const firstB = b[0] || {chapter:0, verse:0};
+      return firstA.chapter - firstB.chapter || firstA.verse - firstB.verse;
+    });
   const flat = expanded.flat();
   expect(flat.every(ref => ref.book === 1 && ref.chapter !== 47)).toBeTruthy();
   expect(flat).toHaveLength(223);
