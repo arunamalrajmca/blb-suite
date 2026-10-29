@@ -445,6 +445,40 @@ test("optional E2E workflows exclude selector-only scripts from their broad scri
   }
 });
 
+test("Group A/B workflow triggers exclude known feature files owned by the other group", () => {
+  const groupA = readFileSync(new URL("../../.github/workflows/browser-e2e-group-a.yml", import.meta.url), "utf8");
+  const groupB = readFileSync(new URL("../../.github/workflows/browser-e2e-group-b.yml", import.meta.url), "utf8");
+  assert.match(groupA, /^\\s*-\\s*['"]extension\\/\\*\\*['"]/m, "Group A must retain the broad runtime fallback");
+  assert.match(groupB, /^\\s*-\\s*['"]extension\\/\\*\\*['"]/m, "Group B must retain the broad runtime fallback");
+  assert.ok(groupA.includes("- '!extension/redirect-scripttagger.js'"), "ScriptTagger-only changes should not start Group A");
+  for (const file of [
+    "kjv-case-sensitive-words.js",
+    "omnibox-search-helpers.js",
+    "selection-text-helpers.js",
+    "study-session-export.js",
+    "study-session-normalization.js",
+    "multiverse-reference-helpers.js",
+    "popup.html",
+    "popup.js",
+    "kings-bible-collector.js",
+    "webster-collector.js",
+    "source-page-collector.js",
+    "multiverse-copy.js",
+    "multiverse-tool-view.js",
+    "study-reference-capture.js",
+    "criteria-search-navigation.js",
+    "blb-auto-hyperlinker.js",
+    "blb-passive-new-tab-targets.js",
+    "blb-draggable-button.js",
+    "blb-parse-popup.js",
+    "blb-verse-link-navigation.js",
+    "blb-page-selection-button.js",
+    "multiverse-handoff.js"
+  ]) {
+    assert.ok(groupB.includes("- '!extension/" + file + "'"), "Group A-only change should not start Group B: " + file);
+  }
+});
+
 test("optional E2E workflows skip spec-only edits but retain shared-fixture triggers", () => {
   for (const workflowPath of [
     "../../.github/workflows/browser-e2e-group-a.yml",
