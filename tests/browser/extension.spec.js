@@ -1021,21 +1021,36 @@ test.describe('core user-visible E2E', () => {
 
   async function setupDoubleClickReferencePage(page, extensionStorage, html) {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    // Allow the newly injected content script to finish its asynchronous
-    // double-click settings initialization before the first gesture.
-    await page.waitForTimeout(1000);
+
+    // Navigate and initialize the content script only once per test. The
+    // exhaustive grammar/alias cases exercise many tokens on the same page;
+    // reloading and sleeping for a full second for every reference dominated
+    // runtime without adding coverage. Replacing only the fixture markup keeps
+    // the real extension listener and DOM behavior under test.
+    const alreadyInitialized = await page.evaluate(() =>
+      location.hostname === 'example.com' && !!document.getElementById('blb-e2e-focused-root')
+    ).catch(() => false);
+    if (!alreadyInitialized) {
+      await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+      // Initial content-script settings setup is asynchronous; wait once after
+      // the first navigation, not once for every reference.
+      await page.waitForTimeout(1000);
+    }
+
     await page.evaluate((html) => {
-      const root = document.createElement('div');
-      root.id = 'blb-e2e-focused-root';
+      let root = document.getElementById('blb-e2e-focused-root');
+      if (!root) {
+        root = document.createElement('div');
+        root.id = 'blb-e2e-focused-root';
+        root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;max-height:calc(100vh - 48px);overflow:auto;';
+        document.body.appendChild(root);
+      }
       root.innerHTML = html;
-      root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;max-height:calc(100vh - 48px);overflow:auto;';
       root.querySelectorAll('.book-token, .alias-token, .reference-token, .book, .chapter, .verse').forEach(el => {
         el.style.display = 'inline-block';
         el.style.paddingLeft = '3px';
         el.style.paddingRight = '3px';
       });
-      document.body.appendChild(root);
     }, html);
   }
 
