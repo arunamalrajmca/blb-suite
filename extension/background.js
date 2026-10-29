@@ -2865,7 +2865,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return;
   }
 
-  if (message.type === 'blbSuiteOpenSelectionText') {
+  if (message.type === 'blbSuiteOpenSelectionText' || message.type === 'blbSuiteOpenDoubleClickSelectionText') {
+    const isDoubleClickAction = message.type === 'blbSuiteOpenDoubleClickSelectionText';
     if (!(await isSuiteEnabled())) {
       sendResponse({ok:false});
       return true;
@@ -2882,8 +2883,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ok:true, deduplicated:true});
       return true;
     }
-    // Use the exact same selection-processing path as Alt+B and the
-    // right-click command so the three entry points cannot diverge.
+    // Double-Click has its own decision path: its content-script gesture
+    // resolver uses the physical click position and passes an explicit
+    // contextualReference when it has one. Do not run the Show on BLB / Alt+B
+    // contextual-selection fallback here; it can replace the clicked token's
+    // local context with another nearby occurrence.
+    if (isDoubleClickAction) {
+      try {
+        const behavior = message.tabBehavior && typeof message.tabBehavior === 'object' ? {
+          activeIfNew: !!message.tabBehavior.activeIfNew,
+          activateExisting: !!message.tabBehavior.activateExisting
+        } : {activeIfNew:true, activateExisting:true};
+        if (Array.isArray(message.contextualReference?.refs) && message.contextualReference.refs.length > 1) {
+          const result = await openBlbMultiVerseRefs(message.contextualReference.refs, !!behavior.activeIfNew || !!behavior.activateExisting);
+          sendResponse({...result, contextual:true, multiVerse:true, actionSource:'double-click'});
+          return true;
+        }
+        if (message.contextualReference?.url) {
+          await openSelectedPdfBibleRefs(text, behavior, message.contextualReference);
+          sendResponse({ok:true, contextual:true, actionSource:'double-click'});
+          return true;
+        }
+        const doubleClickBookOnly = getSelectedBookOnlyReference(normalizeSelectedScriptureText(text));
+        if (doubleClickBookOnly?.url) {
+          await recordStudyRefs([parseBlbKjvUrlToStudyRef(doubleClickBookOnly.url)].filter(Boolean));
+          await openBlbDestination(doubleClickBookOnly.url, !!behavior.activeIfNew, !!behavior.activateExisting);
+          sendResponse({ok:true, bookOnly:true, actionSource:'double-click'});
+          return true;
+        }
+        await openSelectedPdfBibleRefs(text, behavior, null);
+        sendResponse({ok:true, actionSource:'double-click'});
+      } catch (error) {
+        console.error('KJV Scripture Tools Double-Click selection:', error);
+        sendResponse({ok:false});
+      }
+      return true;
+    }
+
+    // Show on BLB and Alt+B use the shared selection-processing path.
+    // The Double-Click gesture-specific resolver is intentionally separate.
     try {
       const behavior = message.tabBehavior && typeof message.tabBehavior === 'object' ? {
         activeIfNew: !!message.tabBehavior.activeIfNew,
