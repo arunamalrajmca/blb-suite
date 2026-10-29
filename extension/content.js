@@ -1924,9 +1924,8 @@ function handleDoubleClickBlb(event) {
             if (!/^(?:P|LI|TD|TH|BLOCKQUOTE|ARTICLE|SECTION|DIV|MAIN|ASIDE|FIGURE)$/.test(ancestor.tagName)) continue;
             const ancestorText = normalizeSelectionText(ancestor.textContent || '');
             if (!ancestorText || ancestorText.length > 3000) continue;
-            const escapedSuffix = selection.replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
             const completeCitation = new RegExp(
-              '(?:^|[^A-Za-z0-9])(?:[1-3]|I{1,3})\\s+' + escapedSuffix +
+              '(?:^|[^A-Za-z0-9])(?:[1-3]|I{1,3})\\s+' + selection +
               '\\.?\\s+\\d{1,3}\\s*(?::|\\.)\\s*\\d{1,3}\\b',
               'i'
             );
