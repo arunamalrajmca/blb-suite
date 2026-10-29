@@ -624,7 +624,7 @@ test('Double-click BLB path remains wired', () => {
   const content = read('content.js');
   assert(content.includes('handleDoubleClickBlb'), 'double-click handler missing');
   assert(content.includes("addEventListener('dblclick'"), 'dblclick listener missing');
-  assert(content.includes('blbSuiteOpenSelectionText'), 'double-click opener missing');
+  assert(content.includes('blbSuiteOpenDoubleClickSelectionText'), 'dedicated double-click opener missing');
 });
 test('Double-click citation handling validates book labels and preserves nonconsecutive verse lists', () => {
   const content = read('content.js');
