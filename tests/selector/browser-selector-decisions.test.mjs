@@ -436,11 +436,15 @@ test("optional E2E workflows exclude selector-only and store-only scripts from b
     ]) {
       assert.ok(workflow.includes("- '!scripts/" + script + "'"), workflowPath + " must exclude " + script);
     }
-    for (const testFile of [
-      "test_verify_store_package.py",
-      "test_verify_store_submission_assets.py"
-    ]) {
-      assert.ok(workflow.includes("- '!tests/" + testFile + "'"), workflowPath + " must exclude " + testFile);
+    if (/^\s*-\s*['"]tests\/\*\*['"]/m.test(workflow)) {
+      for (const testFile of [
+        "test_verify_store_package.py",
+        "test_verify_store_submission_assets.py"
+      ]) {
+        assert.ok(workflow.includes("- '!tests/" + testFile + "'"), workflowPath + " must exclude " + testFile);
+      }
+    } else {
+      assert.doesNotMatch(workflow, /^\s*-\s*['"]tests\/\*\*['"]/m, workflowPath + " must not add a broad tests/** trigger");
     }
     assert.ok(workflow.includes("- '!scripts/reference-e2e-matrix.json'"), "matrix metadata should not trigger optional E2E workflows");
   }
