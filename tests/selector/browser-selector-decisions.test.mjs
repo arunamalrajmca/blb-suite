@@ -353,15 +353,17 @@ test("Criteria Search navigation selects direct popup navigation behavior only",
   });
 });
 
-test("test-only browser edits run only the changed spec in the focused workflow", () => {
+test("test-only browser edits reuse the required reference workflow classifier", () => {
   const workflow = readFileSync(
-    new URL("../../.github/workflows/focused-behavior-tests.yml", import.meta.url),
+    new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url),
     "utf8"
   );
-  assert.match(workflow, /^\s*-\s*['"]tests\/browser\/\*\.spec\.js['"]/m);
+  assert.match(workflow, /focused_specs: \$\{\{ steps\.focused\.outputs\.focused_specs \}\}/);
   assert.match(workflow, /tests\/browser\/\*\.spec\.js\)/);
-  assert.match(workflow, /needs\.change-detection\.outputs\.runtime_changed == 'false'/);
+  assert.match(workflow, /id: focused[\s\S]*?FOCUSED_SPECS=/);
+  assert.match(workflow, /github\.event_name == 'pull_request'[\s\S]*?needs\.change-detection\.outputs\.runtime_changed == 'false'/);
   assert.match(workflow, /needs\.change-detection\.outputs\.focused_specs != ''/);
+  assert.match(workflow, /npx playwright test "\$\{specs\[@\]\}"/);
 });
 
 test("MultiVerse workflow excludes selector-only script changes", () => {
