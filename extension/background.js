@@ -1648,7 +1648,7 @@ async function handleBCommand(text, disposition = 'currentTab') {
     // rewritten. Verse zero is the one intentional lower-bound normalization.
     if (ch != null) {
       const numericChapter = Number(ch);
-      if (!Number.isInteger(numericChapter) || numericChapter < 1 || numericChapter > book.chapterCount) return;
+      if (!Number.isInteger(numericChapter) || numericChapter < 1) return;
       if (from != null && (!Number.isInteger(Number(from)) || Number(from) < 0)) return;
       if (to != null && (!Number.isInteger(Number(to)) || Number(to) < Number(from))) return;
     }
@@ -5184,34 +5184,65 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // term in parallel, then run the full classifier only for reconciliation.
   const selectedRefs = extractBibleRefsFromSelectedTextUncached(text);
   const wholeBookRefs = getSelectedWholeBookReferencesFromMixedText(text);
-  let combinedRefs = [...selectedRefs, ...wholeBookRefs].sort((a, b) => {
+  const combinedRefs = [...selectedRefs, ...wholeBookRefs].sort((a, b) => {
     const aIndex = text.toLowerCase().indexOf(String(a.text || '').toLowerCase());
     const bIndex = text.toLowerCase().indexOf(String(b.text || '').toLowerCase());
     return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
   });
-
-  // A continuous sequence of individual verses in one chapter is one normal
-  // BLB passage, not a MultiVerse collection. Keep non-contiguous or
-  // cross-chapter selections on the existing MultiVerse path.
   if (combinedRefs.length >= 2) {
-    const first = combinedRefs[0];
-    const last = combinedRefs[combinedRefs.length - 1];
-    const sameChapter = combinedRefs.every(ref =>
-      ref.book === first.book &&
-      Number(ref.chapter) === Number(first.chapter) &&
-      Number.isInteger(Number(ref.from)) &&
-      Number(ref.from) === Number(ref.to)
-    );
-    const contiguous = sameChapter && combinedRefs.every((ref, index) =>
-      index === 0 || Number(ref.from) === Number(combinedRefs[index - 1].from) + 1
-    );
-    if (contiguous) {
-      const merged = resolveBibleReference(first.book, first.chapter, first.from, last.to);
-      if (merged?.url) combinedRefs = [merged];
+    // If the selection contains only consecutive verses from one chapter,
+    // open the normal BLB range URL instead of creating a MultiVerse request.
+    // Keep multi-book, cross-chapter, gapped, and prose-bearing selections on
+    // the existing MultiVerse path.
+    const selectionOnlyReferences = (() => {
+      let residual = text;
+      for (const ref of combinedRefs) {
+        const from = ref.from == null ? null : Number(ref.from);
+        const to = ref.to == null ? from : Number(ref.to);
+        const label = String(ref.text || '').trim() || (
+          from == null
+            ? String(ref.book) + ' ' + String(ref.chapter)
+            : String(ref.book) + ' ' + String(ref.chapter) + ':' + String(from) +
+              (to != null && to !== from ? '-' + String(to) : '')
+        );
+        const index = residual.toLowerCase().indexOf(label.toLowerCase());
+        if (index >= 0) {
+          residual = residual.slice(0, index) + ' ' + residual.slice(index + label.length);
+        }
+      }
+      return residual
+        .replace(/\b(?:and|or)\b/gi, ' ')
+        .replace(/[\s,;&:().\-–—]+/g, '')
+        .length === 0;
+    })();
+    if (selectionOnlyReferences) {
+      // Reuse the shared canonicalizer before range detection: extracted
+      // selection refs contain book/chapter/from/to/url but may not have
+      // bookNumber or version, both of which the helper requires.
+      const canonicalRefs = canonicalMultiVerseSet(combinedRefs).refs;
+      const continuousRange = getContinuousSameChapterRange(canonicalRefs);
+      if (continuousRange) {
+        const book = bookData.find(item =>
+          Number(item.bookNumber) === Number(continuousRange.bookNumber)
+        );
+        const range = book && resolveBibleReference(
+          book.name,
+          continuousRange.chapter,
+          continuousRange.from,
+          continuousRange.to
+        );
+        if (range?.url) {
+          await recordStudyRefs(combinedRefs.map(ref => parseBlbKjvUrlToStudyRef(ref.url)).filter(Boolean));
+          await openBlbDestination(
+            range.url,
+            !!tabBehavior.activeIfNew,
+            !!tabBehavior.activateExisting
+          );
+          return;
+        }
+      }
     }
-  }
 
-  if (combinedRefs.length >= 2) {
     // Start the MultiVerse tab-opening path before doing any Criteria-query
     // extraction. The latter performs corpus lookups and scans the selected
     // text synchronously; on PDF selections it must not sit in front of the
