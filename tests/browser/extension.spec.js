@@ -353,6 +353,30 @@ test.describe('core user-visible E2E', () => {
     expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
   });
 
+  test('Show on BLB resolves a short book token from its adjacent verse context', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-short-book-context';
+      el.textContent = 'Jn 3:16';
+      document.body.appendChild(el);
+      const range = document.createRange();
+      range.setStart(el.firstChild, 0);
+      range.setEnd(el.firstChild, 2);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await button.click();
+    const blb = await waitForBlbTabPath(extensionWorker, '/kjv/jhn/3/16/');
+    expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
+  });
+
   test('Show on BLB exact-reference handoff timing: fresh tab', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
