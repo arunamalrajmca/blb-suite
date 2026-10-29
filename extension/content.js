@@ -1908,7 +1908,7 @@ function handleDoubleClickBlb(event) {
               recentDoubleClickDestinations.set(gestureTarget,now);
             }
             safeRuntimeSendMessage({
-              type:'blbSuiteOpenSelectionText',
+              type:'blbSuiteOpenDoubleClickSelectionText',
               text:selection,
               contextualReference:null,
               contextualReferenceResolved:true,
@@ -1930,7 +1930,7 @@ function handleDoubleClickBlb(event) {
         }
 
         safeRuntimeSendMessage({
-          type:'blbSuiteOpenSelectionText',
+          type:'blbSuiteOpenDoubleClickSelectionText',
           text:selection,
           contextualReference,
           contextualReferenceResolved:true,
