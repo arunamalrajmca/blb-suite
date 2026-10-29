@@ -445,17 +445,16 @@ test("combined Group A/B workflow classifies once and retains broad runtime fall
   const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
   assert.ok(workflow.includes("      - 'extension/**'"), "combined workflow must retain the broad runtime fallback");
   assert.equal((workflow.match(/^  change-detection:/gm) || []).length, 1, "both groups must share one classifier job");
-  assert.match(workflow, /group_a_required: \\$\{\{ steps\.select\.outputs\.group_a_required \\}\}/);
-  assert.match(workflow, /group_b_required: \\$\{\{ steps\.select\.outputs\.group_b_required \\}\}/);
-  assert.match(workflow, /if: \\$\{\{ needs\.change-detection\.outputs\.group_a_required == 'true' \\}\}/);
-  assert.match(workflow, /if: \\$\{\{ needs\.change-detection\.outputs\.group_b_required == 'true' \\}\}/);
+  assert.ok(workflow.includes("group_a_required: ${{ steps.select.outputs.group_a_required }}"));
+  assert.ok(workflow.includes("group_b_required: ${{ steps.select.outputs.group_b_required }}"));
+  assert.ok(workflow.includes("if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}"));
+  assert.ok(workflow.includes("if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}"));
   assert.match(workflow, /tests\/browser\/scripttagger-global-injection\.spec\.js/);
 });
 
 test("optional E2E workflows skip spec-only edits but retain shared-fixture triggers", () => {
   for (const workflowPath of [
-    "../../.github/workflows/browser-e2e-group-a.yml",
-    "../../.github/workflows/browser-e2e-group-b.yml"
+    "../../.github/workflows/browser-e2e-groups.yml"
   ]) {
     const workflow = readFileSync(new URL(workflowPath, import.meta.url), "utf8");
     assert.doesNotMatch(workflow, /^\s*-\s*['"]tests\/\*\*['"]/m);
