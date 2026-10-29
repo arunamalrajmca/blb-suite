@@ -13,6 +13,7 @@ on:
       - '!scripts/verify-store-branding.py'
       - '!scripts/verify-store-package.py'
       - '!scripts/verify-store-submission-assets.py'
+      - '!scripts/test-*.js'
       - 'regression-suite/**'
       - 'package.json'
       - 'package-lock.json'
