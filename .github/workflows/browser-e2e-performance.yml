@@ -8,6 +8,9 @@ on:
     paths:
       - 'extension/**'
       - 'tests/**'
+      - '!tests/selector/**'
+      - '!tests/test_verify_store_package.py'
+      - '!tests/test_verify_store_submission_assets.py'
       - 'scripts/**'
       - '!scripts/verify-store-assets.py'
       - '!scripts/verify-store-branding.py'
