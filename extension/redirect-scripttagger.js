@@ -66,3 +66,5 @@
     } catch (_) {}
   }, true);
 })();
+
+// CI routing validation: harmless comment-only change to exercise the ScriptTagger selector.
