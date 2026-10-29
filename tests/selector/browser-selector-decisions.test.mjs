@@ -404,7 +404,7 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
     "omnibox-command-routing",
     "pdf-selection-regressions"
   ]) {
-    assert.ok(referenceMatrix.some(entry => entry.file === "tests/browser/" + spec + ".spec.js"), "reference matrix should include " + spec);
+    assert.ok(referenceMatrix.some(entry => entry.file === "tests/browser/" + spec + ".spec.js" || entry.files?.includes("tests/browser/" + spec + ".spec.js")), "reference matrix should include " + spec);
 
     assert.match(groupA, new RegExp("tests/browser/" + spec + "\\.spec\\.js"));
   }

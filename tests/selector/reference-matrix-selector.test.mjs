@@ -6,9 +6,9 @@ import { validateReferenceMatrix, selectReferenceMatrix } from "../../scripts/se
 const entries = validateReferenceMatrix(JSON.parse(readFileSync(new URL("../../scripts/reference-e2e-matrix.json", import.meta.url), "utf8")));
 
 test("reference matrix defines unique, complete entries", () => {
-  assert.ok(entries.length >= 15, `expected the full reference matrix, found ${entries.length}`);
+  assert.ok(entries.length >= 7, `expected the full reference matrix, found ${entries.length}`);
   assert.equal(new Set(entries.map(entry => entry.group)).size, entries.length);
-  assert.ok(entries.some(entry => entry.group === "redirect-hostnames" && entry.file === "tests/browser/redirect-hostnames.spec.js"));
+  assert.ok(entries.some(entry => entry.group === "redirect-source-smoke-batch" && entry.files.includes("tests/browser/redirect-hostnames.spec.js")));
   assert.ok(entries.some(entry => entry.group === "extension-spec-reference-coverage" && entry.grep.includes("generic reference grammar — exhaustive token coverage — OT")));
 });
 
@@ -18,7 +18,7 @@ test("full-suite fallback selects every declared matrix entry", () => {
 
 test("mapped redirect change selects only matrix groups for its selected spec", () => {
   const selected = selectReferenceMatrix(entries, { changedSpecs: "tests/browser/redirect-hostnames.spec.js" });
-  assert.deepEqual(selected.map(entry => entry.group), ["redirect-hostnames"]);
+  assert.deepEqual(selected.map(entry => entry.group), ["redirect-source-smoke-batch"]);
 });
 
 test("shared-core or unknown runtime full-suite selection retains broad matrix coverage", () => {
@@ -31,11 +31,11 @@ test("test spec edited alongside runtime preserves the existing generic-spec exc
     changedSpecs: "tests/browser/extension.spec.js,tests/browser/redirect-hostnames.spec.js",
     changedBrowserSpecs: "tests/browser/extension.spec.js"
   });
-  assert.ok(!selected.some(entry => !entry.file), "generic extension.spec matrix groups should remain excluded");
-  assert.ok(selected.some(entry => entry.group === "redirect-hostnames"));
+  assert.ok(!selected.some(entry => !entry.file && !entry.files), "generic extension.spec matrix groups should remain excluded");
+  assert.ok(selected.some(entry => entry.group === "redirect-source-smoke-batch"));
 });
 
 test("unselected matrix entries are omitted before runner allocation", () => {
-  assert.deepEqual(selectReferenceMatrix(entries, { changedSpecs: "tests/browser/redirect-hostnames.spec.js" }).map(x => x.group), ["redirect-hostnames"]);
+  assert.deepEqual(selectReferenceMatrix(entries, { changedSpecs: "tests/browser/redirect-hostnames.spec.js" }).map(x => x.group), ["redirect-source-smoke-batch"]);
   assert.deepEqual(selectReferenceMatrix(entries, { changedSpecs: "" }), []);
 });

@@ -29,8 +29,8 @@ test("extension.spec.js reference checks share one matrix runner without droppin
   }
 });
 
-test("dedicated reference specs remain separate matrix entries", () => {
-  const files = new Set(matrix.map(entry => entry.file).filter(Boolean));
+test("dedicated reference specs remain covered by individual or batched matrix entries", () => {
+  const files = new Set(matrix.flatMap(entry => entry.files || (entry.file ? [entry.file] : [])));
   for (const spec of [
     "shared-regex-patterns",
     "redirect-source-url-patterns",
@@ -48,6 +48,9 @@ test("dedicated reference specs remain separate matrix entries", () => {
     "research-dom-smoke"
   ]) {
     assert.ok(files.has("tests/browser/" + spec + ".spec.js"), "dedicated spec remains: " + spec);
+  }
+  for (const group of ["redirect-source-smoke-batch", "selection-parser-batch", "command-and-redirect-batch"]) {
+    assert.ok(matrix.some(entry => entry.group === group && Array.isArray(entry.files) && entry.grep === ".*"), "batch retains coverage: " + group);
   }
 });
 
