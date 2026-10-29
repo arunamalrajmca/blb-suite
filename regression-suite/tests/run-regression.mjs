@@ -620,6 +620,16 @@ test('Alt+B selection path remains wired', () => {
   assert(bg.includes('chrome.commands.onCommand'), 'extension command listener missing');
 });
 section('selection');
+test('Show on BLB and Alt+B share selection routing while Double-Click stays separate', () => {
+  const bg = read('background.js');
+  const content = read('content.js');
+  assert(bg.includes('async function openSharedSelectionAction'), 'shared selection resolver missing');
+  assert(bg.includes('return openSharedSelectionAction({'), 'Alt+B does not use the shared selection resolver');
+  assert(bg.includes('const result = await openSharedSelectionAction({'), 'Show on BLB does not use the shared selection resolver');
+  assert(bg.includes('if (isDoubleClickAction)'), 'Double-Click action-specific route missing');
+  assert(content.includes('blbSuiteOpenDoubleClickSelectionText'), 'content script does not dispatch the separate Double-Click action');
+});
+
 test('Double-click BLB path remains wired', () => {
   const content = read('content.js');
   assert(content.includes('handleDoubleClickBlb'), 'double-click handler missing');
