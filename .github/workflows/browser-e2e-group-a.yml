@@ -277,7 +277,7 @@ jobs:
 
   cancel-sibling-runs:
     name: Cancel sibling runs after failure
-    if: ${{ failure() }}
+    if: ${{ failure() && github.event_name == 'pull_request' }}
     needs: [change-detection, core-group-a]
     permissions:
       actions: write
