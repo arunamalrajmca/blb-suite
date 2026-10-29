@@ -17,7 +17,6 @@ on:
       - 'playwright.config.js'
       - 'package.json'
       - 'package-lock.json'
-      - '.github/workflows/multiverse-tab-reuse.yml'
   workflow_dispatch:
 
 concurrency:
