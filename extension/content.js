@@ -2062,7 +2062,10 @@ function handleDoubleClickBlb(event) {
               type:'blbSuiteOpenSelectionText',
               text:selection,
               contextualReference:null,
-              contextualReferenceResolved:true,
+              // Let the background use the same shared contextual-reference
+              // fallback as Alt+B when this double-click's fast local resolver
+              // has no answer. Marking null as already resolved bypassed that
+              // fallback and sent book-name suffixes to Criteria Search.
               requestId,
               tabBehavior:{activeIfNew:false,activateExisting:true}
             });
