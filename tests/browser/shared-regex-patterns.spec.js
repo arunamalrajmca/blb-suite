@@ -137,7 +137,7 @@ test('numbered prose after a one-chapter-book verse is not parsed as another ver
       '1 Timothy 6:21', '2 Timothy 4:22', 'Titus 3:15', 'Philemon 25',
       '3. The Ancient Church Often Accepted Paul as the Author',
       'The Eastern church especially associated Hebrews with Paul.'
-    ].join('\\n');
+    ].join('\n');
     return resolveBibleReferenceText(text)
       .map(ref => [ref.book.toLowerCase(), ref.chapter, ref.from, ref.to]);
   });
