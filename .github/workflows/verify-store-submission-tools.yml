@@ -4,14 +4,14 @@ on:
   pull_request:
     paths:
       - 'scripts/verify-store-package.py'
-      - 'scripts/verify-store-submission-assets.py'
+      # Submission-asset script changes are validated by audit-store-submission-assets.yml.
       - 'tests/test_verify_store_package.py'
   push:
     branches:
       - main
     paths:
       - 'scripts/verify-store-package.py'
-      - 'scripts/verify-store-submission-assets.py'
+      # Submission-asset script changes are validated by audit-store-submission-assets.yml.
       - 'tests/test_verify_store_package.py'
   workflow_dispatch:
 
