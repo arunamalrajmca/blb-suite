@@ -6,6 +6,7 @@ on:
     branches: [ main ]
     paths:
       - 'extension/**'
+      - '!extension/redirect-scripttagger.js'
       - 'tests/browser/fixtures.js'
       - 'scripts/**'
       - '!scripts/classify-ci-changes.mjs'
@@ -23,6 +24,7 @@ on:
     types: [opened, synchronize, reopened, labeled]
     paths:
       - 'extension/**'
+      - '!extension/redirect-scripttagger.js'
       - 'tests/browser/fixtures.js'
       - 'scripts/**'
       - '!scripts/classify-ci-changes.mjs'
