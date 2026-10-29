@@ -389,6 +389,10 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
     new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url),
     "utf8"
   );
+  const referenceMatrix = JSON.parse(readFileSync(
+    new URL("../../scripts/reference-e2e-matrix.json", import.meta.url),
+    "utf8"
+  ));
   const groupA = readFileSync(
     new URL("../../.github/workflows/browser-e2e-group-a.yml", import.meta.url),
     "utf8"
@@ -410,7 +414,8 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
     "omnibox-command-routing",
     "pdf-selection-regressions"
   ]) {
-    assert.match(referenceWorkflow, new RegExp("file: tests/browser/" + spec + "\\.spec\\.js"));
+    assert.ok(referenceMatrix.some(entry => entry.file === "tests/browser/" + spec + ".spec.js"), "reference matrix should include " + spec);
+
     assert.match(groupA, new RegExp("tests/browser/" + spec + "\\.spec\\.js"));
   }
   assert.match(groupA, /REFERENCE_GATE_REQUIRED:/);
