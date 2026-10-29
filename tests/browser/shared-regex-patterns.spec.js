@@ -128,6 +128,23 @@ test('shared sensitive-site classifier covers known providers without keyword fa
   });
 });
 
+test('numbered prose after a one-chapter-book verse is not parsed as another verse', async ({ extensionWorker }) => {
+  const parsed = await extensionWorker.evaluate(() => {
+    const text = [
+      'Romans 16:24', '1 Corinthians 16:23', '2 Corinthians 13:14',
+      'Galatians 6:18', 'Ephesians 6:24', 'Philippians 4:23',
+      'Colossians 4:18', '1 Thessalonians 5:28', '2 Thessalonians 3:18',
+      '1 Timothy 6:21', '2 Timothy 4:22', 'Titus 3:15', 'Philemon 25',
+      '3. The Ancient Church Often Accepted Paul as the Author',
+      'The Eastern church especially associated Hebrews with Paul.'
+    ].join('\n');
+    return resolveBibleReferenceText(text)
+      .map(ref => [ref.book.toLowerCase(), ref.chapter, ref.from, ref.to]);
+  });
+  expect(parsed).toContainEqual(['philemon', 1, 25, 25]);
+  expect(parsed).not.toContainEqual(['philemon', 1, 3, 3]);
+});
+
 test('Facebook-style DOM range extraction preserves all block-separated references before MultiVerse parsing', async ({ context, extensionWorker }) => {
   const page = await context.newPage();
   await page.setContent(`
