@@ -1511,6 +1511,18 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       if (!refBook || nearestSelectedBookPosition == null) continue;
       if (selectedBook && selectedBook.urlKey !== refBook.urlKey) continue;
       const normalizedRefText = normalizeSelectionText(ref.text || '').normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-');
+      // Parsed references can preserve a Roman-prefix alias ("I Thessalonians")
+      // even though the resolved book is canonicalized as "1 Thessalonians".
+      // Check aliases for this same book as well as its canonical display name.
+      const bookLabels = [refBook.name, ...Object.entries(BOOK_ALIASES || {})
+        .filter(([, targetBook]) => {
+          const aliasBook = resolveBibleBook(targetBook);
+          return aliasBook?.urlKey === refBook.urlKey;
+        })
+        .map(([alias]) => alias)];
+      const bookMatches = [];
+      for (const label of [...new Set(bookLabels)]) {
+        const escapedLabel = label.replace(/[.*+?^$()|[\]\\]/g, '\\      const normalizedRefText = normalizeSelectionText(ref.text || '').normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-');
       const escapedRefBook = refBook.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
       const bookInRef = new RegExp('(?<![A-Za-z0-9])' + escapedRefBook + '(?![A-Za-z0-9])', 'i').exec(normalizedRefText);
       if (!bookInRef) continue;
@@ -1525,6 +1537,26 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       for (const occurrence of occurrences) {
         if (occurrence.start + bookInRef.index + selectedOffsetInBook === nearestSelectedBookPosition) {
           return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
+        }
+      }');
+        const pattern = new RegExp('(?<![A-Za-z0-9])' + escapedLabel + '(?![A-Za-z0-9])', 'ig');
+        let match;
+        while ((match = pattern.exec(normalizedRefText))) {
+          bookMatches.push({text: match[0], index: match.index});
+        }
+      }
+      if (!bookMatches.length) continue;
+
+      // For a split book name, align the clicked token's position with the
+      // matching canonical or alias label. This handles prefix clicks ("1"),
+      // suffix clicks ("Corinthians"), and lowercase/Roman-prefix spellings.
+      for (const bookInRef of bookMatches) {
+        const selectedOffsetInBook = bookInRef.text.toLowerCase().indexOf(selected.toLowerCase());
+        if (selectedOffsetInBook < 0) continue;
+        for (const occurrence of occurrences) {
+          if (occurrence.start + bookInRef.index + selectedOffsetInBook === nearestSelectedBookPosition) {
+            return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
+          }
         }
       }
     }
