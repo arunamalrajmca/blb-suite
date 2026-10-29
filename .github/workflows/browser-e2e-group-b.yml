@@ -75,6 +75,8 @@ jobs:
 
   core-group-b:
     needs: change-detection
+    # Skip the runner entirely when the selector says this group is irrelevant.
+    if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
     name: BROWSER E2E — GROUP B — CLIPBOARD/LINKS
     runs-on: ubuntu-latest
     timeout-minutes: 20
