@@ -296,7 +296,11 @@
         const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
           && KJV_CORPUS_WORD_INDEX.has(token);
         const isBookName = !!resolveBibleBook(text);
-        if (!isKjvWord && !isBookName) {
+        // Verse cues are intentionally actionable even though "verse", "verses",
+        // and "v" are not KJV corpus words. Their adjacent verse number and
+        // surrounding chapter reference provide the passage context.
+        const isVerseCue = /^(?:verse|verses|v)$/i.test(text);
+        if (!isKjvWord && !isBookName && !isVerseCue) {
           blbPageButtonSelection = '';
           return;
         }
