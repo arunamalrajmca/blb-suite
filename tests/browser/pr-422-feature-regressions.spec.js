@@ -6,6 +6,7 @@ const vm = require('node:vm');
 const root = path.resolve(__dirname, '../..');
 const read = relative => fs.readFileSync(path.join(root, relative), 'utf8');
 const contentSource = read('extension/content.js');
+const kingsBibleCollectorSource = read('extension/kings-bible-collector.js');
 const popupSource = read('extension/popup.html');
 const popupJsSource = read('extension/popup.js');
 const tutorialSource = read('extension/Tutorial.html');
@@ -84,11 +85,11 @@ test.describe("The King's Bible entry-page click handling", () => {
   });
 
   test('handles visible book references, abbreviated data-bible IDs, verse ranges, and Judges source IDs', () => {
-    expect(contentSource).toContain('element.getAttribute("data-bible")');
-    expect(contentSource).toContain('const abbreviatedLabel = /^\\d+:\\d+(?:-\\d+)?$/');
-    expect(contentSource).toContain('const visibleRange = label.match(/^(\\d+):(\\d+)-(\\d+)$/)');
-    expect(contentSource).toContain('bookCode === "65"');
-    expect(contentSource).toContain('resolveBibleReference(bookName, chapter, from, to)');
+    expect(kingsBibleCollectorSource).toContain('element.getAttribute("data-bible")');
+    expect(kingsBibleCollectorSource).toContain('const abbreviatedLabel = /^\\d+:\\d+(?:-\\d+)?$/');
+    expect(kingsBibleCollectorSource).toContain('const range = label.match(/^(\\d+):(\\d+)-(\\d+)$/)');
+    expect(kingsBibleCollectorSource).toContain('bookCode === "65"');
+    expect(kingsBibleCollectorSource).toContain('resolveBibleReference(bookName, chapter, from, to)');
   });
 
   test('preserves the full non-contiguous verse list when opening MultiVerse', () => {
@@ -100,40 +101,39 @@ test.describe("The King's Bible entry-page click handling", () => {
 
 test.describe("The King's Bible MultiVerse collector regressions", () => {
   test('uses source-specific selectors for Concordance versus Dictionary entries', () => {
-    expect(contentSource).toContain("'#ConcordanceTable a.concordanceitem[href^=\"/Bible/\"], a.concordanceitem[href^=\"/Bible/\"]'");
-    expect(contentSource).toContain('".bible[data-bible], a.bible"');
-    expect(contentSource).toContain('const kingsBibleEntryType = kingsBibleEntryMatch[1].toLowerCase()');
+    expect(kingsBibleCollectorSource).toContain("'#ConcordanceTable a.concordanceitem[href^=\"/Bible/\"], a.concordanceitem[href^=\"/Bible/\"]'");
+    expect(kingsBibleCollectorSource).toContain('".bible[data-bible], a.bible"');
+    expect(kingsBibleCollectorSource).toContain('const kingsBibleEntryType = kingsBibleEntryMatch[1].toLowerCase()');
   });
 
   test('reads numbered pagination controls, caps probing, and deduplicates collected references', () => {
-    expect(contentSource).toContain('ul.pagination li.current-page a');
-    expect(contentSource).toContain('Math.min(lastPage, 20)');
-    expect(contentSource).toContain('const pageCount = pageNumbers.length ? Math.min(lastPage, 20) : 10');
-    expect(contentSource).toContain('while (pending.length && visited.size < 20)');
-    expect(contentSource).toContain('if (seen.has(ref.url)) continue');
-    expect(contentSource).toContain('fetch(pageUrl, { credentials: "same-origin" })');
+    expect(kingsBibleCollectorSource).toContain('ul.pagination li.current-page a');
+    expect(kingsBibleCollectorSource).toContain('Math.min(lastPage, 20)');
+    expect(kingsBibleCollectorSource).toContain('const pageCount = pageNumbers.length ? Math.min(lastPage, 20) : 10');
+    expect(kingsBibleCollectorSource).toContain('while (pending.length && visited.size < 20)');
+    expect(kingsBibleCollectorSource).toContain('if (seen.has(ref.url)) continue');
+    expect(kingsBibleCollectorSource).toContain('fetch(pageUrl, { credentials: "same-origin" })');
   });
 
   test('does not collect all Dictionary pages as though they were paginated Concordance results', () => {
-    expect(contentSource).toContain('if (kingsBibleEntryType !== "concordance")');
-    expect(contentSource).toContain('return collectKingsBibleReferences(document, location.href)');
+    expect(kingsBibleCollectorSource).toContain('if (kingsBibleEntryType !== "concordance")');
+    expect(kingsBibleCollectorSource).toContain('return collectKingsBibleReferences(document, location.href)');
   });
 
   test('creates one visible button and removes it when the master setting is disabled', () => {
-    expect(contentSource).toContain('id = "blb-suite-kingsbible-multiverse"');
-    expect(contentSource).toContain('document.getElementById("blb-suite-kingsbible-multiverse")');
-    expect(contentSource).toContain('document.getElementById("blb-suite-kingsbible-multiverse")?.remove()');
-    expect(contentSource).toContain('Open Bible References in BLB');
+    expect(kingsBibleCollectorSource).toContain('id = "blb-suite-kingsbible-multiverse"');
+    expect(kingsBibleCollectorSource).toContain('document.getElementById("blb-suite-kingsbible-multiverse")');
+    expect(kingsBibleCollectorSource).toContain('document.getElementById("blb-suite-kingsbible-multiverse")?.remove()');
+    expect(kingsBibleCollectorSource).toContain('Open Bible References in BLB');
   });
 });
 
 test.describe('Gospel content and Study deletion safety regressions', () => {
-  test('popup includes clickable Gospel references and the full 2 Timothy 2:15 KJV footer', () => {
+  test('popup keeps its Gospel message and clickable Scripture references', () => {
     expect(popupSource).toContain('The Gospel of Salvation');
     expect(popupSource).toContain('https://www.blueletterbible.org/kjv/1co/15/1-4/');
     expect(popupSource).toContain('https://www.blueletterbible.org/kjv/eph/2/8-9/');
-    expect(popupSource).toContain('2 Timothy 2:15 (KJV)');
-    expect(popupSource).toContain('https://columbusbiblechurch.org/');
+    expect(popupSource).toContain('https://www.blueletterbible.org/kjv/2ti/2/15/');
   });
 
   test('tutorial includes Gospel/right-division content and the recommended study links', () => {
