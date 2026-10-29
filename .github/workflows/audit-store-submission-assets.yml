@@ -8,7 +8,6 @@ on:
       - 'docs/chrome-web-store-assets/**'
       - 'scripts/verify-store-submission-assets.py'
       - 'tests/test_verify_store_submission_assets.py'
-      - '.github/workflows/audit-store-submission-assets.yml'
   push:
     branches:
       - main
@@ -17,7 +16,6 @@ on:
       - 'docs/chrome-web-store-assets/**'
       - 'scripts/verify-store-submission-assets.py'
       - 'tests/test_verify_store_submission_assets.py'
-      - '.github/workflows/audit-store-submission-assets.yml'
   workflow_dispatch:
 
 permissions:
