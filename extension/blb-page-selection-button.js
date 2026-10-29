@@ -253,7 +253,7 @@
           // as double-click: do not re-scan page context after the selection has
           // already been accepted as a word. Multi-word selections still resolve
           // adjacent references through the normal background path.
-          contextualReferenceResolved: !blbPageButtonContextualReference && !/\\s/.test(text),
+          contextualReferenceResolved: !!blbPageButtonContextualReference,
           tabBehavior:{activeIfNew:true,activateExisting:true}
         });
         clearBlbPageSelectionAfterAction();
