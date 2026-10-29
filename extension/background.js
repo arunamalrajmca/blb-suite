@@ -3590,7 +3590,12 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     if (isShadowedBookMatch(m.index)) continue;
     const book = resolveBook(m[1]);
     if (!book) continue;
-    addRef(book, Number(m[2]), Number(m[3]), Number(m[4] || m[3]), m[0]);
+    const chapter = Number(m[2]);
+    // A one-chapter book cannot use an out-of-range chapter in a spaced
+    // chapter/verse match. Otherwise numbered prose after a verse can be
+    // misread as another reference (for example, "Philemon 25 3").
+    if (book.chapterCount === 1 && chapter !== 1) continue;
+    addRef(book, chapter, Number(m[3]), Number(m[4] || m[3]), m[0]);
   }
 
   // The shared parser is authoritative for conventional references and
