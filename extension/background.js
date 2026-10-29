@@ -2920,86 +2920,23 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
 
-    // Show on BLB and Alt+B use the shared selection-processing path.
-    // The Double-Click gesture-specific resolver is intentionally separate.
     try {
       const behavior = message.tabBehavior && typeof message.tabBehavior === 'object' ? {
         activeIfNew: !!message.tabBehavior.activeIfNew,
         activateExisting: !!message.tabBehavior.activateExisting
       } : {activeIfNew:true, activateExisting:true};
-      // Resolve a complete reference/Strong's/book directly. For every other
-      // selection, resolve the page-adjacent citation FIRST. This is critical
-      // for long KJV paragraphs: classifySelectionForBlb() can scan the entire
-      // local corpus and strip cited verse wording before it reaches the
-      // opener, making the action feel stalled and allowing the search path to
-      // win before the adjacent citation is considered.
-      //
-      // If an adjacent reference is found, it is authoritative and we return
-      // immediately. We do NOT run the KJV Criteria Search for that selection.
-      // This preserves the selected reference's chapter/verse information.
-      if (normalizeSiteHostname(hostnameFromTabUrl(sender?.tab?.url)) === BLB_HOSTNAME) {
-        const result = await openBlbPageSelection(text, behavior);
-        sendResponse({...result, sourceSite:BLB_HOSTNAME});
-        return true;
-      }
-      const directUrl = typeof message.directUrl === 'string' ? message.directUrl.trim() : '';
-      if (directUrl && /^https:\/\/www\.blueletterbible\.org\/kjv\//i.test(directUrl)
-          && message.contextualReference?.url === directUrl) {
-        const referenceOpen = openBlbDestination(directUrl, !!behavior.activeIfNew, !!behavior.activateExisting);
-        const studyRef = parseBlbKjvUrlToStudyRef(directUrl);
-        const studyCapture = studyRef ? recordStudyRefs([studyRef]) : Promise.resolve();
-        await Promise.all([referenceOpen, studyCapture]);
-        sendResponse({ok:true, direct:true});
-        return true;
-      }
-      const normalized = normalizeSelectedScriptureText(text);
-      const direct = getDirectSelectedReference(normalized);
-      const strong = canonicalStrongValue(normalized);
-      const bookOnly = getSelectedBookOnlyReference(normalized);
-      const selectedRefs = extractBibleRefsFromSelectedTextUncached(normalized);
-
-      // An explicit contextualReference from the double-click entry point is
-      // authoritative for a single-token selection, even when that token also
-      // has an independent meaning. For example, "Jn" and "16" inside
-      // "Jn 3:16" must open John 3:16, not the standalone book/number meaning.
-      // Orphan standalone numbers have no contextualReference and therefore
-      // continue through the normal standalone-book path.
-      if (Array.isArray(message.contextualReference?.refs) && message.contextualReference.refs.length > 1) {
-        const result = await openBlbMultiVerseRefs(message.contextualReference.refs, !!behavior.activeIfNew || !!behavior.activateExisting);
-        sendResponse({...result, contextual:true, multiVerse:true});
-        return true;
-      }
-      if (message.contextualReference?.url && selectedRefs.length < 2) {
-        await openSelectedPdfBibleRefs(text, behavior, message.contextualReference);
-        sendResponse({ok:true, contextual:true});
-        return true;
-      }
-
-      if (!direct && !strong) {
-        // Context is authoritative for partial selections, but NOT when the
-        // selected text itself contains multiple explicit Bible references.
-        // In that case a single page-context result can incorrectly short-circuit
-        // the full-selection classifier and make a two-reference selection open
-        // only its first citation (and suppress Criteria Search).
-        if (selectedRefs.length < 2 && message.contextualReferenceResolved !== true) {
-          const contextualRef = await getContextualSelectionReference(sender?.tab?.id, text);
-          if (contextualRef?.url) {
-            await openSelectedPdfBibleRefs(text, behavior, contextualRef);
-            sendResponse({ok:true, contextual:true});
-            return true;
-          }
-        }
-      }
-      if (bookOnly?.url && !message.contextualReference?.url) {
-        await recordStudyRefs([parseBlbKjvUrlToStudyRef(bookOnly.url)].filter(Boolean));
-        await openBlbDestination(bookOnly.url, !!behavior.activeIfNew, !!behavior.activateExisting);
-        sendResponse({ok:true, bookOnly:true});
-        return true;
-      }
-      await openSelectedPdfBibleRefs(text, behavior, null);
-      sendResponse({ok:true});
+      const result = await openSharedSelectionAction({
+        tabId:sender?.tab?.id,
+        tabUrl:sender?.tab?.url || '',
+        text,
+        behavior,
+        contextualReference:message.contextualReference || null,
+        contextualReferenceResolved:message.contextualReferenceResolved === true,
+        directUrl:message.directUrl || ''
+      });
+      sendResponse(result);
     } catch (error) {
-      console.error('KJV Scripture Tools page selection button:', error);
+      console.error('KJV Scripture Tools shared selection action:', error);
       sendResponse({ok:false});
     }
     return true;
@@ -5580,37 +5517,71 @@ async function openBlbPageSelection(selectionText, tabBehavior = {activeIfNew:tr
   return {ok:true, criteriaSearch:true, reused:!!result?.reused};
 }
 
-async function openCurrentSelectionInBlb(tabId) {
-  const text = await getActiveTabSelection(tabId);
-  if (!text) return;
+async function openSharedSelectionAction({
+  tabId,
+  tabUrl = '',
+  text,
+  behavior = {activeIfNew:true, activateExisting:true},
+  contextualReference = null,
+  contextualReferenceResolved = false,
+  directUrl = ''
+}) {
+  if (normalizeSiteHostname(hostnameFromTabUrl(tabUrl)) === BLB_HOSTNAME) {
+    const result = await openBlbPageSelection(text, behavior);
+    return {...result, sourceSite:BLB_HOSTNAME};
+  }
 
-  // IMPORTANT PERFORMANCE/REFERENCE RULE:
-  // Resolve an already-complete reference immediately, but for every other
-  // selection ask the page-side contextual resolver BEFORE running the heavy
-  // KJV passage classifier.  The classifier can scan the local 31,102-verse
-  // corpus and can also remove/compare cited verse text. Doing that first made
-  // a long paragraph appear to hang and, more importantly, prevented the
-  // adjacent citation from winning.
+  const validatedDirectUrl = typeof directUrl === 'string' ? directUrl.trim() : '';
+  if (validatedDirectUrl && /^https:\/\/www\\.blueletterbible\\.org\/kjv\//i.test(validatedDirectUrl)
+      && contextualReference?.url === validatedDirectUrl) {
+    const referenceOpen = openBlbDestination(validatedDirectUrl, !!behavior.activeIfNew, !!behavior.activateExisting);
+    const studyRef = parseBlbKjvUrlToStudyRef(validatedDirectUrl);
+    const studyCapture = studyRef ? recordStudyRefs([studyRef]) : Promise.resolve();
+    await Promise.all([referenceOpen, studyCapture]);
+    return {ok:true, direct:true};
+  }
+
   const normalized = normalizeSelectedScriptureText(text);
   const direct = getDirectSelectedReference(normalized);
   const strong = canonicalStrongValue(normalized);
   const bookOnly = getSelectedBookOnlyReference(normalized);
+  const selectedRefs = extractBibleRefsFromSelectedTextUncached(normalized);
 
-  if (!direct && !strong) {
-    // Use page context for partial references. If the selected text already
-    // contains multiple explicit references, keep the entire selection intact
-    // so MultiVerse and Criteria Search can both run.
-    const selectedRefs = extractBibleRefsFromSelectedTextUncached(normalized);
-    if (selectedRefs.length < 2) {
-      const contextualRef = await getContextualSelectionReference(tabId, text);
-      if (contextualRef?.url) {
-        await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true, altB:true}, contextualRef);
-        return;
-      }
+  if (Array.isArray(contextualReference?.refs) && contextualReference.refs.length > 1) {
+    const result = await openBlbMultiVerseRefs(contextualReference.refs, !!behavior.activeIfNew || !!behavior.activateExisting);
+    return {...result, contextual:true, multiVerse:true};
+  }
+  if (contextualReference?.url && selectedRefs.length < 2) {
+    await openSelectedPdfBibleRefs(text, behavior, contextualReference);
+    return {ok:true, contextual:true};
+  }
+
+  if (!direct && !strong && selectedRefs.length < 2 && contextualReferenceResolved !== true) {
+    const contextualRef = await getContextualSelectionReference(tabId, text);
+    if (contextualRef?.url) {
+      await openSelectedPdfBibleRefs(text, behavior, contextualRef);
+      return {ok:true, contextual:true};
     }
   }
 
-  await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true, altB:true}, null);
+  if (bookOnly?.url && !contextualReference?.url) {
+    await recordStudyRefs([parseBlbKjvUrlToStudyRef(bookOnly.url)].filter(Boolean));
+    await openBlbDestination(bookOnly.url, !!behavior.activeIfNew, !!behavior.activateExisting);
+    return {ok:true, bookOnly:true};
+  }
+
+  await openSelectedPdfBibleRefs(text, behavior, null);
+  return {ok:true};
+}
+
+async function openCurrentSelectionInBlb(tabId) {
+  const text = await getActiveTabSelection(tabId);
+  if (!text) return;
+  return openSharedSelectionAction({
+    tabId,
+    text,
+    behavior:{activeIfNew:true, activateExisting:true, altB:true}
+  });
 }
 
 function hostnameFromTabUrl(url) {
