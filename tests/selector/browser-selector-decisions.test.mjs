@@ -436,10 +436,12 @@ test("optional E2E workflows exclude selector-only scripts from their broad scri
     for (const script of [
       "classify-ci-changes.mjs",
       "select-browser-specs.mjs",
+      "select-reference-matrix.mjs",
       "test-ci-routing-selector.js"
     ]) {
       assert.ok(workflow.includes("- '!scripts/" + script + "'"));
     }
+    assert.ok(workflow.includes("- '!scripts/reference-e2e-matrix.json'"), "matrix metadata should not trigger optional Group A/B workflows");
   }
 });
 
