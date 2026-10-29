@@ -37,6 +37,9 @@ jobs:
       changed_browser_specs: ${{ steps.browser-select.outputs.changed_browser_specs }}
       extension_spec_required: ${{ steps.browser-select.outputs.extension_spec_required }}
       browser_e2e_required: ${{ steps.browser-select.outputs.reference_required }}
+      reference_matrix: ${{ steps.matrix-select.outputs.reference_matrix }}
+      reference_matrix_required: ${{ steps.matrix-select.outputs.reference_matrix_required }}
+      reference_matrix_count: ${{ steps.matrix-select.outputs.reference_matrix_count }}
     steps:
       # Publish a pending commit status before classification or browser tests.
       # Configure this exact context ("browser-e2e") as a required check on main.
@@ -76,6 +79,13 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: node scripts/select-browser-specs.mjs "$BASE_SHA"
+      - name: Select reference matrix before allocating runners
+        id: matrix-select
+        env:
+          FULL_BROWSER_SUITE: ${{ steps.browser-select.outputs.full_browser_suite }}
+          CHANGED_SPECS: ${{ steps.browser-select.outputs.changed_specs }}
+          CHANGED_BROWSER_SPECS: ${{ steps.browser-select.outputs.changed_browser_specs }}
+        run: node scripts/select-reference-matrix.mjs
 
   verse-context-regression:
     name: BROWSER E2E — generic verse-context gate
@@ -139,76 +149,14 @@ jobs:
   browser-e2e:
     name: BROWSER E2E — References — ${{ matrix.group }}
     needs: [change-detection, verse-context-regression]
-    if: ${{ always() && (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.verse-context-regression.result == 'success' || needs.change-detection.outputs.extension_spec_required == 'false' || contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
+    if: ${{ always() && needs.change-detection.outputs.reference_matrix_required == 'true' && (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.verse-context-regression.result == 'success' || needs.change-detection.outputs.extension_spec_required == 'false' || contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       # Cancel sibling reference-test jobs as soon as any group fails.
       fail-fast: true
       matrix:
-        include:
-          - group: positional
-            grep: 'Double-click resolves any part|positional context|browser token|separate lines|standalone book numbers|ordinary heading words'
-          - group: paired-timothy-post
-            file: tests/browser/shared-regex-patterns.spec.js
-            grep: 'paired 1 & 2 Timothy whole-book shorthand reaches the final MultiVerse POST with every chapter'
-          - group: redirect-source-url-patterns
-            file: tests/browser/redirect-source-url-patterns.spec.js
-            grep: '.*'
-          - group: redirect-source-url-browser
-            file: tests/browser/redirect-source-url-browser.spec.js
-            grep: '.*'
-          - group: redirect-hostnames
-            file: tests/browser/redirect-hostnames.spec.js
-            grep: '.*'
-          - group: redirect-toggle-isolation
-            file: tests/browser/redirect-toggle-isolation.spec.js
-            grep: '.*'
-          - group: multiverse-clipboard-reference-pattern
-            file: tests/browser/multiverse-clipboard-reference-pattern.spec.js
-            grep: '.*'
-          - group: popup-master-toggle
-            file: tests/browser/popup-master-toggle-regression.spec.js
-            grep: '.*'
-          - group: facebook-selection-parser
-            file: tests/browser/facebook-selection-parser.spec.js
-            grep: '.*'
-          - group: substack-selection-parser
-            file: tests/browser/substack-selection-parser.spec.js
-            grep: '.*'
-          - group: omnibox-command-routing
-            file: tests/browser/omnibox-command-routing.spec.js
-            grep: '.*'
-          - group: pdf-selection-regressions
-            file: tests/browser/pdf-selection-regressions.spec.js
-            grep: '.*'
-          - group: blb-non-kjv-redirect
-            file: tests/browser/blb-non-kjv-redirect.spec.js
-            grep: '.*'
-          - group: grammar-token-coverage-ot
-            grep: 'generic reference grammar — exhaustive token coverage — OT'
-          - group: grammar-token-coverage-nt
-            grep: 'generic reference grammar — exhaustive token coverage — NT'
-          - group: grammar-colon-ot-nt
-            grep: 'generic reference syntax — colon forms'
-          - group: grammar-dot-ot-nt
-            grep: 'generic reference syntax — dot forms'
-          - group: grammar-spaced-ot-nt
-            grep: 'generic reference syntax — spaced forms'
-          - group: grammar-chapter-ot-nt
-            grep: 'generic reference syntax — chapter forms'
-          - group: grammar-range-ot-nt
-            grep: 'generic reference syntax — range forms'
-          - group: aliases-and-roman
-            grep: 'generic aliases|numbered aliases and Roman prefixes|standalone Roman prefixes'
-          - group: resolver
-            grep: 'All 66 canonical'
-          - group: sagacity-nested-anchor
-            file: tests/browser/rediscover-sagacity-button.spec.js
-            grep: 'Sagacity browser collector captures Matt\\. 12:37 from malformed nested BLB anchors'
-          - group: research-derived
-            file: tests/browser/research-dom-smoke.spec.js
-            grep: 'D14|D16|D18|D19|D20|D21|D22|D23|D25|D41|D42|D43|D44|D45|D46|D47|D48|D49|D50|D51|D52|D53|D54|D55|D56|D57|D58|D59|D60'
+        include: ${{ fromJSON(needs.change-detection.outputs.reference_matrix) }}
     steps:
       - name: Checkout
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) && (matrix.file || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
