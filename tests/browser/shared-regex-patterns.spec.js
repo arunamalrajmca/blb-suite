@@ -128,6 +128,23 @@ test('shared sensitive-site classifier covers known providers without keyword fa
   });
 });
 
+test('numbered prose after a one-chapter-book verse is not parsed as another verse', async ({ extensionWorker }) => {
+  const parsed = await extensionWorker.evaluate(() => {
+    const text = [
+      'Romans 16:24', '1 Corinthians 16:23', '2 Corinthians 13:14',
+      'Galatians 6:18', 'Ephesians 6:24', 'Philippians 4:23',
+      'Colossians 4:18', '1 Thessalonians 5:28', '2 Thessalonians 3:18',
+      '1 Timothy 6:21', '2 Timothy 4:22', 'Titus 3:15', 'Philemon 25',
+      '3. The Ancient Church Often Accepted Paul as the Author',
+      'The Eastern church especially associated Hebrews with Paul.'
+    ].join('\n');
+    return resolveBibleReferenceText(text)
+      .map(ref => [ref.book.toLowerCase(), ref.chapter, ref.from, ref.to]);
+  });
+  expect(parsed).toContainEqual(['philemon', 1, 25, 25]);
+  expect(parsed).not.toContainEqual(['philemon', 1, 3, 3]);
+});
+
 test('Facebook-style DOM range extraction preserves all block-separated references before MultiVerse parsing', async ({ context, extensionWorker }) => {
   const page = await context.newPage();
   await page.setContent(`
@@ -391,11 +408,14 @@ test('all reference orders preserve the middle selection through parsing and fin
     ['Philippians 2:19-22', 'Romans 16:21', '1 Corinthians 4:17'],
     ['Philippians 2:19-22', '1 Corinthians 4:17', 'Romans 16:21']
   ];
-  const expected = [
-    ['romans', 16, 21, 21],
-    ['1 corinthians', 4, 17, 17],
-    ['philippians', 2, 19, 22]
-  ];
+  const expectedByReference = {
+    'Romans 16:21': ['romans', 16, 21, 21],
+    '1 Corinthians 4:17': ['1 corinthians', 4, 17, 17],
+    'Philippians 2:19-22': ['philippians', 2, 19, 22]
+  };
+  const expectedByPermutation = permutations.map(lines =>
+    lines.map(reference => expectedByReference[reference])
+  );
 
   const parsed = await extensionWorker.evaluate(cases => cases.map(lines => {
     const refs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(lines.join('\n')));
@@ -407,6 +427,7 @@ test('all reference orders preserve the middle selection through parsing and fin
   }), permutations);
 
   for (let i = 0; i < parsed.length; i++) {
+    const expected = expectedByPermutation[i];
     expect(parsed[i].refs, 'parser permutation ' + i).toEqual(expected);
     for (const [book, chapter, from, to] of expected) {
       for (let verse = from; verse <= to; verse++) {
