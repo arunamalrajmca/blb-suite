@@ -1422,10 +1422,30 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // DOM makes Range-derived offsets drift after whitespace normalization.
     // Anchor the selected canonical book token to the same parsed occurrence;
     // never let a prose mention borrow a different reference elsewhere.
+    // A double-click on a split numbered book may select only its prefix
+    // ("1") or suffix ("Corinthians"), neither of which resolves as a complete
+    // book name on its own. Track the clicked token's source position even when
+    // it is not independently resolvable; the exact offset check below ensures
+    // it must line up with a token inside the parsed book label.
     const selectedBook = resolveBibleBook(selected);
+    const selectedBookPositions = [];
+    if (selected && !/\s/.test(selected)) {
+      const escapedSelected = selected.replace(/[.*+?^$()|[\]\\]/g, '\\    const selectedBook = resolveBibleBook(selected);
     const selectedBookPositions = [];
     if (selectedBook) {
       const escapedSelected = selected.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
+      const selectedPattern = new RegExp('(?<![A-Za-z0-9])' + escapedSelected + '(?![A-Za-z0-9])', 'gi');
+      let selectedMatch;
+      while ((selectedMatch = selectedPattern.exec(normalizedMatchSource))) {
+        selectedBookPositions.push(selectedMatch.index);
+        if (!selectedMatch[0].length) selectedPattern.lastIndex++;
+      }
+    }
+    const nearestSelectedBookPosition = selectedBookPositions.length
+      ? selectedBookPositions.reduce((best, position) =>
+          Math.abs(position - selectionStart) < Math.abs(best - selectionStart) ? position : best,
+        selectedBookPositions[0])
+      : null;');
       const selectedPattern = new RegExp('(?<![A-Za-z0-9])' + escapedSelected + '(?![A-Za-z0-9])', 'gi');
       let selectedMatch;
       while ((selectedMatch = selectedPattern.exec(normalizedMatchSource))) {
@@ -1488,8 +1508,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // The book token must occupy the corresponding position inside this
       // exact parsed reference occurrence; an unrelated mention cannot qualify.
       const refBook = resolveBibleBook(ref.book);
-      if (!selectedBook || !refBook || selectedBook.urlKey !== refBook.urlKey ||
-          nearestSelectedBookPosition == null) continue;
+      if (!refBook || nearestSelectedBookPosition == null) continue;
+      if (selectedBook && selectedBook.urlKey !== refBook.urlKey) continue;
       const normalizedRefText = normalizeSelectionText(ref.text || '').normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-');
       const escapedRefBook = refBook.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
       const bookInRef = new RegExp('(?<![A-Za-z0-9])' + escapedRefBook + '(?![A-Za-z0-9])', 'i').exec(normalizedRefText);
