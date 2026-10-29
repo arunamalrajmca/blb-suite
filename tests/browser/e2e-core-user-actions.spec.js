@@ -12,7 +12,7 @@ async function waitForTab(extensionWorker, predicate, timeout = 10000) {
       lastTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
         items.map(tab => ({
           id: tab.id,
-          url: tab.url || '',
+          url: tab.url || tab.pendingUrl || '',
           pendingUrl: tab.pendingUrl || '',
           urls: [tab.url, tab.pendingUrl].filter(Boolean)
         }))
