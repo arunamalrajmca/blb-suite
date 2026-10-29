@@ -65,7 +65,7 @@
       };
     })();
 
-    const passiveNewTabObserver = new MutationObserver(mutations => {
+    // Reconcile immediately when the master switch changes; the observer only\n    // sees DOM mutations and otherwise leaves our previously-added targets in place.\n    chrome.storage?.onChanged?.addListener((changes, area) => {\n      if (area !== "local" || !changes.masterEnabled) return;\n      if (changes.masterEnabled.newValue === false) {\n        clearPassiveNewTabTargets();\n      } else {\n        schedulePassiveNewTabTargets();\n      }\n    });\n\n    const passiveNewTabObserver = new MutationObserver(mutations => {
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
           if (node.nodeType === 1) schedulePassiveNewTabTargets(node);
