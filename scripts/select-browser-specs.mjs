@@ -43,7 +43,7 @@ const focusedOmniboxBackgroundChange = changed.length === 2
   && changed.includes("extension/background.js")
   && changed.includes("tests/browser/omnibox-command-routing.spec.js");
 const forceFull = alwaysFull || changed.some(path =>
-  (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js")
+  (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js" && path !== "scripts/reference-e2e-matrix.json")
   || path.startsWith("regression-suite/")
   || (path.startsWith("tests/") && !/^tests\/selector\//.test(path) && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path))
   || path === "package.json"
