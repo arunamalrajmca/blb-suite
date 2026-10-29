@@ -54,6 +54,7 @@ jobs:
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 event: "pull_request",
+                branch: headRef,
                 per_page: 100
               }
             );
