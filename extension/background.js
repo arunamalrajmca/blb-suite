@@ -2890,6 +2890,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // local context with another nearby occurrence.
     if (isDoubleClickAction) {
       try {
+        if (normalizeSiteHostname(hostnameFromTabUrl(sender?.tab?.url)) === BLB_HOSTNAME) {
+          const result = await openBlbPageSelection(text, message.tabBehavior || {activeIfNew:true, activateExisting:true});
+          sendResponse({...result, sourceSite:BLB_HOSTNAME, actionSource:'double-click'});
+          return true;
+        }
         const behavior = message.tabBehavior && typeof message.tabBehavior === 'object' ? {
           activeIfNew: !!message.tabBehavior.activeIfNew,
           activateExisting: !!message.tabBehavior.activateExisting
@@ -5532,7 +5537,7 @@ async function openSharedSelectionAction({
   }
 
   const validatedDirectUrl = typeof directUrl === 'string' ? directUrl.trim() : '';
-  if (validatedDirectUrl && /^https:\/\/www\\.blueletterbible\\.org\/kjv\//i.test(validatedDirectUrl)
+  if (validatedDirectUrl && validatedDirectUrl.toLowerCase().startsWith('https://www.blueletterbible.org/kjv/')
       && contextualReference?.url === validatedDirectUrl) {
     const referenceOpen = openBlbDestination(validatedDirectUrl, !!behavior.activeIfNew, !!behavior.activateExisting);
     const studyRef = parseBlbKjvUrlToStudyRef(validatedDirectUrl);
