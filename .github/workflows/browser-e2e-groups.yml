@@ -101,7 +101,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          # Test execution does not need history; the selector job handles the base diff.
+          fetch-depth: 1
       - uses: actions/setup-node@v4
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
         with:
@@ -294,7 +295,7 @@ jobs:
 
   core-group-b:
     needs: change-detection
-    # Skip the runner entirely when the selector says this group is irrelevant.
+    # Test execution does not need history; the selector job handles the base diff.
     if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
     name: BROWSER E2E — GROUP B — CLIPBOARD/LINKS
     runs-on: ubuntu-latest
@@ -302,7 +303,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
       - uses: actions/setup-node@v4
         if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}
         with:
