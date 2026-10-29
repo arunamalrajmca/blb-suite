@@ -999,8 +999,6 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
 
   await installMultiVerseHandoffCapture(extensionWorker);
 
-  await installMultiVerseHandoffCapture(extensionWorker);
-
   const response = await extensionWorker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
     if (!tab?.id) throw new Error('No active tab for disjoint chapter-range E2E');
@@ -1120,6 +1118,8 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
   const baselineTabIds = await extensionWorker.evaluate(async () =>
     (await chrome.tabs.query({})).map(tab => tab.id)
   );
+
+  await installMultiVerseHandoffCapture(extensionWorker);
 
   const response = await extensionWorker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
