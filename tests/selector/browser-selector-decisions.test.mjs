@@ -657,10 +657,10 @@ test("same-condition extension reference regressions share one Playwright invoca
   );
 
   assert.match(referenceWorkflow, /Run both verse-context regressions in one Playwright invocation/);
-  assert.match(referenceWorkflow, /Generic article verse cues follow the latest explicit chapter context\\|Article verse cues resolve context outside Facebook/);
+  assert.ok(referenceWorkflow.includes("Generic article verse cues follow the latest explicit chapter context|Article verse cues resolve context outside Facebook"));
   assert.doesNotMatch(referenceWorkflow, /Run generic verse-context regression first|Run real Supply of Grace cross-site regression/);
 
   assert.match(groupsWorkflow, /Run Facebook and Supply of Grace reference-context regressions/);
-  assert.match(groupsWorkflow, /Facebook nested dir-auto reference resolves from book, chapter, and verse-range gestures\\|Supply of Grace Substack Ephesians chapter context does not fall back to Ephesians 1:1/);
+  assert.ok(groupsWorkflow.includes("Facebook nested dir-auto reference resolves from book, chapter, and verse-range gestures|Supply of Grace Substack Ephesians chapter context does not fall back to Ephesians 1:1"));
   assert.doesNotMatch(groupsWorkflow, /Run Facebook nested reference token regression|Run Supply of Grace Ephesians chapter-context regression/);
 });
