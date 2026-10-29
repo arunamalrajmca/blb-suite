@@ -1494,8 +1494,16 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const escapedRefBook = refBook.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&');
       const bookInRef = new RegExp('(?<![A-Za-z0-9])' + escapedRefBook + '(?![A-Za-z0-9])', 'i').exec(normalizedRefText);
       if (!bookInRef) continue;
+
+      // When a numbered book is rendered as separate tokens, Chromium selects
+      // only the clicked suffix ("Corinthians" in "1 Corinthians"). The
+      // selected token's position is therefore inside the canonical book label,
+      // not at its beginning. Align the fallback with that token offset instead
+      // of requiring the click to land on the prefix character.
+      const selectedOffsetInBook = bookInRef[0].toLowerCase().indexOf(selected.toLowerCase());
+      if (selectedOffsetInBook < 0) continue;
       for (const occurrence of occurrences) {
-        if (occurrence.start + bookInRef.index === nearestSelectedBookPosition) {
+        if (occurrence.start + bookInRef.index + selectedOffsetInBook === nearestSelectedBookPosition) {
           return {book:ref.book,chapter:ref.chapter,from:ref.from,to:ref.to,url:ref.url};
         }
       }
