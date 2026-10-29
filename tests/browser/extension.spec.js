@@ -353,6 +353,29 @@ test.describe('core user-visible E2E', () => {
     expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
   });
 
+  test('Show on BLB resolves standalone Jn alias as John', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-standalone-jn';
+      el.textContent = 'Jn';
+      document.body.appendChild(el);
+      const range = document.createRange();
+      range.selectNodeContents(el);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await button.click();
+    const blb = await waitForBlbTabPath(extensionWorker, '/kjv/jhn/1/1/');
+    expect(new URL(blb.url).pathname).toBe('/kjv/jhn/1/1/');
+  });
+
   test('Show on BLB exact-reference handoff timing: fresh tab', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
