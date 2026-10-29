@@ -6,7 +6,6 @@ on:
       - 'scripts/verify-store-package.py'
       - 'scripts/verify-store-submission-assets.py'
       - 'tests/test_verify_store_package.py'
-      - '.github/workflows/verify-store-submission-tools.yml'
   push:
     branches:
       - main
@@ -14,7 +13,6 @@ on:
       - 'scripts/verify-store-package.py'
       - 'scripts/verify-store-submission-assets.py'
       - 'tests/test_verify_store_package.py'
-      - '.github/workflows/verify-store-submission-tools.yml'
   workflow_dispatch:
 
 concurrency:
