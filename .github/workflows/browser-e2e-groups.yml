@@ -179,9 +179,6 @@ jobs:
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-source-url-browser.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/redirect-source-url-browser.spec.js') && !(needs.change-detection.outputs.browser_e2e_required == 'true' && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-source-url-browser.spec.js'))) }}
         run: npx playwright test tests/browser/redirect-source-url-browser.spec.js
 
-      - name: Run source-page collector initialization regressions
-        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
-        run: npx playwright test tests/browser/extension.spec.js --grep 'source-page collector initializes on'
 
       # Repeat the previously intermittent two-tab selection test in fresh browser contexts.
       # Preserve each attempt's result but continue so we can compare reproducibility.
@@ -271,9 +268,9 @@ jobs:
         run: npx playwright test tests/browser/criteria-search-navigation.spec.js
 
       # Keep both reference-context regressions in this targeted suite so range/context fixes are exercised on branch pushes.
-      - name: Run Facebook and Supply of Grace reference-context regressions
+      - name: Run extension source-page and reference-context regressions
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
-        run: npx playwright test tests/browser/extension.spec.js --grep 'Facebook nested dir-auto reference resolves from book, chapter, and verse-range gestures|Supply of Grace Substack Ephesians chapter context does not fall back to Ephesians 1:1'
+        run: npx playwright test tests/browser/extension.spec.js --grep 'source-page collector initializes on|Facebook nested dir-auto reference resolves from book, chapter, and verse-range gestures|Supply of Grace Substack Ephesians chapter context does not fall back to Ephesians 1:1'
 
       - name: Run changed browser specs without a dedicated workflow step
         if: ${{ needs.change-detection.outputs.unmapped_specs != '' }}
