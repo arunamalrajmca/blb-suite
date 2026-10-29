@@ -164,7 +164,7 @@ test.describe('core user-visible E2E', () => {
             <p><span id="generic-verse-44">Verse</span> 44.</p>
             <p><span id="generic-verse-46">verses</span> 46.</p>
             <p>The next chapter is 1 Kings 19.</p>
-            <p><span id="generic-verse-19-18">verse</span> 18.</p>
+            <p><span id="generic-verse-18">verse</span> 18.</p>
             <p>Psalm 119.</p>
             <p><span id="generic-verse-176">v</span> 176.</p>
             <p><span id="generic-verse-177">verses</span> 177.</p>
@@ -179,7 +179,7 @@ test.describe('core user-visible E2E', () => {
       ['#generic-verse-42', 42, 18, '/kjv/1ki/18/42/'],
       ['#generic-verse-44', 44, 18, '/kjv/1ki/18/44/'],
       ['#generic-verse-46', 46, 18, '/kjv/1ki/18/46/'],
-      ['#generic-verse-19-18', 18, 19, '/kjv/1ki/19/18/']
+      ['#generic-verse-18', 18, 19, '/kjv/1ki/19/18/']
     ];
 
     for (const [selector, verse, chapter, expectedPath] of gestures) {
