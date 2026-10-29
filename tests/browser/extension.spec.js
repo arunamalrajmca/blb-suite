@@ -1364,6 +1364,8 @@ test.describe('core user-visible E2E', () => {
       { label: 'lowercase 1 corinthians', tokens: ['1', 'corinthians'], chapter: 3, verse: 16, urlKey: '1co' },
       { label: 'I Thessalonians', tokens: ['I', 'Thessalonians'], chapter: 2, verse: 13, urlKey: '1th' },
       { label: 'lowercase i thessalonians', tokens: ['i', 'thessalonians'], chapter: 2, verse: 13, urlKey: '1th' },
+      { label: 'II Kings', tokens: ['II', 'Kings'], chapter: 5, verse: 10, urlKey: '2ki' },
+      { label: 'lowercase ii kings', tokens: ['ii', 'kings'], chapter: 5, verse: 10, urlKey: '2ki' },
       { label: '2 Timothy', tokens: ['2', 'Timothy'], chapter: 2, verse: 15, urlKey: '2ti' },
       { label: 'lowercase 2 timothy', tokens: ['2', 'timothy'], chapter: 2, verse: 15, urlKey: '2ti' },
       { label: 'John', tokens: ['John'], chapter: 3, verse: 16, urlKey: 'jhn' }
