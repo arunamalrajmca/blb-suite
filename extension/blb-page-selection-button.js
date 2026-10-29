@@ -257,7 +257,7 @@
           // contextual reference. A standalone alias such as "Jn" must still
           // reach the shared background resolver, which handles book aliases
           // and can recover nearby verse context if the local fast path missed it.
-          contextualReferenceResolved: !blbPageButtonContextualReference && !/\\s/.test(text) && !resolveBibleBook(text),
+          contextualReferenceResolved: !blbPageButtonContextualReference && !/\s/.test(text) && !resolveBibleBook(text),
           tabBehavior:{activeIfNew:true,activateExisting:true}
         });
         clearBlbPageSelectionAfterAction();
