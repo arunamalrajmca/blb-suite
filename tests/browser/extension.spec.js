@@ -1343,7 +1343,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click prefixed book names preserve the cited chapter and verse', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click resolves any part of prefixed book names and preserves the cited chapter and verse', async ({ page, context, extensionStorage, extensionWorker }) => {
     const cases = [
       { label: '1 Corinthians', tokens: ['1', 'Corinthians'], chapter: 3, verse: 16, urlKey: '1co' },
       { label: 'I Thessalonians', tokens: ['I', 'Thessalonians'], chapter: 2, verse: 13, urlKey: '1th' },
