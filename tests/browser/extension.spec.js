@@ -1398,13 +1398,16 @@ test.describe('core user-visible E2E', () => {
     // then dispatch a double-click at the real physical location of the book
     // suffix. This isolates event-target/caret resolution from selection timing.
     await page.locator('#nested-thessalonians').evaluate(element => {
-      const stale = document.createRange();
-      stale.selectNodeContents(document.querySelector('#blb-e2e-focused-root'));
-      stale.setStart(document.body.firstChild || element, 0);
       const selection = window.getSelection();
       selection.removeAllRanges();
-      const staleWord = [...document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT)]
-        .find(node => /^(?:the)$/i.test((node.nodeValue || '').trim()));
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let staleWord = null;
+      while (walker.nextNode()) {
+        if (/^(?:the)$/i.test((walker.currentNode.nodeValue || '').trim())) {
+          staleWord = walker.currentNode;
+          break;
+        }
+      }
       if (staleWord) {
         const range = document.createRange();
         range.selectNodeContents(staleWord);
