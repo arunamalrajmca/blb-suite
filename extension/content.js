@@ -1972,7 +1972,10 @@ function handleDoubleClickBlb(event) {
             const normalizedToken = normalizeDoubleClickToken(selection).replace(/’/g, "'");
             const isSuffixKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
               && KJV_CORPUS_WORD_INDEX.has(normalizedToken);
-            if (possibleNumberedBookSuffix && !isSuffixKjvWord && !hasValidNearbyBookSuffix) return true;
+            // Some suffix spellings are also valid standalone aliases (notably Jn -> John).
+            // Keep the numbered-book guard for non-book words, but never reject a token
+            // that the shared resolver already recognizes as a complete book name.
+            if (possibleNumberedBookSuffix && !isSuffixKjvWord && !hasValidNearbyBookSuffix && !isBookName) return true;
 
             // A numbered-book suffix such as "Cor" may be the clicked part of
             // a chapter-only citation ("1 Cor. 13"). Resolve that exact nearby
