@@ -46,9 +46,9 @@ async function installMultiVerseHandoffCapture(extensionWorker) {
 }
 
 function expandGenesisMultiVerseHandoff(mvText) {
-  const parts = String(mvText || '').split(/\\s*;\\s*/).filter(Boolean);
+  const parts = String(mvText || '').split(/\s*;\s*/).filter(Boolean);
   return parts.flatMap(part => {
-    const match = part.match(/^Genesis\\s+(\\d+):(\\d+)(?:-(\\d+))?$/i);
+    const match = part.match(/^Genesis\s+(\d+):(\d+)(?:-(\d+))?$/i);
     if (!match) throw new Error('Unexpected MultiVerse POST payload reference: ' + part);
     const chapter = Number(match[1]);
     const from = Number(match[2]);
