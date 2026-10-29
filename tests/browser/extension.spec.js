@@ -1343,6 +1343,26 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  test('Double-click prefixed book names preserve the cited chapter and verse', async ({ page, context, extensionStorage, extensionWorker }) => {
+    const cases = [
+      { label: '1 Corinthians', tokens: ['1', 'Corinthians'], chapter: 3, verse: 16, urlKey: '1co' },
+      { label: 'I Thessalonians', tokens: ['I', 'Thessalonians'], chapter: 2, verse: 13, urlKey: '1th' },
+      { label: '2 Timothy', tokens: ['2', 'Timothy'], chapter: 2, verse: 15, urlKey: '2ti' },
+      { label: 'John', tokens: ['John'], chapter: 3, verse: 16, urlKey: 'jhn' }
+    ];
+
+    for (const item of cases) {
+      await setupDoubleClickReferencePage(
+        page, extensionStorage,
+        `<p id="ref">${item.tokens.map((token, i) => `<span class="book-token" data-index="${i}">${token}</span>`).join(' ')} <span class="chapter">${item.chapter}</span>:<span class="verse">${item.verse}</span></p>`
+      );
+      const expectedPath = `/kjv/${item.urlKey}/${item.chapter}/${item.verse}/`;
+      for (let i = 0; i < item.tokens.length; i++) {
+        await assertDoubleClickPath(page, context, extensionWorker, `#ref .book-token[data-index="${i}"]`, expectedPath);
+      }
+    }
+  });
+
   // The release suite already runs the complete generic syntax matrix above
   // (colon, dot, spaced, chapter, and range forms for OT/NT). Keeping a second
   // 66-book × multi-variant copy here doubled the release runtime and could hit
