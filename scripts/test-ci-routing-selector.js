@@ -324,6 +324,8 @@ try {
   // CI selector infrastructure changes are validated by the package gate and must not launch browser E2E.
   resetScenario(base);
   write('scripts/select-browser-specs.mjs', '// selector infrastructure change\n');
+  write('scripts/select-reference-matrix.mjs', '// matrix selector infrastructure change\n');
+  write('scripts/reference-e2e-matrix.json', '{\"group\":\"test\"}\n');
   commit('change selector infrastructure');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', false, 'selector infrastructure');
