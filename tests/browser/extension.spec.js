@@ -1361,8 +1361,11 @@ test.describe('core user-visible E2E', () => {
   test('Double-click resolves any part of prefixed book names and preserves the cited chapter and verse', async ({ page, context, extensionStorage, extensionWorker }) => {
     const cases = [
       { label: '1 Corinthians', tokens: ['1', 'Corinthians'], chapter: 3, verse: 16, urlKey: '1co' },
+      { label: 'lowercase 1 corinthians', tokens: ['1', 'corinthians'], chapter: 3, verse: 16, urlKey: '1co' },
       { label: 'I Thessalonians', tokens: ['I', 'Thessalonians'], chapter: 2, verse: 13, urlKey: '1th' },
+      { label: 'lowercase i thessalonians', tokens: ['i', 'thessalonians'], chapter: 2, verse: 13, urlKey: '1th' },
       { label: '2 Timothy', tokens: ['2', 'Timothy'], chapter: 2, verse: 15, urlKey: '2ti' },
+      { label: 'lowercase 2 timothy', tokens: ['2', 'timothy'], chapter: 2, verse: 15, urlKey: '2ti' },
       { label: 'John', tokens: ['John'], chapter: 3, verse: 16, urlKey: 'jhn' }
     ];
 
