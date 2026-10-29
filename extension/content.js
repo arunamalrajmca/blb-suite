@@ -1856,6 +1856,10 @@ function handleDoubleClickBlb(event) {
         // Declare this outside the fast-rejection block because target selection
         // and the DOM-context resolver also need the same cue classification.
         const isVerseContextWord = /^(?:v|verse|verses)$/i.test(selection);
+        // Recognize suffixes before the KJV-vocabulary fast reject: book names
+        // such as "Thessalonians" may be absent from the generated word index,
+        // but are valid double-click targets when preceded by a real book prefix.
+        const possibleNumberedBookSuffix=/^(?:Sam(?:uel)?|Kings|Kgs?|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)$/i.test(selection);
 
         // Reject unrelated English single words before building DOM context or
         // entering the background selection resolver. This is an exact local
@@ -1872,7 +1876,7 @@ function handleDoubleClickBlb(event) {
           // reference check below; without a valid nearby prefix they remain
           // inert and are not sent to ordinary word lookup.
           const isRomanBookPrefixToken = /^(?:I|II|III)$/i.test(selection);
-          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isRomanBookPrefixToken && !isVerseContextWord) return true;
+          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isRomanBookPrefixToken && !isVerseContextWord && !possibleNumberedBookSuffix) return true;
         }
 
         // DOM context is useful only when the clicked token can identify a
@@ -1893,11 +1897,6 @@ function handleDoubleClickBlb(event) {
         );
         const isPrefixedBookName=hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
         const isBookName=!hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
-        // A suffix such as "Peter" or "Cor" can be part of a numbered book
-        // name. Only enter contextual matching when the complete nearby prefix
-        // resolves to a real Bible book; arbitrary words remain fast-rejected.
-        const possibleNumberedBookSuffix=/^(?:Sam(?:uel)?|Kings|Kgs?|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)$/i.test(selection);
-
         // For explicit verse cues and numbered-book suffixes, prefer the
         // physical event target where needed. The generic caret-target helper
         // can return a nearby/stale element on pages with inline citation spans.
@@ -1962,6 +1961,14 @@ function handleDoubleClickBlb(event) {
             hasValidNearbyRomanBookPrefix=!!(completeBook
               && isRomanBookPrefix
               && match[1].toUpperCase()===selection.toUpperCase());
+
+            // A suffix absent from the KJV word index is eligible only when
+            // it is actually part of a recognized prefixed book citation.
+            // This preserves the fast rejection of unrelated English words.
+            const normalizedToken = normalizeDoubleClickToken(selection).replace(/’/g, "'");
+            const isSuffixKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
+              && KJV_CORPUS_WORD_INDEX.has(normalizedToken);
+            if (possibleNumberedBookSuffix && !isSuffixKjvWord && !hasValidNearbyBookSuffix) return true;
 
             // A numbered-book suffix such as "Cor" may be the clicked part of
             // a chapter-only citation ("1 Cor. 13"). Resolve that exact nearby
