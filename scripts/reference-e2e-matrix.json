@@ -9,58 +9,32 @@
     "grep": "paired 1 & 2 Timothy whole-book shorthand reaches the final MultiVerse POST with every chapter"
   },
   {
-    "group": "redirect-source-url-patterns",
-    "file": "tests/browser/redirect-source-url-patterns.spec.js",
+    "group": "command-and-redirect-batch",
+    "files": [
+      "tests/browser/omnibox-command-routing.spec.js",
+      "tests/browser/pdf-selection-regressions.spec.js",
+      "tests/browser/blb-non-kjv-redirect.spec.js"
+    ],
     "grep": ".*"
   },
   {
-    "group": "redirect-source-url-browser",
-    "file": "tests/browser/redirect-source-url-browser.spec.js",
+    "group": "selection-parser-batch",
+    "files": [
+      "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
+      "tests/browser/popup-master-toggle-regression.spec.js",
+      "tests/browser/facebook-selection-parser.spec.js",
+      "tests/browser/substack-selection-parser.spec.js"
+    ],
     "grep": ".*"
   },
   {
-    "group": "redirect-hostnames",
-    "file": "tests/browser/redirect-hostnames.spec.js",
-    "grep": ".*"
-  },
-  {
-    "group": "redirect-toggle-isolation",
-    "file": "tests/browser/redirect-toggle-isolation.spec.js",
-    "grep": ".*"
-  },
-  {
-    "group": "multiverse-clipboard-reference-pattern",
-    "file": "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
-    "grep": ".*"
-  },
-  {
-    "group": "popup-master-toggle",
-    "file": "tests/browser/popup-master-toggle-regression.spec.js",
-    "grep": ".*"
-  },
-  {
-    "group": "facebook-selection-parser",
-    "file": "tests/browser/facebook-selection-parser.spec.js",
-    "grep": ".*"
-  },
-  {
-    "group": "substack-selection-parser",
-    "file": "tests/browser/substack-selection-parser.spec.js",
-    "grep": ".*"
-  },
-  {
-    "group": "omnibox-command-routing",
-    "file": "tests/browser/omnibox-command-routing.spec.js",
-    "grep": ".*"
-  },
-  {
-    "group": "pdf-selection-regressions",
-    "file": "tests/browser/pdf-selection-regressions.spec.js",
-    "grep": ".*"
-  },
-  {
-    "group": "blb-non-kjv-redirect",
-    "file": "tests/browser/blb-non-kjv-redirect.spec.js",
+    "group": "redirect-source-smoke-batch",
+    "files": [
+      "tests/browser/redirect-source-url-patterns.spec.js",
+      "tests/browser/redirect-source-url-browser.spec.js",
+      "tests/browser/redirect-hostnames.spec.js",
+      "tests/browser/redirect-toggle-isolation.spec.js"
+    ],
     "grep": ".*"
   },
   {
