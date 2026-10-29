@@ -116,6 +116,12 @@ jobs:
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
 
+      # Run the dedicated MultiVerse tab-reuse regression in this existing runner.
+      # Shared/unknown runtime changes retain this coverage via full_browser_suite.
+      - name: Run MultiVerse tab reuse and 22-batch persistence regressions
+        if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/multiverse-tab-reuse.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/multiverse-tab-reuse.spec.js') }}
+        run: npx playwright test tests/browser/multiverse-tab-reuse.spec.js --workers=1
+
       - name: Run every test in changed browser spec files
         if: ${{ needs.change-detection.outputs.changed_browser_specs != '' }}
         env:
