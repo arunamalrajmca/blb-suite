@@ -230,11 +230,11 @@ test('mixed reference selection keeps the paired Timothy book shorthand visible 
   ]);
   expect(result.normalized).toContain('1 & 2 Timothy');
   expect(result.wholeBooks.length).toBeGreaterThan(0);
-  expect(result.wholeBooks[0][0]).toBe('1 Timothy');
-  expect(result.wholeBooks.some(ref => ref[0] === '2 Timothy')).toBe(true);
-  expect(result.wholeBooks.filter(ref => ref[0] === '1 Timothy').map(ref => ref[1]))
+  expect(result.wholeBooks[0][0]).toBe('1 timothy');
+  expect(result.wholeBooks.some(ref => ref[0] === '2 timothy')).toBe(true);
+  expect(result.wholeBooks.filter(ref => ref[0] === '1 timothy').map(ref => ref[1]))
     .toEqual(Array.from({length: 6}, (_, index) => index + 1));
-  expect(result.wholeBooks.filter(ref => ref[0] === '2 Timothy').map(ref => ref[1]))
+  expect(result.wholeBooks.filter(ref => ref[0] === '2 timothy').map(ref => ref[1]))
     .toEqual(Array.from({length: 4}, (_, index) => index + 1));
 });
 
@@ -408,11 +408,14 @@ test('all reference orders preserve the middle selection through parsing and fin
     ['Philippians 2:19-22', 'Romans 16:21', '1 Corinthians 4:17'],
     ['Philippians 2:19-22', '1 Corinthians 4:17', 'Romans 16:21']
   ];
-  const expected = [
-    ['romans', 16, 21, 21],
-    ['1 corinthians', 4, 17, 17],
-    ['philippians', 2, 19, 22]
-  ];
+  const expectedByReference = {
+    'Romans 16:21': ['romans', 16, 21, 21],
+    '1 Corinthians 4:17': ['1 corinthians', 4, 17, 17],
+    'Philippians 2:19-22': ['philippians', 2, 19, 22]
+  };
+  const expectedByPermutation = permutations.map(lines =>
+    lines.map(reference => expectedByReference[reference])
+  );
 
   const parsed = await extensionWorker.evaluate(cases => cases.map(lines => {
     const refs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(lines.join('\n')));
@@ -424,6 +427,7 @@ test('all reference orders preserve the middle selection through parsing and fin
   }), permutations);
 
   for (let i = 0; i < parsed.length; i++) {
+    const expected = expectedByPermutation[i];
     expect(parsed[i].refs, 'parser permutation ' + i).toEqual(expected);
     for (const [book, chapter, from, to] of expected) {
       for (let verse = from; verse <= to; verse++) {
