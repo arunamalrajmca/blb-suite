@@ -6,7 +6,6 @@ on:
     branches:
       - chore/chrome-web-store-screenshots
     paths:
-      - '.github/workflows/generate-store-screenshots.yml'
       - 'extension/Tutorial.html'
       - 'extension/Tutorial.js'
       - 'extension/Tutorial.pdf'
