@@ -1,12 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { parseReferenceMatrix, selectReferenceMatrix } from "../../scripts/select-reference-matrix.mjs";
+import { validateReferenceMatrix, selectReferenceMatrix } from "../../scripts/select-reference-matrix.mjs";
 
-const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url), "utf8");
-const entries = parseReferenceMatrix(workflow);
+const entries = validateReferenceMatrix(JSON.parse(readFileSync(new URL("../../scripts/reference-e2e-matrix.json", import.meta.url), "utf8")));
 
-test("parses the workflow matrix without losing group/file/grep values", () => {
+test("reference matrix defines unique, complete entries", () => {
   assert.ok(entries.length >= 20, `expected the full reference matrix, found ${entries.length}`);
   assert.equal(new Set(entries.map(entry => entry.group)).size, entries.length);
   assert.ok(entries.some(entry => entry.group === "redirect-hostnames" && entry.file === "tests/browser/redirect-hostnames.spec.js"));
@@ -22,7 +21,7 @@ test("mapped redirect change selects only matrix groups for its selected spec", 
   assert.deepEqual(selected.map(entry => entry.group), ["redirect-hostnames"]);
 });
 
-test("unknown or shared-core full-suite selection retains broad matrix coverage", () => {
+test("shared-core or unknown runtime full-suite selection retains broad matrix coverage", () => {
   const selected = selectReferenceMatrix(entries, { full: true, changedSpecs: "tests/browser/redirect-hostnames.spec.js" });
   assert.equal(selected.length, entries.length);
 });
