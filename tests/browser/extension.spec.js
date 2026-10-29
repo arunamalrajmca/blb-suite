@@ -1390,7 +1390,7 @@ test.describe('core user-visible E2E', () => {
 
   test('Nested prefixed-book DOM uses the physical token when native selection is stale', async ({ page, context, extensionStorage, extensionWorker }) => {
     await setupDoubleClickReferencePage(page, extensionStorage,
-      '<article id="nested-prefixed-reference"><p><span><span>I</span></span> <span><span id="nested-thessalonians">Thessalonians</span></span> <span>2</span>:<span>13</span></p></article>'
+      '<span id="stale-selection-word" style="position:fixed;left:-1000px">the</span><article id="nested-prefixed-reference"><p><span><span>I</span></span> <span><span id="nested-thessalonians">Thessalonians</span></span> <span>2</span>:<span>13</span></p></article>'
     );
     const beforeIds = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id)));
 
