@@ -4,7 +4,6 @@ on:
   pull_request:
     paths:
       - '.github/workflows/generate-store-screenshots.yml'
-      - '.github/workflows/verify-store-assets.yml'
       - 'docs/chrome-web-store-assets/**'
       - 'scripts/verify-store-assets.py'
       - 'scripts/verify-store-branding.py'
@@ -14,7 +13,6 @@ on:
       - main
     paths:
       - '.github/workflows/generate-store-screenshots.yml'
-      - '.github/workflows/verify-store-assets.yml'
       - 'docs/chrome-web-store-assets/**'
       - 'scripts/verify-store-assets.py'
       - 'scripts/verify-store-branding.py'
