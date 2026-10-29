@@ -26,6 +26,39 @@ async function waitForTab(extensionWorker, predicate, timeout = 10000) {
   return match;
 }
 
+const MULTIVERSE_HANDOFF_CAPTURE_PREFIX = 'blbSuiteE2EMultiVerseHandoff_';
+
+async function installMultiVerseHandoffCapture(extensionWorker) {
+  await extensionWorker.evaluate((prefix) => {
+    if (globalThis.__blbE2EMultiVerseHandoffListener) return;
+    const listener = (tabId, changeInfo, tab) => {
+      const url = String(changeInfo.url || tab?.url || tab?.pendingUrl || '');
+      const handoffUrl = chrome.runtime.getURL('multiverse-post.html');
+      if (!url.startsWith(handoffUrl)) return;
+      let mvText = '';
+      try { mvText = new URL(url).searchParams.get('mvText') || ''; } catch (_) {}
+      if (!mvText) return;
+      void chrome.storage.local.set({[prefix + String(tabId)]:mvText});
+    };
+    globalThis.__blbE2EMultiVerseHandoffListener = listener;
+    chrome.tabs.onUpdated.addListener(listener);
+  }, MULTIVERSE_HANDOFF_CAPTURE_PREFIX);
+}
+
+function expandGenesisMultiVerseHandoff(mvText) {
+  const parts = String(mvText || '').split(/\\s*;\\s*/).filter(Boolean);
+  return parts.flatMap(part => {
+    const match = part.match(/^Genesis\\s+(\\d+):(\\d+)(?:-(\\d+))?$/i);
+    if (!match) throw new Error('Unexpected MultiVerse POST payload reference: ' + part);
+    const chapter = Number(match[1]);
+    const from = Number(match[2]);
+    const to = Number(match[3] || match[2]);
+    return Array.from({length:Math.max(0, to - from + 1)}, (_, index) => ({
+      book:1, chapter, verse:from + index
+    }));
+  });
+}
+
 async function removeTabById(extensionWorker, id) {
   if (id == null) return;
   await extensionWorker.evaluate((tabId) => chrome.tabs.remove(tabId).catch(() => {}), id);
@@ -964,6 +997,10 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
     (await chrome.tabs.query({})).map(tab => tab.id)
   );
 
+  await installMultiVerseHandoffCapture(extensionWorker);
+
+  await installMultiVerseHandoffCapture(extensionWorker);
+
   const response = await extensionWorker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
     if (!tab?.id) throw new Error('No active tab for disjoint chapter-range E2E');
@@ -992,12 +1029,12 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
     }).length;
   }, baselineTabIds), { timeout:15000 }).toBe(2);
 
-  // A tab URL can appear before the extension has persisted that tab's verse batch.
-  // Wait for the actual hand-off state, not merely tab creation, in both ordering cases.
-  await expect.poll(async () => extensionWorker.evaluate(async (baseline) => {
+  // Capture the actual mvText query parameter on each extension-owned POST handoff
+  // page before it navigates away to BLB. This is the source payload for this route;
+  // blbSuitePendingMultiVerseRefsByTab is not populated by this POST-based flow.
+  await expect.poll(async () => extensionWorker.evaluate(async ({baseline, prefix}) => {
     const tabs = await chrome.tabs.query({});
-    const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
-    const pending = data.blbSuitePendingMultiVerseRefsByTab || {};
+    const data = await chrome.storage.local.get(null);
     const multiverseTabs = tabs.filter(tab => {
       if (baseline.includes(tab.id)) return false;
       try {
@@ -1007,15 +1044,13 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
            url.searchParams.get('blbSuiteMultiVerse') === '1');
       } catch (_) { return false; }
     });
-    return multiverseTabs.length === 2 && multiverseTabs.every(tab =>
-      Array.isArray(pending[String(tab.id)]) && pending[String(tab.id)].length > 0
-    );
-  }, baselineTabIds), { timeout:15000 }).toBe(true);
+    const captured = multiverseTabs.filter(tab => typeof data[prefix + String(tab.id)] === 'string' && data[prefix + String(tab.id)].length > 0);
+    return multiverseTabs.length === 2 && captured.length === 2;
+  }, {baseline:baselineTabIds, prefix:MULTIVERSE_HANDOFF_CAPTURE_PREFIX}), { timeout:15000 }).toBe(true);
 
-  const state = await extensionWorker.evaluate(async (baselineTabIds) => {
+  const state = await extensionWorker.evaluate(async ({baselineTabIds, prefix}) => {
     const tabs = await chrome.tabs.query({});
-    const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
-    const pending = data.blbSuitePendingMultiVerseRefsByTab || {};
+    const data = await chrome.storage.local.get(null);
     const multiverseTabs = tabs.filter(tab => {
       if (baselineTabIds.includes(tab.id)) return false;
       try {
@@ -1025,22 +1060,16 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
            url.searchParams.get('blbSuiteMultiVerse') === '1');
       } catch (_) { return false; }
     });
-    return multiverseTabs.map(tab => ({id:tab.id, refs:pending[String(tab.id)] || []}));
-  }, baselineTabIds);
+    return multiverseTabs.map(tab => ({
+      id:tab.id,
+      mvText:data[prefix + String(tab.id)] || ''
+    }));
+  }, {baselineTabIds, prefix:MULTIVERSE_HANDOFF_CAPTURE_PREFIX});
 
   expect(state).toHaveLength(2);
-  const batches = state.map(tab => tab.refs);
-  expect(batches.every(refs => refs.length > 0)).toBeTruthy();
+  expect(state.every(tab => tab.mvText.length > 0)).toBeTruthy();
 
-  const expanded = batches.map(refs => refs.flatMap(ref => {
-    const from = Number(ref.from || 1);
-    const to = Number(ref.to || from);
-    return Array.from({length:Math.max(0, to - from + 1)}, (_, index) => ({
-      book:Number(ref.bookNumber),
-      chapter:Number(ref.chapter),
-      verse:from + index
-    }));
-  }));
+  const expanded = state.map(tab => expandGenesisMultiVerseHandoff(tab.mvText));
   const flat = expanded.flat();
   expect(flat.every(ref => ref.book === 1 && ref.chapter !== 47)).toBeTruthy();
   expect(flat).toHaveLength(223);
@@ -1120,12 +1149,12 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
     }).length;
   }, baselineTabIds), { timeout:15000 }).toBe(2);
 
-  // A tab URL can appear before the extension has persisted that tab's verse batch.
-  // Wait for the actual hand-off state, not merely tab creation, in both ordering cases.
-  await expect.poll(async () => extensionWorker.evaluate(async (baseline) => {
+  // Capture the actual mvText query parameter on each extension-owned POST handoff
+  // page before it navigates away to BLB. This is the source payload for this route;
+  // blbSuitePendingMultiVerseRefsByTab is not populated by this POST-based flow.
+  await expect.poll(async () => extensionWorker.evaluate(async ({baseline, prefix}) => {
     const tabs = await chrome.tabs.query({});
-    const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
-    const pending = data.blbSuitePendingMultiVerseRefsByTab || {};
+    const data = await chrome.storage.local.get(null);
     const multiverseTabs = tabs.filter(tab => {
       if (baseline.includes(tab.id)) return false;
       try {
@@ -1135,15 +1164,13 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
            url.searchParams.get('blbSuiteMultiVerse') === '1');
       } catch (_) { return false; }
     });
-    return multiverseTabs.length === 2 && multiverseTabs.every(tab =>
-      Array.isArray(pending[String(tab.id)]) && pending[String(tab.id)].length > 0
-    );
-  }, baselineTabIds), { timeout:15000 }).toBe(true);
+    const captured = multiverseTabs.filter(tab => typeof data[prefix + String(tab.id)] === 'string' && data[prefix + String(tab.id)].length > 0);
+    return multiverseTabs.length === 2 && captured.length === 2;
+  }, {baseline:baselineTabIds, prefix:MULTIVERSE_HANDOFF_CAPTURE_PREFIX}), { timeout:15000 }).toBe(true);
 
-  const state = await extensionWorker.evaluate(async (baselineTabIds) => {
+  const state = await extensionWorker.evaluate(async ({baselineTabIds, prefix}) => {
     const tabs = await chrome.tabs.query({});
-    const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
-    const pending = data.blbSuitePendingMultiVerseRefsByTab || {};
+    const data = await chrome.storage.local.get(null);
     const multiverseTabs = tabs.filter(tab => {
       if (baselineTabIds.includes(tab.id)) return false;
       try {
@@ -1153,22 +1180,16 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
            url.searchParams.get('blbSuiteMultiVerse') === '1');
       } catch (_) { return false; }
     });
-    return multiverseTabs.map(tab => ({id:tab.id, refs:pending[String(tab.id)] || []}));
-  }, baselineTabIds);
+    return multiverseTabs.map(tab => ({
+      id:tab.id,
+      mvText:data[prefix + String(tab.id)] || ''
+    }));
+  }, {baselineTabIds, prefix:MULTIVERSE_HANDOFF_CAPTURE_PREFIX});
 
   expect(state).toHaveLength(2);
-  const batches = state.map(tab => tab.refs);
-  expect(batches.every(refs => refs.length > 0)).toBeTruthy();
+  expect(state.every(tab => tab.mvText.length > 0)).toBeTruthy();
 
-  const expanded = batches.map(refs => refs.flatMap(ref => {
-    const from = Number(ref.from || 1);
-    const to = Number(ref.to || from);
-    return Array.from({length:Math.max(0, to - from + 1)}, (_, index) => ({
-      book:Number(ref.bookNumber),
-      chapter:Number(ref.chapter),
-      verse:from + index
-    }));
-  }));
+  const expanded = state.map(tab => expandGenesisMultiVerseHandoff(tab.mvText));
   const flat = expanded.flat();
   expect(flat.every(ref => ref.book === 1 && ref.chapter !== 47)).toBeTruthy();
   expect(flat).toHaveLength(223);
