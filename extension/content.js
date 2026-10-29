@@ -1839,6 +1839,7 @@ function handleDoubleClickBlb(event) {
         const isRomanBookPrefix=/^(?:I|II|III)$/i.test(selection);
         let hasValidNearbyBookPrefix=false;
         let hasValidNearbyRomanBookPrefix=false;
+        let hasValidNearbyBookSuffix=false;
         let numberedSuffixReference=null;
         if ((possibleNumberedBookSuffix||isRomanBookPrefix) && !hasNumericPrefix) {
           try {
@@ -1851,9 +1852,13 @@ function handleDoubleClickBlb(event) {
               ? (/^[1-3]$/.test(match[1]) ? match[1] : ({I:'1',II:'2',III:'3'}[match[1].toUpperCase()]||''))
               : '';
             const completeBook=!!(match && prefixNumber && resolveBibleBook(prefixNumber+' '+match[2]));
-            hasValidNearbyBookPrefix=!!(completeBook
-              && match[2].toLowerCase()===selection.toLowerCase()
-              && /^[1-3]$/.test(match[1]));
+            // A recognized suffix must trigger contextual resolution even when
+            // the reference uses a Roman prefix ("I Thessalonians", "II Kings").
+            // Previously this gate accepted numeric prefixes only, so these suffixes
+            // were sent to criteria search before positional verse context was tried.
+            hasValidNearbyBookSuffix=!!(completeBook
+              && match[2].toLowerCase()===selection.toLowerCase());
+            hasValidNearbyBookPrefix=!!(hasValidNearbyBookSuffix && /^[1-3]$/.test(match[1]));
             hasValidNearbyRomanBookPrefix=!!(completeBook
               && isRomanBookPrefix
               && match[1].toUpperCase()===selection.toUpperCase());
@@ -1889,7 +1894,7 @@ function handleDoubleClickBlb(event) {
         // existing positional DOM resolver, which uses the physical caret token to
         // identify the exact citation and can expand consecutive verses to a range.
         const isCommaSeparatedNumericVerseSelection = /^\d{1,3}\s*,\s*\d{1,3}$/.test(selection);
-        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord||isCommaSeparatedNumericVerseSelection;
+        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||hasValidNearbyBookSuffix||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord||isCommaSeparatedNumericVerseSelection;
         const blockContext=needsDomContext
           ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
           : null;
