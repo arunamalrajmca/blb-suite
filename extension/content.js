@@ -1569,11 +1569,32 @@ function getDoubleClickTargetElement(event) {
 // a period at the start of the block. This guard is specific to double-click.
 function isNumberedListSerialDoubleClick(selectionText, event) {
   const selected = normalizeSelectionText(selectionText).normalize('NFKC');
-  if (!/^\d+$/.test(selected)) return false;
-  const number = Number(selected);
+  // Chromium may include punctuation when selecting a numbered-list label such as "1.".
+  // Accept it only after the physical click confirms the number-plus-period label below.
+  const selectedNumber = selected.match(/^(\d+)\.?$/)?.[1] || '';
+  if (!selectedNumber) return false;
+  const number = Number(selectedNumber);
   if (!Number.isSafeInteger(number) || number < 0) return false;
 
   try {
+    // Some Chromium double-click events expose a caret range that lands in the
+    // wrapper element rather than the label's text node. The physical event
+    // target still identifies the clicked label, so accept that exact target
+    // only when its own text is "<number>." and it begins its containing block.
+    const physicalTarget = event?.target instanceof Element
+      ? event.target
+      : (event?.target?.parentElement || null);
+    let candidate = physicalTarget;
+    for (let depth = 0; candidate && depth < 4; depth++, candidate = candidate.parentElement) {
+      if (normalizeSelectionText(candidate.textContent).normalize('NFKC') !== selectedNumber + '.') continue;
+      const block = candidate.parentElement?.closest?.('p,li,td,th,blockquote,article,section,div');
+      if (!block) continue;
+      const beforeLabel = document.createRange();
+      beforeLabel.selectNodeContents(block);
+      beforeLabel.setEnd(candidate, 0);
+      if (!normalizeSelectionText(beforeLabel.toString())) return true;
+    }
+
     let pointRange = null;
     if (Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)) {
       if (typeof document.caretRangeFromPoint === 'function') {
@@ -1610,7 +1631,7 @@ function isNumberedListSerialDoubleClick(selectionText, event) {
     while (start > 0 && /\d/.test(value[start - 1])) start--;
     let end = start;
     while (end < value.length && /\d/.test(value[end])) end++;
-    if (start < 0 || value.slice(start, end) !== selected || value[end] !== '.') return false;
+    if (start < 0 || value.slice(start, end) !== selectedNumber || value[end] !== '.') return false;
 
     const block = node.parentElement?.closest?.('p,li,td,th,blockquote,article,section,div') || node.parentElement;
     if (!block) return false;
