@@ -79,7 +79,6 @@ on:
       - 'package-lock.json'
       - 'playwright.config.js'
       - 'playwright.config.ts'
-      - '.github/workflows/browser-e2e-group-b.yml'
   workflow_dispatch:
 
 concurrency:
