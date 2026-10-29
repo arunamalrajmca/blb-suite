@@ -1383,6 +1383,15 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  test('Double-click resolves a prefixed-book suffix when the citation spans nested blocks', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await setupDoubleClickReferencePage(page, extensionStorage,
+      '<article id="split-prefixed-reference"><div><span>I</span></div><p><span id="split-thessalonians">Thessalonians</span> <span>2</span>:<span>13</span></p></article>'
+    );
+    await assertDoubleClickPath(
+      page, context, extensionWorker, '#split-thessalonians', '/kjv/1th/2/13/'
+    );
+  });
+
   // The release suite already runs the complete generic syntax matrix above
   // (colon, dot, spaced, chapter, and range forms for OT/NT). Keeping a second
   // 66-book × multi-variant copy here doubled the release runtime and could hit
