@@ -1686,6 +1686,65 @@ function getDoubleClickSelection(event) {
   return '';
 }
 
+// Resolve the word under the physical double-click point before relying on
+// window.getSelection(). On rich-text pages Chromium can leave the previous
+// word selected briefly, and the stale token may be rejected as an ordinary
+// KJV word before the DOM reference-context resolver is reached.
+function getDoubleClickPhysicalWord(event) {
+  try {
+    if (!event || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return '';
+    let range = null;
+    if (typeof document.caretRangeFromPoint === 'function') {
+      range = document.caretRangeFromPoint(event.clientX, event.clientY);
+    } else if (typeof document.caretPositionFromPoint === 'function') {
+      const position = document.caretPositionFromPoint(event.clientX, event.clientY);
+      if (position?.offsetNode) {
+        range = document.createRange();
+        range.setStart(position.offsetNode, position.offset);
+        range.collapse(true);
+      }
+    }
+    let node = range?.startContainer || null;
+    let offset = range?.startOffset ?? 0;
+    if (node?.nodeType === Node.ELEMENT_NODE) {
+      const children = node.childNodes || [];
+      const findText = (root, reverse = false) => {
+        if (!root) return null;
+        if (root.nodeType === Node.TEXT_NODE && (root.nodeValue || '').length) return root;
+        const descendants = [...(root.childNodes || [])];
+        if (reverse) descendants.reverse();
+        for (const child of descendants) {
+          const found = findText(child, reverse);
+          if (found) return found;
+        }
+        return null;
+      };
+      const right = children[Math.min(offset, children.length)] || null;
+      const left = offset > 0 ? children[offset - 1] : null;
+      const rightText = findText(right);
+      const leftText = findText(left, true);
+      if (rightText) { node = rightText; offset = 0; }
+      else if (leftText) { node = leftText; offset = (leftText.nodeValue || '').length; }
+      else return '';
+    }
+    if (node?.nodeType !== Node.TEXT_NODE) return '';
+    const value = node.nodeValue || '';
+    offset = Math.max(0, Math.min(value.length, offset));
+    const isWordChar = char => /[A-Za-z0-9.'’\\u2019\\u2010-\\u2015\\u2212-]/.test(char || '');
+    let start = offset, end = offset;
+    while (start > 0 && isWordChar(value[start - 1])) start--;
+    while (end < value.length && isWordChar(value[end])) end++;
+    if (end === start && offset > 0 && isWordChar(value[offset - 1])) {
+      start = offset - 1; end = offset;
+      while (start > 0 && isWordChar(value[start - 1])) start--;
+      while (end < value.length && isWordChar(value[end])) end++;
+    }
+    return end > start ? normalizeSelectionText(value.slice(start, end)).normalize('NFKC') : '';
+  } catch (_) {
+    return '';
+  }
+}
+
 function handleDoubleClickBlb(event) {
   try {
     if (!suiteEnabled || isSensitiveSiteHostname(location.hostname) || isDoubleClickExcludedTarget(event.target)) return;
@@ -1710,6 +1769,20 @@ function handleDoubleClickBlb(event) {
         // the current double-click. The physical event coordinates remain the
         // authoritative target while the Selection is settling.
         let selection=normalizeSelectionText(getDoubleClickSelection(event)).normalize('NFKC');
+        const physicalWord = getDoubleClickPhysicalWord(event);
+        // A numbered-book prefix/suffix can be misclassified as an ordinary
+        // word if Chromium's Selection still describes the previous gesture.
+        // Prefer the physical token for book-context candidates before the
+        // early KJV-word rejection, while leaving unrelated clicks unchanged.
+        const physicalWordKey = normalizeDoubleClickToken(physicalWord).toLowerCase();
+        const physicalWordIsBookContext = !!physicalWord && (
+          !!resolveBibleBook(physicalWord) ||
+          Object.keys(BOOK_ALIASES || {}).some(alias => normalizeDoubleClickToken(alias).toLowerCase() === physicalWordKey) ||
+          /^(?:[1-3]|i|ii|iii|sam(?:uel)?|kings|kgs?|chronicles|chr|corinthians|cor|thessalonians|thess|timothy|tim|peter|pet|john|jn|jhn)$/i.test(physicalWord)
+        );
+        if (physicalWordIsBookContext && selection.toLowerCase() !== physicalWord.toLowerCase()) {
+          selection = physicalWord;
+        }
         // On double-click, Chromium may still expose the previous word's
         // non-empty Selection. For the narrowly supported verse-context
         // gesture, the physical event target is authoritative: use its exact
