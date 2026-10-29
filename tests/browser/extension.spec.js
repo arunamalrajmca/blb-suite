@@ -142,6 +142,113 @@ test.describe('core user-visible E2E', () => {
   // once the regression passes, all existing coverage runs unchanged.
   test.describe.configure({ mode: 'serial' });
 
+  test('Single-word verse cues resolve the same adjacent passage through all three actions', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({
+      masterEnabled: true,
+      pageSelectionButtonSites: { 'example.com': true },
+      doubleClickBlbSites: { 'example.com': true }
+    });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('body')).toBeVisible();
+    await page.waitForTimeout(1000);
+
+    // The selected text is always exactly one cue word. The verse number and
+    // chapter reference remain outside the selection and supply the context.
+    await page.evaluate(() => {
+      const article = document.createElement('article');
+      article.id = 'single-word-verse-cue-matrix';
+      article.className = 'article-content';
+      const add = (text, id) => {
+        const p = document.createElement('p');
+        if (id) {
+          const cue = document.createElement('span');
+          cue.id = id;
+          cue.textContent = text;
+          p.appendChild(cue);
+        } else {
+          p.textContent = text;
+        }
+        article.appendChild(p);
+      };
+      add('Chapter reference: 1 Kings 18.');
+      add('verse', 'matrix-verse-42'); article.lastChild.appendChild(document.createTextNode(' 42.'));
+      add('verses', 'matrix-verses-44'); article.lastChild.appendChild(document.createTextNode(' 44.'));
+      add('v', 'matrix-v-46'); article.lastChild.appendChild(document.createTextNode(' 46.'));
+      add('The next chapter is 1 Kings 19.');
+      add('verse', 'matrix-verse-18'); article.lastChild.appendChild(document.createTextNode(' 18.'));
+      document.body.appendChild(article);
+    });
+
+    const cases = [
+      ['#matrix-verse-42', 'verse', '/kjv/1ki/18/42/'],
+      ['#matrix-verses-44', 'verses', '/kjv/1ki/18/44/'],
+      ['#matrix-v-46', 'v', '/kjv/1ki/18/46/'],
+      ['#matrix-verse-18', 'verse', '/kjv/1ki/19/18/']
+    ];
+    const actions = ['Show on BLB', 'Alt+B', 'Double-Click'];
+
+    for (const [selector, cueWord, expectedPath] of cases) {
+      for (const action of actions) {
+        const cue = page.locator(selector);
+        await expect(cue).toHaveText(cueWord);
+        await page.evaluate(({ selector }) => {
+          const el = document.querySelector(selector);
+          const range = document.createRange();
+          range.selectNodeContents(el);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }, { selector });
+        expect(await page.evaluate(() => window.getSelection()?.toString() || ''),
+          selector + ': selection must contain only the cue word').toBe(cueWord);
+
+        const beforeIds = await extensionWorker.evaluate(() =>
+          chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+        );
+
+        if (action === 'Show on BLB') {
+          await page.dispatchEvent('body', 'mouseup');
+          const button = page.locator('#blb-suite-page-selection-button');
+          await expect(button).toBeVisible({ timeout: 10000 });
+          await button.click();
+        } else if (action === 'Alt+B') {
+          // Call the handler registered for the browser command; Playwright's
+          // keyboard simulation does not dispatch Chrome extension commands.
+          await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+        } else {
+          await cue.dblclick();
+        }
+
+        await activateBlbTabForPath(extensionWorker, expectedPath, {
+          fragment: action,
+          selector,
+          selectedText: cueWord
+        });
+        const openedPaths = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+          tabs.filter(tab => !before.includes(tab.id)).map(tab => {
+            try {
+              const url = new URL(String(tab.url || tab.pendingUrl || ''));
+              return url.hostname.endsWith('blueletterbible.org') ? url.pathname : '';
+            } catch (_) { return ''; }
+          }).filter(Boolean)
+        ), beforeIds);
+        expect(openedPaths, action + ' with selected cue "' + cueWord + '" must open its adjacent passage')
+          .toContain(expectedPath);
+
+        await extensionWorker.evaluate(path => chrome.tabs.query({}).then(async tabs => {
+          for (const tab of tabs) {
+            try {
+              const url = new URL(String(tab.url || tab.pendingUrl || ''));
+              if (url.hostname.endsWith('blueletterbible.org') && url.pathname === path && tab.id != null) {
+                await chrome.tabs.remove(tab.id);
+              }
+            } catch (_) {}
+          }
+        }), expectedPath);
+      }
+    }
+  });
+
   test('Generic article verse cues follow the latest explicit chapter context', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({
       masterEnabled: true,
