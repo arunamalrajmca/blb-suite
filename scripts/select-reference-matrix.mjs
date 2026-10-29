@@ -9,7 +9,7 @@ import { dirname, resolve } from "node:path";
 
 export function parseReferenceMatrix(workflow) {
   const lines = workflow.split(/\r?\n/);
-  const includeAt = lines.findIndex(line => /^\s{6}include:\s*$/.test(line));
+  const includeAt = lines.findIndex(line => /^\s{8}include:\s*$/.test(line));
   if (includeAt < 0) throw new Error("Reference workflow matrix include block was not found");
   const entries = [];
   let current = null;
