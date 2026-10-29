@@ -33,6 +33,21 @@ jobs:
               return;
             }
 
+            // GitHub's workflow-runs list may omit pull_requests associations, so
+            // identify a PR's runs by its head repository + branch as well.
+            const pull = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: prNumber
+            });
+            const headRef = pull.data.head.ref;
+            const headRepository = pull.data.head.repo?.full_name;
+
+            if (!headRepository) {
+              core.info(`PR #${prNumber} head repository is unavailable; no runs will be cancelled.`);
+              return;
+            }
+
             const runs = await github.paginate(
               github.rest.actions.listWorkflowRunsForRepo,
               {
@@ -46,8 +61,12 @@ jobs:
             const candidates = runs.filter(run =>
               run.id !== context.runId &&
               ["queued", "in_progress", "waiting", "pending", "requested"].includes(run.status) &&
-              Array.isArray(run.pull_requests) &&
-              run.pull_requests.some(pr => pr.number === prNumber)
+              (
+                (run.head_branch === headRef &&
+                  run.head_repository?.full_name === headRepository) ||
+                (Array.isArray(run.pull_requests) &&
+                  run.pull_requests.some(pr => pr.number === prNumber))
+              )
             );
 
             for (const run of candidates) {
