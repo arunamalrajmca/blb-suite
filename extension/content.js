@@ -1904,11 +1904,43 @@ function handleDoubleClickBlb(event) {
         const cueElement = [physicalTarget, getDoubleClickTargetElement(event)].find(candidate =>
           /^(?:v|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
         );
-        const contextualTarget = possibleNumberedBookSuffix
+        let contextualTarget = possibleNumberedBookSuffix
           ? physicalTarget
           : (isVerseContextWord
             ? (cueElement || getDoubleClickTargetElement(event) || event.target)
             : (getDoubleClickTargetElement(event) || event.target));
+
+        // Some rich-text pages split the clicked suffix, its ordinal prefix,
+        // and the citation numbers across separate inline/block wrappers. The
+        // nearest paragraph can therefore contain only "Thessalonians" even
+        // though a containing article/post has the complete "I Thessalonians
+        // 2:13" citation. For numbered-book suffix clicks, climb only as far
+        // as needed to find a complete, valid book + chapter/verse occurrence;
+        // this keeps context local and avoids scanning the whole document.
+        if (possibleNumberedBookSuffix && physicalTarget instanceof Element) {
+          let ancestor = physicalTarget;
+          let matchedContext = null;
+          for (let depth = 0; ancestor && depth < 8; depth++, ancestor = ancestor.parentElement) {
+            if (!/^(?:P|LI|TD|TH|BLOCKQUOTE|ARTICLE|SECTION|DIV|MAIN|ASIDE|FIGURE)$/.test(ancestor.tagName)) continue;
+            const ancestorText = normalizeSelectionText(ancestor.textContent || '');
+            if (!ancestorText || ancestorText.length > 3000) continue;
+            const escapedSuffix = selection.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\        const contextualTarget = possibleNumberedBookSuffix
+          ? physicalTarget
+          : (isVerseContextWord
+            ? (cueElement || getDoubleClickTargetElement(event) || event.target)
+            : (getDoubleClickTargetElement(event) || event.target));');
+            const completeCitation = new RegExp(
+              '(?:^|[^A-Za-z0-9])(?:[1-3]|I{1,3})\\\\s+' + escapedSuffix +
+              '\\\\.?\\\\s+\\\\d{1,3}\\\\s*(?::|\\\\.)\\\\s*\\\\d{1,3}\\\\b',
+              'i'
+            );
+            if (completeCitation.test(ancestorText)) {
+              matchedContext = ancestor;
+              break;
+            }
+          }
+          if (matchedContext) contextualTarget = matchedContext;
+        }
         const isRomanBookPrefix=/^(?:I|II|III)$/i.test(selection);
         let hasValidNearbyBookPrefix=false;
         let hasValidNearbyRomanBookPrefix=false;
