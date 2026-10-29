@@ -49,6 +49,11 @@ test("dedicated reference specs remain covered by individual or batched matrix e
   ]) {
     assert.ok(files.has("tests/browser/" + spec + ".spec.js"), "dedicated spec remains: " + spec);
   }
+  const specialized = matrix.find(entry => entry.group === "specialized-reference-smoke-batch");
+  assert.ok(specialized && specialized.files.length === 3, "specialized low-volume specs share one runner");
+  for (const pattern of ["paired 1 & 2 Timothy whole-book shorthand reaches the final MultiVerse POST with every chapter", "Sagacity browser collector captures Matt\\. 12:37 from malformed nested BLB anchors", "D14", "D60"]) {
+    assert.ok(specialized.grep.includes(pattern), "specialized batch retains grep coverage: " + pattern);
+  }
   for (const group of ["redirect-source-smoke-batch", "selection-parser-batch", "command-and-redirect-batch"]) {
     assert.ok(matrix.some(entry => entry.group === group && Array.isArray(entry.files) && entry.grep === ".*"), "batch retains coverage: " + group);
   }

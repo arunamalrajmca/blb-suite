@@ -6,9 +6,10 @@ import { validateReferenceMatrix, selectReferenceMatrix } from "../../scripts/se
 const entries = validateReferenceMatrix(JSON.parse(readFileSync(new URL("../../scripts/reference-e2e-matrix.json", import.meta.url), "utf8")));
 
 test("reference matrix defines unique, complete entries", () => {
-  assert.ok(entries.length >= 7, `expected the full reference matrix, found ${entries.length}`);
+  assert.ok(entries.length >= 5, `expected the full reference matrix, found ${entries.length}`);
   assert.equal(new Set(entries.map(entry => entry.group)).size, entries.length);
   assert.ok(entries.some(entry => entry.group === "redirect-source-smoke-batch" && entry.files.includes("tests/browser/redirect-hostnames.spec.js")));
+  assert.ok(entries.some(entry => entry.group === "specialized-reference-smoke-batch" && entry.files.length === 3));
   assert.ok(entries.some(entry => entry.group === "extension-spec-reference-coverage" && entry.grep.includes("generic reference grammar — exhaustive token coverage — OT")));
 });
 

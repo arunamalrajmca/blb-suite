@@ -402,7 +402,10 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
     "facebook-selection-parser",
     "substack-selection-parser",
     "omnibox-command-routing",
-    "pdf-selection-regressions"
+    "pdf-selection-regressions",
+    "shared-regex-patterns",
+    "rediscover-sagacity-button",
+    "research-dom-smoke"
   ]) {
     assert.ok(referenceMatrix.some(entry => entry.file === "tests/browser/" + spec + ".spec.js" || entry.files?.includes("tests/browser/" + spec + ".spec.js")), "reference matrix should include " + spec);
 
