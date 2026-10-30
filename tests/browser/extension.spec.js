@@ -1481,9 +1481,9 @@ test.describe('core user-visible E2E', () => {
     const suffixAliases = await extensionWorker.evaluate(() => NUMBERED_BOOK_SUFFIX_ALIASES);
     expect(suffixAliases).toEqual({
       samuel: ['Sam', 'Samuel', 'Sa'],
-      kings: ['Kings', 'Kgs'],
+      kings: ['Kings', 'Kgs', 'Ki'],
       chronicles: ['Chronicles', 'Chr'],
-      corinthians: ['Corinthians', 'Cor'],
+      corinthians: ['Corinthians', 'Cor', 'Co'],
       thessalonians: ['Thessalonians', 'Thess', 'Thes', 'Th'],
       timothy: ['Timothy', 'Tim', 'Ti'],
       peter: ['Peter', 'Pet', 'Pt'],
@@ -1521,6 +1521,22 @@ test.describe('core user-visible E2E', () => {
           `/kjv/${item.urlKey}/${item.chapter}/${item.verse}/`
         );
       }
+    }
+
+    // Short aliases that overlap other standalone book aliases must resolve
+    // by the complete numbered form: Ti alone is Titus, but 1/2 Ti are Timothy.
+    for (const [token, expectedName, expectedPath] of [
+      ['Ti', 'titus', '/kjv/tit/1/1/'],
+      ['1 Ti', '1 timothy', '/kjv/1ti/1/1/'],
+      ['2 Ti', '2 timothy', '/kjv/2ti/1/1/'],
+      ['1 Ki', '1 kings', '/kjv/1ki/1/1/'],
+      ['2 Ki', '2 kings', '/kjv/2ki/1/1/'],
+      ['1 Co', '1 corinthians', '/kjv/1co/1/1/'],
+      ['2 Co', '2 corinthians', '/kjv/2co/1/1/']
+    ]) {
+      const resolved = await extensionWorker.evaluate(value => resolveBibleBook(value)?.name || null, token);
+      expect(resolved, token).toBe(expectedName);
+      expect(expectedPath).toContain('/kjv/');
     }
 
     // Roman-numeral prefixes are also valid numbered-book context.
