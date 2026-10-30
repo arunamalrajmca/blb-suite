@@ -137,10 +137,8 @@ for (const site of [
 }
 
 test.describe('core user-visible E2E', () => {
-  // Run the generic article verse-context regression first. In serial mode, any
-  // failure skips the legacy tests in this suite for a faster feedback loop;
-  // once the regression passes, all existing coverage runs unchanged.
-  test.describe.configure({ mode: 'serial' });
+  // Each test uses its own Playwright page/context fixture. Keep the tests
+  // independent so one failure does not skip the remaining coverage.
 
   test('Single-word verse cues resolve the same adjacent passage through all four actions', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({
