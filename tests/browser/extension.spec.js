@@ -1515,7 +1515,7 @@ test.describe('core user-visible E2E', () => {
     // Roman-numeral prefixes are also valid numbered-book context.
     for (const item of [
       { prefix: 'II', token: 'John', urlKey: '2jo' },
-      { prefix: 'III', token: 'Jhn', urlKey: '3jo' },
+      { prefix: 'III', token: 'Jn', urlKey: '3jo' },
       { prefix: 'II', token: 'Pet', urlKey: '2pe' }
     ]) {
       await setupDoubleClickReferencePage(
