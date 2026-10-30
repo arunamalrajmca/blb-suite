@@ -1925,6 +1925,11 @@ function handleDoubleClickBlb(event) {
             ? standaloneBook
             : (isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook)));
         if (!contextualReference) {
+          // Numbered-book suffix candidates are allowed past the initial
+          // fast-reject only to validate their adjacent prefix. Without a
+          // complete valid numbered book, keep them inert rather than turning
+          // the suffix into an unrelated word-search request.
+          if (possibleNumberedBookSuffix && !hasValidNearbyBookPrefix) return true;
           // A version abbreviation alone is not a KJV word-search request.
           if (isBibleVersionCode) return true;
           if (/^[A-Za-z][A-Za-z'’-]*$/.test(selection) && !/^(?:i|ii|iii)$/i.test(selection)) {
