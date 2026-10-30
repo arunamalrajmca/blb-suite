@@ -2899,6 +2899,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           activeIfNew: !!message.tabBehavior.activeIfNew,
           activateExisting: !!message.tabBehavior.activateExisting
         } : {activeIfNew:true, activateExisting:true};
+        // This explicit override is emitted only by the Double-Click resolver
+        // for a numbered book name without a chapter/verse. Keep it separate
+        // from Show on BLB and Alt+B selection classification.
+        const criteriaSearchText=String(message.criteriaSearchText || '').trim();
+        if (criteriaSearchText) {
+          await openBlbDestination(
+            `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(criteriaSearchText).replace(/%20/g,'+')}`,
+            !!behavior.activeIfNew,
+            !!behavior.activateExisting
+          );
+          sendResponse({ok:true,criteriaSearch:true,actionSource:'double-click'});
+          return true;
+        }
         if (Array.isArray(message.contextualReference?.refs) && message.contextualReference.refs.length > 1) {
           const result = await openBlbMultiVerseRefs(message.contextualReference.refs, !!behavior.activeIfNew || !!behavior.activateExisting);
           sendResponse({...result, contextual:true, multiVerse:true, actionSource:'double-click'});
