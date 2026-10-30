@@ -215,10 +215,19 @@ test.describe('core user-visible E2E', () => {
         );
 
         if (action === 'Show on BLB') {
+          // Clear diagnostics left by earlier actions, then wait for this exact
+          // selection's contextual resolver result before clicking the button.
+          await page.evaluate(() => {
+            const root = document.querySelector('#single-word-verse-cue-matrix');
+            root?.removeAttribute('data-blb-verse-context-diagnostic');
+            root?.removeAttribute('data-blb-verse-context-resolution');
+          });
           await page.dispatchEvent('body', 'mouseup');
-          // The page-button selection resolver runs on a deferred animation frame.
-          // Do not click a still-visible button carrying the previous cue's cached context.
-          await page.waitForTimeout(50);
+          await expect.poll(async () => page.evaluate(() => {
+            const raw = document.querySelector('#single-word-verse-cue-matrix')
+              ?.getAttribute('data-blb-verse-context-resolution');
+            try { return new URL(JSON.parse(raw).resolvedUrl).pathname; } catch (_) { return ''; }
+          }), { message: 'Show on BLB must resolve the current cue selection before click' }).toBe(expectedPath);
           const button = page.locator('#blb-suite-page-selection-button');
           await expect(button).toBeVisible({ timeout: 10000 });
           await button.click();
