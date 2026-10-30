@@ -163,8 +163,19 @@ test('Facebook post selection extracts references split across separate post tex
   ]);
   expect(result.filter(ref => ref.book === 'romans' && [9,10,11].includes(ref.chapter))
     .map(ref => ref.chapter)).toEqual([9,10,11]);
-  expect(result.filter(ref => ref.book === 'romans' && [1,2,3,4,5].includes(ref.chapter))
-    .map(ref => ref.chapter)).toEqual([1,2,3,4,5]);
+  expect([...new Set(result.filter(ref => ref.book === 'romans' && [1,2,3,4,5].includes(ref.chapter))
+    .map(ref => ref.chapter))].sort((a,b) => a-b)).toEqual([1,2,3,4,5]);
+  expect(result.some(ref => ref.book === 'romans' && ref.chapter === 4 && ref.from === 4 && ref.to === 5)).toBe(true);
   expect(result.filter(ref => ref.book === 'colossians' && ref.chapter === 2)
     .map(ref => ref.from)).toEqual([4,8,18]);
+});
+
+
+test('Facebook selection parser does not reinterpret a chapter:verse range as a chapter range', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() =>
+    extractBibleRefsFromSelectedTextUncached('Romans 4:4-5').map(ref => ({
+      book: ref.book, chapter: ref.chapter, from: ref.from, to: ref.to
+    }))
+  );
+  expect(result).toEqual([{book:'romans',chapter:4,from:4,to:5}]);
 });
