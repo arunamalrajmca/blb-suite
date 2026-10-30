@@ -1649,8 +1649,8 @@ test.describe('core user-visible E2E', () => {
       }))
     );
     expect(cases.map(item => item.name).sort()).toEqual([
-      '1 Peter', '1 Thessalonians', '1 Timothy',
-      '2 Peter', '2 Thessalonians', '2 Timothy'
+      '1 peter', '1 thessalonians', '1 timothy',
+      '2 peter', '2 thessalonians', '2 timothy'
     ]);
 
     // Without a chapter/verse, double-clicking the suffix must search the
@@ -1686,12 +1686,12 @@ test.describe('core user-visible E2E', () => {
 
     // Full references retain their exact chapter and verse.
     const fullReferences = [
-      { name: '1 Timothy', chapter: 2, verse: 3 },
-      { name: '2 Timothy', chapter: 3, verse: 4 },
-      { name: '1 Peter', chapter: 2, verse: 9 },
-      { name: '2 Peter', chapter: 1, verse: 5 },
-      { name: '1 Thessalonians', chapter: 4, verse: 13 },
-      { name: '2 Thessalonians', chapter: 2, verse: 3 }
+      { name: '1 timothy', chapter: 2, verse: 3 },
+      { name: '2 timothy', chapter: 3, verse: 4 },
+      { name: '1 peter', chapter: 2, verse: 9 },
+      { name: '2 peter', chapter: 1, verse: 5 },
+      { name: '1 thessalonians', chapter: 4, verse: 13 },
+      { name: '2 thessalonians', chapter: 2, verse: 3 }
     ];
     for (const item of fullReferences) {
       const book = cases.find(candidate => candidate.name === item.name);
