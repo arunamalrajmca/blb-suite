@@ -19,16 +19,14 @@ globalThis.BLBShared = Object.freeze({
   // Keep this list centralized so URL classification can be extended without
   // adding another inline regular expression.
   sensitiveSiteUrlKeywords: Object.freeze([
-    'payment', 'hospital', 'healthcare', 'health', 'medicine', 'medical',
-    'clinic', 'pharmacy', 'prescription', 'patient', 'diagnosis', 'treatment',
-    'doctor', 'medical-record', 'dental', 'surgery', 'therapy', 'laboratory', 'lab',
-    'insurance', 'insurer', 'assurance', 'insurance-claim', 'policy', 'policies',
+    'hospital', 'healthcare', 'medical', 'clinic', 'pharmacy', 'prescription',
+    'diagnosis', 'treatment', 'medical-record', 'dental', 'surgery', 'therapy',
+    'laboratory', 'lab', 'insurance', 'insurer', 'insurance-claim', 'policies',
     'claim', 'claims', 'premium', 'beneficiary', 'coverage', 'reimbursement',
-    'bank', 'banking', 'banker', 'credit', 'credit-card', 'credit-union', 'loan',
-    'mortgage', 'financial', 'finance', 'tax', 'investment', 'trading', 'wallet',
-    'billing', 'invoice', 'transaction', 'transfer', 'deposit', 'withdrawal',
-    'confidential', 'records', 'account', 'personal-data',
-    'attorney', 'lawyer', 'legal', 'court', 'lawsuit'
+    'banking', 'banker', 'credit', 'credit-card', 'credit-union', 'mortgage',
+    'financial', 'finance', 'tax', 'investment', 'wallet', 'billing', 'invoice',
+    'transaction', 'transfer', 'deposit', 'withdrawal', 'confidential',
+    'personal-data', 'attorney', 'legal', 'lawsuit'
   ]),
   // Curated domain suffixes cover providers whose hostnames do not reveal
   // their category (for example chase.com). This reviewed seed list is not a
