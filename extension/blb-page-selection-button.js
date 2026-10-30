@@ -329,6 +329,24 @@
             lastSelectionContextualText = text;
           }
         }
+        if (!blbPageButtonContextualReference && /^(?:v|verse|verses)$/i.test(normalizeDoubleClickToken(text))) {
+          // Resolve verse-cue context while the native selection still exists.
+          // The button click clears that selection immediately after dispatching
+          // its background message, so deferring this lookup until the message
+          // handler runs loses the DOM range and opens no passage.
+          try {
+            const selection = window.getSelection?.();
+            if (selection?.rangeCount && !selection.isCollapsed
+                && typeof window.__blbSuiteResolveVerseCueContext === 'function') {
+              const contextual = window.__blbSuiteResolveVerseCueContext(text);
+              if (contextual?.url) {
+                blbPageButtonContextualReference = contextual;
+                lastSelectionContextualReference = contextual;
+                lastSelectionContextualText = text;
+              }
+            }
+          } catch (_) {}
+        }
         if (!blbPageButtonContextualReference) {
           const contextual = getContextualBibleReference(text);
           if (contextual?.url) {
