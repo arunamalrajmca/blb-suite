@@ -235,10 +235,28 @@ test.describe('core user-visible E2E', () => {
             }, tab);
           }, cueWord);
         } else {
-          // Let Chromium perform the actual word-selection gesture. A
-          // pre-created Range would be collapsed by the first mouse click,
-          // making this unlike a user's double-click.
+          // Capture what Chromium and the content handler actually see. This
+          // diagnostic is test-only and does not alter the production handler.
+          await page.evaluate(() => {
+            window.__blbSuiteTestDoubleClickEvent = null;
+            document.addEventListener('dblclick', event => {
+              window.__blbSuiteTestDoubleClickEvent = {
+                target: event.target?.outerHTML || '',
+                clientX: event.clientX,
+                clientY: event.clientY,
+                selection: window.getSelection()?.toString() || ''
+              };
+            }, true);
+          });
           await cue.dblclick();
+          const gestureDiagnostics = await page.evaluate(() => ({
+            event: window.__blbSuiteTestDoubleClickEvent,
+            context: document.querySelector('#single-word-verse-cue-matrix')
+              ?.getAttribute('data-blb-verse-context-diagnostic'),
+            resolution: document.querySelector('#single-word-verse-cue-matrix')
+              ?.getAttribute('data-blb-verse-context-resolution')
+          }));
+          console.log('Verse cue double-click diagnostics', selector, gestureDiagnostics);
           expect(await page.evaluate(() => window.getSelection()?.toString() || ''),
             selector + ': native double-click must select only the cue word').toBe(cueWord);
         }
