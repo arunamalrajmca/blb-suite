@@ -15,19 +15,26 @@
     return `<!DOCTYPE html><html><body><!--StartFragment--><span style="font-family:Arial,sans-serif;">${html}</span><!--EndFragment--></body></html>`;
   }
 
-  function initialize({ BLBShared, isSuiteEnabledNow, isSuiteEnabled }) {
+  function initialize({ BLBShared, isSuiteEnabledNow, isSuiteEnabled, suiteSettingsReadyPromise }) {
     if (!(location.hostname.endsWith(BLBShared.hostnames.blb) &&
         !/(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)$/i.test(location.pathname))) return;
-    document.addEventListener("copy", e => {
-      if (!isSuiteEnabledNow()) return;
-      const text = window.getSelection()?.toString() || "";
-      const html = formatBlbTextToHtml(text, BLBShared);
-      if (!html || !e.clipboardData) return;
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      e.clipboardData.setData("text/html", html);
-      e.clipboardData.setData("text/plain", text);
-    }, true);
+
+    // The cached master flag starts fail-closed and is populated asynchronously.
+    // Register the synchronous copy handler only after that initial read settles,
+    // so a page cannot apply Suite clipboard formatting during initialization.
+    Promise.resolve(suiteSettingsReadyPromise).catch(() => {}).then(() => {
+      document.addEventListener("copy", e => {
+        if (!isSuiteEnabledNow()) return;
+        const text = window.getSelection()?.toString() || "";
+        const html = formatBlbTextToHtml(text, BLBShared);
+        if (!html || !e.clipboardData) return;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        e.clipboardData.setData("text/html", html);
+        e.clipboardData.setData("text/plain", text);
+      }, true);
+    });
+
     if (navigator.clipboard?.writeText) {
       const original = navigator.clipboard.writeText.bind(navigator.clipboard);
       navigator.clipboard.writeText = async text => {
