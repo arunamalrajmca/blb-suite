@@ -149,7 +149,7 @@ test('Facebook post selection extracts references split across separate post tex
       '2Tim.2:10-15',
       'Titus 3:8'
     ];
-    return extractBibleRefsFromSelectedTextUncached(selectedBlocks.join('\\n')).map(ref => ({
+    return extractBibleRefsFromSelectedTextUncached(selectedBlocks.join('\n')).map(ref => ({
       book: ref.book, chapter: ref.chapter, from: ref.from ?? null, to: ref.to ?? null
     }));
   });
