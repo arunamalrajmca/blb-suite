@@ -73,12 +73,23 @@ async function isSuiteEnabled() {
 // updated while an old content script is still attached to a page. Keep that
 // stale-page condition silent and fail closed instead of surfacing
 // "Extension context invalidated" to the user.
-function safeRuntimeSendMessage(message) {
+function safeRuntimeSendMessage(message, onError = null) {
+  const reportError = error => {
+    try {
+      if (typeof onError === 'function') onError(error);
+    } catch (_) {}
+  };
   try {
     const pending = chrome.runtime.sendMessage(message);
-    if (pending && typeof pending.catch === 'function') return pending.catch(() => undefined);
+    if (pending && typeof pending.catch === 'function') {
+      return pending.catch(error => {
+        reportError(error);
+        return undefined;
+      });
+    }
     return Promise.resolve(pending);
-  } catch (_) {
+  } catch (error) {
+    reportError(error);
     return Promise.resolve(undefined);
   }
 }
@@ -1945,6 +1956,13 @@ function handleDoubleClickBlb(event) {
           recentDoubleClickDestinations.set(gestureTarget,now);
         }
 
+        const getVerseDiagnosticRoot = () => contextualTarget instanceof Element
+          ? contextualTarget.closest(
+            '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main], ' +
+            '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
+            '.entry-content, .article-body, .article-content, .content-body'
+          )
+          : null;
         const openRequest = safeRuntimeSendMessage({
           type:'blbSuiteOpenDoubleClickSelectionText',
           text:selection,
@@ -1952,18 +1970,18 @@ function handleDoubleClickBlb(event) {
           contextualReferenceResolved:true,
           requestId,
           tabBehavior:{activeIfNew:false,activateExisting:true}
+        }, error => {
+          if (!isVerseContextWord) return;
+          const detail = error?.message || String(error || 'Unknown runtime messaging error');
+          try {
+            getVerseDiagnosticRoot()?.setAttribute('data-blb-verse-context-send-error', detail);
+          } catch (_) {}
+          console.error('KJV Scripture Tools Double-Click message delivery:', detail);
         });
         if (isVerseContextWord) {
           void openRequest.then(response => {
             try {
-              const root = contextualTarget instanceof Element
-                ? contextualTarget.closest(
-                  '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
-                  '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
-                  '.entry-content, .article-body, .article-content, .content-body'
-                )
-                : null;
-              root?.setAttribute('data-blb-verse-context-response', JSON.stringify(response ?? null));
+              getVerseDiagnosticRoot()?.setAttribute('data-blb-verse-context-response', JSON.stringify(response ?? null));
             } catch (_) {}
           });
         }
