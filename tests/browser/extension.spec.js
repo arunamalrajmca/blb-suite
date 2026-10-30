@@ -1681,16 +1681,25 @@ test.describe('core user-visible E2E', () => {
     for (let index = 0; index < words.length; index++) {
       const word = words[index];
       await page.locator(`#blb-e2e-numbered-suffix-kjv-words span[data-index="${index}"]`).dblclick();
-      await expect.poll(() => extensionWorker.evaluate(expected => chrome.tabs.query({}).then(tabs =>
-        tabs.some(tab => {
-          try {
-            const url = new URL(String(tab.url || tab.pendingUrl || ''));
-            return url.hostname === 'www.blueletterbible.org'
-              && url.pathname === '/search/search.cfm'
-              && (url.searchParams.get('Criteria') || '').toLowerCase() === expected.toLowerCase();
-          } catch (_) { return false; }
-        })
-      ), word), { timeout: 10000 }).toBe(true);
+      try {
+        await expect.poll(() => extensionWorker.evaluate(expected => chrome.tabs.query({}).then(tabs =>
+          tabs.some(tab => {
+            try {
+              const url = new URL(String(tab.url || tab.pendingUrl || ''));
+              return url.hostname === 'www.blueletterbible.org'
+                && url.pathname === '/search/search.cfm'
+                && (url.searchParams.get('Criteria') || '').toLowerCase() === expected.toLowerCase();
+            } catch (_) { return false; }
+          })
+        ), word), { timeout: 10000 }).toBe(true);
+      } catch (error) {
+        const openTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+          tabs.map(tab => ({ id: tab.id, url: tab.url || tab.pendingUrl || '' }))
+        ));
+        throw new Error(
+          `Criteria Search did not open for standalone KJV word "${word}". Open tabs: ${JSON.stringify(openTabs)}\n${error.message}`
+        );
+      }
       await extensionWorker.evaluate(expected => chrome.tabs.query({}).then(async tabs => {
         for (const tab of tabs) {
           try {
