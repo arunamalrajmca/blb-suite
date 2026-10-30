@@ -1637,6 +1637,88 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  test('Double-click standalone numbered-book names use complete Criteria Search names and preserve reference destinations', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(120000);
+    const cases = await extensionWorker.evaluate(() => BOOKS
+      .filter(book => /^(?:1|2) (?:timothy|peter|thessalonians)$/i.test(book.name))
+      .map(book => ({
+        name: book.name,
+        number: book.name[0],
+        suffix: book.name.slice(2),
+        urlKey: book.urlKey
+      }))
+    );
+    expect(cases.map(item => item.name).sort()).toEqual([
+      '1 peter', '1 thessalonians', '1 timothy',
+      '2 peter', '2 thessalonians', '2 timothy'
+    ]);
+
+    // Without a chapter/verse, double-clicking the suffix must search the
+    // complete prefixed book name, not the bare suffix or a guessed passage.
+    for (const item of cases) {
+      await setupDoubleClickReferencePage(
+        page, extensionStorage,
+        `<p id="ref"><span class="book-prefix">${item.number}</span> <span class="book-suffix">${item.suffix}</span></p>`
+      );
+      await page.locator('#ref .book-suffix').dblclick();
+      await expect.poll(() => extensionWorker.evaluate(expected => chrome.tabs.query({}).then(tabs =>
+        tabs.some(tab => {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            return url.hostname === 'www.blueletterbible.org'
+              && url.pathname === '/search/search.cfm'
+              && url.searchParams.get('Criteria') === expected;
+          } catch (_) { return false; }
+        })
+      ), item.name), { timeout: 10000 }).toBe(true);
+      await extensionWorker.evaluate(expected => chrome.tabs.query({}).then(async tabs => {
+        for (const tab of tabs) {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            if (url.hostname === 'www.blueletterbible.org'
+              && url.pathname === '/search/search.cfm'
+              && url.searchParams.get('Criteria') === expected
+              && tab.id != null) await chrome.tabs.remove(tab.id);
+          } catch (_) {}
+        }
+      }), item.name);
+    }
+
+    // Full references retain their exact chapter and verse.
+    const fullReferences = [
+      { name: '1 timothy', chapter: 2, verse: 3 },
+      { name: '2 timothy', chapter: 3, verse: 4 },
+      { name: '1 peter', chapter: 2, verse: 9 },
+      { name: '2 peter', chapter: 1, verse: 5 },
+      { name: '1 thessalonians', chapter: 4, verse: 13 },
+      { name: '2 thessalonians', chapter: 2, verse: 3 }
+    ];
+    for (const item of fullReferences) {
+      const book = cases.find(candidate => candidate.name === item.name);
+      await setupDoubleClickReferencePage(
+        page, extensionStorage,
+        `<p id="ref"><span class="book-prefix">${book.number}</span> <span class="book-suffix">${book.suffix}</span> <span class="chapter">${item.chapter}</span>:<span class="verse">${item.verse}</span></p>`
+      );
+      await assertDoubleClickPath(
+        page, context, extensionWorker, '#ref .book-suffix',
+        `/kjv/${book.urlKey}/${item.chapter}/${item.verse}/`
+      );
+    }
+
+    // Chapter-only references keep the established chapter-to-verse-1 fallback.
+    for (const item of fullReferences) {
+      const book = cases.find(candidate => candidate.name === item.name);
+      await setupDoubleClickReferencePage(
+        page, extensionStorage,
+        `<p id="ref"><span class="book-prefix">${book.number}</span> <span class="book-suffix">${book.suffix}</span> <span class="chapter">${item.chapter}</span></p>`
+      );
+      await assertDoubleClickPath(
+        page, context, extensionWorker, '#ref .book-suffix',
+        `/kjv/${book.urlKey}/${item.chapter}/1/`
+      );
+    }
+  });
+
   test('Double-click generic canonical references — all 66 books × book/chapter/verse tokens', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(240000);
     const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
