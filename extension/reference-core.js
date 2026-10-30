@@ -53,7 +53,8 @@ function resolveBibleBook(value) {
   if (numericPrefixMatch) {
     const numberedBook = BOOKS.find(book =>
       normalizeBibleBookKey(book.name) === normalizedBook ||
-      normalizeBibleBookKey(book.urlKey) === normalizedBook
+      normalizeBibleBookKey(book.urlKey) === normalizedBook ||
+      compactBibleReferenceText(book.urlKey) === compact
     );
     if (numberedBook) return numberedBook;
     const aliasTarget = BOOK_ALIASES && (BOOK_ALIASES[lower] || BOOK_ALIASES[compact]);
