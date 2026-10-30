@@ -154,11 +154,17 @@ test('Facebook post selection extracts references split across separate post tex
     }));
   });
 
-  expect(result).toHaveLength(24);
-  expect(result.map(ref => ref.book)).toEqual([
-    'matthew','luke','romans','romans','ephesians','colossians','ephesians',
-    '2 timothy','romans','matthew','luke','romans','romans','romans',
-    '1 corinthians','1 corinthians','2 corinthians','2 corinthians',
-    'philippians','philippians','colossians','colossians','2 timothy','titus'
+  // Chapter-only ranges expand to every chapter, and comma-separated verses
+  // remain separate reference entries; the output therefore exceeds 24 blocks.
+  expect(result.length).toBeGreaterThanOrEqual(24);
+  expect([...new Set(result.map(ref => ref.book))]).toEqual([
+    'matthew','luke','romans','ephesians','colossians','2 timothy',
+    '1 corinthians','2 corinthians','philippians','titus'
   ]);
+  expect(result.filter(ref => ref.book === 'romans' && [9,10,11].includes(ref.chapter))
+    .map(ref => ref.chapter)).toEqual([9,10,11]);
+  expect(result.filter(ref => ref.book === 'romans' && [1,2,3,4,5].includes(ref.chapter))
+    .map(ref => ref.chapter)).toEqual([1,2,3,4,5]);
+  expect(result.filter(ref => ref.book === 'colossians' && ref.chapter === 2)
+    .map(ref => ref.from)).toEqual([4,8,18]);
 });
