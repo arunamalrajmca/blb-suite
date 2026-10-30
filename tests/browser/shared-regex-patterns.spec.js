@@ -115,7 +115,16 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     hospitalPath: BLBShared.isSensitiveSiteUrl('https://example.com/patient/hospital-record'),
     healthcareQuery: BLBShared.isSensitiveSiteUrl('https://example.com/search?next=healthcare'),
     medicineFragment: BLBShared.isSensitiveSiteUrl('https://example.com/account#medicine-list'),
-    medicineCaseInsensitive: BLBShared.isSensitiveSiteUrl('https://example.com/MEDICINE/refill')
+    medicineCaseInsensitive: BLBShared.isSensitiveSiteUrl('https://example.com/MEDICINE/refill'),
+    urlKeywordsFrozen: Object.isFrozen(BLBShared.sensitiveSiteUrlKeywords),
+    insurancePath: BLBShared.isSensitiveSiteUrl('https://example.com/insurance/claims'),
+    policyQuery: BLBShared.isSensitiveSiteUrl('https://example.com/search?type=policy'),
+    doctorPath: BLBShared.isSensitiveSiteUrl('https://example.com/find-a-doctor'),
+    legalPath: BLBShared.isSensitiveSiteUrl('https://example.com/legal/court-records'),
+    accountPath: BLBShared.isSensitiveSiteUrl('https://example.com/account/profile'),
+    billingPath: BLBShared.isSensitiveSiteUrl('https://example.com/billing/history'),
+    taxPath: BLBShared.isSensitiveSiteUrl('https://example.com/tax/filing'),
+    unrelatedKeywordPage: BLBShared.isSensitiveSiteUrl('https://example.com/articles/gardening')
   }));
   expect(result).toMatchObject({
     chase: true,
@@ -144,7 +153,16 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     hospitalPath: true,
     healthcareQuery: true,
     medicineFragment: true,
-    medicineCaseInsensitive: true
+    medicineCaseInsensitive: true,
+    urlKeywordsFrozen: true,
+    insurancePath: true,
+    policyQuery: true,
+    doctorPath: true,
+    legalPath: true,
+    accountPath: true,
+    billingPath: true,
+    taxPath: true,
+    unrelatedKeywordPage: false
   });
 });
 
