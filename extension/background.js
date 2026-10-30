@@ -5803,7 +5803,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   }
 });
 
-chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+async function handleBlbSelectionContextMenuClick(info, tab) {
   if (!(await isSuiteEnabled())) return;
   const menuId = String(info?.menuItemId || '');
   if (menuId !== 'blb-suite-web-selection' && menuId !== 'blb-suite-pdf-selection') return;
@@ -5832,26 +5832,26 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!text) return;
   if (!(await shouldShowBlbContextMenu(tab, text))) return;
   try {
-    if (normalizeSiteHostname(hostnameFromTabUrl(tab?.url)) === BLB_HOSTNAME) {
-      await openBlbPageSelection(text, {activeIfNew:true, activateExisting:true});
-    } else {
-      // PDF right-click selections already provide the selected text directly.
-      // Do not wait for a content-script contextual-reference lookup on PDF
-      // viewer tabs: that message is unsupported or slow on many PDF viewers
-      // and was delaying the first visible MultiVerse tab. Context lookup stays
-      // available for ordinary webpages, where partial selections need it.
-      const contextualRef = menuId === 'blb-suite-pdf-selection'
-        ? null
-        : await getContextualSelectionReference(tab?.id, text);
-      if (menuId === 'blb-suite-pdf-selection') pdfClickTrace('selection-checks-complete', {combinedTextChars:text.length});
-      await openSelectedPdfBibleRefs(text, {activeIfNew:true, activateExisting:true}, contextualRef || null);
-    }
+    // PDF right-click selections already provide the selected text directly.
+    // Avoid a content-script context lookup on protected PDF viewer tabs.
+    const contextualRef = menuId === 'blb-suite-pdf-selection'
+      ? null
+      : await getContextualSelectionReference(tab?.id, text);
+    if (menuId === 'blb-suite-pdf-selection') pdfClickTrace('selection-checks-complete', {combinedTextChars:text.length});
+    await openSharedSelectionAction({
+      tabId:tab?.id,
+      tabUrl:tab?.url || '',
+      text,
+      behavior:{activeIfNew:true, activateExisting:true},
+      contextualReference:contextualRef || null
+    });
     await clearPageSelectionAfterBlbAction(tab?.id);
   } catch (err) {
     console.error('KJV Scripture Tools selection:',err);
   }
-});
+}
 
+chrome.contextMenus.onClicked.addListener(handleBlbSelectionContextMenuClick);
 
 async function clearPageSelectionAfterBlbAction(tabId) {
   if (!Number.isInteger(tabId)) return;
