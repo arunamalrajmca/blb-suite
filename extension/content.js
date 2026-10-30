@@ -1785,7 +1785,7 @@ function handleDoubleClickBlb(event) {
         // when they are not KJV words (for example, "Sam" or "Jn"). Keep this
         // candidate set aligned with the suffix alternatives in the context
         // matcher below; KJV-word overlaps still retain ordinary word search.
-        const isNumberedBookSuffixCandidate=/^(?:Sam(?:uel)?|Kings|Kgs?|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)$/i.test(selection);
+        const isNumberedBookSuffixCandidate=/^(?:Sam(?:uel)?|S|Kings|Kgs|K|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|P|John|Jn|Jo|J)$/i.test(selection);
         const normalizedSelectionToken = normalizeDoubleClickToken(selection).replace(/’/g, "'");
         const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
           && KJV_CORPUS_WORD_INDEX.has(normalizedSelectionToken);
@@ -1848,7 +1848,7 @@ function handleDoubleClickBlb(event) {
               ? (contextualTarget.closest('p,li,td,th,blockquote,article,section,div')||contextualTarget.parentElement||contextualTarget)
               : (event.target?.parentElement||event.target);
             const contextText=normalizeSelectionText(contextNode?.textContent||'');
-            const match=contextText.match(/(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\s+(Samuel|Sam|Kings|Kgs|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)\b/i);
+            const match=contextText.match(/(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\s+(Samuel|Sam|S|Kings|Kgs|K|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|P|John|Jn|Jo|J)\b/i);
             const prefixNumber=match
               ? (/^[1-3]$/.test(match[1]) ? match[1] : ({I:'1',II:'2',III:'3'}[match[1].toUpperCase()]||''))
               : '';
@@ -1932,11 +1932,9 @@ function handleDoubleClickBlb(event) {
             ? standaloneBook
             : (isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook)));
         if (!contextualReference) {
-          // Numbered-book suffix candidates are allowed past the initial
-          // fast-reject only to validate their adjacent prefix. Without a
-          // complete valid numbered book, keep them inert rather than turning
-          // the suffix into an unrelated word-search request.
-          // If the suffix is also a real KJV word (e.g. John, Peter, Kings,
+          // Numbered-book suffix candidates without a valid adjacent prefix
+          // must not be mistaken for Bible references. If the suffix is also
+          // a real KJV word (e.g. John, Peter, Kings,
           // Samuel, or Corinthians), preserve its ordinary Criteria Search
           // behavior when no valid numbered-book prefix is present.
           if (isNumberedBookSuffixCandidate && !hasValidNearbyBookPrefix && !isKjvWord) return true;
