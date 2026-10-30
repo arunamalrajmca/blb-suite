@@ -57,6 +57,7 @@ test('sensitive-page popup replaces all normal controls with a brief privacy not
   extensionId
 }) => {
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.locator('body').evaluate(body => !body.classList.contains('popup-loading'))).toBe(true);
   await page.evaluate(() => render({ isSensitiveSite: true }));
 
   await expect(page.locator('#sensitiveNotice')).toBeVisible();
