@@ -1945,7 +1945,7 @@ function handleDoubleClickBlb(event) {
           recentDoubleClickDestinations.set(gestureTarget,now);
         }
 
-        safeRuntimeSendMessage({
+        const openRequest = safeRuntimeSendMessage({
           type:'blbSuiteOpenDoubleClickSelectionText',
           text:selection,
           contextualReference,
@@ -1953,6 +1953,20 @@ function handleDoubleClickBlb(event) {
           requestId,
           tabBehavior:{activeIfNew:false,activateExisting:true}
         });
+        if (isVerseContextWord) {
+          void openRequest.then(response => {
+            try {
+              const root = contextualTarget instanceof Element
+                ? contextualTarget.closest(
+                  '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
+                  '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
+                  '.entry-content, .article-body, .article-content, .content-body'
+                )
+                : null;
+              root?.setAttribute('data-blb-verse-context-response', JSON.stringify(response ?? null));
+            } catch (_) {}
+          });
+        }
         return true;
       } catch (_) {
         return false;
