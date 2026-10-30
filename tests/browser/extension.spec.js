@@ -170,12 +170,23 @@ test.describe('core user-visible E2E', () => {
         }
         article.appendChild(p);
       };
-      add('Chapter reference: 1 Kings 18.');
-      add('verse', 'matrix-verse-42'); article.lastChild.appendChild(document.createTextNode(' 42.'));
-      add('verses', 'matrix-verses-44'); article.lastChild.appendChild(document.createTextNode(' 44.'));
-      add('v', 'matrix-v-46'); article.lastChild.appendChild(document.createTextNode(' 46.'));
-      add('The next chapter is 1 Kings 19.');
-      add('verse', 'matrix-verse-18'); article.lastChild.appendChild(document.createTextNode(' 18.'));
+      const addCue = (chapterLabel, cueWord, id, verse) => {
+        const p = document.createElement('p');
+        p.appendChild(document.createTextNode(chapterLabel + ' '));
+        const cue = document.createElement('span');
+        cue.id = id;
+        cue.textContent = cueWord;
+        p.appendChild(cue);
+        p.appendChild(document.createTextNode(' ' + verse + '.'));
+        article.appendChild(p);
+      };
+      // Keep each explicit chapter reference in the same paragraph as its cue.
+      // The contextual resolver intentionally does not borrow citations from
+      // a different paragraph or unrelated nearby block.
+      addCue('Chapter reference: 1 Kings 18.', 'verse', 'matrix-verse-42', 42);
+      addCue('Chapter reference: 1 Kings 18.', 'verses', 'matrix-verses-44', 44);
+      addCue('Chapter reference: 1 Kings 18.', 'v', 'matrix-v-46', 46);
+      addCue('The next chapter is 1 Kings 19.', 'verse', 'matrix-verse-18', 18);
       document.body.appendChild(article);
     });
 
@@ -185,7 +196,7 @@ test.describe('core user-visible E2E', () => {
       ['#matrix-v-46', 'v', '/kjv/1ki/18/46/'],
       ['#matrix-verse-18', 'verse', '/kjv/1ki/19/18/']
     ];
-    const actions = ['Show on BLB', 'Alt+B', 'Double-Click'];
+    const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];
 
     for (const [selector, cueWord, expectedPath] of cases) {
       for (const action of actions) {
@@ -215,6 +226,17 @@ test.describe('core user-visible E2E', () => {
           // Call the handler registered for the browser command; Playwright's
           // keyboard simulation does not dispatch Chrome extension commands.
           await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+        } else if (action === 'Right-Click') {
+          // Exercise the exact background handler registered with
+          // chrome.contextMenus.onClicked; Playwright cannot open Chrome's
+          // native extension context-menu UI.
+          await extensionWorker.evaluate(async () => {
+            const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+            await handleBlbSelectionContextMenuClick({
+              menuItemId:'blb-suite-web-selection',
+              selectionText:window.__unusedSelectionText || 'verse'
+            }, tab);
+          });
         } else {
           await cue.dblclick();
         }
