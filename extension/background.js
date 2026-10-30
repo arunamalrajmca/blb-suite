@@ -3326,7 +3326,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // extractor, so Double-Click, Alt+B, right-click, and Show on BLB use the
   // same MultiVerse reference set instead of falling back to the first chapter.
   // Do not match chapter:verse references or one-chapter books as chapter ranges.
-  const chapterRangeRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*-\s*(\d+)(?!\s*[:.]\s*\d)(?![A-Za-z0-9])/gi;
+  const chapterRangeRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)(?!\s*[:.]\s*\d)\s*-\s*(\d+)(?!\s*[:.]\s*\d)(?![A-Za-z0-9])/gi;
   let chapterRangeMatch;
   while ((chapterRangeMatch = chapterRangeRe.exec(source))) {
     if (isShadowedBookMatch(chapterRangeMatch.index)) continue;

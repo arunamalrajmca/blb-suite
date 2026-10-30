@@ -118,3 +118,64 @@ test('Facebook selection parser keeps a chapter ref distinct from explicit verse
     { book: 'romans', chapter: 8, from: 1, to: 1 }
   ]);
 });
+
+test('Facebook post selection extracts references split across separate post text blocks', async ({ extensionWorker }) => {
+  // Mirrors the selected reference-bearing lines in the supplied Facebook post.
+  // Each entry represents a separate dir="auto" text block in the post DOM.
+  const result = await extensionWorker.evaluate(() => {
+    const selectedBlocks = [
+      'Mt.10:32-33',
+      'Lk.12:33',
+      'Romans 9-11',
+      'Romans 16:25',
+      'Eph. 3',
+      'Col. 1:24-27',
+      'Eph.3:1-3',
+      '2 Tim.2:12',
+      'Romans 1-5',
+      'Mt.16:24-27',
+      'Lk.21:36',
+      'Romans 4:4-5',
+      'Romans 8:17',
+      'Romans14:10-12',
+      '1Cor. 3: 5-15',
+      '1Cor. 9:14-27',
+      '2Cor. 5: 9-10',
+      '2Cor. 9:6-7',
+      'Phil. 3:10-14',
+      'Phil.4:15-17',
+      'Col. 2:4,8,18',
+      'Col.3:23-25',
+      '2Tim.2:10-15',
+      'Titus 3:8'
+    ];
+    return extractBibleRefsFromSelectedTextUncached(selectedBlocks.join('\n')).map(ref => ({
+      book: ref.book, chapter: ref.chapter, from: ref.from ?? null, to: ref.to ?? null
+    }));
+  });
+
+  // Chapter-only ranges expand to every chapter, and comma-separated verses
+  // remain separate reference entries; the output therefore exceeds 24 blocks.
+  expect(result.length).toBeGreaterThanOrEqual(24);
+  expect([...new Set(result.map(ref => ref.book))]).toEqual([
+    'matthew','luke','romans','ephesians','colossians','2 timothy',
+    '1 corinthians','2 corinthians','philippians','titus'
+  ]);
+  expect(result.filter(ref => ref.book === 'romans' && [9,10,11].includes(ref.chapter))
+    .map(ref => ref.chapter)).toEqual([9,10,11]);
+  expect([...new Set(result.filter(ref => ref.book === 'romans' && [1,2,3,4,5].includes(ref.chapter))
+    .map(ref => ref.chapter))].sort((a,b) => a-b)).toEqual([1,2,3,4,5]);
+  expect(result.some(ref => ref.book === 'romans' && ref.chapter === 4 && ref.from === 4 && ref.to === 5)).toBe(true);
+  expect(result.filter(ref => ref.book === 'colossians' && ref.chapter === 2)
+    .map(ref => ref.from).sort((a,b) => a-b)).toEqual([4,8,18]);
+});
+
+
+test('Facebook selection parser does not reinterpret a chapter:verse range as a chapter range', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() =>
+    extractBibleRefsFromSelectedTextUncached('Romans 4:4-5').map(ref => ({
+      book: ref.book, chapter: ref.chapter, from: ref.from, to: ref.to
+    }))
+  );
+  expect(result).toEqual([{book:'romans',chapter:4,from:4,to:5}]);
+});
