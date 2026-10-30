@@ -146,7 +146,7 @@ test('payment URLs suppress selection injection and context-menu eligibility des
     await chrome.storage.local.set({
       masterEnabled: true,
       redirectEnabled: false,
-      pageSelectionButtonSites: { 'example.com': true },
+      pageSelectionButtonSites: { 'example.com': true, 'blueletterbible.org': true },
       doubleClickBlbSites: { 'example.com': true }
     });
     const tab = { id: 987654, url: 'https://example.com/account/payment-details' };
@@ -161,12 +161,24 @@ test('payment URLs suppress selection injection and context-menu eligibility des
         pageSelectionButtonSites: { 'example.com': true },
         doubleClickBlbSites: { 'example.com': true }
       }),
-      contextMenu: await shouldShowBlbContextMenu(tab, 'John 3:16')
+      contextMenu: await shouldShowBlbContextMenu(tab, 'John 3:16'),
+      blbPaymentScripts: contentScriptFilesForTab({ url: 'https://www.blueletterbible.org/payment/checkout' }, {
+        redirectEnabled: false,
+        pageSelectionButtonSites: { 'blueletterbible.org': true },
+        doubleClickBlbSites: {}
+      }),
+      blbNormalScripts: contentScriptFilesForTab({ url: 'https://www.blueletterbible.org/kjv/jhn/3/16/' }, {
+        redirectEnabled: false,
+        pageSelectionButtonSites: { 'blueletterbible.org': true },
+        doubleClickBlbSites: {}
+      })
     };
   });
   expect(result.scripts).not.toContain('content.js');
   expect(result.shouldInject).toBe(false);
   expect(result.contextMenu).toBe(false);
+  expect(result.blbPaymentScripts).not.toContain('content.js');
+  expect(result.blbNormalScripts).toContain('content.js');
 });
 
 test('numbered prose after a one-chapter-book verse is not parsed as another verse', async ({ extensionWorker }) => {
