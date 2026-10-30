@@ -1662,7 +1662,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click numbered-book suffixes that are KJV words retain Criteria Search without a prefix @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click numbered-book suffixes preserve standalone KJV word destinations without a prefix @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(120000);
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
@@ -1680,22 +1680,32 @@ test.describe('core user-visible E2E', () => {
       const word = words[index];
       await page.locator(`#blb-e2e-numbered-suffix-kjv-words span[data-index="${index}"]`).dblclick();
       try {
-        await expect.poll(() => extensionWorker.evaluate(expected => chrome.tabs.query({}).then(tabs =>
-          tabs.some(tab => {
-            try {
-              const url = new URL(String(tab.url || tab.pendingUrl || ''));
-              return url.hostname === 'www.blueletterbible.org'
-                && url.pathname === '/search/search.cfm'
-                && (url.searchParams.get('Criteria') || '').toLowerCase() === expected.toLowerCase();
-            } catch (_) { return false; }
-          })
-        ), word), { timeout: 10000 }).toBe(true);
+        if (word === 'Cor') {
+          // Cor has a single KJV Criteria Search result, so BLB resolves it
+          // directly to that verse instead of leaving the user on search.
+          await activateBlbTabForPath(extensionWorker, '/kjv/eze/45/14/', {
+            fragment: 'numbered-suffix-kjv-words',
+            selector: '#blb-e2e-numbered-suffix-kjv-words',
+            selectedText: word
+          });
+        } else {
+          await expect.poll(() => extensionWorker.evaluate(expected => chrome.tabs.query({}).then(tabs =>
+            tabs.some(tab => {
+              try {
+                const url = new URL(String(tab.url || tab.pendingUrl || ''));
+                return url.hostname === 'www.blueletterbible.org'
+                  && url.pathname === '/search/search.cfm'
+                  && (url.searchParams.get('Criteria') || '').toLowerCase() === expected.toLowerCase();
+              } catch (_) { return false; }
+            })
+          ), word), { timeout: 10000 }).toBe(true);
+        }
       } catch (error) {
         const openTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
           tabs.map(tab => ({ id: tab.id, url: tab.url || tab.pendingUrl || '' }))
         ));
         throw new Error(
-          `Criteria Search did not open for standalone KJV word "${word}". Open tabs: ${JSON.stringify(openTabs)}\n${error.message}`
+          `Unexpected destination for standalone KJV word "${word}". Open tabs: ${JSON.stringify(openTabs)}\n${error.message}`
         );
       }
       await extensionWorker.evaluate(expected => chrome.tabs.query({}).then(async tabs => {
