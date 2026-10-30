@@ -526,6 +526,37 @@ async function openBlbMultiVerseRefs(refs, active = true, options = {}) {
   const allVerses = expandMultiVerseRefsToVerses(refs);
   if (!allVerses.length) return {ok:false, reason:"not-enough-references", count:0, batchCount:0};
 
+  // A MultiVerse request that resolves to one uninterrupted range within
+  // a single chapter belongs in BLB's normal chapter view, not the MultiVerse
+  // tool. Work from the expanded, deduplicated verse list so adjacent or
+  // overlapping input ranges are recognized even when supplied separately.
+  if (allVerses.length > 1) {
+    const continuousRange = getContinuousSameChapterRange(allVerses);
+    if (continuousRange) {
+      const book = bookData.find(item =>
+        Number(item.bookNumber) === Number(continuousRange.bookNumber)
+      );
+      const range = book && resolveBibleReference(
+        book.name,
+        continuousRange.chapter,
+        continuousRange.from,
+        continuousRange.to
+      );
+      if (range?.url) {
+        const tab = await openBlbDestination(range.url, !!active, !!active);
+        return {
+          ok:true,
+          count:allVerses.length,
+          batchCount:1,
+          chapterRange:true,
+          url:range.url,
+          tabIds:[tab?.id ?? tab?.tab?.id].filter(id => id != null),
+          results:[{ok:true, count:allVerses.length, chapterRange:true, url:range.url, tabId:tab?.id ?? tab?.tab?.id ?? null}]
+        };
+      }
+    }
+  }
+
   if (allVerses.length === 1) {
     const ref = allVerses[0];
     const book = bookData.find(item => Number(item.bookNumber) === Number(ref.bookNumber));

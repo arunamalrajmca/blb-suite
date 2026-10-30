@@ -476,7 +476,8 @@ globalThis.BLBMultiVerseCopyModule?.initialize({
 globalThis.BLBAutoHyperlinkerModule?.initialize({
   BLBShared,
   isSuiteEnabledNow: () => suiteEnabled,
-  isSuiteEnabled
+  isSuiteEnabled,
+  suiteSettingsReadyPromise
 });
 
 // BLB parsing-popup navigation remains an independent feature module.
@@ -516,9 +517,10 @@ globalThis.BLBCriteriaSearchNavigationModule?.initialize({
 });
 
 // Passive BLB new-tab targets are isolated in a classic-script feature module.
-globalThis.BLBPassiveNewTabTargetsModule?.initialize({
+const blbPassiveNewTabTargets = globalThis.BLBPassiveNewTabTargetsModule?.initialize({
   BLB_HOSTNAME,
-  isSuiteEnabledNow: () => suiteEnabled
+  isSuiteEnabledNow: () => suiteEnabled,
+  suiteSettingsReadyPromise
 });
 
 // Shared floating-button drag behavior is isolated in a classic-script feature module.
@@ -1728,6 +1730,14 @@ function handleDoubleClickBlb(event) {
         );
         const physicalToken = normalizeSelectionText(cueTarget?.textContent || '').normalize('NFKC');
         if (cueTarget && /^(?:v|verse|verses)$/i.test(physicalToken)) selection = physicalToken;
+
+        // Chromium may leave the previous numeric token selected when the next
+        // double-click is dispatched. For a physical numeric token, the click
+        // coordinates identify the current gesture more reliably than that
+        // stale Selection (notably when testing or reading adjacent book numbers).
+        const physicalNumericToken = normalizeSelectionText(caretTarget?.textContent || '').normalize('NFKC');
+        if (/^\d+$/.test(physicalNumericToken)) selection = physicalNumericToken;
+
         if (!selection) {
           if (Date.now()-started<1500) requestAnimationFrame(dispatch);
           return true;
@@ -2135,6 +2145,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
   if (changes.masterEnabled) {
     suiteEnabled = changes.masterEnabled.newValue !== false;
+    blbPassiveNewTabTargets?.refresh?.();
     if (!suiteEnabled) {
       document.getElementById('blb-suite-webster-multiverse')?.remove();
       document.getElementById('blb-suite-webster-multiverse-reset-position')?.remove();
