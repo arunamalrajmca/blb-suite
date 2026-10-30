@@ -1,8 +1,13 @@
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
 let currentSiteOrigin = '';
+let currentSiteUrl = '';
 
 function isSensitiveSiteHostname(value) {
   return BLBShared.isSensitiveSiteHostname(value);
+}
+
+function isSensitiveSiteUrl(value) {
+  return BLBShared.isSensitiveSiteUrl(value);
 }
 
 function getSiteKey(url, title = '') {
@@ -61,6 +66,7 @@ async function getState() {
   const pageTitle = tabs[0]?.title || '';
   const pageTitleForDefaultCheck = pageTitle;
   const activeUrl = String(tabs[0]?.url || '');
+  currentSiteUrl = activeUrl;
   try {
     const active = new URL(activeUrl);
     currentSiteOrigin = (active.protocol === 'http:' || active.protocol === 'https:')
@@ -71,7 +77,7 @@ async function getState() {
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
   const defaultEnabled = await getDefaultSiteEnabled(siteKey, pageTitleForDefaultCheck);
   const isBlbSite = siteKey === BLB_HOSTNAME;
-  const isSensitiveSite = isSensitiveSiteHostname(siteKey);
+  const isSensitiveSite = isSensitiveSiteUrl(activeUrl);
   const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
   let hasCurrentSiteAccess = true;
   let hasSiteSpecificAccess = true;
@@ -99,7 +105,7 @@ async function getState() {
     master: data.masterEnabled !== false,
     // Both site-based toggles are OFF by default. An explicit per-site setting
     // wins, but neither can appear ON until Chrome has granted host permission.
-    pageButton: (isBlbSite || !isSensitiveSite) && !!siteKey && effectivePageEnabled,
+    pageButton: !isSensitiveSite && !!siteKey && effectivePageEnabled,
     doubleClick: !isBlbSite && !isSensitiveSite && !isPdfContext && !!siteKey && effectiveDoubleEnabled,
     redirect: data.redirectEnabled !== false,
     siteKey,
@@ -132,7 +138,7 @@ function render(state) {
   const page = document.getElementById('pageButton');
   const dbl = document.getElementById('doubleClick');
   const redirect = document.getElementById('redirectEnabled');
-  page.disabled = !state.master || !state.siteKey || (state.isSensitiveSite && !state.isBlbSite);
+  page.disabled = !state.master || !state.siteKey || state.isSensitiveSite;
   dbl.disabled = !state.master || !state.siteKey || state.isBlbSite || state.isSensitiveSite || state.isPdfContext;
   redirect.disabled = !state.master;
   document.getElementById('pageSetting').classList.toggle('disabled', page.disabled);
@@ -202,7 +208,7 @@ async function pinSiteFeatureChoice(feature, otherFeatureEnabled) {
 
 async function setPageButton(on) {
   const state = await getState();
-  if (!state.siteKey || !state.master || (state.isSensitiveSite && !state.isBlbSite)) return;
+  if (!state.siteKey || !state.master || state.isSensitiveSite) return;
   const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
   const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
   sites[state.siteKey] = !!on;
@@ -1170,7 +1176,7 @@ document.getElementById('extensionVersion')?.addEventListener('click', async eve
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
 async function setIndependentSiteFeature(feature, on) {
   // Do not request host permissions or persist feature opt-ins on sensitive sites.
-  if (isSensitiveSiteHostname(currentSiteOrigin)) { render(await getState()); return; }
+  if (isSensitiveSiteUrl(currentSiteUrl)) { render(await getState()); return; }
   // Capture the other toggle before any permission change can alter defaults.
   const otherFeatureEnabled = feature === 'pageButton'
     ? document.getElementById('doubleClick').checked

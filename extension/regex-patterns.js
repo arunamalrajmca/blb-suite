@@ -38,12 +38,18 @@ globalThis.BLBShared = Object.freeze({
     if (host.startsWith('www.')) host = host.slice(4);
     if (!host || host === 'localhost' || /^127(?:\.\d{1,3}){3}$/.test(host)) return false;
     if (this.sensitiveSiteDomainSuffixes.some(domain => host === domain || host.endsWith('.' + domain))) return true;
-    // Treat any hostname label exactly equal to "gov" as government-related,
-    // regardless of the country-code suffix (for example example.gov.uk or example.gov.in).
     if (/(?:^|\.)gov(?:\.[a-z]{2})+$/i.test(host)) return true;
-    // Preserve clear category-label matching for lesser-known providers, while
-    // avoiding incidental substrings such as "health" in healthline.com.
     return /(?:^|[.-])(?:bank|banking|banker|credit.?union|hospital|hospitals|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)(?:[.-]|$)/i.test(host);
+  },
+  isSensitiveSiteUrl(value) {
+    const raw = String(value || '').trim();
+    if (/payment/i.test(raw)) return true;
+    try {
+      const url = new URL(raw);
+      return (url.protocol === 'http:' || url.protocol === 'https:') && this.isSensitiveSiteHostname(url.hostname);
+    } catch (_) {
+      return this.isSensitiveSiteHostname(raw);
+    }
   },
   regex: Object.freeze({
     // URL and hostname handling

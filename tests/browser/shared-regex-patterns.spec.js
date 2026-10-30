@@ -105,7 +105,13 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     lookalikeGov: BLBShared.isSensitiveSiteHostname('example.gov.com'),
     healthInformationSite: BLBShared.isSensitiveSiteHostname('healthline.com'),
     financeContentSubdomain: BLBShared.isSensitiveSiteHostname('finance.yahoo.com'),
-    unrelated: BLBShared.isSensitiveSiteHostname('example.com')
+    unrelated: BLBShared.isSensitiveSiteHostname('example.com'),
+    paymentPath: BLBShared.isSensitiveSiteUrl('https://example.com/payment'),
+    paymentSegment: BLBShared.isSensitiveSiteUrl('https://example.com/account/payment-details'),
+    paymentQuery: BLBShared.isSensitiveSiteUrl('https://example.com/checkout?flow=payment'),
+    paymentCaseInsensitive: BLBShared.isSensitiveSiteUrl('https://example.com/Payment/Confirm'),
+    unrelatedPage: BLBShared.isSensitiveSiteUrl('https://example.com/account/profile'),
+    paymentDomain: BLBShared.isSensitiveSiteUrl('https://payments.example.com/account')
   }));
   expect(result).toMatchObject({
     chase: true,
@@ -124,8 +130,55 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     lookalikeGov: false,
     healthInformationSite: false,
     financeContentSubdomain: false,
-    unrelated: false
+    unrelated: false,
+    paymentPath: true,
+    paymentSegment: true,
+    paymentQuery: true,
+    paymentCaseInsensitive: true,
+    unrelatedPage: false,
+    paymentDomain: true
   });
+});
+
+
+test('payment URLs suppress selection injection and context-menu eligibility despite saved opt-ins', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    await chrome.storage.local.set({
+      masterEnabled: true,
+      redirectEnabled: false,
+      pageSelectionButtonSites: { 'example.com': true, 'blueletterbible.org': true },
+      doubleClickBlbSites: { 'example.com': true }
+    });
+    const tab = { id: 987654, url: 'https://example.com/account/payment-details' };
+    return {
+      scripts: contentScriptFilesForTab(tab, {
+        redirectEnabled: false,
+        pageSelectionButtonSites: { 'example.com': true },
+        doubleClickBlbSites: { 'example.com': true }
+      }),
+      shouldInject: await shouldInjectContentScriptForTab(tab, {
+        redirectEnabled: false,
+        pageSelectionButtonSites: { 'example.com': true },
+        doubleClickBlbSites: { 'example.com': true }
+      }),
+      contextMenu: await shouldShowBlbContextMenu(tab, 'John 3:16'),
+      blbPaymentScripts: contentScriptFilesForTab({ url: 'https://www.blueletterbible.org/payment/checkout' }, {
+        redirectEnabled: false,
+        pageSelectionButtonSites: { 'blueletterbible.org': true },
+        doubleClickBlbSites: {}
+      }),
+      blbNormalScripts: contentScriptFilesForTab({ url: 'https://www.blueletterbible.org/kjv/jhn/3/16/' }, {
+        redirectEnabled: false,
+        pageSelectionButtonSites: { 'blueletterbible.org': true },
+        doubleClickBlbSites: {}
+      })
+    };
+  });
+  expect(result.scripts).not.toContain('content.js');
+  expect(result.shouldInject).toBe(false);
+  expect(result.contextMenu).toBe(false);
+  expect(result.blbPaymentScripts).not.toContain('content.js');
+  expect(result.blbNormalScripts).toContain('content.js');
 });
 
 test('numbered prose after a one-chapter-book verse is not parsed as another verse', async ({ extensionWorker }) => {

@@ -125,6 +125,10 @@ function isSensitiveSiteHostname(hostname) {
   return BLBShared.isSensitiveSiteHostname(hostname);
 }
 
+function isSensitiveSiteUrl(url) {
+  return BLBShared.isSensitiveSiteUrl(url);
+}
+
 function openBlbDestinationFromContent(url) {
   const target = normalizeBlbDestinationUrl(url);
   if (!target) return;
@@ -1686,7 +1690,7 @@ window.__blbSuiteResolveVerseCueContext = function(selectionText) {
 
 function handleDoubleClickBlb(event) {
   try {
-    if (!suiteEnabled || isSensitiveSiteHostname(location.hostname) || isDoubleClickExcludedTarget(event.target)) return;
+    if (!suiteEnabled || isSensitiveSiteUrl(location.href) || isDoubleClickExcludedTarget(event.target)) return;
 
     // Chromium may dispatch dblclick before the new word selection has replaced
     // the previous native selection. Never freeze that early selection/context:
@@ -2056,7 +2060,7 @@ async function getSiteDefaultEnabled() {
 async function refreshDoubleClickBlb() {
   try {
     const siteKey = getPageSelectionSiteKey();
-    if (siteKey === BLB_HOSTNAME || isSensitiveSiteHostname(siteKey) || !suiteEnabled || !siteKey) {
+    if (siteKey === BLB_HOSTNAME || isSensitiveSiteUrl(location.href) || !suiteEnabled || !siteKey) {
       doubleClickBlbEnabled = false;
       disableDoubleClickBlb();
       return;
@@ -2112,6 +2116,7 @@ const blbPageSelectionButton = globalThis.BLBPageSelectionButtonModule.initializ
   getContextualBibleReference: getContextualBibleReference,
   safeRuntimeSendMessage: safeRuntimeSendMessage,
   isSensitiveSiteHostname: isSensitiveSiteHostname,
+   isSensitiveSiteUrl: isSensitiveSiteUrl,
   getSiteDefaultEnabled: getSiteDefaultEnabled,
   refreshDoubleClickBlb: refreshDoubleClickBlb,
   suiteSettingsReadyPromise: suiteSettingsReadyPromise,
