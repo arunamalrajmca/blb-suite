@@ -1768,6 +1768,22 @@ test.describe('core user-visible E2E', () => {
   // 66-book × multi-variant copy here doubled the release runtime and could hit
   // the 4-minute per-test timeout without adding coverage.
 
+  test('All 66 canonical books and every configured alias resolve to the correct book', async ({ extensionWorker }) => {
+    const audit = await extensionWorker.evaluate(() => ({
+      books: BOOKS.map(book => {
+        const resolved = resolveBibleBook(book.name);
+        return { input: book.name, expected: book.name, actual: resolved?.name || null, urlKey: resolved?.urlKey || null };
+      }),
+      aliases: Object.entries(EXTRA_BOOK_ALIASES).map(([alias, expected]) => {
+        const resolved = resolveBibleBook(alias);
+        return { input: alias, expected, actual: resolved?.name || null };
+      })
+    }));
+    expect(audit.books).toHaveLength(66);
+    expect(audit.books.filter(item => item.actual !== item.expected), 'canonical book mismatches').toEqual([]);
+    expect(audit.aliases.filter(item => item.actual !== item.expected), 'book alias mismatches').toEqual([]);
+  });
+
   test('All 66 canonical books resolve correctly through the shared reference resolver', async ({ extensionWorker }) => {
     const results = await extensionWorker.evaluate(() => BOOKS.map(book => {
       const text = `${book.name} 1:1`;
