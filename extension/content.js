@@ -1657,6 +1657,22 @@ function getDoubleClickSelection(event) {
   return '';
 }
 
+
+window.__blbSuiteResolveVerseCueContext = function(selectionText) {
+  try {
+    const selected = normalizeSelectionText(selectionText).normalize('NFKC');
+    if (!/^(?:v|verse|verses)$/i.test(normalizeDoubleClickToken(selected))) return null;
+    const selection = window.getSelection?.();
+    if (!selection?.rangeCount || selection.isCollapsed) return null;
+    let target = selection.getRangeAt(0).commonAncestorContainer;
+    if (target?.nodeType === Node.TEXT_NODE) target = target.parentElement;
+    if (!(target instanceof Element)) return null;
+    return getDoubleClickBlockContextReference(selected, target, null);
+  } catch (_) {
+    return null;
+  }
+};
+
 function handleDoubleClickBlb(event) {
   try {
     if (!suiteEnabled || isSensitiveSiteHostname(location.hostname) || isDoubleClickExcludedTarget(event.target)) return;
