@@ -216,6 +216,9 @@ test.describe('core user-visible E2E', () => {
 
         if (action === 'Show on BLB') {
           await page.dispatchEvent('body', 'mouseup');
+          // The page-button selection resolver runs on a deferred animation frame.
+          // Do not click a still-visible button carrying the previous cue's cached context.
+          await page.waitForTimeout(50);
           const button = page.locator('#blb-suite-page-selection-button');
           await expect(button).toBeVisible({ timeout: 10000 });
           await button.click();
