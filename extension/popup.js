@@ -105,7 +105,7 @@ async function getState() {
     master: data.masterEnabled !== false,
     // Both site-based toggles are OFF by default. An explicit per-site setting
     // wins, but neither can appear ON until Chrome has granted host permission.
-    pageButton: (isBlbSite || !isSensitiveSite) && !!siteKey && effectivePageEnabled,
+    pageButton: !isSensitiveSite && !!siteKey && effectivePageEnabled,
     doubleClick: !isBlbSite && !isSensitiveSite && !isPdfContext && !!siteKey && effectiveDoubleEnabled,
     redirect: data.redirectEnabled !== false,
     siteKey,
@@ -138,7 +138,7 @@ function render(state) {
   const page = document.getElementById('pageButton');
   const dbl = document.getElementById('doubleClick');
   const redirect = document.getElementById('redirectEnabled');
-  page.disabled = !state.master || !state.siteKey || (state.isSensitiveSite && !state.isBlbSite);
+  page.disabled = !state.master || !state.siteKey || state.isSensitiveSite;
   dbl.disabled = !state.master || !state.siteKey || state.isBlbSite || state.isSensitiveSite || state.isPdfContext;
   redirect.disabled = !state.master;
   document.getElementById('pageSetting').classList.toggle('disabled', page.disabled);
@@ -208,7 +208,7 @@ async function pinSiteFeatureChoice(feature, otherFeatureEnabled) {
 
 async function setPageButton(on) {
   const state = await getState();
-  if (!state.siteKey || !state.master || (state.isSensitiveSite && !state.isBlbSite)) return;
+  if (!state.siteKey || !state.master || state.isSensitiveSite) return;
   const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
   const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
   sites[state.siteKey] = !!on;
