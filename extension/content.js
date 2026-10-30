@@ -1728,6 +1728,14 @@ function handleDoubleClickBlb(event) {
         );
         const physicalToken = normalizeSelectionText(cueTarget?.textContent || '').normalize('NFKC');
         if (cueTarget && /^(?:v|verse|verses)$/i.test(physicalToken)) selection = physicalToken;
+
+        // Chromium may leave the previous numeric token selected when the next
+        // double-click is dispatched. For a physical numeric token, the click
+        // coordinates identify the current gesture more reliably than that
+        // stale Selection (notably when testing or reading adjacent book numbers).
+        const physicalNumericToken = normalizeSelectionText(caretTarget?.textContent || '').normalize('NFKC');
+        if (/^\\d+$/.test(physicalNumericToken)) selection = physicalNumericToken;
+
         if (!selection) {
           if (Date.now()-started<1500) requestAnimationFrame(dispatch);
           return true;
