@@ -97,7 +97,7 @@ jobs:
     if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
     name: BROWSER E2E — GROUP A — REFERENCE
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4
         with:

@@ -253,7 +253,7 @@
           // as double-click: do not re-scan page context after the selection has
           // already been accepted as a word. Multi-word selections still resolve
           // adjacent references through the normal background path.
-          contextualReferenceResolved: !blbPageButtonContextualReference && !/\\s/.test(text),
+          contextualReferenceResolved: !!blbPageButtonContextualReference,
           tabBehavior:{activeIfNew:true,activateExisting:true}
         });
         clearBlbPageSelectionAfterAction();
@@ -296,7 +296,11 @@
         const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
           && KJV_CORPUS_WORD_INDEX.has(token);
         const isBookName = !!resolveBibleBook(text);
-        if (!isKjvWord && !isBookName) {
+        // Verse cues are intentionally actionable even though "verse", "verses",
+        // and "v" are not KJV corpus words. Their adjacent verse number and
+        // surrounding chapter reference provide the passage context.
+        const isVerseCue = /^(?:verse|verses|v)$/i.test(text);
+        if (!isKjvWord && !isBookName && !isVerseCue) {
           blbPageButtonSelection = '';
           return;
         }
@@ -324,6 +328,24 @@
             lastSelectionContextualReference = contextual;
             lastSelectionContextualText = text;
           }
+        }
+        if (!blbPageButtonContextualReference && /^(?:v|verse|verses)$/i.test(normalizeDoubleClickToken(text))) {
+          // Resolve verse-cue context while the native selection still exists.
+          // The button click clears that selection immediately after dispatching
+          // its background message, so deferring this lookup until the message
+          // handler runs loses the DOM range and opens no passage.
+          try {
+            const selection = window.getSelection?.();
+            if (selection?.rangeCount && !selection.isCollapsed
+                && typeof window.__blbSuiteResolveVerseCueContext === 'function') {
+              const contextual = window.__blbSuiteResolveVerseCueContext(text);
+              if (contextual?.url) {
+                blbPageButtonContextualReference = contextual;
+                lastSelectionContextualReference = contextual;
+                lastSelectionContextualText = text;
+              }
+            }
+          } catch (_) {}
         }
         if (!blbPageButtonContextualReference) {
           const contextual = getContextualBibleReference(text);
@@ -462,7 +484,24 @@
         try {
           const selected = String(message.selectionText || '').trim();
           const cached = lastSelectionContextualText === selected ? lastSelectionContextualReference : null;
-          const resolved = cached || getContextualBibleReference(selected);
+          let verseCueReference = null;
+          // Show on BLB, Alt+B, and right-click receive only the selected cue
+          // word. Reuse the same narrowly scoped article/post resolver that
+          // Double-Click uses to associate that cue with its following verse
+          // number and nearest preceding explicit book/chapter reference.
+          if (!cached && /^(?:v|verse|verses)$/i.test(normalizeDoubleClickToken(selected))) {
+            const selection = window.getSelection?.();
+            if (selection?.rangeCount && !selection.isCollapsed) {
+              let target = selection.getRangeAt(0).commonAncestorContainer;
+              if (target?.nodeType === Node.TEXT_NODE) target = target.parentElement;
+              if (target instanceof Element) {
+                verseCueReference = typeof window.__blbSuiteResolveVerseCueContext === 'function'
+                  ? window.__blbSuiteResolveVerseCueContext(selected)
+                  : null;
+              }
+            }
+          }
+          const resolved = cached || verseCueReference || getContextualBibleReference(selected);
           sendResponse(resolved ? {ok:true, reference:resolved} : {ok:true, reference:null});
         } catch (_) { sendResponse({ok:true, reference:null}); }
         return true;

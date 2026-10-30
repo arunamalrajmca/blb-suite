@@ -142,6 +142,178 @@ test.describe('core user-visible E2E', () => {
   // once the regression passes, all existing coverage runs unchanged.
   test.describe.configure({ mode: 'serial' });
 
+  test('Single-word verse cues resolve the same adjacent passage through all four actions', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({
+      masterEnabled: true,
+      pageSelectionButtonSites: { 'example.com': true },
+      doubleClickBlbSites: { 'example.com': true }
+    });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('body')).toBeVisible();
+    await page.waitForTimeout(1000);
+
+    // The selected text is always exactly one cue word. The verse number and
+    // chapter reference remain outside the selection and supply the context.
+    await page.evaluate(() => {
+      const article = document.createElement('article');
+      article.id = 'single-word-verse-cue-matrix';
+      article.className = 'article-content';
+      const add = (text, id) => {
+        const p = document.createElement('p');
+        if (id) {
+          const cue = document.createElement('span');
+          cue.id = id;
+          cue.textContent = text;
+          p.appendChild(cue);
+        } else {
+          p.textContent = text;
+        }
+        article.appendChild(p);
+      };
+      add('Chapter reference: 1 Kings 18.');
+      add('verse', 'matrix-verse-42'); article.lastChild.appendChild(document.createTextNode(' 42.'));
+      add('verses', 'matrix-verses-44'); article.lastChild.appendChild(document.createTextNode(' 44.'));
+      add('v', 'matrix-v-46'); article.lastChild.appendChild(document.createTextNode(' 46.'));
+      add('The next chapter is 1 Kings 19.');
+      add('verse', 'matrix-verse-18'); article.lastChild.appendChild(document.createTextNode(' 18.'));
+      document.body.appendChild(article);
+    });
+
+    const cases = [
+      ['#matrix-verse-42', 'verse', '/kjv/1ki/18/42/'],
+      ['#matrix-verses-44', 'verses', '/kjv/1ki/18/44/'],
+      ['#matrix-v-46', 'v', '/kjv/1ki/18/46/'],
+      ['#matrix-verse-18', 'verse', '/kjv/1ki/19/18/']
+    ];
+    const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];
+
+    for (const [selector, cueWord, expectedPath] of cases) {
+      for (const action of actions) {
+        const cue = page.locator(selector);
+        await expect(cue).toHaveText(cueWord);
+        // Show on BLB, Alt+B, and Right-Click consume an existing native
+        // selection, so create that selection explicitly. Double-Click must
+        // instead start with no preselected Range: Chromium's physical
+        // double-click gesture creates the word selection itself.
+        if (action !== 'Double-Click') {
+          await page.evaluate(({ selector }) => {
+            const el = document.querySelector(selector);
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }, { selector });
+          expect(await page.evaluate(() => window.getSelection()?.toString() || ''),
+            selector + ': selection must contain only the cue word').toBe(cueWord);
+        } else {
+          await page.evaluate(() => window.getSelection()?.removeAllRanges());
+        }
+
+        const beforeIds = await extensionWorker.evaluate(() =>
+          chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+        );
+
+        if (action === 'Show on BLB') {
+          // Clear diagnostics left by earlier actions, then wait for this exact
+          // selection's contextual resolver result before clicking the button.
+          await page.evaluate(() => {
+            const root = document.querySelector('#single-word-verse-cue-matrix');
+            root?.removeAttribute('data-blb-verse-context-diagnostic');
+            root?.removeAttribute('data-blb-verse-context-resolution');
+          });
+          await page.dispatchEvent('body', 'mouseup');
+          await expect.poll(async () => page.evaluate(() => {
+            const raw = document.querySelector('#single-word-verse-cue-matrix')
+              ?.getAttribute('data-blb-verse-context-resolution');
+            try { return new URL(JSON.parse(raw).resolvedUrl).pathname; } catch (_) { return ''; }
+          }), { message: 'Show on BLB must resolve the current cue selection before click' }).toBe(expectedPath);
+          const button = page.locator('#blb-suite-page-selection-button');
+          await expect(button).toBeVisible({ timeout: 10000 });
+          await button.click();
+        } else if (action === 'Alt+B') {
+          // Call the handler registered for the browser command; Playwright's
+          // keyboard simulation does not dispatch Chrome extension commands.
+          await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+        } else if (action === 'Right-Click') {
+          // Exercise the exact background handler registered with
+          // chrome.contextMenus.onClicked; Playwright cannot open Chrome's
+          // native extension context-menu UI.
+          await extensionWorker.evaluate(async selectedText => {
+            const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+            await handleBlbSelectionContextMenuClick({
+              menuItemId:'blb-suite-web-selection',
+              selectionText:selectedText
+            }, tab);
+          }, cueWord);
+        } else {
+          // Capture what Chromium and the content handler actually see. This
+          // diagnostic is test-only and does not alter the production handler.
+          await page.evaluate(() => {
+            window.__blbSuiteTestDoubleClickEvent = null;
+            document.addEventListener('dblclick', event => {
+              window.__blbSuiteTestDoubleClickEvent = {
+                target: event.target?.outerHTML || '',
+                clientX: event.clientX,
+                clientY: event.clientY,
+                selection: window.getSelection()?.toString() || ''
+              };
+            }, true);
+          });
+          await cue.dblclick();
+          // The runtime message is asynchronous. Wait for either its response
+          // or its rejection diagnostic before reading the attributes.
+          await page.waitForFunction(() => {
+            const root = document.querySelector('#single-word-verse-cue-matrix');
+            return root?.hasAttribute('data-blb-verse-context-response')
+              || root?.hasAttribute('data-blb-verse-context-send-error');
+          }, { timeout: 3000 }).catch(() => {});
+          const gestureDiagnostics = await page.evaluate(() => ({
+            event: window.__blbSuiteTestDoubleClickEvent,
+            context: document.querySelector('#single-word-verse-cue-matrix')
+              ?.getAttribute('data-blb-verse-context-diagnostic'),
+            resolution: document.querySelector('#single-word-verse-cue-matrix')
+              ?.getAttribute('data-blb-verse-context-resolution'),
+            response: document.querySelector('#single-word-verse-cue-matrix')
+              ?.getAttribute('data-blb-verse-context-response'),
+            sendError: document.querySelector('#single-word-verse-cue-matrix')
+              ?.getAttribute('data-blb-verse-context-send-error')
+          }));
+          console.log('Verse cue double-click diagnostics', selector, gestureDiagnostics);
+          expect(await page.evaluate(() => window.getSelection()?.toString() || ''),
+            selector + ': native double-click must select only the cue word').toBe(cueWord);
+        }
+
+        await activateBlbTabForPath(extensionWorker, expectedPath, {
+          fragment: action,
+          selector,
+          selectedText: cueWord
+        });
+        const openedPaths = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+          tabs.filter(tab => !before.includes(tab.id)).map(tab => {
+            try {
+              const url = new URL(String(tab.url || tab.pendingUrl || ''));
+              return url.hostname.endsWith('blueletterbible.org') ? url.pathname : '';
+            } catch (_) { return ''; }
+          }).filter(Boolean)
+        ), beforeIds);
+        expect(openedPaths, action + ' with selected cue "' + cueWord + '" must open its adjacent passage')
+          .toContain(expectedPath);
+
+        await extensionWorker.evaluate(path => chrome.tabs.query({}).then(async tabs => {
+          for (const tab of tabs) {
+            try {
+              const url = new URL(String(tab.url || tab.pendingUrl || ''));
+              if (url.hostname.endsWith('blueletterbible.org') && url.pathname === path && tab.id != null) {
+                await chrome.tabs.remove(tab.id);
+              }
+            } catch (_) {}
+          }
+        }), expectedPath);
+      }
+    }
+  });
+
   test('Generic article verse cues follow the latest explicit chapter context', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({
       masterEnabled: true,
@@ -153,24 +325,43 @@ test.describe('core user-visible E2E', () => {
     // before installing the fixture and dispatching the first double-click.
     await page.waitForTimeout(1000);
 
-    // Use a normal article DOM on example.com, not Facebook markup or a live
-    // social-media post. The fixture reproduces only the relevant text pattern.
+    // Add a generic article fixture without replacing document.body's HTML.
+    // Build it with DOM APIs so this test does not depend on body.innerHTML
+    // replacement or erase the page structure created by the browser fixture.
     await page.evaluate(() => {
-      document.body.innerHTML = `
-        <main>
-          <article id="generic-verse-context-article" class="article-content">
-            <p>Chapter reference: 1 Kings 18.</p>
-            <p><span id="generic-verse-42">verse</span> 42.</p>
-            <p><span id="generic-verse-44">Verse</span> 44.</p>
-            <p><span id="generic-verse-46">verses</span> 46.</p>
-            <p>The next chapter is 1 Kings 19.</p>
-            <p><span id="generic-verse-19-18">verse</span> 18.</p>
-            <p>Psalm 119.</p>
-            <p><span id="generic-verse-176">v</span> 176.</p>
-            <p><span id="generic-verse-177">verses</span> 177.</p>
-            <p>An unrelated number: <span id="generic-unrelated-number">7000</span>.</p>
-          </article>
-        </main>`;
+      const main = document.createElement('main');
+      const article = document.createElement('article');
+      article.id = 'generic-verse-context-article';
+      article.className = 'article-content';
+
+      const addParagraph = (...parts) => {
+        const paragraph = document.createElement('p');
+        for (const part of parts) {
+          if (typeof part === 'string') {
+            paragraph.appendChild(document.createTextNode(part));
+          } else {
+            const cue = document.createElement('span');
+            cue.id = part.id;
+            cue.textContent = part.text;
+            paragraph.appendChild(cue);
+          }
+        }
+        article.appendChild(paragraph);
+      };
+
+      addParagraph('Chapter reference: 1 Kings 18.');
+      addParagraph({ id: 'generic-verse-42', text: 'verse' }, ' 42.');
+      addParagraph({ id: 'generic-verse-44', text: 'Verse' }, ' 44.');
+      addParagraph({ id: 'generic-verse-46', text: 'verses' }, ' 46.');
+      addParagraph('The next chapter is 1 Kings 19.');
+      addParagraph({ id: 'generic-verse-18', text: 'verse' }, ' 18.');
+      addParagraph('Psalm 119.');
+      addParagraph({ id: 'generic-verse-176', text: 'v' }, ' 176.');
+      addParagraph({ id: 'generic-verse-177', text: 'verses' }, ' 177.');
+      addParagraph('An unrelated number: ', { id: 'generic-unrelated-number', text: '7000' }, '.');
+
+      main.appendChild(article);
+      document.body.appendChild(main);
     });
 
     const article = page.locator('#generic-verse-context-article');
@@ -179,7 +370,7 @@ test.describe('core user-visible E2E', () => {
       ['#generic-verse-42', 42, 18, '/kjv/1ki/18/42/'],
       ['#generic-verse-44', 44, 18, '/kjv/1ki/18/44/'],
       ['#generic-verse-46', 46, 18, '/kjv/1ki/18/46/'],
-      ['#generic-verse-19-18', 18, 19, '/kjv/1ki/19/18/']
+      ['#generic-verse-18', 18, 19, '/kjv/1ki/19/18/']
     ];
 
     for (const [selector, verse, chapter, expectedPath] of gestures) {
@@ -344,6 +535,30 @@ test.describe('core user-visible E2E', () => {
       const sel = window.getSelection();
       sel.removeAllRanges();
       sel.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await button.click();
+    const blb = await waitForBlbTabPath(extensionWorker, '/kjv/jhn/3/16/');
+    expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
+  });
+
+  test('Show on BLB resolves a short book token from its adjacent verse context', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const el = document.createElement('p');
+      el.id = 'blb-e2e-short-book-context';
+      el.textContent = 'Jn 3:16';
+      document.body.appendChild(el);
+      const range = document.createRange();
+      range.setStart(el.firstChild, 0);
+      range.setEnd(el.firstChild, 2);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
       document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
     });
     const button = page.locator('#blb-suite-page-selection-button');
