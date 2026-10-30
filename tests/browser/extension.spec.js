@@ -170,23 +170,12 @@ test.describe('core user-visible E2E', () => {
         }
         article.appendChild(p);
       };
-      const addCue = (chapterLabel, cueWord, id, verse) => {
-        const p = document.createElement('p');
-        p.appendChild(document.createTextNode(chapterLabel + ' '));
-        const cue = document.createElement('span');
-        cue.id = id;
-        cue.textContent = cueWord;
-        p.appendChild(cue);
-        p.appendChild(document.createTextNode(' ' + verse + '.'));
-        article.appendChild(p);
-      };
-      // Keep each explicit chapter reference in the same paragraph as its cue.
-      // The contextual resolver intentionally does not borrow citations from
-      // a different paragraph or unrelated nearby block.
-      addCue('Chapter reference: 1 Kings 18.', 'verse', 'matrix-verse-42', 42);
-      addCue('Chapter reference: 1 Kings 18.', 'verses', 'matrix-verses-44', 44);
-      addCue('Chapter reference: 1 Kings 18.', 'v', 'matrix-v-46', 46);
-      addCue('The next chapter is 1 Kings 19.', 'verse', 'matrix-verse-18', 18);
+      add('Chapter reference: 1 Kings 18.');
+      add('verse', 'matrix-verse-42'); article.lastChild.appendChild(document.createTextNode(' 42.'));
+      add('verses', 'matrix-verses-44'); article.lastChild.appendChild(document.createTextNode(' 44.'));
+      add('v', 'matrix-v-46'); article.lastChild.appendChild(document.createTextNode(' 46.'));
+      add('The next chapter is 1 Kings 19.');
+      add('verse', 'matrix-verse-18'); article.lastChild.appendChild(document.createTextNode(' 18.'));
       document.body.appendChild(article);
     });
 
