@@ -202,6 +202,11 @@ test.describe('core user-visible E2E', () => {
         expect(await page.evaluate(() => window.getSelection()?.toString() || ''),
           selector + ': selection must contain only the cue word').toBe(cueWord);
 
+        // The background worker intentionally suppresses duplicate opens
+        // of the same selected text for 1.2 seconds. This matrix deliberately
+        // repeats each cue word across four distinct user actions, so let that
+        // protection window expire before each independent action is exercised.
+        await page.waitForTimeout(1250);
         const beforeIds = await extensionWorker.evaluate(() =>
           chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
         );
