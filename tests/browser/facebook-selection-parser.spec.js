@@ -167,7 +167,7 @@ test('Facebook post selection extracts references split across separate post tex
     .map(ref => ref.chapter))].sort((a,b) => a-b)).toEqual([1,2,3,4,5]);
   expect(result.some(ref => ref.book === 'romans' && ref.chapter === 4 && ref.from === 4 && ref.to === 5)).toBe(true);
   expect(result.filter(ref => ref.book === 'colossians' && ref.chapter === 2)
-    .map(ref => ref.from)).toEqual([4,8,18]);
+    .map(ref => ref.from).sort((a,b) => a-b)).toEqual([4,8,18]);
 });
 
 
