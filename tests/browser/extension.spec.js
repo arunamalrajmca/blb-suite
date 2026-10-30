@@ -1688,6 +1688,14 @@ test.describe('core user-visible E2E', () => {
             selector: '#blb-e2e-numbered-suffix-kjv-words',
             selectedText: word
           });
+        } else if (word === 'John') {
+          // John is also a canonical Bible-book name, so the book resolver
+          // opens its first verse rather than running Criteria Search.
+          await activateBlbTabForPath(extensionWorker, '/kjv/jhn/1/1/', {
+            fragment: 'numbered-suffix-kjv-words',
+            selector: '#blb-e2e-numbered-suffix-kjv-words',
+            selectedText: word
+          });
         } else {
           await expect.poll(() => extensionWorker.evaluate(expected => chrome.tabs.query({}).then(tabs =>
             tabs.some(tab => {
