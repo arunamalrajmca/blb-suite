@@ -249,6 +249,13 @@ test.describe('core user-visible E2E', () => {
             }, true);
           });
           await cue.dblclick();
+          // The runtime message is asynchronous. Wait for either its response
+          // or its rejection diagnostic before reading the attributes.
+          await page.waitForFunction(() => {
+            const root = document.querySelector('#single-word-verse-cue-matrix');
+            return root?.hasAttribute('data-blb-verse-context-response')
+              || root?.hasAttribute('data-blb-verse-context-send-error');
+          }, { timeout: 3000 }).catch(() => {});
           const gestureDiagnostics = await page.evaluate(() => ({
             event: window.__blbSuiteTestDoubleClickEvent,
             context: document.querySelector('#single-word-verse-cue-matrix')
