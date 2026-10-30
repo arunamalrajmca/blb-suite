@@ -1478,23 +1478,52 @@ test.describe('core user-visible E2E', () => {
 
   test('Double-click numbered-book suffixes resolve all six prefixed book references', async ({ page, context, extensionStorage, extensionWorker }) => {
     const cases = [
-      { book: '1 Thessalonians', token: 'Thessalonians', chapter: 5, verse: 23, urlKey: '1th' },
-      { book: '2 Thessalonians', token: 'Thessalonians', chapter: 3, verse: 5, urlKey: '2th' },
-      { book: '1 Peter', token: 'Peter', chapter: 2, verse: 9, urlKey: '1pe' },
-      { book: '2 Peter', token: 'Peter', chapter: 1, verse: 4, urlKey: '2pe' },
-      { book: '1 Timothy', token: 'Timothy', chapter: 2, verse: 4, urlKey: '1ti' },
-      { book: '2 Timothy', token: 'Timothy', chapter: 2, verse: 15, urlKey: '2ti' }
+      { book: '1 Samuel', tokens: ['Sam', 'Samuel'], chapter: 1, verse: 1, urlKey: '1sa' },
+      { book: '2 Samuel', tokens: ['Sam', 'Samuel'], chapter: 1, verse: 1, urlKey: '2sa' },
+      { book: '1 Kings', tokens: ['Kings', 'Kgs'], chapter: 1, verse: 1, urlKey: '1ki' },
+      { book: '2 Kings', tokens: ['Kings', 'Kgs'], chapter: 1, verse: 1, urlKey: '2ki' },
+      { book: '1 Chronicles', tokens: ['Chronicles', 'Chr'], chapter: 1, verse: 1, urlKey: '1ch' },
+      { book: '2 Chronicles', tokens: ['Chronicles', 'Chr'], chapter: 1, verse: 1, urlKey: '2ch' },
+      { book: '1 Corinthians', tokens: ['Corinthians', 'Cor'], chapter: 1, verse: 1, urlKey: '1co' },
+      { book: '2 Corinthians', tokens: ['Corinthians', 'Cor'], chapter: 1, verse: 1, urlKey: '2co' },
+      { book: '1 Thessalonians', tokens: ['Thessalonians', 'Thess'], chapter: 1, verse: 1, urlKey: '1th' },
+      { book: '2 Thessalonians', tokens: ['Thessalonians', 'Thess'], chapter: 1, verse: 1, urlKey: '2th' },
+      { book: '1 Timothy', tokens: ['Timothy', 'Tim'], chapter: 1, verse: 1, urlKey: '1ti' },
+      { book: '2 Timothy', tokens: ['Timothy', 'Tim'], chapter: 1, verse: 1, urlKey: '2ti' },
+      { book: '1 Peter', tokens: ['Peter', 'Pet'], chapter: 1, verse: 1, urlKey: '1pe' },
+      { book: '2 Peter', tokens: ['Peter', 'Pet'], chapter: 1, verse: 1, urlKey: '2pe' },
+      { book: '1 John', tokens: ['John', 'Jn', 'Jhn'], chapter: 1, verse: 1, urlKey: '1jo' },
+      { book: '2 John', tokens: ['John', 'Jn', 'Jhn'], chapter: 1, verse: 1, urlKey: '2jo' },
+      { book: '3 John', tokens: ['John', 'Jn', 'Jhn'], chapter: 1, verse: 1, urlKey: '3jo' }
     ];
 
     for (const item of cases) {
+      for (const token of item.tokens) {
+        await setupDoubleClickReferencePage(
+          page, extensionStorage,
+          `<p id="ref"><span class="book-prefix">${item.book[0]}</span> <span class="book-suffix">${token}</span> <span class="chapter">${item.chapter}</span>:<span class="verse">${item.verse}</span></p>`
+        );
+        await assertDoubleClickPath(
+          page, context, extensionWorker,
+          '#ref .book-suffix',
+          `/kjv/${item.urlKey}/${item.chapter}/${item.verse}/`
+        );
+      }
+    }
+
+    // Roman-numeral prefixes are also valid numbered-book context.
+    for (const item of [
+      { prefix: 'II', token: 'John', urlKey: '2jo' },
+      { prefix: 'III', token: 'Jhn', urlKey: '3jo' },
+      { prefix: 'II', token: 'Pet', urlKey: '2pe' }
+    ]) {
       await setupDoubleClickReferencePage(
         page, extensionStorage,
-        `<p id="ref"><span class="book-prefix">${item.book[0]}</span> <span class="book-suffix">${item.token}</span> <span class="chapter">${item.chapter}</span>:<span class="verse">${item.verse}</span></p>`
+        `<p id="ref"><span class="book-prefix">${item.prefix}</span> <span class="book-suffix">${item.token}</span> 1:1</p>`
       );
       await assertDoubleClickPath(
-        page, context, extensionWorker,
-        '#ref .book-suffix',
-        `/kjv/${item.urlKey}/${item.chapter}/${item.verse}/`
+        page, context, extensionWorker, '#ref .book-suffix',
+        `/kjv/${item.urlKey}/1/1/`
       );
     }
 
@@ -1572,6 +1601,46 @@ test.describe('core user-visible E2E', () => {
       for (let i = 0; i < tokens.length; i++) {
         await assertDoubleClickPath(page, context, extensionWorker, `#ref .alias-token[data-index="${i}"]`, expectedPath);
       }
+    }
+  });
+
+  test('Double-click numbered-book suffixes that are KJV words retain Criteria Search without a prefix', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    const words = ['Samuel', 'Kings', 'Chronicles', 'Corinthians', 'Cor', 'Thessalonians', 'Timothy', 'Peter', 'John'];
+    await page.evaluate(words => {
+      const root = document.createElement('p');
+      root.id = 'blb-e2e-numbered-suffix-kjv-words';
+      root.innerHTML = words.map((word, index) => `<span data-index="${index}">${word}</span>`).join(' ');
+      root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(root);
+    }, words);
+
+    for (let index = 0; index < words.length; index++) {
+      const word = words[index];
+      await page.locator(`#blb-e2e-numbered-suffix-kjv-words span[data-index="${index}"]`).dblclick();
+      await expect.poll(() => extensionWorker.evaluate(expected => chrome.tabs.query({}).then(tabs =>
+        tabs.some(tab => {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            return url.hostname === 'www.blueletterbible.org'
+              && url.pathname === '/search/search.cfm'
+              && (url.searchParams.get('Criteria') || '').toLowerCase() === expected.toLowerCase();
+          } catch (_) { return false; }
+        })
+      ), word), { timeout: 10000 }).toBe(true);
+      await extensionWorker.evaluate(expected => chrome.tabs.query({}).then(async tabs => {
+        for (const tab of tabs) {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            if (url.hostname === 'www.blueletterbible.org'
+              && url.pathname === '/search/search.cfm'
+              && (url.searchParams.get('Criteria') || '').toLowerCase() === expected.toLowerCase()
+              && tab.id != null) await chrome.tabs.remove(tab.id);
+          } catch (_) {}
+        }
+      }), word);
     }
   });
 
