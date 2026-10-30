@@ -11,8 +11,8 @@ body{margin:0;width:360px;padding:10px;background:#1b1c1f;color:#e8eaed;font-fam
 .sensitive-notice{display:none;align-items:flex-start;gap:11px;min-height:90px;padding:17px 14px;border:1px solid #46566b;border-radius:10px;background:#202b38;color:#e8edf4}
 .sensitive-notice-icon{width:28px;height:28px;flex:0 0 28px;border-radius:7px;background:#303f52;display:flex;align-items:center;justify-content:center;color:#b9d4f4;font-size:17px}
 .sensitive-notice-copy{min-width:0}.sensitive-notice-title{font-size:12px;font-weight:700;color:#fff;margin:1px 0 5px}.sensitive-notice-message{font-size:10px;line-height:15px;color:#c2cbd6;margin:0}
-body.sensitive-restricted > :not(#sensitiveNotice){display:none!important}
-body.sensitive-restricted #sensitiveNotice{display:flex}
+body.popup-loading > :not(#sensitiveNotice),body.sensitive-restricted > :not(#sensitiveNotice){display:none!important}
+body.popup-loading #sensitiveNotice,body.sensitive-restricted #sensitiveNotice{display:flex}
 body.light .sensitive-notice{background:#f0f4f9;border-color:#cbd7e5;color:#253448}
 body.light .sensitive-notice-icon{background:#dce7f3;color:#355778}
 body.light .sensitive-notice-title{color:#253448}
@@ -151,8 +151,8 @@ body.light .topic-start-btn:disabled,body.light .action-btn:disabled{opacity:.55
   <section id="sensitiveNotice" class="sensitive-notice" role="status" aria-live="polite">
     <div class="sensitive-notice-icon" aria-hidden="true">ⓘ</div>
     <div class="sensitive-notice-copy">
-      <div class="sensitive-notice-title">Features paused on this page</div>
-      <p class="sensitive-notice-message">For your privacy, KJV Scripture Tools is disabled on pages that may contain sensitive information.</p>
+      <div id="sensitiveNoticeTitle" class="sensitive-notice-title">Checking this page…</div>
+      <p id="sensitiveNoticeMessage" class="sensitive-notice-message">Checking whether extension controls are available here.</p>
     </div>
   </section>
   <header class="app-header">
