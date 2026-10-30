@@ -1533,11 +1533,11 @@ test.describe('core user-visible E2E', () => {
           const match = book.name.match(/^([1-3])\\s+(.+)$/i);
           if (!match || match[2].toLowerCase() !== family) return [];
           return tokens.flatMap(token => {
-            const bareTarget = EXTRA_BOOK_ALIASES[token.toLowerCase()] || token.toLowerCase();
-            if (bareTarget === book.name.toLowerCase()) return [];
+            const bareBook = resolveBibleBook(token);
+            if (!bareBook || bareBook.name.toLowerCase() === book.name.toLowerCase()) return [];
             return [{
               token,
-              bareTarget,
+              bareTarget: bareBook.name.toLowerCase(),
               numberedInput: `${match[1]} ${token}`,
               numberedName: book.name.toLowerCase(),
               numberedUrlKey: book.urlKey
