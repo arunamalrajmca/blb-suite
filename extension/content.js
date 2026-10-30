@@ -1781,6 +1781,9 @@ function handleDoubleClickBlb(event) {
         // Declare this outside the fast-rejection block because target selection
         // and the DOM-context resolver also need the same cue classification.
         const isVerseContextWord = /^(?:v|verse|verses)$/i.test(selection);
+        // Identify numbered-book suffixes before the fast-reject gate, then
+        // require the later nearby-prefix check to validate the complete book.
+        const possibleNumberedBookSuffix=/^(?:Sam(?:uel)?|Kings|Kgs?|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)$/i.test(selection);
 
         // Reject unrelated English single words before building DOM context or
         // entering the background selection resolver. This is an exact local
@@ -1792,11 +1795,6 @@ function handleDoubleClickBlb(event) {
           const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
             && KJV_CORPUS_WORD_INDEX.has(token);
           const isBookName = !!resolveBibleBook(selection);
-          // A numbered-book suffix (Peter, Timothy, Thessalonians, etc.) must
-          // reach the nearby-prefix validator below. It is not treated as a
-          // book by itself: only a complete, valid numbered book in context
-          // can authorize reference resolution.
-          const possibleNumberedBookSuffix=/^(?:Sam(?:uel)?|Kings|Kgs?|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)$/i.test(selection);
           // Roman numeral tokens can be the prefix of a numbered Bible book
           // (II Samuel, III John). Let them reach the tightly gated nearby-
           // reference check below; without a valid nearby prefix they remain
