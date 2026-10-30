@@ -142,7 +142,7 @@ test.describe('core user-visible E2E', () => {
   // once the regression passes, all existing coverage runs unchanged.
   test.describe.configure({ mode: 'serial' });
 
-  test('Single-word verse cues resolve the same adjacent passage through all three actions', async ({ page, extensionStorage, extensionWorker }) => {
+  test('Single-word verse cues resolve the same adjacent passage through all four actions', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({
       masterEnabled: true,
       pageSelectionButtonSites: { 'example.com': true },
@@ -230,13 +230,13 @@ test.describe('core user-visible E2E', () => {
           // Exercise the exact background handler registered with
           // chrome.contextMenus.onClicked; Playwright cannot open Chrome's
           // native extension context-menu UI.
-          await extensionWorker.evaluate(async () => {
+          await extensionWorker.evaluate(async selectedText => {
             const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
             await handleBlbSelectionContextMenuClick({
               menuItemId:'blb-suite-web-selection',
-              selectionText:'verse'
+              selectionText:selectedText
             }, tab);
-          });
+          }, cueWord);
         } else {
           await cue.dblclick();
         }
