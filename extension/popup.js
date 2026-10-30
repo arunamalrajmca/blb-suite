@@ -1374,9 +1374,8 @@ document.addEventListener('click', event => {
   // Keep the normal popup available if initialization fails on an ordinary page.
   let isSensitivePopup = false;
   try {
-    const state = await getState();
-    isSensitivePopup = state.isSensitiveSite === true;
-    render(state);
+    render(await getState());
+    isSensitivePopup = document.body.classList.contains('sensitive-restricted');
   } catch (error) {
     console.error('KJV Scripture Tools popup initialization failed:', error);
     // If live tab/permission inspection fails, keep the popup usable without
