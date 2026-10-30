@@ -1792,12 +1792,17 @@ function handleDoubleClickBlb(event) {
           const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
             && KJV_CORPUS_WORD_INDEX.has(token);
           const isBookName = !!resolveBibleBook(selection);
+          // A numbered-book suffix (Peter, Timothy, Thessalonians, etc.) must
+          // reach the nearby-prefix validator below. It is not treated as a
+          // book by itself: only a complete, valid numbered book in context
+          // can authorize reference resolution.
+          const possibleNumberedBookSuffix=/^(?:Sam(?:uel)?|Kings|Kgs?|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)$/i.test(selection);
           // Roman numeral tokens can be the prefix of a numbered Bible book
           // (II Samuel, III John). Let them reach the tightly gated nearby-
           // reference check below; without a valid nearby prefix they remain
           // inert and are not sent to ordinary word lookup.
           const isRomanBookPrefixToken = /^(?:I|II|III)$/i.test(selection);
-          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isRomanBookPrefixToken && !isVerseContextWord) return true;
+          if (!isBibleVersionCode && !isKjvWord && !isBookName && !possibleNumberedBookSuffix && !isRomanBookPrefixToken && !isVerseContextWord) return true;
         }
 
         // DOM context is useful only when the clicked token can identify a
@@ -1818,10 +1823,8 @@ function handleDoubleClickBlb(event) {
         );
         const isPrefixedBookName=hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
         const isBookName=!hasNumericPrefix && (!!resolveBibleBook(selection)||isKnownBookAlias);
-        // A suffix such as "Peter" or "Cor" can be part of a numbered book
-        // name. Only enter contextual matching when the complete nearby prefix
-        // resolves to a real Bible book; arbitrary words remain fast-rejected.
-        const possibleNumberedBookSuffix=/^(?:Sam(?:uel)?|Kings|Kgs?|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)$/i.test(selection);
+        // Numbered-book suffix candidates were identified before the
+        // single-word fast-reject so they can reach this strict prefix check.
 
         // For explicit verse cues and numbered-book suffixes, prefer the
         // physical event target where needed. The generic caret-target helper
