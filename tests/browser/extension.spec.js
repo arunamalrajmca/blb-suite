@@ -1554,10 +1554,12 @@ test.describe('core user-visible E2E', () => {
 
     expect(data.length).toBeGreaterThan(0);
     for (const item of data) {
-      // "sam" is context-dependent: it can identify either Samuel book and
-      // must be tested with an adjacent 1/2 prefix, not as a bare alias.
-      if (item.alias.trim().toLowerCase() === 'sam') continue;
+      // "Sam" is context-dependent. Skip every alias containing that token
+      // here because this loop double-clicks each token independently, without
+      // preserving an alias-internal numbered prefix. The dedicated Sam test
+      // below verifies both numbered forms and rejects an unprefixed guess.
       const tokens = item.alias.trim().split(/\s+/);
+      if (tokens.some(token => token.toLowerCase() === 'sam')) continue;
       const tokenHtml = tokens.map((token, i) => `<span class="alias-token" data-index="${i}">${token}</span>`).join(' ');
       await setupDoubleClickReferencePage(
         page, extensionStorage,
