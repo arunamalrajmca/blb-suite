@@ -1479,23 +1479,23 @@ test.describe('core user-visible E2E', () => {
   test('Double-click numbered-book suffixes resolve every supported numbered-book alias', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(240000);
     const cases = [
-      { book: '1 Samuel', tokens: ['Sam', 'Samuel'], chapter: 1, verse: 1, urlKey: '1sa' },
-      { book: '2 Samuel', tokens: ['Sam', 'Samuel'], chapter: 1, verse: 1, urlKey: '2sa' },
+      { book: '1 Samuel', tokens: ['Sam', 'Samuel', 'Sa'], chapter: 1, verse: 1, urlKey: '1sa' },
+      { book: '2 Samuel', tokens: ['Sam', 'Samuel', 'Sa'], chapter: 1, verse: 1, urlKey: '2sa' },
       { book: '1 Kings', tokens: ['Kings', 'Kgs'], chapter: 1, verse: 1, urlKey: '1ki' },
       { book: '2 Kings', tokens: ['Kings', 'Kgs'], chapter: 1, verse: 1, urlKey: '2ki' },
       { book: '1 Chronicles', tokens: ['Chronicles', 'Chr'], chapter: 1, verse: 1, urlKey: '1ch' },
       { book: '2 Chronicles', tokens: ['Chronicles', 'Chr'], chapter: 1, verse: 1, urlKey: '2ch' },
       { book: '1 Corinthians', tokens: ['Corinthians', 'Cor'], chapter: 1, verse: 1, urlKey: '1co' },
       { book: '2 Corinthians', tokens: ['Corinthians', 'Cor'], chapter: 1, verse: 1, urlKey: '2co' },
-      { book: '1 Thessalonians', tokens: ['Thessalonians', 'Thess'], chapter: 1, verse: 1, urlKey: '1th' },
-      { book: '2 Thessalonians', tokens: ['Thessalonians', 'Thess'], chapter: 1, verse: 1, urlKey: '2th' },
-      { book: '1 Timothy', tokens: ['Timothy', 'Tim'], chapter: 1, verse: 1, urlKey: '1ti' },
-      { book: '2 Timothy', tokens: ['Timothy', 'Tim'], chapter: 1, verse: 1, urlKey: '2ti' },
-      { book: '1 Peter', tokens: ['Peter', 'Pet'], chapter: 1, verse: 1, urlKey: '1pe' },
-      { book: '2 Peter', tokens: ['Peter', 'Pet'], chapter: 1, verse: 1, urlKey: '2pe' },
-      { book: '1 John', tokens: ['John', 'Jn', 'Jo'], chapter: 1, verse: 1, urlKey: '1jo' },
-      { book: '2 John', tokens: ['John', 'Jn', 'Jo'], chapter: 1, verse: 1, urlKey: '2jo' },
-      { book: '3 John', tokens: ['John', 'Jn', 'Jo'], chapter: 1, verse: 1, urlKey: '3jo' }
+      { book: '1 Thessalonians', tokens: ['Thessalonians', 'Thess', 'Thes'], chapter: 1, verse: 1, urlKey: '1th' },
+      { book: '2 Thessalonians', tokens: ['Thessalonians', 'Thess', 'Thes'], chapter: 1, verse: 1, urlKey: '2th' },
+      { book: '1 Timothy', tokens: ['Timothy', 'Tim', 'Ti'], chapter: 1, verse: 1, urlKey: '1ti' },
+      { book: '2 Timothy', tokens: ['Timothy', 'Tim', 'Ti'], chapter: 1, verse: 1, urlKey: '2ti' },
+      { book: '1 Peter', tokens: ['Peter', 'Pet', 'Pt'], chapter: 1, verse: 1, urlKey: '1pe' },
+      { book: '2 Peter', tokens: ['Peter', 'Pet', 'Pt'], chapter: 1, verse: 1, urlKey: '2pe' },
+      { book: '1 John', tokens: ['John', 'Jn', 'Jo', 'Jhn'], chapter: 1, verse: 1, urlKey: '1jo' },
+      { book: '2 John', tokens: ['John', 'Jn', 'Jo', 'Jhn'], chapter: 1, verse: 1, urlKey: '2jo' },
+      { book: '3 John', tokens: ['John', 'Jn', 'Jo', 'Jhn'], chapter: 1, verse: 1, urlKey: '3jo' }
     ];
 
     for (const item of cases) {
