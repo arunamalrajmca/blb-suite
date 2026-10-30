@@ -234,7 +234,7 @@ test.describe('core user-visible E2E', () => {
             const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
             await handleBlbSelectionContextMenuClick({
               menuItemId:'blb-suite-web-selection',
-              selectionText:window.__unusedSelectionText || 'verse'
+              selectionText:'verse'
             }, tab);
           });
         } else {
