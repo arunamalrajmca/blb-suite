@@ -50,3 +50,20 @@ test('popup master toggle persists across reload and preserves per-site feature 
   await page.reload();
   await expect(master).toBeChecked();
 });
+
+
+test('sensitive-page popup replaces all normal controls with a brief privacy notice', async ({
+  page,
+  extensionId
+}) => {
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await page.evaluate(() => render({ isSensitiveSite: true }));
+
+  await expect(page.locator('#sensitiveNotice')).toBeVisible();
+  await expect(page.locator('#sensitiveNotice')).toContainText('Features paused on this page');
+  await expect(page.locator('#sensitiveNotice')).toContainText('For your privacy');
+  await expect(page.locator('.app-header')).toBeHidden();
+  await expect(page.locator('.gospel-card')).toBeHidden();
+  await expect(page.locator('.popup-card')).toBeHidden();
+  await expect(page.locator('#master')).toBeHidden();
+});
