@@ -5,6 +5,10 @@ function isSensitiveSiteHostname(value) {
   return BLBShared.isSensitiveSiteHostname(value);
 }
 
+function isSensitiveSiteUrl(value) {
+  return BLBShared.isSensitiveSiteUrl(value);
+}
+
 function getSiteKey(url, title = '') {
   try {
     const raw = String(url || '');
@@ -71,7 +75,7 @@ async function getState() {
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
   const defaultEnabled = await getDefaultSiteEnabled(siteKey, pageTitleForDefaultCheck);
   const isBlbSite = siteKey === BLB_HOSTNAME;
-  const isSensitiveSite = isSensitiveSiteHostname(siteKey);
+  const isSensitiveSite = isSensitiveSiteUrl(activeUrl);
   const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
   let hasCurrentSiteAccess = true;
   let hasSiteSpecificAccess = true;
@@ -1170,7 +1174,7 @@ document.getElementById('extensionVersion')?.addEventListener('click', async eve
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
 async function setIndependentSiteFeature(feature, on) {
   // Do not request host permissions or persist feature opt-ins on sensitive sites.
-  if (isSensitiveSiteHostname(currentSiteOrigin)) { render(await getState()); return; }
+  if (isSensitiveSiteUrl(currentSiteOrigin)) { render(await getState()); return; }
   // Capture the other toggle before any permission change can alter defaults.
   const otherFeatureEnabled = feature === 'pageButton'
     ? document.getElementById('doubleClick').checked
