@@ -1467,9 +1467,8 @@ test.describe('core user-visible E2E', () => {
           return [tab.url, tab.pendingUrl].some(value => {
             try {
               const url = new URL(String(value || ''));
-              const pathnameMatches = url.pathname === expectedPath
-                || url.pathname.startsWith(expectedPath.replace(/\\/$/, '') + '/');
-              return url.hostname === 'www.blueletterbible.org' && pathnameMatches;
+              return url.hostname === 'www.blueletterbible.org'
+                && url.pathname === expectedPath;
             } catch (_) {
               return false;
             }
