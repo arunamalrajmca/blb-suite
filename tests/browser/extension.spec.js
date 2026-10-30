@@ -1582,6 +1582,24 @@ test.describe('core user-visible E2E', () => {
       const expectedPath = number === 1 ? '/kjv/1sa/1/1/' : '/kjv/2sa/1/1/';
       await assertDoubleClickPath(page, context, extensionWorker, '#ref .book-suffix', expectedPath);
     }
+
+    // Without the numbered prefix, "Sam" is ambiguous and must not select
+    // either Samuel book by default.
+    await setupDoubleClickReferencePage(
+      page, extensionStorage,
+      '<p id="ref"><span class="book-suffix">Sam</span> <span class="chapter">1</span>:<span class="verse">1</span></p>'
+    );
+    await page.locator('#ref .book-suffix').dblclick();
+    await page.waitForTimeout(1200);
+    const openedPassage = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+      tabs.some(tab => {
+        try {
+          const url = new URL(String(tab.url || tab.pendingUrl || ''));
+          return url.hostname.endsWith('blueletterbible.org') && url.pathname.startsWith('/kjv/');
+        } catch (_) { return false; }
+      })
+    ));
+    expect(openedPassage, 'bare Sam must not guess between 1 Samuel and 2 Samuel').toBe(false);
   });
 
   test('Double-click generic numbered aliases and Roman prefixes — every numbered family', async ({ page, context, extensionStorage, extensionWorker }) => {
