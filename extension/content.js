@@ -1843,6 +1843,7 @@ function handleDoubleClickBlb(event) {
         let hasValidNearbyBookPrefix=false;
         let hasValidNearbyRomanBookPrefix=false;
         let numberedSuffixReference=null;
+        let numberedBookCriteriaQuery=null;
         if ((possibleNumberedBookSuffix||isRomanBookPrefix) && !hasNumericPrefix) {
           try {
             const contextNode=contextualTarget instanceof Element
@@ -1879,6 +1880,12 @@ function handleDoubleClickBlb(event) {
               if (chapter>0 && !hasExplicitVerse) {
                 const resolvedBook=resolveBibleBook(prefixNumber+' '+match[2]);
                 if (resolvedBook) numberedSuffixReference=resolveBibleReference(resolvedBook.name,chapter,1,1);
+              } else if (!chapterMatch) {
+                // A prefixed book name without chapter/verse is a Criteria
+                // Search request. Preserve the complete canonical name rather
+                // than sending only the clicked suffix (e.g. "Timothy").
+                const resolvedBook=resolveBibleBook(prefixNumber+' '+match[2]);
+                if (resolvedBook) numberedBookCriteriaQuery=resolvedBook.name;
               }
             }
           } catch (_) {}
@@ -1953,6 +1960,7 @@ function handleDoubleClickBlb(event) {
             safeRuntimeSendMessage({
               type:'blbSuiteOpenDoubleClickSelectionText',
               text:selection,
+              ...(numberedBookCriteriaQuery ? {criteriaSearchText:numberedBookCriteriaQuery} : {}),
               contextualReference:null,
               contextualReferenceResolved:true,
               requestId,
