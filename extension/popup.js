@@ -122,9 +122,16 @@ if (extensionVersion) {
   extensionVersion.textContent = `v${manifest.version}`;
 }
 
+function showSensitivePageNotice() {
+  document.getElementById('sensitiveNoticeTitle').textContent = 'Features paused on this page';
+  document.getElementById('sensitiveNoticeMessage').textContent =
+    'For your privacy, KJV Scripture Tools is disabled on pages that may contain sensitive information.';
+  document.body.classList.add('sensitive-restricted');
+}
+
 function render(state) {
   if (state.isSensitiveSite) {
-    document.body.classList.add('sensitive-restricted');
+    showSensitivePageNotice();
     return;
   }
   document.body.classList.remove('sensitive-restricted');
@@ -1388,7 +1395,7 @@ document.addEventListener('click', event => {
       const url = String(tabs[0]?.url || '');
       isSensitivePopup = isSensitiveSiteUrl(url);
       if (isSensitivePopup) {
-        document.body.classList.add('sensitive-restricted');
+        showSensitivePageNotice();
       } else {
         const siteKey = getSiteKey(url, tabs[0]?.title || '');
         const pageSites = saved.pageSelectionButtonSites && typeof saved.pageSelectionButtonSites === 'object' ? saved.pageSelectionButtonSites : {};
