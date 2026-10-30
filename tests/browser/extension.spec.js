@@ -191,22 +191,25 @@ test.describe('core user-visible E2E', () => {
       for (const action of actions) {
         const cue = page.locator(selector);
         await expect(cue).toHaveText(cueWord);
-        await page.evaluate(({ selector }) => {
-          const el = document.querySelector(selector);
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          const selection = window.getSelection();
-          selection.removeAllRanges();
-          selection.addRange(range);
-        }, { selector });
-        expect(await page.evaluate(() => window.getSelection()?.toString() || ''),
-          selector + ': selection must contain only the cue word').toBe(cueWord);
+        // Show on BLB, Alt+B, and Right-Click consume an existing native
+        // selection, so create that selection explicitly. Double-Click must
+        // instead start with no preselected Range: Chromium's physical
+        // double-click gesture creates the word selection itself.
+        if (action !== 'Double-Click') {
+          await page.evaluate(({ selector }) => {
+            const el = document.querySelector(selector);
+            const range = document.createRange();
+            range.selectNodeContents(el);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+          }, { selector });
+          expect(await page.evaluate(() => window.getSelection()?.toString() || ''),
+            selector + ': selection must contain only the cue word').toBe(cueWord);
+        } else {
+          await page.evaluate(() => window.getSelection()?.removeAllRanges());
+        }
 
-        // The background worker intentionally suppresses duplicate opens
-        // of the same selected text for 1.2 seconds. This matrix deliberately
-        // repeats each cue word across four distinct user actions, so let that
-        // protection window expire before each independent action is exercised.
-        await page.waitForTimeout(1250);
         const beforeIds = await extensionWorker.evaluate(() =>
           chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
         );
@@ -232,7 +235,12 @@ test.describe('core user-visible E2E', () => {
             }, tab);
           }, cueWord);
         } else {
+          // Let Chromium perform the actual word-selection gesture. A
+          // pre-created Range would be collapsed by the first mouse click,
+          // making this unlike a user's double-click.
           await cue.dblclick();
+          expect(await page.evaluate(() => window.getSelection()?.toString() || ''),
+            selector + ': native double-click must select only the cue word').toBe(cueWord);
         }
 
         await activateBlbTabForPath(extensionWorker, expectedPath, {
