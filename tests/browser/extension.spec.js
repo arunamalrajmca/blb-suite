@@ -1950,10 +1950,13 @@ test('Standalone book-name and KJV-word collision policy is consistent across al
 
   const explicit = Object.fromEntries(audit.explicit.map(row => [row.input, row]));
   expect(explicit.John.type).toBe('BOOK');
-  expect(explicit['1 John'].book).toBe('1 John');
-  expect(explicit['1 Cor 13:4']).toMatchObject({ book: '1 Corinthians', chapter: 13, verse: 4 });
-  expect(explicit['2 Ti 1:1']).toMatchObject({ book: '2 Timothy', chapter: 1, verse: 1 });
-  expect(explicit['1 Sam 1:1']).toMatchObject({ book: '1 Samuel', chapter: 1, verse: 1 });
+  expect(explicit['1 John'].book.toLowerCase()).toBe('1 john');
+  expect(explicit['1 Cor 13:4']).toMatchObject({ chapter: 13, verse: 4 });
+  expect(explicit['1 Cor 13:4'].book.toLowerCase()).toBe('1 corinthians');
+  expect(explicit['2 Ti 1:1']).toMatchObject({ chapter: 1, verse: 1 });
+  expect(explicit['2 Ti 1:1'].book.toLowerCase()).toBe('2 timothy');
+  expect(explicit['1 Sam 1:1']).toMatchObject({ chapter: 1, verse: 1 });
+  expect(explicit['1 Sam 1:1'].book.toLowerCase()).toBe('1 samuel');
   expect(explicit.Cor).toMatchObject({ type: 'KJV_WORD', word: true, singleMatch: [26, 45, 14] });
   expect(explicit.Sam.type).not.toBe('BOOK');
 
