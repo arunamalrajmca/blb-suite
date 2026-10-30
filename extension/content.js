@@ -1958,7 +1958,7 @@ function handleDoubleClickBlb(event) {
 
         const getVerseDiagnosticRoot = () => contextualTarget instanceof Element
           ? contextualTarget.closest(
-            '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main], ' +
+            '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
             '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
             '.entry-content, .article-body, .article-content, .content-body'
           )
