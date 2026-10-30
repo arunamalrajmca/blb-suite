@@ -1236,11 +1236,18 @@ test.describe('core user-visible E2E', () => {
 
   async function setupDoubleClickReferencePage(page, extensionStorage, html) {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    // Allow the newly injected content script to finish its asynchronous
-    // double-click settings initialization before the first gesture.
-    await page.waitForTimeout(1000);
+
+    // Keep the same document for successive grammar cases. The content script
+    // and its asynchronous settings initialization survive between cases, so
+    // navigating again would add a needless reload and readiness delay.
+    if (page.url() !== 'https://example.com/') {
+      await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+      // Wait only for the initial content-script injection in this test.
+      await page.waitForTimeout(1000);
+    }
+
     await page.evaluate((html) => {
+      document.getElementById('blb-e2e-focused-root')?.remove();
       const root = document.createElement('div');
       root.id = 'blb-e2e-focused-root';
       root.innerHTML = html;
