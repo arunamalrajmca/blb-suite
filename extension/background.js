@@ -5654,6 +5654,7 @@ async function shouldShowBlbContextMenu(tab, selectionText) {
   // The right-click action is exactly the same site-based feature as the
   // floating Show on BLB button. Do not require a content-script visibility
   // signal or a classifier just to expose the menu item.
+  if (isSensitiveSiteUrl(tab?.url || '')) return false;
   return await isPageButtonEnabledForHostname(siteKey, tab?.title || '');
 }
 
@@ -5791,7 +5792,7 @@ async function shouldInjectContentScriptForTab(tab, data) {
   const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
-  const explicitEnabled = key === BLB_HOSTNAME ? pageSites[key] === true : !isSensitiveSiteHostname(key) && (pageSites[key] === true || doubleSites[key] === true);
+  const explicitEnabled = key === BLB_HOSTNAME ? pageSites[key] === true : !isSensitiveSiteUrl(tab.url) && (pageSites[key] === true || doubleSites[key] === true);
 
   // Global Redirect External Bible Links is intentionally available on any
   // HTTP(S) host for which the user granted host access. Do not limit runtime
