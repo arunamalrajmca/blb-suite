@@ -2324,6 +2324,10 @@ function isSensitiveSiteHostname(hostname) {
   return BLBShared.isSensitiveSiteHostname(hostname);
 }
 
+function isSensitiveSiteUrl(url) {
+  return BLBShared.isSensitiveSiteUrl(url);
+}
+
 function contentScriptFilesForTab(tab, data) {
   const hostname = hostnameFromTabUrl(tab?.url);
   const key = normalizeSiteHostname(hostname);
@@ -2331,7 +2335,7 @@ function contentScriptFilesForTab(tab, data) {
     ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
     ? data.doubleClickBlbSites : {};
-  const sensitiveSite = isSensitiveSiteHostname(hostname);
+  const sensitiveSite = isSensitiveSiteUrl(tab?.url || hostname);
   const blbSite = key === BLB_HOSTNAME;
   const explicitSiteFeature = blbSite ? pageSites[key] === true : !sensitiveSite && (pageSites[key] === true || doubleSites[key] === true);
   const redirectEnabled = data.redirectEnabled === true;
