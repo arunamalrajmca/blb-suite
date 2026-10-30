@@ -43,7 +43,7 @@ globalThis.BLBShared = Object.freeze({
   },
   isSensitiveSiteUrl(value) {
     const raw = String(value || '').trim();
-    if (/payment/i.test(raw)) return true;
+    if (/(?:payment|hospital|healthcare|medicine)/i.test(raw)) return true;
     try {
       const url = new URL(raw);
       return (url.protocol === 'http:' || url.protocol === 'https:') && this.isSensitiveSiteHostname(url.hostname);
