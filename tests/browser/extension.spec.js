@@ -1511,7 +1511,7 @@ test.describe('core user-visible E2E', () => {
         tabs.some(tab => {
           try {
             const url = new URL(String(tab.url || tab.pendingUrl || ''));
-            return url.hostname.endsWith('blueletterbible.org') && /^\\/kjv\\//.test(url.pathname);
+            return url.hostname.endsWith('blueletterbible.org') && url.pathname.startsWith('/kjv/');
           } catch (_) { return false; }
         })
       ));
