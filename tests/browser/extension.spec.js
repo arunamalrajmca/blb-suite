@@ -137,10 +137,8 @@ for (const site of [
 }
 
 test.describe('core user-visible E2E', () => {
-  // Run the generic article verse-context regression first. In serial mode, any
-  // failure skips the legacy tests in this suite for a faster feedback loop;
-  // once the regression passes, all existing coverage runs unchanged.
-  test.describe.configure({ mode: 'serial' });
+  // Each test uses its own Playwright page/context fixture. Keep the tests
+  // independent so one failure does not skip the remaining coverage.
 
   test('Single-word verse cues resolve the same adjacent passage through all four actions', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({
@@ -1236,11 +1234,18 @@ test.describe('core user-visible E2E', () => {
 
   async function setupDoubleClickReferencePage(page, extensionStorage, html) {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    // Allow the newly injected content script to finish its asynchronous
-    // double-click settings initialization before the first gesture.
-    await page.waitForTimeout(1000);
+
+    // Keep the same document for successive grammar cases. The content script
+    // and its asynchronous settings initialization survive between cases, so
+    // navigating again would add a needless reload and readiness delay.
+    if (page.url() !== 'https://example.com/') {
+      await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+      // Wait only for the initial content-script injection in this test.
+      await page.waitForTimeout(1000);
+    }
+
     await page.evaluate((html) => {
+      document.getElementById('blb-e2e-focused-root')?.remove();
       const root = document.createElement('div');
       root.id = 'blb-e2e-focused-root';
       root.innerHTML = html;
@@ -1434,25 +1439,56 @@ test.describe('core user-visible E2E', () => {
     for (const book of books) {
       const target = page.locator(`#ref .standalone-number[data-book-number="${book.number}"]`);
       await target.scrollIntoViewIfNeeded();
+
+      // Record existing tab IDs so an old BLB tab cannot satisfy this
+      // iteration's assertion or be closed by its cleanup.
+      const baselineTabIds = await extensionWorker.evaluate(() =>
+        chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
+      );
+
       await target.dblclick();
 
       const expectedPath = `/kjv/${book.urlKey}/1/1/`;
-      await activateBlbTabForPath(extensionWorker, expectedPath, {
-        fragment: String(book.number),
-        selector: `#ref .standalone-number[data-book-number="${book.number}"]`,
-        selectedText: String(book.number)
-      });
-      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
-        const matches = tabs.filter(tab => {
-          try {
-            const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
-            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
-          } catch (_) { return false; }
-        });
-        for (const tab of matches) if (tab.id != null) {
-          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+      let openedTab = null;
+      await expect.poll(async () => {
+        const tabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
+          items.map(tab => ({
+            id: tab.id,
+            url: tab.url || '',
+            pendingUrl: tab.pendingUrl || ''
+          }))
+        ));
+
+        openedTab = tabs.find(tab => {
+          if (tab.id == null || baselineTabIds.includes(tab.id)) return false;
+
+          // Chrome may expose the old URL and new pendingUrl together.
+          // Check both independently so the old URL cannot mask navigation.
+          return [tab.url, tab.pendingUrl].some(value => {
+            try {
+              const url = new URL(String(value || ''));
+              return url.hostname === 'www.blueletterbible.org'
+                && url.pathname === expectedPath;
+            } catch (_) {
+              return false;
+            }
+          });
+        }) || null;
+
+        return openedTab;
+      }, {
+        message: `Double-clicking standalone book number ${book.number} must open a new BLB tab at ${expectedPath}`,
+        timeout: 10000
+      }).toBeTruthy();
+
+      // Close only the tab opened by this gesture, preserving all existing tabs.
+      await extensionWorker.evaluate(async tabId => {
+        try {
+          await chrome.tabs.remove(tabId);
+        } catch (_) {
+          // The tab may already have closed during browser cleanup.
         }
-      }), expectedPath);
+      }, openedTab.id);
     }
   });
 
@@ -1467,6 +1503,7 @@ test.describe('core user-visible E2E', () => {
       const number = /^\d+$/.test(key) ? Number(key) : NaN;
       return bookNames.has(key)
         || (Number.isInteger(number) && number >= 1 && number <= 176)
+        || Object.values(NUMBERED_BOOK_SUFFIX_ALIASES || {}).flat().some(alias => String(alias).toLowerCase() === key)
         || /^(?:i|ii|iii)$/i.test(key);
     }, token);
     // DOM context is intentionally limited to book names/aliases and standalone
@@ -1474,6 +1511,131 @@ test.describe('core user-visible E2E', () => {
     if (!isContextCandidate) return;
     await runDoubleClickReferenceToken(page, context, extensionWorker, selector, token, expectedPath);
   }
+
+  test('Double-click numbered-book suffixes resolve every supported numbered-book alias', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
+    // Derive all numbered-book cases from the production alias map and canonical
+    // BOOKS list. No parallel family, alias, or URL-key list belongs in this test.
+    const cases = await extensionWorker.evaluate(() =>
+      Object.entries(NUMBERED_BOOK_SUFFIX_ALIASES).flatMap(([family, tokens]) =>
+        BOOKS.flatMap(book => {
+          const match = book.name.match(/^([1-3])\s+(.+)$/i);
+          if (!match || match[2].toLowerCase() !== family) return [];
+          return [{
+            book: book.name,
+            number: Number(match[1]),
+            tokens,
+            chapter: 1,
+            verse: 1,
+            urlKey: book.urlKey
+          }];
+        })
+      )
+    );
+    expect(cases.length, 'numbered suffix aliases must map to canonical numbered books').toBeGreaterThan(0);
+
+    for (const item of cases) {
+      for (const token of item.tokens) {
+        await setupDoubleClickReferencePage(
+          page, extensionStorage,
+          `<p id="ref"><span class="book-prefix">${item.book[0]}</span> <span class="book-suffix">${token}</span> <span class="chapter">${item.chapter}</span>:<span class="verse">${item.verse}</span></p>`
+        );
+        await assertDoubleClickPath(
+          page, context, extensionWorker,
+          '#ref .book-suffix',
+          `/kjv/${item.urlKey}/${item.chapter}/${item.verse}/`
+        );
+      }
+
+      // The same alias must resolve with both Arabic and Roman prefixes.
+      const roman = ['I', 'II', 'III'][item.number - 1];
+      for (const token of item.tokens) {
+        for (const prefix of [String(item.number), roman]) {
+          const resolved = await extensionWorker.evaluate(value => {
+            const book = resolveBibleBook(value);
+            return book ? book.urlKey : null;
+          }, `${prefix} ${token}`);
+          expect(resolved, `${prefix} ${token} (${item.book})`).toBe(item.urlKey);
+        }
+      }
+    }
+
+    // Derive overlapping standalone aliases from the same production maps.
+    // For example, if Ti maps to Titus by itself but 1 Ti maps to 1 Timothy,
+    // both expectations follow the configured alias data automatically.
+    const standaloneOverlaps = await extensionWorker.evaluate(() =>
+      Object.entries(NUMBERED_BOOK_SUFFIX_ALIASES).flatMap(([family, tokens]) =>
+        BOOKS.flatMap(book => {
+          const match = book.name.match(/^([1-3])\s+(.+)$/i);
+          if (!match || match[2].toLowerCase() !== family) return [];
+          return tokens.flatMap(token => {
+            const bareBook = resolveBibleBook(token);
+            if (!bareBook || bareBook.name.toLowerCase() === book.name.toLowerCase()) return [];
+            return [{
+              token,
+              bareTarget: bareBook.name.toLowerCase(),
+              numberedInput: `${match[1]} ${token}`,
+              numberedName: book.name.toLowerCase(),
+              numberedUrlKey: book.urlKey
+            }];
+          });
+        })
+      )
+    );
+
+    for (const item of standaloneOverlaps) {
+      const bare = await extensionWorker.evaluate(value => {
+        const book = resolveBibleBook(value);
+        return book ? book.name.toLowerCase() : null;
+      }, item.token);
+      expect(bare, item.token + ' standalone alias').toBe(item.bareTarget);
+
+      const numbered = await extensionWorker.evaluate(value => {
+        const book = resolveBibleBook(value);
+        return book ? { name: book.name.toLowerCase(), urlKey: book.urlKey } : null;
+      }, item.numberedInput);
+      expect(numbered, item.numberedInput).toEqual({
+        name: item.numberedName,
+        urlKey: item.numberedUrlKey
+      });
+    }
+
+    // Roman-numeral prefixes are also valid numbered-book context.
+    for (const item of [
+      { prefix: 'II', token: 'John', urlKey: '2jo' },
+      { prefix: 'III', token: 'Jn', urlKey: '3jo' },
+      { prefix: 'II', token: 'Pet', urlKey: '2pe' }
+    ]) {
+      await setupDoubleClickReferencePage(
+        page, extensionStorage,
+        `<p id="ref"><span class="book-prefix">${item.prefix}</span> <span class="book-suffix">${item.token}</span> 1:1</p>`
+      );
+      await assertDoubleClickPath(
+        page, context, extensionWorker, '#ref .book-suffix',
+        `/kjv/${item.urlKey}/1/1/`
+      );
+    }
+
+    // The suffix is not a standalone book alias. An invalid numbered prefix
+    // must not let the nearby chapter/verse text resolve to a different book.
+    for (const html of [
+      '<p id="ref"><span class="book-prefix">4</span> <span class="book-suffix">Peter</span> 2:9</p>',
+      '<p id="ref"><span class="book-suffix">Peter</span> 2:9</p>'
+    ]) {
+      await setupDoubleClickReferencePage(page, extensionStorage, html);
+      await page.locator('#ref .book-suffix').dblclick();
+      await page.waitForTimeout(1200);
+      const openedPassage = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+        tabs.some(tab => {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            return url.hostname.endsWith('blueletterbible.org') && url.pathname.startsWith('/kjv/');
+          } catch (_) { return false; }
+        })
+      ));
+      expect(openedPassage, 'an invalid or missing numbered prefix must not open a BLB passage').toBe(false);
+    }
+  });
 
   test('Double-click generic canonical references — all 66 books × book/chapter/verse tokens', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(240000);
@@ -1510,7 +1672,12 @@ test.describe('core user-visible E2E', () => {
 
     expect(data.length).toBeGreaterThan(0);
     for (const item of data) {
+      // "Sam" is context-dependent. Skip every alias containing that token
+      // here because this loop double-clicks each token independently, without
+      // preserving an alias-internal numbered prefix. The dedicated Sam test
+      // below verifies both numbered forms and rejects an unprefixed guess.
       const tokens = item.alias.trim().split(/\s+/);
+      if (tokens.some(token => token.toLowerCase() === 'sam')) continue;
       const tokenHtml = tokens.map((token, i) => `<span class="alias-token" data-index="${i}">${token}</span>`).join(' ');
       await setupDoubleClickReferencePage(
         page, extensionStorage,
@@ -1524,6 +1691,103 @@ test.describe('core user-visible E2E', () => {
         await assertDoubleClickPath(page, context, extensionWorker, `#ref .alias-token[data-index="${i}"]`, expectedPath);
       }
     }
+  });
+
+  test('Double-click numbered-book suffixes preserve standalone KJV word destinations without a prefix @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(120000);
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    const words = ['Samuel', 'Kings', 'Chronicles', 'Corinthians', 'Cor', 'Thessalonians', 'Timothy', 'Peter', 'John'];
+    await page.evaluate(words => {
+      const root = document.createElement('p');
+      root.id = 'blb-e2e-numbered-suffix-kjv-words';
+      root.innerHTML = words.map((word, index) => `<span data-index="${index}">${word}</span>`).join(' ');
+      root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(root);
+    }, words);
+
+    for (let index = 0; index < words.length; index++) {
+      const word = words[index];
+      await page.locator(`#blb-e2e-numbered-suffix-kjv-words span[data-index="${index}"]`).dblclick();
+      try {
+        if (word === 'Cor') {
+          // Cor has a single KJV Criteria Search result, so BLB resolves it
+          // directly to that verse instead of leaving the user on search.
+          await activateBlbTabForPath(extensionWorker, '/kjv/eze/45/14/', {
+            fragment: 'numbered-suffix-kjv-words',
+            selector: '#blb-e2e-numbered-suffix-kjv-words',
+            selectedText: word
+          });
+        } else if (word === 'John') {
+          // John is also a canonical Bible-book name, so the book resolver
+          // opens its first verse rather than running Criteria Search.
+          await activateBlbTabForPath(extensionWorker, '/kjv/jhn/1/1/', {
+            fragment: 'numbered-suffix-kjv-words',
+            selector: '#blb-e2e-numbered-suffix-kjv-words',
+            selectedText: word
+          });
+        } else {
+          await expect.poll(() => extensionWorker.evaluate(expected => chrome.tabs.query({}).then(tabs =>
+            tabs.some(tab => {
+              try {
+                const url = new URL(String(tab.url || tab.pendingUrl || ''));
+                return url.hostname === 'www.blueletterbible.org'
+                  && url.pathname === '/search/search.cfm'
+                  && (url.searchParams.get('Criteria') || '').toLowerCase() === expected.toLowerCase();
+              } catch (_) { return false; }
+            })
+          ), word), { timeout: 10000 }).toBe(true);
+        }
+      } catch (error) {
+        const openTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+          tabs.map(tab => ({ id: tab.id, url: tab.url || tab.pendingUrl || '' }))
+        ));
+        throw new Error(
+          `Unexpected destination for standalone KJV word "${word}". Open tabs: ${JSON.stringify(openTabs)}\n${error.message}`
+        );
+      }
+      await extensionWorker.evaluate(expected => chrome.tabs.query({}).then(async tabs => {
+        for (const tab of tabs) {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            if (url.hostname === 'www.blueletterbible.org'
+              && url.pathname === '/search/search.cfm'
+              && (url.searchParams.get('Criteria') || '').toLowerCase() === expected.toLowerCase()
+              && tab.id != null) await chrome.tabs.remove(tab.id);
+          } catch (_) {}
+        }
+      }), word);
+    }
+  });
+
+  test('Double-click Sam abbreviation resolves from its adjacent numbered prefix @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
+    for (const number of [1, 2]) {
+      await setupDoubleClickReferencePage(
+        page, extensionStorage,
+        `<p id="ref"><span class="book-prefix">${number}</span> <span class="book-suffix">Sam</span> <span class="chapter">1</span>:<span class="verse">1</span></p>`
+      );
+      const expectedPath = number === 1 ? '/kjv/1sa/1/1/' : '/kjv/2sa/1/1/';
+      await assertDoubleClickPath(page, context, extensionWorker, '#ref .book-suffix', expectedPath);
+    }
+
+    // Without the numbered prefix, "Sam" is ambiguous and must not select
+    // either Samuel book by default.
+    await setupDoubleClickReferencePage(
+      page, extensionStorage,
+      '<p id="ref"><span class="book-suffix">Sam</span> <span class="chapter">1</span>:<span class="verse">1</span></p>'
+    );
+    await page.locator('#ref .book-suffix').dblclick();
+    await page.waitForTimeout(1200);
+    const openedPassage = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+      tabs.some(tab => {
+        try {
+          const url = new URL(String(tab.url || tab.pendingUrl || ''));
+          return url.hostname.endsWith('blueletterbible.org') && url.pathname.startsWith('/kjv/');
+        } catch (_) { return false; }
+      })
+    ));
+    expect(openedPassage, 'bare Sam must not guess between 1 Samuel and 2 Samuel').toBe(false);
   });
 
   test('Double-click generic numbered aliases and Roman prefixes — every numbered family', async ({ page, context, extensionStorage, extensionWorker }) => {
@@ -1562,6 +1826,22 @@ test.describe('core user-visible E2E', () => {
   // (colon, dot, spaced, chapter, and range forms for OT/NT). Keeping a second
   // 66-book × multi-variant copy here doubled the release runtime and could hit
   // the 4-minute per-test timeout without adding coverage.
+
+  test('All 66 canonical books and every configured alias resolve to the correct book', async ({ extensionWorker }) => {
+    const audit = await extensionWorker.evaluate(() => ({
+      books: BOOKS.map(book => {
+        const resolved = resolveBibleBook(book.name);
+        return { input: book.name, expected: book.name, actual: resolved?.name || null, urlKey: resolved?.urlKey || null };
+      }),
+      aliases: Object.entries(EXTRA_BOOK_ALIASES).map(([alias, expected]) => {
+        const resolved = resolveBibleBook(alias);
+        return { input: alias, expected, actual: resolved?.name || null };
+      })
+    }));
+    expect(audit.books).toHaveLength(66);
+    expect(audit.books.filter(item => item.actual !== item.expected), 'canonical book mismatches').toEqual([]);
+    expect(audit.aliases.filter(item => item.actual !== item.expected), 'book alias mismatches').toEqual([]);
+  });
 
   test('All 66 canonical books resolve correctly through the shared reference resolver', async ({ extensionWorker }) => {
     const results = await extensionWorker.evaluate(() => BOOKS.map(book => {
