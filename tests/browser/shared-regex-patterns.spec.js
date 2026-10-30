@@ -130,7 +130,13 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     lookalikeGov: false,
     healthInformationSite: false,
     financeContentSubdomain: false,
-    unrelated: false
+    unrelated: false,
+    paymentPath: true,
+    paymentSegment: true,
+    paymentQuery: true,
+    paymentCaseInsensitive: true,
+    unrelatedPage: false,
+    paymentDomain: true
   });
 });
 
