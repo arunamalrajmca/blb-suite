@@ -7,9 +7,9 @@ const EXTRA_BOOK_ALIASES = {"rut":"ruth","rth":"ruth","sol":"song of solomon","s
 // because several are ambiguous without 1/2/3 context (and Ti is also Titus).
 const NUMBERED_BOOK_SUFFIX_ALIASES = {
   samuel: ['Sam', 'Samuel', 'Sa'],
-  kings: ['Kings', 'Kgs'],
+  kings: ['Kings', 'Kgs', 'Ki'],
   chronicles: ['Chronicles', 'Chr'],
-  corinthians: ['Corinthians', 'Cor'],
+  corinthians: ['Corinthians', 'Cor', 'Co'],
   thessalonians: ['Thessalonians', 'Thess', 'Thes', 'Th'],
   timothy: ['Timothy', 'Tim', 'Ti'],
   peter: ['Peter', 'Pet', 'Pt'],
