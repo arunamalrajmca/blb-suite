@@ -1467,6 +1467,7 @@ test.describe('core user-visible E2E', () => {
       const number = /^\d+$/.test(key) ? Number(key) : NaN;
       return bookNames.has(key)
         || (Number.isInteger(number) && number >= 1 && number <= 176)
+        || /^(?:sam(?:uel)?|kings|kgs?|chronicles|chr|corinthians|cor|thessalonians|thess|timothy|tim|peter|pet|john|jn|jhn)$/i.test(key)
         || /^(?:i|ii|iii)$/i.test(key);
     }, token);
     // DOM context is intentionally limited to book names/aliases and standalone
@@ -1474,6 +1475,29 @@ test.describe('core user-visible E2E', () => {
     if (!isContextCandidate) return;
     await runDoubleClickReferenceToken(page, context, extensionWorker, selector, token, expectedPath);
   }
+
+  test('Double-click numbered-book suffixes resolve all six prefixed book references', async ({ page, context, extensionStorage, extensionWorker }) => {
+    const cases = [
+      { book: '1 Thessalonians', token: 'Thessalonians', chapter: 5, verse: 23, urlKey: '1th' },
+      { book: '2 Thessalonians', token: 'Thessalonians', chapter: 3, verse: 5, urlKey: '2th' },
+      { book: '1 Peter', token: 'Peter', chapter: 2, verse: 9, urlKey: '1pe' },
+      { book: '2 Peter', token: 'Peter', chapter: 1, verse: 4, urlKey: '2pe' },
+      { book: '1 Timothy', token: 'Timothy', chapter: 2, verse: 4, urlKey: '1ti' },
+      { book: '2 Timothy', token: 'Timothy', chapter: 2, verse: 15, urlKey: '2ti' }
+    ];
+
+    for (const item of cases) {
+      await setupDoubleClickReferencePage(
+        page, extensionStorage,
+        `<p id="ref"><span class="book-prefix">${item.book[0]}</span> <span class="book-suffix">${item.token}</span> <span class="chapter">${item.chapter}</span>:<span class="verse">${item.verse}</span></p>`
+      );
+      await assertDoubleClickPath(
+        page, context, extensionWorker,
+        '#ref .book-suffix',
+        `/kjv/${item.urlKey}/${item.chapter}/${item.verse}/`
+      );
+    }
+  });
 
   test('Double-click generic canonical references — all 66 books × book/chapter/verse tokens', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(240000);
