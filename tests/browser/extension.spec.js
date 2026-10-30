@@ -1525,18 +1525,20 @@ test.describe('core user-visible E2E', () => {
 
     // Short aliases that overlap other standalone book aliases must resolve
     // by the complete numbered form: Ti alone is Titus, but 1/2 Ti are Timothy.
-    for (const [token, expectedName, expectedPath] of [
-      ['Ti', 'titus', '/kjv/tit/1/1/'],
-      ['1 Ti', '1 timothy', '/kjv/1ti/1/1/'],
-      ['2 Ti', '2 timothy', '/kjv/2ti/1/1/'],
-      ['1 Ki', '1 kings', '/kjv/1ki/1/1/'],
-      ['2 Ki', '2 kings', '/kjv/2ki/1/1/'],
-      ['1 Co', '1 corinthians', '/kjv/1co/1/1/'],
-      ['2 Co', '2 corinthians', '/kjv/2co/1/1/']
+    for (const [token, expectedName, expectedUrlKey] of [
+      ['Ti', 'titus', 'tit'],
+      ['1 Ti', '1 timothy', '1ti'],
+      ['2 Ti', '2 timothy', '2ti'],
+      ['1 Ki', '1 kings', '1ki'],
+      ['2 Ki', '2 kings', '2ki'],
+      ['1 Co', '1 corinthians', '1co'],
+      ['2 Co', '2 corinthians', '2co']
     ]) {
-      const resolved = await extensionWorker.evaluate(value => resolveBibleBook(value)?.name || null, token);
-      expect(resolved, token).toBe(expectedName);
-      expect(expectedPath).toContain('/kjv/');
+      const resolved = await extensionWorker.evaluate(value => {
+        const book = resolveBibleBook(value);
+        return book ? { name: book.name, urlKey: book.urlKey } : null;
+      }, token);
+      expect(resolved, token).toEqual({ name: expectedName, urlKey: expectedUrlKey });
     }
 
     // Roman-numeral prefixes are also valid numbered-book context.
