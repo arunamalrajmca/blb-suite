@@ -466,7 +466,22 @@
         try {
           const selected = String(message.selectionText || '').trim();
           const cached = lastSelectionContextualText === selected ? lastSelectionContextualReference : null;
-          const resolved = cached || getContextualBibleReference(selected);
+          let verseCueReference = null;
+          // Show on BLB, Alt+B, and right-click receive only the selected cue
+          // word. Reuse the same narrowly scoped article/post resolver that
+          // Double-Click uses to associate that cue with its following verse
+          // number and nearest preceding explicit book/chapter reference.
+          if (!cached && /^(?:v|verse|verses)$/i.test(normalizeDoubleClickToken(selected))) {
+            const selection = window.getSelection?.();
+            if (selection?.rangeCount && !selection.isCollapsed) {
+              let target = selection.getRangeAt(0).commonAncestorContainer;
+              if (target?.nodeType === Node.TEXT_NODE) target = target.parentElement;
+              if (target instanceof Element) {
+                verseCueReference = getDoubleClickBlockContextReference(selected, target, null);
+              }
+            }
+          }
+          const resolved = cached || verseCueReference || getContextualBibleReference(selected);
           sendResponse(resolved ? {ok:true, reference:resolved} : {ok:true, reference:null});
         } catch (_) { sendResponse({ok:true, reference:null}); }
         return true;
