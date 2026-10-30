@@ -1,5 +1,6 @@
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
 let currentSiteOrigin = '';
+let currentSiteUrl = '';
 
 function isSensitiveSiteHostname(value) {
   return BLBShared.isSensitiveSiteHostname(value);
@@ -65,6 +66,7 @@ async function getState() {
   const pageTitle = tabs[0]?.title || '';
   const pageTitleForDefaultCheck = pageTitle;
   const activeUrl = String(tabs[0]?.url || '');
+  currentSiteUrl = activeUrl;
   try {
     const active = new URL(activeUrl);
     currentSiteOrigin = (active.protocol === 'http:' || active.protocol === 'https:')
@@ -1174,7 +1176,7 @@ document.getElementById('extensionVersion')?.addEventListener('click', async eve
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
 async function setIndependentSiteFeature(feature, on) {
   // Do not request host permissions or persist feature opt-ins on sensitive sites.
-  if (isSensitiveSiteUrl(currentSiteOrigin)) { render(await getState()); return; }
+  if (isSensitiveSiteUrl(currentSiteUrl)) { render(await getState()); return; }
   // Capture the other toggle before any permission change can alter defaults.
   const otherFeatureEnabled = feature === 'pageButton'
     ? document.getElementById('doubleClick').checked
