@@ -74,10 +74,12 @@ test('independent MultiVerse commands start opening tabs without waiting for ear
       return original(...args);
     };
 
+    // Use different chapters so these requests deliberately remain MultiVerse
+    // under the continuous-same-chapter routing rule being tested in PR #629.
     const refsA = [{ book:'Genesis', bookNumber:1, chapter:1, from:1, to:1, version:'kjv' },
-                   { book:'Genesis', bookNumber:1, chapter:1, from:2, to:2, version:'kjv' }];
+                   { book:'Genesis', bookNumber:1, chapter:2, from:1, to:1, version:'kjv' }];
     const refsB = [{ book:'John', bookNumber:43, chapter:1, from:1, to:1, version:'niv' },
-                   { book:'John', bookNumber:43, chapter:1, from:2, to:2, version:'niv' }];
+                   { book:'John', bookNumber:43, chapter:2, from:1, to:1, version:'niv' }];
 
     try {
       const first = openBlbMultiVerseRefs(refsA, false);
