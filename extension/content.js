@@ -516,9 +516,10 @@ globalThis.BLBCriteriaSearchNavigationModule?.initialize({
 });
 
 // Passive BLB new-tab targets are isolated in a classic-script feature module.
-globalThis.BLBPassiveNewTabTargetsModule?.initialize({
+const blbPassiveNewTabTargets = globalThis.BLBPassiveNewTabTargetsModule?.initialize({
   BLB_HOSTNAME,
-  isSuiteEnabledNow: () => suiteEnabled
+  isSuiteEnabledNow: () => suiteEnabled,
+  suiteSettingsReadyPromise
 });
 
 // Shared floating-button drag behavior is isolated in a classic-script feature module.
@@ -2143,6 +2144,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
   if (changes.masterEnabled) {
     suiteEnabled = changes.masterEnabled.newValue !== false;
+    blbPassiveNewTabTargets?.refresh?.();
     if (!suiteEnabled) {
       document.getElementById('blb-suite-webster-multiverse')?.remove();
       document.getElementById('blb-suite-webster-multiverse-reset-position')?.remove();
