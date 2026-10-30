@@ -105,7 +105,13 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     lookalikeGov: BLBShared.isSensitiveSiteHostname('example.gov.com'),
     healthInformationSite: BLBShared.isSensitiveSiteHostname('healthline.com'),
     financeContentSubdomain: BLBShared.isSensitiveSiteHostname('finance.yahoo.com'),
-    unrelated: BLBShared.isSensitiveSiteHostname('example.com')
+    unrelated: BLBShared.isSensitiveSiteHostname('example.com'),
+    paymentPath: BLBShared.isSensitiveSiteUrl('https://example.com/payment'),
+    paymentSegment: BLBShared.isSensitiveSiteUrl('https://example.com/account/payment-details'),
+    paymentQuery: BLBShared.isSensitiveSiteUrl('https://example.com/checkout?flow=payment'),
+    paymentCaseInsensitive: BLBShared.isSensitiveSiteUrl('https://example.com/Payment/Confirm'),
+    unrelatedPage: BLBShared.isSensitiveSiteUrl('https://example.com/account/profile'),
+    paymentDomain: BLBShared.isSensitiveSiteUrl('https://payments.example.com/account')
   }));
   expect(result).toMatchObject({
     chase: true,
