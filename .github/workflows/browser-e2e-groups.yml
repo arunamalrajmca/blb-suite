@@ -133,6 +133,12 @@ jobs:
         if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
 
+      # Run focused regressions from prior failures before the exhaustive changed-spec suite.
+      # Add @failure-first to a focused test title; leave its original exhaustive test in place.
+      - name: Run failure-first browser regressions
+        if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
+        run: npx playwright test --grep "@failure-first" --workers=1
+
       # Run the dedicated MultiVerse tab-reuse regression in this existing runner.
       # Shared/unknown runtime changes retain this coverage via full_browser_suite.
       - name: Run MultiVerse tab reuse and 22-batch persistence regressions
