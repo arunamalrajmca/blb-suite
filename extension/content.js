@@ -2060,7 +2060,7 @@ async function getSiteDefaultEnabled() {
 async function refreshDoubleClickBlb() {
   try {
     const siteKey = getPageSelectionSiteKey();
-    if (siteKey === BLB_HOSTNAME || isSensitiveSiteHostname(siteKey) || !suiteEnabled || !siteKey) {
+    if (siteKey === BLB_HOSTNAME || isSensitiveSiteUrl(location.href) || !suiteEnabled || !siteKey) {
       doubleClickBlbEnabled = false;
       disableDoubleClickBlb();
       return;
