@@ -477,7 +477,9 @@
               let target = selection.getRangeAt(0).commonAncestorContainer;
               if (target?.nodeType === Node.TEXT_NODE) target = target.parentElement;
               if (target instanceof Element) {
-                verseCueReference = getDoubleClickBlockContextReference(selected, target, null);
+                verseCueReference = typeof window.__blbSuiteResolveVerseCueContext === 'function'
+                  ? window.__blbSuiteResolveVerseCueContext(selected)
+                  : null;
               }
             }
           }
