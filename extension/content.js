@@ -1781,10 +1781,10 @@ function handleDoubleClickBlb(event) {
         // Declare this outside the fast-rejection block because target selection
         // and the DOM-context resolver also need the same cue classification.
         const isVerseContextWord = /^(?:v|verse|verses)$/i.test(selection);
-        // Only the three suffixes involved in the reported regression need
-        // to bypass the single-word fast-reject. Other numbered-book suffix
-        // handling retains its existing path and fallback behavior.
-        const isReportedNumberedBookSuffix=/^(?:Thessalonians|Peter|Timothy)$/i.test(selection);
+        // Only the reported numbered-book suffixes need to bypass the
+        // single-word fast-reject so the adjacent-prefix resolver can validate
+        // the complete book name. Other suffix handling remains unchanged.
+        const isReportedNumberedBookSuffix=/^(?:Sam|Thessalonians|Peter|Timothy)$/i.test(selection);
 
         // Reject unrelated English single words before building DOM context or
         // entering the background selection resolver. This is an exact local
