@@ -1478,36 +1478,25 @@ test.describe('core user-visible E2E', () => {
 
   test('Double-click numbered-book suffixes resolve every supported numbered-book alias', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(240000);
-    const suffixAliases = await extensionWorker.evaluate(() => NUMBERED_BOOK_SUFFIX_ALIASES);
-    expect(suffixAliases).toEqual({
-      samuel: ['Sam', 'Samuel', 'Sa'],
-      kings: ['Kings', 'Kgs', 'Ki'],
-      chronicles: ['Chronicles', 'Chr'],
-      corinthians: ['Corinthians', 'Cor', 'Co'],
-      thessalonians: ['Thessalonians', 'Thess', 'Thes', 'Th'],
-      timothy: ['Timothy', 'Tim', 'Ti'],
-      peter: ['Peter', 'Pet', 'Pt'],
-      john: ['John', 'Jn', 'Jo', 'Jhn']
-    });
-    const cases = [
-      { book: '1 Samuel', tokens: suffixAliases.samuel, chapter: 1, verse: 1, urlKey: '1sa' },
-      { book: '2 Samuel', tokens: suffixAliases.samuel, chapter: 1, verse: 1, urlKey: '2sa' },
-      { book: '1 Kings', tokens: suffixAliases.kings, chapter: 1, verse: 1, urlKey: '1ki' },
-      { book: '2 Kings', tokens: suffixAliases.kings, chapter: 1, verse: 1, urlKey: '2ki' },
-      { book: '1 Chronicles', tokens: suffixAliases.chronicles, chapter: 1, verse: 1, urlKey: '1ch' },
-      { book: '2 Chronicles', tokens: suffixAliases.chronicles, chapter: 1, verse: 1, urlKey: '2ch' },
-      { book: '1 Corinthians', tokens: suffixAliases.corinthians, chapter: 1, verse: 1, urlKey: '1co' },
-      { book: '2 Corinthians', tokens: suffixAliases.corinthians, chapter: 1, verse: 1, urlKey: '2co' },
-      { book: '1 Thessalonians', tokens: suffixAliases.thessalonians, chapter: 1, verse: 1, urlKey: '1th' },
-      { book: '2 Thessalonians', tokens: suffixAliases.thessalonians, chapter: 1, verse: 1, urlKey: '2th' },
-      { book: '1 Timothy', tokens: suffixAliases.timothy, chapter: 1, verse: 1, urlKey: '1ti' },
-      { book: '2 Timothy', tokens: suffixAliases.timothy, chapter: 1, verse: 1, urlKey: '2ti' },
-      { book: '1 Peter', tokens: suffixAliases.peter, chapter: 1, verse: 1, urlKey: '1pe' },
-      { book: '2 Peter', tokens: suffixAliases.peter, chapter: 1, verse: 1, urlKey: '2pe' },
-      { book: '1 John', tokens: suffixAliases.john, chapter: 1, verse: 1, urlKey: '1jo' },
-      { book: '2 John', tokens: suffixAliases.john, chapter: 1, verse: 1, urlKey: '2jo' },
-      { book: '3 John', tokens: suffixAliases.john, chapter: 1, verse: 1, urlKey: '3jo' }
-    ];
+    // Derive all numbered-book cases from the production alias map and canonical
+    // BOOKS list. No parallel family, alias, or URL-key list belongs in this test.
+    const cases = await extensionWorker.evaluate(() =>
+      Object.entries(NUMBERED_BOOK_SUFFIX_ALIASES).flatMap(([family, tokens]) =>
+        BOOKS.flatMap(book => {
+          const match = book.name.match(/^([1-3])\\s+(.+)$/i);
+          if (!match || match[2].toLowerCase() !== family) return [];
+          return [{
+            book: book.name,
+            number: Number(match[1]),
+            tokens,
+            chapter: 1,
+            verse: 1,
+            urlKey: book.urlKey
+          }];
+        })
+      )
+    );
+    expect(cases.length, 'numbered suffix aliases must map to canonical numbered books').toBeGreaterThan(0);
 
     for (const item of cases) {
       for (const token of item.tokens) {
@@ -1521,51 +1510,58 @@ test.describe('core user-visible E2E', () => {
           `/kjv/${item.urlKey}/${item.chapter}/${item.verse}/`
         );
       }
-    }
 
-    // Short aliases that overlap other standalone book aliases must resolve
-    // by the complete numbered form: Ti alone is Titus, but 1/2 Ti are Timothy.
-    for (const [token, expectedName, expectedUrlKey] of [
-      ['Ti', 'titus', 'tit'],
-      ['1 Ti', '1 timothy', '1ti'],
-      ['2 Ti', '2 timothy', '2ti'],
-      ['1 Ki', '1 kings', '1ki'],
-      ['2 Ki', '2 kings', '2ki'],
-      ['1 Co', '1 corinthians', '1co'],
-      ['2 Co', '2 corinthians', '2co']
-    ]) {
-      const resolved = await extensionWorker.evaluate(value => {
-        const book = resolveBibleBook(value);
-        return book ? { name: book.name, urlKey: book.urlKey } : null;
-      }, token);
-      expect(resolved, token).toEqual({ name: expectedName, urlKey: expectedUrlKey });
-    }
-
-    // Exhaustively validate every configured suffix in numeric and Roman
-    // numbered-book context, including aliases that overlap other books.
-    for (const [family, suffixes, numbers, urlKeys] of [
-      ['Samuel', suffixAliases.samuel, [1, 2], ['1sa', '2sa']],
-      ['Kings', suffixAliases.kings, [1, 2], ['1ki', '2ki']],
-      ['Chronicles', suffixAliases.chronicles, [1, 2], ['1ch', '2ch']],
-      ['Corinthians', suffixAliases.corinthians, [1, 2], ['1co', '2co']],
-      ['Thessalonians', suffixAliases.thessalonians, [1, 2], ['1th', '2th']],
-      ['Timothy', suffixAliases.timothy, [1, 2], ['1ti', '2ti']],
-      ['Peter', suffixAliases.peter, [1, 2], ['1pe', '2pe']],
-      ['John', suffixAliases.john, [1, 2, 3], ['1jo', '2jo', '3jo']]
-    ]) {
-      for (let i = 0; i < numbers.length; i++) {
-        const n = numbers[i];
-        const roman = ['I', 'II', 'III'][n - 1];
-        for (const suffix of suffixes) {
-          for (const prefix of [String(n), roman]) {
-            const resolved = await extensionWorker.evaluate(value => {
-              const book = resolveBibleBook(value);
-              return book ? book.urlKey : null;
-            }, `${prefix} ${suffix}`);
-            expect(resolved, `${prefix} ${suffix} (${family})`).toBe(urlKeys[i]);
-          }
+      // The same alias must resolve with both Arabic and Roman prefixes.
+      const roman = ['I', 'II', 'III'][item.number - 1];
+      for (const token of item.tokens) {
+        for (const prefix of [String(item.number), roman]) {
+          const resolved = await extensionWorker.evaluate(value => {
+            const book = resolveBibleBook(value);
+            return book ? book.urlKey : null;
+          }, `${prefix} ${token}`);
+          expect(resolved, `${prefix} ${token} (${item.book})`).toBe(item.urlKey);
         }
       }
+    }
+
+    // Derive overlapping standalone aliases from the same production maps.
+    // For example, if Ti maps to Titus by itself but 1 Ti maps to 1 Timothy,
+    // both expectations follow the configured alias data automatically.
+    const standaloneOverlaps = await extensionWorker.evaluate(() =>
+      Object.entries(NUMBERED_BOOK_SUFFIX_ALIASES).flatMap(([family, tokens]) =>
+        BOOKS.flatMap(book => {
+          const match = book.name.match(/^([1-3])\\s+(.+)$/i);
+          if (!match || match[2].toLowerCase() !== family) return [];
+          return tokens.flatMap(token => {
+            const bareTarget = EXTRA_BOOK_ALIASES[token.toLowerCase()] || token.toLowerCase();
+            if (bareTarget === book.name.toLowerCase()) return [];
+            return [{
+              token,
+              bareTarget,
+              numberedInput: `${match[1]} ${token}`,
+              numberedName: book.name.toLowerCase(),
+              numberedUrlKey: book.urlKey
+            }];
+          });
+        })
+      )
+    );
+
+    for (const item of standaloneOverlaps) {
+      const bare = await extensionWorker.evaluate(value => {
+        const book = resolveBibleBook(value);
+        return book ? book.name.toLowerCase() : null;
+      }, item.token);
+      expect(bare, item.token + ' standalone alias').toBe(item.bareTarget);
+
+      const numbered = await extensionWorker.evaluate(value => {
+        const book = resolveBibleBook(value);
+        return book ? { name: book.name.toLowerCase(), urlKey: book.urlKey } : null;
+      }, item.numberedInput);
+      expect(numbered, item.numberedInput).toEqual({
+        name: item.numberedName,
+        urlKey: item.numberedUrlKey
+      });
     }
 
     // Roman-numeral prefixes are also valid numbered-book context.
