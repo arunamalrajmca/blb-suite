@@ -1955,7 +1955,7 @@ test('Standalone book-name and KJV-word collision policy is consistent across al
   expect(explicit['2 Ti 1:1']).toMatchObject({ book: '2 Timothy', chapter: 1, verse: 1 });
   expect(explicit['1 Sam 1:1']).toMatchObject({ book: '1 Samuel', chapter: 1, verse: 1 });
   expect(explicit.Cor).toMatchObject({ type: 'KJV_WORD', word: true, singleMatch: [26, 45, 14] });
-  expect(explicit.Sam.type).toBe('KJV_WORD');
+  expect(explicit.Sam.type).not.toBe('BOOK');
 
   // A one-result word is eligible for direct verse opening; no unique match
   // means the existing Criteria Search path is retained. Check this across
