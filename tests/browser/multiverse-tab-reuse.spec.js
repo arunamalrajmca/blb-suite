@@ -171,6 +171,7 @@ test('tracked MultiVerse reservations survive an intermediate loading URL', asyn
 });
 
 test('MultiVerse opens every batch for requests exceeding 20 tabs', async ({ context, extensionWorker }) => {
+  test.setTimeout(120000);
   const submittedPayloads = [];
   await context.route('https://www.blueletterbible.org/**', route => {
     if (route.request().method() === 'POST') {
@@ -178,9 +179,9 @@ test('MultiVerse opens every batch for requests exceeding 20 tabs', async ({ con
       submittedPayloads.push(body.get('mvText') || '');
     }
     return route.fulfill({
-    status: 200,
-    contentType: 'text/html',
-    body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><head><title>MultiVerse test fixture</title></head><body>MultiVerse fixture</body></html>'
     });
   });
 
@@ -204,49 +205,99 @@ test('MultiVerse opens every batch for requests exceeding 20 tabs', async ({ con
       }
       if (refs.length >= 4201) break;
     }
+    const expectedVerseKeys = refs.map(ref =>
+      String(ref.book).trim().toLowerCase() + '|' + ref.chapter + '|' + ref.from
+    );
     const opened = await openBlbMultiVerseRefs(refs, true);
-    return { requestedVerseCount: refs.length, opened };
+    return { requestedVerseCount: refs.length, expectedVerseKeys, opened };
   });
 
-  expect(result.requestedVerseCount).toBe(4201);
-  expect(result.opened?.ok, JSON.stringify(result.opened)).toBe(true);
-  expect(result.opened.count).toBe(4201);
-  expect(result.opened.batchCount).toBe(22);
-  expect(result.opened.tabIds).toHaveLength(22);
-  expect(new Set(result.opened.tabIds).size).toBe(22);
-  expect(result.opened.truncated).toBe(false);
+  const tabIds = result.opened?.tabIds || [];
+  try {
+    expect(result.requestedVerseCount).toBe(4201);
+    expect(result.expectedVerseKeys).toHaveLength(4201);
+    expect(new Set(result.expectedVerseKeys).size).toBe(4201);
+    expect(result.opened?.ok, JSON.stringify(result.opened)).toBe(true);
+    expect(result.opened.count).toBe(4201);
+    expect(result.opened.batchCount).toBe(22);
+    expect(tabIds).toHaveLength(22);
+    expect(new Set(tabIds).size).toBe(22);
+    expect(result.opened.truncated).toBe(false);
 
-  // Confirm all returned tabs still exist after the final batch has been
-  // created, are uniquely tracked, and are progressing through the POST
-  // handoff or have reached the mocked BLB destination.
-  const liveState = await extensionWorker.evaluate(async ids => {
-    const tabs = await Promise.all(ids.map(id => chrome.tabs.get(id).catch(() => null)));
-    const data = await chrome.storage.local.get({ blbSuiteMultiVerseTabSets: {} });
-    const tracked = data.blbSuiteMultiVerseTabSets || {};
-    return tabs.map(tab => tab && ({
-      id: tab.id,
-      url: tab.url || '',
-      pendingUrl: tab.pendingUrl || '',
-      key: tracked[String(tab.id)]?.key || null
-    }));
-  }, result.opened.tabIds);
-  expect(liveState.filter(Boolean), JSON.stringify(liveState, null, 2)).toHaveLength(22);
-  expect(new Set(liveState.map(tab => tab.id)).size).toBe(22);
-  expect(liveState.every(tab => tab.key), JSON.stringify(liveState, null, 2)).toBe(true);
-  expect(new Set(liveState.map(tab => tab.key)).size).toBe(22);
-  const expectedDestination = value =>
-    /^(?:chrome|moz)-extension:\/\//i.test(value) ||
-    /blueletterbible\.org\/(?:tools\/MultiVerse\.cfm|search\/search\.cfm)/i.test(value);
-  expect(liveState.every(tab =>
-    expectedDestination(tab.url) || expectedDestination(tab.pendingUrl)
-  ), JSON.stringify(liveState, null, 2)).toBe(true);
+    // Confirm every returned tab still exists and is uniquely tracked.
+    // Inspect both URL fields independently because navigation may expose
+    // the handoff URL in one field and the destination in the other.
+    const liveState = await extensionWorker.evaluate(async ids => {
+      const tabs = await Promise.all(ids.map(id => chrome.tabs.get(id).catch(() => null)));
+      const data = await chrome.storage.local.get({ blbSuiteMultiVerseTabSets: {} });
+      const tracked = data.blbSuiteMultiVerseTabSets || {};
+      return tabs.map(tab => tab && ({
+        id: tab.id,
+        url: tab.url || '',
+        pendingUrl: tab.pendingUrl || '',
+        key: tracked[String(tab.id)]?.key || null
+      }));
+    }, tabIds);
+    expect(liveState.filter(Boolean), JSON.stringify(liveState, null, 2)).toHaveLength(22);
+    expect(new Set(liveState.map(tab => tab.id)).size).toBe(22);
+    expect(liveState.every(tab => tab.key), JSON.stringify(liveState, null, 2)).toBe(true);
+    expect(new Set(liveState.map(tab => tab.key)).size).toBe(22);
 
-  // 4,201 verses must be submitted as 21 full batches plus one final verse.
-  await expect.poll(() => submittedPayloads.length, { timeout: 50000 }).toBe(22);
-  expect(submittedPayloads.map(countSubmittedVerses).sort((a, b) => b - a))
-    .toEqual([...Array(21).fill(200), 1]);
+    const isExpectedDestination = value => {
+      try {
+        const url = new URL(String(value || ''));
+        if (['chrome-extension:', 'moz-extension:'].includes(url.protocol)) {
+          return url.pathname === '/multiverse-post.html';
+        }
+        return url.protocol === 'https:'
+          && url.hostname === 'www.blueletterbible.org'
+          && ['/tools/MultiVerse.cfm', '/search/search.cfm'].includes(url.pathname);
+      } catch (_) {
+        return false;
+      }
+    };
+    expect(liveState.every(tab =>
+      isExpectedDestination(tab.url) || isExpectedDestination(tab.pendingUrl)
+    ), JSON.stringify(liveState, null, 2)).toBe(true);
+
+    // 4,201 verses must be submitted as 21 full batches plus one final verse.
+    await expect.poll(() => submittedPayloads.length, { timeout: 50000 }).toBe(22);
+    expect(submittedPayloads.map(countSubmittedVerses).sort((a, b) => b - a))
+      .toEqual([...Array(21).fill(200), 1]);
+
+    // Decode the actual BLB form payloads into individual verse identities.
+    // This catches missing/duplicated/wrong references even when batch sizes
+    // happen to remain 21 x 200 plus 1.
+    const submittedVerseKeys = submittedPayloads.flatMap(payload =>
+      String(payload).split(';').map(part => {
+        const match = part.trim().match(/^(.+?)\s+(\d+):(\d+)(?:\s*-\s*(\d+))?$/);
+        expect(match, 'Unrecognized MultiVerse reference: ' + part).not.toBeNull();
+        const [, rawBook, rawChapter, rawFrom, rawTo] = match;
+        const book = rawBook.trim().toLowerCase();
+        const chapter = Number(rawChapter);
+        const from = Number(rawFrom);
+        const to = rawTo == null ? from : Number(rawTo);
+        return Array.from({ length: to - from + 1 }, (_, offset) =>
+          book + '|' + chapter + '|' + (from + offset)
+        );
+      }).flat()
+    );
+    expect(submittedVerseKeys, 'every requested verse must be submitted exactly once')
+      .toHaveLength(4201);
+    expect(new Set(submittedVerseKeys).size, 'submitted payloads must not duplicate verses')
+      .toBe(4201);
+    expect([...submittedVerseKeys].sort())
+      .toEqual([...result.expectedVerseKeys].sort());
+  } finally {
+    // These tabs belong to this test invocation. Close only the exact IDs
+    // returned by the opener, including when an assertion above fails.
+    if (tabIds.length) {
+      await extensionWorker.evaluate(async ids => {
+        await Promise.all(ids.map(id => chrome.tabs.remove(id).catch(() => {})));
+      }, tabIds);
+    }
+  }
 });
-
 test('case-sensitive gods search opens and reuses both batches', async ({ context, extensionWorker }) => {
   const submittedPayloads = [];
   await context.route('https://www.blueletterbible.org/**', route => {
