@@ -111,7 +111,11 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     paymentQuery: BLBShared.isSensitiveSiteUrl('https://example.com/checkout?flow=payment'),
     paymentCaseInsensitive: BLBShared.isSensitiveSiteUrl('https://example.com/Payment/Confirm'),
     unrelatedPage: BLBShared.isSensitiveSiteUrl('https://example.com/account/profile'),
-    paymentDomain: BLBShared.isSensitiveSiteUrl('https://payments.example.com/account')
+    paymentDomain: BLBShared.isSensitiveSiteUrl('https://payments.example.com/account'),
+    hospitalPath: BLBShared.isSensitiveSiteUrl('https://example.com/patient/hospital-record'),
+    healthcareQuery: BLBShared.isSensitiveSiteUrl('https://example.com/search?next=healthcare'),
+    medicineFragment: BLBShared.isSensitiveSiteUrl('https://example.com/account#medicine-list'),
+    medicineCaseInsensitive: BLBShared.isSensitiveSiteUrl('https://example.com/MEDICINE/refill')
   }));
   expect(result).toMatchObject({
     chase: true,
@@ -136,7 +140,11 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     paymentQuery: true,
     paymentCaseInsensitive: true,
     unrelatedPage: false,
-    paymentDomain: true
+    paymentDomain: true,
+    hospitalPath: true,
+    healthcareQuery: true,
+    medicineFragment: true,
+    medicineCaseInsensitive: true
   });
 });
 
