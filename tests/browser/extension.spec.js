@@ -1497,6 +1497,26 @@ test.describe('core user-visible E2E', () => {
         `/kjv/${item.urlKey}/${item.chapter}/${item.verse}/`
       );
     }
+
+    // The suffix is not a standalone book alias. An invalid numbered prefix
+    // must not let the nearby chapter/verse text resolve to a different book.
+    for (const html of [
+      '<p id="ref"><span class="book-prefix">4</span> <span class="book-suffix">Peter</span> 2:9</p>',
+      '<p id="ref"><span class="book-suffix">Peter</span> 2:9</p>'
+    ]) {
+      await setupDoubleClickReferencePage(page, extensionStorage, html);
+      await page.locator('#ref .book-suffix').dblclick();
+      await page.waitForTimeout(1200);
+      const openedPassage = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+        tabs.some(tab => {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            return url.hostname.endsWith('blueletterbible.org') && /^\\/kjv\\//.test(url.pathname);
+          } catch (_) { return false; }
+        })
+      ));
+      expect(openedPassage, 'an invalid or missing numbered prefix must not open a BLB passage').toBe(false);
+    }
   });
 
   test('Double-click generic canonical references — all 66 books × book/chapter/verse tokens', async ({ page, context, extensionStorage, extensionWorker }) => {
