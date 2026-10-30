@@ -122,7 +122,19 @@ if (extensionVersion) {
   extensionVersion.textContent = `v${manifest.version}`;
 }
 
+function showSensitivePageNotice() {
+  document.getElementById('sensitiveNoticeTitle').textContent = 'Features paused on this page';
+  document.getElementById('sensitiveNoticeMessage').textContent =
+    'For your privacy, KJV Scripture Tools is disabled on pages that may contain sensitive information.';
+  document.body.classList.add('sensitive-restricted');
+}
+
 function render(state) {
+  if (state.isSensitiveSite) {
+    showSensitivePageNotice();
+    return;
+  }
+  document.body.classList.remove('sensitive-restricted');
   const pageGroupLabel = document.getElementById('pageGroupLabel');
   if (pageGroupLabel) {
     const caption = state.pageCaption || 'This Page';
@@ -1365,11 +1377,12 @@ document.addEventListener('click', event => {
 });
 
 (async () => {
-  // A failed tabs/storage read must not leave the toolbar popup permanently
-  // hidden. Keep normal rendering unchanged; on initialization failure, expose
-  // the existing UI so the user can recover instead of seeing a blank popup.
+  // Sensitive pages get a minimal explanation instead of any extension controls.
+  // Keep the normal popup available if initialization fails on an ordinary page.
+  let isSensitivePopup = false;
   try {
     render(await getState());
+    isSensitivePopup = document.body.classList.contains('sensitive-restricted');
   } catch (error) {
     console.error('KJV Scripture Tools popup initialization failed:', error);
     // If live tab/permission inspection fails, keep the popup usable without
@@ -1380,14 +1393,19 @@ document.addEventListener('click', event => {
         chrome.tabs.query({active:true, currentWindow:true}).catch(() => [])
       ]);
       const url = String(tabs[0]?.url || '');
-      const siteKey = getSiteKey(url, tabs[0]?.title || '');
-      const pageSites = saved.pageSelectionButtonSites && typeof saved.pageSelectionButtonSites === 'object' ? saved.pageSelectionButtonSites : {};
-      const doubleSites = saved.doubleClickBlbSites && typeof saved.doubleClickBlbSites === 'object' ? saved.doubleClickBlbSites : {};
-      document.getElementById('master').checked = saved.masterEnabled !== false;
-      document.getElementById('redirectEnabled').checked = saved.redirectEnabled === true;
-      document.getElementById('pageButton').checked = Object.prototype.hasOwnProperty.call(pageSites, siteKey) && pageSites[siteKey] === true;
-      document.getElementById('doubleClick').checked = Object.prototype.hasOwnProperty.call(doubleSites, siteKey) && doubleSites[siteKey] === true;
-      for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
+      isSensitivePopup = isSensitiveSiteUrl(url);
+      if (isSensitivePopup) {
+        showSensitivePageNotice();
+      } else {
+        const siteKey = getSiteKey(url, tabs[0]?.title || '');
+        const pageSites = saved.pageSelectionButtonSites && typeof saved.pageSelectionButtonSites === 'object' ? saved.pageSelectionButtonSites : {};
+        const doubleSites = saved.doubleClickBlbSites && typeof saved.doubleClickBlbSites === 'object' ? saved.doubleClickBlbSites : {};
+        document.getElementById('master').checked = saved.masterEnabled !== false;
+        document.getElementById('redirectEnabled').checked = saved.redirectEnabled === true;
+        document.getElementById('pageButton').checked = Object.prototype.hasOwnProperty.call(pageSites, siteKey) && pageSites[siteKey] === true;
+        document.getElementById('doubleClick').checked = Object.prototype.hasOwnProperty.call(doubleSites, siteKey) && doubleSites[siteKey] === true;
+        for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
+      }
     } catch (fallbackError) {
       console.error('KJV Scripture Tools popup saved-setting fallback failed:', fallbackError);
       for (const id of ['master', 'pageButton', 'doubleClick', 'redirectEnabled']) document.getElementById(id).disabled = true;
@@ -1395,6 +1413,7 @@ document.addEventListener('click', event => {
   } finally {
     document.body.classList.remove('popup-loading');
   }
+  if (isSensitivePopup) return;
   await loadSelectedTopic();
   await refreshStudyState();
   await refreshStudyAutoStop();
