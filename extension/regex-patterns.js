@@ -19,7 +19,7 @@ globalThis.BLBShared = Object.freeze({
   // Keep this list centralized so URL classification can be extended without
   // adding another inline regular expression.
   sensitiveSiteUrlKeywords: Object.freeze([
-    'payments', 'hospital', 'healthcare', 'medical', 'clinic', 'pharmacy', 'prescription',
+    'payments', 'hospital', 'healthcare', 'medical', 'mychart', 'clinic', 'pharmacy', 'prescription',
     'diagnosis', 'treatment', 'medical-record', 'dental', 'surgery', 'therapy',
     'laboratory', 'lab', 'insurance', 'insurer', 'insurance-claim', 'policies',
     'claim', 'claims', 'premium', 'beneficiary', 'coverage', 'reimbursement',
