@@ -28,7 +28,30 @@
     
     function getSelectedPageText() {
       try {
-        return normalizeSelectionText(window.getSelection?.().toString() || '');
+        const selection = window.getSelection?.();
+        if (!selection || !selection.rangeCount || selection.isCollapsed) return '';
+        const range = selection.getRangeAt(0).cloneRange();
+        // Rich-text feeds such as Facebook split a post into many block-level
+        // nodes. Reconstruct only the user's selected range and preserve those
+        // boundaries so adjacent references do not run together.
+        const blockTags = new Set(['ADDRESS','ARTICLE','ASIDE','BLOCKQUOTE','DIV','DL','DT','DD','FIELDSET','FIGCAPTION','FIGURE','FOOTER','FORM','H1','H2','H3','H4','H5','H6','HEADER','LI','MAIN','NAV','OL','P','PRE','SECTION','TABLE','TR','UL']);
+        const pieces = [];
+        const walk = node => {
+          if (node.nodeType === Node.TEXT_NODE) { pieces.push(node.nodeValue || ''); return; }
+          if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return;
+          if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') { pieces.push('\\n'); return; }
+          const isBlock = node.nodeType === Node.ELEMENT_NODE && blockTags.has(node.tagName);
+          if (isBlock && pieces.length && !String(pieces[pieces.length - 1]).endsWith('\\n')) pieces.push('\\n');
+          for (const child of node.childNodes) walk(child);
+          if (isBlock && pieces.length && !String(pieces[pieces.length - 1]).endsWith('\\n')) pieces.push('\\n');
+        };
+        walk(range.cloneContents());
+        const reconstructed = pieces.join('')
+          .replace(/\\u00a0/g, ' ')
+          .replace(/[ \\t]*\\n[ \\t]*/g, '\\n')
+          .replace(/\\n{3,}/g, '\\n\\n')
+          .trim();
+        return normalizeSelectionText(reconstructed || selection.toString());
       } catch (_) {
         return '';
       }
@@ -513,25 +536,7 @@
       if (message?.type === 'blbSuiteGetActiveSelectionText') {
         try {
           const selection = window.getSelection?.();
-          if (!selection || !selection.rangeCount) {
-            sendResponse({ok:true, text:''});
-            return;
-          }
-          const range = selection.getRangeAt(0).cloneRange();
-          const blockTags = new Set(['ADDRESS','ARTICLE','ASIDE','BLOCKQUOTE','DIV','DL','DT','DD','FIELDSET','FIGCAPTION','FIGURE','FOOTER','FORM','H1','H2','H3','H4','H5','H6','HEADER','LI','MAIN','NAV','OL','P','PRE','SECTION','TABLE','TR','UL']);
-          const pieces = [];
-          const walk = node => {
-            if (node.nodeType === Node.TEXT_NODE) { pieces.push(node.nodeValue || ''); return; }
-            if (node.nodeType !== Node.ELEMENT_NODE && node.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) return;
-            if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') { pieces.push('\n'); return; }
-            const isBlock = node.nodeType === Node.ELEMENT_NODE && blockTags.has(node.tagName);
-            if (isBlock && pieces.length && !String(pieces[pieces.length - 1]).endsWith('\n')) pieces.push('\n');
-            for (const child of node.childNodes) walk(child);
-            if (isBlock && pieces.length && !String(pieces[pieces.length - 1]).endsWith('\n')) pieces.push('\n');
-          };
-          walk(range.cloneContents());
-          const reconstructed = pieces.join('').replace(/\u00a0/g, ' ').replace(/[ \\t]*\n[ \\t]*/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-          sendResponse({ok:true, text:reconstructed || selection.toString()});
+          sendResponse({ok:true, text:getSelectedPageText() || (selection ? normalizeSelectionText(selection.toString()) : '')});
         } catch (_) {
           sendResponse({ok:true, text:window.getSelection ? window.getSelection().toString() : ''});
         }
