@@ -1664,7 +1664,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click numbered-book suffixes that are KJV words retain Criteria Search without a prefix', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click numbered-book suffixes that are KJV words retain Criteria Search without a prefix @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(120000);
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
