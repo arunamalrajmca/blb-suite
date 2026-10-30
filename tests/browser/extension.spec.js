@@ -1483,7 +1483,7 @@ test.describe('core user-visible E2E', () => {
     const cases = await extensionWorker.evaluate(() =>
       Object.entries(NUMBERED_BOOK_SUFFIX_ALIASES).flatMap(([family, tokens]) =>
         BOOKS.flatMap(book => {
-          const match = book.name.match(/^([1-3])\\s+(.+)$/i);
+          const match = book.name.match(/^([1-3])\s+(.+)$/i);
           if (!match || match[2].toLowerCase() !== family) return [];
           return [{
             book: book.name,
@@ -1530,7 +1530,7 @@ test.describe('core user-visible E2E', () => {
     const standaloneOverlaps = await extensionWorker.evaluate(() =>
       Object.entries(NUMBERED_BOOK_SUFFIX_ALIASES).flatMap(([family, tokens]) =>
         BOOKS.flatMap(book => {
-          const match = book.name.match(/^([1-3])\\s+(.+)$/i);
+          const match = book.name.match(/^([1-3])\s+(.+)$/i);
           if (!match || match[2].toLowerCase() !== family) return [];
           return tokens.flatMap(token => {
             const bareBook = resolveBibleBook(token);
