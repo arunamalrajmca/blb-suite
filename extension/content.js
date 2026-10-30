@@ -1785,7 +1785,7 @@ function handleDoubleClickBlb(event) {
         // when they are not KJV words (for example, "Sam" or "Jn"). Keep this
         // candidate set aligned with the suffix alternatives in the context
         // matcher below; KJV-word overlaps still retain ordinary word search.
-        const isNumberedBookSuffixCandidate=/^(?:Sam(?:uel)?|Sa|Kings|Kgs|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Thes|Timothy|Tim|Ti|Peter|Pet|Pt|John|Jn|Jo|Jhn)$/i.test(selection);
+        const isNumberedBookSuffixCandidate=/^(?:Sam(?:uel)?|Sa|Kings|Kgs|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Thes|Th|Timothy|Tim|Ti|Peter|Pet|Pt|John|Jn|Jo|Jhn)$/i.test(selection);
         const normalizedSelectionToken = normalizeDoubleClickToken(selection).replace(/’/g, "'");
         const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
           && KJV_CORPUS_WORD_INDEX.has(normalizedSelectionToken);
@@ -1848,7 +1848,7 @@ function handleDoubleClickBlb(event) {
               ? (contextualTarget.closest('p,li,td,th,blockquote,article,section,div')||contextualTarget.parentElement||contextualTarget)
               : (event.target?.parentElement||event.target);
             const contextText=normalizeSelectionText(contextNode?.textContent||'');
-            const match=contextText.match(/(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\s+(Samuel|Sam|Sa|Kings|Kgs|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Thes|Timothy|Tim|Ti|Peter|Pet|Pt|John|Jn|Jo|Jhn)\b/i);
+            const match=contextText.match(/(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\s+(Samuel|Sam|Sa|Kings|Kgs|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Thes|Th|Timothy|Tim|Ti|Peter|Pet|Pt|John|Jn|Jo|Jhn)\b/i);
             const prefixNumber=match
               ? (/^[1-3]$/.test(match[1]) ? match[1] : ({I:'1',II:'2',III:'3'}[match[1].toUpperCase()]||''))
               : '';
