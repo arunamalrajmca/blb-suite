@@ -1735,7 +1735,7 @@ function handleDoubleClickBlb(event) {
         // coordinates identify the current gesture more reliably than that
         // stale Selection (notably when testing or reading adjacent book numbers).
         const physicalNumericToken = normalizeSelectionText(caretTarget?.textContent || '').normalize('NFKC');
-        if (/^\\d+$/.test(physicalNumericToken)) selection = physicalNumericToken;
+        if (/^\d+$/.test(physicalNumericToken)) selection = physicalNumericToken;
 
         if (!selection) {
           if (Date.now()-started<1500) requestAnimationFrame(dispatch);
