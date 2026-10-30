@@ -476,7 +476,8 @@ globalThis.BLBMultiVerseCopyModule?.initialize({
 globalThis.BLBAutoHyperlinkerModule?.initialize({
   BLBShared,
   isSuiteEnabledNow: () => suiteEnabled,
-  isSuiteEnabled
+  isSuiteEnabled,
+  suiteSettingsReadyPromise
 });
 
 // BLB parsing-popup navigation remains an independent feature module.
