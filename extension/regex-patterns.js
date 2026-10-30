@@ -15,6 +15,19 @@ globalThis.BLBShared = Object.freeze({
     blbHome: 'https://www.blueletterbible.org/',
     blbSearch: 'https://www.blueletterbible.org/search/search.cfm'
   }),
+  // URL keywords intentionally favor broad suppression on potentially sensitive pages.
+  // Keep this list centralized so URL classification can be extended without
+  // adding another inline regular expression.
+  sensitiveSiteUrlKeywords: Object.freeze([
+    'payments', 'hospital', 'healthcare', 'medical', 'mychart', 'clinic', 'pharmacy', 'prescription',
+    'diagnosis', 'treatment', 'medical-record', 'dental', 'surgery', 'therapy',
+    'laboratory', 'lab', 'insurance', 'insurer', 'insurance-claim', 'policies',
+    'claim', 'claims', 'premium', 'beneficiary', 'coverage', 'reimbursement',
+    'banking', 'banker', 'credit', 'credit-card', 'credit-union', 'mortgage',
+    'financial', 'finance', 'tax', 'investment', 'wallet', 'billing', 'invoice',
+    'transaction', 'transfer', 'deposit', 'withdrawal', 'confidential',
+    'personal-data', 'attorney', 'legal', 'lawsuit'
+  ]),
   // Curated domain suffixes cover providers whose hostnames do not reveal
   // their category (for example chase.com). This reviewed seed list is not a
   // complete global directory; expand it only with targeted tests. It is static:
@@ -43,7 +56,8 @@ globalThis.BLBShared = Object.freeze({
   },
   isSensitiveSiteUrl(value) {
     const raw = String(value || '').trim();
-    if (/(?:payment|hospital|healthcare|medicine)/i.test(raw)) return true;
+    const normalizedUrl = raw.toLowerCase();
+    if (this.sensitiveSiteUrlKeywords.some(keyword => normalizedUrl.includes(keyword))) return true;
     try {
       const url = new URL(raw);
       return (url.protocol === 'http:' || url.protocol === 'https:') && this.isSensitiveSiteHostname(url.hostname);
