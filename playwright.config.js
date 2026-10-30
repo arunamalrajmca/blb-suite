@@ -7,9 +7,9 @@ module.exports = defineConfig({
   expect: { timeout: 10000 },
   fullyParallel: false,
   workers: 1,
-  // Stop the entire Playwright run on the first failed test. Do not retry
-  // failures first: a failure should immediately gate the remaining suite.
-  maxFailures: 1,
+  // Continue through the complete selected suite after failures so every
+  // existing test in each changed browser spec still reports its result.
+  maxFailures: 0,
   retries: 0,
   reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }], ['json', { outputFile: 'test-results/results.json' }]],
   use: {
