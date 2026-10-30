@@ -1868,6 +1868,103 @@ test.describe('core user-visible E2E', () => {
 });
 
 
+test('Standalone book-name and KJV-word collision policy is consistent across all books and aliases', async ({ extensionWorker }) => {
+  const audit = await extensionWorker.evaluate(() => {
+    const candidates = new Map();
+    const add = (token, source, expectedBook = null) => {
+      const key = String(token || '').trim().toLowerCase();
+      if (!key) return;
+      const current = candidates.get(key) || { token: String(token).trim(), sources: [], expectedBooks: [] };
+      current.sources.push(source);
+      if (expectedBook) current.expectedBooks.push(expectedBook);
+      candidates.set(key, current);
+    };
+
+    for (const book of BOOKS) add(book.name, 'canonical', book.name);
+    for (const [alias, target] of Object.entries(EXTRA_BOOK_ALIASES || {})) add(alias, 'configured-alias', target);
+    for (const [family, aliases] of Object.entries(NUMBERED_BOOK_SUFFIX_ALIASES || {})) {
+      for (const alias of aliases || []) add(alias, 'numbered-suffix:' + family);
+    }
+
+    const rows = [...candidates.values()].map(candidate => {
+      const book = resolveBibleBook(candidate.token);
+      const decision = classifySelectionForBlb(candidate.token);
+      const isKjvWord = isKjvVocabularySelection(candidate.token);
+      const singleMatch = isKjvWord ? findSingleKjvPhraseMatch(candidate.token) : null;
+      const expectedBook = candidate.expectedBooks[0] || null;
+      return {
+        ...candidate,
+        resolvedBook: book?.name || null,
+        expectedBook,
+        decisionType: decision.type,
+        decisionBook: decision.bookOnly?.book?.name || decision.book?.name || null,
+        isKjvWord,
+        singleMatch: singleMatch ? {
+          bookNumber: Number(singleMatch[0]),
+          chapter: Number(singleMatch[1]),
+          verse: Number(singleMatch[2])
+        } : null,
+        expectedPolicy: book ? 'BOOK' : (isKjvWord ? 'KJV_WORD' : 'NON_KJV_SINGLE_WORD')
+      };
+    });
+
+    const wordCollisions = rows.filter(row => row.isKjvWord);
+    return {
+      books: rows.filter(row => row.sources.includes('canonical')),
+      aliases: rows.filter(row => row.sources.includes('configured-alias')),
+      suffixes: rows.filter(row => row.sources.some(source => source.startsWith('numbered-suffix:'))),
+      wordCollisions,
+      explicit: ['John', '1 John', '1 Cor 13:4', '2 Ti 1:1', '1 Sam 1:1', 'Cor', 'Sam'].map(input => {
+        const decision = classifySelectionForBlb(input);
+        const direct = resolveDirectBibleReference(input);
+        return {
+          input,
+          type: decision.type,
+          book: decision.bookOnly?.book?.name || direct?.book || null,
+          chapter: direct?.chapter ?? null,
+          verse: direct?.from ?? null,
+          word: isKjvVocabularySelection(input),
+          singleMatch: findSingleKjvPhraseMatch(input)
+            ? findSingleKjvPhraseMatch(input).slice(0, 3).map(Number)
+            : null
+        };
+      })
+    };
+  });
+
+  expect(audit.books).toHaveLength(66);
+  expect(audit.books.filter(row =>
+    row.resolvedBook !== row.expectedBook || row.decisionType !== 'BOOK'
+  ), 'every canonical book name must win over any KJV-word overlap').toEqual([]);
+
+  expect(audit.aliases.filter(row =>
+    row.resolvedBook !== row.expectedBook || row.decisionType !== 'BOOK'
+  ), 'every configured standalone alias must resolve as its configured book').toEqual([]);
+
+  expect(audit.suffixes.filter(row => row.decisionType !== row.expectedPolicy),
+    'suffix-only aliases must remain KJV word searches unless independently configured as standalone book aliases').toEqual([]);
+
+  expect(audit.wordCollisions.length).toBeGreaterThan(0);
+  expect(audit.wordCollisions.filter(row => row.decisionType !== row.expectedPolicy),
+    'every real KJV-word collision must follow book-first precedence only when it is an actual book identity').toEqual([]);
+
+  const explicit = Object.fromEntries(audit.explicit.map(row => [row.input, row]));
+  expect(explicit.John.type).toBe('BOOK');
+  expect(explicit['1 John'].book).toBe('1 John');
+  expect(explicit['1 Cor 13:4']).toMatchObject({ book: '1 Corinthians', chapter: 13, verse: 4 });
+  expect(explicit['2 Ti 1:1']).toMatchObject({ book: '2 Timothy', chapter: 1, verse: 1 });
+  expect(explicit['1 Sam 1:1']).toMatchObject({ book: '1 Samuel', chapter: 1, verse: 1 });
+  expect(explicit.Cor).toMatchObject({ type: 'KJV_WORD', word: true, singleMatch: [26, 45, 14] });
+  expect(explicit.Sam.type).toBe('KJV_WORD');
+
+  // A one-result word is eligible for direct verse opening; no unique match
+  // means the existing Criteria Search path is retained. Check this across
+  // every actual vocabulary collision rather than a manually curated sample.
+  expect(audit.wordCollisions.every(row =>
+    row.decisionType === 'BOOK' || row.decisionType === 'KJV_WORD'
+  )).toBe(true);
+});
+
 test.describe('Alt+B toggle enforcement', () => {
   async function selectReference(page) {
     await page.evaluate(() => {
