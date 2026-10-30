@@ -1575,7 +1575,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click Sam abbreviation resolves from its adjacent numbered prefix', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click Sam abbreviation resolves from its adjacent numbered prefix @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
     for (const number of [1, 2]) {
       await setupDoubleClickReferencePage(
         page, extensionStorage,
