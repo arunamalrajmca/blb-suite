@@ -34,6 +34,7 @@ function runInjectionHelper(functionNames, { settings, tabs }) {
     URL,
     BLB_HOSTNAME: 'blueletterbible.org',
     isSensitiveSiteHostname: value => /(?:bank|banking|banker|credit.?union|financial|finance|hospital|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)/i.test(String(value || '')),
+    isSensitiveSiteUrl: value => /payment/i.test(String(value || '')) || /(?:bank|banking|banker|credit.?union|financial|finance|hospital|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)/i.test(String(value || '')),
     injected,
     isHttpPageUrl: url => /^https?:\/\//i.test(String(url || '')),
     originPatternForUrl: url => {
@@ -143,6 +144,7 @@ test('global redirect uses the minimal handlers on ordinary sites and the full b
   };
   context.globalThis = context;
   vm.runInNewContext(sharedRegexPatterns, context);
+  context.isSensitiveSiteUrl = value => context.BLBShared.isSensitiveSiteUrl(value);
   vm.runInNewContext(background.slice(start, end), context);
   // Rediscover and Sagacity use the existing full content bundle because it
   // contains the current-page MultiVerse collector. They still use dynamic,
