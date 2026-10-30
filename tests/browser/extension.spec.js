@@ -254,7 +254,9 @@ test.describe('core user-visible E2E', () => {
             context: document.querySelector('#single-word-verse-cue-matrix')
               ?.getAttribute('data-blb-verse-context-diagnostic'),
             resolution: document.querySelector('#single-word-verse-cue-matrix')
-              ?.getAttribute('data-blb-verse-context-resolution')
+              ?.getAttribute('data-blb-verse-context-resolution'),
+            response: document.querySelector('#single-word-verse-cue-matrix')
+              ?.getAttribute('data-blb-verse-context-response')
           }));
           console.log('Verse cue double-click diagnostics', selector, gestureDiagnostics);
           expect(await page.evaluate(() => window.getSelection()?.toString() || ''),
