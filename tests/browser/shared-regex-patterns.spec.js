@@ -140,6 +140,35 @@ test('shared sensitive-site classifier covers known providers without keyword fa
   });
 });
 
+
+test('payment URLs suppress selection injection and context-menu eligibility despite saved opt-ins', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    await chrome.storage.local.set({
+      masterEnabled: true,
+      redirectEnabled: false,
+      pageSelectionButtonSites: { 'example.com': true },
+      doubleClickBlbSites: { 'example.com': true }
+    });
+    const tab = { id: 987654, url: 'https://example.com/account/payment-details' };
+    return {
+      scripts: contentScriptFilesForTab(tab, {
+        redirectEnabled: false,
+        pageSelectionButtonSites: { 'example.com': true },
+        doubleClickBlbSites: { 'example.com': true }
+      }),
+      shouldInject: await shouldInjectContentScriptForTab(tab, {
+        redirectEnabled: false,
+        pageSelectionButtonSites: { 'example.com': true },
+        doubleClickBlbSites: { 'example.com': true }
+      }),
+      contextMenu: await shouldShowBlbContextMenu(tab, 'John 3:16')
+    };
+  });
+  expect(result.scripts).not.toContain('content.js');
+  expect(result.shouldInject).toBe(false);
+  expect(result.contextMenu).toBe(false);
+});
+
 test('numbered prose after a one-chapter-book verse is not parsed as another verse', async ({ extensionWorker }) => {
   const parsed = await extensionWorker.evaluate(() => {
     const text = [
