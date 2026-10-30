@@ -1,6 +1,6 @@
 // Floating Show on BLB page-selection control and its lifecycle.
 (function (global) {
-  function initialize({ BLBShared, BOOKS, BOOK_ALIASES, KJV_CORPUS_WORD_INDEX, canonicalStrongValue, resolveBibleReference, resolveBibleBook, resolveBibleReferenceText, normalizeSelectionText, normalizeDoubleClickToken, getContextualBibleReference, safeRuntimeSendMessage, isSensitiveSiteHostname, getSiteDefaultEnabled, refreshDoubleClickBlb, suiteSettingsReadyPromise, isSuiteEnabledNow, makeBlbMultiVerseButtonDraggable, getPageSelectionSiteKey }) {
+  function initialize({ BLBShared, BOOKS, BOOK_ALIASES, KJV_CORPUS_WORD_INDEX, canonicalStrongValue, resolveBibleReference, resolveBibleBook, resolveBibleReferenceText, normalizeSelectionText, normalizeDoubleClickToken, getContextualBibleReference, safeRuntimeSendMessage, isSensitiveSiteHostname, isSensitiveSiteUrl, getSiteDefaultEnabled, refreshDoubleClickBlb, suiteSettingsReadyPromise, isSuiteEnabledNow, makeBlbMultiVerseButtonDraggable, getPageSelectionSiteKey }) {
     // ---------- Floating page selection button ----------
     // This feature is intentionally dormant unless the user enables "Show on BLB".
     // Alt+B and right-click remain independent entry points.
@@ -269,7 +269,7 @@
     }
     
     async function updateBlbPageSelectionButtonFromSelection() {
-      if (!pageButtonMonitoring || isBlbPageButtonExcludedSite() || isSensitiveSiteHostname(location.hostname)) return;
+      if (!pageButtonMonitoring || isBlbPageButtonExcludedSite() || isSensitiveSiteUrl(location.href)) return;
       let button = document.getElementById(BLB_PAGE_BUTTON_ID);
       if (!button) {
         addBlbPageSelectionButton();
@@ -400,7 +400,7 @@
     
     const PAGE_BUTTON_HANDLERS_GUARD = '__blbSuitePageButtonHandlersV2';
     function enableBlbPageButtonMonitoring() {
-      if (pageButtonMonitoring || isBlbPageButtonExcludedSite() || isSensitiveSiteHostname(location.hostname) || !isSuiteEnabledNow()) return;
+      if (pageButtonMonitoring || isBlbPageButtonExcludedSite() || isSensitiveSiteUrl(location.href) || !isSuiteEnabledNow()) return;
       try {
         const previous = window[PAGE_BUTTON_HANDLERS_GUARD];
         if (previous && typeof previous === 'object') {
@@ -541,7 +541,7 @@
     
     async function refreshBlbPageSelectionButton() {
       try {
-        if (isBlbPageButtonExcludedSite() || isSensitiveSiteHostname(location.hostname)) {
+        if (isBlbPageButtonExcludedSite() || isSensitiveSiteUrl(location.href)) {
           disableBlbPageButtonMonitoring();
           return;
         }
@@ -570,7 +570,7 @@
       }
     }
     
-    if (!isBlbPageButtonExcludedSite() && !isSensitiveSiteHostname(location.hostname)) {
+    if (!isBlbPageButtonExcludedSite() && !isSensitiveSiteUrl(location.href)) {
       suiteSettingsReadyPromise.then(refreshBlbPageSelectionButton).catch(()=>{});
       if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', () => { refreshBlbPageSelectionButton().catch(()=>{}); }, {once:true});
