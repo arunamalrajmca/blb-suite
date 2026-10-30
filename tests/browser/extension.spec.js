@@ -1439,25 +1439,57 @@ test.describe('core user-visible E2E', () => {
     for (const book of books) {
       const target = page.locator(`#ref .standalone-number[data-book-number="${book.number}"]`);
       await target.scrollIntoViewIfNeeded();
+
+      // Record existing tab IDs so an old BLB tab cannot satisfy this
+      // iteration's assertion or be closed by its cleanup.
+      const baselineTabIds = await extensionWorker.evaluate(() =>
+        chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
+      );
+
       await target.dblclick();
 
       const expectedPath = `/kjv/${book.urlKey}/1/1/`;
-      await activateBlbTabForPath(extensionWorker, expectedPath, {
-        fragment: String(book.number),
-        selector: `#ref .standalone-number[data-book-number="${book.number}"]`,
-        selectedText: String(book.number)
-      });
-      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
-        const matches = tabs.filter(tab => {
-          try {
-            const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
-            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
-          } catch (_) { return false; }
-        });
-        for (const tab of matches) if (tab.id != null) {
-          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+      let openedTab = null;
+      await expect.poll(async () => {
+        const tabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
+          items.map(tab => ({
+            id: tab.id,
+            url: tab.url || '',
+            pendingUrl: tab.pendingUrl || ''
+          }))
+        ));
+
+        openedTab = tabs.find(tab => {
+          if (tab.id == null || baselineTabIds.includes(tab.id)) return false;
+
+          // Chrome may expose the old URL and new pendingUrl together.
+          // Check both independently so the old URL cannot mask navigation.
+          return [tab.url, tab.pendingUrl].some(value => {
+            try {
+              const url = new URL(String(value || ''));
+              const pathnameMatches = url.pathname === expectedPath
+                || url.pathname.startsWith(expectedPath.replace(/\\/$/, '') + '/');
+              return url.hostname === 'www.blueletterbible.org' && pathnameMatches;
+            } catch (_) {
+              return false;
+            }
+          });
+        }) || null;
+
+        return openedTab;
+      }, {
+        message: `Double-clicking standalone book number ${book.number} must open a new BLB tab at ${expectedPath}`,
+        timeout: 10000
+      }).toBeTruthy();
+
+      // Close only the tab opened by this gesture, preserving all existing tabs.
+      await extensionWorker.evaluate(async tabId => {
+        try {
+          await chrome.tabs.remove(tabId);
+        } catch (_) {
+          // The tab may already have closed during browser cleanup.
         }
-      }), expectedPath);
+      }, openedTab.id);
     }
   });
 
