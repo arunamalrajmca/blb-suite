@@ -1554,6 +1554,9 @@ test.describe('core user-visible E2E', () => {
 
     expect(data.length).toBeGreaterThan(0);
     for (const item of data) {
+      // "sam" is context-dependent: it can identify either Samuel book and
+      // must be tested with an adjacent 1/2 prefix, not as a bare alias.
+      if (item.alias.trim().toLowerCase() === 'sam') continue;
       const tokens = item.alias.trim().split(/\s+/);
       const tokenHtml = tokens.map((token, i) => `<span class="alias-token" data-index="${i}">${token}</span>`).join(' ');
       await setupDoubleClickReferencePage(
@@ -1567,6 +1570,17 @@ test.describe('core user-visible E2E', () => {
       for (let i = 0; i < tokens.length; i++) {
         await assertDoubleClickPath(page, context, extensionWorker, `#ref .alias-token[data-index="${i}"]`, expectedPath);
       }
+    }
+  });
+
+  test('Double-click Sam abbreviation resolves from its adjacent numbered prefix', async ({ page, context, extensionStorage, extensionWorker }) => {
+    for (const number of [1, 2]) {
+      await setupDoubleClickReferencePage(
+        page, extensionStorage,
+        `<p id="ref"><span class="book-prefix">${number}</span> <span class="book-suffix">Sam</span> <span class="chapter">1</span>:<span class="verse">1</span></p>`
+      );
+      const expectedPath = number === 1 ? '/kjv/1sa/1/1/' : '/kjv/2sa/1/1/';
+      await assertDoubleClickPath(page, context, extensionWorker, '#ref .book-suffix', expectedPath);
     }
   });
 
