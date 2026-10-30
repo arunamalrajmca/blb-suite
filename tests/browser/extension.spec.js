@@ -1541,6 +1541,33 @@ test.describe('core user-visible E2E', () => {
       expect(resolved, token).toEqual({ name: expectedName, urlKey: expectedUrlKey });
     }
 
+    // Exhaustively validate every configured suffix in numeric and Roman
+    // numbered-book context, including aliases that overlap other books.
+    for (const [family, suffixes, numbers, urlKeys] of [
+      ['Samuel', suffixAliases.samuel, [1, 2], ['1sa', '2sa']],
+      ['Kings', suffixAliases.kings, [1, 2], ['1ki', '2ki']],
+      ['Chronicles', suffixAliases.chronicles, [1, 2], ['1ch', '2ch']],
+      ['Corinthians', suffixAliases.corinthians, [1, 2], ['1co', '2co']],
+      ['Thessalonians', suffixAliases.thessalonians, [1, 2], ['1th', '2th']],
+      ['Timothy', suffixAliases.timothy, [1, 2], ['1ti', '2ti']],
+      ['Peter', suffixAliases.peter, [1, 2], ['1pe', '2pe']],
+      ['John', suffixAliases.john, [1, 2, 3], ['1jo', '2jo', '3jo']]
+    ]) {
+      for (let i = 0; i < numbers.length; i++) {
+        const n = numbers[i];
+        const roman = ['I', 'II', 'III'][n - 1];
+        for (const suffix of suffixes) {
+          for (const prefix of [String(n), roman]) {
+            const resolved = await extensionWorker.evaluate(value => {
+              const book = resolveBibleBook(value);
+              return book ? book.urlKey : null;
+            }, `${prefix} ${suffix}`);
+            expect(resolved, `${prefix} ${suffix} (${family})`).toBe(urlKeys[i]);
+          }
+        }
+      }
+    }
+
     // Roman-numeral prefixes are also valid numbered-book context.
     for (const item of [
       { prefix: 'II', token: 'John', urlKey: '2jo' },
