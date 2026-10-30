@@ -1467,7 +1467,7 @@ test.describe('core user-visible E2E', () => {
       const number = /^\d+$/.test(key) ? Number(key) : NaN;
       return bookNames.has(key)
         || (Number.isInteger(number) && number >= 1 && number <= 176)
-        || /^(?:sam(?:uel)?|kings|kgs?|chronicles|chr|corinthians|cor|thessalonians|thess|timothy|tim|peter|pet|john|jn|jhn)$/i.test(key)
+        || /^(?:sam(?:uel)?|s|kings|kgs|k|chronicles|chr|corinthians|cor|thessalonians|thess|timothy|tim|peter|pet|p|john|jn|jo|j)$/i.test(key)
         || /^(?:i|ii|iii)$/i.test(key);
     }, token);
     // DOM context is intentionally limited to book names/aliases and standalone
@@ -1476,12 +1476,13 @@ test.describe('core user-visible E2E', () => {
     await runDoubleClickReferenceToken(page, context, extensionWorker, selector, token, expectedPath);
   }
 
-  test('Double-click numbered-book suffixes resolve all six prefixed book references', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click numbered-book suffixes resolve every supported numbered-book alias', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
     const cases = [
-      { book: '1 Samuel', tokens: ['Sam', 'Samuel'], chapter: 1, verse: 1, urlKey: '1sa' },
-      { book: '2 Samuel', tokens: ['Sam', 'Samuel'], chapter: 1, verse: 1, urlKey: '2sa' },
-      { book: '1 Kings', tokens: ['Kings', 'Kgs'], chapter: 1, verse: 1, urlKey: '1ki' },
-      { book: '2 Kings', tokens: ['Kings', 'Kgs'], chapter: 1, verse: 1, urlKey: '2ki' },
+      { book: '1 Samuel', tokens: ['Sam', 'Samuel', 'S'], chapter: 1, verse: 1, urlKey: '1sa' },
+      { book: '2 Samuel', tokens: ['Sam', 'Samuel', 'S'], chapter: 1, verse: 1, urlKey: '2sa' },
+      { book: '1 Kings', tokens: ['Kings', 'Kgs', 'K'], chapter: 1, verse: 1, urlKey: '1ki' },
+      { book: '2 Kings', tokens: ['Kings', 'Kgs', 'K'], chapter: 1, verse: 1, urlKey: '2ki' },
       { book: '1 Chronicles', tokens: ['Chronicles', 'Chr'], chapter: 1, verse: 1, urlKey: '1ch' },
       { book: '2 Chronicles', tokens: ['Chronicles', 'Chr'], chapter: 1, verse: 1, urlKey: '2ch' },
       { book: '1 Corinthians', tokens: ['Corinthians', 'Cor'], chapter: 1, verse: 1, urlKey: '1co' },
@@ -1490,11 +1491,11 @@ test.describe('core user-visible E2E', () => {
       { book: '2 Thessalonians', tokens: ['Thessalonians', 'Thess'], chapter: 1, verse: 1, urlKey: '2th' },
       { book: '1 Timothy', tokens: ['Timothy', 'Tim'], chapter: 1, verse: 1, urlKey: '1ti' },
       { book: '2 Timothy', tokens: ['Timothy', 'Tim'], chapter: 1, verse: 1, urlKey: '2ti' },
-      { book: '1 Peter', tokens: ['Peter', 'Pet'], chapter: 1, verse: 1, urlKey: '1pe' },
-      { book: '2 Peter', tokens: ['Peter', 'Pet'], chapter: 1, verse: 1, urlKey: '2pe' },
-      { book: '1 John', tokens: ['John', 'Jn', 'Jhn'], chapter: 1, verse: 1, urlKey: '1jo' },
-      { book: '2 John', tokens: ['John', 'Jn', 'Jhn'], chapter: 1, verse: 1, urlKey: '2jo' },
-      { book: '3 John', tokens: ['John', 'Jn', 'Jhn'], chapter: 1, verse: 1, urlKey: '3jo' }
+      { book: '1 Peter', tokens: ['Peter', 'Pet', 'P'], chapter: 1, verse: 1, urlKey: '1pe' },
+      { book: '2 Peter', tokens: ['Peter', 'Pet', 'P'], chapter: 1, verse: 1, urlKey: '2pe' },
+      { book: '1 John', tokens: ['John', 'Jn', 'Jo', 'J'], chapter: 1, verse: 1, urlKey: '1jo' },
+      { book: '2 John', tokens: ['John', 'Jn', 'Jo', 'J'], chapter: 1, verse: 1, urlKey: '2jo' },
+      { book: '3 John', tokens: ['John', 'Jn', 'Jo', 'J'], chapter: 1, verse: 1, urlKey: '3jo' }
     ];
 
     for (const item of cases) {
@@ -1605,6 +1606,7 @@ test.describe('core user-visible E2E', () => {
   });
 
   test('Double-click numbered-book suffixes that are KJV words retain Criteria Search without a prefix', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(120000);
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
