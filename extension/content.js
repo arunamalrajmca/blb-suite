@@ -1781,10 +1781,14 @@ function handleDoubleClickBlb(event) {
         // Declare this outside the fast-rejection block because target selection
         // and the DOM-context resolver also need the same cue classification.
         const isVerseContextWord = /^(?:v|verse|verses)$/i.test(selection);
-        // Only the reported numbered-book suffixes need to bypass the
-        // single-word fast-reject so the adjacent-prefix resolver can validate
-        // the complete book name. Other suffix handling remains unchanged.
-        const isReportedNumberedBookSuffix=/^(?:Sam|Thessalonians|Peter|Timothy)$/i.test(selection);
+        // Numbered-book suffixes must reach the adjacent-prefix resolver even
+        // when they are not KJV words (for example, "Sam" or "Jn"). Keep this
+        // candidate set aligned with the suffix alternatives in the context
+        // matcher below; KJV-word overlaps still retain ordinary word search.
+        const isNumberedBookSuffixCandidate=/^(?:Sam(?:uel)?|Kings|Kgs?|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)$/i.test(selection);
+        const normalizedSelectionToken = normalizeDoubleClickToken(selection).replace(/’/g, "'");
+        const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
+          && KJV_CORPUS_WORD_INDEX.has(normalizedSelectionToken);
 
         // Reject unrelated English single words before building DOM context or
         // entering the background selection resolver. This is an exact local
@@ -1792,16 +1796,13 @@ function handleDoubleClickBlb(event) {
         // Known Bible-version codes are the exception: scan their surrounding
         // text for a reference, but never send the code itself for word lookup.
         if (/^[A-Za-z][A-Za-z'’\\-]*$/.test(selection)) {
-          const token = normalizeDoubleClickToken(selection).replace(/’/g, "'");
-          const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
-            && KJV_CORPUS_WORD_INDEX.has(token);
           const isBookName = !!resolveBibleBook(selection);
           // Roman numeral tokens can be the prefix of a numbered Bible book
           // (II Samuel, III John). Let them reach the tightly gated nearby-
           // reference check below; without a valid nearby prefix they remain
           // inert and are not sent to ordinary word lookup.
           const isRomanBookPrefixToken = /^(?:I|II|III)$/i.test(selection);
-          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isReportedNumberedBookSuffix && !isRomanBookPrefixToken && !isVerseContextWord) return true;
+          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isNumberedBookSuffixCandidate && !isRomanBookPrefixToken && !isVerseContextWord) return true;
         }
 
         // DOM context is useful only when the clicked token can identify a
@@ -1831,7 +1832,7 @@ function handleDoubleClickBlb(event) {
         const cueElement = [physicalTarget, getDoubleClickTargetElement(event)].find(candidate =>
           /^(?:v|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
         );
-        const possibleNumberedBookSuffix=/^(?:Sam(?:uel)?|Kings|Kgs?|Chronicles|Chr|Corinthians|Cor|Thessalonians|Thess|Timothy|Tim|Peter|Pet|John|Jn|Jhn)$/i.test(selection);
+        const possibleNumberedBookSuffix=isNumberedBookSuffixCandidate;
         const contextualTarget = possibleNumberedBookSuffix
           ? physicalTarget
           : (isVerseContextWord
@@ -1854,7 +1855,7 @@ function handleDoubleClickBlb(event) {
             const completeBook=!!(match && prefixNumber && resolveBibleBook(prefixNumber+' '+match[2]));
             hasValidNearbyBookPrefix=!!(completeBook
               && match[2].toLowerCase()===selection.toLowerCase()
-              && /^[1-3]$/.test(match[1]));
+              && !!prefixNumber);
             hasValidNearbyRomanBookPrefix=!!(completeBook
               && isRomanBookPrefix
               && match[1].toUpperCase()===selection.toUpperCase());
@@ -1935,7 +1936,10 @@ function handleDoubleClickBlb(event) {
           // fast-reject only to validate their adjacent prefix. Without a
           // complete valid numbered book, keep them inert rather than turning
           // the suffix into an unrelated word-search request.
-          if (isReportedNumberedBookSuffix && !hasValidNearbyBookPrefix) return true;
+          // If the suffix is also a real KJV word (e.g. John, Peter, Kings,
+          // Samuel, or Corinthians), preserve its ordinary Criteria Search
+          // behavior when no valid numbered-book prefix is present.
+          if (isNumberedBookSuffixCandidate && !hasValidNearbyBookPrefix && !isKjvWord) return true;
           // A version abbreviation alone is not a KJV word-search request.
           if (isBibleVersionCode) return true;
           if (/^[A-Za-z][A-Za-z'’-]*$/.test(selection) && !/^(?:i|ii|iii)$/i.test(selection)) {
