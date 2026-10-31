@@ -700,7 +700,7 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
   entries.sort((a, b) => b.name.length - a.name.length);
 
   for (const entry of entries) {
-    const escaped = entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionEnd) {').replace(/\s+/g, '\\s+');
+    const escaped = entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
     const patterns = [
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.(?=\\d)\\s*)(\\d{1,3})\\s*[:.]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])', 'gi'),
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])', 'gi'),
