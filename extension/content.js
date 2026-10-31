@@ -1352,15 +1352,10 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         return resolveBibleReferenceFromContextWindow(normalizedSource, start, end);
       };
 
-      if (clickedWordRange &&
-          normalizeSelectionText(clickedWordText).normalize('NFKC') === selected) {
-        const rangeAnchor = clickedWordRange.startContainer?.nodeType === Node.TEXT_NODE
-          ? clickedWordRange.startContainer.parentElement
-          : initialNode;
-        const exactRangeCitation = resolveNumericRange(clickedWordRange, rangeAnchor);
-        if (exactRangeCitation) return exactRangeCitation;
-      }
-
+      // Prefer the exact physical target element over caret-derived offsets.
+      // Chromium can return a valid-looking caret Range from a neighbouring
+      // token in rich-text layouts; that stale offset may still match the same
+      // digits elsewhere in the block and resolve the wrong citation.
       const numericTargets = [initialNode, getDoubleClickTargetElement(event)]
         .filter((candidate, index, all) =>
           candidate instanceof Element && all.indexOf(candidate) === index
@@ -1374,6 +1369,17 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           numericTarget
         );
         if (exactTargetCitation) return exactTargetCitation;
+      }
+
+      // Use the caret-derived range only when no exact target-element match
+      // identifies the clicked numeric token in its own DOM position.
+      if (clickedWordRange &&
+          normalizeSelectionText(clickedWordText).normalize('NFKC') === selected) {
+        const rangeAnchor = clickedWordRange.startContainer?.nodeType === Node.TEXT_NODE
+          ? clickedWordRange.startContainer.parentElement
+          : initialNode;
+        const exactRangeCitation = resolveNumericRange(clickedWordRange, rangeAnchor);
+        if (exactRangeCitation) return exactRangeCitation;
       }
     }
 
@@ -2667,6 +2673,7 @@ function handleDoubleClickBlb(event) {
         const openRequest = safeRuntimeSendMessage({
           type:'blbSuiteOpenDoubleClickSelectionText',
           text:selection,
+          ...(isStandaloneNumericBook ? {standaloneBookNumber:Number(selection)} : {}),
           contextualReference,
           contextualReferenceResolved:true,
           requestId,

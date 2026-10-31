@@ -2937,6 +2937,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // This explicit override is emitted only by the Double-Click resolver
         // for a numbered book name without a chapter/verse. Keep it separate
         // from Show on BLB and Alt+B selection classification.
+        const standaloneBookNumber=Number(message.standaloneBookNumber);
+        if (Number.isInteger(standaloneBookNumber) && standaloneBookNumber >= 1 && standaloneBookNumber <= 66) {
+          const standaloneBook=bookData.find(book => Number(book.bookNumber) === standaloneBookNumber);
+          if (standaloneBook) {
+            await openBlbBook(standaloneBook.bookNumber, behavior);
+            sendResponse({ok:true,bookOnly:true,standaloneNumericBook:true,actionSource:'double-click'});
+            return true;
+          }
+        }
         const criteriaSearchText=String(message.criteriaSearchText || '').trim();
         if (criteriaSearchText) {
           await openBlbDestination(
