@@ -692,8 +692,8 @@ test.describe('core user-visible E2E', () => {
         '<div dir="auto">In <span>Mt.</span> <span>16:24-27</span>, losing your life for his sake in <span id="matthew-v-cue">v.</span> <span id="matthew-verse">25</span> is tied to rewards.</div>',
         '<div dir="auto"><span id="romans-book">Romans14</span>:<span id="romans-first-verse">10</span>-<span id="romans-last-verse">12</span></div>',
         '<div dir="auto"><span id="john-book">John3</span>:<span id="john-verse">16</span></div>',
-        '<div dir="auto"><span id="one-cor-number">1</span> <span>Cor.</span> <span>13</span></div>',
-        '<div dir="auto"><span id="two-cor-number">2</span> <span>Cor.</span> <span>13</span></div>'
+        '<div dir="auto"><span id="one-dot-serial">1.</span> First point in a numbered list</div>',
+        '<div dir="auto"><span id="two-dot-serial">2.</span> Second point in a numbered list</div>'
       ].join('');
       document.body.appendChild(article);
     });
@@ -707,8 +707,8 @@ test.describe('core user-visible E2E', () => {
       ['#romans-last-verse', '12', '/kjv/rom/14/10-12/'],
       ['#john-book', 'John3', '/kjv/jhn/3/16/'],
       ['#john-verse', '16', '/kjv/jhn/3/16/'],
-      ['#one-cor-number', '1', '/kjv/1co/13/1/'],
-      ['#two-cor-number', '2', '/kjv/2co/13/1/']
+      ['#one-dot-serial', '1.', '/kjv/gen/1/1/'],
+      ['#two-dot-serial', '2.', '/kjv/exo/1/1/']
     ];
     const actions = ['Show on BLB', 'Right-Click', 'Alt+B', 'Double-Click'];
 
@@ -828,15 +828,13 @@ test.describe('core user-visible E2E', () => {
 
     for (const { selector, expectedPath } of [
       { selector: '#substack-cor1', expectedPath: '/kjv/1co/13/1/' },
-      { selector: '#substack-cor2', expectedPath: '/kjv/2co/13/1/' },
-      { selector: '#substack-cor1-number', expectedPath: '/kjv/1co/13/1/' },
-      { selector: '#substack-cor2-number', expectedPath: '/kjv/2co/13/1/' }
+      { selector: '#substack-cor2', expectedPath: '/kjv/2co/13/1/' }
     ]) {
       await page.locator(selector).dblclick();
       await activateBlbTabForPath(extensionWorker, expectedPath, {
         fragment: selector,
         selector: '#blb-e2e-substack-corinthians-reference',
-        selectedText: selector.endsWith('-number') ? (selector.includes('cor1') ? '1' : '2') : 'Cor'
+        selectedText: 'Cor'
       });
       await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
         for (const tab of tabs) {
@@ -858,7 +856,7 @@ test.describe('core user-visible E2E', () => {
     const point = await page.evaluate(() => {
       const paragraph = document.createElement('p');
       paragraph.id = 'blb-e2e-substack-corinthians-plain-text';
-      paragraph.innerHTML = 'Essentially, you are asking yourself, “How do I apply the attributes of charity in <span id="substack-plain-number">1</span> Cor. 13 in how I love my wife and how I live my life?”';
+      paragraph.innerHTML = 'Essentially, you are asking yourself, “How do I apply the attributes of charity in 1 Cor. 13 in how I love my wife and how I live my life?”';
       document.body.appendChild(paragraph);
       const textNode = paragraph.firstChild;
       const start = textNode.textContent.indexOf('Cor');
