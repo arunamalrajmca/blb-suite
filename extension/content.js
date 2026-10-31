@@ -1287,7 +1287,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // wrapper or inspect its ancestors. Prefer the actual clicked text range.
     const isVersionCodeClick = isBibleVersionCodeToken(selected);
     const blockCandidates = [];
-    if (isVersionCodeClick || /^\\d+$/.test(selected)) {
+    if (isVersionCodeClick || /^\d+$/.test(selected)) {
       const clickAnchor = clickedWordRange?.startContainer?.parentElement || initialNode;
       const localBlock = clickAnchor?.closest?.('p,li,td,th,blockquote,article,section,main')
         || clickAnchor?.closest?.('div')
@@ -2041,7 +2041,7 @@ function handleDoubleClickBlb(event) {
           ...Object.keys(BOOK_ALIASES || {})
         ].filter(Boolean).sort((a,b) => String(b).length - String(a).length);
         const isCompactBookChapterToken = compactBookChapterEntries.some(name => {
-          const escaped = String(name).replace(/\\./g, '\\\\.').replace(/\\s+/g, '');
+          const escaped = String(name).replace(/\./g, '\\.').replace(/\s+/g, '');
           return new RegExp('^' + escaped + '\\d{1,3}$', 'i').test(selection);
         });
 
@@ -2124,7 +2124,7 @@ function handleDoubleClickBlb(event) {
               const chapterMatch=afterBook.match(/^\s*\.?\s*(\d{1,3})\b/);
               const chapter=chapterMatch ? Number(chapterMatch[1]) : 0;
               const resolvedBook=resolveBibleBook(prefixNumber+' '+match[2]);
-              const verseMatch=afterBook.match(/^\\s*\\.?\\s*\\d{1,3}\\s*[:.]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?/);
+              const verseMatch=afterBook.match(/^\s*\.?\s*\d{1,3}\s*[:.]\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
               if (chapter>0 && resolvedBook) {
                 // Resolve this exact numbered-book occurrence for Arabic and
                 // Roman prefixes; do not fall back to the bare suffix alias.
