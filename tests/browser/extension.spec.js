@@ -494,9 +494,18 @@ test.describe('core user-visible E2E', () => {
         cue.id = 'sog-verse-cue';
         cue.textContent = match[0];
         // Keep the adjacent verse number outside the cue, as on the live page.
-        const after = document.createTextNode(value.slice(match.index + match[0].length));
+        const remainder = value.slice(match.index + match[0].length);
+        const numberMatch = /^(\s*)(1)\b/.exec(remainder);
+        if (!numberMatch) continue;
+        const numberGap = document.createTextNode(numberMatch[1]);
+        const number = document.createElement('span');
+        number.id = 'sog-verse-number';
+        number.textContent = numberMatch[2];
+        const after = document.createTextNode(remainder.slice(numberMatch[0].length));
         parent.insertBefore(before, node);
         parent.insertBefore(cue, node);
+        parent.insertBefore(numberGap, node);
+        parent.insertBefore(number, node);
         parent.insertBefore(after, node);
         parent.removeChild(node);
         return;
@@ -514,6 +523,32 @@ test.describe('core user-visible E2E', () => {
     expect(diagnostic.associatedVerse, 'generic article cue must extract verse 1').toBe(1);
     await activateBlbTabForPath(extensionWorker, '/kjv/psa/136/1/', {
       fragment: '#sog-verse-cue',
+      selector: '.dt-post-body',
+      selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
+    });
+
+    // Remove the first destination so the numeric-token gesture must open it
+    // independently rather than inheriting a tab from the cue click.
+    await extensionWorker.evaluate(() => chrome.tabs.query({}).then(async tabs => {
+      for (const tab of tabs) {
+        try {
+          if (new URL(String(tab.url || tab.pendingUrl || '')).pathname === '/kjv/psa/136/1/' && tab.id != null) {
+            await chrome.tabs.remove(tab.id);
+          }
+        } catch (_) {}
+      }
+    }));
+    await page.locator('#sog-verse-number').dblclick();
+    await expect.poll(async () => page.locator('[data-blb-verse-context-diagnostic]').count(), {
+      timeout: 3000, intervals: [100, 200, 300]
+    }).toBeGreaterThan(0);
+    const numberDiagnosticText = await page.locator('[data-blb-verse-context-diagnostic]').first()
+      .getAttribute('data-blb-verse-context-diagnostic');
+    const numberDiagnostic = JSON.parse(numberDiagnosticText || '{}');
+    expect(numberDiagnostic.verseNumberClick, 'the isolated verse number must be recognized as a verse-context click').toBe(true);
+    expect(numberDiagnostic.associatedVerse).toBe(1);
+    await activateBlbTabForPath(extensionWorker, '/kjv/psa/136/1/', {
+      fragment: '#sog-verse-number',
       selector: '.dt-post-body',
       selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
     });
@@ -691,7 +726,8 @@ test.describe('core user-visible E2E', () => {
         '<div dir="auto">While God wants us to know and understand his prophetic program found in Genesis—<span id="acts-book">Acts</span> <span>7</span> and Hebrews—Revelation, these books are addressed to the nation of Israel specifically.</div>',
         '<div dir="auto">In <span>Mt.</span> <span>16:24-27</span>, losing your life for his sake in <span id="matthew-v-cue">v.</span> <span id="matthew-verse">25</span> is tied to rewards.</div>',
         '<div dir="auto"><span id="romans-book">Romans14</span>:<span id="romans-first-verse">10</span>-<span id="romans-last-verse">12</span></div>',
-        '<div dir="auto"><span id="john-book">John3</span>:<span id="john-verse">16</span></div>'
+        '<div dir="auto"><span id="john-book">John3</span>:<span id="john-verse">16</span></div>',
+        '<div dir="auto">Psalm 136:1 introduces this song. Verse <span id="psalm-verse-number">1</span> is the first line.</div>'
       ].join('');
       document.body.appendChild(article);
     });
@@ -704,7 +740,8 @@ test.describe('core user-visible E2E', () => {
       ['#romans-first-verse', '10', '/kjv/rom/14/10-12/'],
       ['#romans-last-verse', '12', '/kjv/rom/14/10-12/'],
       ['#john-book', 'John3', '/kjv/jhn/3/16/'],
-      ['#john-verse', '16', '/kjv/jhn/3/16/']
+      ['#john-verse', '16', '/kjv/jhn/3/16/'],
+      ['#psalm-verse-number', '1', '/kjv/psa/136/1/']
     ];
     const actions = ['Show on BLB', 'Right-Click', 'Alt+B', 'Double-Click'];
 
