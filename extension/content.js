@@ -1386,7 +1386,16 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // later article-level prose supply a different citation for the token.
       // Keep verse cues intact when an explicit book label exists in the local
       // semantic block; bare 1–66 tokens continue to standalone-book handling.
-      if (numericSelectionWithoutBookLabel) return null;
+      const numericContextAnchor = clickedWordRange?.startContainer?.nodeType === Node.TEXT_NODE
+        ? clickedWordRange.startContainer.parentElement
+        : initialNode;
+      const numericContextBlock = nearestSemanticBlock(numericContextAnchor);
+      const numericContextText = numericContextBlock instanceof Element
+        ? domText(numericContextBlock)
+        : '';
+      const numericContextHasBook = hasExplicitBookLabel(numericContextText);
+      const numericContextHasVerseCue = /\\b(?:v\\.?|verses?)\\s*\\d{1,3}\\b/i.test(numericContextText);
+      if (!numericContextHasBook && !numericContextHasVerseCue) return null;
     }
 
     // An exact standalone book token must retain the book-only destination.

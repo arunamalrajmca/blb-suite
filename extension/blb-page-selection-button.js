@@ -432,7 +432,7 @@
               const source = normalizeSelectionText(position.text).normalize('NFKC');
               const selectedStart = position.start;
               const selectedEnd = position.end;
-              const listPattern = /((?:[1-3]\\s*|i{1,3}\\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\\s+(\\d{1,3})\\s*:\\s*(\\d{1,3}(?:\\s*,\\s*\\d{1,3})+)/gi;
+              const listPattern = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d{1,3})\s*:\s*(\d{1,3}(?:\s*,\s*\d{1,3})+)/gi;
               let match;
               while ((match = listPattern.exec(source))) {
                 const citationStart = match.index;
