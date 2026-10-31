@@ -675,6 +675,263 @@ test.describe('core user-visible E2E', () => {
       }), expectedPath);
     }
   });
+  test('Acts 7, v.25, and compact references resolve through all four selection actions @failure-first', async ({ page, extensionStorage, extensionWorker }) => {
+    // This matrix opens and closes a real BLB tab for every action/case.
+    // Keep it beyond Playwright's 60-second default so timeout teardown does
+    // not interrupt a still-running button interaction.
+    test.setTimeout(360000);
+    await extensionStorage.set({
+      masterEnabled: true,
+      pageSelectionButtonSites: { 'example.com': true },
+      doubleClickBlbSites: { 'example.com': true }
+    });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('body')).toBeVisible();
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const article = document.createElement('article');
+      article.id = 'four-action-reference-matrix';
+      article.innerHTML = [
+        '<p>While God wants us to know and understand his prophetic program found in Genesis—<span id="acts-book">Acts</span> <span>7</span> and Hebrews—Revelation, these books are addressed to the nation of Israel specifically.</p>',
+        '<p>In <span>Mt.</span> <span>16:24-27</span>, losing your life for his sake in <span id="matthew-v-cue">v.</span> <span id="matthew-verse">25</span> is tied to rewards.</p>',
+        '<p><span id="romans-book">Romans14</span>:<span id="romans-first-verse">10</span>-<span id="romans-last-verse">12</span></p>',
+        '<p><span id="mark-book">Mark5</span>:<span id="mark-verse">9</span></p>',
+        '<p><span id="john-book">John3</span>:<span id="john-first-verse">16</span>-<span id="john-last-verse">18</span></p>',
+        '<p><span id="first-cor-prefix">1</span> <span id="first-cor-book">Cor</span> 13:1</p>',
+        '<p><span id="second-th-prefix">II</span> <span id="second-th-book">Th</span> 2:1</p>',
+        '<p><span id="third-john-prefix">III</span> <span id="third-john-book">Jn</span> 1:1</p>',
+        '<p><span id="comma-romans-book">Romans</span> <span id="comma-romans-chapter">10</span>:<span id="comma-romans-first">9</span>,<span id="comma-romans-second">10</span></p>',
+        '<p><span id="standalone-cor">Cor</span></p>',
+        '<p><span id="standalone-th">Th</span></p>',
+        '<p><span id="standalone-jn">Jn</span></p>',
+        '<p><span id="one-dot-serial">1.</span> First point in a numbered list</p>',
+        '<p><span id="two-dot-serial">2.</span> Second point in a numbered list</p>'
+      ].join('');
+      document.body.appendChild(article);
+    });
+
+    // Keep compact book/chapter tokens (John3 and Romans14) in this four-action
+    // matrix: the selected token alone must inherit only its adjacent verse.
+    const cases = [
+      ['#acts-book', 'Acts', '/kjv/act/7/'],
+      ['#matthew-v-cue', 'v.', '/kjv/mat/16/25/'],
+      ['#matthew-verse', '25', '/kjv/mat/16/25/'],
+      ['#romans-book', 'Romans14', '/kjv/rom/14/10-12/'],
+      ['#romans-first-verse', '10', '/kjv/rom/14/10-12/'],
+      ['#romans-last-verse', '12', '/kjv/rom/14/10-12/'],
+      ['#john-book', 'John3', '/kjv/jhn/3/16-18/'],
+      ['#john-first-verse', '16', '/kjv/jhn/3/16-18/'],
+      ['#john-last-verse', '18', '/kjv/jhn/3/16-18/'],
+      ['#mark-book', 'Mark5', '/kjv/mar/5/9/'],
+      ['#mark-verse', '9', '/kjv/mar/5/9/'],
+      ['#first-cor-book', 'Cor', '/kjv/1co/13/1/'],
+      ['#second-th-book', 'Th', '/kjv/2th/2/1/'],
+      ['#third-john-book', 'Jn', '/kjv/3jo/1/1/'],
+      ['#comma-romans-book', 'Romans', '/kjv/rom/10/9-10/'],
+      ['#comma-romans-chapter', '10', '/kjv/rom/10/9-10/'],
+      ['#comma-romans-first', '9', '/kjv/rom/10/9-10/'],
+      ['#comma-romans-second', '10', '/kjv/rom/10/9-10/'],
+      // Standalone "Cor" is a KJV word with one Criteria Search result;
+      // preserve its established destination instead of forcing 1 Corinthians.
+      ['#standalone-cor', 'Cor', '/kjv/eze/45/14/'],
+      // Bare "Th" is not an unnumbered book alias; only numbered forms such as
+      // "II Th" are resolvable, so all four actions must leave it untouched.
+      ['#standalone-th', 'Th', null],
+      ['#standalone-jn', 'Jn', '/kjv/jhn/1/1/'],
+      ['#one-dot-serial', '1.', '/kjv/gen/1/1/'],
+      ['#two-dot-serial', '2.', '/kjv/exo/1/1/']
+    ];
+    const actions = ['Show on BLB', 'Right-Click', 'Alt+B', 'Double-Click'];
+    // Reuse the token "Jn" in III John and standalone John; each new selection
+    // must be treated as a distinct gesture even when it occurs within 1.2s.
+    const standaloneJnResolver = await extensionWorker.evaluate(() => ({
+      aliasTarget: BOOK_ALIASES?.jn || null,
+      book: resolveBibleBook('Jn')?.name || null,
+      bookOnlyUrl: resolveBibleBookOnly('Jn')?.url || null
+    }));
+    expect(standaloneJnResolver).toEqual({
+      aliasTarget:'john',
+      book:'john',
+      bookOnlyUrl:'https://www.blueletterbible.org/kjv/jhn/1/1/'
+    });
+
+    for (const [selector, selectedText, expectedPath] of cases) {
+      for (const action of actions) {
+        await page.bringToFront();
+        const beforeIds = await extensionWorker.evaluate(() =>
+          chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+        );
+        if (action !== 'Double-Click') {
+          await page.evaluate(({ selector }) => {
+            const target = document.querySelector(selector);
+            const range = document.createRange();
+            range.selectNodeContents(target);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+          }, { selector });
+          expect(await page.evaluate(() => window.getSelection()?.toString() || ''))
+            .toBe(selectedText);
+        } else {
+          await page.evaluate(() => window.getSelection()?.removeAllRanges());
+          await page.locator(selector).dblclick();
+        }
+
+        if (action === 'Show on BLB') {
+          const button = page.locator('#blb-suite-page-selection-button');
+          if (expectedPath) {
+            await expect(button).toBeVisible({ timeout: 10000 });
+            await button.click();
+          } else {
+            await expect(button).toBeHidden({ timeout: 10000 });
+          }
+        } else if (action === 'Right-Click') {
+          await extensionWorker.evaluate(async selected => {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            await handleBlbSelectionContextMenuClick({
+              menuItemId: 'blb-suite-web-selection',
+              selectionText: selected
+            }, tab);
+          }, selectedText);
+        } else if (action === 'Alt+B') {
+          await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+        }
+
+        if (!expectedPath) {
+          const newBlbTabs = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+            tabs.filter(tab => !before.includes(tab.id)).filter(tab => {
+              try { return new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org'); }
+              catch (_) { return false; }
+            }).length
+          ), beforeIds);
+          expect(newBlbTabs, action + ' on ' + selector + ' must not resolve an ambiguous standalone abbreviation')
+            .toBe(0);
+          await page.evaluate(() => window.getSelection()?.removeAllRanges());
+          continue;
+        }
+        await activateBlbTabForPath(extensionWorker, expectedPath, {
+          fragment: action + ' ' + selector,
+          selector: '[role="article"]',
+          selectedText
+        });
+        const openedPaths = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+          tabs.filter(tab => !before.includes(tab.id)).map(tab => {
+            try {
+              const url = new URL(String(tab.url || tab.pendingUrl || ''));
+              return url.hostname.endsWith('blueletterbible.org') ? url.pathname : '';
+            } catch (_) { return ''; }
+          }).filter(Boolean)
+        ), beforeIds);
+        const expectedPathBase = expectedPath.replace(/\/$/, '');
+        const expectedPathPattern = new RegExp(
+          '^' + expectedPathBase + '(?:/s_\\d+)?/?$'
+        );
+        expect(
+          openedPaths.some(path => expectedPathPattern.test(path)),
+          action + ' on ' + selector + ' must open ' + expectedPath + ' (allowing BLB canonical verse IDs)'
+        ).toBe(true);
+        await extensionWorker.evaluate(before => chrome.tabs.query({}).then(async tabs => {
+          for (const tab of tabs) {
+            if (tab.id == null || before.includes(tab.id)) continue;
+            try {
+              const url = new URL(String(tab.url || tab.pendingUrl || ''));
+              if (url.hostname.endsWith('blueletterbible.org')) await chrome.tabs.remove(tab.id);
+            } catch (_) {}
+          }
+        }), beforeIds);
+        await page.evaluate(() => window.getSelection()?.removeAllRanges());
+      }
+    }
+  });
+
+  test('Same-chapter range resolution covers all 66 books on Double-Click @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(360000);
+    const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
+      number: Number(book.bookNumber),
+      name: book.name,
+      urlKey: book.urlKey
+    })));
+    expect(books, 'the production book table must contain all 66 canonical books').toHaveLength(66);
+
+    const markup = books.map(book => {
+      const compactToken = book.name.replace(/\s+/g, '') + '1';
+      return '<p id="all-book-range-' + book.number + '"><span class="compact-book-chapter-token">' +
+        compactToken + '</span>:<span>1</span>-<span>2</span></p>';
+    }).join('');
+    await setupDoubleClickReferencePage(
+      page,
+      extensionStorage,
+      '<article id="all-book-ranges">' + markup + '</article>'
+    );
+
+    // Use the same valid first-chapter range (1:1-2) for every canonical book.
+    // Double-click the compact book/chapter token itself, including compacted
+    // multiword and numbered book names, and retain both verses.
+    for (const book of books) {
+      const target = page.locator('#all-book-range-' + book.number + ' .compact-book-chapter-token');
+      await target.scrollIntoViewIfNeeded();
+      const beforeIds = await extensionWorker.evaluate(() =>
+        chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
+      );
+      const expectedPath = '/kjv/' + book.urlKey + '/1/1-2/';
+      await target.dblclick();
+      await expect.poll(async () => extensionWorker.evaluate(({ beforeIds, expectedPath }) =>
+        chrome.tabs.query({}).then(tabs => tabs.some(tab => {
+          if (tab.id == null || beforeIds.includes(tab.id)) return false;
+          return [tab.url, tab.pendingUrl].some(value => {
+            try {
+              const url = new URL(String(value || ''));
+              return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+            } catch (_) { return false; }
+          });
+        })), { beforeIds, expectedPath }), {
+          message: 'Double-clicking compact ' + book.name.replace(/\\s+/g, '') + '1 must preserve ' + book.name + ' 1:1-2',
+          timeout: 10000
+        }).toBe(true);
+
+      await extensionWorker.evaluate(async ({ beforeIds, expectedPath }) => {
+        const tabs = await chrome.tabs.query({});
+        for (const tab of tabs) {
+          if (tab.id == null || beforeIds.includes(tab.id)) continue;
+          const matches = [tab.url, tab.pendingUrl].some(value => {
+            try {
+              const url = new URL(String(value || ''));
+              return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+            } catch (_) { return false; }
+          });
+          if (matches) {
+            try { await chrome.tabs.remove(tab.id); } catch (_) {}
+          }
+        }
+      }, { beforeIds, expectedPath });
+    }
+  });
+
+  test('Show on BLB handles a selected Facebook-style post reference across nested blocks', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const article = document.createElement('div');
+      article.setAttribute('role', 'article');
+      article.innerHTML = '<div dir="auto"><span>Read this passage:</span></div><div dir="auto"><span id="facebook-selected-reference">Romans14:10-12</span></div>';
+      document.body.appendChild(article);
+      const target = article.querySelector('#facebook-selected-reference');
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await button.click();
+    const blb = await waitForBlbTabPath(extensionWorker, '/kjv/rom/14/10-12/');
+    expect(new URL(blb.url).pathname).toBe('/kjv/rom/14/10-12/');
+  });
+
   test('Double-click resolves Cor contextually in Substack-style 1 Cor. 13 and 2 Cor. 13 citations', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
@@ -1001,7 +1258,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click uses the browser token, not the whole surrounding line', async ({ page, context, extensionStorage }) => {
+  test('Double-click uses the browser token, not the whole surrounding line @failure-first', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     // Wait for asynchronous double-click settings initialization before the first gesture.
@@ -1245,6 +1502,7 @@ test.describe('core user-visible E2E', () => {
     }
 
     await page.evaluate((html) => {
+      window.getSelection()?.removeAllRanges();
       document.getElementById('blb-e2e-focused-root')?.remove();
       const root = document.createElement('div');
       root.id = 'blb-e2e-focused-root';
@@ -1417,7 +1675,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click positional context — standalone numeric book tokens remain independent', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click positional context — standalone numeric book tokens remain independent @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
     // Exhaustive 66-book coverage needs more than Playwright's 60s default
     // because every gesture opens and closes a real BLB tab.
     test.setTimeout(180000);
@@ -1512,7 +1770,7 @@ test.describe('core user-visible E2E', () => {
     await runDoubleClickReferenceToken(page, context, extensionWorker, selector, token, expectedPath);
   }
 
-  test('Double-click numbered-book suffixes resolve every supported numbered-book alias', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click numbered-book suffixes resolve every supported numbered-book alias @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(240000);
     // Derive all numbered-book cases from the production alias map and canonical
     // BOOKS list. No parallel family, alias, or URL-key list belongs in this test.

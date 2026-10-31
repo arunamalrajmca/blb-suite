@@ -5136,6 +5136,39 @@ function getDirectSelectedReference(selectionText) {
   return resolveDirectBibleReference(source);
 }
 
+function getCompactBookChapterSelection(selectionText) {
+  const token = normalizeSelectedScriptureText(selectionText).trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9.'-]*$/.test(token)) return null;
+  for (let split = token.length - 1; split > 0; split--) {
+    const rawBookPart = token.slice(0, split);
+    const compactKey = rawBookPart.replace(/\s+/g, '').toLowerCase();
+    const book = resolveBibleBook(rawBookPart) || bookData.find(item =>
+      String(item.name || '').replace(/\s+/g, '').toLowerCase() === compactKey ||
+      String(item.urlKey || '').replace(/\s+/g, '').toLowerCase() === compactKey ||
+      (item.aliases || []).some(alias =>
+        String(alias).replace(/\s+/g, '').toLowerCase() === compactKey
+      )
+    );
+    const chapterText = token.slice(split);
+    if (book && /^\d{1,3}$/.test(chapterText)) {
+      return {book, chapter:Number(chapterText)};
+    }
+  }
+  return null;
+}
+
+function isContextualReferenceForCompactSelection(selectionText, contextualReference) {
+  const compact = getCompactBookChapterSelection(selectionText);
+  if (!compact || !contextualReference?.url) return false;
+  const contextBook = typeof contextualReference.book === 'string'
+    ? contextualReference.book.trim().toLowerCase()
+    : String(contextualReference.book?.name || contextualReference.book?.bookName ||
+        contextualReference.book?.book || '').trim().toLowerCase();
+  return !!contextBook
+    && contextBook === String(compact.book.name || '').trim().toLowerCase()
+    && Number(contextualReference.chapter) === compact.chapter;
+}
+
 async function openBlbBook(bookOrNumber, tabBehavior = {activeIfNew:true, activateExisting:true}) {
   const raw = String(bookOrNumber || '').trim().toLowerCase();
   const book = bookData.find(b =>
@@ -5223,6 +5256,22 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     const bIndex = text.toLowerCase().indexOf(String(b.text || '').toLowerCase());
     return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
   });
+
+  // Double-Click has a separate handoff route. Prefer the DOM-resolved
+  // reference whenever the selected token itself is a compact book/chapter
+  // and the contextual result identifies that same book and chapter. Do not
+  // depend on the text parser producing a chapter-only result first.
+  const contextualSupersedesCompactChapter =
+    isContextualReferenceForCompactSelection(text, contextualRef);
+  if (contextualSupersedesCompactChapter) {
+    const studyRef = parseBlbKjvUrlToStudyRef(contextualRef.url);
+    await Promise.all([
+      openBlbDestination(contextualRef.url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting),
+      studyRef ? recordStudyRefs([studyRef]) : Promise.resolve()
+    ]);
+    return;
+  }
+
   if (combinedRefs.length >= 2) {
     // If the selection contains only consecutive verses from one chapter,
     // open the normal BLB range URL instead of creating a MultiVerse request.
@@ -5601,6 +5650,24 @@ async function openSharedSelectionAction({
   const bookOnly = getSelectedBookOnlyReference(normalized);
   const selectedRefs = extractBibleRefsFromSelectedTextUncached(normalized);
 
+  // A compact book/chapter token (for example, John3 or Romans14) is only
+  // chapter-specific by itself. When the DOM-context resolver has identified
+  // the immediately adjacent verse, prefer that more precise reference over
+  // the parser's chapter-only default (which otherwise opens verse 1).
+  // Require the selected token to parse as exactly one book/chapter and the
+  // contextual result to identify that same book and chapter; explicit
+  // selected verses and unrelated nearby references remain authoritative.
+  const contextualMatchesSelectedChapter =
+    isContextualReferenceForCompactSelection(normalized, contextualReference);
+  if (contextualMatchesSelectedChapter) {
+    const studyRef = parseBlbKjvUrlToStudyRef(contextualReference.url);
+    await Promise.all([
+      openBlbDestination(contextualReference.url, !!behavior.activeIfNew, !!behavior.activateExisting),
+      studyRef ? recordStudyRefs([studyRef]) : Promise.resolve()
+    ]);
+    return {ok:true, contextual:true, compactChapter:true};
+  }
+
   if (Array.isArray(contextualReference?.refs) && contextualReference.refs.length > 1) {
     const result = await openBlbMultiVerseRefs(contextualReference.refs, !!behavior.activeIfNew || !!behavior.activateExisting);
     return {...result, contextual:true, multiVerse:true};
@@ -5933,7 +6000,19 @@ async function handleOpenBibleSelectionCommand() {
       }
       return;
     }
-    await openCurrentSelectionInBlb(tab.id);
+    const selectedText = await getActiveTabSelection(tab.id);
+    if (!selectedText) return;
+    // Alt+B must use the same DOM-context resolver as the floating button and
+    // right-click. A one-token selection such as "Acts", "v.", or "10" is not
+    // independently meaningful without the adjacent citation in the page.
+    const contextualReference = await getContextualSelectionReference(tab.id, selectedText);
+    await openSharedSelectionAction({
+      tabId: tab.id,
+      tabUrl: tab.url || '',
+      text: selectedText,
+      behavior: {activeIfNew:true, activateExisting:true, altB:true},
+      contextualReference: contextualReference || null
+    });
     await clearPageSelectionAfterBlbAction(tab.id);
   } catch (err) {
     console.error('KJV Scripture Tools Alt+B:', err);
