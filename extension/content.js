@@ -1243,6 +1243,14 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
       '.entry-content, .article-body, .article-content, .content-body'
     ) || initialNode?.closest?.('article, main, [role="main"]');
+    const writeCompactContextDiagnostic = detail => {
+      try {
+        (messageRoot || initialNode)?.setAttribute(
+          'data-blb-compact-context-diagnostic',
+          JSON.stringify(detail)
+        );
+      } catch (_) {}
+    };
 
     // A compact book/chapter token can be selected independently of the
     // adjacent verse (John3:16). Prefer the exact physical target element:
@@ -1275,6 +1283,15 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         }
       }
       const following = afterText.match(/^\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
+      writeCompactContextDiagnostic({
+        stage: 'message-root-compact',
+        selected: compactSelectedToken,
+        targetText: normalizeSelectionText(initialNode?.textContent || '').normalize('NFKC'),
+        exactTarget,
+        messageRootTag: messageRoot?.tagName || null,
+        afterText: afterText.slice(0, 120),
+        following: following?.[0] || null
+      });
       if (following) {
         for (let split = compactSelectedToken.length - 1; split > 0; split--) {
           const book = resolveBibleBook(compactSelectedToken.slice(0, split));
@@ -1283,7 +1300,20 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const from = Number(following[1]);
           const to = following[2] ? Number(following[2]) : from;
           const resolved = resolveBibleReference(book.name, Number(chapterText), from, to);
-          if (resolved) return resolved;
+          if (resolved) {
+            writeCompactContextDiagnostic({
+              stage: 'message-root-compact-resolved',
+              selected: compactSelectedToken,
+              afterText: afterText.slice(0, 120),
+              following: following[0],
+              book: book.name,
+              chapter: Number(chapterText),
+              from,
+              to,
+              url: resolved.url
+            });
+            return resolved;
+          }
         }
       }
     }
@@ -1723,17 +1753,40 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           if (!book || !/^\d{1,3}$/.test(chapterText)) continue;
           const following = normalizedMatchSource.slice(compactEnd)
             .match(/^\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
+          writeCompactContextDiagnostic({
+            stage: 'local-block-compact',
+            selected: compactToken,
+            source: normalizedMatchSource.slice(0, 180),
+            selectionStart,
+            selectionEnd,
+            compactStart,
+            compactEnd,
+            following: following?.[0] || null,
+            candidateBook: book.name,
+            chapterText
+          });
           if (!following) continue;
           const from = Number(following[1]);
           const to = following[2] ? Number(following[2]) : from;
           const compactResolved = resolveBibleReference(book.name, Number(chapterText), from, to);
-          if (compactResolved) return {
-            book: compactResolved.book,
-            chapter: compactResolved.chapter,
-            from: compactResolved.from,
-            to: compactResolved.to,
-            url: compactResolved.url
-          };
+          if (compactResolved) {
+            writeCompactContextDiagnostic({
+              stage: 'local-block-compact-resolved',
+              selected: compactToken,
+              book: book.name,
+              chapter: compactResolved.chapter,
+              from: compactResolved.from,
+              to: compactResolved.to,
+              url: compactResolved.url
+            });
+            return {
+              book: compactResolved.book,
+              chapter: compactResolved.chapter,
+              from: compactResolved.from,
+              to: compactResolved.to,
+              url: compactResolved.url
+            };
+          }
         }
       }
     }

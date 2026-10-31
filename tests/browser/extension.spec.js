@@ -750,6 +750,11 @@ test.describe('core user-visible E2E', () => {
         } else {
           await page.evaluate(() => window.getSelection()?.removeAllRanges());
           await page.locator(selector).dblclick();
+          if (selector === '#john-book') {
+            await page.waitForTimeout(50);
+            console.error('John compact context diagnostic',
+              await page.locator('[role="article"]').getAttribute('data-blb-compact-context-diagnostic'));
+          }
         }
 
         if (action === 'Show on BLB') {
@@ -1455,6 +1460,7 @@ test.describe('core user-visible E2E', () => {
     }
 
     await page.evaluate((html) => {
+      window.getSelection()?.removeAllRanges();
       document.getElementById('blb-e2e-focused-root')?.remove();
       const root = document.createElement('div');
       root.id = 'blb-e2e-focused-root';
