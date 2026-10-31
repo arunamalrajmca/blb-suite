@@ -699,7 +699,7 @@ test.describe('core user-visible E2E', () => {
     });
 
     const cases = [
-      ['#acts-book', 'Acts', '/kjv/act/7/1/'],
+      ['#acts-book', 'Acts', '/kjv/act/7/'],
       ['#matthew-v-cue', 'v.', '/kjv/mat/16/25/'],
       ['#matthew-verse', '25', '/kjv/mat/16/25/'],
       ['#romans-book', 'Romans14', '/kjv/rom/14/10-12/'],
