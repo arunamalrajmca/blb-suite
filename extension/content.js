@@ -1755,12 +1755,28 @@ function handleDoubleClickBlb(event) {
           : (event.target?.parentElement || null);
         const caretTarget = getDoubleClickTargetElement(event);
         const cueTarget = [eventTarget, caretTarget].find(candidate =>
-          /^(?:v|verse|verses)$/i.test(
+          /^(?:v\.?|verse|verses)$/i.test(
             normalizeSelectionText(candidate?.textContent || '').normalize('NFKC')
           )
         );
         const physicalToken = normalizeSelectionText(cueTarget?.textContent || '').normalize('NFKC');
         if (cueTarget && /^(?:v\.?|verse|verses)$/i.test(physicalToken)) selection = physicalToken;
+
+        // A stale native Selection can also survive when the user double-clicks
+        // a book name (for example, Acts in "Genesis—Acts 7"). Prefer the exact
+        // physical token under the pointer when it is a recognized Bible book,
+        // rather than resolving the previous word or a nearby standalone number.
+        const physicalBookTarget = [eventTarget, caretTarget].find(candidate => {
+          const token = normalizeSelectionText(candidate?.textContent || '').normalize('NFKC');
+          return token && !/\s/.test(token) &&
+            (!!resolveBibleBook(token) ||
+             Object.keys(BOOK_ALIASES || {}).some(alias =>
+               normalizeDoubleClickToken(alias) === normalizeDoubleClickToken(token)
+             ));
+        });
+        if (physicalBookTarget) {
+          selection = normalizeSelectionText(physicalBookTarget.textContent || '').normalize('NFKC');
+        }
 
         // Chromium may leave the previous numeric token selected when the next
         // double-click is dispatched. For a physical numeric token, the click
