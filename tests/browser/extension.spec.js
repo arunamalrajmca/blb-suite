@@ -692,6 +692,8 @@ test.describe('core user-visible E2E', () => {
         '<div dir="auto">In <span>Mt.</span> <span>16:24-27</span>, losing your life for his sake in <span id="matthew-v-cue">v.</span> <span id="matthew-verse">25</span> is tied to rewards.</div>',
         '<div dir="auto"><span id="romans-book">Romans14</span>:<span id="romans-first-verse">10</span>-<span id="romans-last-verse">12</span></div>',
         '<div dir="auto"><span id="john-book">John3</span>:<span id="john-verse">16</span></div>',
+        '<div dir="auto"><span id="third-john-prefix">III</span> <span id="third-john-book">Jn</span> 1:1</div>',
+        '<div dir="auto"><span id="standalone-jn">Jn</span></div>',
         '<div dir="auto"><span id="one-dot-serial">1.</span> First point in a numbered list</div>',
         '<div dir="auto"><span id="two-dot-serial">2.</span> Second point in a numbered list</div>'
       ].join('');
@@ -707,6 +709,8 @@ test.describe('core user-visible E2E', () => {
       ['#romans-last-verse', '12', '/kjv/rom/14/10-12/'],
       ['#john-book', 'John3', '/kjv/jhn/3/16/'],
       ['#john-verse', '16', '/kjv/jhn/3/16/'],
+      ['#third-john-book', 'Jn', '/kjv/3jo/1/1/'],
+      ['#standalone-jn', 'Jn', '/kjv/jhn/1/1/'],
       ['#one-dot-serial', '1.', '/kjv/gen/1/1/'],
       ['#two-dot-serial', '2.', '/kjv/exo/1/1/']
     ];
