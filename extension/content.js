@@ -1760,7 +1760,7 @@ function handleDoubleClickBlb(event) {
           )
         );
         const physicalToken = normalizeSelectionText(cueTarget?.textContent || '').normalize('NFKC');
-        if (cueTarget && /^(?:v|verse|verses)$/i.test(physicalToken)) selection = physicalToken;
+        if (cueTarget && /^(?:v\.?|verse|verses)$/i.test(physicalToken)) selection = physicalToken;
 
         // Chromium may leave the previous numeric token selected when the next
         // double-click is dispatched. For a physical numeric token, the click
