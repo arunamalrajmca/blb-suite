@@ -832,7 +832,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
     const chapterMatch = source.slice(tokenEnd).match(/^(?:\s+|\.(?=\d)\s*)([1-9]\d{0,2})(?!\s*[:.]\s*\d)/);
     if (!chapterMatch) continue;
     const chapter = Number(chapterMatch[1]);
-    const resolved = resolveBibleReference(book.name, chapter, 1, 1);
+    const resolved = resolveBibleReference(book.name, chapter, null, null);
     if (resolved) return {book:resolved.book,chapter:resolved.chapter,from:resolved.from,to:resolved.to,url:resolved.url};
   }
 
