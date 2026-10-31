@@ -954,7 +954,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         if (textNode?.nodeType === Node.TEXT_NODE) {
           const value = textNode.nodeValue || '';
           pointOffset = Math.max(0, Math.min(value.length, pointOffset));
-          const isWordChar = char => /[A-Za-z0-9.'’\u2019\u2010-\u2015\u2212-]/.test(char || '');
+          const isWordChar = char => /[A-Za-z0-9.'’\u2019]/.test(char || '');
           let wordStart = pointOffset;
           let wordEnd = pointOffset;
           while (wordStart > 0 && isWordChar(value[wordStart - 1])) wordStart--;
