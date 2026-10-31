@@ -581,7 +581,8 @@ globalThis.BLBStudyReferenceCaptureModule?.initialize({
 // Double-click a single KJV word, Bible book name, or standalone book number.
 // Uses the Suite's own selection logic and never invokes BLB's native search.
 function normalizeDoubleClickToken(value) {
-  return String(value || '').trim().replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '').toLowerCase();
+  return String(value || '').normalize('NFKC').trim()
+    .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '').toLowerCase();
 }
 
 // ---------- Context-aware Bible reference resolver ----------

@@ -135,9 +135,11 @@ jobs:
 
       # Run focused regressions from prior failures before the exhaustive changed-spec suite.
       # Add @failure-first to a focused test title; leave its original exhaustive test in place.
-      - name: Run failure-first browser regressions
+      - name: Run previously failed reference regressions
         if: ${{ always() && (needs.change-detection.outputs.group_a_required == 'true') }}
-        run: npx playwright test --grep "@failure-first" --workers=1
+        run: >-
+          npx playwright test --workers=1 --grep
+          "Single-word verse cues resolve|Double-click resolves any part of an adjacent Bible reference|Acts 7, v.25|Unicode-styled Bible book|spaced forms — OT|spaced forms — NT|Facebook directional-format Revelation 20:1-10"
 
       # Run the dedicated MultiVerse tab-reuse regression in this existing runner.
       # Shared/unknown runtime changes retain this coverage via full_browser_suite.
@@ -275,7 +277,7 @@ jobs:
 
       # Keep both reference-context regressions in this targeted suite so range/context fixes are exercised on branch pushes.
       - name: Run extension source-page and reference-context regressions
-        if: ${{ always() && ((needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
+        if: ${{ always() && needs.change-detection.outputs.full_browser_suite == 'true' }}
         run: npx playwright test tests/browser/extension.spec.js --grep 'source-page collector initializes on|Facebook nested dir-auto reference resolves from book, chapter, and verse-range gestures|Supply of Grace Substack Ephesians chapter context does not fall back to Ephesians 1:1'
 
       - name: Run changed browser specs without a dedicated workflow step
@@ -288,9 +290,6 @@ jobs:
           IFS=',' read -r -a specs <<< "$UNMAPPED_SPECS"
           npx playwright test "${specs[@]}"
 
-      - name: Run Facebook Revelation directional-format range regression
-        if: ${{ always() && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
-        run: npx playwright test tests/browser/extension.spec.js --grep 'Facebook directional-format Revelation 20:1-10 resolves the whole range from book-name double-click'
 
   core-group-b:
     needs: change-detection
