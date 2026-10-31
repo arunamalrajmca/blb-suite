@@ -723,7 +723,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
   // Contextual actions (floating button, right-click, and Alt+B) receive the
   // selected token, not the whole citation. Resolve a book token against only
   // its immediately following chapter, matching the double-click behavior.
-  const bookTokens = /(?<![A-Za-z0-9])((?:[1-3]\\s+|i{1,3}\\s+)?[A-Za-z][A-Za-z.'-]*(?:\\s+[A-Za-z][A-Za-z.'-]*){0,2})(?![A-Za-z0-9])/gi;
+  const bookTokens = /(?<![A-Za-z0-9])((?:[1-3]\s+|i{1,3}\s+)?[A-Za-z][A-Za-z.'-]*(?:\s+[A-Za-z][A-Za-z.'-]*){0,2})(?![A-Za-z0-9])/gi;
   let bookTokenMatch;
   while ((bookTokenMatch = bookTokens.exec(source))) {
     const book = resolveBibleBook(bookTokenMatch[1]);
@@ -731,7 +731,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
     const tokenStart = bookTokenMatch.index;
     const tokenEnd = tokenStart + bookTokenMatch[0].length;
     if (selectionStart >= tokenEnd || selectionEnd <= tokenStart) continue;
-    const chapterMatch = source.slice(tokenEnd).match(/^(?:\\s+|\\.(?=\\d)\\s*)([1-9]\\d{0,2})(?!\\s*[:.]\\s*\\d)/);
+    const chapterMatch = source.slice(tokenEnd).match(/^(?:\s+|\.(?=\d)\s*)([1-9]\d{0,2})(?!\s*[:.]\s*\d)/);
     if (!chapterMatch) continue;
     const chapter = Number(chapterMatch[1]);
     const resolved = resolveBibleReference(book.name, chapter, 1, 1);
@@ -741,7 +741,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
   // A verse cue such as "v.25" may be selected as either the cue or its
   // numeric token. Associate that number only with the nearest preceding
   // explicit reference in this same context window.
-  const cueNumber = /\\b(?:v\\.?|verses?)\\s*(\\d{1,3})\\b/gi;
+  const cueNumber = /\b(?:v\.?|verses?)\s*(\d{1,3})\b/gi;
   let cueMatch;
   while ((cueMatch = cueNumber.exec(source))) {
     const numberStart = cueMatch.index + cueMatch[0].lastIndexOf(cueMatch[1]);
