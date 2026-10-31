@@ -1226,6 +1226,13 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       return element instanceof Element ? element : null;
     };
     let selected = normalizeSelectionText(selectionText).normalize('NFKC');
+    // A numbered-list serial such as "1." is also a supported numeric book
+    // selector when it is visibly the first token in its own list block.
+    // Normalize only that verified label to its digits before positional
+    // resolution so all four actions share the same Genesis/Exodus book path.
+    if (/^\d+\.$/.test(selected) && isNumberedListSerialDoubleClick(selected, event)) {
+      selected = selected.slice(0, -1);
+    }
     const initialNode = target instanceof Element ? target : (target?.parentElement || null);
     const hasExplicitBookLabel = value => {
       const labels = [
