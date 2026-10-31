@@ -682,14 +682,11 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
   const source = rawSource.normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-');
   if (!source || !Number.isFinite(selectionStart) || !Number.isFinite(selectionEnd) ||
       selectionEnd <= selectionStart) return null;
-  // Range offsets are measured before NFKC in the shared selection path.
-  // Translate both endpoints so styled Unicode letters and invisible bidi
-  // controls cannot shift the clicked token away from its citation.
-  const mapOffset = offset => normalizeSelectionText(
-    rawSource.slice(0, Math.max(0, Math.min(rawSource.length, offset)))
-  ).normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-').length;
-  selectionStart = mapOffset(selectionStart);
-  selectionEnd = mapOffset(selectionEnd);
+  // Callers provide offsets already aligned to their normalized source:
+  // getSelectionContextPosition normalizes each Range segment independently,
+  // and the DOM fallback translates its Range offsets before calling here.
+  // Re-normalizing a prefix would trim its trailing separator and shift the
+  // selected token one character to the left.
 
   const entries = [];
   const add = (name, book) => {
@@ -700,10 +697,21 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
   for (const book of BOOKS) {
     add(book.name, book);
     add(book.urlKey, book);
+    const numberedName = String(book.name || '').match(/^([1-3])\s+(.+)$/i);
+    if (numberedName) {
+      const roman = ({'1':'I','2':'II','3':'III'})[numberedName[1]];
+      add(roman + ' ' + numberedName[2], book);
+    }
   }
   for (const [alias, canonicalName] of Object.entries(BOOK_ALIASES || {})) {
     const book = BOOKS.find(item => item.name === canonicalName);
-    if (book) add(alias, book);
+    if (!book) continue;
+    add(alias, book);
+    const numberedName = String(canonicalName || '').match(/^([1-3])\s+(.+)$/i);
+    if (numberedName && !/^(?:[1-3]|i{1,3})\s+/i.test(alias)) {
+      const roman = ({'1':'I','2':'II','3':'III'})[numberedName[1]];
+      add(roman + ' ' + alias, book);
+    }
   }
   entries.sort((a, b) => b.name.length - a.name.length);
 
@@ -712,18 +720,25 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
     const patterns = [
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.(?=\\d)\\s*)(\\d{1,3})\\s*[:.]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])', 'gi'),
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])', 'gi'),
-      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')\\s+(\\d{1,3})\\s+(\\d{1,3})(?=$|[^A-Za-z0-9])', 'gi')
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')\\s+(\\d{1,3})\\s+(\\d{1,3})(?=$|[^A-Za-z0-9])', 'gi'),
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.(?=\\d)\\s*)(\\d{1,3})(?!\\s*[:.]\\s*\\d)(?=$|[^A-Za-z0-9])', 'gi'),
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})(?!\\s*:\\s*\\d)(?=$|[^A-Za-z0-9])', 'gi')
     ];
-    for (const pattern of patterns) {
+    for (let patternIndex = 0; patternIndex < patterns.length; patternIndex++) {
+      const pattern = patterns[patternIndex];
+      const chapterOnly = patternIndex >= 3;
       let match;
       while ((match = pattern.exec(source))) {
         const citationStart = match.index + match[0].indexOf(match[1]);
         const citationEnd = match.index + match[0].length;
         if (selectionStart >= citationEnd || selectionEnd <= citationStart) continue;
         const chapter = Number(match[2]);
-        const from = Number(match[3]);
-        const to = match[4] ? Number(match[4]) : from;
-        const resolved = resolveBibleReference(entry.book.name, chapter, from, to);
+        const resolved = chapterOnly
+          ? resolveBibleReference(entry.book.name, chapter, null, null)
+          : resolveBibleReference(
+              entry.book.name, chapter, Number(match[3]),
+              match[4] ? Number(match[4]) : Number(match[3])
+            );
         if (resolved) return {
           book: resolved.book, chapter: resolved.chapter,
           from: resolved.from, to: resolved.to, url: resolved.url
