@@ -1004,7 +1004,7 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
   const response = await extensionWorker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
     if (!tab?.id) throw new Error('No active tab for disjoint chapter-range E2E');
-    return chrome.scripting.executeScript({
+    const [execution] = await chrome.scripting.executeScript({
       target: {tabId:tab.id},
       world:'ISOLATED',
       func: () => new Promise(resolve => chrome.runtime.sendMessage({
@@ -1013,8 +1013,9 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
         tabBehavior:{activeIfNew:true,activateExisting:true}
       }, result => resolve(result || null)))
     });
+    return execution?.result || null;
   });
-  expect(response).toBeTruthy();
+  expect(response, 'Background must accept and complete the MultiVerse selection request').toMatchObject({ok:true});
 
   await expect.poll(async () => extensionWorker.evaluate(async (baseline) => {
     const tabs = await chrome.tabs.query({});
@@ -1134,7 +1135,7 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
   const response = await extensionWorker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
     if (!tab?.id) throw new Error('No active tab for disjoint chapter-range E2E');
-    return chrome.scripting.executeScript({
+    const [execution] = await chrome.scripting.executeScript({
       target: {tabId:tab.id},
       world:'ISOLATED',
       func: () => new Promise(resolve => chrome.runtime.sendMessage({
@@ -1143,8 +1144,9 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
         tabBehavior:{activeIfNew:true,activateExisting:true}
       }, result => resolve(result || null)))
     });
+    return execution?.result || null;
   });
-  expect(response).toBeTruthy();
+  expect(response, 'Background must accept and complete the MultiVerse selection request').toMatchObject({ok:true});
 
   await expect.poll(async () => extensionWorker.evaluate(async (baseline) => {
     const tabs = await chrome.tabs.query({});
