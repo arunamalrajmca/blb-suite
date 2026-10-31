@@ -737,15 +737,22 @@ test.describe('core user-visible E2E', () => {
       ['#two-dot-serial', '2.', '/kjv/exo/1/1/']
     ];
     const actions = ['Show on BLB', 'Right-Click', 'Alt+B', 'Double-Click'];
+    // Reuse the token "Jn" in III John and standalone John; each new selection
+    // must be treated as a distinct gesture even when it occurs within 1.2s.
     const standaloneJnResolver = await extensionWorker.evaluate(() => ({
       aliasTarget: BOOK_ALIASES?.jn || null,
       book: resolveBibleBook('Jn')?.name || null,
       bookOnlyUrl: resolveBibleBookOnly('Jn')?.url || null
     }));
-    console.log('Standalone Jn shared resolver:', JSON.stringify(standaloneJnResolver));
+    expect(standaloneJnResolver).toEqual({
+      aliasTarget:'john',
+      book:'john',
+      bookOnlyUrl:'https://www.blueletterbible.org/kjv/jhn/1/1/'
+    });
 
     for (const [selector, selectedText, expectedPath] of cases) {
       for (const action of actions) {
+        await page.bringToFront();
         const beforeIds = await extensionWorker.evaluate(() =>
           chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
         );
@@ -811,17 +818,23 @@ test.describe('core user-visible E2E', () => {
             } catch (_) { return ''; }
           }).filter(Boolean)
         ), beforeIds);
-        expect(openedPaths, action + ' on ' + selector + ' must open ' + expectedPath)
-          .toContain(expectedPath);
-        await extensionWorker.evaluate(path => chrome.tabs.query({}).then(async tabs => {
+        const expectedPathBase = expectedPath.replace(/\/$/, '');
+        const expectedPathPattern = new RegExp(
+          '^' + expectedPathBase + '(?:/s_\\d+)?/?$'
+        );
+        expect(
+          openedPaths.some(path => expectedPathPattern.test(path)),
+          action + ' on ' + selector + ' must open ' + expectedPath + ' (allowing BLB canonical verse IDs)'
+        ).toBe(true);
+        await extensionWorker.evaluate(before => chrome.tabs.query({}).then(async tabs => {
           for (const tab of tabs) {
+            if (tab.id == null || before.includes(tab.id)) continue;
             try {
               const url = new URL(String(tab.url || tab.pendingUrl || ''));
-              if (url.hostname.endsWith('blueletterbible.org') &&
-                  url.pathname === path && tab.id != null) await chrome.tabs.remove(tab.id);
+              if (url.hostname.endsWith('blueletterbible.org')) await chrome.tabs.remove(tab.id);
             } catch (_) {}
           }
-        }), expectedPath);
+        }), beforeIds);
         await page.evaluate(() => window.getSelection()?.removeAllRanges());
       }
     }

@@ -15,6 +15,7 @@
     let pageButtonSelectionFrame = 0;
     let pageButtonValidationToken = 0;
     let pageButtonActionInProgress = false;
+    let pageButtonRequestSequence = 0;
     let pageButtonDomObserver = null;
     let pageButtonDomValidationFrame = 0;
     
@@ -267,6 +268,7 @@
         // Ignore stale content-script contexts if the extension was reloaded.
         safeRuntimeSendMessage({
           type:'blbSuiteOpenSelectionText',
+          requestId:`show-on-blb-${Date.now()}-${++pageButtonRequestSequence}`,
           text,
           contextualReference: blbPageButtonContextualReference || null,
           directUrl: blbPageButtonDirectUrl || null,

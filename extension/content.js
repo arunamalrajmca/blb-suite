@@ -1744,20 +1744,66 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // Chapter-only references are positional too: when a clicked book name
     // is immediately followed by a chapter (for example, "Genesis—Acts 7"),
     // resolve that chapter instead of falling back to the book's first verse.
-    // Require the selected occurrence itself to be the book token and require
-    // the chapter to follow directly; unrelated numbers elsewhere in the block
-    // must never be borrowed.
-    if (selectionStart != null && selectionEnd != null) {
+    // Keep this lookup inside the nearest semantic text block. A book token at
+    // the end of one paragraph must not borrow a numbered-list item from the
+    // next paragraph as though it were its chapter (for example, "Jn" then "1.").
+    const chapterContextBlock = initialNode?.closest?.('p,li,td,th,blockquote') || null;
+    const chapterContextRawSource = chapterContextBlock ? domText(chapterContextBlock) : rawSource;
+    const chapterContextSource = chapterContextBlock
+      ? normalizeSelectionText(chapterContextRawSource).normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-')
+      : normalizedMatchSource;
+    let chapterContextSelectionStart = selectionStart;
+    let chapterContextSelectionEnd = selectionEnd;
+    if (chapterContextBlock && chapterContextBlock !== block) {
+      let localRange = clickedWordRange &&
+        chapterContextBlock.contains(clickedWordRange.startContainer) &&
+        chapterContextBlock.contains(clickedWordRange.endContainer)
+        ? clickedWordRange
+        : null;
+      if (!localRange) {
+        const liveSelection = window.getSelection?.();
+        if (liveSelection?.rangeCount && !liveSelection.isCollapsed &&
+            normalizeSelectionText(liveSelection.toString()).normalize('NFKC') === selected) {
+          const range = liveSelection.getRangeAt(0);
+          if (chapterContextBlock.contains(range.startContainer) &&
+              chapterContextBlock.contains(range.endContainer)) localRange = range;
+        }
+      }
+      if (!localRange && initialNode instanceof Element && chapterContextBlock.contains(initialNode)) {
+        localRange = document.createRange();
+        localRange.selectNodeContents(initialNode);
+      }
+      if (localRange) {
+        const localOffset = (container, offset) => {
+          const scratch = document.createRange();
+          scratch.selectNodeContents(chapterContextBlock);
+          scratch.setEnd(container, offset);
+          const rawPrefix = domRangeText(scratch);
+          const normalizedPrefix = normalizeSelectionText(rawPrefix).normalize('NFKC');
+          const hasInteriorSeparator = normalizedPrefix.length > 0 &&
+            /[\s\u00A0\u2007\u202F]$/.test(rawPrefix) &&
+            /\S/.test(chapterContextRawSource.slice(rawPrefix.length));
+          return normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
+        };
+        chapterContextSelectionStart = localOffset(localRange.startContainer, localRange.startOffset);
+        chapterContextSelectionEnd = localOffset(localRange.endContainer, localRange.endOffset);
+      } else {
+        chapterContextSelectionStart = null;
+        chapterContextSelectionEnd = null;
+      }
+    }
+    if (chapterContextSelectionStart != null && chapterContextSelectionEnd != null &&
+        chapterContextSource.slice(chapterContextSelectionStart, chapterContextSelectionEnd) === selected) {
       const clickedChapterBook = resolveBibleBook(selected);
       if (clickedChapterBook) {
-        const escapedBookToken = selected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const escapedBookToken = selected.replace(/[.*+?^$(){}|[\]\\]/g, '\\$&');
         const bookTokenPattern = new RegExp('(?<![A-Za-z0-9])' + escapedBookToken + '(?![A-Za-z0-9])', 'gi');
         let bookTokenMatch;
-        while ((bookTokenMatch = bookTokenPattern.exec(normalizedMatchSource))) {
+        while ((bookTokenMatch = bookTokenPattern.exec(chapterContextSource))) {
           const tokenStart = bookTokenMatch.index;
           const tokenEnd = tokenStart + bookTokenMatch[0].length;
-          if (selectionStart >= tokenEnd || selectionEnd <= tokenStart) continue;
-          const following = normalizedMatchSource.slice(tokenEnd);
+          if (chapterContextSelectionStart >= tokenEnd || chapterContextSelectionEnd <= tokenStart) continue;
+          const following = chapterContextSource.slice(tokenEnd);
           const chapterMatch = following.match(/^\s+([1-9]\d{0,2})(?!\s*[:.]\s*\d)/);
           if (!chapterMatch) continue;
           const chapter = Number(chapterMatch[1]);
