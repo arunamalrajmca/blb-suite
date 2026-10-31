@@ -1267,7 +1267,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // spans (for example, "17" in "Acts 17:11" or "1" in "1 Samuel 1:1").
     // Anchor this pass to the clicked token's own element and nearest semantic
     // text block, then use the shared positional resolver.
-    if (/^\\d+$/.test(selected)) {
+    if (/^\d+$/.test(selected)) {
       const numericTargets = [initialNode, getDoubleClickTargetElement(event)]
         .filter((candidate, index, all) =>
           candidate instanceof Element && all.indexOf(candidate) === index
@@ -1277,7 +1277,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         const localBlock = numericTarget.closest('p,li,td,th,blockquote') || numericTarget;
         const rawSource = domText(localBlock);
         const normalizedSource = normalizeSelectionText(rawSource).normalize('NFKC')
-          .replace(/[\\u2010-\\u2015\\u2212]/g, '-');
+          .replace(/[\u2010-\u2015\u2212]/g, '-');
         if (!normalizedSource) continue;
         try {
           const tokenRange = document.createRange();
@@ -1288,8 +1288,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const rawPrefix = domRangeText(prefixRange);
           const normalizedPrefix = normalizeSelectionText(rawPrefix).normalize('NFKC');
           const hasInteriorSeparator = normalizedPrefix.length > 0 &&
-            /[\\s\\u00A0\\u2007\\u202F]$/.test(rawPrefix) &&
-            /\\S/.test(rawSource.slice(rawPrefix.length));
+            /[\s\u00A0\u2007\u202F]$/.test(rawPrefix) &&
+            /\S/.test(rawSource.slice(rawPrefix.length));
           const start = normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
           const end = start + selected.length;
           if (normalizedSource.slice(start, end) !== selected) continue;
