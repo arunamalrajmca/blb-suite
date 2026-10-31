@@ -675,6 +675,72 @@ test.describe('core user-visible E2E', () => {
       }), expectedPath);
     }
   });
+  test('Facebook post references resolve Acts chapter, verse cues, and compact Romans ranges', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const article = document.createElement('div');
+      article.setAttribute('role', 'article');
+      article.innerHTML = [
+        '<div dir="auto">While God wants us to know and understand his prophetic program found in Genesis—<span id="acts-book">Acts</span> <span>7</span> and Hebrews—Revelation, these books are addressed to the nation of Israel specifically.</div>',
+        '<div dir="auto">In <span>Mt.</span> <span>16:24-27</span>, losing your life for his sake in <span id="matthew-v-cue">v.</span> <span id="matthew-verse">25</span> is tied to rewards.</div>',
+        '<div dir="auto"><span id="romans-book">Romans14</span>:<span id="romans-first-verse">10</span>-<span id="romans-last-verse">12</span></div>'
+      ].join('');
+      document.body.appendChild(article);
+    });
+
+    const cases = [
+      ['#acts-book', '/kjv/act/7/1/'],
+      ['#matthew-v-cue', '/kjv/mat/16/25/'],
+      ['#matthew-verse', '/kjv/mat/16/25/'],
+      ['#romans-book', '/kjv/rom/14/10-12/'],
+      ['#romans-first-verse', '/kjv/rom/14/10-12/'],
+      ['#romans-last-verse', '/kjv/rom/14/10-12/']
+    ];
+    for (const [selector, expectedPath] of cases) {
+      await page.locator(selector).first().dblclick();
+      await activateBlbTabForPath(extensionWorker, expectedPath, {
+        fragment: selector, selector: '[role="article"]',
+        selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
+      });
+      await extensionWorker.evaluate(path => chrome.tabs.query({}).then(async tabs => {
+        for (const tab of tabs) {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            if (url.hostname.endsWith('blueletterbible.org') &&
+                (url.pathname === path || url.pathname.startsWith(path.replace(/\/$/, '') + '/')) &&
+                tab.id != null) await chrome.tabs.remove(tab.id);
+          } catch (_) {}
+        }
+      }), expectedPath);
+    }
+  });
+
+  test('Show on BLB handles a selected Facebook-style post reference across nested blocks', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const article = document.createElement('div');
+      article.setAttribute('role', 'article');
+      article.innerHTML = '<div dir="auto"><span>Read this passage:</span></div><div dir="auto"><span id="facebook-selected-reference">Romans14:10-12</span></div>';
+      document.body.appendChild(article);
+      const target = article.querySelector('#facebook-selected-reference');
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+    });
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await button.click();
+    const blb = await waitForBlbTabPath(extensionWorker, '/kjv/rom/14/10-12/');
+    expect(new URL(blb.url).pathname).toBe('/kjv/rom/14/10-12/');
+  });
+
   test('Double-click resolves Cor contextually in Substack-style 1 Cor. 13 and 2 Cor. 13 citations', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
