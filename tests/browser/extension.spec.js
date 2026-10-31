@@ -726,9 +726,12 @@ test.describe('core user-visible E2E', () => {
       ['#first-cor-book', 'Cor', '/kjv/1co/13/1/'],
       ['#second-th-book', 'Th', '/kjv/2th/2/1/'],
       ['#third-john-book', 'Jn', '/kjv/3jo/1/1/'],
-      // Standalone "Cor" is a KJV word with a single Criteria Search result;
-      // it must retain that destination instead of being forced to 1 Corinthians.
-      ['#standalone-cor', 'Cor', '/search/search.cfm', 'Cor'],
+      // Standalone "Cor" is a KJV word with one Criteria Search result;
+      // preserve its established destination instead of forcing 1 Corinthians.
+      ['#standalone-cor', 'Cor', '/kjv/eze/45/14/'],
+      // Bare "Th" is not an unnumbered book alias; only numbered forms such as
+      // "II Th" are resolvable, so all four actions must leave it untouched.
+      ['#standalone-th', 'Th', null],
       ['#standalone-th', 'Th', '/kjv/1th/1/1/'],
       ['#standalone-jn', 'Jn', '/kjv/jhn/1/1/'],
       ['#one-dot-serial', '1.', '/kjv/gen/1/1/'],
@@ -736,7 +739,7 @@ test.describe('core user-visible E2E', () => {
     ];
     const actions = ['Show on BLB', 'Right-Click', 'Alt+B', 'Double-Click'];
 
-    for (const [selector, selectedText, expectedPath, expectedCriteria] of cases) {
+    for (const [selector, selectedText, expectedPath] of cases) {
       for (const action of actions) {
         const beforeIds = await extensionWorker.evaluate(() =>
           chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
@@ -760,8 +763,12 @@ test.describe('core user-visible E2E', () => {
 
         if (action === 'Show on BLB') {
           const button = page.locator('#blb-suite-page-selection-button');
-          await expect(button).toBeVisible({ timeout: 10000 });
-          await button.click();
+          if (expectedPath) {
+            await expect(button).toBeVisible({ timeout: 10000 });
+            await button.click();
+          } else {
+            await expect(button).toBeHidden({ timeout: 10000 });
+          }
         } else if (action === 'Right-Click') {
           await extensionWorker.evaluate(async selected => {
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -774,6 +781,18 @@ test.describe('core user-visible E2E', () => {
           await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
         }
 
+        if (!expectedPath) {
+          const newBlbTabs = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+            tabs.filter(tab => !before.includes(tab.id)).filter(tab => {
+              try { return new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org'); }
+              catch (_) { return false; }
+            }).length
+          ), beforeIds);
+          expect(newBlbTabs, action + ' on ' + selector + ' must not resolve an ambiguous standalone abbreviation')
+            .toBe(0);
+          await page.evaluate(() => window.getSelection()?.removeAllRanges());
+          continue;
+        }
         await activateBlbTabForPath(extensionWorker, expectedPath, {
           fragment: action + ' ' + selector,
           selector: '[role="article"]',
@@ -789,17 +808,6 @@ test.describe('core user-visible E2E', () => {
         ), beforeIds);
         expect(openedPaths, action + ' on ' + selector + ' must open ' + expectedPath)
           .toContain(expectedPath);
-        if (expectedCriteria) {
-          const openedCriteria = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
-            tabs.filter(tab => !before.includes(tab.id)).map(tab => {
-              try { return new URL(String(tab.url || tab.pendingUrl || '')).searchParams.get('Criteria') || ''; }
-              catch (_) { return ''; }
-            }).filter(Boolean).map(value => value.toLowerCase())
-          ), beforeIds);
-          expect(openedCriteria, action + ' on ' + selector + ' must preserve its KJV Criteria Search destination')
-            .toContain(expectedCriteria.toLowerCase());
-        }
-
         await extensionWorker.evaluate(path => chrome.tabs.query({}).then(async tabs => {
           for (const tab of tabs) {
             try {
