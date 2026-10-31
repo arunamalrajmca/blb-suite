@@ -1294,8 +1294,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
               // trailing period by the physical Range. Keep the already
               // classified numeric token so the period cannot bypass the
               // numeric-book path or turn the serial into ordinary prose.
-              const verifiedNumericSerial = /^\\d+$/.test(selected)
-                && /^\\d+\\.$/.test(clickedWordText)
+              const verifiedNumericSerial = /^\d+$/.test(selected)
+                && /^\d+\.$/.test(clickedWordText)
                 && isNumberedListSerialDoubleClick(clickedWordText, event);
               if (!verifiedNumericSerial) selected = clickedWordText;
             }
@@ -1431,7 +1431,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     const standaloneBookBlockText = standaloneBookBlock instanceof Element
       ? normalizeSelectionText(domText(standaloneBookBlock)).normalize('NFKC')
       : '';
-    if (standaloneBookBlockText === selected && !/\\s/.test(selected)) {
+    if (standaloneBookBlockText === selected && !/\s/.test(selected)) {
       const standaloneBook = resolveBibleBook(selected);
       const standaloneBookReference = standaloneBook
         ? resolveBibleBookOnly(standaloneBook.name)
@@ -1448,6 +1448,62 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
       '.entry-content, .article-body, .article-content, .content-body'
     ) || initialNode?.closest?.('article, main, [role="main"]');
+
+    // Resolve the exact physical token against its own DOM position before
+    // falling through to broader text parsing. This keeps book-name, verse-cue,
+    // Unicode compatibility, and rich-text/directional-format clicks aligned
+    // with the same positional resolver used for numeric and comma-list tokens.
+    // For verse cues, retain the containing post/article so the preceding
+    // chapter reference may be in an earlier paragraph of that same post.
+    const verseCueSelection = /^(?:v\.?|verses?)$/i.test(
+      normalizeDoubleClickToken(selected)
+    );
+    const exactTargetCandidates = [];
+    const addExactTargetCandidate = candidate => {
+      if (candidate instanceof Element &&
+          !exactTargetCandidates.includes(candidate)) exactTargetCandidates.push(candidate);
+    };
+    addExactTargetCandidate(initialNode);
+    addExactTargetCandidate(event?.target instanceof Element ? event.target : event?.target?.parentElement);
+    addExactTargetCandidate(getDoubleClickTargetElement(event));
+    if (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+      addExactTargetCandidate(document.elementFromPoint(event.clientX, event.clientY));
+    }
+    const exactPhysicalTarget = exactTargetCandidates.find(candidate =>
+      normalizeSelectionText(candidate.textContent || '').normalize('NFKC') ===
+      normalizeSelectionText(selected).normalize('NFKC')
+    );
+    if (exactPhysicalTarget) {
+      const exactContextRoot = verseCueSelection
+        ? (messageRoot || nearestSemanticBlock(exactPhysicalTarget))
+        : nearestSemanticBlock(exactPhysicalTarget);
+      if (exactContextRoot instanceof Element && exactContextRoot.contains(exactPhysicalTarget)) {
+        try {
+          const rawContext = domText(exactContextRoot);
+          const normalizedContext = normalizeSelectionText(rawContext).normalize('NFKC')
+            .replace(/[\u2010-\u2015\u2212]/g, '-');
+          const exactRange = document.createRange();
+          exactRange.selectNodeContents(exactPhysicalTarget);
+          const prefixRange = document.createRange();
+          prefixRange.selectNodeContents(exactContextRoot);
+          prefixRange.setEnd(exactRange.startContainer, exactRange.startOffset);
+          const rawPrefix = domRangeText(prefixRange);
+          const normalizedPrefix = normalizeSelectionText(rawPrefix).normalize('NFKC');
+          const hasInteriorSeparator = normalizedPrefix.length > 0 &&
+            /[\s\u00A0\u2007\u202F]$/.test(rawPrefix) &&
+            /\S/.test(rawContext.slice(rawPrefix.length));
+          const exactStart = normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
+          const exactToken = normalizeSelectionText(exactPhysicalTarget.textContent || '').normalize('NFKC');
+          const exactEnd = exactStart + exactToken.length;
+          if (exactToken && normalizedContext.slice(exactStart, exactEnd) === exactToken) {
+            const exactReference = resolveBibleReferenceFromContextWindow(
+              normalizedContext, exactStart, exactEnd
+            );
+            if (exactReference) return exactReference;
+          }
+        } catch (_) {}
+      }
+    }
 
     // A compact book/chapter token can be selected independently of the
     // adjacent verse (John3:16). Prefer the exact physical target element:
