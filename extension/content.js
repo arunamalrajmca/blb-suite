@@ -1381,6 +1381,12 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         const exactRangeCitation = resolveNumericRange(clickedWordRange, rangeAnchor);
         if (exactRangeCitation) return exactRangeCitation;
       }
+
+      // If this number did not resolve at its exact DOM position, never let
+      // later article-level prose supply a different citation for the token.
+      // Keep verse cues intact when an explicit book label exists in the local
+      // semantic block; bare 1–66 tokens continue to standalone-book handling.
+      if (numericSelectionWithoutBookLabel) return null;
     }
 
     // An exact standalone book token must retain the book-only destination.
