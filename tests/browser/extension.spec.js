@@ -689,22 +689,22 @@ test.describe('core user-visible E2E', () => {
     await expect(page.locator('body')).toBeVisible();
     await page.waitForTimeout(1000);
     await page.evaluate(() => {
-      const article = document.createElement('div');
-      article.setAttribute('role', 'article');
+      const article = document.createElement('article');
+      article.id = 'four-action-reference-matrix';
       article.innerHTML = [
-        '<div dir="auto">While God wants us to know and understand his prophetic program found in Genesis—<span id="acts-book">Acts</span> <span>7</span> and Hebrews—Revelation, these books are addressed to the nation of Israel specifically.</div>',
-        '<div dir="auto">In <span>Mt.</span> <span>16:24-27</span>, losing your life for his sake in <span id="matthew-v-cue">v.</span> <span id="matthew-verse">25</span> is tied to rewards.</div>',
-        '<div dir="auto"><span id="romans-book">Romans14</span>:<span id="romans-first-verse">10</span>-<span id="romans-last-verse">12</span></div>',
-        '<div dir="auto"><span id="mark-book">Mark5</span>:<span id="mark-verse">9</span></div>',
-        '<div dir="auto"><span id="john-book">John3</span>:<span id="john-first-verse">16</span>-<span id="john-last-verse">18</span></div>',
-        '<div dir="auto"><span id="first-cor-prefix">1</span> <span id="first-cor-book">Cor</span> 13:1</div>',
-        '<div dir="auto"><span id="second-th-prefix">II</span> <span id="second-th-book">Th</span> 2:1</div>',
-        '<div dir="auto"><span id="third-john-prefix">III</span> <span id="third-john-book">Jn</span> 1:1</div>',
-        '<div dir="auto"><span id="standalone-cor">Cor</span></div>',
-        '<div dir="auto"><span id="standalone-th">Th</span></div>',
-        '<div dir="auto"><span id="standalone-jn">Jn</span></div>',
-        '<div dir="auto"><span id="one-dot-serial">1.</span> First point in a numbered list</div>',
-        '<div dir="auto"><span id="two-dot-serial">2.</span> Second point in a numbered list</div>'
+        '<p>While God wants us to know and understand his prophetic program found in Genesis—<span id="acts-book">Acts</span> <span>7</span> and Hebrews—Revelation, these books are addressed to the nation of Israel specifically.</p>',
+        '<p>In <span>Mt.</span> <span>16:24-27</span>, losing your life for his sake in <span id="matthew-v-cue">v.</span> <span id="matthew-verse">25</span> is tied to rewards.</p>',
+        '<p><span id="romans-book">Romans14</span>:<span id="romans-first-verse">10</span>-<span id="romans-last-verse">12</span></p>',
+        '<p><span id="mark-book">Mark5</span>:<span id="mark-verse">9</span></p>',
+        '<p><span id="john-book">John3</span>:<span id="john-first-verse">16</span>-<span id="john-last-verse">18</span></p>',
+        '<p><span id="first-cor-prefix">1</span> <span id="first-cor-book">Cor</span> 13:1</p>',
+        '<p><span id="second-th-prefix">II</span> <span id="second-th-book">Th</span> 2:1</p>',
+        '<p><span id="third-john-prefix">III</span> <span id="third-john-book">Jn</span> 1:1</p>',
+        '<p><span id="standalone-cor">Cor</span></p>',
+        '<p><span id="standalone-th">Th</span></p>',
+        '<p><span id="standalone-jn">Jn</span></p>',
+        '<p><span id="one-dot-serial">1.</span> First point in a numbered list</p>',
+        '<p><span id="two-dot-serial">2.</span> Second point in a numbered list</p>'
       ].join('');
       document.body.appendChild(article);
     });
