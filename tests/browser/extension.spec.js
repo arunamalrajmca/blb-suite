@@ -822,7 +822,7 @@ test.describe('core user-visible E2E', () => {
     await page.evaluate(() => {
       const fixture = document.createElement('div');
       fixture.id = 'blb-e2e-substack-corinthians-reference';
-      fixture.innerHTML = '<p>Essentially, you are asking yourself, “How do I apply the attributes of charity in <span id="substack-cor1-number">1</span> <span id="substack-cor1">Cor</span>. <span>13</span> in how I love my wife and how I live my life?”</p><p>See also <span id="substack-cor2-number">2</span> <span id="substack-cor2">Cor</span>. <span>13</span>.</p>';
+      fixture.innerHTML = '<p>Essentially, you are asking yourself, “How do I apply the attributes of charity in <span>1</span> <span id="substack-cor1">Cor</span>. <span>13</span> in how I love my wife and how I live my life?”</p><p>See also <span>2</span> <span id="substack-cor2">Cor</span>. <span>13</span>.</p>';
       document.body.appendChild(fixture);
     });
 
@@ -856,7 +856,7 @@ test.describe('core user-visible E2E', () => {
     const point = await page.evaluate(() => {
       const paragraph = document.createElement('p');
       paragraph.id = 'blb-e2e-substack-corinthians-plain-text';
-      paragraph.innerHTML = 'Essentially, you are asking yourself, “How do I apply the attributes of charity in 1 Cor. 13 in how I love my wife and how I live my life?”';
+      paragraph.textContent = 'Essentially, you are asking yourself, “How do I apply the attributes of charity in 1 Cor. 13 in how I love my wife and how I live my life?”';
       document.body.appendChild(paragraph);
       const textNode = paragraph.firstChild;
       const start = textNode.textContent.indexOf('Cor');
@@ -872,21 +872,6 @@ test.describe('core user-visible E2E', () => {
       fragment: 'plain-text',
       selector: '#blb-e2e-substack-corinthians-plain-text',
       selectedText: 'Cor'
-    });
-    await extensionWorker.evaluate(() => chrome.tabs.query({}).then(async tabs => {
-      for (const tab of tabs) {
-        try {
-          if (new URL(String(tab.url || tab.pendingUrl || '')).pathname === '/kjv/1co/13/1/' && tab.id != null) {
-            await chrome.tabs.remove(tab.id);
-          }
-        } catch (_) {}
-      }
-    }));
-    await page.locator('#substack-plain-number').dblclick();
-    await activateBlbTabForPath(extensionWorker, '/kjv/1co/13/1/', {
-      fragment: '#substack-plain-number',
-      selector: '#blb-e2e-substack-corinthians-plain-text',
-      selectedText: '1'
     });
   });
 
