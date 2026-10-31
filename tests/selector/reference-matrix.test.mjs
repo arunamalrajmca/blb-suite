@@ -14,16 +14,13 @@ test("extension.spec.js reference checks share one matrix runner without droppin
   assert.doesNotThrow(() => new RegExp(grouped[0].grep));
 
   for (const pattern of [
-    "Double-click resolves any part",
-    "generic reference grammar — exhaustive token coverage — OT",
-    "generic reference grammar — exhaustive token coverage — NT",
-    "generic reference syntax — colon forms",
-    "generic reference syntax — dot forms",
-    "generic reference syntax — spaced forms",
-    "generic reference syntax — chapter forms",
-    "generic reference syntax — range forms",
-    "generic aliases",
-    "All 66 canonical"
+    "Single-word verse cues resolve",
+    "Double-click resolves any part of an adjacent Bible reference",
+    "Acts 7, v.25",
+    "Unicode-styled Bible book",
+    "spaced forms — OT",
+    "spaced forms — NT",
+    "Facebook directional-format Revelation 20:1-10"
   ]) {
     assert.ok(grouped[0].grep.includes(pattern), "batched grep must preserve: " + pattern);
   }
