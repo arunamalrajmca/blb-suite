@@ -5658,6 +5658,19 @@ async function openSharedSelectionAction({
   }
 
   const normalized = normalizeSelectedScriptureText(text);
+  const numericOnlySelection = /^\d+\.?$/.test(normalized);
+  if (numericOnlySelection && !contextualReference?.url) {
+    if (!contextualReferenceResolved) {
+      const liveContext = await getContextualSelectionReference(tabId, text);
+      if (liveContext?.url) {
+        await openSelectedPdfBibleRefs(text, behavior, liveContext);
+        return {ok:true, contextual:true};
+      }
+    }
+    // Numeric tokens are positional. If their live Range has no valid
+    // reference, do not reinterpret them as a default-book verse.
+    return {ok:true, unresolvedNumeric:true};
+  }
   const direct = getDirectSelectedReference(normalized);
   const strong = canonicalStrongValue(normalized);
   const bookOnly = getSelectedBookOnlyReference(normalized);
@@ -5978,7 +5991,8 @@ async function handleBlbSelectionContextMenuClick(info, tab) {
       tabUrl:tab?.url || '',
       text,
       behavior:{activeIfNew:true, activateExisting:true},
-      contextualReference:contextualRef || null
+      contextualReference:contextualRef || null,
+      contextualReferenceResolved: menuId === 'blb-suite-web-selection'
     });
     await clearPageSelectionAfterBlbAction(tab?.id);
   } catch (err) {
@@ -6030,7 +6044,8 @@ async function handleOpenBibleSelectionCommand() {
       tabUrl: tab.url || '',
       text: selectedText,
       behavior: {activeIfNew:true, activateExisting:true, altB:true},
-      contextualReference: contextualReference || null
+      contextualReference: contextualReference || null,
+      contextualReferenceResolved: true
     });
     await clearPageSelectionAfterBlbAction(tab.id);
   } catch (err) {

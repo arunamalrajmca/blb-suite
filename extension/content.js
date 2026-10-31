@@ -1033,8 +1033,8 @@ function getContextualBibleReference(selectionText) {  const selected = normaliz
   // so their Range must resolve against the same surrounding DOM citation
   // before a text-only numeric/Criteria fallback can reinterpret that token.
   const normalizedSelectedToken = selected.normalize('NFKC');
-  if (!/\\s/.test(normalizedSelectedToken) &&
-      /^[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*$/u.test(normalizedSelectedToken)) {
+  if (!/\s/.test(normalizedSelectedToken) &&
+      /^[\p{L}\p{N}][\p{L}\p{N}.'-]*$/u.test(normalizedSelectedToken)) {
     const liveSelection = window.getSelection?.();
     if (liveSelection?.rangeCount && !liveSelection.isCollapsed) {
       let target = liveSelection.getRangeAt(0).commonAncestorContainer;
@@ -1045,6 +1045,11 @@ function getContextualBibleReference(selectionText) {  const selected = normaliz
       }
     }
   }
+
+  // Never send an unresolved bare number to the text-only parser: it can
+  // manufacture a default Genesis reference from a chapter/verse token.
+  // Standalone 1–66 book numbers have already returned above when valid.
+  if (/^\d+\.?$/.test(normalizedSelectedToken)) return null;
 
   // Resolve compact book/chapter selections directly from the live DOM Range.
   // This avoids depending on reconstructed text offsets when the colon and
