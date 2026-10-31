@@ -675,7 +675,7 @@ test.describe('core user-visible E2E', () => {
       }), expectedPath);
     }
   });
-  test('Facebook post references resolve Acts chapter, verse cues, and compact Romans ranges', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Contextual DOM references resolve Acts chapter, verse cues, and generic compact book-chapter ranges', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
@@ -685,7 +685,8 @@ test.describe('core user-visible E2E', () => {
       article.innerHTML = [
         '<div dir="auto">While God wants us to know and understand his prophetic program found in Genesis—<span id="acts-book">Acts</span> <span>7</span> and Hebrews—Revelation, these books are addressed to the nation of Israel specifically.</div>',
         '<div dir="auto">In <span>Mt.</span> <span>16:24-27</span>, losing your life for his sake in <span id="matthew-v-cue">v.</span> <span id="matthew-verse">25</span> is tied to rewards.</div>',
-        '<div dir="auto"><span id="romans-book">Romans14</span>:<span id="romans-first-verse">10</span>-<span id="romans-last-verse">12</span></div>'
+        '<div dir="auto"><span id="romans-book">Romans14</span>:<span id="romans-first-verse">10</span>-<span id="romans-last-verse">12</span></div>',
+        '<div dir="auto"><span id="john-book">John3</span>:<span id="john-verse">16</span></div>'
       ].join('');
       document.body.appendChild(article);
     });
@@ -696,7 +697,9 @@ test.describe('core user-visible E2E', () => {
       ['#matthew-verse', '/kjv/mat/16/25/'],
       ['#romans-book', '/kjv/rom/14/10-12/'],
       ['#romans-first-verse', '/kjv/rom/14/10-12/'],
-      ['#romans-last-verse', '/kjv/rom/14/10-12/']
+      ['#romans-last-verse', '/kjv/rom/14/10-12/'],
+      ['#john-book', '/kjv/jhn/3/16/'],
+      ['#john-verse', '/kjv/jhn/3/16/']
     ];
     for (const [selector, expectedPath] of cases) {
       await page.locator(selector).first().dblclick();
