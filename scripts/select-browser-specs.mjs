@@ -15,7 +15,6 @@ const event = process.env.GITHUB_EVENT_NAME || "";
 const ref = process.env.GITHUB_REF || "";
 // Main pushes should select coverage from the pushed diff, just like PRs. Keep a full run for manual dispatches and first pushes where GitHub provides an all-zero before SHA.
 const alwaysFull = event === "workflow_dispatch" || (event === "push" && ref === "refs/heads/main" && (!base || /^0+$/.test(base)));
-const knownFailuresOnly = process.env.KNOWN_FAILURES_ONLY === "true";
 const run = (args) => execFileSync("git", args, { encoding: "utf8" }).trimEnd();
 let changed = [];
 if (!alwaysFull) {
@@ -221,8 +220,8 @@ for (const path of changed) {
 const missingMappedSpecs = [...specs].filter(path => !existingBrowserSpecs.has(path));
 // A stale mapping must never silently drop behavioral coverage. Fall back to
 // the full suite if any mapped target no longer exists in the checked-out tree.
-const full = !knownFailuresOnly && (forceFull || unknownRuntime || missingMappedSpecs.length > 0);
-const selected = knownFailuresOnly ? ["tests/browser/extension.spec.js"] : [...specs].filter(path => existingBrowserSpecs.has(path)).sort();
+const full = forceFull || unknownRuntime || missingMappedSpecs.length > 0;
+const selected = [...specs].filter(path => existingBrowserSpecs.has(path)).sort();
 const mappedSpecs = new Set([
   "tests/browser/redirect-source-url-patterns.spec.js",
   "tests/browser/omnibox-boolean-operators.spec.js",
@@ -268,10 +267,10 @@ const has = (...names) => full || selected.some(path => names.includes(path));
 const values = {
   full_browser_suite: String(full),
   changed_specs: selected.join(","),
-  changed_browser_specs: knownFailuresOnly ? "" : changedBrowserSpecs.join(","),
+  changed_browser_specs: changedBrowserSpecs.join(","),
   unmapped_specs: unmapped.join(","),
-  extension_spec_required: String(!knownFailuresOnly && (full || selected.includes("tests/browser/extension.spec.js"))),
-  group_a_required: String(!knownFailuresOnly && (has(
+  extension_spec_required: String(full || selected.includes("tests/browser/extension.spec.js")),
+  group_a_required: String(has(
     "tests/browser/redirect-source-url-patterns.spec.js",
     "tests/browser/omnibox-boolean-operators.spec.js",
     "tests/browser/redirect-source-url-browser.spec.js",
@@ -294,8 +293,8 @@ const values = {
     "tests/browser/extension.spec.js",
     "tests/browser/site-feature-defaults.spec.js",
     "tests/browser/study-session-popup-ui-regression.spec.js"
-   ) || unmapped.length > 0 || changedBrowserSpecs.length > 0)),
-  group_b_required: String(!knownFailuresOnly && has(
+  ) || unmapped.length > 0 || changedBrowserSpecs.length > 0),
+  group_b_required: String(has(
     "tests/browser/redirect-hostnames.spec.js",
     "tests/browser/blb-non-kjv-redirect.spec.js",
     "tests/browser/scripttagger-global-injection.spec.js"
