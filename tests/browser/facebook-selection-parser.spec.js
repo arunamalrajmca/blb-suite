@@ -25,13 +25,12 @@ test('NFKC-normalized references resolve compatibility-form ranges for all 66 bo
       const source = fullWidth(book.name + ' 1:1-2');
       const normalized = normalizeSelectedScriptureText(source);
       const ref = resolveBibleReferenceText(normalized)[0];
-      return ref && [ref.book, ref.chapter, ref.from, ref.to];
+      return !!ref && ref.book === book.name && ref.chapter === 1 &&
+        ref.from === 1 && ref.to === 2;
     });
   });
   expect(result).toHaveLength(66);
-  expect(result.every((ref, index) =>
-    ref && ref[0] && ref[1] === 1 && ref[2] === 1 && ref[3] === 2
-  )).toBe(true);
+  expect(result.every(Boolean)).toBe(true);
 });
 
 test('Facebook selection parser preserves numbered-book references across invisible Unicode marks', async ({ extensionWorker }) => {
