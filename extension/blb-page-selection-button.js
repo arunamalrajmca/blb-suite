@@ -418,11 +418,59 @@
           } catch (_) {}
         }
         if (!blbPageButtonContextualReference) {
-          const contextual = getContextualBibleReference(text);
+          let contextual = getContextualBibleReference(text);
+
+          // Numeric tokens are meaningful only at their exact DOM position.
+          // If the shared resolver cannot reconstruct that position on a
+          // nested inline selection, resolve a same-chapter comma list from
+          // the same live Range context before allowing any background fallback.
+          if (!contextual?.url && /^\\d+$/.test(normalizeSelectionText(text))) {
+            const position = typeof getSelectionContextPosition === 'function'
+              ? getSelectionContextPosition()
+              : null;
+            if (position?.text && Number.isFinite(position.start) && Number.isFinite(position.end)) {
+              const source = normalizeSelectionText(position.text).normalize('NFKC');
+              const selectedStart = position.start;
+              const selectedEnd = position.end;
+              const listPattern = /((?:[1-3]\\s*|i{1,3}\\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\\s+(\\d{1,3})\\s*:\\s*(\\d{1,3}(?:\\s*,\\s*\\d{1,3})+)/gi;
+              let match;
+              while ((match = listPattern.exec(source))) {
+                const citationStart = match.index;
+                const citationEnd = citationStart + match[0].length;
+                if (selectedStart >= citationEnd || selectedEnd <= citationStart) continue;
+                const book = resolveBibleBook(match[1]);
+                if (!book) continue;
+                const verses = match[3].split(',').map(value => Number(value.trim()));
+                const consecutive = verses.every((verse, index) =>
+                  index === 0 || verse === verses[index - 1] + 1
+                );
+                if (!consecutive) continue;
+                const resolved = resolveBibleReference(
+                  book.name, Number(match[2]), verses[0], verses[verses.length - 1]
+                );
+                if (resolved) {
+                  contextual = {
+                    book: resolved.book,
+                    chapter: resolved.chapter,
+                    from: resolved.from,
+                    to: resolved.to,
+                    url: resolved.url
+                  };
+                  break;
+                }
+              }
+            }
+          }
+
           if (contextual?.url) {
             blbPageButtonContextualReference = contextual;
             lastSelectionContextualReference = contextual;
             lastSelectionContextualText = text;
+          } else if (/^\\d+$/.test(normalizeSelectionText(text))) {
+            // Never pass an unresolved bare number to the background parser:
+            // it can be mistaken for Genesis 1:9 or another default-book ref.
+            blbPageButtonSelection = '';
+            return;
           }
         }
       }
