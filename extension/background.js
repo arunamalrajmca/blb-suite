@@ -5933,7 +5933,19 @@ async function handleOpenBibleSelectionCommand() {
       }
       return;
     }
-    await openCurrentSelectionInBlb(tab.id);
+    const selectedText = await getActiveTabSelection(tab.id);
+    if (!selectedText) return;
+    // Alt+B must use the same DOM-context resolver as the floating button and
+    // right-click. A one-token selection such as "Acts", "v.", or "10" is not
+    // independently meaningful without the adjacent citation in the page.
+    const contextualReference = await getContextualSelectionReference(tab.id, selectedText);
+    await openSharedSelectionAction({
+      tabId: tab.id,
+      tabUrl: tab.url || '',
+      text: selectedText,
+      behavior: {activeIfNew:true, activateExisting:true, altB:true},
+      contextualReference: contextualReference || null
+    });
     await clearPageSelectionAfterBlbAction(tab.id);
   } catch (err) {
     console.error('KJV Scripture Tools Alt+B:', err);
