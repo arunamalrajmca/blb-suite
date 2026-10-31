@@ -1358,7 +1358,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       if (clickedChapterBook) {
         const escapedBookToken = selected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const bookTokenPattern = new RegExp('(?<![A-Za-z0-9])' + escapedBookToken + '(?![A-Za-z0-9])', 'gi');
-        const bookTokenPattern = new RegExp('(?<![A-Za-z0-9])' + escapedBookToken + '(?![A-Za-z0-9])', 'gi');
         let bookTokenMatch;
         while ((bookTokenMatch = bookTokenPattern.exec(normalizedMatchSource))) {
           const tokenStart = bookTokenMatch.index;
