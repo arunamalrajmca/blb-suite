@@ -1287,7 +1287,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // wrapper or inspect its ancestors. Prefer the actual clicked text range.
     const isVersionCodeClick = isBibleVersionCodeToken(selected);
     const blockCandidates = [];
-    if (isVersionCodeClick) {
+    if (isVersionCodeClick || /^\\d+$/.test(selected)) {
       const clickAnchor = clickedWordRange?.startContainer?.parentElement || initialNode;
       const localBlock = clickAnchor?.closest?.('p,li,td,th,blockquote,article,section,main')
         || clickAnchor?.closest?.('div')
@@ -2034,11 +2034,18 @@ function handleDoubleClickBlb(event) {
         const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
           && KJV_CORPUS_WORD_INDEX.has(normalizedSelectionToken);
 
-        // Reject unrelated English single words before building DOM context or
-        // entering the background selection resolver. This is an exact local
-        // membership check against the corpus-derived KJV vocabulary index.
-        // Known Bible-version codes are the exception: scan their surrounding
-        // text for a reference, but never send the code itself for word lookup.
+        // Compact book/chapter tokens such as Romans14 and John3 are
+        // reference candidates even though they are not standalone aliases.
+        const compactBookChapterEntries = [
+          ...BOOKS.flatMap(book => [book.name, book.urlKey]),
+          ...Object.keys(BOOK_ALIASES || {})
+        ].filter(Boolean).sort((a,b) => String(b).length - String(a).length);
+        const isCompactBookChapterToken = compactBookChapterEntries.some(name => {
+          const escaped = String(name).replace(/\\./g, '\\\\.').replace(/\\s+/g, '');
+          return new RegExp('^' + escaped + '\\d{1,3}$', 'i').test(selection);
+        });
+
+        // Reject unrelated English single words before building DOM context.
         if (/^[A-Za-z][A-Za-z'’\\-]*$/.test(selection)) {
           const isBookName = !!resolveBibleBook(selection);
           // Roman numeral tokens can be the prefix of a numbered Bible book
@@ -2046,7 +2053,7 @@ function handleDoubleClickBlb(event) {
           // reference check below; without a valid nearby prefix they remain
           // inert and are not sent to ordinary word lookup.
           const isRomanBookPrefixToken = /^(?:I|II|III)$/i.test(selection);
-          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isNumberedBookSuffixCandidate && !isRomanBookPrefixToken && !isVerseContextWord) return true;
+          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isNumberedBookSuffixCandidate && !isRomanBookPrefixToken && !isVerseContextWord && !isCompactBookChapterToken) return true;
         }
 
         // DOM context is useful only when the clicked token can identify a
@@ -2116,13 +2123,14 @@ function handleDoubleClickBlb(event) {
               const afterBook=contextText.slice(match.index+match[0].length);
               const chapterMatch=afterBook.match(/^\s*\.?\s*(\d{1,3})\b/);
               const chapter=chapterMatch ? Number(chapterMatch[1]) : 0;
-              // Preserve an explicit verse when the suffix is clicked in a
-              // full reference such as "1 Peter 2:9". This fallback is only
-              // for chapter-only citations such as "1 Corinthians 13".
-              const hasExplicitVerse=/^\s*\.?\s*\d{1,3}\s*(?:[:.]|\s)\s*\d{1,3}\b/.test(afterBook);
-              if (chapter>0 && !hasExplicitVerse) {
-                const resolvedBook=resolveBibleBook(prefixNumber+' '+match[2]);
-                if (resolvedBook) numberedSuffixReference=resolveBibleReference(resolvedBook.name,chapter,1,1);
+              const resolvedBook=resolveBibleBook(prefixNumber+' '+match[2]);
+              const verseMatch=afterBook.match(/^\\s*\\.?\\s*\\d{1,3}\\s*[:.]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?/);
+              if (chapter>0 && resolvedBook) {
+                // Resolve this exact numbered-book occurrence for Arabic and
+                // Roman prefixes; do not fall back to the bare suffix alias.
+                const from=verseMatch ? Number(verseMatch[1]) : 1;
+                const to=verseMatch?.[2] ? Number(verseMatch[2]) : from;
+                numberedSuffixReference=resolveBibleReference(resolvedBook.name,chapter,from,to);
               } else if (!chapterMatch) {
                 // A prefixed book name without chapter/verse is a Criteria
                 // Search request. Preserve the complete canonical name rather
@@ -2141,7 +2149,7 @@ function handleDoubleClickBlb(event) {
         // existing positional DOM resolver, which uses the physical caret token to
         // identify the exact citation and can expand consecutive verses to a range.
         const isCommaSeparatedNumericVerseSelection = /^\d{1,3}\s*,\s*\d{1,3}$/.test(selection);
-        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord||isCommaSeparatedNumericVerseSelection;
+        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord||isCommaSeparatedNumericVerseSelection||isCompactBookChapterToken;
         const blockContext=needsDomContext
           ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
           : null;
@@ -2175,10 +2183,10 @@ function handleDoubleClickBlb(event) {
         const standaloneBook=isNumericBookCandidate
           ? getStandaloneBookReference(selection)
           : null;
-        const blockText=isNumericBookCandidate ? normalizeSelectionText(
-          event?.target?.closest?.('p,li,td,th,blockquote,article,section,div')?.textContent||''
-        ) : '';
-        const isStandaloneNumericBook=isNumericBookCandidate && standaloneBook && blockText===selection;
+        // Independent numeric tokens may share a paragraph in social/article
+        // layouts. If no citation resolves in their own nearest block, retain
+        // the standalone book-number gesture.
+        const isStandaloneNumericBook=isNumericBookCandidate && standaloneBook && !blockContext;
         const contextualReference=numberedSuffixReference
           || (isNumberedListSerial && standaloneBook
             ? standaloneBook
