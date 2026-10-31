@@ -1053,7 +1053,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       ].filter(Boolean);
       return labels.some(label => {
         const escaped = String(label).replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-        return new RegExp('(?:^|[^A-Za-z0-9])' + escaped + '(?=$|[^A-Za-z0-9])', 'i').test(value);
+        return new RegExp('(?:^|[^A-Za-z0-9])' + escaped + '(?=$|[^A-Za-z0-9]|\\d)', 'i').test(value);
       });
     };
     const numericSelectionWithoutBookLabel = /^\d+$/.test(selected)
