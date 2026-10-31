@@ -708,25 +708,13 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
     if (!book) continue;
     add(alias, book);
     const numberedName = String(canonicalName || '').match(/^([1-3])\s+(.+)$/i);
-    if (numberedName && !/^(?:[1-3]|i{1,3})\s+/i.test(alias)) {
+    if (numberedName && !/^(?:[1-3]|i{1,3})\\s+/i.test(alias)) {
       const roman = ({'1':'I','2':'II','3':'III'})[numberedName[1]];
+      // Generate both prefix forms for every configured alias of every
+      // numbered book. A selected suffix may be an abbreviation (Jn, Cor,
+      // Th, etc.), so matching only canonical book names is insufficient.
+      add(numberedName[1] + ' ' + alias, book);
       add(roman + ' ' + alias, book);
-    }
-  }
-  // Expand the production numbered-book suffix map into positional aliases.
-  // A selection may cover only the suffix (for example, "Jn" in "III Jn 1:1"),
-  // so the prefix must be part of the candidate citation even though it is not
-  // part of the browser selection. Keep both Arabic and Roman forms aligned
-  // with NUMBERED_BOOK_SUFFIX_ALIASES, the authoritative suffix map.
-  for (const [family, aliases] of Object.entries(NUMBERED_BOOK_SUFFIX_ALIASES || {})) {
-    for (const book of BOOKS) {
-      const numberedName = String(book.name || '').match(/^([1-3])\\s+(.+)$/i);
-      if (!numberedName || numberedName[2].toLowerCase() !== String(family).toLowerCase()) continue;
-      const roman = ({'1':'I','2':'II','3':'III'})[numberedName[1]];
-      for (const alias of aliases || []) {
-        add(numberedName[1] + ' ' + alias, book);
-        add(roman + ' ' + alias, book);
-      }
     }
   }
   entries.sort((a, b) => b.name.length - a.name.length);
