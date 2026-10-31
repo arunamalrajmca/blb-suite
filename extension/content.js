@@ -720,6 +720,47 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
 
   const refs = resolveBibleReferenceText(source);
 
+  // Compact book/chapter syntax (e.g. Romans14:10-12, John3:16) must be
+  // resolved in the shared contextual path so all four user actions behave
+  // identically. Match the complete compact citation and accept a selection
+  // anywhere inside it: book/chapter token, first verse, or range endpoint.
+  const compactBookEntries = [];
+  const addCompactBookEntry = (name, book) => {
+    const value = String(name || '').trim();
+    if (!value || !book || compactBookEntries.some(entry => entry.name.toLowerCase() === value.toLowerCase())) return;
+    compactBookEntries.push({name:value,book});
+  };
+  for (const bookEntry of BOOKS) {
+    addCompactBookEntry(bookEntry.name, bookEntry);
+    addCompactBookEntry(bookEntry.urlKey, bookEntry);
+  }
+  for (const [alias, canonicalName] of Object.entries(BOOK_ALIASES || {})) {
+    const bookEntry = BOOKS.find(candidate => candidate.name === canonicalName);
+    if (bookEntry) addCompactBookEntry(alias, bookEntry);
+  }
+  compactBookEntries.sort((a,b) => b.name.length-a.name.length);
+  for (const entry of compactBookEntries) {
+    const escaped = entry.name.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\  const refs = resolveBibleReferenceText(source);
+
+  // Contextual actions (floating button, right-click, and Alt+B) receive the
+').replace(/\\s+/g, '\\\\s+');
+    const compactPattern = new RegExp(
+      `(?:^|[^A-Za-z0-9])${escaped}(\\\\d{1,3})(?::(\\\\d{1,3})(?:\\\\s*[-–]\\\\s*(\\\\d{1,3}))?)?(?=$|[^A-Za-z0-9])`,
+      'gi'
+    );
+    let compactMatch;
+    while ((compactMatch = compactPattern.exec(source))) {
+      const citationStart = compactMatch.index + compactMatch[0].indexOf(entry.name);
+      const citationEnd = compactPattern.lastIndex;
+      if (selectionStart >= citationEnd || selectionEnd <= citationStart) continue;
+      const chapter = Number(compactMatch[1]);
+      const verseFrom = compactMatch[2] ? Number(compactMatch[2]) : 1;
+      const verseTo = compactMatch[3] ? Number(compactMatch[3]) : verseFrom;
+      const resolved = resolveBibleReference(entry.book.name, chapter, verseFrom, verseTo);
+      if (resolved) return {book:resolved.book,chapter:resolved.chapter,from:resolved.from,to:resolved.to,url:resolved.url};
+    }
+  }
+
   // Contextual actions (floating button, right-click, and Alt+B) receive the
   // selected token, not the whole citation. Resolve a book token against only
   // its immediately following chapter, matching the double-click behavior.
