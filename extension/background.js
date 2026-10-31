@@ -2941,7 +2941,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (Number.isInteger(standaloneBookNumber) && standaloneBookNumber >= 1 && standaloneBookNumber <= 66) {
           const standaloneBook=bookData.find(book => Number(book.bookNumber) === standaloneBookNumber);
           if (standaloneBook) {
-            await openBlbBook(standaloneBook.bookNumber, behavior);
+            await openBlbDestination(
+              standaloneBook.url,
+              !!behavior.activeIfNew,
+              !!behavior.activateExisting
+            );
             sendResponse({ok:true,bookOnly:true,standaloneNumericBook:true,actionSource:'double-click'});
             return true;
           }
