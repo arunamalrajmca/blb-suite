@@ -688,6 +688,28 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
   // Re-normalizing a prefix would trim its trailing separator and shift the
   // selected token one character to the left.
 
+  // Resolve a clicked suffix against its immediately preceding ordinal prefix.
+  const selectedToken = normalizeSelectionText(source.slice(selectionStart, selectionEnd)).normalize('NFKC');
+  if (/^[A-Za-z][A-Za-z.'-]*$/.test(selectedToken)) {
+    const prefix = source.slice(0, selectionStart).match(/(?:^|[^A-Za-z0-9])((?:[1-3]|i{1,3})\s+)$/i);
+    if (prefix) {
+      const numberedBook = resolveBibleBook(prefix[1] + selectedToken);
+      if (numberedBook) {
+        const following = source.slice(selectionEnd).match(/^(?:\s+|\.(?=\d)\s*)(\d{1,3})(?:\s*[:.]\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?)?/);
+        if (following) {
+          const chapter = Number(following[1]);
+          const from = following[2] ? Number(following[2]) : null;
+          const to = following[3] ? Number(following[3]) : from;
+          const resolved = resolveBibleReference(numberedBook.name, chapter, from, to);
+          if (resolved) return {
+            book: resolved.book, chapter: resolved.chapter,
+            from: resolved.from, to: resolved.to, url: resolved.url
+          };
+        }
+      }
+    }
+  }
+
   const entries = [];
   const add = (name, book) => {
     const value = String(name || '').trim();
@@ -1024,6 +1046,21 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     const domRangeText = range => serializeDomChildren(range.cloneContents());
     let selected = normalizeSelectionText(selectionText).normalize('NFKC');
     const initialNode = target instanceof Element ? target : (target?.parentElement || null);
+    const hasExplicitBookLabel = value => {
+      const labels = [
+        ...(BOOKS || []).flatMap(book => [book.name, book.urlKey]),
+        ...Object.keys(BOOK_ALIASES || {})
+      ].filter(Boolean);
+      return labels.some(label => {
+        const escaped = String(label).replace(/[.*+?^$()|[\]\\]/g, '\\    let selected = normalizeSelectionText(selectionText).normalize('NFKC');
+    const initialNode = target instanceof Element ? target : (target?.parentElement || null);').replace(/\s+/g, '\\s+');
+        return new RegExp('(?:^|[^A-Za-z0-9])' + escaped + '(?=$|[^A-Za-z0-9])', 'i').test(value);
+      });
+    };
+    const numericSelectionWithoutBookLabel = /^\d+$/.test(selected)
+      && !hasExplicitBookLabel(normalizeSelectionText(
+        target?.closest?.('p,li,td,th,blockquote,article,section,div')?.textContent || target?.textContent || ''
+      ));
 
     // Prefer the physical double-click location over the browser's Selection:
     // dblclick can expose a stale, non-empty Selection from the previous word.
@@ -1311,7 +1348,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // Normalize typographic dashes for source-to-parser matching. Each dash
       // maps to one code unit, so DOM selection offsets remain unchanged.
       const candidateMatchSource = candidateSource.replace(/[\u2010-\u2015\u2212]/g, '-');
-      if (!candidateSource) continue;
+      if (!candidateSource || numericSelectionWithoutBookLabel) continue;
       // Parse the same dash-normalized text used for positional matching;
       // otherwise Unicode ranges such as 46–47 are located correctly but
       // rejected by the reference parser before matching can begin.
@@ -1384,6 +1421,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // while Range-derived offsets must be translated from the original DOM
     // text into the normalized string before comparing positions.
     const normalizedMatchSource = normalizeSelectionText(rawSource).normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-');
+    // Prevent numeric-only prose such as `1 66` becoming a clamped chapter.
+    if (numericSelectionWithoutBookLabel) return null;
     const toNormalizedOffset = offset => {
       const boundedOffset = Math.max(0, Math.min(rawSource.length, offset));
       const prefix = rawSource.slice(0, boundedOffset);

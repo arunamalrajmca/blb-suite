@@ -675,7 +675,7 @@ test.describe('core user-visible E2E', () => {
       }), expectedPath);
     }
   });
-  test('Acts 7, v.25, and compact references resolve through all four selection actions', async ({ page, extensionStorage, extensionWorker }) => {
+  test('Acts 7, v.25, and compact references resolve through all four selection actions @failure-first', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({
       masterEnabled: true,
       pageSelectionButtonSites: { 'example.com': true },
@@ -1142,7 +1142,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click uses the browser token, not the whole surrounding line', async ({ page, context, extensionStorage }) => {
+  test('Double-click uses the browser token, not the whole surrounding line @failure-first', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     // Wait for asynchronous double-click settings initialization before the first gesture.
@@ -1558,7 +1558,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click positional context — standalone numeric book tokens remain independent', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click positional context — standalone numeric book tokens remain independent @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
     // Exhaustive 66-book coverage needs more than Playwright's 60s default
     // because every gesture opens and closes a real BLB tab.
     test.setTimeout(180000);
@@ -1653,7 +1653,7 @@ test.describe('core user-visible E2E', () => {
     await runDoubleClickReferenceToken(page, context, extensionWorker, selector, token, expectedPath);
   }
 
-  test('Double-click numbered-book suffixes resolve every supported numbered-book alias', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click numbered-book suffixes resolve every supported numbered-book alias @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(240000);
     // Derive all numbered-book cases from the production alias map and canonical
     // BOOKS list. No parallel family, alias, or URL-key list belongs in this test.
