@@ -1701,8 +1701,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // Anchor offsets to the exact clicked DOM token when available; this avoids
     // stale/native Selection offsets drifting across adjacent inline elements.
     const compactToken = selected.normalize('NFKC');
-    const compactBookChapter = resolveCompactBookChapterToken(compactToken);
-    if (compactBookChapter) {
+    const compactTokenBookChapter = resolveCompactBookChapterToken(compactToken);
+    if (compactTokenBookChapter) {
       let compactStart = selectionStart;
       let compactEnd = selectionEnd;
       const exactClickedElement = [initialNode, getDoubleClickTargetElement(event)]
@@ -1725,7 +1725,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const from = Number(following[1]);
           const to = following[2] ? Number(following[2]) : from;
           const compactResolved = resolveBibleReference(
-            compactBookChapter.book.name, compactBookChapter.chapter, from, to
+            compactTokenBookChapter.book.name, compactTokenBookChapter.chapter, from, to
           );
           if (compactResolved) return {
             book: compactResolved.book,
