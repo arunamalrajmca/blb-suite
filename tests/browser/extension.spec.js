@@ -726,7 +726,9 @@ test.describe('core user-visible E2E', () => {
       ['#first-cor-book', 'Cor', '/kjv/1co/13/1/'],
       ['#second-th-book', 'Th', '/kjv/2th/2/1/'],
       ['#third-john-book', 'Jn', '/kjv/3jo/1/1/'],
-      ['#standalone-cor', 'Cor', '/kjv/1co/1/1/'],
+      // Standalone "Cor" is a KJV word with a single Criteria Search result;
+      // it must retain that destination instead of being forced to 1 Corinthians.
+      ['#standalone-cor', 'Cor', '/search/search.cfm', 'Cor'],
       ['#standalone-th', 'Th', '/kjv/1th/1/1/'],
       ['#standalone-jn', 'Jn', '/kjv/jhn/1/1/'],
       ['#one-dot-serial', '1.', '/kjv/gen/1/1/'],
@@ -734,7 +736,7 @@ test.describe('core user-visible E2E', () => {
     ];
     const actions = ['Show on BLB', 'Right-Click', 'Alt+B', 'Double-Click'];
 
-    for (const [selector, selectedText, expectedPath] of cases) {
+    for (const [selector, selectedText, expectedPath, expectedCriteria] of cases) {
       for (const action of actions) {
         const beforeIds = await extensionWorker.evaluate(() =>
           chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
@@ -787,6 +789,16 @@ test.describe('core user-visible E2E', () => {
         ), beforeIds);
         expect(openedPaths, action + ' on ' + selector + ' must open ' + expectedPath)
           .toContain(expectedPath);
+        if (expectedCriteria) {
+          const openedCriteria = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+            tabs.filter(tab => !before.includes(tab.id)).map(tab => {
+              try { return new URL(String(tab.url || tab.pendingUrl || '')).searchParams.get('Criteria') || ''; }
+              catch (_) { return ''; }
+            }).filter(Boolean).map(value => value.toLowerCase())
+          ), beforeIds);
+          expect(openedCriteria, action + ' on ' + selector + ' must preserve its KJV Criteria Search destination')
+            .toContain(expectedCriteria.toLowerCase());
+        }
 
         await extensionWorker.evaluate(path => chrome.tabs.query({}).then(async tabs => {
           for (const tab of tabs) {
