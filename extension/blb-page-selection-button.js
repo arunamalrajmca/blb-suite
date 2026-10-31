@@ -466,7 +466,7 @@
             blbPageButtonContextualReference = contextual;
             lastSelectionContextualReference = contextual;
             lastSelectionContextualText = text;
-          } else if (/^\\d+$/.test(normalizeSelectionText(text))) {
+          } else if (/^\d+$/.test(normalizeSelectionText(text))) {
             // Never pass an unresolved bare number to the background parser:
             // it can be mistaken for Genesis 1:9 or another default-book ref.
             blbPageButtonSelection = '';
