@@ -13,9 +13,20 @@ test("extension.spec.js reference checks share one matrix runner without droppin
   assert.equal(grouped[0].file, undefined, "group must continue to target the default extension.spec.js");
   assert.doesNotThrow(() => new RegExp(grouped[0].grep));
 
-  assert.equal(grouped[0].grep, "Acts 7, v.25",
-    "the focused matrix must contain only the still-unverified four-action cue regression");
-  assert.doesNotMatch(grouped[0].grep, /Single-word verse cues|Double-click resolves any part|Unicode-styled Bible book|spaced forms|Facebook directional-format/);
+  for (const pattern of [
+    "Double-click resolves any part",
+    "generic reference grammar — exhaustive token coverage — OT",
+    "generic reference grammar — exhaustive token coverage — NT",
+    "generic reference syntax — colon forms",
+    "generic reference syntax — dot forms",
+    "generic reference syntax — spaced forms",
+    "generic reference syntax — chapter forms",
+    "generic reference syntax — range forms",
+    "generic aliases",
+    "All 66 canonical"
+  ]) {
+    assert.ok(grouped[0].grep.includes(pattern), "batched grep must preserve: " + pattern);
+  }
 });
 
 test("dedicated reference specs remain covered by individual or batched matrix entries", () => {
