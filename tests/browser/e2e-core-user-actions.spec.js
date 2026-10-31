@@ -1130,8 +1130,6 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
 test('MultiVerse parses reversed disjoint chapter ranges without dropping the second range', async ({ page, context, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-  await extensionStorage.set({ masterEnabled: true });
-  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
 
   const submittedPayloads = [];
