@@ -1871,9 +1871,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       }
     }
 
-    const positionalCitation = resolvePositionalBookCitation(normalizedMatchSource, selectionStart, selectionEnd);
-    if (positionalCitation) return positionalCitation;
-
     // Chapter-only references are positional too: when a clicked book name
     // is immediately followed by a chapter (for example, "Genesis—Acts 7"),
     // resolve that chapter instead of falling back to the book's first verse.
@@ -2039,6 +2036,9 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       );
       if (verseListReference) return verseListReference;
     }
+
+    const positionalCitation = resolvePositionalBookCitation(normalizedMatchSource, selectionStart, selectionEnd);
+    if (positionalCitation) return positionalCitation;
 
     // A bare numeric token is independent unless its exact position matched an
     // explicit book citation or verse cue above; never borrow another number
