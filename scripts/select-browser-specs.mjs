@@ -68,11 +68,11 @@ const forceFull = alwaysFull || changed.some(path =>
 // coverage when the implementation is genuinely feature-scoped.
 const featureSpecs = [
   {
-    // The shared content script's contextual-token fixes are covered by the
-    // known failure inventory in extension.spec.js. Keep this isolated change
-    // focused; mixed/shared changes still use the conservative full-suite path.
     paths: ["extension/content.js"],
-    specs: ["tests/browser/extension.spec.js"]
+    specs: [
+      "tests/browser/redirect-toggle-isolation.spec.js",
+      "tests/browser/multiverse-clipboard-reference-pattern.spec.js"
+    ]
   },
   {
     paths: ["extension/background.js"],
