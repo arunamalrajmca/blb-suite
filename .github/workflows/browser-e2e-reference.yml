@@ -186,8 +186,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
-      # Cancel sibling reference-test jobs as soon as any group fails.
-      fail-fast: true
+      # Collect every reference-test group's result before failing the workflow.
+      fail-fast: false
       matrix:
         include: ${{ fromJSON(needs.change-detection.outputs.reference_matrix) }}
     steps:
@@ -419,13 +419,6 @@ jobs:
 
           echo "$description"
 
-  cancel-sibling-runs:
-    name: Cancel sibling runs after failure
-    if: ${{ failure() && github.event_name == 'pull_request' }}
-    needs: [change-detection, verse-context-regression, browser-e2e, browser-e2e-features, browser-e2e-summary]
-    permissions:
-      actions: write
-    uses: ./.github/workflows/cancel-sibling-runs-on-failure.yml
 
   focused-test-only-behavior:
     name: Focused behavior tests (test-only edits)
