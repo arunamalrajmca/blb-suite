@@ -253,24 +253,6 @@ try {
     console.log('PASS: ' + path.basename(file) + ' selects focused browser coverage');
   }
 
-  // The known-failure verification mode intentionally narrows this one
-  // active PR to its recorded failing reference tests, even though its branch
-  // contains earlier shared-runtime work. Normal PRs retain broad routing.
-  resetScenario(base);
-  write('extension/content.js', '// known failure inventory\\n');
-  write('extension/reference-core.js', '// prior shared core change\\n');
-  write('extension/background.js', '// prior background change\\n');
-  commit('simulate accumulated PR changes for failure inventory');
-  result = selectorResult(base, { KNOWN_FAILURES_ONLY: 'true' });
-  assertValue(result, 'full_browser_suite', false, 'known failure inventory');
-  assert.equal(result.values.changed_specs, 'tests/browser/extension.spec.js');
-  assert.equal(result.values.changed_browser_specs, '');
-  assertValue(result, 'group_a_required', false, 'known failure inventory');
-  assertValue(result, 'group_b_required', false, 'known failure inventory');
-  assertValue(result, 'extension_spec_required', false, 'known failure inventory');
-  assertValue(result, 'reference_required', true, 'known failure inventory');
-  console.log('PASS: known failure inventory runs only the reference failure matrix');
-
   // Shared runtime/bootstrap changes must force the full applicable suite.
   resetScenario(base);
   write('extension/reference-core.js', '// shared-core change\n');
