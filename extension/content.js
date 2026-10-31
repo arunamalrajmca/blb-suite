@@ -1499,11 +1499,24 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const exactToken = normalizeSelectionText(exactPhysicalTarget.textContent || '').normalize('NFKC');
           const exactEnd = exactStart + exactToken.length;
           if (exactToken && normalizedContext.slice(exactStart, exactEnd) === exactToken) {
-            const exactReference = resolvePositionalBookCitation(
-              normalizedContext, exactStart, exactEnd
-            ) || resolveBibleReferenceFromContextWindow(
+            const contextualReference = resolveBibleReferenceFromContextWindow(
               normalizedContext, exactStart, exactEnd
             );
+            const positionalReference = resolvePositionalBookCitation(
+              normalizedContext, exactStart, exactEnd
+            );
+            // The context-window resolver understands same-chapter comma lists
+            // (Romans 10:9,10), while the positional grammar also handles
+            // whitespace-separated chapter/verse forms (Ezra 1 1). Prefer the
+            // richer result when both resolve the same exact clicked token.
+            const referenceScore = reference => {
+              if (!reference) return -1;
+              if (reference.from == null) return 0;
+              return 100 + Math.max(0, Number(reference.to || reference.from) - Number(reference.from));
+            };
+            const exactReference = referenceScore(positionalReference) > referenceScore(contextualReference)
+              ? positionalReference
+              : (contextualReference || positionalReference);
             if (exactReference) return exactReference;
           }
         } catch (_) {}
