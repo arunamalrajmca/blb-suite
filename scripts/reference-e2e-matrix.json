@@ -1,7 +1,7 @@
 [
   {
     "group": "extension-spec-reference-coverage",
-    "grep": "Acts 7, v.25"
+    "grep": "(?:Double-click resolves any part|positional context|browser token|separate lines|standalone book numbers|ordinary heading words)|(?:generic reference grammar — exhaustive token coverage — OT)|(?:generic reference grammar — exhaustive token coverage — NT)|(?:generic reference syntax — colon forms)|(?:generic reference syntax — dot forms)|(?:generic reference syntax — spaced forms)|(?:generic reference syntax — chapter forms)|(?:generic reference syntax — range forms)|(?:generic aliases|numbered aliases and Roman prefixes|standalone Roman prefixes)|(?:All 66 canonical)"
   },
   {
     "group": "specialized-reference-smoke-batch",
