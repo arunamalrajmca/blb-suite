@@ -737,6 +737,12 @@ test.describe('core user-visible E2E', () => {
       ['#two-dot-serial', '2.', '/kjv/exo/1/1/']
     ];
     const actions = ['Show on BLB', 'Right-Click', 'Alt+B', 'Double-Click'];
+    const standaloneJnResolver = await extensionWorker.evaluate(() => ({
+      aliasTarget: BOOK_ALIASES?.jn || null,
+      book: resolveBibleBook('Jn')?.name || null,
+      bookOnlyUrl: resolveBibleBookOnly('Jn')?.url || null
+    }));
+    console.log('Standalone Jn shared resolver:', JSON.stringify(standaloneJnResolver));
 
     for (const [selector, selectedText, expectedPath] of cases) {
       for (const action of actions) {
