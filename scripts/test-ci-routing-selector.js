@@ -258,7 +258,12 @@ try {
   // group. Mixed content-script changes remain broad (covered below).
   resetScenario(base);
   write('extension/content.js', '// focused contextual resolver change\\n');
-  commit('change content-script contextual resolver');
+  write('.github/workflows/browser-e2e-groups.yml');
+  write('.github/workflows/browser-e2e-reference.yml');
+  write('scripts/select-browser-specs.mjs');
+  write('scripts/test-ci-routing-selector.js');
+  write('scripts/reference-e2e-matrix.json');
+  commit('change content-script contextual resolver and its focused CI routing');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', false, 'focused content script');
   assert(result.values.changed_specs.includes('tests/browser/extension.spec.js'),

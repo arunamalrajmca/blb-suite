@@ -26,6 +26,13 @@ if (!alwaysFull) {
     .split("\n").filter(Boolean);
 }
 
+const focusedContentContext = changed.includes("extension/content.js") && changed.every(path =>
+  path === "extension/content.js" ||
+  path.startsWith(".github/workflows/") ||
+  path === "scripts/select-browser-specs.mjs" ||
+  path === "scripts/test-ci-routing-selector.js" ||
+  path === "scripts/reference-e2e-matrix.json"
+);
 const browserSpecPattern = /^tests\/browser\/[^/]+\.spec\.js$/;
 const existingBrowserSpecs = new Set(run(["ls-tree", "-r", "--name-only", "HEAD", "--", "tests/browser"]).split("\n").filter(Boolean));
 // Test-file edits alone must not launch feature E2E suites. Those suites are
@@ -52,7 +59,7 @@ const forceFull = alwaysFull || changed.some(path =>
   || path === "playwright.config.ts"
   || path === "extension/manifest.json"
   || (path === "extension/background.js" && !focusedOmniboxBackgroundChange)
-  || (path === "extension/content.js" && changed.length > 1)
+  || (path === "extension/content.js" && !focusedContentContext)
   || path === "extension/reference-core.js"
   || path === "extension/regex-patterns.js"
   || path === "extension/books.js"
@@ -264,7 +271,6 @@ const mappedSpecs = new Set([
 const separatelyManagedSpecs = new Set(["tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/performance.spec.js"]);
 const unmapped = selected.filter(path => !mappedSpecs.has(path) && !separatelyManagedSpecs.has(path));
 const has = (...names) => full || selected.some(path => names.includes(path));
-const focusedContentContext = changed.length === 1 && changed[0] === "extension/content.js";
 const values = {
   full_browser_suite: String(full),
   changed_specs: selected.join(","),
