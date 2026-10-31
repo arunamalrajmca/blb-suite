@@ -1027,6 +1027,25 @@ function resolveCompactBookChapterToken(value) {
 function getContextualBibleReference(selectionText) {  const selected = normalizeSelectionText(selectionText);
   if (!selected) return null;
 
+  // Reuse the exact same block-local positional resolver used by Double-Click
+  // for single-token selections. Context-menu, Alt+B, and Show on BLB also
+  // receive only a token (for example the chapter "10" in "Romans 10:9,10"),
+  // so their Range must resolve against the same surrounding DOM citation
+  // before a text-only numeric/Criteria fallback can reinterpret that token.
+  const normalizedSelectedToken = selected.normalize('NFKC');
+  if (!/\\s/.test(normalizedSelectedToken) &&
+      /^[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*$/u.test(normalizedSelectedToken)) {
+    const liveSelection = window.getSelection?.();
+    if (liveSelection?.rangeCount && !liveSelection.isCollapsed) {
+      let target = liveSelection.getRangeAt(0).commonAncestorContainer;
+      if (target?.nodeType === Node.TEXT_NODE) target = target.parentElement;
+      if (target instanceof Element) {
+        const exactContext = getDoubleClickBlockContextReference(normalizedSelectedToken, target, null);
+        if (exactContext?.url) return exactContext;
+      }
+    }
+  }
+
   // Resolve compact book/chapter selections directly from the live DOM Range.
   // This avoids depending on reconstructed text offsets when the colon and
   // verse are split across adjacent inline elements (e.g. <span>John3</span>:<span>16</span>).
