@@ -64,6 +64,17 @@ const test = base.extend({
     await use(worker);
   },
   extensionStorage: async ({ extensionWorker }, use) => {
+    // Wait for the extension's onInstalled defaults before tests override storage.
+    // Otherwise a late default write (masterEnabled: true) can race a test that
+    // intentionally sets masterEnabled: false and make the result nondeterministic.
+    await extensionWorker.evaluate(async () => {
+      for (let attempt = 0; attempt < 100; attempt++) {
+        const { masterEnabled } = await chrome.storage.local.get({ masterEnabled: null });
+        if (masterEnabled !== null) return;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      throw new Error('Extension settings were not initialized before browser tests started');
+    });
     await use({
       set: async (values) => extensionWorker.evaluate(async (data) => {
         await chrome.storage.local.set(data);

@@ -2359,3 +2359,39 @@ test.describe('Alt+B toggle enforcement', () => {
     }), ['/kjv/rev/20/1-10/', '/kjv/rev/1/1/']);
   });
 });
+
+test('Double-clicking the Mt abbreviation opens its complete chapter-and-verse range', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+  await page.evaluate(() => {
+    const paragraph = document.createElement('p');
+    paragraph.id = 'blb-e2e-mt-abbreviation-range';
+    paragraph.innerHTML = '<span id="target-mt-abbreviation">Mt</span>.10:32-33';
+    document.body.appendChild(paragraph);
+  });
+
+  const beforeIds = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+    tabs.filter(tab => {
+      try { return new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org'); }
+      catch (_) { return false; }
+    }).map(tab => tab.id)
+  ));
+
+  await page.locator('#target-mt-abbreviation').dblclick();
+  await activateBlbTabForPath(extensionWorker, '/kjv/mat/10/32-33/', {
+    fragment: 'Mt',
+    selector: '#blb-e2e-mt-abbreviation-range',
+    selectedText: 'Mt'
+  });
+
+  const openedPaths = await extensionWorker.evaluate(ids => chrome.tabs.query({}).then(tabs =>
+    tabs.filter(tab => !ids.includes(tab.id)).map(tab => {
+      try {
+        const url = new URL(String(tab.url || tab.pendingUrl || ''));
+        return url.hostname.endsWith('blueletterbible.org') ? url.pathname : '';
+      } catch (_) { return ''; }
+    }).filter(Boolean)
+  ), beforeIds);
+  expect(openedPaths).toContain('/kjv/mat/10/32-33/');
+});
