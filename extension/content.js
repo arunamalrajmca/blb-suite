@@ -1261,6 +1261,25 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     }
     if (!selected) return null;
 
+    // An exact standalone book token must retain the book-only destination.
+    // The general text parser can interpret a bare alias (for example, "Jn")
+    // as a chapter view when it is evaluated inside a larger article that also
+    // contains numbered-book citations. Restrict this override to the nearest
+    // local block containing only the clicked token; adjacent explicit
+    // references such as "III Jn 1:1" continue through contextual resolution.
+    const standaloneBookBlock = initialNode?.closest?.('p,li,td,th,blockquote,article,section,div')
+      || initialNode;
+    const standaloneBookBlockText = standaloneBookBlock instanceof Element
+      ? normalizeSelectionText(domText(standaloneBookBlock)).normalize('NFKC')
+      : '';
+    if (standaloneBookBlockText === selected && !/\\s/.test(selected)) {
+      const standaloneBook = resolveBibleBook(selected);
+      const standaloneBookReference = standaloneBook
+        ? resolveBibleBookOnly(standaloneBook.name)
+        : null;
+      if (standaloneBookReference) return standaloneBookReference;
+    }
+
     // Cross-site article/post-level "verse N" context. Keep the scan inside
     // the nearest recognizable content root instead of depending on Facebook's
     // private DOM attributes; this supports articles, Substack posts, and other
