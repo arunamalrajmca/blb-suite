@@ -1261,6 +1261,44 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     }
     if (!selected) return null;
 
+    // Numeric double-clicks inside a citation must be resolved from the exact
+    // physical token position before standalone-number fallback. Chromium can
+    // expose a stale Selection or neighbouring caret range for adjacent inline
+    // spans (for example, "17" in "Acts 17:11" or "1" in "1 Samuel 1:1").
+    // Anchor this pass to the clicked token's own element and nearest semantic
+    // text block, then use the shared positional resolver.
+    if (/^\\d+$/.test(selected)) {
+      const numericTargets = [initialNode, getDoubleClickTargetElement(event)]
+        .filter((candidate, index, all) =>
+          candidate instanceof Element && all.indexOf(candidate) === index
+        );
+      for (const numericTarget of numericTargets) {
+        if (normalizeSelectionText(numericTarget.textContent || '').normalize('NFKC') !== selected) continue;
+        const localBlock = numericTarget.closest('p,li,td,th,blockquote') || numericTarget;
+        const rawSource = domText(localBlock);
+        const normalizedSource = normalizeSelectionText(rawSource).normalize('NFKC')
+          .replace(/[\\u2010-\\u2015\\u2212]/g, '-');
+        if (!normalizedSource) continue;
+        try {
+          const tokenRange = document.createRange();
+          tokenRange.selectNodeContents(numericTarget);
+          const prefixRange = document.createRange();
+          prefixRange.selectNodeContents(localBlock);
+          prefixRange.setEnd(tokenRange.startContainer, tokenRange.startOffset);
+          const rawPrefix = domRangeText(prefixRange);
+          const normalizedPrefix = normalizeSelectionText(rawPrefix).normalize('NFKC');
+          const hasInteriorSeparator = normalizedPrefix.length > 0 &&
+            /[\\s\\u00A0\\u2007\\u202F]$/.test(rawPrefix) &&
+            /\\S/.test(rawSource.slice(rawPrefix.length));
+          const start = normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
+          const end = start + selected.length;
+          if (normalizedSource.slice(start, end) !== selected) continue;
+          const exactNumericCitation = resolvePositionalBookCitation(normalizedSource, start, end);
+          if (exactNumericCitation) return exactNumericCitation;
+        } catch (_) {}
+      }
+    }
+
     // An exact standalone book token must retain the book-only destination.
     // The general text parser can interpret a bare alias (for example, "Jn")
     // as a chapter view when it is evaluated inside a larger article that also
