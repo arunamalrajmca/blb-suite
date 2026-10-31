@@ -1,7 +1,7 @@
 [
   {
     "group": "extension-spec-reference-coverage",
-    "grep": "(?:Single-word verse cues resolve|Double-click resolves any part|Acts 7, v\\\\.25, and compact references|Double-click resolves a Unicode-styled Bible book|Double-click generic reference syntax — spaced forms — OT|Double-click generic reference syntax — spaced forms — NT|Facebook directional-format Revelation 20:1-10)"
+    "grep": "(?:Single-word verse cues resolve|Double-click resolves any part|Acts 7, v\\.25, and compact references|Double-click resolves a Unicode-styled Bible book|Double-click generic reference syntax — spaced forms — OT|Double-click generic reference syntax — spaced forms — NT|Facebook directional-format Revelation 20:1-10)"
   },
   {
     "group": "specialized-reference-smoke-batch",
