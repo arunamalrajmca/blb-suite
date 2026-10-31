@@ -539,9 +539,12 @@ test.describe('core user-visible E2E', () => {
       }
     }));
     await page.locator('#sog-verse-number').dblclick();
-    await expect.poll(async () => page.locator('[data-blb-verse-context-diagnostic]').count(), {
-      timeout: 3000, intervals: [100, 200, 300]
-    }).toBeGreaterThan(0);
+    await expect.poll(async () => {
+      const raw = await page.locator('[data-blb-verse-context-diagnostic]').first()
+        .getAttribute('data-blb-verse-context-diagnostic');
+      try { return JSON.parse(raw || '{}').verseNumberClick === true; } catch (_) { return false; }
+    }, { timeout: 5000, intervals: [100, 200, 300] })
+      .toBe(true);
     const numberDiagnosticText = await page.locator('[data-blb-verse-context-diagnostic]').first()
       .getAttribute('data-blb-verse-context-diagnostic');
     const numberDiagnostic = JSON.parse(numberDiagnosticText || '{}');
