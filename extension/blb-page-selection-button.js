@@ -298,17 +298,12 @@
       }
       if (!button) return;
     
-      const debugStage = stage => {
-        if (location.hostname === 'example.com') button.dataset.blbDebugStage = stage;
-      };
-      debugStage('update-start');
       const text = getSelectedPageText();
-      debugStage('selection-read:' + text);
       blbPageButtonSelection = text;
       blbPageButtonContextualReference = null;
       blbPageButtonDirectUrl = null;
       setBlbPageButtonVisible(false);
-      if (!text || !isSuiteEnabledNow()) { debugStage('empty-or-suite-disabled'); return; }
+      if (!text || !isSuiteEnabledNow()) return;
     
       // Match the Double-Click BLB fast-reject rule for single-word selections.
       // Hide the floating button for non-ASCII tokens and English words absent
@@ -322,14 +317,29 @@
         const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
           && KJV_CORPUS_WORD_INDEX.has(token);
         const isBookName = !!resolveBibleBook(text);
-        debugStage('single-word-checked:' + String(isKjvWord) + ':' + String(isBookName));
-        // Verse cues are intentionally actionable even though "verse", "verses",
-        // and "v" are not KJV corpus words. Their adjacent verse number and
-        // surrounding chapter reference provide the passage context.
+        // Verse cues and numbered-book suffix aliases can be meaningful only
+        // with their adjacent DOM context (for example, "II Th 2:1" with only
+        // "Th" selected). Resolve that narrow positional case before applying
+        // the single-word fast reject; ordinary unknown words remain rejected.
         const isVerseCue = /^(?:verse|verses|v)$/i.test(text);
         if (!isKjvWord && !isBookName && !isVerseCue) {
-          blbPageButtonSelection = '';
-          return;
+          const position = getSelectionContextPosition();
+          const hasAdjacentOrdinalPrefix = !!position?.text &&
+            /(?:^|[^A-Za-z0-9])(?:[1-3]|i{1,3})\s+$/i.test(
+              position.text.slice(0, position.start)
+            );
+          if (hasAdjacentOrdinalPrefix) {
+            const contextual = getContextualBibleReference(text);
+            if (contextual?.url) {
+              blbPageButtonContextualReference = contextual;
+              lastSelectionContextualReference = contextual;
+              lastSelectionContextualText = text;
+            }
+          }
+          if (!blbPageButtonContextualReference) {
+            blbPageButtonSelection = '';
+            return;
+          }
         }
       }
     
@@ -349,9 +359,7 @@
           }
         }
         if (isCompactBookChapterToken) {
-          debugStage('compact-context-start');
           const contextual = getContextualBibleReference(text);
-          debugStage('compact-context-end');
           if (contextual?.url) {
             blbPageButtonContextualReference = contextual;
             lastSelectionContextualReference = contextual;
@@ -362,9 +370,7 @@
         // Fast path: an exact single reference can be resolved locally once while
         // the selection is being classified. Retain its validated BLB URL so the
         // click does not repeat selection classification in the background worker.
-        debugStage('direct-reference-start');
         const directRefs = resolveBibleReferenceText(normalizeSelectionText(text));
-        debugStage('direct-reference-end:' + directRefs.length);
         if (!blbPageButtonContextualReference && directRefs.length === 1) {
           const direct = directRefs[0];
           const selectedNormalized = normalizeSelectionText(text).replace(/\s+/g, ' ').trim();
@@ -402,9 +408,7 @@
           } catch (_) {}
         }
         if (!blbPageButtonContextualReference) {
-          debugStage('context-start');
           const contextual = getContextualBibleReference(text);
-          debugStage('context-end');
           if (contextual?.url) {
             blbPageButtonContextualReference = contextual;
             lastSelectionContextualReference = contextual;
@@ -414,7 +418,6 @@
       }
       // Show the floating control for accepted selections, including multiword
       // text and partial references that need the shared background resolver.
-      debugStage('visible');
       setBlbPageButtonVisible(true);
     }
     
@@ -427,12 +430,7 @@
         if (!pageButtonMonitoring) return;
         pageButtonSelectionFrame = requestAnimationFrame(() => {
           pageButtonSelectionFrame = 0;
-          updateBlbPageSelectionButtonFromSelection().catch(error => {
-            const button = document.getElementById(BLB_PAGE_BUTTON_ID);
-            if (button && location.hostname === 'example.com') {
-              button.dataset.blbDebugStage = 'update-error:' + String(error?.message || error).slice(0, 120);
-            }
-          });
+          updateBlbPageSelectionButtonFromSelection().catch(()=>{});
         });
       }, 0);
     }

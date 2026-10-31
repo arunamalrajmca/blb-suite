@@ -758,8 +758,6 @@ test.describe('core user-visible E2E', () => {
 
         if (action === 'Show on BLB') {
           const button = page.locator('#blb-suite-page-selection-button');
-          await page.waitForTimeout(100);
-          console.log('Four-action Show on BLB stage:', await button.getAttribute('data-blb-debug-stage'));
           await expect(button).toBeVisible({ timeout: 10000 });
           await button.click();
         } else if (action === 'Right-Click') {
