@@ -1691,8 +1691,32 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           compactEnd = toNormalizedOffset(getOffset(exactRange.endContainer, exactRange.endOffset));
         } catch (_) {}
       }
+      // Rich-text hosts can shift native Range offsets while preserving the
+      // exact visible token. If the mapped offsets do not identify that token,
+      // recover its occurrence inside this same local block and prefer the
+      // occurrence nearest the physical/native selection position.
+      if (compactStart == null || compactEnd <= compactStart ||
+          normalizedMatchSource.slice(compactStart, compactEnd) !== compactToken) {
+        const tokenKey = compactToken.toLowerCase();
+        const sourceKey = normalizedMatchSource.toLowerCase();
+        const occurrences = [];
+        let occurrence = sourceKey.indexOf(tokenKey);
+        while (occurrence >= 0) {
+          const before = normalizedMatchSource[occurrence - 1] || '';
+          const after = normalizedMatchSource[occurrence + compactToken.length] || '';
+          if (!/[A-Za-z0-9]/.test(before) && !/[A-Za-z0-9]/.test(after)) occurrences.push(occurrence);
+          occurrence = sourceKey.indexOf(tokenKey, occurrence + 1);
+        }
+        if (occurrences.length) {
+          occurrences.sort((a, b) => Number.isFinite(selectionStart)
+            ? Math.abs(a - selectionStart) - Math.abs(b - selectionStart)
+            : a - b);
+          compactStart = occurrences[0];
+          compactEnd = compactStart + compactToken.length;
+        }
+      }
       if (compactStart != null && compactEnd > compactStart &&
-          normalizedMatchSource.slice(compactStart, compactEnd) === compactToken) {
+          normalizedMatchSource.slice(compactStart, compactEnd).toLowerCase() === compactToken.toLowerCase()) {
         for (let split = compactToken.length - 1; split > 0; split--) {
           const book = resolveBibleBook(compactToken.slice(0, split));
           const chapterText = compactToken.slice(split);

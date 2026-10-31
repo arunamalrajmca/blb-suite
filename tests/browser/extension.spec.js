@@ -798,6 +798,69 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  test('Same-chapter range resolution covers all 66 books on Double-Click @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(360000);
+    const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
+      number: Number(book.bookNumber),
+      name: book.name,
+      urlKey: book.urlKey
+    })));
+    expect(books, 'the production book table must contain all 66 canonical books').toHaveLength(66);
+
+    const markup = books.map(book =>
+      '<p id="all-book-range-' + book.number + '"><span class="book-label">' +
+      book.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') +
+      '</span> <span class="chapter-token">1</span>:<span>1</span>-<span>2</span></p>'
+    ).join('');
+    await setupDoubleClickReferencePage(
+      page,
+      extensionStorage,
+      '<article id="all-book-ranges">' + markup + '</article>'
+    );
+
+    // Use the same valid first-chapter range (1:1-2) for every canonical book.
+    // Clicking its chapter token must bind to that exact citation and retain
+    // both verses, including numbered and one-chapter books.
+    for (const book of books) {
+      const target = page.locator('#all-book-range-' + book.number + ' .chapter-token');
+      await target.scrollIntoViewIfNeeded();
+      const beforeIds = await extensionWorker.evaluate(() =>
+        chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
+      );
+      const expectedPath = '/kjv/' + book.urlKey + '/1/1-2/';
+      await target.dblclick();
+      await expect.poll(async () => extensionWorker.evaluate(({ beforeIds, expectedPath }) =>
+        chrome.tabs.query({}).then(tabs => tabs.some(tab => {
+          if (tab.id == null || beforeIds.includes(tab.id)) return false;
+          return [tab.url, tab.pendingUrl].some(value => {
+            try {
+              const url = new URL(String(value || ''));
+              return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+            } catch (_) { return false; }
+          });
+        })), { beforeIds, expectedPath }), {
+          message: 'Double-clicking chapter 1 in ' + book.name + ' 1:1-2 must preserve the range',
+          timeout: 10000
+        }).toBe(true);
+
+      await extensionWorker.evaluate(async ({ beforeIds, expectedPath }) => {
+        const tabs = await chrome.tabs.query({});
+        for (const tab of tabs) {
+          if (tab.id == null || beforeIds.includes(tab.id)) continue;
+          const matches = [tab.url, tab.pendingUrl].some(value => {
+            try {
+              const url = new URL(String(value || ''));
+              return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+            } catch (_) { return false; }
+          });
+          if (matches) {
+            try { await chrome.tabs.remove(tab.id); } catch (_) {}
+          }
+        }
+      }, { beforeIds, expectedPath });
+    }
+  });
+
   test('Show on BLB handles a selected Facebook-style post reference across nested blocks', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
