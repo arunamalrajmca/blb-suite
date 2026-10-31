@@ -418,13 +418,14 @@
           } catch (_) {}
         }
         if (!blbPageButtonContextualReference) {
-          let contextual = getContextualBibleReference(text);
+          let contextual = null;
 
-          // Numeric tokens are meaningful only at their exact DOM position.
-          // If the shared resolver cannot reconstruct that position on a
-          // nested inline selection, resolve a same-chapter comma list from
-          // the same live Range context before allowing any background fallback.
-          if (!contextual?.url && /^\\d+$/.test(normalizeSelectionText(text))) {
+          // Numeric selections must be resolved from their exact DOM Range
+          // before the generic contextual parser. That parser may otherwise
+          // reinterpret a chapter token as a default-book verse. The shared
+          // Range serializer preserves nested inline elements and <br>/block
+          // boundaries across generic article and post DOM layouts.
+          if (/^\d+$/.test(normalizeSelectionText(text))) {
             const position = typeof getSelectionContextPosition === 'function'
               ? getSelectionContextPosition()
               : null;
@@ -462,6 +463,10 @@
             }
           }
 
+          if (!contextual?.url) contextual = getContextualBibleReference(text);
+
+          // Numeric selections never fall through to the background text-only
+          // parser. A bare number with no exact contextual result is rejected.
           if (contextual?.url) {
             blbPageButtonContextualReference = contextual;
             lastSelectionContextualReference = contextual;

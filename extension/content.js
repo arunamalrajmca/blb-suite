@@ -1395,7 +1395,20 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         : '';
       const numericContextHasBook = hasExplicitBookLabel(numericContextText);
       const numericContextHasVerseCue = /\b(?:v\.?|verses?)\s*\d{1,3}\b/i.test(numericContextText);
-      if (!numericContextHasBook && !numericContextHasVerseCue) return null;
+      if (!numericContextHasBook && !numericContextHasVerseCue) {
+        // A standalone numeric token from 1–66 is also a supported book
+        // selector. Resolve it only after exact positional citation matching
+        // above has had the opportunity to claim chapter/verse numbers.
+        const bookNumber = Number(selected);
+        const standaloneNumericBook = Number.isInteger(bookNumber) && bookNumber >= 1 && bookNumber <= 66
+          ? (BOOKS || []).find(book => Number(book.bookNumber) === bookNumber)
+          : null;
+        const standaloneNumericReference = standaloneNumericBook
+          ? resolveBibleBookOnly(standaloneNumericBook.name)
+          : null;
+        if (standaloneNumericReference) return standaloneNumericReference;
+        return null;
+      }
     }
 
     // An exact standalone book token must retain the book-only destination.
