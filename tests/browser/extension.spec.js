@@ -227,6 +227,38 @@ test.describe('core user-visible E2E', () => {
             try { return new URL(JSON.parse(raw).resolvedUrl).pathname; } catch (_) { return ''; }
           }), { message: 'Show on BLB must resolve the current cue selection before click' }).toBe(expectedPath);
           const button = page.locator('#blb-suite-page-selection-button');
+          const pageButtonDiagnostic = await extensionWorker.evaluate(async () => {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            const [injected] = await chrome.scripting.executeScript({
+              target: { tabId: tab.id },
+              world: 'ISOLATED',
+              func: () => {
+                const selected = window.getSelection()?.toString() || '';
+                const button = document.getElementById('blb-suite-page-selection-button');
+                let book = null;
+                let contextual = null;
+                let error = null;
+                try {
+                  book = typeof resolveBibleBook === 'function' ? resolveBibleBook(selected)?.name || null : 'resolver-unavailable';
+                  contextual = typeof getContextualBibleReference === 'function'
+                    ? getContextualBibleReference(selected)
+                    : 'context-resolver-unavailable';
+                } catch (caught) {
+                  error = String(caught?.stack || caught);
+                }
+                return {
+                  selected,
+                  book,
+                  contextual,
+                  error,
+                  buttonDisplay: button?.style.display || null,
+                  buttonComputedDisplay: button ? getComputedStyle(button).display : null
+                };
+              }
+            });
+            return injected?.result || null;
+          });
+          console.log('Show on BLB page-button diagnostic:', JSON.stringify(pageButtonDiagnostic));
           await expect(button).toBeVisible({ timeout: 10000 });
           await button.click();
         } else if (action === 'Alt+B') {
