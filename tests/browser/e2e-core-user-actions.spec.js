@@ -921,9 +921,23 @@ test('Double-Click resolves partial references in Instagram-style rich text with
 });
 
 test('chapter-only ranges expand across all chapters and open MultiVerse', async ({ page, extensionStorage, extensionWorker }) => {
-  await extensionStorage.set({ masterEnabled: true });
-  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
+
+  const submittedPayloads = [];
+  // Keep this regression independent of BLB's live POST response/redirects.
+  // The test is validating our generated MultiVerse form payloads and tab
+  // splitting, not the remote site's current response behavior.
+  await context.route('https://www.blueletterbible.org/tools/MultiVerse.cfm', async route => {
+    if (route.request().method() === 'POST') {
+      const body = new URLSearchParams(route.request().postData() || '');
+      submittedPayloads.push(body.get('mvText') || '');
+    }
+    return route.fulfill({
+      status:200,
+      contentType:'text/html',
+      body:'<!doctype html><html><body>MultiVerse POST fixture</body></html>'
+    });
+  });
 
   for (const reference of ['Genesis 48-49', 'Genesis 42-46']) {
     await page.evaluate((text) => {
@@ -977,10 +991,24 @@ test('chapter-only ranges expand across all chapters and open MultiVerse', async
 });
 
 
-test('MultiVerse batches disjoint chapter ranges without gaps and stays under 200 verses', async ({ page, extensionStorage, extensionWorker }) => {
-  await extensionStorage.set({ masterEnabled: true });
-  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+test('MultiVerse batches disjoint chapter ranges without gaps and stays under 200 verses', async ({ page, context, extensionStorage, extensionWorker }) => {
   await page.waitForTimeout(1000);
+
+  const submittedPayloads = [];
+  // Keep this regression independent of BLB's live POST response/redirects.
+  // The test is validating our generated MultiVerse form payloads and tab
+  // splitting, not the remote site's current response behavior.
+  await context.route('https://www.blueletterbible.org/tools/MultiVerse.cfm', async route => {
+    if (route.request().method() === 'POST') {
+      const body = new URLSearchParams(route.request().postData() || '');
+      submittedPayloads.push(body.get('mvText') || '');
+    }
+    return route.fulfill({
+      status:200,
+      contentType:'text/html',
+      body:'<!doctype html><html><body>MultiVerse POST fixture</body></html>'
+    });
+  });
 
   const requestedText = 'Genesis 42-46; Genesis 48-49';
   await page.evaluate((text) => {
@@ -1108,7 +1136,7 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
   for (const tab of state) await removeTabById(extensionWorker, tab.id);
 });
 
-test('MultiVerse parses reversed disjoint chapter ranges without dropping the second range', async ({ page, extensionStorage, extensionWorker }) => {
+test('MultiVerse parses reversed disjoint chapter ranges without dropping the second range', async ({ page, context, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
