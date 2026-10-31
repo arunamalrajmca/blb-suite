@@ -5952,7 +5952,13 @@ async function handleBlbSelectionContextMenuClick(info, tab) {
   let text = nativeText;
   if (menuId === 'blb-suite-web-selection' && Number.isInteger(tab?.id)) {
     liveText = await getActiveTabSelection(tab.id);
-    if (liveText && nativeText && liveText !== nativeText) {
+    const liveSelectionKey = normalizeSelectedScriptureText(liveText);
+    const nativeSelectionKey = normalizeSelectedScriptureText(nativeText);
+    // Chromium's context-menu text may retain mathematical/full-width Unicode
+    // while the resident content script returns its NFKC parsing copy. Treat
+    // those as the same selection instead of concatenating a duplicate cue
+    // (for example, "v" + "𝐯"), which would prevent positional cue matching.
+    if (liveText && nativeText && liveSelectionKey !== nativeSelectionKey) {
       text = liveText + '\n' + nativeText;
     } else if (liveText) {
       text = liveText;
