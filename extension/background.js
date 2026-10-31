@@ -5223,6 +5223,34 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     const bIndex = text.toLowerCase().indexOf(String(b.text || '').toLowerCase());
     return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
   });
+
+  // Double-Click has its own handoff route, separate from
+  // openSharedSelectionAction. A compact token such as John3 can parse as the
+  // chapter's default verse 1, even though the content script has already
+  // resolved the immediately adjacent verse/range from the DOM. In that
+  // exact compact-token case, prefer the more precise contextual reference.
+  const compactChapterOnlySelection = /^[A-Za-z][A-Za-z.'-]*\d{1,3}$/.test(text.trim());
+  const bookNameForContextMatch = value => typeof value === 'string'
+    ? value.trim().toLowerCase()
+    : String(value?.name || value?.bookName || value?.book || '').trim().toLowerCase();
+  const chapterOnlySelectedRef = selectedRefs.length === 1 ? selectedRefs[0] : null;
+  const contextualSupersedesCompactChapter = compactChapterOnlySelection
+    && contextualRef?.url
+    && chapterOnlySelectedRef
+    && Number(chapterOnlySelectedRef.chapter) === Number(contextualRef.chapter)
+    && Number(chapterOnlySelectedRef.from) === 1
+    && Number(chapterOnlySelectedRef.to) === 1
+    && bookNameForContextMatch(chapterOnlySelectedRef.book) !== ''
+    && bookNameForContextMatch(chapterOnlySelectedRef.book) === bookNameForContextMatch(contextualRef.book);
+  if (contextualSupersedesCompactChapter) {
+    const studyRef = parseBlbKjvUrlToStudyRef(contextualRef.url);
+    await Promise.all([
+      openBlbDestination(contextualRef.url, !!tabBehavior.activeIfNew, !!tabBehavior.activateExisting),
+      studyRef ? recordStudyRefs([studyRef]) : Promise.resolve()
+    ]);
+    return;
+  }
+
   if (combinedRefs.length >= 2) {
     // If the selection contains only consecutive verses from one chapter,
     // open the normal BLB range URL instead of creating a MultiVerse request.

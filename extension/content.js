@@ -1243,14 +1243,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
       '.entry-content, .article-body, .article-content, .content-body'
     ) || initialNode?.closest?.('article, main, [role="main"]');
-    const writeCompactContextDiagnostic = detail => {
-      try {
-        (messageRoot || initialNode)?.setAttribute(
-          'data-blb-compact-context-diagnostic',
-          JSON.stringify(detail)
-        );
-      } catch (_) {}
-    };
 
     // A compact book/chapter token can be selected independently of the
     // adjacent verse (John3:16). Prefer the exact physical target element:
@@ -1283,15 +1275,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         }
       }
       const following = afterText.match(/^\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
-      writeCompactContextDiagnostic({
-        stage: 'message-root-compact',
-        selected: compactSelectedToken,
-        targetText: normalizeSelectionText(initialNode?.textContent || '').normalize('NFKC'),
-        exactTarget,
-        messageRootTag: messageRoot?.tagName || null,
-        afterText: afterText.slice(0, 120),
-        following: following?.[0] || null
-      });
       if (following) {
         for (let split = compactSelectedToken.length - 1; split > 0; split--) {
           const book = resolveBibleBook(compactSelectedToken.slice(0, split));
@@ -1300,20 +1283,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const from = Number(following[1]);
           const to = following[2] ? Number(following[2]) : from;
           const resolved = resolveBibleReference(book.name, Number(chapterText), from, to);
-          if (resolved) {
-            writeCompactContextDiagnostic({
-              stage: 'message-root-compact-resolved',
-              selected: compactSelectedToken,
-              afterText: afterText.slice(0, 120),
-              following: following[0],
-              book: book.name,
-              chapter: Number(chapterText),
-              from,
-              to,
-              url: resolved.url
-            });
-            return resolved;
-          }
+          if (resolved) return resolved;
         }
       }
     }
@@ -1721,72 +1691,25 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           compactEnd = toNormalizedOffset(getOffset(exactRange.endContainer, exactRange.endOffset));
         } catch (_) {}
       }
-      // Rich-text hosts can shift native Range offsets while preserving the
-      // exact visible token. If the mapped offsets do not identify that token,
-      // recover its occurrence inside this same local block and prefer the
-      // occurrence nearest the physical/native selection position.
-      if (compactStart == null || compactEnd <= compactStart ||
-          normalizedMatchSource.slice(compactStart, compactEnd) !== compactToken) {
-        const tokenKey = compactToken.toLowerCase();
-        const sourceKey = normalizedMatchSource.toLowerCase();
-        const occurrences = [];
-        let occurrence = sourceKey.indexOf(tokenKey);
-        while (occurrence >= 0) {
-          const before = normalizedMatchSource[occurrence - 1] || '';
-          const after = normalizedMatchSource[occurrence + compactToken.length] || '';
-          if (!/[A-Za-z0-9]/.test(before) && !/[A-Za-z0-9]/.test(after)) occurrences.push(occurrence);
-          occurrence = sourceKey.indexOf(tokenKey, occurrence + 1);
-        }
-        if (occurrences.length) {
-          occurrences.sort((a, b) => Number.isFinite(selectionStart)
-            ? Math.abs(a - selectionStart) - Math.abs(b - selectionStart)
-            : a - b);
-          compactStart = occurrences[0];
-          compactEnd = compactStart + compactToken.length;
-        }
-      }
       if (compactStart != null && compactEnd > compactStart &&
-          normalizedMatchSource.slice(compactStart, compactEnd).toLowerCase() === compactToken.toLowerCase()) {
+          normalizedMatchSource.slice(compactStart, compactEnd) === compactToken) {
         for (let split = compactToken.length - 1; split > 0; split--) {
           const book = resolveBibleBook(compactToken.slice(0, split));
           const chapterText = compactToken.slice(split);
           if (!book || !/^\d{1,3}$/.test(chapterText)) continue;
           const following = normalizedMatchSource.slice(compactEnd)
             .match(/^\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
-          writeCompactContextDiagnostic({
-            stage: 'local-block-compact',
-            selected: compactToken,
-            source: normalizedMatchSource.slice(0, 180),
-            selectionStart,
-            selectionEnd,
-            compactStart,
-            compactEnd,
-            following: following?.[0] || null,
-            candidateBook: book.name,
-            chapterText
-          });
           if (!following) continue;
           const from = Number(following[1]);
           const to = following[2] ? Number(following[2]) : from;
           const compactResolved = resolveBibleReference(book.name, Number(chapterText), from, to);
-          if (compactResolved) {
-            writeCompactContextDiagnostic({
-              stage: 'local-block-compact-resolved',
-              selected: compactToken,
-              book: book.name,
-              chapter: compactResolved.chapter,
-              from: compactResolved.from,
-              to: compactResolved.to,
-              url: compactResolved.url
-            });
-            return {
-              book: compactResolved.book,
-              chapter: compactResolved.chapter,
-              from: compactResolved.from,
-              to: compactResolved.to,
-              url: compactResolved.url
-            };
-          }
+          if (compactResolved) return {
+            book: compactResolved.book,
+            chapter: compactResolved.chapter,
+            from: compactResolved.from,
+            to: compactResolved.to,
+            url: compactResolved.url
+          };
         }
       }
     }
