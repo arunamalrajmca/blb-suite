@@ -10,9 +10,7 @@ test("reference matrix defines unique, complete entries", () => {
   assert.equal(new Set(entries.map(entry => entry.group)).size, entries.length);
   assert.ok(entries.some(entry => entry.group === "redirect-source-smoke-batch" && entry.files.includes("tests/browser/redirect-hostnames.spec.js")));
   assert.ok(entries.some(entry => entry.group === "specialized-reference-smoke-batch" && entry.files.length === 3));
-  const extensionCoverage = entries.find(entry => entry.group === "extension-spec-reference-coverage");
-  assert.equal(extensionCoverage.grep, "Acts 7, v.25",
-    "only the still-unverified four-action verse-cue matrix should run");
+  assert.ok(entries.some(entry => entry.group === "extension-spec-reference-coverage" && entry.grep.includes("generic reference grammar — exhaustive token coverage — OT")));
 });
 
 test("full-suite fallback selects every declared matrix entry", () => {
