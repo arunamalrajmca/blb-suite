@@ -732,7 +732,6 @@ test.describe('core user-visible E2E', () => {
       // Bare "Th" is not an unnumbered book alias; only numbered forms such as
       // "II Th" are resolvable, so all four actions must leave it untouched.
       ['#standalone-th', 'Th', null],
-      ['#standalone-th', 'Th', '/kjv/1th/1/1/'],
       ['#standalone-jn', 'Jn', '/kjv/jhn/1/1/'],
       ['#one-dot-serial', '1.', '/kjv/gen/1/1/'],
       ['#two-dot-serial', '2.', '/kjv/exo/1/1/']
