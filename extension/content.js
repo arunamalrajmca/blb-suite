@@ -1295,10 +1295,12 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
               // trailing period by the physical Range. Keep the already
               // classified numeric token so the period cannot bypass the
               // numeric-book path or turn the serial into ordinary prose.
-              const verifiedNumericSerial = /^\d+$/.test(selected)
+              const numericSerialSelection = selected.match(/^(\d+)\.?$/);
+              const verifiedNumericSerial = !!numericSerialSelection
                 && /^\d+\.$/.test(clickedWordText)
                 && isNumberedListSerialDoubleClick(clickedWordText, event);
-              if (!verifiedNumericSerial) selected = clickedWordText;
+              if (verifiedNumericSerial) selected = numericSerialSelection[1];
+              else selected = clickedWordText;
             }
           }
         }
