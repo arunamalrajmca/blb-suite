@@ -1828,6 +1828,18 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       selectionEnd = toNormalizedOffset(selectionEnd);
     }
 
+    // Resolve a consecutive same-chapter comma list before the general parser
+    // reduces it to the first verse. This applies to every physical token in
+    // the exact citation, including the book name; the previous numeric-only
+    // path could resolve 9 or 10 but let a click on Romans fall back to Rom 1:1.
+    if (selectionStart != null && selectionEnd != null &&
+        /\\b\\d{1,3}\\s*:\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\b/.test(normalizedMatchSource)) {
+      const commaListReference = resolveBibleReferenceFromContextWindow(
+        normalizedMatchSource, selectionStart, selectionEnd
+      );
+      if (commaListReference) return commaListReference;
+    }
+
     // Compact book/chapter tokens (John3, Romans14, etc.) need the verse
     // immediately following the token. Resolve this before any chapter-only
     // fallback so a generic parser cannot downgrade John3:16 to John 3:1.
