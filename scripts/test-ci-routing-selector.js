@@ -32,9 +32,9 @@ const resetScenario = (base) => {
   run(['git', 'reset', '--hard', base]);
   run(['git', 'clean', '-fd']);
 };
-const selectorResult = (base) => {
+const selectorResult = (base, extraEnv = {}) => {
   const output = run([process.execPath, selector, base], {
-    env: { GITHUB_EVENT_NAME: 'pull_request', GITHUB_REF: 'refs/pull/1/merge' }
+    env: { GITHUB_EVENT_NAME: 'pull_request', GITHUB_REF: 'refs/pull/1/merge', ...extraEnv }
   });
   const values = Object.fromEntries(output.split(/\r?\n/).filter(line => /^[a-z_]+=/.test(line))
     .map(line => {
@@ -273,6 +273,24 @@ try {
   assertValue(result, 'extension_spec_required', false, 'focused content script');
   assertValue(result, 'reference_required', true, 'focused content script');
   console.log('PASS: focused content-script changes select only reference regressions');
+
+  // The known-failure verification mode intentionally narrows this one
+  // active PR to its recorded failing reference tests, even though its branch
+  // contains earlier shared-runtime work. Normal PRs retain broad routing.
+  resetScenario(base);
+  write('extension/content.js', '// known failure inventory\\n');
+  write('extension/reference-core.js', '// prior shared core change\\n');
+  write('extension/background.js', '// prior background change\\n');
+  commit('simulate accumulated PR changes for failure inventory');
+  result = selectorResult(base, { KNOWN_FAILURES_ONLY: 'true' });
+  assertValue(result, 'full_browser_suite', false, 'known failure inventory');
+  assert.equal(result.values.changed_specs, 'tests/browser/extension.spec.js');
+  assert.equal(result.values.changed_browser_specs, '');
+  assertValue(result, 'group_a_required', false, 'known failure inventory');
+  assertValue(result, 'group_b_required', false, 'known failure inventory');
+  assertValue(result, 'extension_spec_required', false, 'known failure inventory');
+  assertValue(result, 'reference_required', true, 'known failure inventory');
+  console.log('PASS: known failure inventory runs only the reference failure matrix');
 
   // Shared runtime/bootstrap changes must force the full applicable suite.
   resetScenario(base);

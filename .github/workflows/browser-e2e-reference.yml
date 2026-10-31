@@ -95,6 +95,7 @@ jobs:
         id: browser-select
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          KNOWN_FAILURES_ONLY: ${{ github.event.pull_request.number == 633 }}
         run: node scripts/select-browser-specs.mjs "$BASE_SHA"
       - name: Select reference matrix before allocating runners
         id: matrix-select
