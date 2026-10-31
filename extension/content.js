@@ -677,6 +677,55 @@ function getSelectionContextPosition() {
   } catch (_) { return null; }
 }
 
+function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
+  const source = normalizeSelectionText(text).normalize('NFKC')
+    .replace(/[\u2010-\u2015\u2212]/g, '-');
+  if (!source || !Number.isFinite(selectionStart) || !Number.isFinite(selectionEnd) ||
+      selectionEnd <= selectionStart) return null;
+
+  const entries = [];
+  const add = (name, book) => {
+    const value = String(name || '').trim();
+    if (!value || !book || entries.some(item => item.name.toLowerCase() === value.toLowerCase())) return;
+    entries.push({name:value, book});
+  };
+  for (const book of BOOKS) {
+    add(book.name, book);
+    add(book.urlKey, book);
+  }
+  for (const [alias, canonicalName] of Object.entries(BOOK_ALIASES || {})) {
+    const book = BOOKS.find(item => item.name === canonicalName);
+    if (book) add(alias, book);
+  }
+  entries.sort((a, b) => b.name.length - a.name.length);
+
+  for (const entry of entries) {
+    const escaped = entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionEnd) {').replace(/\s+/g, '\\s+');
+    const patterns = [
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.(?=\\d)\\s*)(\\d{1,3})\\s*[:.]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])', 'gi'),
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])', 'gi'),
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')\\s+(\\d{1,3})\\s+(\\d{1,3})(?=$|[^A-Za-z0-9])', 'gi')
+    ];
+    for (const pattern of patterns) {
+      let match;
+      while ((match = pattern.exec(source))) {
+        const citationStart = match.index + match[0].indexOf(match[1]);
+        const citationEnd = match.index + match[0].length;
+        if (selectionStart >= citationEnd || selectionEnd <= citationStart) continue;
+        const chapter = Number(match[2]);
+        const from = Number(match[3]);
+        const to = match[4] ? Number(match[4]) : from;
+        const resolved = resolveBibleReference(entry.book.name, chapter, from, to);
+        if (resolved) return {
+          book: resolved.book, chapter: resolved.chapter,
+          from: resolved.from, to: resolved.to, url: resolved.url
+        };
+      }
+    }
+  }
+  return null;
+}
+
 function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionEnd) {
   const source = normalizeSelectionText(text);
   if (!source) return null;
@@ -717,6 +766,9 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
     const resolved = resolveBibleReference(book.name, chapter, verse, verse);
     if (resolved) return {book:resolved.book,chapter:resolved.chapter,from:resolved.from,to:resolved.to,url:resolved.url};
   }
+
+  const positionalCitation = resolvePositionalBookCitation(source, selectionStart, selectionEnd);
+  if (positionalCitation) return positionalCitation;
 
   const refs = resolveBibleReferenceText(source);
 
@@ -992,7 +1044,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         if (textNode?.nodeType === Node.TEXT_NODE) {
           const value = textNode.nodeValue || '';
           pointOffset = Math.max(0, Math.min(value.length, pointOffset));
-          const isWordChar = char => /[A-Za-z0-9.'’\u2019]/.test(char || '');
+          const isWordChar = char => /[\p{L}\p{N}.'’\u2019]/u.test(char || '');
           let wordStart = pointOffset;
           let wordEnd = pointOffset;
           while (wordStart > 0 && isWordChar(value[wordStart - 1])) wordStart--;
@@ -1428,6 +1480,9 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       selectionEnd = toNormalizedOffset(selectionEnd);
     }
 
+    const positionalCitation = resolvePositionalBookCitation(normalizedMatchSource, selectionStart, selectionEnd);
+    if (positionalCitation) return positionalCitation;
+
     // Chapter-only references are positional too: when a clicked book name
     // is immediately followed by a chapter (for example, "Genesis—Acts 7"),
     // resolve that chapter instead of falling back to the book's first verse.
@@ -1448,7 +1503,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const chapterMatch = following.match(/^\s+([1-9]\d{0,2})(?!\s*[:.]\s*\d)/);
           if (!chapterMatch) continue;
           const chapter = Number(chapterMatch[1]);
-          const resolved = resolveBibleReference(clickedChapterBook.name, chapter, 1, 1);
+          const chapterResults = resolveBibleReferenceText(clickedChapterBook.name + ' ' + chapter);
+          const resolved = chapterResults && chapterResults[0];
           if (resolved) return {book:resolved.book, chapter:resolved.chapter, from:resolved.from, to:resolved.to, url:resolved.url};
         }
       }
@@ -1546,6 +1602,11 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       );
       if (verseListReference) return verseListReference;
     }
+
+    // A bare numeric token is independent unless its exact position matched an
+    // explicit book citation or verse cue above; never borrow another number
+    // from the same paragraph (for example, a numbered list of 1 through 66).
+    if (/^\d+$/.test(selected)) return null;
 
     // Book-name selections can still be identified reliably when a rich-text
     // DOM makes Range-derived offsets drift after whitespace normalization.
@@ -1660,8 +1721,8 @@ function getDoubleClickTargetElement(event) {
     for (const candidate of candidates) {
       if (!(candidate instanceof Element)) continue;
       const token = candidate.closest?.('[data-index], .reference-token') || candidate;
-      const text = normalizeSelectionText(token.textContent || '');
-      if (text && !/\s/.test(text) && /^[A-Za-z0-9][A-Za-z0-9.'-]*$/.test(text)) return token;
+      const text = normalizeSelectionText(token.textContent || '').normalize('NFKC');
+      if (text && !/\s/.test(text) && /^[\p{L}\p{N}][\p{L}\p{N}.'-]*$/u.test(text)) return token;
     }
 
     // If the click lands on an inter-token whitespace gap, recover the nearest
@@ -1674,7 +1735,7 @@ function getDoubleClickTargetElement(event) {
         let bestDistance = Infinity;
         for (const token of block.querySelectorAll('[data-index], .reference-token')) {
           const text = normalizeSelectionText(token.textContent || '');
-          if (!text || /\s/.test(text) || !/^[A-Za-z0-9][A-Za-z0-9.'-]*$/.test(text)) continue;
+          if (!text || /\s/.test(text) || !/^[\p{L}\p{N}][\p{L}\p{N}.'-]*$/u.test(text)) continue;
           const rect = token.getBoundingClientRect();
           const dx = event.clientX < rect.left ? rect.left - event.clientX : event.clientX > rect.right ? event.clientX - rect.right : 0;
           const dy = event.clientY < rect.top ? rect.top - event.clientY : event.clientY > rect.bottom ? event.clientY - rect.bottom : 0;
