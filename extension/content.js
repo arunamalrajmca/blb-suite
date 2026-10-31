@@ -969,40 +969,27 @@ function getContextualBibleReference(selectionText) {  const selected = normaliz
   // the browser exposes a usable selection.
   const position = getSelectionContextPosition();
   if (position?.text) {
-    const contextText = normalizeSelectionText(position.text);
+    const contextText = position.text;
     const selectedToken = normalizeSelectionText(
       contextText.slice(position.start, position.end)
     ).normalize('NFKC');
-    // A compact book/chapter token can be selected separately from its
-    // immediately adjacent verse (e.g. DOM: <span>John3</span>:<span>16</span>).
-    // Resolve that exact adjacency before the generic chapter-only fallback,
-    // so the floating button cannot downgrade John 3:16 to John 3:1.
+    // The selected token may combine a book alias and chapter while the
+    // following verse is outside the selected DOM node (e.g. John3 : 16).
+    // Split at each possible boundary and let the canonical book resolver
+    // validate the prefix; this supports every registered alias without a
+    // second alias table.
     if (/^[A-Za-z][A-Za-z0-9.'-]*$/.test(selectedToken)) {
-      const compactBooks = [];
-      const addCompactBook = (name, book) => {
-        const label = String(name || '').trim();
-        if (!label || !book || compactBooks.some(item => item.label.toLowerCase() === label.toLowerCase())) return;
-        compactBooks.push({label, book});
-      };
-      for (const book of BOOKS) {
-        addCompactBook(book.name, book);
-        addCompactBook(book.urlKey, book);
-      }
-      for (const [alias, canonicalName] of Object.entries(BOOK_ALIASES || {})) {
-        const book = BOOKS.find(item => item.name === canonicalName);
-        if (book) addCompactBook(alias, book);
-      }
-      compactBooks.sort((a, b) => b.label.length - a.label.length);
-      for (const entry of compactBooks) {
-        if (!selectedToken.toLowerCase().startsWith(entry.label.toLowerCase())) continue;
-        const chapterText = selectedToken.slice(entry.label.length);
-        if (!/^\\d{1,3}$/.test(chapterText)) continue;
-        const following = contextText.slice(position.end).match(/^\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?/);
+      for (let split = selectedToken.length - 1; split > 0; split--) {
+        const book = resolveBibleBook(selectedToken.slice(0, split));
+        const chapterText = selectedToken.slice(split);
+        if (!book || !/^\\d{1,3}$/.test(chapterText)) continue;
+        const following = contextText.slice(position.end)
+          .match(/^\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?/);
         if (!following) continue;
         const chapter = Number(chapterText);
         const from = Number(following[1]);
         const to = following[2] ? Number(following[2]) : from;
-        const compactResolved = resolveBibleReference(entry.book.name, chapter, from, to);
+        const compactResolved = resolveBibleReference(book.name, chapter, from, to);
         if (compactResolved) return {
           book: compactResolved.book,
           chapter: compactResolved.chapter,
