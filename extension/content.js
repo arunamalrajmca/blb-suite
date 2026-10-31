@@ -973,18 +973,16 @@ function getContextualBibleReference(selectionText) {  const selected = normaliz
     const selectedToken = normalizeSelectionText(
       contextText.slice(position.start, position.end)
     ).normalize('NFKC');
-    // The selected token may combine a book alias and chapter while the
-    // following verse is outside the selected DOM node (e.g. John3 : 16).
-    // Split at each possible boundary and let the canonical book resolver
-    // validate the prefix; this supports every registered alias without a
-    // second alias table.
+    // Resolve a selected compact book/chapter token against the verse that
+    // immediately follows it. resolveBibleBook validates canonical names and
+    // all aliases, avoiding a parallel alias table.
     if (/^[A-Za-z][A-Za-z0-9.'-]*$/.test(selectedToken)) {
       for (let split = selectedToken.length - 1; split > 0; split--) {
         const book = resolveBibleBook(selectedToken.slice(0, split));
         const chapterText = selectedToken.slice(split);
-        if (!book || !/^\\d{1,3}$/.test(chapterText)) continue;
+        if (!book || !/^\d{1,3}$/.test(chapterText)) continue;
         const following = contextText.slice(position.end)
-          .match(/^\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?/);
+          .match(/^\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
         if (!following) continue;
         const chapter = Number(chapterText);
         const from = Number(following[1]);
