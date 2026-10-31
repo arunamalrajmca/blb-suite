@@ -1245,42 +1245,45 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     ) || initialNode?.closest?.('article, main, [role="main"]');
 
     // A compact book/chapter token can be selected independently of the
-    // adjacent verse (John3:16). Resolve that immediate suffix from the
-    // physical click Range before the generic chapter-only positional matcher.
+    // adjacent verse (John3:16). Prefer the exact physical target element:
+    // caret APIs can return a neighboring/stale text range during dblclick.
     const compactSelectedToken = normalizeSelectionText(selected).normalize('NFKC');
     if (/^[A-Za-z][A-Za-z0-9.'-]*$/.test(compactSelectedToken)) {
-      let compactRange = clickedWordRange;
-      if (!compactRange && initialNode instanceof Element &&
-          normalizeSelectionText(initialNode.textContent || '').normalize('NFKC') === compactSelectedToken) {
-        compactRange = document.createRange();
-        compactRange.selectNodeContents(initialNode);
-      }
-      if (!compactRange) {
-        const liveSelection = window.getSelection?.();
-        if (liveSelection?.rangeCount && !liveSelection.isCollapsed &&
-            normalizeSelectionText(liveSelection.toString()).normalize('NFKC') === compactSelectedToken) {
-          compactRange = liveSelection.getRangeAt(0);
+      const exactTarget = initialNode instanceof Element &&
+        messageRoot?.contains(initialNode) &&
+        normalizeSelectionText(initialNode.textContent || '').normalize('NFKC') === compactSelectedToken;
+      let afterText = '';
+      if (exactTarget) {
+        const afterRange = document.createRange();
+        afterRange.selectNodeContents(messageRoot);
+        afterRange.setStartAfter(initialNode);
+        afterText = normalizeSelectionText(domText(afterRange.cloneContents())).normalize('NFKC');
+      } else {
+        let compactRange = clickedWordRange;
+        if (!compactRange) {
+          const liveSelection = window.getSelection?.();
+          if (liveSelection?.rangeCount && !liveSelection.isCollapsed &&
+              normalizeSelectionText(liveSelection.toString()).normalize('NFKC') === compactSelectedToken) {
+            compactRange = liveSelection.getRangeAt(0);
+          }
+        }
+        if (compactRange && messageRoot?.contains(compactRange.endContainer)) {
+          const afterRange = document.createRange();
+          afterRange.selectNodeContents(messageRoot);
+          afterRange.setStart(compactRange.endContainer, compactRange.endOffset);
+          afterText = normalizeSelectionText(domText(afterRange.cloneContents())).normalize('NFKC');
         }
       }
-      const compactRoot = (messageRoot && compactRange && messageRoot.contains(compactRange.endContainer))
-        ? messageRoot
-        : (initialNode?.closest?.('p,li,td,th,blockquote,article,section,div') || document.body);
-      if (compactRange && compactRoot?.contains(compactRange.endContainer)) {
-        const afterRange = document.createRange();
-        afterRange.selectNodeContents(compactRoot);
-        afterRange.setStart(compactRange.endContainer, compactRange.endOffset);
-        const afterText = normalizeSelectionText(domText(afterRange.cloneContents())).normalize('NFKC');
-        const following = afterText.match(/^\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
-        if (following) {
-          for (let split = compactSelectedToken.length - 1; split > 0; split--) {
-            const book = resolveBibleBook(compactSelectedToken.slice(0, split));
-            const chapterText = compactSelectedToken.slice(split);
-            if (!book || !/^\d{1,3}$/.test(chapterText)) continue;
-            const from = Number(following[1]);
-            const to = following[2] ? Number(following[2]) : from;
-            const resolved = resolveBibleReference(book.name, Number(chapterText), from, to);
-            if (resolved) return resolved;
-          }
+      const following = afterText.match(/^\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
+      if (following) {
+        for (let split = compactSelectedToken.length - 1; split > 0; split--) {
+          const book = resolveBibleBook(compactSelectedToken.slice(0, split));
+          const chapterText = compactSelectedToken.slice(split);
+          if (!book || !/^\d{1,3}$/.test(chapterText)) continue;
+          const from = Number(following[1]);
+          const to = following[2] ? Number(following[2]) : from;
+          const resolved = resolveBibleReference(book.name, Number(chapterText), from, to);
+          if (resolved) return resolved;
         }
       }
     }
