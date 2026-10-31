@@ -36,6 +36,9 @@ for (const [input, expected] of [
   ['\u202eJohn 3:16\u202c', 'John 3:16'],
   ['faith\n\tand hope', 'faith and hope'],
   ["  LORD'S   word!  ", "LORD'S word!"],
-  ['Romans 1:3–4', 'Romans 1:3–4']
+  ['Romans 1:3–4', 'Romans 1:3-4'],
+  ['𝐑𝐨𝐦𝐚𝐧𝐬 𝟏𝟎:𝟗–𝟏𝟐', 'Romans 10:9-12'],
+  ['Ｒｏｍａｎｓ　１０：９－１２', 'Romans 10:9-12'],
+  ['1\u200f Corinthians ４:１７', '1 Corinthians 4:17']
 ]) assert.equal(normalize(input), expected, JSON.stringify(input));
 console.log('PASS: selection-text normalization contracts');
