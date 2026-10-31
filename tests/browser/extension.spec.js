@@ -171,7 +171,7 @@ test.describe('core user-visible E2E', () => {
       add('Chapter reference: 1 Kings 18.');
       add('verse', 'matrix-verse-42'); article.lastChild.appendChild(document.createTextNode(' 42.'));
       add('verses', 'matrix-verses-44'); article.lastChild.appendChild(document.createTextNode(' 44.'));
-      add('v', 'matrix-v-46'); article.lastChild.appendChild(document.createTextNode(' 46.'));
+      add('𝐯', 'matrix-v-46'); article.lastChild.appendChild(document.createTextNode(' 46.'));
       add('The next chapter is 1 Kings 19.');
       add('verse', 'matrix-verse-18'); article.lastChild.appendChild(document.createTextNode(' 18.'));
       document.body.appendChild(article);
@@ -180,7 +180,7 @@ test.describe('core user-visible E2E', () => {
     const cases = [
       ['#matrix-verse-42', 'verse', '/kjv/1ki/18/42/'],
       ['#matrix-verses-44', 'verses', '/kjv/1ki/18/44/'],
-      ['#matrix-v-46', 'v', '/kjv/1ki/18/46/'],
+      ['#matrix-v-46', '𝐯', '/kjv/1ki/18/46/'],
       ['#matrix-verse-18', 'verse', '/kjv/1ki/19/18/']
     ];
     const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];

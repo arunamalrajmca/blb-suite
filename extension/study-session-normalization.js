@@ -3,7 +3,7 @@
 (function (global) {
   function createStudySessionNormalizationHelpers({ canonicalStoredRef }) {
     function normalizeStudyNoteKey(value) {
-      return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+      return String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
     }
     
     function titleCaseStudyNote(value) {

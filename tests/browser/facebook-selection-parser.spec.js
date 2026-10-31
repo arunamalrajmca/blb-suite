@@ -1,5 +1,39 @@
 const { test, expect } = require('./fixtures');
 
+test('Bible-reference selection normalization applies NFKC and shared Unicode cleanup', async ({ extensionWorker }) => {
+  const cases = [
+    ['𝐑𝐨𝐦𝐚𝐧𝐬 𝟏𝟎:𝟗–𝟏𝟐', 'Romans 10:9-12'],
+    ['Ｒｏｍａｎｓ　１０：９－１２', 'Romans 10:9-12'],
+    ['Romans\u00A010:9\u201112', 'Romans 10:9-12'],
+    ['1\u200F Corinthians ４:１７', '1 Corinthians 4:17']
+  ];
+  const result = await extensionWorker.evaluate(cases =>
+    cases.map(([input]) => normalizeSelectedScriptureText(input)), cases
+  );
+  expect(result).toEqual(cases.map(([, expected]) => expected));
+});
+
+test('NFKC-normalized references resolve compatibility-form ranges for all 66 books', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => {
+    const fullWidth = value => Array.from(String(value), character => {
+      const code = character.charCodeAt(0);
+      if ((code >= 0x21 && code <= 0x7E)) return String.fromCharCode(code + 0xFEE0);
+      if (character === ' ') return '\u3000';
+      return character;
+    }).join('');
+    return BOOKS.map(book => {
+      const source = fullWidth(book.name + ' 1:1-2');
+      const normalized = normalizeSelectedScriptureText(source);
+      const ref = resolveBibleReferenceText(normalized)[0];
+      return ref && [ref.book, ref.chapter, ref.from, ref.to];
+    });
+  });
+  expect(result).toHaveLength(66);
+  expect(result.every((ref, index) =>
+    ref && ref[0] && ref[1] === 1 && ref[2] === 1 && ref[3] === 2
+  )).toBe(true);
+});
+
 test('Facebook selection parser preserves numbered-book references across invisible Unicode marks', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(() => {
     const selected = [

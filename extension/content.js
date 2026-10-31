@@ -142,15 +142,17 @@ function openBlbDestinationFromContent(url) {
 
 function normalizeSelectionText(s) {
   return String(s || '')
-    // Facebook and some rich-text sites can insert invisible bidirectional
-    // formatting marks around Bible references. They are presentation-only
-    // characters and must not become part of the reference token.
+    // Compatibility forms (mathematical/full-width letters and digits,
+    // ligatures, etc.) must be equivalent to ordinary reference text.
+    // Normalize only this matching representation, never the page content.
+    .normalize('NFKC')
+    // Rich-text sites can insert invisible bidirectional formatting marks.
     .replace(/[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '')
     .replace(/[\u00A0\u2007\u202F]/g, ' ')
+    .replace(/[\u2010-\u2015\u2212]/g, '-')
     .replace(/\s+/g, ' ')
     .trim();
 }
-
 function norm(s) {
   return normalizeSelectionText(s).toLowerCase().replace(/[_]/g,"-").replace(/[.]/g,"").replace(/\s+/g,"-").replace(/-+/g,"-");
 }
@@ -1833,7 +1835,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // the exact citation, including the book name; the previous numeric-only
     // path could resolve 9 or 10 but let a click on Romans fall back to Rom 1:1.
     if (selectionStart != null && selectionEnd != null &&
-        /\\b\\d{1,3}\\s*:\\s*\\d{1,3}\\s*,\\s*\\d{1,3}\\b/.test(normalizedMatchSource)) {
+        /\b\d{1,3}\s*:\s*\d{1,3}\s*,\s*\d{1,3}\b/.test(normalizedMatchSource)) {
       const commaListReference = resolveBibleReferenceFromContextWindow(
         normalizedMatchSource, selectionStart, selectionEnd
       );
