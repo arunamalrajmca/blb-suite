@@ -127,7 +127,7 @@ jobs:
   verse-context-regression:
     name: BROWSER E2E — generic verse-context gate
     needs: change-detection
-    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
+    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && needs.change-detection.outputs.extension_spec_required == 'true' && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -255,7 +255,7 @@ jobs:
     needs:
       - change-detection
       - browser-e2e
-    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
+    if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && needs.change-detection.outputs.extension_spec_required == 'true' && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -355,7 +355,7 @@ jobs:
           fi
 
           verse_context_expected=false
-          if [[ "$reference_expected" == true && ( "$FULL_BROWSER_SUITE" == "true" || ",$CHANGED_SPECS," == *",tests/browser/extension.spec.js,"* ) && ",$CHANGED_BROWSER_SPECS," != *",tests/browser/extension.spec.js,"* ]]; then
+          if [[ "$reference_expected" == true && "$EXTENSION_SPEC_REQUIRED" == "true" && ( "$FULL_BROWSER_SUITE" == "true" || ",$CHANGED_SPECS," == *",tests/browser/extension.spec.js,"* ) && ",$CHANGED_BROWSER_SPECS," != *",tests/browser/extension.spec.js,"* ]]; then
             verse_context_expected=true
           fi
 
@@ -380,7 +380,7 @@ jobs:
           fi
 
           features_expected=false
-          if [[ "$reference_expected" == true && ( "$FULL_BROWSER_SUITE" == "true" || ",$CHANGED_SPECS," == *",tests/browser/extension.spec.js,"* ) && ",$CHANGED_BROWSER_SPECS," != *",tests/browser/extension.spec.js,"* ]]; then
+          if [[ "$reference_expected" == true && "$EXTENSION_SPEC_REQUIRED" == "true" && ( "$FULL_BROWSER_SUITE" == "true" || ",$CHANGED_SPECS," == *",tests/browser/extension.spec.js,"* ) && ",$CHANGED_BROWSER_SPECS," != *",tests/browser/extension.spec.js,"* ]]; then
             features_expected=true
           fi
 

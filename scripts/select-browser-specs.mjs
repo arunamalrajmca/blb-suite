@@ -264,13 +264,14 @@ const mappedSpecs = new Set([
 const separatelyManagedSpecs = new Set(["tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/performance.spec.js"]);
 const unmapped = selected.filter(path => !mappedSpecs.has(path) && !separatelyManagedSpecs.has(path));
 const has = (...names) => full || selected.some(path => names.includes(path));
+const focusedContentContext = changed.length === 1 && changed[0] === "extension/content.js";
 const values = {
   full_browser_suite: String(full),
   changed_specs: selected.join(","),
   changed_browser_specs: changedBrowserSpecs.join(","),
   unmapped_specs: unmapped.join(","),
-  extension_spec_required: String(full || selected.includes("tests/browser/extension.spec.js")),
-  group_a_required: String(has(
+  extension_spec_required: String(full || (selected.includes("tests/browser/extension.spec.js") && !focusedContentContext)),
+  group_a_required: String(!focusedContentContext && (has(
     "tests/browser/redirect-source-url-patterns.spec.js",
     "tests/browser/omnibox-boolean-operators.spec.js",
     "tests/browser/redirect-source-url-browser.spec.js",
@@ -293,8 +294,8 @@ const values = {
     "tests/browser/extension.spec.js",
     "tests/browser/site-feature-defaults.spec.js",
     "tests/browser/study-session-popup-ui-regression.spec.js"
-  ) || unmapped.length > 0 || changedBrowserSpecs.length > 0),
-  group_b_required: String(has(
+   ) || unmapped.length > 0 || changedBrowserSpecs.length > 0)),
+  group_b_required: String(!focusedContentContext && has(
     "tests/browser/redirect-hostnames.spec.js",
     "tests/browser/blb-non-kjv-redirect.spec.js",
     "tests/browser/scripttagger-global-injection.spec.js"

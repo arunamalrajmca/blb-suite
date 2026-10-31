@@ -263,8 +263,9 @@ try {
   assertValue(result, 'full_browser_suite', false, 'focused content script');
   assert(result.values.changed_specs.includes('tests/browser/extension.spec.js'),
     'content-script contextual fixes must select the reference regression spec');
-  assertValue(result, 'group_a_required', true, 'focused content script');
+  assertValue(result, 'group_a_required', false, 'focused content script');
   assertValue(result, 'group_b_required', false, 'focused content script');
+  assertValue(result, 'extension_spec_required', false, 'focused content script');
   assertValue(result, 'reference_required', true, 'focused content script');
   console.log('PASS: focused content-script changes select only reference regressions');
 
