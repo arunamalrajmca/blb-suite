@@ -92,7 +92,7 @@
       entries.sort((a,b) => b.name.length - a.name.length);
       for (const entry of entries) {
         const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-        const re = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}\\.?\\s*(-?\\d+)(?:(?::|\\.)\\s*(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?|\\s+(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?)?(?=$|[^A-Za-z0-9])`, 'i');
+        const re = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}(?:\\.?\\s+|\\.(?=\\d)\\s*|(?<=[A-Za-z])(?=\\d))(-?\\d+)(?:(?::|\\.)\\s*(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?|\\s+(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?)?(?=$|[^A-Za-z0-9])`, 'i');
         const match = re.exec(source);
         if (!match) continue;
     
