@@ -1052,8 +1052,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         ...Object.keys(BOOK_ALIASES || {})
       ].filter(Boolean);
       return labels.some(label => {
-        const escaped = String(label).replace(/[.*+?^$()|[\]\\]/g, '\\        const escaped = String(label).replace(/[.*+?^$()|[\]\\]/g, '\\    let selected = normalizeSelectionText(selectionText).normalize('NFKC');
-    const initialNode = target instanceof Element ? target : (target?.parentElement || null);').replace(/\s+/g, '\\s+');').replace(/\s+/g, '\\s+');
+        const escaped = String(label).replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
         return new RegExp('(?:^|[^A-Za-z0-9])' + escaped + '(?=$|[^A-Za-z0-9])', 'i').test(value);
       });
     };
