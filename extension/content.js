@@ -1356,8 +1356,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     if (selectionStart != null && selectionEnd != null) {
       const clickedChapterBook = resolveBibleBook(selected);
       if (clickedChapterBook) {
-        const escapedBookToken = selected.replace(/[.*+?^\u0024()|[\\]\\\\]/g, '\\\\    // Some sites render citations as plain text and double-clicking a book
-');
+        const escapedBookToken = selected.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const bookTokenPattern = new RegExp('(?<![A-Za-z0-9])' + escapedBookToken + '(?![A-Za-z0-9])', 'gi');
         const bookTokenPattern = new RegExp('(?<![A-Za-z0-9])' + escapedBookToken + '(?![A-Za-z0-9])', 'gi');
         let bookTokenMatch;
         while ((bookTokenMatch = bookTokenPattern.exec(normalizedMatchSource))) {
@@ -1365,7 +1365,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const tokenEnd = tokenStart + bookTokenMatch[0].length;
           if (selectionStart >= tokenEnd || selectionEnd <= tokenStart) continue;
           const following = normalizedMatchSource.slice(tokenEnd);
-          const chapterMatch = following.match(/^\\s+([1-9]\\d{0,2})(?!\\s*[:.]\\s*\\d)/);
+          const chapterMatch = following.match(/^\s+([1-9]\d{0,2})(?!\s*[:.]\s*\d)/);
           if (!chapterMatch) continue;
           const chapter = Number(chapterMatch[1]);
           const resolved = resolveBibleReference(clickedChapterBook.name, chapter, 1, 1);
