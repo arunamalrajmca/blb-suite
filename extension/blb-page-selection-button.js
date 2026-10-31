@@ -1,6 +1,6 @@
 // Floating Show on BLB page-selection control and its lifecycle.
 (function (global) {
-  function initialize({ BLBShared, BOOKS, BOOK_ALIASES, KJV_CORPUS_WORD_INDEX, canonicalStrongValue, resolveBibleReference, resolveBibleBook, resolveBibleReferenceText, normalizeSelectionText, normalizeDoubleClickToken, getContextualBibleReference, safeRuntimeSendMessage, isSensitiveSiteHostname, isSensitiveSiteUrl, getSiteDefaultEnabled, refreshDoubleClickBlb, suiteSettingsReadyPromise, isSuiteEnabledNow, makeBlbMultiVerseButtonDraggable, getPageSelectionSiteKey }) {
+  function initialize({ BLBShared, BOOKS, BOOK_ALIASES, KJV_CORPUS_WORD_INDEX, canonicalStrongValue, resolveBibleReference, resolveBibleBook, resolveBibleReferenceText, normalizeSelectionText, normalizeDoubleClickToken, getContextualBibleReference, getSelectionContextPosition, safeRuntimeSendMessage, isSensitiveSiteHostname, isSensitiveSiteUrl, getSiteDefaultEnabled, refreshDoubleClickBlb, suiteSettingsReadyPromise, isSuiteEnabledNow, makeBlbMultiVerseButtonDraggable, getPageSelectionSiteKey }) {
     // ---------- Floating page selection button ----------
     // This feature is intentionally dormant unless the user enables "Show on BLB".
     // Alt+B and right-click remain independent entry points.
@@ -323,7 +323,9 @@
         // the single-word fast reject; ordinary unknown words remain rejected.
         const isVerseCue = /^(?:verse|verses|v)$/i.test(text);
         if (!isKjvWord && !isBookName && !isVerseCue) {
-          const position = getSelectionContextPosition();
+          const position = typeof getSelectionContextPosition === 'function'
+            ? getSelectionContextPosition()
+            : null;
           const hasAdjacentOrdinalPrefix = !!position?.text &&
             /(?:^|[^A-Za-z0-9])(?:[1-3]|i{1,3})\s+$/i.test(
               position.text.slice(0, position.start)

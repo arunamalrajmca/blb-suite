@@ -2594,6 +2594,7 @@ const blbPageSelectionButton = globalThis.BLBPageSelectionButtonModule.initializ
   normalizeSelectionText: normalizeSelectionText,
   normalizeDoubleClickToken: normalizeDoubleClickToken,
   getContextualBibleReference: getContextualBibleReference,
+  getSelectionContextPosition: getSelectionContextPosition,
   safeRuntimeSendMessage: safeRuntimeSendMessage,
   isSensitiveSiteHostname: isSensitiveSiteHostname,
    isSensitiveSiteUrl: isSensitiveSiteUrl,
