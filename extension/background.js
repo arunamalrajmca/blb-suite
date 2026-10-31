@@ -2941,8 +2941,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (Number.isInteger(standaloneBookNumber) && standaloneBookNumber >= 1 && standaloneBookNumber <= 66) {
           const standaloneBook=bookData.find(book => Number(book.bookNumber) === standaloneBookNumber);
           if (standaloneBook) {
+            // BOOKS entries expose urlKey, not a prebuilt url property.
+            // Resolve the canonical first verse through the shared reference
+            // core so standalone numeric book labels (1–66) open the real BLB
+            // destination instead of creating an empty extension tab.
+            const standaloneBookReference = resolveBibleReference(
+              standaloneBook.name, 1, 1, 1
+            );
+            if (!standaloneBookReference?.url) {
+              sendResponse({ok:false, reason:'standalone-book-reference-unavailable'});
+              return true;
+            }
             await openBlbDestination(
-              standaloneBook.url,
+              standaloneBookReference.url,
               !!behavior.activeIfNew,
               !!behavior.activateExisting
             );
