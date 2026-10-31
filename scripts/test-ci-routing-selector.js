@@ -32,9 +32,9 @@ const resetScenario = (base) => {
   run(['git', 'reset', '--hard', base]);
   run(['git', 'clean', '-fd']);
 };
-const selectorResult = (base) => {
+const selectorResult = (base, extraEnv = {}) => {
   const output = run([process.execPath, selector, base], {
-    env: { GITHUB_EVENT_NAME: 'pull_request', GITHUB_REF: 'refs/pull/1/merge' }
+    env: { GITHUB_EVENT_NAME: 'pull_request', GITHUB_REF: 'refs/pull/1/merge', ...extraEnv }
   });
   const values = Object.fromEntries(output.split(/\r?\n/).filter(line => /^[a-z_]+=/.test(line))
     .map(line => {

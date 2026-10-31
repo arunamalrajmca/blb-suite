@@ -1,6 +1,6 @@
 // Floating Show on BLB page-selection control and its lifecycle.
 (function (global) {
-  function initialize({ BLBShared, BOOKS, BOOK_ALIASES, KJV_CORPUS_WORD_INDEX, canonicalStrongValue, resolveBibleReference, resolveBibleBook, resolveBibleReferenceText, normalizeSelectionText, normalizeDoubleClickToken, getContextualBibleReference, safeRuntimeSendMessage, isSensitiveSiteHostname, isSensitiveSiteUrl, getSiteDefaultEnabled, refreshDoubleClickBlb, suiteSettingsReadyPromise, isSuiteEnabledNow, makeBlbMultiVerseButtonDraggable, getPageSelectionSiteKey }) {
+  function initialize({ BLBShared, BOOKS, BOOK_ALIASES, KJV_CORPUS_WORD_INDEX, canonicalStrongValue, resolveBibleReference, resolveBibleBook, resolveBibleReferenceText, normalizeSelectionText, normalizeDoubleClickToken, getContextualBibleReference, getSelectionContextPosition, safeRuntimeSendMessage, isSensitiveSiteHostname, isSensitiveSiteUrl, getSiteDefaultEnabled, refreshDoubleClickBlb, suiteSettingsReadyPromise, isSuiteEnabledNow, makeBlbMultiVerseButtonDraggable, getPageSelectionSiteKey }) {
     // ---------- Floating page selection button ----------
     // This feature is intentionally dormant unless the user enables "Show on BLB".
     // Alt+B and right-click remain independent entry points.
@@ -15,6 +15,7 @@
     let pageButtonSelectionFrame = 0;
     let pageButtonValidationToken = 0;
     let pageButtonActionInProgress = false;
+    let pageButtonRequestSequence = 0;
     let pageButtonDomObserver = null;
     let pageButtonDomValidationFrame = 0;
     
@@ -92,7 +93,7 @@
       entries.sort((a,b) => b.name.length - a.name.length);
       for (const entry of entries) {
         const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-        const re = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}\\.?\\s+(-?\\d+)(?:(?::|\\.)\\s*(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?|\\s+(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?)?(?=$|[^A-Za-z0-9])`, 'i');
+        const re = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}(?:\\.?\\s+|\\.(?=\\d)\\s*|(?<=[A-Za-z])(?=\\d))(-?\\d+)(?:(?::|\\.)\\s*(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?|\\s+(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?)?(?=$|[^A-Za-z0-9])`, 'i');
         const match = re.exec(source);
         if (!match) continue;
     
@@ -267,6 +268,7 @@
         // Ignore stale content-script contexts if the extension was reloaded.
         safeRuntimeSendMessage({
           type:'blbSuiteOpenSelectionText',
+          requestId:`show-on-blb-${Date.now()}-${++pageButtonRequestSequence}`,
           text,
           contextualReference: blbPageButtonContextualReference || null,
           directUrl: blbPageButtonDirectUrl || null,
@@ -317,22 +319,69 @@
         const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
           && KJV_CORPUS_WORD_INDEX.has(token);
         const isBookName = !!resolveBibleBook(text);
-        // Verse cues are intentionally actionable even though "verse", "verses",
-        // and "v" are not KJV corpus words. Their adjacent verse number and
-        // surrounding chapter reference provide the passage context.
+        // Verse cues and numbered-book suffix aliases can be meaningful only
+        // with their adjacent DOM context (for example, "II Th 2:1" with only
+        // "Th" selected). Resolve that narrow positional case before applying
+        // the single-word fast reject; ordinary unknown words remain rejected.
         const isVerseCue = /^(?:verse|verses|v)$/i.test(text);
         if (!isKjvWord && !isBookName && !isVerseCue) {
-          blbPageButtonSelection = '';
-          return;
+          const position = typeof getSelectionContextPosition === 'function'
+            ? getSelectionContextPosition()
+            : null;
+          const hasAdjacentOrdinalPrefix = !!position?.text &&
+            /(?:^|[^A-Za-z0-9])(?:[1-3]|i{1,3})\s+$/i.test(
+              position.text.slice(0, position.start)
+            );
+          if (hasAdjacentOrdinalPrefix) {
+            const contextual = getContextualBibleReference(text);
+            if (contextual?.url) {
+              blbPageButtonContextualReference = contextual;
+              lastSelectionContextualReference = contextual;
+              lastSelectionContextualText = text;
+            }
+          }
+          if (!blbPageButtonContextualReference) {
+            blbPageButtonSelection = '';
+            return;
+          }
         }
       }
     
       if (text) {
+        // Compact book/chapter tokens are ambiguous without their adjacent
+        // verse. Resolve their live DOM context before the exact-text parser,
+        // which otherwise defaults John3 to John 3:1 and caches that weaker URL.
+        const compactToken = normalizeSelectionText(text).normalize('NFKC');
+        let isCompactBookChapterToken = false;
+        if (/^[A-Za-z][A-Za-z0-9.'-]*$/.test(compactToken)) {
+          for (let split = compactToken.length - 1; split > 0; split--) {
+            const book = resolveBibleBook(compactToken.slice(0, split));
+            if (book && /^\d{1,3}$/.test(compactToken.slice(split))) {
+              isCompactBookChapterToken = true;
+              break;
+            }
+          }
+        }
+        if (isCompactBookChapterToken) {
+          const contextual = getContextualBibleReference(text);
+          if (contextual?.url) {
+            blbPageButtonContextualReference = contextual;
+            lastSelectionContextualReference = contextual;
+            lastSelectionContextualText = text;
+          }
+        }
+
         // Fast path: an exact single reference can be resolved locally once while
         // the selection is being classified. Retain its validated BLB URL so the
         // click does not repeat selection classification in the background worker.
-        const directRefs = resolveBibleReferenceText(normalizeSelectionText(text));
-        if (directRefs.length === 1) {
+        // A bare number is position-dependent. The text-only parser can
+        // reinterpret chapter/verse tokens such as the "10" in
+        // "Romans 10:9,10" as an unrelated default-book reference. Resolve
+        // numeric selections only through the live DOM Range context below.
+        const directRefs = /^\d+$/.test(normalizeSelectionText(text))
+          ? []
+          : resolveBibleReferenceText(normalizeSelectionText(text));
+        if (!blbPageButtonContextualReference && directRefs.length === 1) {
           const direct = directRefs[0];
           const selectedNormalized = normalizeSelectionText(text).replace(/\s+/g, ' ').trim();
           const referenceNormalized = normalizeSelectionText(direct.text || '').replace(/\s+/g, ' ').trim();
@@ -369,11 +418,64 @@
           } catch (_) {}
         }
         if (!blbPageButtonContextualReference) {
-          const contextual = getContextualBibleReference(text);
+          let contextual = null;
+
+          // Numeric selections must be resolved from their exact DOM Range
+          // before the generic contextual parser. That parser may otherwise
+          // reinterpret a chapter token as a default-book verse. The shared
+          // Range serializer preserves nested inline elements and <br>/block
+          // boundaries across generic article and post DOM layouts.
+          if (/^\d+$/.test(normalizeSelectionText(text))) {
+            const position = typeof getSelectionContextPosition === 'function'
+              ? getSelectionContextPosition()
+              : null;
+            if (position?.text && Number.isFinite(position.start) && Number.isFinite(position.end)) {
+              const source = normalizeSelectionText(position.text).normalize('NFKC');
+              const selectedStart = position.start;
+              const selectedEnd = position.end;
+              const listPattern = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d{1,3})\s*:\s*(\d{1,3}(?:\s*,\s*\d{1,3})+)/gi;
+              let match;
+              while ((match = listPattern.exec(source))) {
+                const citationStart = match.index;
+                const citationEnd = citationStart + match[0].length;
+                if (selectedStart >= citationEnd || selectedEnd <= citationStart) continue;
+                const book = resolveBibleBook(match[1]);
+                if (!book) continue;
+                const verses = match[3].split(',').map(value => Number(value.trim()));
+                const consecutive = verses.every((verse, index) =>
+                  index === 0 || verse === verses[index - 1] + 1
+                );
+                if (!consecutive) continue;
+                const resolved = resolveBibleReference(
+                  book.name, Number(match[2]), verses[0], verses[verses.length - 1]
+                );
+                if (resolved) {
+                  contextual = {
+                    book: resolved.book,
+                    chapter: resolved.chapter,
+                    from: resolved.from,
+                    to: resolved.to,
+                    url: resolved.url
+                  };
+                  break;
+                }
+              }
+            }
+          }
+
+          if (!contextual?.url) contextual = getContextualBibleReference(text);
+
+          // Numeric selections never fall through to the background text-only
+          // parser. A bare number with no exact contextual result is rejected.
           if (contextual?.url) {
             blbPageButtonContextualReference = contextual;
             lastSelectionContextualReference = contextual;
             lastSelectionContextualText = text;
+          } else if (/^\d+$/.test(normalizeSelectionText(text))) {
+            // Never pass an unresolved bare number to the background parser:
+            // it can be mistaken for Genesis 1:9 or another default-book ref.
+            blbPageButtonSelection = '';
+            return;
           }
         }
       }

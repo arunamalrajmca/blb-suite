@@ -642,7 +642,7 @@ test('Ordinary numbers without a list-label period are not classified as serials
   await expect(page.locator('#ordinary-number-without-period')).toContainText('250 items');
 });
 
-test('Double-Click anywhere in a consecutive comma-separated verse citation opens the full range', async ({ page, extensionStorage, extensionWorker }) => {
+test('Double-Click anywhere in a consecutive comma-separated verse citation opens the full range @failure-first', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
   const installFixture = async () => {
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
@@ -845,7 +845,7 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
   expect(targetResults.filter(result => result.result !== 'PASS'), 'Failed physical double-click targets').toEqual([]);
 });
 
-test('Double-Click resolves references through custom and framework-generated DOM containers', async ({ page, extensionStorage, extensionWorker }) => {
+test('Double-Click resolves references through custom and framework-generated DOM containers @failure-first', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
@@ -889,7 +889,7 @@ test('Double-Click resolves references through custom and framework-generated DO
 });
 
 
-test('Double-Click resolves partial references in Instagram-style rich text with line breaks', async ({ page, extensionStorage, extensionWorker }) => {
+test('Double-Click resolves partial references in Instagram-style rich text with line breaks @failure-first', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
@@ -977,10 +977,27 @@ test('chapter-only ranges expand across all chapters and open MultiVerse', async
 });
 
 
-test('MultiVerse batches disjoint chapter ranges without gaps and stays under 200 verses', async ({ page, extensionStorage, extensionWorker }) => {
+test('MultiVerse batches disjoint chapter ranges without gaps and stays under 200 verses', async ({ page, context, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
+
+
+  const submittedPayloads = [];
+  // Keep this regression independent of BLB's live POST response/redirects.
+  // The test is validating our generated MultiVerse form payloads and tab
+  // splitting, not the remote site's current response behavior.
+  await context.route('https://www.blueletterbible.org/tools/MultiVerse.cfm', async route => {
+    if (route.request().method() === 'POST') {
+      const body = new URLSearchParams(route.request().postData() || '');
+      submittedPayloads.push(body.get('mvText') || '');
+    }
+    return route.fulfill({
+      status:200,
+      contentType:'text/html',
+      body:'<!doctype html><html><body>MultiVerse POST fixture</body></html>'
+    });
+  });
 
   const requestedText = 'Genesis 42-46; Genesis 48-49';
   await page.evaluate((text) => {
@@ -1004,7 +1021,7 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
   const response = await extensionWorker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
     if (!tab?.id) throw new Error('No active tab for disjoint chapter-range E2E');
-    return chrome.scripting.executeScript({
+    const [execution] = await chrome.scripting.executeScript({
       target: {tabId:tab.id},
       world:'ISOLATED',
       func: () => new Promise(resolve => chrome.runtime.sendMessage({
@@ -1013,8 +1030,9 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
         tabBehavior:{activeIfNew:true,activateExisting:true}
       }, result => resolve(result || null)))
     });
+    return execution?.result || null;
   });
-  expect(response).toBeTruthy();
+  expect(response, 'Background must accept and complete the MultiVerse selection request').toMatchObject({ok:true});
 
   await expect.poll(async () => extensionWorker.evaluate(async (baseline) => {
     const tabs = await chrome.tabs.query({});
@@ -1068,11 +1086,13 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
 
   expect(state).toHaveLength(2);
   expect(state.every(tab => tab.mvText.length > 0)).toBeTruthy();
+  await expect.poll(() => submittedPayloads.length, {timeout:15000}).toBe(2);
+  expect([...submittedPayloads].sort()).toEqual(state.map(tab => tab.mvText).sort());
 
   // Chrome tab enumeration is not a batch-order guarantee; restore the
   // canonical reference order before checking that the split has no gaps.
-  const expanded = state
-    .map(tab => expandGenesisMultiVerseHandoff(tab.mvText))
+  const expanded = submittedPayloads
+    .map(mvText => expandGenesisMultiVerseHandoff(mvText))
     .sort((a, b) => {
       const firstA = a[0] || {chapter:0, verse:0};
       const firstB = b[0] || {chapter:0, verse:0};
@@ -1107,10 +1127,27 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
   for (const tab of state) await removeTabById(extensionWorker, tab.id);
 });
 
-test('MultiVerse parses reversed disjoint chapter ranges without dropping the second range', async ({ page, extensionStorage, extensionWorker }) => {
+test('MultiVerse parses reversed disjoint chapter ranges without dropping the second range', async ({ page, context, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
+
+  const submittedPayloads = [];
+  // Keep this regression independent of BLB's live POST response/redirects.
+  // The test is validating our generated MultiVerse form payloads and tab
+  // splitting, not the remote site's current response behavior.
+  await context.route('https://www.blueletterbible.org/tools/MultiVerse.cfm', async route => {
+    if (route.request().method() === 'POST') {
+      const body = new URLSearchParams(route.request().postData() || '');
+      submittedPayloads.push(body.get('mvText') || '');
+    }
+    return route.fulfill({
+      status:200,
+      contentType:'text/html',
+      body:'<!doctype html><html><body>MultiVerse POST fixture</body></html>'
+    });
+  });
+
 
   const requestedText = 'Genesis 48-49 and Genesis 42-46';
   await page.evaluate((text) => {
@@ -1134,7 +1171,7 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
   const response = await extensionWorker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
     if (!tab?.id) throw new Error('No active tab for disjoint chapter-range E2E');
-    return chrome.scripting.executeScript({
+    const [execution] = await chrome.scripting.executeScript({
       target: {tabId:tab.id},
       world:'ISOLATED',
       func: () => new Promise(resolve => chrome.runtime.sendMessage({
@@ -1143,8 +1180,9 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
         tabBehavior:{activeIfNew:true,activateExisting:true}
       }, result => resolve(result || null)))
     });
+    return execution?.result || null;
   });
-  expect(response).toBeTruthy();
+  expect(response, 'Background must accept and complete the MultiVerse selection request').toMatchObject({ok:true});
 
   await expect.poll(async () => extensionWorker.evaluate(async (baseline) => {
     const tabs = await chrome.tabs.query({});
@@ -1198,11 +1236,13 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
 
   expect(state).toHaveLength(2);
   expect(state.every(tab => tab.mvText.length > 0)).toBeTruthy();
+  await expect.poll(() => submittedPayloads.length, {timeout:15000}).toBe(2);
+  expect([...submittedPayloads].sort()).toEqual(state.map(tab => tab.mvText).sort());
 
   // Chrome tab enumeration is not a batch-order guarantee; restore the
   // canonical reference order before checking that the split has no gaps.
-  const expanded = state
-    .map(tab => expandGenesisMultiVerseHandoff(tab.mvText))
+  const expanded = submittedPayloads
+    .map(mvText => expandGenesisMultiVerseHandoff(mvText))
     .sort((a, b) => {
       const firstA = a[0] || {chapter:0, verse:0};
       const firstB = b[0] || {chapter:0, verse:0};

@@ -42,11 +42,3 @@ jobs:
             echo "PR head:     $PR_HEAD_SHA"
             exit 1
           fi
-
-  cancel-sibling-runs:
-    name: Cancel sibling runs after failure
-    if: ${{ failure() }}
-    needs: [latest-main-ancestry]
-    permissions:
-      actions: write
-    uses: ./.github/workflows/cancel-sibling-runs-on-failure.yml
