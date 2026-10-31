@@ -969,6 +969,49 @@ function getContextualBibleReference(selectionText) {  const selected = normaliz
   // the browser exposes a usable selection.
   const position = getSelectionContextPosition();
   if (position?.text) {
+    const contextText = normalizeSelectionText(position.text);
+    const selectedToken = normalizeSelectionText(
+      contextText.slice(position.start, position.end)
+    ).normalize('NFKC');
+    // A compact book/chapter token can be selected separately from its
+    // immediately adjacent verse (e.g. DOM: <span>John3</span>:<span>16</span>).
+    // Resolve that exact adjacency before the generic chapter-only fallback,
+    // so the floating button cannot downgrade John 3:16 to John 3:1.
+    if (/^[A-Za-z][A-Za-z0-9.'-]*$/.test(selectedToken)) {
+      const compactBooks = [];
+      const addCompactBook = (name, book) => {
+        const label = String(name || '').trim();
+        if (!label || !book || compactBooks.some(item => item.label.toLowerCase() === label.toLowerCase())) return;
+        compactBooks.push({label, book});
+      };
+      for (const book of BOOKS) {
+        addCompactBook(book.name, book);
+        addCompactBook(book.urlKey, book);
+      }
+      for (const [alias, canonicalName] of Object.entries(BOOK_ALIASES || {})) {
+        const book = BOOKS.find(item => item.name === canonicalName);
+        if (book) addCompactBook(alias, book);
+      }
+      compactBooks.sort((a, b) => b.label.length - a.label.length);
+      for (const entry of compactBooks) {
+        if (!selectedToken.toLowerCase().startsWith(entry.label.toLowerCase())) continue;
+        const chapterText = selectedToken.slice(entry.label.length);
+        if (!/^\\d{1,3}$/.test(chapterText)) continue;
+        const following = contextText.slice(position.end).match(/^\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?/);
+        if (!following) continue;
+        const chapter = Number(chapterText);
+        const from = Number(following[1]);
+        const to = following[2] ? Number(following[2]) : from;
+        const compactResolved = resolveBibleReference(entry.book.name, chapter, from, to);
+        if (compactResolved) return {
+          book: compactResolved.book,
+          chapter: compactResolved.chapter,
+          from: compactResolved.from,
+          to: compactResolved.to,
+          url: compactResolved.url
+        };
+      }
+    }
     const resolved = resolveBibleReferenceFromContextWindow(position.text, position.start, position.end);
     if (resolved) return resolved;
   }
