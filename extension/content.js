@@ -1102,6 +1102,12 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         const beforeText = normalizeSelectionText(domText(beforeRange.cloneContents())).normalize('NFKC');
         let associatedVerse = null;
         let followingVerse = null;
+        // A number immediately following an explicit verse cue (for example,
+        // the separately wrapped "1" in "Verse 1") is the same contextual
+        // gesture as clicking the cue itself. This is intentionally narrower
+        // than scanning arbitrary article numbers, which must remain inert.
+        const verseNumberClick = /^\d{1,3}$/.test(normalizedSelectedToken) &&
+          /(?:^|[\s([{])(?:v(?:erse)?s?)\.?\s*$/i.test(beforeText);
         if (verseWordClick) {
           const afterRange = document.createRange();
           afterRange.selectNodeContents(messageRoot);
@@ -1111,22 +1117,23 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const following = afterText.match(/^[\s,.:;()\[\]{}–—-]*(\d{1,3})\b/);
           followingVerse = following ? Number(following[1]) : null;
           // Never classify an out-of-range number as an extracted verse.
-          // Preserve it separately only so the gesture can be explicitly
-          // rejected instead of falling through to ordinary word lookup.
           if (Number.isInteger(followingVerse) && followingVerse >= 1 && followingVerse <= 176) {
             associatedVerse = followingVerse;
           }
+        } else if (verseNumberClick) {
+          followingVerse = Number(normalizedSelectedToken);
+          if (followingVerse >= 1 && followingVerse <= 176) associatedVerse = followingVerse;
         }
-        if (verseWordClick) {
+        if (verseWordClick || verseNumberClick) {
           const diagnostic = {
-            clickToken, verseWordClick, associatedVerse,
+            clickToken, verseWordClick, verseNumberClick, associatedVerse,
             followingVerse,
             tokenElementIsExact, hasClickRange,
             beforeText: beforeText.slice(-500)
           };
           messageRoot.setAttribute('data-blb-verse-context-diagnostic', JSON.stringify(diagnostic));
         }
-        if (verseWordClick && associatedVerse) {
+        if ((verseWordClick || verseNumberClick) && associatedVerse) {
           // The first number immediately following the clicked cue is the
           // verse. Do not search for other verse numbers in the post. Resolve
           // chapter context by walking backward from the cue and stop at the
