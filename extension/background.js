@@ -5136,6 +5136,35 @@ function getDirectSelectedReference(selectionText) {
   return resolveDirectBibleReference(source);
 }
 
+function getCompactBookChapterSelection(selectionText) {
+  const token = normalizeSelectedScriptureText(selectionText).trim();
+  if (!/^[A-Za-z][A-Za-z0-9.'-]*$/.test(token)) return null;
+  for (let split = token.length - 1; split > 0; split--) {
+    const rawBookPart = token.slice(0, split);
+    // Compact numbered-book forms (1John3, IITh2) normalize to the same
+    // canonical prefix form accepted by the shared book resolver.
+    const bookPart = rawBookPart.replace(/^([1-3]|I{1,3})(?=[A-Za-z])/i, '$1 ');
+    const book = resolveBibleBook(bookPart);
+    const chapterText = token.slice(split);
+    if (book && /^\d{1,3}$/.test(chapterText)) {
+      return {book, chapter:Number(chapterText)};
+    }
+  }
+  return null;
+}
+
+function isContextualReferenceForCompactSelection(selectionText, contextualReference) {
+  const compact = getCompactBookChapterSelection(selectionText);
+  if (!compact || !contextualReference?.url) return false;
+  const contextBook = typeof contextualReference.book === 'string'
+    ? contextualReference.book.trim().toLowerCase()
+    : String(contextualReference.book?.name || contextualReference.book?.bookName ||
+        contextualReference.book?.book || '').trim().toLowerCase();
+  return !!contextBook
+    && contextBook === String(compact.book.name || '').trim().toLowerCase()
+    && Number(contextualReference.chapter) === compact.chapter;
+}
+
 async function openBlbBook(bookOrNumber, tabBehavior = {activeIfNew:true, activateExisting:true}) {
   const raw = String(bookOrNumber || '').trim().toLowerCase();
   const book = bookData.find(b =>
@@ -5224,24 +5253,12 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     return (aIndex < 0 ? Number.MAX_SAFE_INTEGER : aIndex) - (bIndex < 0 ? Number.MAX_SAFE_INTEGER : bIndex);
   });
 
-  // Double-Click has its own handoff route, separate from
-  // openSharedSelectionAction. A compact token such as John3 can parse as the
-  // chapter's default verse 1, even though the content script has already
-  // resolved the immediately adjacent verse/range from the DOM. In that
-  // exact compact-token case, prefer the more precise contextual reference.
-  const compactChapterOnlySelection = /^[A-Za-z][A-Za-z.'-]*\d{1,3}$/.test(text.trim());
-  const bookNameForContextMatch = value => typeof value === 'string'
-    ? value.trim().toLowerCase()
-    : String(value?.name || value?.bookName || value?.book || '').trim().toLowerCase();
-  const chapterOnlySelectedRef = selectedRefs.length === 1 ? selectedRefs[0] : null;
-  const contextualSupersedesCompactChapter = compactChapterOnlySelection
-    && contextualRef?.url
-    && chapterOnlySelectedRef
-    && Number(chapterOnlySelectedRef.chapter) === Number(contextualRef.chapter)
-    && Number(chapterOnlySelectedRef.from) === 1
-    && Number(chapterOnlySelectedRef.to) === 1
-    && bookNameForContextMatch(chapterOnlySelectedRef.book) !== ''
-    && bookNameForContextMatch(chapterOnlySelectedRef.book) === bookNameForContextMatch(contextualRef.book);
+  // Double-Click has a separate handoff route. Prefer the DOM-resolved
+  // reference whenever the selected token itself is a compact book/chapter
+  // and the contextual result identifies that same book and chapter. Do not
+  // depend on the text parser producing a chapter-only result first.
+  const contextualSupersedesCompactChapter =
+    isContextualReferenceForCompactSelection(text, contextualRef);
   if (contextualSupersedesCompactChapter) {
     const studyRef = parseBlbKjvUrlToStudyRef(contextualRef.url);
     await Promise.all([
@@ -5636,16 +5653,8 @@ async function openSharedSelectionAction({
   // Require the selected token to parse as exactly one book/chapter and the
   // contextual result to identify that same book and chapter; explicit
   // selected verses and unrelated nearby references remain authoritative.
-  const compactChapterOnlySelection = /^[A-Za-z][A-Za-z.'-]*\d{1,3}$/.test(normalized.trim());
-  const bookNameForContextMatch = value => typeof value === 'string'
-    ? value.trim().toLowerCase()
-    : String(value?.name || value?.bookName || value?.book || '').trim().toLowerCase();
-  const contextualMatchesSelectedChapter = compactChapterOnlySelection
-    && contextualReference?.url
-    && selectedRefs.length === 1
-    && Number(selectedRefs[0].chapter) === Number(contextualReference.chapter)
-    && bookNameForContextMatch(selectedRefs[0].book) !== ''
-    && bookNameForContextMatch(selectedRefs[0].book) === bookNameForContextMatch(contextualReference.book);
+  const contextualMatchesSelectedChapter =
+    isContextualReferenceForCompactSelection(normalized, contextualReference);
   if (contextualMatchesSelectedChapter) {
     const studyRef = parseBlbKjvUrlToStudyRef(contextualReference.url);
     await Promise.all([
