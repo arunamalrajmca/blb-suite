@@ -691,7 +691,9 @@ test.describe('core user-visible E2E', () => {
         '<div dir="auto">While God wants us to know and understand his prophetic program found in Genesis—<span id="acts-book">Acts</span> <span>7</span> and Hebrews—Revelation, these books are addressed to the nation of Israel specifically.</div>',
         '<div dir="auto">In <span>Mt.</span> <span>16:24-27</span>, losing your life for his sake in <span id="matthew-v-cue">v.</span> <span id="matthew-verse">25</span> is tied to rewards.</div>',
         '<div dir="auto"><span id="romans-book">Romans14</span>:<span id="romans-first-verse">10</span>-<span id="romans-last-verse">12</span></div>',
-        '<div dir="auto"><span id="john-book">John3</span>:<span id="john-verse">16</span></div>'
+        '<div dir="auto"><span id="john-book">John3</span>:<span id="john-verse">16</span></div>',
+        '<div dir="auto"><span id="one-cor-number">1</span> <span>Cor.</span> <span>13</span></div>',
+        '<div dir="auto"><span id="two-cor-number">2</span> <span>Cor.</span> <span>13</span></div>'
       ].join('');
       document.body.appendChild(article);
     });
@@ -704,7 +706,9 @@ test.describe('core user-visible E2E', () => {
       ['#romans-first-verse', '10', '/kjv/rom/14/10-12/'],
       ['#romans-last-verse', '12', '/kjv/rom/14/10-12/'],
       ['#john-book', 'John3', '/kjv/jhn/3/16/'],
-      ['#john-verse', '16', '/kjv/jhn/3/16/']
+      ['#john-verse', '16', '/kjv/jhn/3/16/'],
+      ['#one-cor-number', '1', '/kjv/1co/13/1/'],
+      ['#two-cor-number', '2', '/kjv/2co/13/1/']
     ];
     const actions = ['Show on BLB', 'Right-Click', 'Alt+B', 'Double-Click'];
 
@@ -832,7 +836,7 @@ test.describe('core user-visible E2E', () => {
       await activateBlbTabForPath(extensionWorker, expectedPath, {
         fragment: selector,
         selector: '#blb-e2e-substack-corinthians-reference',
-        selectedText: 'Cor'
+        selectedText: selector.endsWith('-number') ? (selector.includes('cor1') ? '1' : '2') : 'Cor'
       });
       await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
         for (const tab of tabs) {
@@ -854,7 +858,7 @@ test.describe('core user-visible E2E', () => {
     const point = await page.evaluate(() => {
       const paragraph = document.createElement('p');
       paragraph.id = 'blb-e2e-substack-corinthians-plain-text';
-      paragraph.textContent = 'Essentially, you are asking yourself, “How do I apply the attributes of charity in 1 Cor. 13 in how I love my wife and how I live my life?”';
+      paragraph.innerHTML = 'Essentially, you are asking yourself, “How do I apply the attributes of charity in <span id="substack-plain-number">1</span> Cor. 13 in how I love my wife and how I live my life?”';
       document.body.appendChild(paragraph);
       const textNode = paragraph.firstChild;
       const start = textNode.textContent.indexOf('Cor');
@@ -870,6 +874,21 @@ test.describe('core user-visible E2E', () => {
       fragment: 'plain-text',
       selector: '#blb-e2e-substack-corinthians-plain-text',
       selectedText: 'Cor'
+    });
+    await extensionWorker.evaluate(() => chrome.tabs.query({}).then(async tabs => {
+      for (const tab of tabs) {
+        try {
+          if (new URL(String(tab.url || tab.pendingUrl || '')).pathname === '/kjv/1co/13/1/' && tab.id != null) {
+            await chrome.tabs.remove(tab.id);
+          }
+        } catch (_) {}
+      }
+    }));
+    await page.locator('#substack-plain-number').dblclick();
+    await activateBlbTabForPath(extensionWorker, '/kjv/1co/13/1/', {
+      fragment: '#substack-plain-number',
+      selector: '#blb-e2e-substack-corinthians-plain-text',
+      selectedText: '1'
     });
   });
 
