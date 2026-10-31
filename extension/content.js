@@ -1289,7 +1289,16 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             clickedWordRange.setStart(textNode, wordStart);
             clickedWordRange.setEnd(textNode, wordEnd);
             clickedWordText = normalizeSelectionText(clickedWordRange.toString()).normalize('NFKC');
-            if (clickedWordText) selected = clickedWordText;
+            if (clickedWordText) {
+              // A verified numbered-list serial may be selected with its
+              // trailing period by the physical Range. Keep the already
+              // classified numeric token so the period cannot bypass the
+              // numeric-book path or turn the serial into ordinary prose.
+              const verifiedNumericSerial = /^\\d+$/.test(selected)
+                && /^\\d+\\.$/.test(clickedWordText)
+                && isNumberedListSerialDoubleClick(clickedWordText, event);
+              if (!verifiedNumericSerial) selected = clickedWordText;
+            }
           }
         }
       }
