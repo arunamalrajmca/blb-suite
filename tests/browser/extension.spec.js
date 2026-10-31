@@ -684,18 +684,19 @@ test.describe('core user-visible E2E', () => {
       article.setAttribute('role', 'article');
       article.innerHTML = [
         '<div dir="auto">While God wants us to know and understand his prophetic program found in Genesis—<span id="acts-book">Acts</span> <span>7</span> and Hebrews—Revelation, these books are addressed to the nation of Israel specifically.</div>',
-        '<div dir="auto">In <span>Mt.</span> <span>16:24-27</span>, losing your life for his sake in <span>v.</span> <span id="matthew-verse">25</span> is tied to rewards.</div>',
-        '<div dir="auto"><span id="romans-book">Romans</span><span id="romans-chapter">14</span>:<span>10</span>-<span>12</span></div>'
+        '<div dir="auto">In <span>Mt.</span> <span>16:24-27</span>, losing your life for his sake in <span id="matthew-v-cue">v.</span> <span id="matthew-verse">25</span> is tied to rewards.</div>',
+        '<div dir="auto"><span id="romans-book">Romans14</span>:<span id="romans-first-verse">10</span>-<span id="romans-last-verse">12</span></div>'
       ].join('');
       document.body.appendChild(article);
     });
 
     const cases = [
       ['#acts-book', '/kjv/act/7/1/'],
+      ['#matthew-v-cue', '/kjv/mat/16/25/'],
       ['#matthew-verse', '/kjv/mat/16/25/'],
       ['#romans-book', '/kjv/rom/14/10-12/'],
-      ['#romans-chapter', '/kjv/rom/14/10-12/'],
-      ['#romans-book + #romans-chapter', '/kjv/rom/14/10-12/']
+      ['#romans-first-verse', '/kjv/rom/14/10-12/'],
+      ['#romans-last-verse', '/kjv/rom/14/10-12/']
     ];
     for (const [selector, expectedPath] of cases) {
       await page.locator(selector).first().dblclick();
