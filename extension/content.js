@@ -1876,12 +1876,12 @@ function handleDoubleClickBlb(event) {
         // valid standalone book gestures even when formatted as list labels.
         // This guard is double-click-only; floating-button and Alt+B are untouched.
         const isNumberedListSerial = isNumberedListSerialDoubleClick(selection, event);
-        if (isNumberedListSerial && (Number(selection.replace(/\\.$/, '')) === 0 || Number(selection.replace(/\\.$/, '')) > 66)) return true;
+        if (isNumberedListSerial && (Number(selection.replace(/\.$/, '')) === 0 || Number(selection.replace(/\.$/, '')) > 66)) return true;
         // A verified ordered-list serial may be selected together with its
         // trailing period (for example, Substack's "1."). Strip only that
         // confirmed marker punctuation so 1–66 still resolve as standalone
         // numeric book gestures; ordinary numeric text is left untouched.
-        if (isNumberedListSerial) selection = selection.replace(/\\.$/, '');
+        if (isNumberedListSerial) selection = selection.replace(/\.$/, '');
 
         // Strong's values are lexicon identifiers, not ordinary KJV words.
         // Double-clicking G/H numbers (including a linked value on The King's
