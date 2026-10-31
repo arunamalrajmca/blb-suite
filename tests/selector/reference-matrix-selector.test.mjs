@@ -11,17 +11,8 @@ test("reference matrix defines unique, complete entries", () => {
   assert.ok(entries.some(entry => entry.group === "redirect-source-smoke-batch" && entry.files.includes("tests/browser/redirect-hostnames.spec.js")));
   assert.ok(entries.some(entry => entry.group === "specialized-reference-smoke-batch" && entry.files.length === 3));
   const extensionCoverage = entries.find(entry => entry.group === "extension-spec-reference-coverage");
-  for (const pattern of [
-    "Single-word verse cues resolve",
-    "Double-click resolves any part",
-    "Acts 7, v\\.25, and compact references",
-    "Double-click resolves a Unicode-styled Bible book",
-    "Double-click generic reference syntax — spaced forms — OT",
-    "Double-click generic reference syntax — spaced forms — NT",
-    "Facebook directional-format Revelation 20:1-10"
-  ]) {
-    assert.ok(extensionCoverage.grep.includes(pattern), "known failure coverage remains selected: " + pattern);
-  }
+  assert.equal(extensionCoverage.grep, "Acts 7, v.25",
+    "only the still-unverified four-action verse-cue matrix should run");
 });
 
 test("full-suite fallback selects every declared matrix entry", () => {
