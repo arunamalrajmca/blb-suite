@@ -14,11 +14,16 @@ test("extension.spec.js reference checks share one matrix runner without droppin
   assert.doesNotThrow(() => new RegExp(grouped[0].grep));
 
   for (const pattern of [
-    "Single-word verse cues resolve"
+    "Single-word verse cues resolve",
+    "Double-click resolves any part",
+    "Acts 7, v\\.25, and compact references",
+    "Double-click resolves a Unicode-styled Bible book",
+    "Double-click generic reference syntax — spaced forms — OT",
+    "Double-click generic reference syntax — spaced forms — NT",
+    "Facebook directional-format Revelation 20:1-10"
   ]) {
     assert.ok(grouped[0].grep.includes(pattern), "batched grep must preserve: " + pattern);
   }
-  assert.doesNotMatch(grouped[0].grep, /Double-click resolves any part|Acts 7, v\\.25|Unicode-styled Bible book|spaced forms — OT|spaced forms — NT|Facebook directional-format Revelation/);
 });
 
 test("dedicated reference specs remain covered by individual or batched matrix entries", () => {

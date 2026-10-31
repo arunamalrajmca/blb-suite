@@ -581,7 +581,7 @@ globalThis.BLBStudyReferenceCaptureModule?.initialize({
 // Double-click a single KJV word, Bible book name, or standalone book number.
 // Uses the Suite's own selection logic and never invokes BLB's native search.
 function normalizeDoubleClickToken(value) {
-  return String(value || '').normalize('NFKC').trim()
+  return normalizeSelectionText(value)
     .replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9]+$/g, '').toLowerCase();
 }
 
@@ -1499,7 +1499,9 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const exactToken = normalizeSelectionText(exactPhysicalTarget.textContent || '').normalize('NFKC');
           const exactEnd = exactStart + exactToken.length;
           if (exactToken && normalizedContext.slice(exactStart, exactEnd) === exactToken) {
-            const exactReference = resolveBibleReferenceFromContextWindow(
+            const exactReference = resolvePositionalBookCitation(
+              normalizedContext, exactStart, exactEnd
+            ) || resolveBibleReferenceFromContextWindow(
               normalizedContext, exactStart, exactEnd
             );
             if (exactReference) return exactReference;
@@ -2050,7 +2052,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const tokenEnd = tokenStart + bookTokenMatch[0].length;
           if (chapterContextSelectionStart >= tokenEnd || chapterContextSelectionEnd <= tokenStart) continue;
           const following = chapterContextSource.slice(tokenEnd);
-          const chapterMatch = following.match(/^\s+([1-9]\d{0,2})(?!\s*[:.]\s*\d)/);
+          const chapterMatch = following.match(/^\s+([1-9]\d{0,2})(?!\s*[:.]\s*\d)(?!\s+\d)/);
           if (!chapterMatch) continue;
           const chapter = Number(chapterMatch[1]);
           const chapterResults = resolveBibleReferenceText(clickedChapterBook.name + ' ' + chapter);
@@ -2324,9 +2326,8 @@ function isNumberedListSerialDoubleClick(selectionText, event) {
     // wrapper element rather than the label's text node. The physical event
     // target still identifies the clicked label, so accept that exact target
     // only when its own text is "<number>." and it begins its containing block.
-    const physicalTarget = event?.target instanceof Element
-      ? event.target
-      : (event?.target?.parentElement || null);
+    const physicalTarget = getDoubleClickTargetElement(event)
+      || (event?.target instanceof Element ? event.target : (event?.target?.parentElement || null));
     let candidate = physicalTarget;
     for (let depth = 0; candidate && depth < 4; depth++, candidate = candidate.parentElement) {
       if (normalizeSelectionText(candidate.textContent).normalize('NFKC') !== selectedNumber + '.') continue;
