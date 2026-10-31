@@ -1347,6 +1347,33 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       selectionEnd = toNormalizedOffset(selectionEnd);
     }
 
+    // Chapter-only references are positional too: when a clicked book name
+    // is immediately followed by a chapter (for example, "Genesis—Acts 7"),
+    // resolve that chapter instead of falling back to the book's first verse.
+    // Require the selected occurrence itself to be the book token and require
+    // the chapter to follow directly; unrelated numbers elsewhere in the block
+    // must never be borrowed.
+    if (selectionStart != null && selectionEnd != null) {
+      const clickedChapterBook = resolveBibleBook(selected);
+      if (clickedChapterBook) {
+        const escapedBookToken = selected.replace(/[.*+?^\u0024()|[\\]\\\\]/g, '\\\\    // Some sites render citations as plain text and double-clicking a book
+');
+        const bookTokenPattern = new RegExp('(?<![A-Za-z0-9])' + escapedBookToken + '(?![A-Za-z0-9])', 'gi');
+        let bookTokenMatch;
+        while ((bookTokenMatch = bookTokenPattern.exec(normalizedMatchSource))) {
+          const tokenStart = bookTokenMatch.index;
+          const tokenEnd = tokenStart + bookTokenMatch[0].length;
+          if (selectionStart >= tokenEnd || selectionEnd <= tokenStart) continue;
+          const following = normalizedMatchSource.slice(tokenEnd);
+          const chapterMatch = following.match(/^\\s+([1-9]\\d{0,2})(?!\\s*[:.]\\s*\\d)/);
+          if (!chapterMatch) continue;
+          const chapter = Number(chapterMatch[1]);
+          const resolved = resolveBibleReference(clickedChapterBook.name, chapter, 1, 1);
+          if (resolved) return {book:resolved.book, chapter:resolved.chapter, from:resolved.from, to:resolved.to, url:resolved.url};
+        }
+      }
+    }
+
     // Some sites render citations as plain text and double-clicking a book
     // abbreviation selects only one token (e.g. "Cor" in "1 Cor. 15:3, 4").
     // Resolve the captured book label itself before trusting a citation match:
@@ -1387,7 +1414,12 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           }
         }
         if (!book || bookLabelEnd == null) continue;
-        if (selectionStart >= bookLabelEnd || selectionEnd <= bookLabelStart) continue;
+        const citationStart = citationMatch.index;
+        const citationEnd = citationStart + citationMatch[0].length;
+        // Any token inside a complete citation may identify that citation,
+        // including compact forms such as Romans14:10-12 where the chapter
+        // and verse numbers are separate double-click targets.
+        if (selectionStart >= citationEnd || selectionEnd <= citationStart) continue;
         const chapter = Number(citationMatch[2]);
         const listedVerses = citationMatch[3]
           ? citationMatch[3].split(',').map(value => Number(value.trim()))
@@ -1794,7 +1826,7 @@ function handleDoubleClickBlb(event) {
         // even when "verse" is absent from the generated KJV word index.
         // Declare this outside the fast-rejection block because target selection
         // and the DOM-context resolver also need the same cue classification.
-        const isVerseContextWord = /^(?:v|verse|verses)$/i.test(selection);
+        const isVerseContextWord = /^(?:v\.?|verse|verses)$/i.test(selection);
         // Numbered-book suffixes must reach the adjacent-prefix resolver even
         // when they are not KJV words (for example, "Sam" or "Jn"). Keep this
         // candidate set aligned with the suffix alternatives in the context
@@ -1845,7 +1877,7 @@ function handleDoubleClickBlb(event) {
         // physical event target where needed. The generic caret-target helper
         // can return a nearby/stale element on pages with inline citation spans.
         const cueElement = [physicalTarget, getDoubleClickTargetElement(event)].find(candidate =>
-          /^(?:v|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
+          /^(?:v\.?|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
         );
         const possibleNumberedBookSuffix=isNumberedBookSuffixCandidate;
         const contextualTarget = possibleNumberedBookSuffix
