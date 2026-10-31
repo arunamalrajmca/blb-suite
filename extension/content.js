@@ -1394,7 +1394,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         ? domText(numericContextBlock)
         : '';
       const numericContextHasBook = hasExplicitBookLabel(numericContextText);
-      const numericContextHasVerseCue = /\\b(?:v\\.?|verses?)\\s*\\d{1,3}\\b/i.test(numericContextText);
+      const numericContextHasVerseCue = /\b(?:v\.?|verses?)\s*\d{1,3}\b/i.test(numericContextText);
       if (!numericContextHasBook && !numericContextHasVerseCue) return null;
     }
 
