@@ -5601,6 +5601,32 @@ async function openSharedSelectionAction({
   const bookOnly = getSelectedBookOnlyReference(normalized);
   const selectedRefs = extractBibleRefsFromSelectedTextUncached(normalized);
 
+  // A compact book/chapter token (for example, John3 or Romans14) is only
+  // chapter-specific by itself. When the DOM-context resolver has identified
+  // the immediately adjacent verse, prefer that more precise reference over
+  // the parser's chapter-only default (which otherwise opens verse 1).
+  // Require the selected token to parse as exactly one book/chapter and the
+  // contextual result to identify that same book and chapter; explicit
+  // selected verses and unrelated nearby references remain authoritative.
+  const compactChapterOnlySelection = /^[A-Za-z][A-Za-z.'-]*\d{1,3}$/.test(normalized.trim());
+  const bookNameForContextMatch = value => typeof value === 'string'
+    ? value.trim().toLowerCase()
+    : String(value?.name || value?.bookName || value?.book || '').trim().toLowerCase();
+  const contextualMatchesSelectedChapter = compactChapterOnlySelection
+    && contextualReference?.url
+    && selectedRefs.length === 1
+    && Number(selectedRefs[0].chapter) === Number(contextualReference.chapter)
+    && bookNameForContextMatch(selectedRefs[0].book) !== ''
+    && bookNameForContextMatch(selectedRefs[0].book) === bookNameForContextMatch(contextualReference.book);
+  if (contextualMatchesSelectedChapter) {
+    const studyRef = parseBlbKjvUrlToStudyRef(contextualReference.url);
+    await Promise.all([
+      openBlbDestination(contextualReference.url, !!behavior.activeIfNew, !!behavior.activateExisting),
+      studyRef ? recordStudyRefs([studyRef]) : Promise.resolve()
+    ]);
+    return {ok:true, contextual:true, compactChapter:true};
+  }
+
   if (Array.isArray(contextualReference?.refs) && contextualReference.refs.length > 1) {
     const result = await openBlbMultiVerseRefs(contextualReference.refs, !!behavior.activeIfNew || !!behavior.activateExisting);
     return {...result, contextual:true, multiVerse:true};

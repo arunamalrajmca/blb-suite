@@ -328,11 +328,34 @@
       }
     
       if (text) {
+        // Compact book/chapter tokens are ambiguous without their adjacent
+        // verse. Resolve their live DOM context before the exact-text parser,
+        // which otherwise defaults John3 to John 3:1 and caches that weaker URL.
+        const compactToken = normalizeSelectionText(text).normalize('NFKC');
+        let isCompactBookChapterToken = false;
+        if (/^[A-Za-z][A-Za-z0-9.'-]*$/.test(compactToken)) {
+          for (let split = compactToken.length - 1; split > 0; split--) {
+            const book = resolveBibleBook(compactToken.slice(0, split));
+            if (book && /^\d{1,3}$/.test(compactToken.slice(split))) {
+              isCompactBookChapterToken = true;
+              break;
+            }
+          }
+        }
+        if (isCompactBookChapterToken) {
+          const contextual = getContextualBibleReference(text);
+          if (contextual?.url) {
+            blbPageButtonContextualReference = contextual;
+            lastSelectionContextualReference = contextual;
+            lastSelectionContextualText = text;
+          }
+        }
+
         // Fast path: an exact single reference can be resolved locally once while
         // the selection is being classified. Retain its validated BLB URL so the
         // click does not repeat selection classification in the background worker.
         const directRefs = resolveBibleReferenceText(normalizeSelectionText(text));
-        if (directRefs.length === 1) {
+        if (!blbPageButtonContextualReference && directRefs.length === 1) {
           const direct = directRefs[0];
           const selectedNormalized = normalizeSelectionText(text).replace(/\s+/g, ' ').trim();
           const referenceNormalized = normalizeSelectionText(direct.text || '').replace(/\s+/g, ' ').trim();

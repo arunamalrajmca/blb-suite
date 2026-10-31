@@ -704,6 +704,8 @@ test.describe('core user-visible E2E', () => {
       document.body.appendChild(article);
     });
 
+    // Keep compact book/chapter tokens (John3 and Romans14) in this four-action
+    // matrix: the selected token alone must inherit only its adjacent verse.
     const cases = [
       ['#acts-book', 'Acts', '/kjv/act/7/'],
       ['#matthew-v-cue', 'v.', '/kjv/mat/16/25/'],
