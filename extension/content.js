@@ -1476,7 +1476,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       normalizeSelectionText(candidate.textContent || '').normalize('NFKC') ===
       normalizeSelectionText(selected).normalize('NFKC')
     );
-    if (exactPhysicalTarget) {
+    if (exactPhysicalTarget && !verseCueSelection) {
       const exactContextRoot = verseCueSelection
         ? (messageRoot || nearestSemanticBlock(exactPhysicalTarget))
         : nearestSemanticBlock(exactPhysicalTarget);

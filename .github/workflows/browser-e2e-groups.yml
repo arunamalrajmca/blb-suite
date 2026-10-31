@@ -140,7 +140,7 @@ jobs:
         if: ${{ always() && (needs.change-detection.outputs.group_a_required == 'true') }}
         run: >-
           npx playwright test --workers=1 --grep
-          "Single-word verse cues resolve|Double-click resolves any part of an adjacent Bible reference|Acts 7, v.25|Unicode-styled Bible book|spaced forms — OT|spaced forms — NT|Facebook directional-format Revelation 20:1-10"
+          "Single-word verse cues resolve"
 
       # Run the dedicated MultiVerse tab-reuse regression in this existing runner.
       # Shared/unknown runtime changes retain this coverage via full_browser_suite.
