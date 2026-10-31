@@ -708,7 +708,7 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
     if (!book) continue;
     add(alias, book);
     const numberedName = String(canonicalName || '').match(/^([1-3])\s+(.+)$/i);
-    if (numberedName && !/^(?:[1-3]|i{1,3})\\s+/i.test(alias)) {
+    if (numberedName && !/^(?:[1-3]|i{1,3})\s+/i.test(alias)) {
       const roman = ({'1':'I','2':'II','3':'III'})[numberedName[1]];
       // Generate both prefix forms for every configured alias of every
       // numbered book. A selected suffix may be an abbreviation (Jn, Cor,
