@@ -1131,7 +1131,10 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           else if (child.nodeType === Node.ELEMENT_NODE) {
             const tag = child.tagName;
             if (tag === 'BR') { pieces.push(' '); continue; }
-            const blockLike = /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DL|DT|FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|LI|MAIN|NAV|OL|P|PRE|SECTION|TABLE|TR|UL)$/.test(tag);
+            let display = '';
+            try { display = getComputedStyle(child).display; } catch (_) {}
+            const blockLike = /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DL|DT|FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|LI|MAIN|NAV|OL|P|PRE|SECTION|TABLE|TR|UL)$/.test(tag) ||
+              /^(block|flow-root|list-item|flex|grid|table|table-row|table-cell)$/.test(display);
             if (blockLike && pieces.length && !/\s$/.test(pieces[pieces.length - 1])) pieces.push(' ');
             walk(child);
             if (blockLike && pieces.length && !/^\s/.test(pieces[pieces.length - 1])) pieces.push(' ');
@@ -1143,6 +1146,20 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     };
     const domText = element => serializeDomChildren(element);
     const domRangeText = range => serializeDomChildren(range.cloneContents());
+    const nearestSemanticBlock = element => {
+      let candidate = element instanceof Element ? element : element?.parentElement;
+      while (candidate && candidate !== document.body && candidate !== document.documentElement) {
+        const tag = candidate.tagName || '';
+        let display = '';
+        try { display = getComputedStyle(candidate).display; } catch (_) {}
+        if (/^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DL|DT|FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|LI|MAIN|NAV|OL|P|PRE|SECTION|TABLE|TR|UL)$/.test(tag) ||
+            /^(block|flow-root|list-item|flex|grid|table|table-row|table-cell)$/.test(display)) {
+          return candidate;
+        }
+        candidate = candidate.parentElement;
+      }
+      return element instanceof Element ? element : null;
+    };
     let selected = normalizeSelectionText(selectionText).normalize('NFKC');
     const initialNode = target instanceof Element ? target : (target?.parentElement || null);
     const hasExplicitBookLabel = value => {
@@ -1268,34 +1285,55 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // Anchor this pass to the clicked token's own element and nearest semantic
     // text block, then use the shared positional resolver.
     if (/^\d+$/.test(selected)) {
+      // Prefer the Range created from the physical click coordinates. The
+      // event target can be a broad wrapper, while the browser Selection may
+      // include punctuation (for example, "10:9") instead of the clicked
+      // numeric token. The clicked-word Range preserves the exact token offset
+      // even in rich text made from adjacent inline spans.
+      const resolveNumericRange = (range, anchor) => {
+        if (!range || !anchor) return null;
+        const localBlock = nearestSemanticBlock(anchor);
+        if (!(localBlock instanceof Element) || !localBlock.contains(range.startContainer)) return null;
+        const rawSource = domText(localBlock);
+        const normalizedSource = normalizeSelectionText(rawSource).normalize('NFKC')
+          .replace(/[\u2010-\u2015\u2212]/g, '-');
+        if (!normalizedSource) return null;
+        const prefixRange = document.createRange();
+        prefixRange.selectNodeContents(localBlock);
+        prefixRange.setEnd(range.startContainer, range.startOffset);
+        const rawPrefix = domRangeText(prefixRange);
+        const normalizedPrefix = normalizeSelectionText(rawPrefix).normalize('NFKC');
+        const hasInteriorSeparator = normalizedPrefix.length > 0 &&
+          /[\s\u00A0\u2007\u202F]$/.test(rawPrefix) &&
+          /\S/.test(rawSource.slice(rawPrefix.length));
+        const start = normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
+        const end = start + selected.length;
+        if (normalizedSource.slice(start, end) !== selected) return null;
+        return resolveBibleReferenceFromContextWindow(normalizedSource, start, end);
+      };
+
+      if (clickedWordRange &&
+          normalizeSelectionText(clickedWordText).normalize('NFKC') === selected) {
+        const rangeAnchor = clickedWordRange.startContainer?.nodeType === Node.TEXT_NODE
+          ? clickedWordRange.startContainer.parentElement
+          : initialNode;
+        const exactRangeCitation = resolveNumericRange(clickedWordRange, rangeAnchor);
+        if (exactRangeCitation) return exactRangeCitation;
+      }
+
       const numericTargets = [initialNode, getDoubleClickTargetElement(event)]
         .filter((candidate, index, all) =>
           candidate instanceof Element && all.indexOf(candidate) === index
         );
       for (const numericTarget of numericTargets) {
         if (normalizeSelectionText(numericTarget.textContent || '').normalize('NFKC') !== selected) continue;
-        const localBlock = numericTarget.closest('p,li,td,th,blockquote') || numericTarget;
-        const rawSource = domText(localBlock);
-        const normalizedSource = normalizeSelectionText(rawSource).normalize('NFKC')
-          .replace(/[\u2010-\u2015\u2212]/g, '-');
-        if (!normalizedSource) continue;
-        try {
-          const tokenRange = document.createRange();
-          tokenRange.selectNodeContents(numericTarget);
-          const prefixRange = document.createRange();
-          prefixRange.selectNodeContents(localBlock);
-          prefixRange.setEnd(tokenRange.startContainer, tokenRange.startOffset);
-          const rawPrefix = domRangeText(prefixRange);
-          const normalizedPrefix = normalizeSelectionText(rawPrefix).normalize('NFKC');
-          const hasInteriorSeparator = normalizedPrefix.length > 0 &&
-            /[\s\u00A0\u2007\u202F]$/.test(rawPrefix) &&
-            /\S/.test(rawSource.slice(rawPrefix.length));
-          const start = normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
-          const end = start + selected.length;
-          if (normalizedSource.slice(start, end) !== selected) continue;
-          const exactNumericCitation = resolvePositionalBookCitation(normalizedSource, start, end);
-          if (exactNumericCitation) return exactNumericCitation;
-        } catch (_) {}
+        const tokenRange = document.createRange();
+        tokenRange.selectNodeContents(numericTarget);
+        const exactTargetCitation = resolveNumericRange(
+          tokenRange,
+          numericTarget
+        );
+        if (exactTargetCitation) return exactTargetCitation;
       }
     }
 

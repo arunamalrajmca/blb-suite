@@ -642,7 +642,7 @@ test('Ordinary numbers without a list-label period are not classified as serials
   await expect(page.locator('#ordinary-number-without-period')).toContainText('250 items');
 });
 
-test('Double-Click anywhere in a consecutive comma-separated verse citation opens the full range', async ({ page, extensionStorage, extensionWorker }) => {
+test('Double-Click anywhere in a consecutive comma-separated verse citation opens the full range @failure-first', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
   const installFixture = async () => {
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
@@ -845,7 +845,7 @@ test('Double-Click anywhere in a consecutive comma-separated verse citation open
   expect(targetResults.filter(result => result.result !== 'PASS'), 'Failed physical double-click targets').toEqual([]);
 });
 
-test('Double-Click resolves references through custom and framework-generated DOM containers', async ({ page, extensionStorage, extensionWorker }) => {
+test('Double-Click resolves references through custom and framework-generated DOM containers @failure-first', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
@@ -889,7 +889,7 @@ test('Double-Click resolves references through custom and framework-generated DO
 });
 
 
-test('Double-Click resolves partial references in Instagram-style rich text with line breaks', async ({ page, extensionStorage, extensionWorker }) => {
+test('Double-Click resolves partial references in Instagram-style rich text with line breaks @failure-first', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
