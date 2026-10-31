@@ -676,6 +676,10 @@ test.describe('core user-visible E2E', () => {
     }
   });
   test('Acts 7, v.25, and compact references resolve through all four selection actions @failure-first', async ({ page, extensionStorage, extensionWorker }) => {
+    // This matrix opens and closes a real BLB tab for every action/case.
+    // Keep it beyond Playwright's 60-second default so timeout teardown does
+    // not interrupt a still-running button interaction.
+    test.setTimeout(360000);
     await extensionStorage.set({
       masterEnabled: true,
       pageSelectionButtonSites: { 'example.com': true },
