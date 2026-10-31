@@ -253,27 +253,6 @@ try {
     console.log('PASS: ' + path.basename(file) + ' selects focused browser coverage');
   }
 
-  // A focused content-script contextual resolver fix uses the known
-  // failure inventory in extension.spec.js instead of rerunning every browser
-  // group. Mixed content-script changes remain broad (covered below).
-  resetScenario(base);
-  write('extension/content.js', '// focused contextual resolver change\\n');
-  write('.github/workflows/browser-e2e-groups.yml');
-  write('.github/workflows/browser-e2e-reference.yml');
-  write('scripts/select-browser-specs.mjs');
-  write('scripts/test-ci-routing-selector.js');
-  write('scripts/reference-e2e-matrix.json');
-  commit('change content-script contextual resolver and its focused CI routing');
-  result = selectorResult(base);
-  assertValue(result, 'full_browser_suite', false, 'focused content script');
-  assert(result.values.changed_specs.includes('tests/browser/extension.spec.js'),
-    'content-script contextual fixes must select the reference regression spec');
-  assertValue(result, 'group_a_required', false, 'focused content script');
-  assertValue(result, 'group_b_required', false, 'focused content script');
-  assertValue(result, 'extension_spec_required', false, 'focused content script');
-  assertValue(result, 'reference_required', true, 'focused content script');
-  console.log('PASS: focused content-script changes select only reference regressions');
-
   // The known-failure verification mode intentionally narrows this one
   // active PR to its recorded failing reference tests, even though its branch
   // contains earlier shared-runtime work. Normal PRs retain broad routing.

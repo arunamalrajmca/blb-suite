@@ -27,13 +27,6 @@ if (!alwaysFull) {
     .split("\n").filter(Boolean);
 }
 
-const focusedContentContext = changed.includes("extension/content.js") && changed.every(path =>
-  path === "extension/content.js" ||
-  path.startsWith(".github/workflows/") ||
-  path === "scripts/select-browser-specs.mjs" ||
-  path === "scripts/test-ci-routing-selector.js" ||
-  path === "scripts/reference-e2e-matrix.json"
-);
 const browserSpecPattern = /^tests\/browser\/[^/]+\.spec\.js$/;
 const existingBrowserSpecs = new Set(run(["ls-tree", "-r", "--name-only", "HEAD", "--", "tests/browser"]).split("\n").filter(Boolean));
 // Test-file edits alone must not launch feature E2E suites. Those suites are
@@ -60,7 +53,7 @@ const forceFull = alwaysFull || changed.some(path =>
   || path === "playwright.config.ts"
   || path === "extension/manifest.json"
   || (path === "extension/background.js" && !focusedOmniboxBackgroundChange)
-  || (path === "extension/content.js" && !focusedContentContext)
+  || path === "extension/content.js"
   || path === "extension/reference-core.js"
   || path === "extension/regex-patterns.js"
   || path === "extension/books.js"
@@ -277,8 +270,8 @@ const values = {
   changed_specs: selected.join(","),
   changed_browser_specs: knownFailuresOnly ? "" : changedBrowserSpecs.join(","),
   unmapped_specs: unmapped.join(","),
-  extension_spec_required: String(!knownFailuresOnly && (full || (selected.includes("tests/browser/extension.spec.js") && !focusedContentContext))),
-  group_a_required: String(!knownFailuresOnly && !focusedContentContext && (has(
+  extension_spec_required: String(!knownFailuresOnly && (full || selected.includes("tests/browser/extension.spec.js"))),
+  group_a_required: String(!knownFailuresOnly && (has(
     "tests/browser/redirect-source-url-patterns.spec.js",
     "tests/browser/omnibox-boolean-operators.spec.js",
     "tests/browser/redirect-source-url-browser.spec.js",
@@ -302,7 +295,7 @@ const values = {
     "tests/browser/site-feature-defaults.spec.js",
     "tests/browser/study-session-popup-ui-regression.spec.js"
    ) || unmapped.length > 0 || changedBrowserSpecs.length > 0)),
-  group_b_required: String(!knownFailuresOnly && !focusedContentContext && has(
+  group_b_required: String(!knownFailuresOnly && has(
     "tests/browser/redirect-hostnames.spec.js",
     "tests/browser/blb-non-kjv-redirect.spec.js",
     "tests/browser/scripttagger-global-injection.spec.js"
