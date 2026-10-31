@@ -678,10 +678,18 @@ function getSelectionContextPosition() {
 }
 
 function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
-  const source = normalizeSelectionText(text).normalize('NFKC')
-    .replace(/[\u2010-\u2015\u2212]/g, '-');
+  const rawSource = normalizeSelectionText(text);
+  const source = rawSource.normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-');
   if (!source || !Number.isFinite(selectionStart) || !Number.isFinite(selectionEnd) ||
       selectionEnd <= selectionStart) return null;
+  // Range offsets are measured before NFKC in the shared selection path.
+  // Translate both endpoints so styled Unicode letters and invisible bidi
+  // controls cannot shift the clicked token away from its citation.
+  const mapOffset = offset => normalizeSelectionText(
+    rawSource.slice(0, Math.max(0, Math.min(rawSource.length, offset)))
+  ).normalize('NFKC').replace(/[\u2010-\u2015\u2212]/g, '-').length;
+  selectionStart = mapOffset(selectionStart);
+  selectionEnd = mapOffset(selectionEnd);
 
   const entries = [];
   const add = (name, book) => {
@@ -851,6 +859,14 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
     const resolved = resolveBibleReference(prior.book, prior.chapter, verse, verse);
     if (resolved) return {book:resolved.book,chapter:resolved.chapter,from:resolved.from,to:resolved.to,url:resolved.url};
   }
+
+  const selectedToken = normalizeSelectionText(source.slice(
+    Math.max(0, selectionStart), Math.max(0, selectionEnd)
+  )).normalize('NFKC');
+  // Do not let the generic parser reinterpret a bare numeric token by borrowing
+  // a different number in the same context block. Explicit citations and verse
+  // cues have already been resolved positionally above.
+  if (/^\d+$/.test(selectedToken)) return null;
 
   const candidates = [];
 
@@ -1734,7 +1750,7 @@ function getDoubleClickTargetElement(event) {
         let nearest = null;
         let bestDistance = Infinity;
         for (const token of block.querySelectorAll('[data-index], .reference-token')) {
-          const text = normalizeSelectionText(token.textContent || '');
+          const text = normalizeSelectionText(token.textContent || '').normalize('NFKC');
           if (!text || /\s/.test(text) || !/^[\p{L}\p{N}][\p{L}\p{N}.'-]*$/u.test(text)) continue;
           const rect = token.getBoundingClientRect();
           const dx = event.clientX < rect.left ? rect.left - event.clientX : event.clientX > rect.right ? event.clientX - rect.right : 0;
