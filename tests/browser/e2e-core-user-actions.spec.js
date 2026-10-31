@@ -1097,11 +1097,13 @@ test('MultiVerse batches disjoint chapter ranges without gaps and stays under 20
 
   expect(state).toHaveLength(2);
   expect(state.every(tab => tab.mvText.length > 0)).toBeTruthy();
+  await expect.poll(() => submittedPayloads.length, {timeout:15000}).toBe(2);
+  expect([...submittedPayloads].sort()).toEqual(state.map(tab => tab.mvText).sort());
 
   // Chrome tab enumeration is not a batch-order guarantee; restore the
   // canonical reference order before checking that the split has no gaps.
-  const expanded = state
-    .map(tab => expandGenesisMultiVerseHandoff(tab.mvText))
+  const expanded = submittedPayloads
+    .map(mvText => expandGenesisMultiVerseHandoff(mvText))
     .sort((a, b) => {
       const firstA = a[0] || {chapter:0, verse:0};
       const firstB = b[0] || {chapter:0, verse:0};
@@ -1228,11 +1230,13 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
 
   expect(state).toHaveLength(2);
   expect(state.every(tab => tab.mvText.length > 0)).toBeTruthy();
+  await expect.poll(() => submittedPayloads.length, {timeout:15000}).toBe(2);
+  expect([...submittedPayloads].sort()).toEqual(state.map(tab => tab.mvText).sort());
 
   // Chrome tab enumeration is not a batch-order guarantee; restore the
   // canonical reference order before checking that the split has no gaps.
-  const expanded = state
-    .map(tab => expandGenesisMultiVerseHandoff(tab.mvText))
+  const expanded = submittedPayloads
+    .map(mvText => expandGenesisMultiVerseHandoff(mvText))
     .sort((a, b) => {
       const firstA = a[0] || {chapter:0, verse:0};
       const firstB = b[0] || {chapter:0, verse:0};
