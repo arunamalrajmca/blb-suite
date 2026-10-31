@@ -759,25 +759,6 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
   }
 
   // Contextual actions (floating button, right-click, and Alt+B) receive the
-').replace(/\\s+/g, '\\\\s+');
-    const compactPattern = new RegExp(
-      `(?:^|[^A-Za-z0-9])${escaped}(\\\\d{1,3})(?::(\\\\d{1,3})(?:\\\\s*[-–]\\\\s*(\\\\d{1,3}))?)?(?=$|[^A-Za-z0-9])`,
-      'gi'
-    );
-    let compactMatch;
-    while ((compactMatch = compactPattern.exec(source))) {
-      const citationStart = compactMatch.index + compactMatch[0].indexOf(entry.name);
-      const citationEnd = compactPattern.lastIndex;
-      if (selectionStart >= citationEnd || selectionEnd <= citationStart) continue;
-      const chapter = Number(compactMatch[1]);
-      const verseFrom = compactMatch[2] ? Number(compactMatch[2]) : 1;
-      const verseTo = compactMatch[3] ? Number(compactMatch[3]) : verseFrom;
-      const resolved = resolveBibleReference(entry.book.name, chapter, verseFrom, verseTo);
-      if (resolved) return {book:resolved.book,chapter:resolved.chapter,from:resolved.from,to:resolved.to,url:resolved.url};
-    }
-  }
-
-  // Contextual actions (floating button, right-click, and Alt+B) receive the
   // selected token, not the whole citation. Resolve a book token against only
   // its immediately following chapter, matching the double-click behavior.
   const bookTokens = /(?<![A-Za-z0-9])((?:[1-3]\s+|i{1,3}\s+)?[A-Za-z][A-Za-z.'-]*(?:\s+[A-Za-z][A-Za-z.'-]*){0,2})(?![A-Za-z0-9])/gi;
