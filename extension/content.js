@@ -1667,6 +1667,50 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       selectionEnd = toNormalizedOffset(selectionEnd);
     }
 
+    // Compact book/chapter tokens (John3, Romans14, etc.) need the verse
+    // immediately following the token. Resolve this before any chapter-only
+    // fallback so a generic parser cannot downgrade John3:16 to John 3:1.
+    // Anchor offsets to the exact clicked DOM token when available; this avoids
+    // stale/native Selection offsets drifting across adjacent inline elements.
+    const compactToken = selected.normalize('NFKC');
+    if (/^[A-Za-z][A-Za-z.'-]*\d{1,3}$/.test(compactToken)) {
+      let compactStart = selectionStart;
+      let compactEnd = selectionEnd;
+      const exactClickedElement = [initialNode, getDoubleClickTargetElement(event)]
+        .find(candidate => candidate instanceof Element &&
+          block.contains(candidate) &&
+          normalizeSelectionText(candidate.textContent || '').normalize('NFKC') === compactToken);
+      if (exactClickedElement) {
+        try {
+          const exactRange = document.createRange();
+          exactRange.selectNodeContents(exactClickedElement);
+          compactStart = toNormalizedOffset(getOffset(exactRange.startContainer, exactRange.startOffset));
+          compactEnd = toNormalizedOffset(getOffset(exactRange.endContainer, exactRange.endOffset));
+        } catch (_) {}
+      }
+      if (compactStart != null && compactEnd > compactStart &&
+          normalizedMatchSource.slice(compactStart, compactEnd) === compactToken) {
+        for (let split = compactToken.length - 1; split > 0; split--) {
+          const book = resolveBibleBook(compactToken.slice(0, split));
+          const chapterText = compactToken.slice(split);
+          if (!book || !/^\d{1,3}$/.test(chapterText)) continue;
+          const following = normalizedMatchSource.slice(compactEnd)
+            .match(/^\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
+          if (!following) continue;
+          const from = Number(following[1]);
+          const to = following[2] ? Number(following[2]) : from;
+          const compactResolved = resolveBibleReference(book.name, Number(chapterText), from, to);
+          if (compactResolved) return {
+            book: compactResolved.book,
+            chapter: compactResolved.chapter,
+            from: compactResolved.from,
+            to: compactResolved.to,
+            url: compactResolved.url
+          };
+        }
+      }
+    }
+
     const positionalCitation = resolvePositionalBookCitation(normalizedMatchSource, selectionStart, selectionEnd);
     if (positionalCitation) return positionalCitation;
 
