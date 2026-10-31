@@ -675,9 +675,14 @@ test.describe('core user-visible E2E', () => {
       }), expectedPath);
     }
   });
-  test('Contextual DOM references resolve Acts chapter, verse cues, and generic compact book-chapter ranges', async ({ page, context, extensionStorage, extensionWorker }) => {
-    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+  test('Acts 7, v.25, and compact references resolve through all four selection actions', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({
+      masterEnabled: true,
+      pageSelectionButtonSites: { 'example.com': true },
+      doubleClickBlbSites: { 'example.com': true }
+    });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('body')).toBeVisible();
     await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const article = document.createElement('div');
@@ -692,31 +697,82 @@ test.describe('core user-visible E2E', () => {
     });
 
     const cases = [
-      ['#acts-book', '/kjv/act/7/1/'],
-      ['#matthew-v-cue', '/kjv/mat/16/25/'],
-      ['#matthew-verse', '/kjv/mat/16/25/'],
-      ['#romans-book', '/kjv/rom/14/10-12/'],
-      ['#romans-first-verse', '/kjv/rom/14/10-12/'],
-      ['#romans-last-verse', '/kjv/rom/14/10-12/'],
-      ['#john-book', '/kjv/jhn/3/16/'],
-      ['#john-verse', '/kjv/jhn/3/16/']
+      ['#acts-book', 'Acts', '/kjv/act/7/1/'],
+      ['#matthew-v-cue', 'v.', '/kjv/mat/16/25/'],
+      ['#matthew-verse', '25', '/kjv/mat/16/25/'],
+      ['#romans-book', 'Romans14', '/kjv/rom/14/10-12/'],
+      ['#romans-first-verse', '10', '/kjv/rom/14/10-12/'],
+      ['#romans-last-verse', '12', '/kjv/rom/14/10-12/'],
+      ['#john-book', 'John3', '/kjv/jhn/3/16/'],
+      ['#john-verse', '16', '/kjv/jhn/3/16/']
     ];
-    for (const [selector, expectedPath] of cases) {
-      await page.locator(selector).first().dblclick();
-      await activateBlbTabForPath(extensionWorker, expectedPath, {
-        fragment: selector, selector: '[role="article"]',
-        selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
-      });
-      await extensionWorker.evaluate(path => chrome.tabs.query({}).then(async tabs => {
-        for (const tab of tabs) {
-          try {
-            const url = new URL(String(tab.url || tab.pendingUrl || ''));
-            if (url.hostname.endsWith('blueletterbible.org') &&
-                (url.pathname === path || url.pathname.startsWith(path.replace(/\/$/, '') + '/')) &&
-                tab.id != null) await chrome.tabs.remove(tab.id);
-          } catch (_) {}
+    const actions = ['Show on BLB', 'Right-Click', 'Alt+B', 'Double-Click'];
+
+    for (const [selector, selectedText, expectedPath] of cases) {
+      for (const action of actions) {
+        const beforeIds = await extensionWorker.evaluate(() =>
+          chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+        );
+        if (action !== 'Double-Click') {
+          await page.evaluate(({ selector }) => {
+            const target = document.querySelector(selector);
+            const range = document.createRange();
+            range.selectNodeContents(target);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+          }, { selector });
+          expect(await page.evaluate(() => window.getSelection()?.toString() || ''))
+            .toBe(selectedText);
+        } else {
+          await page.evaluate(() => window.getSelection()?.removeAllRanges());
+          await page.locator(selector).dblclick();
         }
-      }), expectedPath);
+
+        if (action === 'Show on BLB') {
+          const button = page.locator('#blb-suite-page-selection-button');
+          await expect(button).toBeVisible({ timeout: 10000 });
+          await button.click();
+        } else if (action === 'Right-Click') {
+          await extensionWorker.evaluate(async selected => {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            await handleBlbSelectionContextMenuClick({
+              menuItemId: 'blb-suite-web-selection',
+              selectionText: selected
+            }, tab);
+          }, selectedText);
+        } else if (action === 'Alt+B') {
+          await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+        }
+
+        await activateBlbTabForPath(extensionWorker, expectedPath, {
+          fragment: action + ' ' + selector,
+          selector: '[role="article"]',
+          selectedText
+        });
+        const openedPaths = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+          tabs.filter(tab => !before.includes(tab.id)).map(tab => {
+            try {
+              const url = new URL(String(tab.url || tab.pendingUrl || ''));
+              return url.hostname.endsWith('blueletterbible.org') ? url.pathname : '';
+            } catch (_) { return ''; }
+          }).filter(Boolean)
+        ), beforeIds);
+        expect(openedPaths, action + ' on ' + selector + ' must open ' + expectedPath)
+          .toContain(expectedPath);
+
+        await extensionWorker.evaluate(path => chrome.tabs.query({}).then(async tabs => {
+          for (const tab of tabs) {
+            try {
+              const url = new URL(String(tab.url || tab.pendingUrl || ''));
+              if (url.hostname.endsWith('blueletterbible.org') &&
+                  url.pathname === path && tab.id != null) await chrome.tabs.remove(tab.id);
+            } catch (_) {}
+          }
+        }), expectedPath);
+        await page.evaluate(() => window.getSelection()?.removeAllRanges());
+      }
     }
   });
 
