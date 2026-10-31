@@ -778,6 +778,44 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
 function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionEnd) {
   const source = normalizeSelectionText(text);
   if (!source) return null;
+
+  // A book-name click can be the only selected part of a comma-separated
+  // same-chapter verse list (for example, "Romans 10:9,10"). Resolve the
+  // immediately following citation from the exact selected book token before
+  // the general parser falls back to its first parsed verse. This is anchored
+  // to the selection boundary, so another reference elsewhere in the block
+  // cannot be borrowed.
+  if (Number.isFinite(selectionStart) && Number.isFinite(selectionEnd) &&
+      selectionEnd > selectionStart) {
+    const selectedBookToken = normalizeSelectionText(
+      source.slice(selectionStart, selectionEnd)
+    ).normalize('NFKC');
+    const selectedBook = resolveBibleBook(selectedBookToken);
+    if (selectedBook) {
+      const followingCitation = source.slice(selectionEnd).match(
+        /^(?:\s+|\.(?=\d)\s*)(\d{1,3})\s*:\s*(\d{1,3}(?:\s*,\s*\d{1,3})+)/
+      );
+      if (followingCitation) {
+        const chapter = Number(followingCitation[1]);
+        const verses = followingCitation[2].split(',').map(value => Number(value.trim()));
+        const consecutive = verses.every((verse, index) =>
+          index === 0 || verse === verses[index - 1] + 1
+        );
+        if (consecutive) {
+          const expanded = resolveBibleReference(
+            selectedBook.name, chapter, verses[0], verses[verses.length - 1]
+          );
+          if (expanded) return {
+            book: expanded.book,
+            chapter: expanded.chapter,
+            from: expanded.from,
+            to: expanded.to,
+            url: expanded.url
+          };
+        }
+      }
+    }
+  }
   // A same-chapter comma-separated list is one contextual citation for
   // double-click purposes. Any part of the citation (book, chapter, first
   // verse, comma, or continuation verse) opens the consecutive range.

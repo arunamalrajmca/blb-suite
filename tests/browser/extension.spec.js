@@ -700,6 +700,7 @@ test.describe('core user-visible E2E', () => {
         '<p><span id="first-cor-prefix">1</span> <span id="first-cor-book">Cor</span> 13:1</p>',
         '<p><span id="second-th-prefix">II</span> <span id="second-th-book">Th</span> 2:1</p>',
         '<p><span id="third-john-prefix">III</span> <span id="third-john-book">Jn</span> 1:1</p>',
+        '<p><span id="comma-romans-book">Romans</span> <span id="comma-romans-chapter">10</span>:<span id="comma-romans-first">9</span>,<span id="comma-romans-second">10</span></p>',
         '<p><span id="standalone-cor">Cor</span></p>',
         '<p><span id="standalone-th">Th</span></p>',
         '<p><span id="standalone-jn">Jn</span></p>',
@@ -726,6 +727,10 @@ test.describe('core user-visible E2E', () => {
       ['#first-cor-book', 'Cor', '/kjv/1co/13/1/'],
       ['#second-th-book', 'Th', '/kjv/2th/2/1/'],
       ['#third-john-book', 'Jn', '/kjv/3jo/1/1/'],
+      ['#comma-romans-book', 'Romans', '/kjv/rom/10/9-10/'],
+      ['#comma-romans-chapter', '10', '/kjv/rom/10/9-10/'],
+      ['#comma-romans-first', '9', '/kjv/rom/10/9-10/'],
+      ['#comma-romans-second', '10', '/kjv/rom/10/9-10/'],
       // Standalone "Cor" is a KJV word with one Criteria Search result;
       // preserve its established destination instead of forcing 1 Corinthians.
       ['#standalone-cor', 'Cor', '/kjv/eze/45/14/'],
