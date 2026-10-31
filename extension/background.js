@@ -5138,13 +5138,17 @@ function getDirectSelectedReference(selectionText) {
 
 function getCompactBookChapterSelection(selectionText) {
   const token = normalizeSelectedScriptureText(selectionText).trim();
-  if (!/^[A-Za-z][A-Za-z0-9.'-]*$/.test(token)) return null;
+  if (!/^[A-Za-z0-9][A-Za-z0-9.'-]*$/.test(token)) return null;
   for (let split = token.length - 1; split > 0; split--) {
     const rawBookPart = token.slice(0, split);
-    // Compact numbered-book forms (1John3, IITh2) normalize to the same
-    // canonical prefix form accepted by the shared book resolver.
-    const bookPart = rawBookPart.replace(/^([1-3]|I{1,3})(?=[A-Za-z])/i, '$1 ');
-    const book = resolveBibleBook(bookPart);
+    const compactKey = rawBookPart.replace(/\s+/g, '').toLowerCase();
+    const book = resolveBibleBook(rawBookPart) || bookData.find(item =>
+      String(item.name || '').replace(/\s+/g, '').toLowerCase() === compactKey ||
+      String(item.urlKey || '').replace(/\s+/g, '').toLowerCase() === compactKey ||
+      (item.aliases || []).some(alias =>
+        String(alias).replace(/\s+/g, '').toLowerCase() === compactKey
+      )
+    );
     const chapterText = token.slice(split);
     if (book && /^\d{1,3}$/.test(chapterText)) {
       return {book, chapter:Number(chapterText)};

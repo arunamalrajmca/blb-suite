@@ -807,11 +807,11 @@ test.describe('core user-visible E2E', () => {
     })));
     expect(books, 'the production book table must contain all 66 canonical books').toHaveLength(66);
 
-    const markup = books.map(book =>
-      '<p id="all-book-range-' + book.number + '"><span class="book-label">' +
-      book.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') +
-      '</span> <span class="chapter-token">1</span>:<span>1</span>-<span>2</span></p>'
-    ).join('');
+    const markup = books.map(book => {
+      const compactToken = book.name.replace(/\s+/g, '') + '1';
+      return '<p id="all-book-range-' + book.number + '"><span class="compact-book-chapter-token">' +
+        compactToken + '</span>:<span>1</span>-<span>2</span></p>';
+    }).join('');
     await setupDoubleClickReferencePage(
       page,
       extensionStorage,
@@ -819,10 +819,10 @@ test.describe('core user-visible E2E', () => {
     );
 
     // Use the same valid first-chapter range (1:1-2) for every canonical book.
-    // Clicking its chapter token must bind to that exact citation and retain
-    // both verses, including numbered and one-chapter books.
+    // Double-click the compact book/chapter token itself, including compacted
+    // multiword and numbered book names, and retain both verses.
     for (const book of books) {
-      const target = page.locator('#all-book-range-' + book.number + ' .chapter-token');
+      const target = page.locator('#all-book-range-' + book.number + ' .compact-book-chapter-token');
       await target.scrollIntoViewIfNeeded();
       const beforeIds = await extensionWorker.evaluate(() =>
         chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
@@ -839,7 +839,7 @@ test.describe('core user-visible E2E', () => {
             } catch (_) { return false; }
           });
         })), { beforeIds, expectedPath }), {
-          message: 'Double-clicking chapter 1 in ' + book.name + ' 1:1-2 must preserve the range',
+          message: 'Double-clicking compact ' + book.name.replace(/\\s+/g, '') + '1 must preserve ' + book.name + ' 1:1-2',
           timeout: 10000
         }).toBe(true);
 

@@ -954,6 +954,35 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
   };
 }
 
+function resolveCompactBookPart(value) {
+  const raw = normalizeSelectionText(value).normalize('NFKC').trim();
+  if (!raw) return null;
+  const direct = resolveBibleBook(raw);
+  if (direct) return direct;
+  const compactKey = raw.replace(/\s+/g, '').toLowerCase();
+  const canonical = BOOKS.find(book =>
+    String(book.name || '').replace(/\s+/g, '').toLowerCase() === compactKey ||
+    String(book.urlKey || '').replace(/\s+/g, '').toLowerCase() === compactKey
+  );
+  if (canonical) return canonical;
+  const alias = Object.keys(BOOK_ALIASES || {}).find(name =>
+    String(name).replace(/\s+/g, '').toLowerCase() === compactKey
+  );
+  return alias ? resolveBibleBook(alias) : null;
+}
+
+function resolveCompactBookChapterToken(value) {
+  const token = normalizeSelectionText(value).normalize('NFKC').trim();
+  if (!/^[A-Za-z0-9][A-Za-z0-9.'-]*$/.test(token)) return null;
+  for (let split = token.length - 1; split > 0; split--) {
+    const chapterText = token.slice(split);
+    if (!/^\d{1,3}$/.test(chapterText)) continue;
+    const book = resolveCompactBookPart(token.slice(0, split));
+    if (book) return {book, chapter:Number(chapterText)};
+  }
+  return null;
+}
+
 function getContextualBibleReference(selectionText) {  const selected = normalizeSelectionText(selectionText);
   if (!selected) return null;
 
@@ -961,7 +990,8 @@ function getContextualBibleReference(selectionText) {  const selected = normaliz
   // This avoids depending on reconstructed text offsets when the colon and
   // verse are split across adjacent inline elements (e.g. <span>John3</span>:<span>16</span>).
   const compactSelectedToken = selected.normalize('NFKC');
-  if (/^[A-Za-z][A-Za-z0-9.'-]*$/.test(compactSelectedToken)) {
+  const compactBookChapter = resolveCompactBookChapterToken(compactSelectedToken);
+  if (compactBookChapter) {
     const liveSelection = window.getSelection?.();
     if (liveSelection?.rangeCount && !liveSelection.isCollapsed &&
         normalizeSelectionText(liveSelection.toString()).normalize('NFKC') === compactSelectedToken) {
@@ -976,21 +1006,18 @@ function getContextualBibleReference(selectionText) {  const selected = normaliz
         const afterText = afterRange.toString();
         const following = afterText.match(/^\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
         if (following) {
-          for (let split = compactSelectedToken.length - 1; split > 0; split--) {
-            const book = resolveBibleBook(compactSelectedToken.slice(0, split));
-            const chapterText = compactSelectedToken.slice(split);
-            if (!book || !/^\d{1,3}$/.test(chapterText)) continue;
-            const from = Number(following[1]);
-            const to = following[2] ? Number(following[2]) : from;
-            const resolved = resolveBibleReference(book.name, Number(chapterText), from, to);
-            if (resolved) return {
-              book: resolved.book,
-              chapter: resolved.chapter,
-              from: resolved.from,
-              to: resolved.to,
-              url: resolved.url
-            };
-          }
+          const from = Number(following[1]);
+          const to = following[2] ? Number(following[2]) : from;
+          const resolved = resolveBibleReference(
+            compactBookChapter.book.name, compactBookChapter.chapter, from, to
+          );
+          if (resolved) return {
+            book: resolved.book,
+            chapter: resolved.chapter,
+            from: resolved.from,
+            to: resolved.to,
+            url: resolved.url
+          };
         }
       }
     }
@@ -1248,7 +1275,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // adjacent verse (John3:16). Prefer the exact physical target element:
     // caret APIs can return a neighboring/stale text range during dblclick.
     const compactSelectedToken = normalizeSelectionText(selected).normalize('NFKC');
-    if (/^[A-Za-z][A-Za-z0-9.'-]*$/.test(compactSelectedToken)) {
+    const compactBookChapter = resolveCompactBookChapterToken(compactSelectedToken);
+    if (compactBookChapter) {
       const exactTarget = initialNode instanceof Element &&
         messageRoot?.contains(initialNode) &&
         normalizeSelectionText(initialNode.textContent || '').normalize('NFKC') === compactSelectedToken;
@@ -1276,15 +1304,12 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       }
       const following = afterText.match(/^\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
       if (following) {
-        for (let split = compactSelectedToken.length - 1; split > 0; split--) {
-          const book = resolveBibleBook(compactSelectedToken.slice(0, split));
-          const chapterText = compactSelectedToken.slice(split);
-          if (!book || !/^\d{1,3}$/.test(chapterText)) continue;
-          const from = Number(following[1]);
-          const to = following[2] ? Number(following[2]) : from;
-          const resolved = resolveBibleReference(book.name, Number(chapterText), from, to);
-          if (resolved) return resolved;
-        }
+        const from = Number(following[1]);
+        const to = following[2] ? Number(following[2]) : from;
+        const resolved = resolveBibleReference(
+          compactBookChapter.book.name, compactBookChapter.chapter, from, to
+        );
+        if (resolved) return resolved;
       }
     }
 
@@ -1676,7 +1701,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // Anchor offsets to the exact clicked DOM token when available; this avoids
     // stale/native Selection offsets drifting across adjacent inline elements.
     const compactToken = selected.normalize('NFKC');
-    if (/^[A-Za-z][A-Za-z.'-]*\d{1,3}$/.test(compactToken)) {
+    const compactBookChapter = resolveCompactBookChapterToken(compactToken);
+    if (compactBookChapter) {
       let compactStart = selectionStart;
       let compactEnd = selectionEnd;
       const exactClickedElement = [initialNode, getDoubleClickTargetElement(event)]
@@ -1693,16 +1719,14 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       }
       if (compactStart != null && compactEnd > compactStart &&
           normalizedMatchSource.slice(compactStart, compactEnd) === compactToken) {
-        for (let split = compactToken.length - 1; split > 0; split--) {
-          const book = resolveBibleBook(compactToken.slice(0, split));
-          const chapterText = compactToken.slice(split);
-          if (!book || !/^\d{1,3}$/.test(chapterText)) continue;
-          const following = normalizedMatchSource.slice(compactEnd)
-            .match(/^\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
-          if (!following) continue;
+        const following = normalizedMatchSource.slice(compactEnd)
+          .match(/^\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
+        if (following) {
           const from = Number(following[1]);
           const to = following[2] ? Number(following[2]) : from;
-          const compactResolved = resolveBibleReference(book.name, Number(chapterText), from, to);
+          const compactResolved = resolveBibleReference(
+            compactBookChapter.book.name, compactBookChapter.chapter, from, to
+          );
           if (compactResolved) return {
             book: compactResolved.book,
             chapter: compactResolved.chapter,
