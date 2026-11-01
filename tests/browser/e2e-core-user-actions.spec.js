@@ -1313,3 +1313,209 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
 
   for (const tab of state) await removeTabById(extensionWorker, tab.id);
 });
+
+
+
+test('Facebook resolves repeated references from each fresh plain-text selection', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
+  await page.route('https://www.facebook.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Facebook test</title></head><body></body></html>'
+  }));
+  await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const lri = '\u2066';
+    const pdi = '\u2069';
+    const article = document.createElement('div');
+    article.setAttribute('role', 'article');
+    article.setAttribute('data-blb-test-diagnostics', 'true');
+    article.innerHTML =
+      '<div data-ad-comet-preview="message">' +
+        '<div dir="auto">' +
+          '<span><span id="fb-samuel-first-book">' + lri + '2 Samuel' + pdi + '</span></span> ' +
+          '<span><span id="fb-samuel-first-chapter">' + lri + '21' + pdi + '</span></span>:' +
+          '<span><span id="fb-samuel-first-range">' + lri + '11-14' + pdi + '</span></span>' +
+          '<span> </span>' +
+          '<span><span id="fb-samuel-second-book">' + lri + '2 Samuel' + pdi + '</span></span> ' +
+          '<span><span id="fb-samuel-second-chapter">' + lri + '21' + pdi + '</span></span>:' +
+          '<span><span id="fb-samuel-second-verse">' + lri + '14' + pdi + '</span></span> ' +
+          '<span>' + lri + 'KJV' + pdi + '</span>' +
+        '</div>' +
+      '</div>';
+    article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(article);
+  });
+
+  const expectedPaths = [
+    ['#fb-samuel-first-book', '/kjv/2sa/21/11-14/'],
+    ['#fb-samuel-second-book', '/kjv/2sa/21/14/'],
+    ['#fb-samuel-second-book', '/kjv/2sa/21/14/']
+  ];
+  const baselineTabs = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({})).map(tab => tab.id)
+  );
+  const observedPaths = [];
+  const reconstructionDiagnostics = [];
+  for (const [selector] of expectedPaths) {
+    await page.locator('[role="article"]').evaluate(article => {
+      article.removeAttribute('data-blb-double-click-diagnostic');
+    });
+    await page.locator(selector).dblclick();
+    // The production duplicate-gesture guard lasts 1.2 seconds for the same
+    // physical target; wait it out so the third scenario is a fresh attempt.
+    await page.waitForTimeout(1300);
+    const diagnostic = await page.locator('[role="article"]').getAttribute('data-blb-double-click-diagnostic');
+    reconstructionDiagnostics.push(diagnostic ? JSON.parse(diagnostic) : null);
+    const newBlbTabs = await extensionWorker.evaluate(async baseline => {
+      const tabs = await chrome.tabs.query({});
+      return tabs.filter(tab => !baseline.includes(tab.id)).map(tab => ({
+        id: tab.id,
+        url: tab.pendingUrl || tab.url || ''
+      })).filter(tab => {
+        try { return new URL(tab.url).hostname === 'www.blueletterbible.org'; }
+        catch (_) { return false; }
+      });
+    }, baselineTabs);
+    let observedPath = null;
+    for (const tab of newBlbTabs) {
+      try {
+        const url = new URL(tab.url);
+        observedPath = url.pathname.replace(/\/s_[^/]+\/?$/, '/');
+      } catch (_) {}
+      await removeTabById(extensionWorker, tab.id);
+    }
+    observedPaths.push(observedPath);
+  }
+  process.stdout.write('[FACEBOOK DOUBLE-CLICK RECONSTRUCTION] ' + JSON.stringify(
+    expectedPaths.map((item, index) => ({
+      scenario: index + 1,
+      clickedElement: item[0],
+      expectedPath: item[1],
+      diagnostic: reconstructionDiagnostics[index],
+      observedPath: observedPaths[index]
+    }))
+  ) + '\\n');
+  expect(reconstructionDiagnostics).toHaveLength(3);
+  expect(reconstructionDiagnostics.every(Boolean)).toBe(true);
+  expect(observedPaths).toEqual(expectedPaths.map(([, path]) => path));
+});
+
+test('Facebook book-name double-click retains Luke 22:26 context', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
+  await page.route('https://www.facebook.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Facebook test</title></head><body></body></html>'
+  }));
+  await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const lri = '\u2066';
+    const pdi = '\u2069';
+    const article = document.createElement('div');
+    article.setAttribute('role', 'article');
+    article.innerHTML =
+      '<div data-ad-comet-preview="message">' +
+        '<div dir="auto">' +
+          '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
+          '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>:' +
+          '<span><span id="fb-luke-verse">' + lri + '26' + pdi + '</span></span> ' +
+          '<span>' + lri + 'KJV' + pdi + '</span>' +
+        '</div>' +
+      '</div>';
+    article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(article);
+  });
+
+  // The reported Facebook regression is specifically the book-name click:
+  // Luke must inherit chapter 22 and verse 26 from this same citation.
+  for (const selector of ['#fb-luke-book', '#fb-luke-chapter', '#fb-luke-verse']) {
+    await page.locator(selector).dblclick();
+    const resolved = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.pendingUrl || tab.url);
+        return url.hostname === 'www.blueletterbible.org' &&
+          url.pathname === '/kjv/luk/22/26/';
+      } catch (_) { return false; }
+    });
+    expect(new URL(resolved.pendingUrl || resolved.url).pathname).toBe('/kjv/luk/22/26/');
+    await removeTabById(extensionWorker, resolved.id);
+  }
+});
+
+
+test('Facebook book clicks use only permitted immediate context', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
+  await page.route('https://www.facebook.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Facebook context boundary test</title></head><body></body></html>'
+  }));
+  await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const lri = '\u2066';
+    const pdi = '\u2069';
+    const article = document.createElement('div');
+    article.setAttribute('role', 'article');
+    article.innerHTML =
+      '<div data-ad-comet-preview="message"><div dir="auto">' +
+        '<span id="fb-reversed-chapter">' + lri + '22:26' + pdi + '</span> ' +
+        '<span id="fb-reversed-luke">' + lri + 'Luke.' + pdi + '</span>' +
+        '<span> | </span>' +
+        '<span id="fb-prefixed-number">' + lri + '2' + pdi + '</span> ' +
+        '<span id="fb-prefixed-samuel">' + lri + 'Samuel' + pdi + '</span> ' +
+        '<span id="fb-prefixed-chapter">' + lri + '21' + pdi + '</span>:' +
+        '<span id="fb-prefixed-verse">' + lri + '14' + pdi + '</span>' +
+        '<span> | </span>' +
+        '<span id="fb-invalid-number">' + lri + '4' + pdi + '</span> ' +
+        '<span id="fb-invalid-samuel">' + lri + 'Samuel' + pdi + '</span> ' +
+        '<span id="fb-invalid-chapter">' + lri + '21' + pdi + '</span>:' +
+        '<span id="fb-invalid-verse">' + lri + '14' + pdi + '</span>' +
+      '</div></div>';
+    article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(article);
+  });
+
+  // An ordinary book name must not borrow a citation to its left.
+  await page.locator('#fb-reversed-luke').dblclick();
+  await page.waitForTimeout(1200);
+  let biblePaths = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({})).map(tab => {
+      try {
+        const url = new URL(tab.pendingUrl || tab.url);
+        return url.hostname === 'www.blueletterbible.org' ? url.pathname : '';
+      } catch (_) { return ''; }
+    }).filter(Boolean)
+  );
+  expect(biblePaths).not.toContain('/kjv/luk/22/26/');
+
+  // A suffix click may inspect exactly its immediately preceding valid prefix.
+  await page.locator('#fb-prefixed-samuel').dblclick();
+  const prefixed = await waitForTab(extensionWorker, tab => {
+    try {
+      const url = new URL(tab.pendingUrl || tab.url);
+      return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/2sa/21/14/';
+    } catch (_) { return false; }
+  });
+  expect(new URL(prefixed.pendingUrl || prefixed.url).pathname).toBe('/kjv/2sa/21/14/');
+  await removeTabById(extensionWorker, prefixed.id);
+
+  // An invalid prefix must not be accepted as a numbered Bible book.
+  await page.locator('#fb-invalid-samuel').dblclick();
+  await page.waitForTimeout(1200);
+  biblePaths = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({})).map(tab => {
+      try {
+        const url = new URL(tab.pendingUrl || tab.url);
+        return url.hostname === 'www.blueletterbible.org' ? url.pathname : '';
+      } catch (_) { return ''; }
+    }).filter(Boolean)
+  );
+  expect(biblePaths).not.toContain('/kjv/2sa/21/14/');
+});

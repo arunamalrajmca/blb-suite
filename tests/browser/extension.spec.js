@@ -1,5 +1,10 @@
 const { test, expect } = require('./fixtures');
 
+async function removeTabById(extensionWorker, id) {
+  if (id == null) return;
+  await extensionWorker.evaluate(tabId => chrome.tabs.remove(tabId).catch(() => {}), id);
+}
+
 async function dblclickAt(locator, rect) {
   const box = await locator.boundingBox();
   expect(box).toBeTruthy();
@@ -644,6 +649,42 @@ test.describe('core user-visible E2E', () => {
       return new URL(url).pathname;
     }).catch(() => ''), existing.id), { timeout: 10000 }).toMatch(/^\/kjv\/jhn\/3\/16\/(?:s_\d+)?$/);
     expect(handoffMs).toBeLessThan(1500);
+  });
+
+  test('X tweet text resolves book clicks from exact caret ranges', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({
+      masterEnabled: true,
+      doubleClickBlbSites: { 'x.com': true }
+    });
+    await page.route('https://x.com/**', route => route.fulfill({
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      body: `<!doctype html><html><head><title>X fixture</title></head><body>
+        <main>
+          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto" style="font:24px Arial,sans-serif">Matthew 22:37</span></div></article>
+          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto" style="font:24px Arial,sans-serif">Genesis 17:8</span></div></article>
+          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto" style="font:24px Arial,sans-serif"><span>Genesis</span><span> </span><span>35</span><span>:</span><span>11</span></span></div></article>
+        </main>
+      </body></html>`
+    }));
+    await page.goto('https://x.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+
+    // X renders tweet text as continuous text nodes inside rich-text spans;
+    // book words do not have dedicated elements with matching textContent.
+    const cases = [
+      { text: 'Matthew 22:37', path: '/kjv/mat/22/37/' },
+      { text: 'Genesis 17:8', path: '/kjv/gen/17/8/' },
+      { text: 'Genesis 35:11', path: '/kjv/gen/35/11/' }
+    ];
+    for (const item of cases) {
+      const tweetText = page.locator('[data-testid="tweetText"] span').filter({ hasText: item.text });
+      await expect(tweetText).toHaveText(item.text);
+      await tweetText.dblclick({ position: { x: 32, y: 12 } });
+      const resolved = await waitForBlbTabPath(extensionWorker, item.path);
+      expect(new URL(resolved.pendingUrl || resolved.url).pathname).toBe(item.path);
+      await removeTabById(extensionWorker, resolved.id);
+    }
   });
 
   test('Double-click resolves any part of an adjacent Bible reference', async ({ page, context, extensionStorage, extensionWorker }) => {

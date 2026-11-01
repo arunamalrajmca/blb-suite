@@ -1401,7 +1401,12 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         const start = normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
         const end = start + selected.length;
         if (normalizedSource.slice(start, end) !== selected) return null;
-        return resolveBibleReferenceFromContextWindow(normalizedSource, start, end);
+        // The positional grammar also handles chapter-only and
+        // whitespace-separated references (e.g. "Exodus 1" and
+        // "Ezra 1 1"). Keep numeric clicks tied to this exact token offset
+        // before considering the standalone-number/book fallback.
+        return resolveBibleReferenceFromContextWindow(normalizedSource, start, end)
+          || resolvePositionalBookCitation(normalizedSource, start, end);
       };
 
       // Prefer the exact physical target element over caret-derived offsets.
@@ -1512,11 +1517,161 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     if (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
       addExactTargetCandidate(document.elementFromPoint(event.clientX, event.clientY));
     }
-    const exactPhysicalTarget = exactTargetCandidates.find(candidate =>
-      normalizeSelectionText(candidate.textContent || '').normalize('NFKC') ===
+    const normalizedSelectedToken = normalizeDoubleClickToken(selected);
+    const exactPhysicalTarget = exactTargetCandidates.find(candidate => {
+      const candidateText = normalizeSelectionText(candidate.textContent || '').normalize('NFKC');
+      if (candidateText.toLowerCase() === normalizeSelectionText(selected).normalize('NFKC').toLowerCase()) {
+        return true;
+      }
+
+      // Facebook can wrap the complete numbered book label ("2 Samuel") in
+      // one bidi-isolated element while Chromium's double-click Selection
+      // contains only its suffix ("Samuel"). In that case the clicked element
+      // itself is the authoritative book token and its end is the correct
+      // boundary for reading the immediately following chapter/verse.
+      const numberedLabel = candidateText.match(/^(?:([1-3])|(I{1,3}))\s+(.+)$/i);
+      if (!numberedLabel) return false;
+      const suffix = normalizeDoubleClickToken(numberedLabel[3]);
+      return suffix === normalizedSelectedToken && !!resolveBibleBook(candidateText);
+    });
+    // X and other rich-text feeds may keep an entire sentence in one text
+    // node rather than wrapping each word in its own element. The physical
+    // caret range still identifies the exact clicked word in that case.
+    const exactPhysicalRange = clickedWordRange &&
+      normalizeSelectionText(clickedWordText).normalize('NFKC') ===
       normalizeSelectionText(selected).normalize('NFKC')
-    );
-    if (exactPhysicalTarget && !verseCueSelection) {
+      ? clickedWordRange
+      : null;
+    if ((exactPhysicalTarget || exactPhysicalRange) && !verseCueSelection && !/^[0-9]+$/.test(selected)) {
+      // Book-name clicks on rich social feeds must bind to the citation
+      // immediately following the exact clicked DOM element. Avoid deriving
+      // the book's position by adding normalized prefix lengths: Facebook can
+      // place bidi isolates and other zero-width controls around each token,
+      // so raw DOM offsets and normalized text offsets are not interchangeable.
+      // Treat terminal periods as book-name punctuation (e.g. "Luke."),
+      // but do not alter punctuation inside a reference or arbitrary prose.
+      const exactClickedBookToken = normalizeSelectionText(
+        exactPhysicalTarget?.textContent || clickedWordText || selected
+      ).normalize('NFKC').replace(/^\.+|\.+$/g, '');
+      const physicalBookContextRoot = messageRoot || nearestSemanticBlock(
+        exactPhysicalTarget || exactPhysicalRange?.startContainer?.parentElement
+      );
+      // Prefer a valid immediately adjacent ordinal prefix before treating
+      // a suffix alias (for example, "Jn") as an unnumbered book. Use the
+      // physical text range when the platform does not wrap individual words
+      // in elements (as X commonly does).
+      const exactPhysicalLabel = normalizeSelectionText(
+        exactPhysicalTarget?.textContent || ''
+      ).normalize('NFKC').match(/^(?:([1-3])|(I{1,3}))\\s+(.+)$/i);
+      // When Facebook wraps "2 Samuel" as one bidi-isolated label, use
+      // that label's DOM boundaries for both sides of the citation. A caret
+      // Range can end before the closing isolate, which otherwise makes the
+      // immediately-following chapter appear detached from the book label.
+      const useWholePhysicalBookLabel = !!exactPhysicalLabel;
+      const exactPrefixRange = document.createRange();
+      exactPrefixRange.selectNodeContents(physicalBookContextRoot);
+      if (useWholePhysicalBookLabel) {
+        exactPrefixRange.setEndBefore(exactPhysicalTarget);
+      } else if (exactPhysicalRange) {
+        exactPrefixRange.setEnd(exactPhysicalRange.startContainer, exactPhysicalRange.startOffset);
+      } else {
+        exactPrefixRange.setEndBefore(exactPhysicalTarget);
+      }
+      // Preserve the trailing separator: normalizeSelectionText trims it,
+      // but numbered-book suffix recognition must see the immediate space
+      // between the ordinal (2 / III) and the clicked suffix (Samuel / Jn).
+      const exactPrefixText = domText(exactPrefixRange.cloneContents())
+        .normalize('NFKC')
+        .replace(/[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '')
+        .replace(/[\u00A0\u2007\u202F]/g, ' ')
+        .replace(/[\u2010-\u2015\u2212]/g, '-')
+        .replace(/\s+/g, ' ');
+      const exactAdjacentPrefix = exactPrefixText.match(
+        /(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\s+$/i
+      );
+      const exactPrefixedBook = exactAdjacentPrefix
+        ? resolveBibleBook(
+            ({ I: '1', II: '2', III: '3' }[exactAdjacentPrefix[1].toUpperCase()] || exactAdjacentPrefix[1]) +
+            ' ' + exactClickedBookToken
+          )
+        : null;
+      const exactClickedBook = exactPrefixedBook || resolveBibleBook(exactClickedBookToken);
+      if (exactClickedBook) {
+        try {
+          const followingRange = document.createRange();
+          followingRange.selectNodeContents(physicalBookContextRoot);
+          if (useWholePhysicalBookLabel) {
+            followingRange.setStartAfter(exactPhysicalTarget);
+          } else if (exactPhysicalRange) {
+            followingRange.setStart(exactPhysicalRange.endContainer, exactPhysicalRange.endOffset);
+          } else {
+            followingRange.setStartAfter(exactPhysicalTarget);
+          }
+          const followingText = normalizeSelectionText(
+            domText(followingRange.cloneContents())
+          ).normalize('NFKC');
+          const writeFacebookDoubleClickDiagnostic = details => {
+            const diagnosticRoot = physicalBookContextRoot?.closest?.('[data-blb-test-diagnostics]');
+            if (diagnosticRoot) {
+              diagnosticRoot.setAttribute(
+                'data-blb-double-click-diagnostic',
+                JSON.stringify({
+                  selected,
+                  clickedWordText,
+                  physicalLabel: exactPhysicalTarget?.textContent || '',
+                  clickedBookToken: exactClickedBookToken,
+                  clickedBook: exactClickedBook?.name || null,
+                  prefixText: exactPrefixText,
+                  followingText,
+                  ...details
+                })
+              );
+            }
+          };
+          // Match the shared positional grammar: colon, dotted, and
+          // whitespace-separated chapter/verse forms. One number is
+          // chapter-only; a second adjacent number is its verse.
+          const followingCitation = followingText.match(
+            /^\s*\.?\s*(\d{1,3})(?:(?:\s*[:.]\s*|\s+)(\d{1,3}(?:\s*,\s*\d{1,3})*)(?:\s*[-–—]\s*(\d{1,3}))?)?/
+          );
+          writeFacebookDoubleClickDiagnostic({
+            followingCitation: followingCitation?.[0] || null,
+            parsedChapter: followingCitation ? Number(followingCitation[1]) : null,
+            parsedVerses: followingCitation?.[2] || null,
+            parsedRangeEnd: followingCitation?.[3] || null,
+            resolvedReference: null
+          });
+          if (followingCitation) {
+            const chapter = Number(followingCitation[1]);
+            const verseList = followingCitation[2]
+              ? followingCitation[2].split(',').map(value => Number(value.trim()))
+              : [];
+            const consecutive = verseList.every((verse, index) =>
+              index === 0 || verse === verseList[index - 1] + 1
+            );
+            const from = verseList.length ? verseList[0] : null;
+            const listedTo = verseList.length ? verseList[verseList.length - 1] : null;
+            const to = followingCitation[3]
+              ? Number(followingCitation[3])
+              : (consecutive ? listedTo : from);
+            const bookClickReference = from == null
+              ? resolveBibleReference(exactClickedBook.name, chapter)
+              : resolveBibleReference(exactClickedBook.name, chapter, from, to);
+            writeFacebookDoubleClickDiagnostic({
+              followingCitation: followingCitation[0],
+              parsedChapter: chapter,
+              parsedVerses: verseList,
+              parsedRangeEnd: followingCitation[3] ? Number(followingCitation[3]) : null,
+              resolvedReference: bookClickReference || null
+            });
+            if (bookClickReference) return bookClickReference;
+          }
+        } catch (_) {}
+        // An ordinary book name may inherit only the citation immediately
+        // to its right. Never scan left or fall through to a wider block
+        // resolver: "22:26 Luke" must remain a book-name selection.
+        return null;
+      }
       const exactContextRoot = verseCueSelection
         ? (messageRoot || nearestSemanticBlock(exactPhysicalTarget))
         : nearestSemanticBlock(exactPhysicalTarget);
@@ -1588,7 +1743,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       } else {
         let compactRange = clickedWordRange;
         if (!compactRange) {
-          const liveSelection = window.getSelection?.();
+          const liveSelection = (event ? null : window.getSelection?.());
           if (liveSelection?.rangeCount && !liveSelection.isCollapsed &&
               normalizeSelectionText(liveSelection.toString()).normalize('NFKC') === compactSelectedToken) {
             compactRange = liveSelection.getRangeAt(0);
@@ -1621,7 +1776,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const clickRange = (clickedWordRange && messageRoot.contains(clickedWordRange.startContainer))
         ? clickedWordRange
         : (() => {
-          const liveSelection = window.getSelection?.();
+          const liveSelection = (event ? null : window.getSelection?.());
           if (!liveSelection?.rangeCount || liveSelection.isCollapsed) return null;
           const liveText = normalizeSelectionText(liveSelection.toString()).normalize('NFKC').toLowerCase();
           const targetText = normalizeSelectionText(clickedWordText || initialNode?.textContent || '').normalize('NFKC').toLowerCase();
@@ -1882,7 +2037,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // Context is positional: the selected browser range must be inside the
     // exact occurrence of the parsed reference. Sharing a paragraph is not
     // enough, so an orphan 16/36 cannot borrow an earlier reference.
-    const sel = window.getSelection?.();
+    const sel = (event ? null : window.getSelection?.());
     const selectedRange = sel?.rangeCount && !sel.isCollapsed ? sel.getRangeAt(0) : null;
 
     const getOffset = (container, offset) => {
@@ -2069,7 +2224,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         ? clickedWordRange
         : null;
       if (!localRange) {
-        const liveSelection = window.getSelection?.();
+        const liveSelection = (event ? null : window.getSelection?.());
         if (liveSelection?.rangeCount && !liveSelection.isCollapsed &&
             normalizeSelectionText(liveSelection.toString()).normalize('NFKC') === selected) {
           const range = liveSelection.getRangeAt(0);
@@ -2500,7 +2655,8 @@ function handleDoubleClickBlb(event) {
         // Re-read the native selection on every frame until Chromium commits
         // the current double-click. The physical event coordinates remain the
         // authoritative target while the Selection is settling.
-        let selection=normalizeSelectionText(getDoubleClickSelection(event)).normalize('NFKC');
+        const plainTextSelectionSnapshot=normalizeSelectionText(getDoubleClickSelection(event)).normalize('NFKC');
+        let selection=plainTextSelectionSnapshot;
         // On double-click, Chromium may still expose the previous word's
         // non-empty Selection. For the narrowly supported verse-context
         // gesture, the physical event target is authoritative: use its exact
@@ -2615,8 +2771,19 @@ function handleDoubleClickBlb(event) {
         // when they are not KJV words (for example, "Sam" or "Jn"). Keep this
         // candidate set aligned with the suffix alternatives in the context
         // matcher below; KJV-word overlaps still retain ordinary word search.
-        const numberedBookSuffixAliases=Object.values(NUMBERED_BOOK_SUFFIX_ALIASES || {}).flat();
-         const isNumberedBookSuffixCandidate=numberedBookSuffixAliases.some(alias=>String(alias).toLowerCase()===String(selection).toLowerCase());
+        const numberedBookSuffixAliases=[...new Set([
+          ...Object.values(NUMBERED_BOOK_SUFFIX_ALIASES || {}).flat(),
+          // Include the complete suffix of every numbered canonical book and
+          // numbered-book alias (e.g. "Samuel" in "2 Samuel", "John" in "III John").
+          ...BOOKS.map(book => String(book.name || '').match(/^[1-3]\s+(.+)$/)?.[1]).filter(Boolean),
+          ...Object.keys(BOOK_ALIASES || {}).map(alias => {
+            const match=String(alias).match(/^[1-3]\s+(.+)$/);
+            return match?.[1] || '';
+          }).filter(Boolean)
+        ])];
+        const isNumberedBookSuffixCandidate=numberedBookSuffixAliases.some(alias=>
+          String(alias).toLowerCase()===String(selection).toLowerCase()
+        );
         const normalizedSelectionToken = normalizeDoubleClickToken(selection).replace(/’/g, "'");
         const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
           && KJV_CORPUS_WORD_INDEX.has(normalizedSelectionToken);
@@ -2688,9 +2855,116 @@ function handleDoubleClickBlb(event) {
             const contextNode=contextualTarget instanceof Element
               ? (contextualTarget.closest('p,li,td,th,blockquote,article,section,div')||contextualTarget.parentElement||contextualTarget)
               : (event.target?.parentElement||event.target);
-            const contextText=normalizeSelectionText(contextNode?.textContent||'');
-             const numberedBookSuffixPattern=numberedBookSuffixAliases.slice().sort((a,b)=>b.length-a.length).join('|');
-             const match=contextText.match(new RegExp('(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\\s+('+numberedBookSuffixPattern+')\\b','i'));
+            const contextText=normalizeSelectionText(contextNode?.textContent||'').normalize('NFKC');
+            const numberedBookSuffixPattern=numberedBookSuffixAliases.slice().sort((a,b)=>b.length-a.length).join('|');
+            const numberedBookSuffixRegex=new RegExp('(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\\s+('+numberedBookSuffixPattern+')\\b','gi');
+            const suffixMatches=[...contextText.matchAll(numberedBookSuffixRegex)];
+            // Repeated numbered-book references can share one Facebook post.
+            // Select the prefix occurrence containing this physical gesture;
+            // never let String.match() silently bind the click to the first
+            // occurrence in the post.
+            const clickedContextOffsets=[];
+            const physicalContextOffsets=[];
+            try {
+              // Facebook can expose a broad event target, a caret position
+              // that lands beside the selected word, or a native Selection
+              // whose range is more precise than either. Collect independently
+              // measured offsets and accept only one that lands inside an
+              // actual numbered-book suffix match.
+              if (contextNode instanceof Element) {
+                const getContextOffset=(range)=>{
+                  if (!range || !contextNode.contains(range.startContainer)) return null;
+                  const prefixRange=document.createRange();
+                  prefixRange.selectNodeContents(contextNode);
+                  prefixRange.setEnd(range.startContainer,range.startOffset);
+                  return normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length;
+                };
+                if (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+                  let pointRange=null;
+                  if (typeof document.caretRangeFromPoint==='function') {
+                    pointRange=document.caretRangeFromPoint(event.clientX,event.clientY);
+                  } else if (typeof document.caretPositionFromPoint==='function') {
+                    const point=document.caretPositionFromPoint(event.clientX,event.clientY);
+                    if (point?.offsetNode) {
+                      pointRange=document.createRange();
+                      pointRange.setStart(point.offsetNode,point.offset);
+                    }
+                  }
+                  const pointOffset=getContextOffset(pointRange);
+                  if (pointOffset!==null) clickedContextOffsets.push(pointOffset);
+                }
+
+                // Use the native selection only when it represents this exact
+                // selected suffix, never when it is a stale selection from a
+                // previous double-click.
+                const nativeSelection=window.getSelection?.();
+                if (nativeSelection?.rangeCount && !nativeSelection.isCollapsed &&
+                    normalizeSelectionText(nativeSelection.toString()).normalize('NFKC').toLowerCase()===
+                      normalizeSelectionText(selection).normalize('NFKC').toLowerCase()) {
+                  const selectedRange=nativeSelection.getRangeAt(0);
+                  const selectedOffset=getContextOffset(selectedRange);
+                  if (selectedOffset!==null) clickedContextOffsets.push(selectedOffset);
+                }
+
+                // Last resort: derive the suffix position from the exact
+                // physical element. Facebook may wrap the complete numbered
+                // label ("2 Samuel") rather than the selected suffix alone.
+                // Anchor the offset inside that label, after its ordinal, so
+                // repeated references remain distinguishable even when the
+                // native Selection/caret APIs expose no usable Range.
+                {
+                  const physicalCandidates = [
+                    getDoubleClickTargetElement(event),
+                    physicalTarget,
+                    event?.target instanceof Element ? event.target : event?.target?.parentElement,
+                    Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)
+                      ? document.elementFromPoint(event.clientX, event.clientY)
+                      : null
+                  ];
+                  for (const candidate of physicalCandidates) {
+                    if (!(candidate instanceof Element) || !contextNode.contains(candidate)) continue;
+                    let label = normalizeSelectionText(candidate.textContent || '').normalize('NFKC');
+                    const numberedLabel = label.match(/^([1-3]|I{1,3})\s+(.+)$/i);
+                    if (numberedLabel &&
+                        normalizeDoubleClickToken(numberedLabel[2]).toLowerCase() ===
+                          normalizeDoubleClickToken(selection).toLowerCase()) {
+                      const prefixRange = document.createRange();
+                      prefixRange.selectNodeContents(contextNode);
+                      prefixRange.setEndBefore(candidate);
+                      const contextBase = normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length;
+                      const suffixOffset = normalizeSelectionText(numberedLabel[1] + ' ').normalize('NFKC').length;
+                      physicalContextOffsets.push(contextBase + suffixOffset);
+                      break;
+                    }
+                    if (normalizeDoubleClickToken(label).toLowerCase() ===
+                        normalizeDoubleClickToken(selection).toLowerCase()) {
+                      const prefixRange = document.createRange();
+                      prefixRange.selectNodeContents(contextNode);
+                      prefixRange.setEndBefore(candidate);
+                      physicalContextOffsets.push(normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length);
+                      break;
+                    }
+                  }
+                }
+              }
+            } catch (_) {}
+            // A suffix click must land inside the exact numbered-book label.
+            // Never choose a merely-nearest valid prefix elsewhere in the post:
+            // an invalid "4 Samuel" must not inherit an earlier "2 Samuel".
+            let match = null;
+            const exactClickedContextOffsets = physicalContextOffsets.length
+              ? physicalContextOffsets
+              : clickedContextOffsets;
+            if (suffixMatches.length && exactClickedContextOffsets.length) {
+              for (const candidate of suffixMatches) {
+                const start = candidate.index;
+                const end = start + candidate[0].length;
+                if (exactClickedContextOffsets.some(offset => offset >= start && offset <= end)) {
+                  match = candidate;
+                  break;
+                }
+              }
+            }
             const prefixNumber=match
               ? (/^[1-3]$/.test(match[1]) ? match[1] : ({I:'1',II:'2',III:'3'}[match[1].toUpperCase()]||''))
               : '';
@@ -2707,8 +2981,7 @@ function handleDoubleClickBlb(event) {
             // citation directly instead of letting the generic DOM resolver
             // borrow an unrelated reference from an ancestor or stale selection.
             if (completeBook && possibleNumberedBookSuffix
-                && match[2].toLowerCase()===selection.toLowerCase()
-                && /^[1-3]$/.test(match[1])) {
+                && match[2].toLowerCase()===selection.toLowerCase()) {
               const afterBook=contextText.slice(match.index+match[0].length);
               const chapterMatch=afterBook.match(/^\s*\.?\s*(\d{1,3})\b/);
               const chapter=chapterMatch ? Number(chapterMatch[1]) : 0;

@@ -124,7 +124,6 @@ jobs:
           fi
           FOCUSED_SPECS="$(IFS=,; printf '%s' "${FOCUSED[*]}")"
           echo "focused_specs=$FOCUSED_SPECS" >> "$GITHUB_OUTPUT"
-
   verse-context-regression:
     name: BROWSER E2E — generic verse-context gate
     needs: change-detection
