@@ -1610,12 +1610,36 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const followingText = normalizeSelectionText(
             domText(followingRange.cloneContents())
           ).normalize('NFKC');
+          const writeFacebookDoubleClickDiagnostic = details => {
+            if (physicalBookContextRoot?.hasAttribute?.('data-blb-test-diagnostics')) {
+              physicalBookContextRoot.setAttribute(
+                'data-blb-double-click-diagnostic',
+                JSON.stringify({
+                  selected,
+                  clickedWordText,
+                  physicalLabel: exactPhysicalTarget?.textContent || '',
+                  clickedBookToken: exactClickedBookToken,
+                  clickedBook: exactClickedBook?.name || null,
+                  prefixText: exactPrefixText,
+                  followingText,
+                  ...details
+                })
+              );
+            }
+          };
           // Match the shared positional grammar: colon, dotted, and
           // whitespace-separated chapter/verse forms. One number is
           // chapter-only; a second adjacent number is its verse.
           const followingCitation = followingText.match(
             /^\s*\.?\s*(\d{1,3})(?:(?:\s*[:.]\s*|\s+)(\d{1,3}(?:\s*,\s*\d{1,3})*)(?:\s*[-–—]\s*(\d{1,3}))?)?/
           );
+          writeFacebookDoubleClickDiagnostic({
+            followingCitation: followingCitation?.[0] || null,
+            parsedChapter: followingCitation ? Number(followingCitation[1]) : null,
+            parsedVerses: followingCitation?.[2] || null,
+            parsedRangeEnd: followingCitation?.[3] || null,
+            resolvedReference: null
+          });
           if (followingCitation) {
             const chapter = Number(followingCitation[1]);
             const verseList = followingCitation[2]
@@ -1632,6 +1656,13 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             const bookClickReference = from == null
               ? resolveBibleReference(exactClickedBook.name, chapter)
               : resolveBibleReference(exactClickedBook.name, chapter, from, to);
+            writeFacebookDoubleClickDiagnostic({
+              followingCitation: followingCitation[0],
+              parsedChapter: chapter,
+              parsedVerses: verseList,
+              parsedRangeEnd: followingCitation[3] ? Number(followingCitation[3]) : null,
+              resolvedReference: bookClickReference || null
+            });
             if (bookClickReference) return bookClickReference;
           }
         } catch (_) {}
