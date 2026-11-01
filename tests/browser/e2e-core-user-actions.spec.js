@@ -500,6 +500,43 @@ test('Double-Click resolves contextual chapter numbers and unique KJV words dire
   await removeTabById(extensionWorker, verse.id);
 });
 
+test('Double-Click preserves Facebook bidi-isolated Matthew 14:22-33 context', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const lri = '\\u2066';
+    const pdi = '\\u2069';
+    const post = document.createElement('div');
+    post.id = 'blb-e2e-facebook-bidi-reference';
+    post.setAttribute('role', 'article');
+    post.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    post.innerHTML =
+      '<div dir="auto"><span id="fb-matthew">' + lri + 'Matthew' + pdi + '</span> ' +
+      '<span id="fb-chapter">' + lri + '14' + pdi + '</span>:' +
+      '<span id="fb-first-verse">' + lri + '22' + pdi + '</span>–' +
+      '<span id="fb-last-verse">' + lri + '33' + pdi + '</span> ' +
+      '<span>' + lri + 'KJV' + pdi + '</span></div>';
+    document.body.appendChild(post);
+  });
+
+  // Facebook's directional isolates must not shift the normalized offsets
+  // used to associate each independently wrapped token with its citation.
+  for (const selector of ['#fb-matthew', '#fb-chapter', '#fb-first-verse', '#fb-last-verse']) {
+    await page.locator(selector).dblclick();
+    const resolved = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.pendingUrl || tab.url);
+        return url.hostname === 'www.blueletterbible.org' &&
+          url.pathname === '/kjv/mat/14/22-33/';
+      } catch (_) { return false; }
+    });
+    expect(new URL(resolved.pendingUrl || resolved.url).pathname).toBe('/kjv/mat/14/22-33/');
+    await removeTabById(extensionWorker, resolved.id);
+  }
+});
+
 const numberedListBookNames = [
   'Genesis', 'Exodus', 'Leviticus', 'Numbers', 'Deuteronomy', 'Joshua', 'Judges', 'Ruth',
   '1 Samuel', '2 Samuel', '1 Kings', '2 Kings', '1 Chronicles', '2 Chronicles', 'Ezra',
