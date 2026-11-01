@@ -658,6 +658,7 @@ test.describe('core user-visible E2E', () => {
         <main>
           <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto" style="font:24px Arial,sans-serif">Matthew 22:37</span></div></article>
           <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto" style="font:24px Arial,sans-serif">Genesis 17:8</span></div></article>
+          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto" style="font:24px Arial,sans-serif"><span>Genesis</span><span> </span><span>35</span><span>:</span><span>11</span></span></div></article>
         </main>
       </body></html>`
     }));
@@ -668,7 +669,8 @@ test.describe('core user-visible E2E', () => {
     // book words do not have dedicated elements with matching textContent.
     const cases = [
       { text: 'Matthew 22:37', path: '/kjv/mat/22/37/' },
-      { text: 'Genesis 17:8', path: '/kjv/gen/17/8/' }
+      { text: 'Genesis 17:8', path: '/kjv/gen/17/8/' },
+      { text: 'Genesis 35:11', path: '/kjv/gen/35/11/' }
     ];
     for (const item of cases) {
       const tweetText = page.locator('[data-testid="tweetText"] span').filter({ hasText: item.text });
