@@ -1532,7 +1532,23 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const exactClickedBookToken = normalizeSelectionText(
         exactPhysicalTarget.textContent || ''
       ).normalize('NFKC').replace(/^\.+|\.+$/g, '');
-      const exactClickedBook = resolveBibleBook(exactClickedBookToken);
+      // Prefer a valid immediately adjacent ordinal prefix before treating
+      // a suffix alias (for example, "Jn") as an unnumbered book.
+      const exactPrefixRange = document.createRange();
+      exactPrefixRange.selectNodeContents(
+        messageRoot || nearestSemanticBlock(exactPhysicalTarget)
+      );
+      exactPrefixRange.setEndBefore(exactPhysicalTarget);
+      const exactPrefixText = normalizeSelectionText(
+        domText(exactPrefixRange.cloneContents())
+      ).normalize('NFKC');
+      const exactAdjacentPrefix = exactPrefixText.match(
+        /(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\s+$/i
+      );
+      const exactPrefixedBook = exactAdjacentPrefix
+        ? resolveBibleBook(exactAdjacentPrefix[1] + ' ' + exactClickedBookToken)
+        : null;
+      const exactClickedBook = exactPrefixedBook || resolveBibleBook(exactClickedBookToken);
       if (exactClickedBook) {
         try {
           const followingRange = document.createRange();
@@ -1541,8 +1557,11 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const followingText = normalizeSelectionText(
             domText(followingRange.cloneContents())
           ).normalize('NFKC');
+          // Match the shared positional grammar: colon, dotted, and
+          // whitespace-separated chapter/verse forms. One number is
+          // chapter-only; a second adjacent number is its verse.
           const followingCitation = followingText.match(
-            /^\s*(\d{1,3})(?:\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?)?/
+            /^\s*\.?\s*(\d{1,3})(?:(?:\s*[:.]\s*|\s+)(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?)?/
           );
           if (followingCitation) {
             const chapter = Number(followingCitation[1]);
@@ -2585,7 +2604,7 @@ function handleDoubleClickBlb(event) {
         // event target when Chromium's caret lookup lands on a neighbouring
         // wrapper at the end of a line. This keeps the final standalone book
         // number (66) from inheriting a stale selection such as 65.
-        const physicalNumericTarget = [caretTarget, eventTarget].find(candidate => {
+        const physicalNumericTarget = [eventTarget, caretTarget].find(candidate => {
           const token = normalizeSelectionText(candidate?.textContent || '').normalize('NFKC');
           return /^\d+$/.test(token);
         });
