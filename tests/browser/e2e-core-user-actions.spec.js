@@ -1316,8 +1316,13 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
 
 
 test('Facebook book-name double-click retains Luke 22:26 context', async ({ page, extensionStorage, extensionWorker }) => {
-  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
-  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
+  await page.route('https://www.facebook.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Facebook test</title></head><body></body></html>'
+  }));
+  await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
 
   await page.evaluate(() => {
