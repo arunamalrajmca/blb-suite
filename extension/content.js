@@ -1540,7 +1540,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const exactClickedBookToken = normalizeSelectionText(
         exactPhysicalTarget?.textContent || clickedWordText || selected
       ).normalize('NFKC').replace(/^\.+|\.+$/g, '');
-      const exactContextRoot = messageRoot || nearestSemanticBlock(
+      const physicalBookContextRoot = messageRoot || nearestSemanticBlock(
         exactPhysicalTarget || exactPhysicalRange?.startContainer?.parentElement
       );
       // Prefer a valid immediately adjacent ordinal prefix before treating
@@ -1548,7 +1548,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // physical text range when the platform does not wrap individual words
       // in elements (as X commonly does).
       const exactPrefixRange = document.createRange();
-      exactPrefixRange.selectNodeContents(exactContextRoot);
+      exactPrefixRange.selectNodeContents(physicalBookContextRoot);
       if (exactPhysicalRange) {
         exactPrefixRange.setEnd(
           exactPhysicalRange.startContainer,
@@ -1570,7 +1570,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       if (exactClickedBook) {
         try {
           const followingRange = document.createRange();
-          followingRange.selectNodeContents(exactContextRoot);
+          followingRange.selectNodeContents(physicalBookContextRoot);
           if (exactPhysicalRange) {
             followingRange.setStart(
               exactPhysicalRange.endContainer,
