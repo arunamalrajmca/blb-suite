@@ -1398,6 +1398,16 @@ test.only('Facebook resolves repeated references from each fresh plain-text sele
       observedPath: observedPaths[index]
     }))
   ) + '\\n');
+  await test.info().attach('facebook-double-click-reconstruction.json', {
+    body: Buffer.from(JSON.stringify(expectedPaths.map((item, index) => ({
+      scenario: index + 1,
+      clickedElement: item[0],
+      expectedPath: item[1],
+      diagnostic: reconstructionDiagnostics[index],
+      observedPath: observedPaths[index]
+    })), null, 2)),
+    contentType: 'application/json'
+  });
   expect(reconstructionDiagnostics).toHaveLength(3);
   expect(reconstructionDiagnostics.every(Boolean)).toBe(true);
   expect(observedPaths).toEqual(expectedPaths.map(([, path]) => path));
