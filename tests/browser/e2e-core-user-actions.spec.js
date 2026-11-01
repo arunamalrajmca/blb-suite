@@ -1389,7 +1389,7 @@ test.only('Facebook resolves repeated references from each fresh plain-text sele
     }
     observedPaths.push(observedPath);
   }
-  console.log('[FACEBOOK DOUBLE-CLICK RECONSTRUCTION]', JSON.stringify(
+  process.stdout.write('[FACEBOOK DOUBLE-CLICK RECONSTRUCTION] ' + JSON.stringify(
     expectedPaths.map((item, index) => ({
       scenario: index + 1,
       clickedElement: item[0],
@@ -1397,7 +1397,7 @@ test.only('Facebook resolves repeated references from each fresh plain-text sele
       diagnostic: reconstructionDiagnostics[index],
       observedPath: observedPaths[index]
     }))
-  ));
+  ) + '\\n');
   expect(reconstructionDiagnostics).toHaveLength(3);
   expect(reconstructionDiagnostics.every(Boolean)).toBe(true);
   expect(observedPaths).toEqual(expectedPaths.map(([, path]) => path));
