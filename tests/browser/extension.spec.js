@@ -1,5 +1,10 @@
 const { test, expect } = require('./fixtures');
 
+async function removeTabById(extensionWorker, id) {
+  if (id == null) return;
+  await extensionWorker.evaluate(tabId => chrome.tabs.remove(tabId).catch(() => {}), id);
+}
+
 async function dblclickAt(locator, rect) {
   const box = await locator.boundingBox();
   expect(box).toBeTruthy();
