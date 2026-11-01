@@ -2719,9 +2719,44 @@ function handleDoubleClickBlb(event) {
             const contextNode=contextualTarget instanceof Element
               ? (contextualTarget.closest('p,li,td,th,blockquote,article,section,div')||contextualTarget.parentElement||contextualTarget)
               : (event.target?.parentElement||event.target);
-            const contextText=normalizeSelectionText(contextNode?.textContent||'');
-             const numberedBookSuffixPattern=numberedBookSuffixAliases.slice().sort((a,b)=>b.length-a.length).join('|');
-             const match=contextText.match(new RegExp('(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\\s+('+numberedBookSuffixPattern+')\\b','i'));
+            const contextText=normalizeSelectionText(contextNode?.textContent||'').normalize('NFKC');
+            const numberedBookSuffixPattern=numberedBookSuffixAliases.slice().sort((a,b)=>b.length-a.length).join('|');
+            const numberedBookSuffixRegex=new RegExp('(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\\s+('+numberedBookSuffixPattern+')\\b','gi');
+            const suffixMatches=[...contextText.matchAll(numberedBookSuffixRegex)];
+            // Repeated numbered-book references can share one Facebook post.
+            // Select the prefix occurrence containing this physical gesture;
+            // never let String.match() silently bind the click to the first
+            // occurrence in the post.
+            let clickedContextOffset=null;
+            try {
+              if (contextNode instanceof Element && physicalTarget instanceof Element && contextNode.contains(physicalTarget)) {
+                const prefixRange=document.createRange();
+                prefixRange.selectNodeContents(contextNode);
+                let pointRange=null;
+                if (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+                  if (typeof document.caretRangeFromPoint==='function') {
+                    pointRange=document.caretRangeFromPoint(event.clientX,event.clientY);
+                  } else if (typeof document.caretPositionFromPoint==='function') {
+                    const point=document.caretPositionFromPoint(event.clientX,event.clientY);
+                    if (point?.offsetNode) {
+                      pointRange=document.createRange();
+                      pointRange.setStart(point.offsetNode,point.offset);
+                    }
+                  }
+                }
+                if (pointRange && contextNode.contains(pointRange.startContainer)) {
+                  prefixRange.setEnd(pointRange.startContainer,pointRange.startOffset);
+                } else {
+                  prefixRange.setEndBefore(physicalTarget);
+                }
+                clickedContextOffset=normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length;
+              }
+            } catch (_) {}
+            const match=suffixMatches.find(candidate =>
+              clickedContextOffset!==null &&
+              clickedContextOffset>=candidate.index &&
+              clickedContextOffset<=candidate.index+candidate[0].length
+            ) || (suffixMatches.length===1 ? suffixMatches[0] : null);
             const prefixNumber=match
               ? (/^[1-3]$/.test(match[1]) ? match[1] : ({I:'1',II:'2',III:'3'}[match[1].toUpperCase()]||''))
               : '';
