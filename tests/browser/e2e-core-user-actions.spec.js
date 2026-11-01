@@ -1316,7 +1316,7 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
 
 
 
-test('Facebook resolves repeated references from each fresh plain-text selection', async ({ page, extensionStorage, extensionWorker }) => {
+test.only('Facebook resolves repeated references from each fresh plain-text selection', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
   await page.route('https://www.facebook.com/**', route => route.fulfill({
     status: 200,
@@ -1360,6 +1360,9 @@ test('Facebook resolves repeated references from each fresh plain-text selection
   const observedPaths = [];
   const reconstructionDiagnostics = [];
   for (const [selector] of expectedPaths) {
+    await page.locator('[role="article"]').evaluate(article => {
+      article.removeAttribute('data-blb-double-click-diagnostic');
+    });
     await page.locator(selector).dblclick();
     // The production duplicate-gesture guard lasts 1.2 seconds for the same
     // physical target; wait it out so the third scenario is a fresh attempt.
@@ -1376,10 +1379,15 @@ test('Facebook resolves repeated references from each fresh plain-text selection
         catch (_) { return false; }
       });
     }, baselineTabs);
+    let observedPath = null;
     for (const tab of newBlbTabs) {
-      try { observedPaths.push(new URL(tab.url).pathname); } catch (_) {}
+      try {
+        const url = new URL(tab.url);
+        observedPath = url.pathname.replace(/\\/s_[^/]+\/?$/, '/');
+      } catch (_) {}
       await removeTabById(extensionWorker, tab.id);
     }
+    observedPaths.push(observedPath);
   }
   console.log('[FACEBOOK DOUBLE-CLICK RECONSTRUCTION]', JSON.stringify(
     expectedPaths.map((item, index) => ({
@@ -1387,10 +1395,11 @@ test('Facebook resolves repeated references from each fresh plain-text selection
       clickedElement: item[0],
       expectedPath: item[1],
       diagnostic: reconstructionDiagnostics[index],
-      observedPaths: observedPaths.slice(index, index + 1)
+      observedPath: observedPaths[index]
     }))
   ));
   expect(reconstructionDiagnostics).toHaveLength(3);
+  expect(reconstructionDiagnostics.every(Boolean)).toBe(true);
   expect(observedPaths).toEqual(expectedPaths.map(([, path]) => path));
 });
 
