@@ -72,11 +72,11 @@ class ProgressReporter {
       `${this.skipped} skipped`,
       ...(this.other ? [`${this.other} other`] : [])
     ].join(', ');
-    console.log(`\\n${color}Test summary: ${this.started}/${this.total} completed — ${summary}${reset}`);
+    console.log(`\n${color}Test summary: ${this.started}/${this.total} completed — ${summary}${reset}`);
     if (this.started < this.total) {
       console.log(`Run ended before all tests completed (runner status: ${result.status.toUpperCase()}).`);
     }
   }
-}}
+}
 
 module.exports = ProgressReporter;
