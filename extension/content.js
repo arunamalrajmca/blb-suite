@@ -1386,9 +1386,18 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         prefixRange.setEnd(range.startContainer, range.startOffset);
         const rawPrefix = domRangeText(prefixRange);
         const normalizedPrefix = normalizeSelectionText(rawPrefix).normalize('NFKC');
+        // Do not compare raw DOM string lengths with serialized/normalized
+        // strings: Facebook wraps visible words in bidi isolate controls, and
+        // removing those controls shifts every subsequent raw character index.
+        // Inspect the actual DOM suffix after this Range instead of slicing
+        // rawSource with rawPrefix.length.
+        const suffixRange = document.createRange();
+        suffixRange.selectNodeContents(localBlock);
+        suffixRange.setStart(range.endContainer, range.endOffset);
+        const rawSuffix = domRangeText(suffixRange);
         const hasInteriorSeparator = normalizedPrefix.length > 0 &&
-          /[\s\u00A0\u2007\u202F]$/.test(rawPrefix) &&
-          /\S/.test(rawSource.slice(rawPrefix.length));
+          /[\s\u00A0\u2007\u202F][\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]*$/.test(rawPrefix) &&
+          !!normalizeSelectionText(rawSuffix);
         const start = normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
         const end = start + selected.length;
         if (normalizedSource.slice(start, end) !== selected) return null;
@@ -1523,9 +1532,16 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           prefixRange.setEnd(exactRange.startContainer, exactRange.startOffset);
           const rawPrefix = domRangeText(prefixRange);
           const normalizedPrefix = normalizeSelectionText(rawPrefix).normalize('NFKC');
+          // The raw prefix can contain bidi controls that disappear from
+          // normalizedContext. Never use its raw length as an index into the
+          // complete DOM text; inspect the true suffix Range instead.
+          const suffixRange = document.createRange();
+          suffixRange.selectNodeContents(exactContextRoot);
+          suffixRange.setStart(exactRange.endContainer, exactRange.endOffset);
+          const rawSuffix = domRangeText(suffixRange);
           const hasInteriorSeparator = normalizedPrefix.length > 0 &&
-            /[\s\u00A0\u2007\u202F]$/.test(rawPrefix) &&
-            /\S/.test(rawContext.slice(rawPrefix.length));
+            /[\s\u00A0\u2007\u202F][\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]*$/.test(rawPrefix) &&
+            !!normalizeSelectionText(rawSuffix);
           const exactStart = normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
           const exactToken = normalizeSelectionText(exactPhysicalTarget.textContent || '').normalize('NFKC');
           const exactEnd = exactStart + exactToken.length;
