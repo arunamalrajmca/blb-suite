@@ -1611,8 +1611,9 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             domText(followingRange.cloneContents())
           ).normalize('NFKC');
           const writeFacebookDoubleClickDiagnostic = details => {
-            if (physicalBookContextRoot?.hasAttribute?.('data-blb-test-diagnostics')) {
-              physicalBookContextRoot.setAttribute(
+            const diagnosticRoot = physicalBookContextRoot?.closest?.('[data-blb-test-diagnostics]');
+            if (diagnosticRoot) {
+              diagnosticRoot.setAttribute(
                 'data-blb-double-click-diagnostic',
                 JSON.stringify({
                   selected,
