@@ -506,8 +506,8 @@ test('Double-Click preserves Facebook bidi-isolated Matthew 14:22-33 context', a
   await page.waitForTimeout(1000);
 
   await page.evaluate(() => {
-    const lri = '\\u2066';
-    const pdi = '\\u2069';
+    const lri = '\u2066';
+    const pdi = '\u2069';
     const post = document.createElement('div');
     post.id = 'blb-e2e-facebook-bidi-reference';
     post.setAttribute('role', 'article');
