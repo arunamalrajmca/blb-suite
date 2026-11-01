@@ -1521,7 +1521,15 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       normalizeSelectionText(candidate.textContent || '').normalize('NFKC') ===
       normalizeSelectionText(selected).normalize('NFKC')
     );
-    if (exactPhysicalTarget && !verseCueSelection) {
+    // X and other rich-text feeds may keep an entire sentence in one text
+    // node rather than wrapping each word in its own element. The physical
+    // caret range still identifies the exact clicked word in that case.
+    const exactPhysicalRange = clickedWordRange &&
+      normalizeSelectionText(clickedWordText).normalize('NFKC') ===
+      normalizeSelectionText(selected).normalize('NFKC')
+      ? clickedWordRange
+      : null;
+    if ((exactPhysicalTarget || exactPhysicalRange) && !verseCueSelection) {
       // Book-name clicks on rich social feeds must bind to the citation
       // immediately following the exact clicked DOM element. Avoid deriving
       // the book's position by adding normalized prefix lengths: Facebook can
@@ -1530,15 +1538,25 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // Treat terminal periods as book-name punctuation (e.g. "Luke."),
       // but do not alter punctuation inside a reference or arbitrary prose.
       const exactClickedBookToken = normalizeSelectionText(
-        exactPhysicalTarget.textContent || ''
+        exactPhysicalTarget?.textContent || clickedWordText || selected
       ).normalize('NFKC').replace(/^\.+|\.+$/g, '');
-      // Prefer a valid immediately adjacent ordinal prefix before treating
-      // a suffix alias (for example, "Jn") as an unnumbered book.
-      const exactPrefixRange = document.createRange();
-      exactPrefixRange.selectNodeContents(
-        messageRoot || nearestSemanticBlock(exactPhysicalTarget)
+      const exactContextRoot = messageRoot || nearestSemanticBlock(
+        exactPhysicalTarget || exactPhysicalRange?.startContainer?.parentElement
       );
-      exactPrefixRange.setEndBefore(exactPhysicalTarget);
+      // Prefer a valid immediately adjacent ordinal prefix before treating
+      // a suffix alias (for example, "Jn") as an unnumbered book. Use the
+      // physical text range when the platform does not wrap individual words
+      // in elements (as X commonly does).
+      const exactPrefixRange = document.createRange();
+      exactPrefixRange.selectNodeContents(exactContextRoot);
+      if (exactPhysicalRange) {
+        exactPrefixRange.setEnd(
+          exactPhysicalRange.startContainer,
+          exactPhysicalRange.startOffset
+        );
+      } else {
+        exactPrefixRange.setEndBefore(exactPhysicalTarget);
+      }
       const exactPrefixText = normalizeSelectionText(
         domText(exactPrefixRange.cloneContents())
       ).normalize('NFKC');
@@ -1552,8 +1570,15 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       if (exactClickedBook) {
         try {
           const followingRange = document.createRange();
-          followingRange.selectNodeContents(messageRoot || nearestSemanticBlock(exactPhysicalTarget));
-          followingRange.setStartAfter(exactPhysicalTarget);
+          followingRange.selectNodeContents(exactContextRoot);
+          if (exactPhysicalRange) {
+            followingRange.setStart(
+              exactPhysicalRange.endContainer,
+              exactPhysicalRange.endOffset
+            );
+          } else {
+            followingRange.setStartAfter(exactPhysicalTarget);
+          }
           const followingText = normalizeSelectionText(
             domText(followingRange.cloneContents())
           ).normalize('NFKC');
