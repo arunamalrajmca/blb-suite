@@ -1361,7 +1361,9 @@ test('Facebook resolves repeated references from each fresh plain-text selection
   const reconstructionDiagnostics = [];
   for (const [selector] of expectedPaths) {
     await page.locator(selector).dblclick();
-    await page.waitForTimeout(500);
+    // The production duplicate-gesture guard lasts 1.2 seconds for the same
+    // physical target; wait it out so the third scenario is a fresh attempt.
+    await page.waitForTimeout(1300);
     const diagnostic = await page.locator('[role="article"]').getAttribute('data-blb-double-click-diagnostic');
     reconstructionDiagnostics.push(diagnostic ? JSON.parse(diagnostic) : null);
     const newBlbTabs = await extensionWorker.evaluate(async baseline => {
