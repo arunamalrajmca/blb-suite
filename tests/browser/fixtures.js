@@ -13,6 +13,7 @@ const sourceExtensionPath = process.env.BLB_EXTENSION_PATH
 const testHosts = [
   'https://example.com/*',
   'https://www.facebook.com/*',
+  'https://x.com/*',
   'https://www.gotquestions.org/*',
   'https://www.christianity.com/*',
   'https://www.crosswalk.com/*',
