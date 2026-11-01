@@ -1517,10 +1517,23 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     if (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
       addExactTargetCandidate(document.elementFromPoint(event.clientX, event.clientY));
     }
-    const exactPhysicalTarget = exactTargetCandidates.find(candidate =>
-      normalizeSelectionText(candidate.textContent || '').normalize('NFKC') ===
-      normalizeSelectionText(selected).normalize('NFKC')
-    );
+    const normalizedSelectedToken = normalizeDoubleClickToken(selected);
+    const exactPhysicalTarget = exactTargetCandidates.find(candidate => {
+      const candidateText = normalizeSelectionText(candidate.textContent || '').normalize('NFKC');
+      if (candidateText.toLowerCase() === normalizeSelectionText(selected).normalize('NFKC').toLowerCase()) {
+        return true;
+      }
+
+      // Facebook can wrap the complete numbered book label ("2 Samuel") in
+      // one bidi-isolated element while Chromium's double-click Selection
+      // contains only its suffix ("Samuel"). In that case the clicked element
+      // itself is the authoritative book token and its end is the correct
+      // boundary for reading the immediately following chapter/verse.
+      const numberedLabel = candidateText.match(/^(?:([1-3])|(I{1,3}))\\s+(.+)$/i);
+      if (!numberedLabel) return false;
+      const suffix = normalizeDoubleClickToken(numberedLabel[3]);
+      return suffix === normalizedSelectedToken && !!resolveBibleBook(candidateText);
+    });
     // X and other rich-text feeds may keep an entire sentence in one text
     // node rather than wrapping each word in its own element. The physical
     // caret range still identifies the exact clicked word in that case.
