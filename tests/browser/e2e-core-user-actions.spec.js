@@ -1383,7 +1383,7 @@ test.only('Facebook resolves repeated references from each fresh plain-text sele
     for (const tab of newBlbTabs) {
       try {
         const url = new URL(tab.url);
-        observedPath = url.pathname.replace(/\\/s_[^/]+\/?$/, '/');
+        observedPath = url.pathname.replace(/\/s_[^/]+\/?$/, '/');
       } catch (_) {}
       await removeTabById(extensionWorker, tab.id);
     }
