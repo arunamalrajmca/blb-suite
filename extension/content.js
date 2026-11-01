@@ -1534,7 +1534,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             domText(followingRange.cloneContents())
           ).normalize('NFKC');
           const followingCitation = followingText.match(
-            /^\\s*(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?/
+            /^\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/
           );
           if (followingCitation) {
             const chapter = Number(followingCitation[1]);
