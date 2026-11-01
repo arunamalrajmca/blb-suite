@@ -1522,9 +1522,12 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // the book's position by adding normalized prefix lengths: Facebook can
       // place bidi isolates and other zero-width controls around each token,
       // so raw DOM offsets and normalized text offsets are not interchangeable.
-      const exactClickedBook = resolveBibleBook(
-        normalizeSelectionText(exactPhysicalTarget.textContent || '').normalize('NFKC')
-      );
+      // Treat terminal periods as book-name punctuation (e.g. "Luke."),
+      // but do not alter punctuation inside a reference or arbitrary prose.
+      const exactClickedBookToken = normalizeSelectionText(
+        exactPhysicalTarget.textContent || ''
+      ).normalize('NFKC').replace(/^\.+|\.+$/g, '');
+      const exactClickedBook = resolveBibleBook(exactClickedBookToken);
       if (exactClickedBook) {
         try {
           const followingRange = document.createRange();
@@ -1546,6 +1549,10 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             if (bookClickReference) return bookClickReference;
           }
         } catch (_) {}
+        // An ordinary book name may inherit only the citation immediately
+        // to its right. Never scan left or fall through to a wider block
+        // resolver: "22:26 Luke" must remain a book-name selection.
+        return null;
       }
       const exactContextRoot = verseCueSelection
         ? (messageRoot || nearestSemanticBlock(exactPhysicalTarget))
