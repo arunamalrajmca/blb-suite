@@ -1564,7 +1564,10 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         /(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\s+$/i
       );
       const exactPrefixedBook = exactAdjacentPrefix
-        ? resolveBibleBook(exactAdjacentPrefix[1] + ' ' + exactClickedBookToken)
+        ? resolveBibleBook(
+            ({ I: '1', II: '2', III: '3' }[exactAdjacentPrefix[1].toUpperCase()] || exactAdjacentPrefix[1]) +
+            ' ' + exactClickedBookToken
+          )
         : null;
       const exactClickedBook = exactPrefixedBook || resolveBibleBook(exactClickedBookToken);
       if (exactClickedBook) {
@@ -1586,12 +1589,21 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           // whitespace-separated chapter/verse forms. One number is
           // chapter-only; a second adjacent number is its verse.
           const followingCitation = followingText.match(
-            /^\s*\.?\s*(\d{1,3})(?:(?:\s*[:.]\s*|\s+)(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?)?/
+            /^\s*\.?\s*(\d{1,3})(?:(?:\s*[:.]\s*|\s+)(\d{1,3}(?:\s*,\s*\d{1,3})*)(?:\s*[-–—]\s*(\d{1,3}))?)?/
           );
           if (followingCitation) {
             const chapter = Number(followingCitation[1]);
-            const from = followingCitation[2] ? Number(followingCitation[2]) : null;
-            const to = followingCitation[3] ? Number(followingCitation[3]) : from;
+            const verseList = followingCitation[2]
+              ? followingCitation[2].split(',').map(value => Number(value.trim()))
+              : [];
+            const consecutive = verseList.every((verse, index) =>
+              index === 0 || verse === verseList[index - 1] + 1
+            );
+            const from = verseList.length ? verseList[0] : null;
+            const listedTo = verseList.length ? verseList[verseList.length - 1] : null;
+            const to = followingCitation[3]
+              ? Number(followingCitation[3])
+              : (consecutive ? listedTo : from);
             const bookClickReference = from == null
               ? resolveBibleReference(exactClickedBook.name, chapter)
               : resolveBibleReference(exactClickedBook.name, chapter, from, to);
