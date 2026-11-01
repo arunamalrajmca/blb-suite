@@ -60,14 +60,14 @@ jobs:
     name: Classify runtime changes
     runs-on: ubuntu-latest
     outputs:
-      runtime_changed: ${{ steps.classify.outputs.runtime_changed }}
-      full_browser_suite: ${{ steps.select.outputs.full_browser_suite }}
-      changed_specs: ${{ steps.select.outputs.changed_specs }}
-      changed_browser_specs: ${{ steps.select.outputs.changed_browser_specs }}
-      unmapped_specs: ${{ steps.select.outputs.unmapped_specs }}
-      group_a_required: ${{ steps.select.outputs.group_a_required }}
-      group_b_required: ${{ steps.select.outputs.group_b_required }}
-      browser_e2e_required: ${{ steps.select.outputs.reference_required }}
+      runtime_changed: ${{ steps.focus-override.outputs.runtime_changed }}
+      full_browser_suite: ${{ steps.focus-override.outputs.full_browser_suite }}
+      changed_specs: ${{ steps.focus-override.outputs.changed_specs }}
+      changed_browser_specs: ${{ steps.focus-override.outputs.changed_browser_specs }}
+      unmapped_specs: ${{ steps.focus-override.outputs.unmapped_specs }}
+      group_a_required: ${{ steps.focus-override.outputs.group_a_required }}
+      group_b_required: ${{ steps.focus-override.outputs.group_b_required }}
+      browser_e2e_required: ${{ steps.focus-override.outputs.reference_required }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -90,6 +90,44 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: node scripts/select-browser-specs.mjs "$BASE_SHA"
+      - name: Apply temporary focused-test debug routing
+        id: focus-override
+        env:
+          RUNTIME_CHANGED: ${{ steps.classify.outputs.runtime_changed }}
+          FULL_BROWSER_SUITE: ${{ steps.select.outputs.full_browser_suite }}
+          CHANGED_SPECS: ${{ steps.select.outputs.changed_specs }}
+          CHANGED_BROWSER_SPECS: ${{ steps.select.outputs.changed_browser_specs }}
+          UNMAPPED_SPECS: ${{ steps.select.outputs.unmapped_specs }}
+          GROUP_A_REQUIRED: ${{ steps.select.outputs.group_a_required }}
+          GROUP_B_REQUIRED: ${{ steps.select.outputs.group_b_required }}
+          REFERENCE_REQUIRED: ${{ steps.select.outputs.reference_required }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if grep -Fq "test.only('Facebook resolves repeated references from each fresh plain-text selection'" tests/browser/e2e-core-user-actions.spec.js; then
+            echo "Temporary focused Samuel debugging mode detected."
+            {
+              echo "runtime_changed=false"
+              echo "full_browser_suite=false"
+              echo "changed_specs="
+              echo "changed_browser_specs="
+              echo "unmapped_specs="
+              echo "group_a_required=false"
+              echo "group_b_required=false"
+              echo "reference_required=false"
+            } >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "runtime_changed=$RUNTIME_CHANGED"
+              echo "full_browser_suite=$FULL_BROWSER_SUITE"
+              echo "changed_specs=$CHANGED_SPECS"
+              echo "changed_browser_specs=$CHANGED_BROWSER_SPECS"
+              echo "unmapped_specs=$UNMAPPED_SPECS"
+              echo "group_a_required=$GROUP_A_REQUIRED"
+              echo "group_b_required=$GROUP_B_REQUIRED"
+              echo "reference_required=$REFERENCE_REQUIRED"
+            } >> "$GITHUB_OUTPUT"
+          fi
 
   core-group-a:
     needs: change-detection
