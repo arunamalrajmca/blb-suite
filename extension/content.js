@@ -2770,11 +2770,28 @@ function handleDoubleClickBlb(event) {
                 clickedContextOffset=normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length;
               }
             } catch (_) {}
-            const match=suffixMatches.find(candidate =>
+            let match=suffixMatches.find(candidate =>
               clickedContextOffset!==null &&
               clickedContextOffset>=candidate.index &&
               clickedContextOffset<=candidate.index+candidate[0].length
             ) || (suffixMatches.length===1 ? suffixMatches[0] : null);
+            // The suffix list is intentionally an optimization, not the
+            // authority for whether a numbered canonical book exists. Resolve
+            // the exact immediately preceding prefix from the clicked token's
+            // own position as a fallback; this also covers full canonical
+            // suffixes such as "John" in "1 John" without borrowing farther
+            // left from another reference in the same post.
+            if (!match && clickedContextOffset!==null) {
+              const immediatelyBeforeClick=contextText.slice(0,clickedContextOffset);
+              const adjacentPrefix=immediatelyBeforeClick.match(/(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\\s+$/i);
+              if (adjacentPrefix) {
+                const candidateBook=resolveBibleBook(adjacentPrefix[1]+' '+selection);
+                if (candidateBook) {
+                  match=[adjacentPrefix[0]+selection,adjacentPrefix[1],selection];
+                  match.index=immediatelyBeforeClick.length-adjacentPrefix[0].length;
+                }
+              }
+            }
             const prefixNumber=match
               ? (/^[1-3]$/.test(match[1]) ? match[1] : ({I:'1',II:'2',III:'3'}[match[1].toUpperCase()]||''))
               : '';
