@@ -2826,6 +2826,7 @@ function handleDoubleClickBlb(event) {
             // never let String.match() silently bind the click to the first
             // occurrence in the post.
             const clickedContextOffsets=[];
+            const physicalContextOffsets=[];
             try {
               // Facebook can expose a broad event target, a caret position
               // that lands beside the selected word, or a native Selection
@@ -2873,7 +2874,7 @@ function handleDoubleClickBlb(event) {
                 // Anchor the offset inside that label, after its ordinal, so
                 // repeated references remain distinguishable even when the
                 // native Selection/caret APIs expose no usable Range.
-                if (!clickedContextOffsets.length) {
+                {
                   const physicalCandidates = [
                     getDoubleClickTargetElement(event),
                     physicalTarget,
@@ -2894,7 +2895,7 @@ function handleDoubleClickBlb(event) {
                       prefixRange.setEndBefore(candidate);
                       const contextBase = normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length;
                       const suffixOffset = normalizeSelectionText(numberedLabel[1] + ' ').normalize('NFKC').length;
-                      clickedContextOffsets.push(contextBase + suffixOffset);
+                      physicalContextOffsets.push(contextBase + suffixOffset);
                       break;
                     }
                     if (normalizeDoubleClickToken(label).toLowerCase() ===
@@ -2902,7 +2903,7 @@ function handleDoubleClickBlb(event) {
                       const prefixRange = document.createRange();
                       prefixRange.selectNodeContents(contextNode);
                       prefixRange.setEndBefore(candidate);
-                      clickedContextOffsets.push(normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length);
+                      physicalContextOffsets.push(normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length);
                       break;
                     }
                   }
@@ -2913,11 +2914,14 @@ function handleDoubleClickBlb(event) {
             // Never choose a merely-nearest valid prefix elsewhere in the post:
             // an invalid "4 Samuel" must not inherit an earlier "2 Samuel".
             let match = null;
-            if (suffixMatches.length && clickedContextOffsets.length) {
+            const exactClickedContextOffsets = physicalContextOffsets.length
+              ? physicalContextOffsets
+              : clickedContextOffsets;
+            if (suffixMatches.length && exactClickedContextOffsets.length) {
               for (const candidate of suffixMatches) {
                 const start = candidate.index;
                 const end = start + candidate[0].length;
-                if (clickedContextOffsets.some(offset => offset >= start && offset <= end)) {
+                if (exactClickedContextOffsets.some(offset => offset >= start && offset <= end)) {
                   match = candidate;
                   break;
                 }
