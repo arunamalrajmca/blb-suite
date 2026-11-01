@@ -2812,17 +2812,23 @@ function handleDoubleClickBlb(event) {
             // Select the prefix occurrence containing this physical gesture;
             // never let String.match() silently bind the click to the first
             // occurrence in the post.
-            let clickedContextOffset=null;
+            const clickedContextOffsets=[];
             try {
-              // Use the exact token at the physical caret when possible. The
-              // bubbling dblclick target on Facebook may be a broad wrapper;
-              // measuring its prefix can bind a repeated numbered-book suffix
-              // to the wrong occurrence (or fail to match either occurrence).
+              // Facebook can expose a broad event target, a caret position
+              // that lands beside the selected word, or a native Selection
+              // whose range is more precise than either. Collect independently
+              // measured offsets and accept only one that lands inside an
+              // actual numbered-book suffix match.
               if (contextNode instanceof Element) {
-                const prefixRange=document.createRange();
-                prefixRange.selectNodeContents(contextNode);
-                let pointRange=null;
+                const getContextOffset=(range)=>{
+                  if (!range || !contextNode.contains(range.startContainer)) return null;
+                  const prefixRange=document.createRange();
+                  prefixRange.selectNodeContents(contextNode);
+                  prefixRange.setEnd(range.startContainer,range.startOffset);
+                  return normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length;
+                };
                 if (event && Number.isFinite(event.clientX) && Number.isFinite(event.clientY)) {
+                  let pointRange=null;
                   if (typeof document.caretRangeFromPoint==='function') {
                     pointRange=document.caretRangeFromPoint(event.clientX,event.clientY);
                   } else if (typeof document.caretPositionFromPoint==='function') {
@@ -2832,17 +2838,25 @@ function handleDoubleClickBlb(event) {
                       pointRange.setStart(point.offsetNode,point.offset);
                     }
                   }
+                  const pointOffset=getContextOffset(pointRange);
+                  if (pointOffset!==null) clickedContextOffsets.push(pointOffset);
                 }
-                if (pointRange && contextNode.contains(pointRange.startContainer)) {
-                  // The event target may wrap the complete numbered book
-                  // ("2 Samuel") while Chromium's selected token is only its
-                  // suffix ("Samuel"). The caret position is authoritative
-                  // and also distinguishes repeated occurrences in one post.
-                  prefixRange.setEnd(pointRange.startContainer,pointRange.startOffset);
-                  clickedContextOffset=normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length;
-                } else {
-                  // Fall back to an exact token element only when the browser
-                  // cannot provide a physical caret position.
+
+                // Use the native selection only when it represents this exact
+                // selected suffix, never when it is a stale selection from a
+                // previous double-click.
+                const nativeSelection=window.getSelection?.();
+                if (nativeSelection?.rangeCount && !nativeSelection.isCollapsed &&
+                    normalizeSelectionText(nativeSelection.toString()).normalize('NFKC').toLowerCase()===
+                      normalizeSelectionText(selection).normalize('NFKC').toLowerCase()) {
+                  const selectedRange=nativeSelection.getRangeAt(0);
+                  const selectedOffset=getContextOffset(selectedRange);
+                  if (selectedOffset!==null) clickedContextOffsets.push(selectedOffset);
+                }
+
+                // Last resort: an exact suffix element gives a reliable prefix
+                // boundary when neither physical nor native range is usable.
+                if (!clickedContextOffsets.length) {
                   const suffixTarget=[getDoubleClickTargetElement(event),physicalTarget].find(candidate =>
                     candidate instanceof Element &&
                     contextNode.contains(candidate) &&
@@ -2850,16 +2864,18 @@ function handleDoubleClickBlb(event) {
                       normalizeSelectionText(selection).normalize('NFKC').toLowerCase()
                   );
                   if (suffixTarget) {
+                    const prefixRange=document.createRange();
+                    prefixRange.selectNodeContents(contextNode);
                     prefixRange.setEndBefore(suffixTarget);
-                    clickedContextOffset=normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length;
+                    clickedContextOffsets.push(normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length);
                   }
                 }
               }
             } catch (_) {}
             let match=suffixMatches.find(candidate =>
-              clickedContextOffset!==null &&
-              clickedContextOffset>=candidate.index &&
-              clickedContextOffset<=candidate.index+candidate[0].length
+              clickedContextOffsets.some(offset =>
+                offset>=candidate.index && offset<=candidate.index+candidate[0].length
+              )
             ) || (suffixMatches.length===1 ? suffixMatches[0] : null);
             // The suffix list is intentionally an optimization, not the
             // authority for whether a numbered canonical book exists. Resolve
