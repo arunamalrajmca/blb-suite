@@ -676,12 +676,7 @@ test.describe('core user-visible E2E', () => {
       const tweetText = page.locator('[data-testid="tweetText"] span').filter({ hasText: item.text });
       await expect(tweetText).toHaveText(item.text);
       await tweetText.dblclick({ position: { x: 32, y: 12 } });
-      const resolved = await waitForTab(extensionWorker, tab => {
-        try {
-          const url = new URL(tab.pendingUrl || tab.url);
-          return url.hostname === 'www.blueletterbible.org' && url.pathname === item.path;
-        } catch (_) { return false; }
-      });
+      const resolved = await waitForBlbTabPath(extensionWorker, item.path);
       expect(new URL(resolved.pendingUrl || resolved.url).pathname).toBe(item.path);
       await removeTabById(extensionWorker, resolved.id);
     }
