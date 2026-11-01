@@ -1327,8 +1327,8 @@ test('Facebook resolves repeated references from each fresh plain-text selection
   await page.waitForTimeout(1000);
 
   await page.evaluate(() => {
-    const lri = '\\u2066';
-    const pdi = '\\u2069';
+    const lri = '\u2066';
+    const pdi = '\u2069';
     const article = document.createElement('div');
     article.setAttribute('role', 'article');
     article.innerHTML =
