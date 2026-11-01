@@ -1331,6 +1331,7 @@ test('Facebook resolves repeated references from each fresh plain-text selection
     const pdi = '\u2069';
     const article = document.createElement('div');
     article.setAttribute('role', 'article');
+    article.setAttribute('data-blb-test-diagnostics', 'true');
     article.innerHTML =
       '<div data-ad-comet-preview="message">' +
         '<div dir="auto">' +
@@ -1353,17 +1354,42 @@ test('Facebook resolves repeated references from each fresh plain-text selection
     ['#fb-samuel-second-book', '/kjv/2sa/21/14/'],
     ['#fb-samuel-second-book', '/kjv/2sa/21/14/']
   ];
-  for (const [selector, expectedPath] of expectedPaths) {
+  const baselineTabs = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({})).map(tab => tab.id)
+  );
+  const observedPaths = [];
+  const reconstructionDiagnostics = [];
+  for (const [selector] of expectedPaths) {
     await page.locator(selector).dblclick();
-    const resolved = await waitForTab(extensionWorker, tab => {
-      try {
-        const url = new URL(tab.pendingUrl || tab.url);
-        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
-      } catch (_) { return false; }
-    });
-    expect(new URL(resolved.pendingUrl || resolved.url).pathname).toBe(expectedPath);
-    await removeTabById(extensionWorker, resolved.id);
+    await page.waitForTimeout(500);
+    const diagnostic = await page.locator('[role="article"]').getAttribute('data-blb-double-click-diagnostic');
+    reconstructionDiagnostics.push(diagnostic ? JSON.parse(diagnostic) : null);
+    const newBlbTabs = await extensionWorker.evaluate(async baseline => {
+      const tabs = await chrome.tabs.query({});
+      return tabs.filter(tab => !baseline.includes(tab.id)).map(tab => ({
+        id: tab.id,
+        url: tab.pendingUrl || tab.url || ''
+      })).filter(tab => {
+        try { return new URL(tab.url).hostname === 'www.blueletterbible.org'; }
+        catch (_) { return false; }
+      });
+    }, baselineTabs);
+    for (const tab of newBlbTabs) {
+      try { observedPaths.push(new URL(tab.url).pathname); } catch (_) {}
+      await removeTabById(extensionWorker, tab.id);
+    }
   }
+  console.log('[FACEBOOK DOUBLE-CLICK RECONSTRUCTION]', JSON.stringify(
+    expectedPaths.map((item, index) => ({
+      scenario: index + 1,
+      clickedElement: item[0],
+      expectedPath: item[1],
+      diagnostic: reconstructionDiagnostics[index],
+      observedPaths: observedPaths.slice(index, index + 1)
+    }))
+  ));
+  expect(reconstructionDiagnostics).toHaveLength(3);
+  expect(observedPaths).toEqual(expectedPaths.map(([, path]) => path));
 });
 
 test('Facebook book-name double-click retains Luke 22:26 context', async ({ page, extensionStorage, extensionWorker }) => {
