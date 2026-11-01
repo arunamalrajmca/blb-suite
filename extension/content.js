@@ -1517,6 +1517,36 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       normalizeSelectionText(selected).normalize('NFKC')
     );
     if (exactPhysicalTarget && !verseCueSelection) {
+      // Book-name clicks on rich social feeds must bind to the citation
+      // immediately following the exact clicked DOM element. Avoid deriving
+      // the book's position by adding normalized prefix lengths: Facebook can
+      // place bidi isolates and other zero-width controls around each token,
+      // so raw DOM offsets and normalized text offsets are not interchangeable.
+      const exactClickedBook = resolveBibleBook(
+        normalizeSelectionText(exactPhysicalTarget.textContent || '').normalize('NFKC')
+      );
+      if (exactClickedBook) {
+        try {
+          const followingRange = document.createRange();
+          followingRange.selectNodeContents(messageRoot || nearestSemanticBlock(exactPhysicalTarget));
+          followingRange.setStartAfter(exactPhysicalTarget);
+          const followingText = normalizeSelectionText(
+            domText(followingRange.cloneContents())
+          ).normalize('NFKC');
+          const followingCitation = followingText.match(
+            /^\\s*(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?/
+          );
+          if (followingCitation) {
+            const chapter = Number(followingCitation[1]);
+            const from = Number(followingCitation[2]);
+            const to = followingCitation[3] ? Number(followingCitation[3]) : from;
+            const bookClickReference = resolveBibleReference(
+              exactClickedBook.name, chapter, from, to
+            );
+            if (bookClickReference) return bookClickReference;
+          }
+        } catch (_) {}
+      }
       const exactContextRoot = verseCueSelection
         ? (messageRoot || nearestSemanticBlock(exactPhysicalTarget))
         : nearestSemanticBlock(exactPhysicalTarget);
