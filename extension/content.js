@@ -2653,8 +2653,19 @@ function handleDoubleClickBlb(event) {
         // when they are not KJV words (for example, "Sam" or "Jn"). Keep this
         // candidate set aligned with the suffix alternatives in the context
         // matcher below; KJV-word overlaps still retain ordinary word search.
-        const numberedBookSuffixAliases=Object.values(NUMBERED_BOOK_SUFFIX_ALIASES || {}).flat();
-         const isNumberedBookSuffixCandidate=numberedBookSuffixAliases.some(alias=>String(alias).toLowerCase()===String(selection).toLowerCase());
+        const numberedBookSuffixAliases=[...new Set([
+          ...Object.values(NUMBERED_BOOK_SUFFIX_ALIASES || {}).flat(),
+          // Include the complete suffix of every numbered canonical book and
+          // numbered-book alias (e.g. "Samuel" in "2 Samuel", "John" in "III John").
+          ...BOOKS.map(book => String(book.name || '').match(/^[1-3]\\s+(.+)$/)?.[1]).filter(Boolean),
+          ...Object.keys(BOOK_ALIASES || {}).map(alias => {
+            const match=String(alias).match(/^[1-3]\\s+(.+)$/);
+            return match?.[1] || '';
+          }).filter(Boolean)
+        ])];
+        const isNumberedBookSuffixCandidate=numberedBookSuffixAliases.some(alias=>
+          String(alias).toLowerCase()===String(selection).toLowerCase()
+        );
         const normalizedSelectionToken = normalizeDoubleClickToken(selection).replace(/’/g, "'");
         const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
           && KJV_CORPUS_WORD_INDEX.has(normalizedSelectionToken);
@@ -2780,8 +2791,7 @@ function handleDoubleClickBlb(event) {
             // citation directly instead of letting the generic DOM resolver
             // borrow an unrelated reference from an ancestor or stale selection.
             if (completeBook && possibleNumberedBookSuffix
-                && match[2].toLowerCase()===selection.toLowerCase()
-                && /^[1-3]$/.test(match[1])) {
+                && match[2].toLowerCase()===selection.toLowerCase()) {
               const afterBook=contextText.slice(match.index+match[0].length);
               const chapterMatch=afterBook.match(/^\s*\.?\s*(\d{1,3})\b/);
               const chapter=chapterMatch ? Number(chapterMatch[1]) : 0;
