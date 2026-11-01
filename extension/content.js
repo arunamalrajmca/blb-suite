@@ -1401,7 +1401,12 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         const start = normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
         const end = start + selected.length;
         if (normalizedSource.slice(start, end) !== selected) return null;
-        return resolveBibleReferenceFromContextWindow(normalizedSource, start, end);
+        // The positional grammar also handles chapter-only and
+        // whitespace-separated references (e.g. "Exodus 1" and
+        // "Ezra 1 1"). Keep numeric clicks tied to this exact token offset
+        // before considering the standalone-number/book fallback.
+        return resolveBibleReferenceFromContextWindow(normalizedSource, start, end)
+          || resolvePositionalBookCitation(normalizedSource, start, end);
       };
 
       // Prefer the exact physical target element over caret-derived offsets.
@@ -1537,15 +1542,15 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             domText(followingRange.cloneContents())
           ).normalize('NFKC');
           const followingCitation = followingText.match(
-            /^\s*(\d{1,3})\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/
+            /^\s*(\d{1,3})(?:\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?)?/
           );
           if (followingCitation) {
             const chapter = Number(followingCitation[1]);
-            const from = Number(followingCitation[2]);
+            const from = followingCitation[2] ? Number(followingCitation[2]) : null;
             const to = followingCitation[3] ? Number(followingCitation[3]) : from;
-            const bookClickReference = resolveBibleReference(
-              exactClickedBook.name, chapter, from, to
-            );
+            const bookClickReference = from == null
+              ? resolveBibleReference(exactClickedBook.name, chapter)
+              : resolveBibleReference(exactClickedBook.name, chapter, from, to);
             if (bookClickReference) return bookClickReference;
           }
         } catch (_) {}
