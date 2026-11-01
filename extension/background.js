@@ -2962,6 +2962,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           }
         }
         const criteriaSearchText=String(message.criteriaSearchText || '').trim();
+        // Criteria Search is textual, never a destination for bare numbers or
+        // numeric reference fragments. Keep this guard at the dispatch boundary
+        // so every content-script caller is protected, even if its classifier
+        // accidentally supplies criteriaSearchText.
+        if (criteriaSearchText && /^[\\d\\s:.,;\\-–—]+$/.test(criteriaSearchText)) {
+          sendResponse({ok:false, reason:'numeric-only-criteria-search'});
+          return true;
+        }
         if (criteriaSearchText) {
           await openBlbDestination(
             `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(criteriaSearchText).replace(/%20/g,'+')}`,
