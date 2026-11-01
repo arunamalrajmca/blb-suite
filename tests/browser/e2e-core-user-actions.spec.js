@@ -1315,6 +1315,57 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
 });
 
 
+
+test('Facebook resolves repeated references from each fresh plain-text selection', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
+  await page.route('https://www.facebook.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Facebook test</title></head><body></body></html>'
+  }));
+  await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const lri = '\\u2066';
+    const pdi = '\\u2069';
+    const article = document.createElement('div');
+    article.setAttribute('role', 'article');
+    article.innerHTML =
+      '<div data-ad-comet-preview="message">' +
+        '<div dir="auto">' +
+          '<span><span id="fb-samuel-first-book">' + lri + '2 Samuel' + pdi + '</span></span> ' +
+          '<span><span id="fb-samuel-first-chapter">' + lri + '21' + pdi + '</span></span>:' +
+          '<span><span id="fb-samuel-first-range">' + lri + '11-14' + pdi + '</span></span>' +
+          '<span> </span>' +
+          '<span><span id="fb-samuel-second-book">' + lri + '2 Samuel' + pdi + '</span></span> ' +
+          '<span><span id="fb-samuel-second-chapter">' + lri + '21' + pdi + '</span></span>:' +
+          '<span><span id="fb-samuel-second-verse">' + lri + '14' + pdi + '</span></span> ' +
+          '<span>' + lri + 'KJV' + pdi + '</span>' +
+        '</div>' +
+      '</div>';
+    article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(article);
+  });
+
+  const expectedPaths = [
+    ['#fb-samuel-first-book', '/kjv/2sa/21/11-14/'],
+    ['#fb-samuel-second-book', '/kjv/2sa/21/14/'],
+    ['#fb-samuel-second-book', '/kjv/2sa/21/14/']
+  ];
+  for (const [selector, expectedPath] of expectedPaths) {
+    await page.locator(selector).dblclick();
+    const resolved = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.pendingUrl || tab.url);
+        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+      } catch (_) { return false; }
+    });
+    expect(new URL(resolved.pendingUrl || resolved.url).pathname).toBe(expectedPath);
+    await removeTabById(extensionWorker, resolved.id);
+  }
+});
+
 test('Facebook book-name double-click retains Luke 22:26 context', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
   await page.route('https://www.facebook.com/**', route => route.fulfill({
