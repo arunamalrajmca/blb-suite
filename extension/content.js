@@ -2814,7 +2814,18 @@ function handleDoubleClickBlb(event) {
             // occurrence in the post.
             let clickedContextOffset=null;
             try {
-              if (contextNode instanceof Element && physicalTarget instanceof Element && contextNode.contains(physicalTarget)) {
+              // Use the exact token at the physical caret when possible. The
+              // bubbling dblclick target on Facebook may be a broad wrapper;
+              // measuring its prefix can bind a repeated numbered-book suffix
+              // to the wrong occurrence (or fail to match either occurrence).
+              const suffixTarget=[getDoubleClickTargetElement(event),physicalTarget].find(candidate =>
+                candidate instanceof Element &&
+                contextNode instanceof Element &&
+                contextNode.contains(candidate) &&
+                normalizeSelectionText(candidate.textContent||'').normalize('NFKC').toLowerCase()===
+                  normalizeSelectionText(selection).normalize('NFKC').toLowerCase()
+              );
+              if (contextNode instanceof Element && suffixTarget) {
                 const prefixRange=document.createRange();
                 prefixRange.selectNodeContents(contextNode);
                 let pointRange=null;
@@ -2832,7 +2843,7 @@ function handleDoubleClickBlb(event) {
                 if (pointRange && contextNode.contains(pointRange.startContainer)) {
                   prefixRange.setEnd(pointRange.startContainer,pointRange.startOffset);
                 } else {
-                  prefixRange.setEndBefore(physicalTarget);
+                  prefixRange.setEndBefore(suffixTarget);
                 }
                 clickedContextOffset=normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length;
               }
