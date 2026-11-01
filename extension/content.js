@@ -2604,7 +2604,7 @@ function handleDoubleClickBlb(event) {
         // event target when Chromium's caret lookup lands on a neighbouring
         // wrapper at the end of a line. This keeps the final standalone book
         // number (66) from inheriting a stale selection such as 65.
-        const physicalNumericTarget = [eventTarget, caretTarget].find(candidate => {
+        const physicalNumericTarget = [caretTarget, eventTarget].find(candidate => {
           const token = normalizeSelectionText(candidate?.textContent || '').normalize('NFKC');
           return /^\d+$/.test(token);
         });
