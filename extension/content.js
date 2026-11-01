@@ -2867,45 +2867,62 @@ function handleDoubleClickBlb(event) {
                   if (selectedOffset!==null) clickedContextOffsets.push(selectedOffset);
                 }
 
-                // Last resort: an exact suffix element gives a reliable prefix
-                // boundary when neither physical nor native range is usable.
+                // Last resort: derive the suffix position from the exact
+                // physical element. Facebook may wrap the complete numbered
+                // label ("2 Samuel") rather than the selected suffix alone.
+                // Anchor the offset inside that label, after its ordinal, so
+                // repeated references remain distinguishable even when the
+                // native Selection/caret APIs expose no usable Range.
                 if (!clickedContextOffsets.length) {
-                  const suffixTarget=[getDoubleClickTargetElement(event),physicalTarget].find(candidate =>
-                    candidate instanceof Element &&
-                    contextNode.contains(candidate) &&
-                    normalizeSelectionText(candidate.textContent||'').normalize('NFKC').toLowerCase()===
-                      normalizeSelectionText(selection).normalize('NFKC').toLowerCase()
-                  );
-                  if (suffixTarget) {
-                    const prefixRange=document.createRange();
-                    prefixRange.selectNodeContents(contextNode);
-                    prefixRange.setEndBefore(suffixTarget);
-                    clickedContextOffsets.push(normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length);
+                  const physicalCandidates = [
+                    getDoubleClickTargetElement(event),
+                    physicalTarget,
+                    event?.target instanceof Element ? event.target : event?.target?.parentElement,
+                    Number.isFinite(event?.clientX) && Number.isFinite(event?.clientY)
+                      ? document.elementFromPoint(event.clientX, event.clientY)
+                      : null
+                  ];
+                  for (const candidate of physicalCandidates) {
+                    if (!(candidate instanceof Element) || !contextNode.contains(candidate)) continue;
+                    let label = normalizeSelectionText(candidate.textContent || '').normalize('NFKC');
+                    const numberedLabel = label.match(/^([1-3]|I{1,3})\s+(.+)$/i);
+                    if (numberedLabel &&
+                        normalizeDoubleClickToken(numberedLabel[2]).toLowerCase() ===
+                          normalizeDoubleClickToken(selection).toLowerCase()) {
+                      const prefixRange = document.createRange();
+                      prefixRange.selectNodeContents(contextNode);
+                      prefixRange.setEndBefore(candidate);
+                      const contextBase = normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length;
+                      const suffixOffset = normalizeSelectionText(numberedLabel[1] + ' ').normalize('NFKC').length;
+                      clickedContextOffsets.push(contextBase + suffixOffset);
+                      break;
+                    }
+                    if (normalizeDoubleClickToken(label).toLowerCase() ===
+                        normalizeDoubleClickToken(selection).toLowerCase()) {
+                      const prefixRange = document.createRange();
+                      prefixRange.selectNodeContents(contextNode);
+                      prefixRange.setEndBefore(candidate);
+                      clickedContextOffsets.push(normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length);
+                      break;
+                    }
                   }
                 }
               }
             } catch (_) {}
-            // Select the occurrence nearest the physical/native range.
-            // Normalized offsets can differ at bidi and collapsed-whitespace
-            // boundaries, so exact containment alone is too brittle. Distance
-            // still binds the gesture to its local occurrence, not the first
-            // match in document order.
+            // A suffix click must land inside the exact numbered-book label.
+            // Never choose a merely-nearest valid prefix elsewhere in the post:
+            // an invalid "4 Samuel" must not inherit an earlier "2 Samuel".
             let match = null;
             if (suffixMatches.length && clickedContextOffsets.length) {
-              let bestDistance = Infinity;
               for (const candidate of suffixMatches) {
                 const start = candidate.index;
                 const end = start + candidate[0].length;
-                for (const offset of clickedContextOffsets) {
-                  const distance = offset < start ? start - offset : offset > end ? offset - end : 0;
-                  if (distance < bestDistance) {
-                    bestDistance = distance;
-                    match = candidate;
-                  }
+                if (clickedContextOffsets.some(offset => offset >= start && offset <= end)) {
+                  match = candidate;
+                  break;
                 }
               }
             }
-            if (!match && suffixMatches.length === 1) match = suffixMatches[0];
             const prefixNumber=match
               ? (/^[1-3]$/.test(match[1]) ? match[1] : ({I:'1',II:'2',III:'3'}[match[1].toUpperCase()]||''))
               : '';
