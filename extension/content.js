@@ -1557,9 +1557,15 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       } else {
         exactPrefixRange.setEndBefore(exactPhysicalTarget);
       }
-      const exactPrefixText = normalizeSelectionText(
-        domText(exactPrefixRange.cloneContents())
-      ).normalize('NFKC');
+      // Preserve the trailing separator: normalizeSelectionText trims it,
+      // but numbered-book suffix recognition must see the immediate space
+      // between the ordinal (2 / III) and the clicked suffix (Samuel / Jn).
+      const exactPrefixText = domText(exactPrefixRange.cloneContents())
+        .normalize('NFKC')
+        .replace(/[\\u061C\\u200B-\\u200F\\u202A-\\u202E\\u2060\\u2066-\\u2069\\uFEFF]/g, '')
+        .replace(/[\\u00A0\\u2007\\u202F]/g, ' ')
+        .replace(/[\\u2010-\\u2015\\u2212]/g, '-')
+        .replace(/\\s+/g, ' ');
       const exactAdjacentPrefix = exactPrefixText.match(
         /(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\s+$/i
       );
