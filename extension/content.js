@@ -1618,7 +1618,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       } else {
         let compactRange = clickedWordRange;
         if (!compactRange) {
-          const liveSelection = window.getSelection?.();
+          const liveSelection = (event ? null : window.getSelection?.());
           if (liveSelection?.rangeCount && !liveSelection.isCollapsed &&
               normalizeSelectionText(liveSelection.toString()).normalize('NFKC') === compactSelectedToken) {
             compactRange = liveSelection.getRangeAt(0);
@@ -1651,7 +1651,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const clickRange = (clickedWordRange && messageRoot.contains(clickedWordRange.startContainer))
         ? clickedWordRange
         : (() => {
-          const liveSelection = window.getSelection?.();
+          const liveSelection = (event ? null : window.getSelection?.());
           if (!liveSelection?.rangeCount || liveSelection.isCollapsed) return null;
           const liveText = normalizeSelectionText(liveSelection.toString()).normalize('NFKC').toLowerCase();
           const targetText = normalizeSelectionText(clickedWordText || initialNode?.textContent || '').normalize('NFKC').toLowerCase();
@@ -1912,7 +1912,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // Context is positional: the selected browser range must be inside the
     // exact occurrence of the parsed reference. Sharing a paragraph is not
     // enough, so an orphan 16/36 cannot borrow an earlier reference.
-    const sel = window.getSelection?.();
+    const sel = (event ? null : window.getSelection?.());
     const selectedRange = sel?.rangeCount && !sel.isCollapsed ? sel.getRangeAt(0) : null;
 
     const getOffset = (container, offset) => {
@@ -2099,7 +2099,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         ? clickedWordRange
         : null;
       if (!localRange) {
-        const liveSelection = window.getSelection?.();
+        const liveSelection = (event ? null : window.getSelection?.());
         if (liveSelection?.rangeCount && !liveSelection.isCollapsed &&
             normalizeSelectionText(liveSelection.toString()).normalize('NFKC') === selected) {
           const range = liveSelection.getRangeAt(0);
