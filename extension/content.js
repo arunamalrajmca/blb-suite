@@ -2657,9 +2657,9 @@ function handleDoubleClickBlb(event) {
           ...Object.values(NUMBERED_BOOK_SUFFIX_ALIASES || {}).flat(),
           // Include the complete suffix of every numbered canonical book and
           // numbered-book alias (e.g. "Samuel" in "2 Samuel", "John" in "III John").
-          ...BOOKS.map(book => String(book.name || '').match(/^[1-3]\\s+(.+)$/)?.[1]).filter(Boolean),
+          ...BOOKS.map(book => String(book.name || '').match(/^[1-3]\s+(.+)$/)?.[1]).filter(Boolean),
           ...Object.keys(BOOK_ALIASES || {}).map(alias => {
-            const match=String(alias).match(/^[1-3]\\s+(.+)$/);
+            const match=String(alias).match(/^[1-3]\s+(.+)$/);
             return match?.[1] || '';
           }).filter(Boolean)
         ])];
