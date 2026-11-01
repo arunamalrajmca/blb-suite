@@ -1529,7 +1529,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // contains only its suffix ("Samuel"). In that case the clicked element
       // itself is the authoritative book token and its end is the correct
       // boundary for reading the immediately following chapter/verse.
-      const numberedLabel = candidateText.match(/^(?:([1-3])|(I{1,3}))\\s+(.+)$/i);
+      const numberedLabel = candidateText.match(/^(?:([1-3])|(I{1,3}))\s+(.+)$/i);
       if (!numberedLabel) return false;
       const suffix = normalizeDoubleClickToken(numberedLabel[3]);
       return suffix === normalizedSelectedToken && !!resolveBibleBook(candidateText);
