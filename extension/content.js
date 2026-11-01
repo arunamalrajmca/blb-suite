@@ -2818,14 +2818,7 @@ function handleDoubleClickBlb(event) {
               // bubbling dblclick target on Facebook may be a broad wrapper;
               // measuring its prefix can bind a repeated numbered-book suffix
               // to the wrong occurrence (or fail to match either occurrence).
-              const suffixTarget=[getDoubleClickTargetElement(event),physicalTarget].find(candidate =>
-                candidate instanceof Element &&
-                contextNode instanceof Element &&
-                contextNode.contains(candidate) &&
-                normalizeSelectionText(candidate.textContent||'').normalize('NFKC').toLowerCase()===
-                  normalizeSelectionText(selection).normalize('NFKC').toLowerCase()
-              );
-              if (contextNode instanceof Element && suffixTarget) {
+              if (contextNode instanceof Element) {
                 const prefixRange=document.createRange();
                 prefixRange.selectNodeContents(contextNode);
                 let pointRange=null;
@@ -2841,11 +2834,26 @@ function handleDoubleClickBlb(event) {
                   }
                 }
                 if (pointRange && contextNode.contains(pointRange.startContainer)) {
+                  // The event target may wrap the complete numbered book
+                  // ("2 Samuel") while Chromium's selected token is only its
+                  // suffix ("Samuel"). The caret position is authoritative
+                  // and also distinguishes repeated occurrences in one post.
                   prefixRange.setEnd(pointRange.startContainer,pointRange.startOffset);
+                  clickedContextOffset=normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length;
                 } else {
-                  prefixRange.setEndBefore(suffixTarget);
+                  // Fall back to an exact token element only when the browser
+                  // cannot provide a physical caret position.
+                  const suffixTarget=[getDoubleClickTargetElement(event),physicalTarget].find(candidate =>
+                    candidate instanceof Element &&
+                    contextNode.contains(candidate) &&
+                    normalizeSelectionText(candidate.textContent||'').normalize('NFKC').toLowerCase()===
+                      normalizeSelectionText(selection).normalize('NFKC').toLowerCase()
+                  );
+                  if (suffixTarget) {
+                    prefixRange.setEndBefore(suffixTarget);
+                    clickedContextOffset=normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length;
+                  }
                 }
-                clickedContextOffset=normalizeSelectionText(prefixRange.toString()).normalize('NFKC').length;
               }
             } catch (_) {}
             let match=suffixMatches.find(candidate =>
