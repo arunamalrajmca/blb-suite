@@ -11,7 +11,7 @@ module.exports = defineConfig({
   // existing test in each changed browser spec still reports its result.
   maxFailures: 0,
   retries: 0,
-  reporter: [['list'], ['html', { outputFolder: 'playwright-report', open: 'never' }], ['json', { outputFile: 'test-results/results.json' }]],
+  reporter: [['./tests/browser/progress-reporter.js'], ['html', { outputFolder: 'playwright-report', open: 'never' }], ['json', { outputFile: 'test-results/results.json' }]],
   use: {
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
