@@ -1409,3 +1409,76 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
     await removeTabById(extensionWorker, resolved.id);
   }
 });
+
+
+test('Facebook book clicks use only permitted immediate context', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
+  await page.route('https://www.facebook.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Facebook context boundary test</title></head><body></body></html>'
+  }));
+  await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const lri = '\\u2066';
+    const pdi = '\\u2069';
+    const article = document.createElement('div');
+    article.setAttribute('role', 'article');
+    article.innerHTML =
+      '<div data-ad-comet-preview="message"><div dir="auto">' +
+        '<span id="fb-reversed-chapter">' + lri + '22:26' + pdi + '</span> ' +
+        '<span id="fb-reversed-luke">' + lri + 'Luke.' + pdi + '</span>' +
+        '<span> | </span>' +
+        '<span id="fb-prefixed-number">' + lri + '2' + pdi + '</span> ' +
+        '<span id="fb-prefixed-samuel">' + lri + 'Samuel' + pdi + '</span> ' +
+        '<span id="fb-prefixed-chapter">' + lri + '21' + pdi + '</span>:' +
+        '<span id="fb-prefixed-verse">' + lri + '14' + pdi + '</span>' +
+        '<span> | </span>' +
+        '<span id="fb-invalid-number">' + lri + '4' + pdi + '</span> ' +
+        '<span id="fb-invalid-samuel">' + lri + 'Samuel' + pdi + '</span> ' +
+        '<span id="fb-invalid-chapter">' + lri + '21' + pdi + '</span>:' +
+        '<span id="fb-invalid-verse">' + lri + '14' + pdi + '</span>' +
+      '</div></div>';
+    article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(article);
+  });
+
+  // An ordinary book name must not borrow a citation to its left.
+  await page.locator('#fb-reversed-luke').dblclick();
+  await page.waitForTimeout(1200);
+  let biblePaths = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({})).map(tab => {
+      try {
+        const url = new URL(tab.pendingUrl || tab.url);
+        return url.hostname === 'www.blueletterbible.org' ? url.pathname : '';
+      } catch (_) { return ''; }
+    }).filter(Boolean)
+  );
+  expect(biblePaths).not.toContain('/kjv/luk/22/26/');
+
+  // A suffix click may inspect exactly its immediately preceding valid prefix.
+  await page.locator('#fb-prefixed-samuel').dblclick();
+  const prefixed = await waitForTab(extensionWorker, tab => {
+    try {
+      const url = new URL(tab.pendingUrl || tab.url);
+      return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/2sa/21/14/';
+    } catch (_) { return false; }
+  });
+  expect(new URL(prefixed.pendingUrl || prefixed.url).pathname).toBe('/kjv/2sa/21/14/');
+  await removeTabById(extensionWorker, prefixed.id);
+
+  // An invalid prefix must not be accepted as a numbered Bible book.
+  await page.locator('#fb-invalid-samuel').dblclick();
+  await page.waitForTimeout(1200);
+  biblePaths = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({})).map(tab => {
+      try {
+        const url = new URL(tab.pendingUrl || tab.url);
+        return url.hostname === 'www.blueletterbible.org' ? url.pathname : '';
+      } catch (_) { return ''; }
+    }).filter(Boolean)
+  );
+  expect(biblePaths).not.toContain('/kjv/2sa/21/14/');
+});
