@@ -1422,8 +1422,8 @@ test('Facebook book clicks use only permitted immediate context', async ({ page,
   await page.waitForTimeout(1000);
 
   await page.evaluate(() => {
-    const lri = '\\u2066';
-    const pdi = '\\u2069';
+    const lri = '\u2066';
+    const pdi = '\u2069';
     const article = document.createElement('div');
     article.setAttribute('role', 'article');
     article.innerHTML =
