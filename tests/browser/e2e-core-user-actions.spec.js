@@ -1313,3 +1313,43 @@ test('MultiVerse parses reversed disjoint chapter ranges without dropping the se
 
   for (const tab of state) await removeTabById(extensionWorker, tab.id);
 });
+
+
+test('Facebook book-name double-click retains Luke 22:26 context', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const lri = '\\u2066';
+    const pdi = '\\u2069';
+    const article = document.createElement('div');
+    article.setAttribute('role', 'article');
+    article.innerHTML =
+      '<div data-ad-comet-preview="message">' +
+        '<div dir="auto">' +
+          '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
+          '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>:' +
+          '<span><span id="fb-luke-verse">' + lri + '26' + pdi + '</span></span> ' +
+          '<span>' + lri + 'KJV' + pdi + '</span>' +
+        '</div>' +
+      '</div>';
+    article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(article);
+  });
+
+  // The reported Facebook regression is specifically the book-name click:
+  // Luke must inherit chapter 22 and verse 26 from this same citation.
+  for (const selector of ['#fb-luke-book', '#fb-luke-chapter', '#fb-luke-verse']) {
+    await page.locator(selector).dblclick();
+    const resolved = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.pendingUrl || tab.url);
+        return url.hostname === 'www.blueletterbible.org' &&
+          url.pathname === '/kjv/luk/22/26/';
+      } catch (_) { return false; }
+    });
+    expect(new URL(resolved.pendingUrl || resolved.url).pathname).toBe('/kjv/luk/22/26/');
+    await removeTabById(extensionWorker, resolved.id);
+  }
+});
