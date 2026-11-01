@@ -1529,7 +1529,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       normalizeSelectionText(selected).normalize('NFKC')
       ? clickedWordRange
       : null;
-    if ((exactPhysicalTarget || exactPhysicalRange) && !verseCueSelection) {
+    if ((exactPhysicalTarget || exactPhysicalRange) && !verseCueSelection && !/^\\d+$/.test(selected)) {
       // Book-name clicks on rich social feeds must bind to the citation
       // immediately following the exact clicked DOM element. Avoid deriving
       // the book's position by adding normalized prefix lengths: Facebook can
