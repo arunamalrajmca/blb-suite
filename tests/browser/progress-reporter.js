@@ -26,7 +26,6 @@ class ProgressReporter {
     const symbol = passed ? '✓' : failed ? '✘' : status === 'skipped' ? '－' : '•';
     const color = passed ? '\u001b[32m' : failed ? '\u001b[31m' : '\u001b[90m';
     const reset = '\u001b[0m';
-    const title = test.titlePath().filter(Boolean).join(' › ');
     const statusText = status.toUpperCase();
     // The title was already printed when the test started. Keep the result
     // line compact so CI logs do not repeat the same long title twice.
@@ -64,11 +63,20 @@ class ProgressReporter {
   }
 
   onEnd(result) {
-    const passed = result.status === 'passed';
-    const color = passed ? '\u001b[32m' : '\u001b[31m';
+    const hasFailures = this.failed > 0 || result.status !== 'passed';
+    const color = hasFailures ? '\u001b[31m' : '\u001b[32m';
     const reset = '\u001b[0m';
-    console.log(`\n${color}Completed ${this.started}/${this.total} tests — ${result.status.toUpperCase()}${reset}`);
+    const summary = [
+      `${this.passed} passed`,
+      `${this.failed} failed`,
+      `${this.skipped} skipped`,
+      ...(this.other ? [`${this.other} other`] : [])
+    ].join(', ');
+    console.log(`\\n${color}Test summary: ${this.started}/${this.total} completed — ${summary}${reset}`);
+    if (this.started < this.total) {
+      console.log(`Run ended before all tests completed (runner status: ${result.status.toUpperCase()}).`);
+    }
   }
-}
+}}
 
 module.exports = ProgressReporter;
