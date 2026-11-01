@@ -20,7 +20,7 @@ class ProgressReporter {
     const reset = '\u001b[0m';
     const title = test.titlePath().filter(Boolean).join(' › ');
     const statusText = status.toUpperCase();
-    console.log(`${color}${symbol} [${this.started}/${this.total}] ${title} — ${statusText} (${result.duration}ms)${reset}`);
+    console.log(`${color}${symbol} [${this.started}/${this.total}] ${title} — ${statusText} (${(result.duration / 1000).toFixed(1)}s)${reset}`);
 
     if (!failed) {
       return;
