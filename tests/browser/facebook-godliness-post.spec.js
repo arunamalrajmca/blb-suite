@@ -64,3 +64,19 @@ test('Facebook Godliness post: extract references from the supplied paragraph DO
   expect(extracted.some(ref => ref.book === 'ephesians' && ref.chapter === 2 && ref.from === 8 && ref.to === 9) || (extracted.some(ref => ref.book === 'ephesians' && ref.chapter === 2 && ref.from === 8) && extracted.some(ref => ref.book === 'ephesians' && ref.chapter === 2 && ref.from === 9))).toBe(true);
   expect(extracted.some(ref => ref.book === '1 timothy' && ref.chapter === 1 && ref.from === 15 && ref.to === 16)).toBe(true);
 });
+
+test('Facebook shorthand references retain their explicitly named book', async ({ extensionWorker }) => {
+  const cases = [
+    { text: 'Gal. 2:20, 4:6', expected: [['galatians', 2, 20], ['galatians', 4, 6]] },
+    { text: 'Eph. 1:7, 13, 14, 2:8, 9', expected: [['ephesians', 1, 7], ['ephesians', 1, 13], ['ephesians', 1, 14], ['ephesians', 2, 8], ['ephesians', 2, 9]] },
+    { text: '2 Cor. 1:22, 4:7, 10, 11', expected: [['2 corinthians', 1, 22], ['2 corinthians', 4, 7], ['2 corinthians', 4, 10], ['2 corinthians', 4, 11]] },
+    { text: 'Acts 13:42, 18:6, 28:28', expected: [['acts', 13, 42], ['acts', 18, 6], ['acts', 28, 28]] }
+  ];
+  const results = await extensionWorker.evaluate(items => items.map(item => ({
+    text: item.text,
+    refs: extractBibleRefsFromSelectedTextUncached(item.text).map(ref => [ref.book, ref.chapter, ref.from])
+  })), cases);
+  for (let i = 0; i < cases.length; i++) {
+    expect(results[i].refs, cases[i].text).toEqual(cases[i].expected);
+  }
+});
