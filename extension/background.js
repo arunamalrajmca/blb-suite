@@ -3017,8 +3017,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         activateExisting: !!message.tabBehavior.activateExisting
       } : {activeIfNew:true, activateExisting:true};
       const normalizedToken = normalizeSelectedScriptureText(text).normalize('NFKC');
-      const isSingleToken = !!normalizedToken && !/\\s/.test(normalizedToken) &&
-        /^[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*$/u.test(normalizedToken);
+      const isSingleToken = !!normalizedToken && !/\s/.test(normalizedToken) &&
+        /^[\p{L}\p{N}][\p{L}\p{N}.'-]*$/u.test(normalizedToken);
       // Message-based Show on BLB handoffs that do not already carry a
       // validated positional result must resolve while the page's live Range
       // is still available. This keeps test/integration callers on the same
