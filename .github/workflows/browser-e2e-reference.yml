@@ -316,9 +316,53 @@ jobs:
       - browser-e2e-features
     if: ${{ always() }}
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
+      actions: read
       statuses: write
     steps:
+      - name: Wait for the grouped browser E2E workflow
+        id: groups
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATUS_SHA: ${{ github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            echo "result=not_required" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          for attempt in $(seq 1 120); do
+            response="$(curl --fail-with-body --silent --show-error \\
+              -H "Authorization: Bearer $GH_TOKEN" \\
+              -H "Accept: application/vnd.github+json" \\
+              -H "X-GitHub-Api-Version: 2022-11-28" \\
+              "${{ github.api_url }}/repos/${{ github.repository }}/actions/runs?head_sha=$STATUS_SHA&per_page=100")"
+            group_run="$(jq -c --arg sha "$STATUS_SHA" --arg event "$EVENT_NAME" \\
+              '.workflow_runs | map(select(.name == "BLB Suite BROWSER E2E — GROUP A + GROUP B" and .head_sha == $sha and .event == $event)) | sort_by(.created_at) | last // empty' \\
+              <<< "$response")"
+
+            if [[ -n "$group_run" ]]; then
+              group_status="$(jq -r '.status' <<< "$group_run")"
+              if [[ "$group_status" == "completed" ]]; then
+                group_result="$(jq -r '.conclusion // "failure"' <<< "$group_run")"
+                echo "Grouped browser E2E result: $group_result"
+                echo "result=$group_result" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              echo "Grouped browser E2E is $group_status (attempt $attempt/120)."
+            else
+              echo "Waiting for grouped browser E2E workflow to be created (attempt $attempt/120)."
+            fi
+            sleep 20
+          done
+
+          echo "Grouped browser E2E did not complete within 40 minutes."
+          echo "result=timeout" >> "$GITHUB_OUTPUT"
+          exit 1
 
       # One shell predicate determines both the published commit status and
       # the job result, preventing the status and required-check logic drifting.
@@ -337,6 +381,7 @@ jobs:
           VERSE_CONTEXT_RESULT: ${{ needs.verse-context-regression.result }}
           REFERENCE_MATRIX_RESULT: ${{ needs.browser-e2e.result }}
           FEATURES_RESULT: ${{ needs.browser-e2e-features.result }}
+          GROUPS_RESULT: ${{ steps.groups.outputs.result }}
         shell: bash
         run: |
           set -euo pipefail
@@ -347,6 +392,11 @@ jobs:
           if [[ "$CHANGE_RESULT" != "success" ]]; then
             failed=1
             reasons+=("change detection: $CHANGE_RESULT")
+          fi
+
+          if [[ "$EVENT_NAME" != "workflow_dispatch" && "$GROUPS_RESULT" != "success" ]]; then
+            failed=1
+            reasons+=("Group A/B browser E2E was required but was $GROUPS_RESULT")
           fi
 
           reference_expected=false
