@@ -80,3 +80,55 @@ test('Facebook shorthand references retain their explicitly named book', async (
     expect(results[i].refs, cases[i].text).toEqual(cases[i].expected);
   }
 });
+
+test('Facebook Godliness shorthand citations open the clicked chapter and verse', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
+  await page.route('https://www.facebook.com/**', route => route.fulfill({
+    status: 200, contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Facebook shorthand click fixture</title></head><body></body></html>'
+  }));
+  await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    const article = document.createElement('div');
+    article.setAttribute('role', 'article');
+    article.innerHTML = `
+      <div dir="auto">The Mystery of Godliness is that Christ is manifesting Himself through the believers
+        <span id="gal-book">Gal.</span> <span id="gal-c1">2</span>:<span id="gal-v1">20</span>,
+        <span id="gal-c2">4</span>:<span id="gal-v2">6</span>;
+        <span id="eph-book">Eph.</span> <span id="eph-c1">1</span>:<span id="eph-v1">7</span>, 13, 14,
+        <span id="eph-c2">2</span>:<span id="eph-v2">8</span>, <span id="eph-v3">9</span>;
+        <span id="cor-book">2 Cor.</span> <span id="cor-c1">1</span>:<span id="cor-v1">22</span>,
+        <span id="cor-c2">4</span>:<span id="cor-v2">7</span>, 10, 11;
+        <span id="acts-book">Acts</span> <span id="acts-c1">13</span>:<span id="acts-v1">42</span>,
+        <span id="acts-c2">18</span>:<span id="acts-v2">6</span>,
+        <span id="acts-c3">28</span>:<span id="acts-v3">28</span>
+      </div>`;
+    article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(article);
+  });
+
+  const cases = [
+    ['#gal-c2', '/kjv/gal/4/6/'],
+    ['#eph-c2', '/kjv/eph/2/8/'],
+    ['#eph-v3', '/kjv/eph/2/9/'],
+    ['#cor-c2', '/kjv/2co/4/7/'],
+    ['#acts-c3', '/kjv/act/28/28/']
+  ];
+  for (const [selector, expectedPath] of cases) {
+    const baseline = await extensionWorker.evaluate(async () => (await chrome.tabs.query({})).map(tab => tab.id));
+    await page.locator(selector).dblclick();
+    let observed = null;
+    await expect.poll(async () => {
+      const tabs = await extensionWorker.evaluate(async ids => (await chrome.tabs.query({}))
+        .filter(tab => !ids.includes(tab.id))
+        .map(tab => tab.pendingUrl || tab.url || ''), baseline);
+      observed = tabs.map(value => { try { return new URL(value).pathname; } catch (_) { return ''; } })
+        .find(pathname => pathname === expectedPath) || null;
+      return observed;
+    }, { timeout: 10000 }).toBe(expectedPath);
+    const opened = await extensionWorker.evaluate(async ids => (await chrome.tabs.query({}))
+      .filter(tab => !ids.includes(tab.id)).map(tab => tab.id), baseline);
+    for (const id of opened) await extensionWorker.evaluate(tabId => chrome.tabs.remove(tabId).catch(() => {}), id);
+  }
+});
