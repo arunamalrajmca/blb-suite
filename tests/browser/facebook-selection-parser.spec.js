@@ -341,7 +341,7 @@ test.only('Facebook supplied div[dir=auto] DOM opens shorthand references from n
   });
 
   const cases = [
-    { context: 'Gal. 2:20, 4:6', token: '4', expected: '/kjv/gal/4/6/' },
+    { context: 'Eph. 1:7, 13, 14, 2:8, 9', token: '9', expected: '/kjv/eph/2/9/' },\n    { context: 'Gal. 2:20, 4:6', token: '4', expected: '/kjv/gal/4/6/' },
     { context: 'Gal. 2:20, 4:6', token: '6', expected: '/kjv/gal/4/6/' },
     { context: 'Eph. 1:7, 13, 14, 2:8, 9', token: '9', expected: '/kjv/eph/2/9/' },
     { context: '2 Cor. 1:22, 4:7, 10, 11', token: '10', expected: '/kjv/2co/4/10/' },
@@ -380,7 +380,7 @@ test.only('Facebook supplied div[dir=auto] DOM opens shorthand references from n
     } catch (error) {
       const clickDiagnostic = await page.evaluate(() => ({
         event: window.__fbLastDblClick,
-        resolver: document.querySelector('#fb-godliness-exact-dom')?.getAttribute('data-blb-numeric-context-diagnostic') || null,
+        resolver: document.querySelector('#fb-godliness-exact-dom')?.getAttribute('data-blb-numeric-context-diagnostic') || null,\n        numericPre: document.querySelector('#fb-godliness-exact-dom')?.getAttribute('data-blb-numeric-pre-diagnostic') || null,
         internal: document.querySelector('#fb-godliness-exact-dom')?.getAttribute('data-blb-click-internal-diagnostic') || null
       }));
       throw new Error(error.message + '\\nObserved tabs: ' + JSON.stringify(observedTabs) +
