@@ -92,8 +92,8 @@
     
       entries.sort((a,b) => b.name.length - a.name.length);
       for (const entry of entries) {
-        const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
-        const re = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}(?:\\.?\\s+|\\.(?=\\d)\\s*|(?<=[A-Za-z])(?=\\d))(-?\\d+)(?:(?::|\\.)\\s*(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?|\\s+(-?\\d+)(?:\\s*[-–]\\s*(-?\\d+))?)?(?=$|[^A-Za-z0-9])`, 'i');
+        const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\s+');
+        const re = new RegExp(`(?:^|[^A-Za-z0-9])${escaped}(?:\\.?\s+|\\.(?=\\d)\s*|(?<=[A-Za-z])(?=\\d))(-?\\d+)(?:(?::|\\.)\s*(-?\\d+)(?:\s*[-–]\s*(-?\\d+))?|\s+(-?\\d+)(?:\s*[-–]\s*(-?\\d+))?)?(?=$|[^A-Za-z0-9])`, 'i');
         const match = re.exec(source);
         if (!match) continue;
     
@@ -269,8 +269,8 @@
         // button became visible. This makes the action itself use the shared
         // Double-Click positional entry point and avoids stale cached context.
         const normalizedActionToken = normalizeSelectionText(text).normalize('NFKC');
-        const actionContext = !/\\s/.test(normalizedActionToken) &&
-          /^[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*$/u.test(normalizedActionToken)
+        const actionContext = !/\s/.test(normalizedActionToken) &&
+          /^[\p{L}\p{N}][\p{L}\p{N}.'-]*$/u.test(normalizedActionToken)
           ? getContextualBibleReference(text)
           : null;
         const actionContextualReference = actionContext?.url
@@ -651,8 +651,8 @@
           // resolver, even when a previous selection-change pass populated a
           // cache. Cached context remains a fallback, never a bypass.
           const normalizedToken = normalizeSelectionText(selected).normalize('NFKC');
-          const isSingleToken = !!normalizedToken && !/\\s/.test(normalizedToken) &&
-            /^[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*$/u.test(normalizedToken);
+          const isSingleToken = !!normalizedToken && !/\s/.test(normalizedToken) &&
+            /^[\p{L}\p{N}][\p{L}\p{N}.'-]*$/u.test(normalizedToken);
           const positional = isSingleToken ? getContextualBibleReference(selected) : null;
           const resolved = isSingleToken
             ? (positional || verseCueReference)
