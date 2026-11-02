@@ -1476,6 +1476,8 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
         } catch (_) { return false; }
       });
       expect(new URL(opened.pendingUrl || opened.url).pathname, actionLabel).toBe(expectedPath);
+      const actionTrace = await readSelectionDiagnostics();
+      console.log('[Facebook action-to-resolver trace]', JSON.stringify({actionLabel, ...actionTrace}));
       await removeTabById(extensionWorker, opened.id);
       await page.waitForTimeout(500);
     } catch (error) {
