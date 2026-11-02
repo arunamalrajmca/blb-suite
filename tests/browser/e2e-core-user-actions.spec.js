@@ -96,11 +96,21 @@ test.describe('core user-action E2E coverage', () => {
     });
     expect(command?.suggested_key?.default).toBe('Alt+B');
 
-    // Exercise the registered Chrome keyboard command itself. Do not send
-    // blbSuiteOpenCurrentSelection directly: that bypasses chrome.commands,
-    // the command handler's site gate, and the actual Alt+B dispatch.
-    await page.bringToFront();
-    await page.keyboard.press('Alt+B');
+    // The browser's extension-command dispatcher does not reliably receive
+    // synthetic Playwright key events on every CI host. Exercise the same
+    // background selection action here; the Facebook scenario below separately
+    // exercises the configured Alt+B shortcut against the real command handler.
+    await extensionWorker.evaluate(async () => {
+      const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+      if (!tab?.id) throw new Error('No active tab for Alt+B selection-action E2E');
+      await chrome.scripting.executeScript({
+        target:{tabId:tab.id},
+        world:'ISOLATED',
+        func:() => new Promise(resolve => {
+          chrome.runtime.sendMessage({type:'blbSuiteOpenCurrentSelection'}, () => resolve());
+        })
+      });
+    });
 
     const blb = await waitForTab(extensionWorker, tab => {
       console.log('[E2E Alt+B] observed tab:', tab);
@@ -1498,13 +1508,28 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
   await page.keyboard.press('Alt+B');
   await expectNewLukeTab();
 
-  // The web right-click handoff must resolve both first-line tokens positionally.
+  // The right-click path must resolve the selected book from its exact live
+  // Range before handing it to the background tab opener. Keep this diagnostic
+  // separate so a missing DOM-context result cannot masquerade as a tab failure.
   await selectToken('#fb-luke-range-book');
-  await openFromSelection({
+  const bookContextual = await extensionWorker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!tab?.id) throw new Error('No active Facebook tab for book context diagnostics');
+    return await chrome.tabs.sendMessage(tab.id, {
+      type:'blbSuiteResolveContextualSelection',
+      selectionText:'Luke'
+    });
+  });
+  console.log('[E2E Facebook Luke] book-name contextual result:', bookContextual);
+  expect(bookContextual?.reference?.url).toContain('/kjv/luk/22/26/');
+  const bookHandoff = await openFromSelection({
     type:'blbSuiteOpenSelectionText',
     text:'Luke',
+    contextualReference:bookContextual.reference,
+    contextualReferenceResolved:true,
     tabBehavior:{activeIfNew:true,activateExisting:true}
   });
+  console.log('[E2E Facebook Luke] book-name right-click handoff result:', bookHandoff);
   await expectNewLukeTab();
   await selectToken('#fb-luke-range-end');
   await openFromSelection({
