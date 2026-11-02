@@ -325,14 +325,11 @@
         // the single-word fast reject; ordinary unknown words remain rejected.
         const isVerseCue = /^(?:verse|verses|v)$/i.test(text);
         if (!isKjvWord && !isBookName && !isVerseCue) {
-          const position = typeof getSelectionContextPosition === 'function'
-            ? getSelectionContextPosition()
-            : null;
-          const hasAdjacentOrdinalPrefix = !!position?.text &&
-            /(?:^|[^A-Za-z0-9])(?:[1-3]|i{1,3})\s+$/i.test(
-              position.text.slice(0, position.start)
-            );
-          if (hasAdjacentOrdinalPrefix) {
+          // A number can be a valid chapter/range endpoint even when it is not
+          // preceded by a numbered-book ordinal (e.g. "Luke 21-22" followed
+          // by "Luke 22:26"). Always ask the positional resolver first; never
+          // expose the floating action for an unresolved bare number.
+          if (/^\d{1,3}$/.test(normalizeSelectionText(text))) {
             const contextual = getContextualBibleReference(text);
             if (contextual?.url) {
               blbPageButtonContextualReference = contextual;
