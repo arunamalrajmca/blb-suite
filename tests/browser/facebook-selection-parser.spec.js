@@ -341,6 +341,8 @@ test.only('Facebook supplied div[dir=auto] DOM opens shorthand references from n
   });
 
   const cases = [
+    { context: 'Gal. 2:20', token: '2', expected: '/kjv/gal/2/20/' },
+    { context: 'Gal. 2:20', token: '20', expected: '/kjv/gal/2/20/' },
     { context: 'Eph. 1:7, 13, 14, 2:8, 9', token: '9', expected: '/kjv/eph/2/9/' },
     { context: 'Gal. 2:20, 4:6', token: '4', expected: '/kjv/gal/4/6/' },
     { context: 'Gal. 2:20, 4:6', token: '6', expected: '/kjv/gal/4/6/' },
