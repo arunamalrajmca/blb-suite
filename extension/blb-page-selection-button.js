@@ -418,7 +418,6 @@
           // selections were already checked by the shared Double-Click resolver
           // above and must not enter a second interpretation path.
           if (!isSingleToken) contextual = getContextualBibleReference(text);
-          if (!contextual?.url) contextual = getContextualBibleReference(text);
 
           // Numeric selections never fall through to the background text-only
           // parser. A bare number with no exact contextual result is rejected.
