@@ -1654,6 +1654,7 @@ test('single-token selection actions share double-click positional resolution ac
 
   for (const token of tokens) {
     await selectToken(token);
+    await expect(floatingButton, 'Alt+B selection setup for ' + token).toBeVisible({timeout:10000});
     await resetResolverCalls();
     const response = await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
     expect(response?.ok, 'Alt+B command handler for ' + token).toBe(true);
@@ -1663,6 +1664,7 @@ test('single-token selection actions share double-click positional resolution ac
 
   for (const token of tokens) {
     await selectToken(token);
+    await expect(floatingButton, 'Right-click selection setup for ' + token).toBeVisible({timeout:10000});
     await resetResolverCalls();
     const response = await openFromSelection({
       type:'blbSuiteOpenSelectionText',
