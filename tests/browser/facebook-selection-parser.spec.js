@@ -341,13 +341,12 @@ test.only('Facebook supplied div[dir=auto] DOM opens shorthand references from n
   });
 
   const cases = [
-    { context: 'Eph. 1:7, 13, 14, 2:8, 9', token: '9', expected: '/kjv/eph/2/9/' },\n    { context: 'Gal. 2:20, 4:6', token: '4', expected: '/kjv/gal/4/6/' },
-    { context: 'Gal. 2:20, 4:6', token: '6', expected: '/kjv/gal/4/6/' },
     { context: 'Eph. 1:7, 13, 14, 2:8, 9', token: '9', expected: '/kjv/eph/2/9/' },
+    { context: 'Gal. 2:20, 4:6', token: '4', expected: '/kjv/gal/4/6/' },
+    { context: 'Gal. 2:20, 4:6', token: '6', expected: '/kjv/gal/4/6/' },
     { context: '2 Cor. 1:22, 4:7, 10, 11', token: '10', expected: '/kjv/2co/4/10/' },
     { context: 'Acts 13:42, 18:6, 28:28', token: '28', expected: '/kjv/act/28/28/' }
-  ];
-  for (const item of cases) {
+  ];  for (const item of cases) {
     const point = await page.evaluate(({ context, token }) => {
       const root = document.querySelector('#godliness-paragraph');
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
