@@ -5678,6 +5678,23 @@ async function openSharedSelectionAction({
 
   const normalized = normalizeSelectedScriptureText(text);
   const numericOnlySelection = /^\d+\.?$/.test(normalized);
+
+  // A bare number has no standalone Bible-reference meaning. When the live
+  // DOM Range resolver has supplied a validated BLB verse URL, that positional
+  // context must win over the text parser; parsing "22" independently can
+  // otherwise route it to an unrelated default-book verse.
+  const contextualNumericUrl = numericOnlySelection &&
+    typeof contextualReference?.url === 'string' &&
+    /^https:\/\/www\.blueletterbible\.org\/kjv\/[a-z0-9]+\/\d+\/\d+(?:-\d+)?\/?$/i.test(contextualReference.url);
+  if (contextualNumericUrl) {
+    const studyRef = parseBlbKjvUrlToStudyRef(contextualReference.url);
+    await Promise.all([
+      openBlbDestination(contextualReference.url, !!behavior.activeIfNew, !!behavior.activateExisting),
+      studyRef ? recordStudyRefs([studyRef]) : Promise.resolve()
+    ]);
+    return {ok:true, contextual:true, positionalNumeric:true};
+  }
+
   if (numericOnlySelection && !contextualReference?.url) {
     if (!contextualReferenceResolved) {
       const liveContext = await getContextualSelectionReference(tabId, text);
