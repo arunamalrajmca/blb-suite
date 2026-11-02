@@ -1605,6 +1605,30 @@ test('single-token selection actions share double-click positional resolution ac
     });
     return execution?.result || null;
   }, message);
+  const resetResolverCalls = async () => extensionWorker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!tab?.id) throw new Error('No active example.com tab');
+    await chrome.scripting.executeScript({
+      target:{tabId:tab.id}, world:'ISOLATED',
+      func:() => {
+        window.__blbSuiteEnableDoubleClickEquivalentDiagnostics = true;
+        window.__blbSuiteDoubleClickEquivalentCalls = [];
+      }
+    });
+  });
+  const readResolverCalls = async () => extensionWorker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!tab?.id) throw new Error('No active example.com tab');
+    const [execution] = await chrome.scripting.executeScript({
+      target:{tabId:tab.id}, world:'ISOLATED',
+      func:() => window.__blbSuiteDoubleClickEquivalentCalls || []
+    });
+    return execution?.result || [];
+  });
+  const expectSharedResolverInvocation = async token => {
+    const calls = await readResolverCalls();
+    expect(calls, 'shared Double-Click positional resolver invocation for ' + token).toContain(token);
+  };
   const expectLukeTab = async label => {
     const opened = await waitForTab(extensionWorker, tab => {
       try {
@@ -1622,19 +1646,24 @@ test('single-token selection actions share double-click positional resolution ac
   for (const token of tokens) {
     await selectToken(token);
     await expect(floatingButton, 'Floating Show on BLB for ' + token).toBeVisible({timeout:10000});
+    await resetResolverCalls();
     await floatingButton.click();
     await expectLukeTab('floating ' + token);
+    await expectSharedResolverInvocation(token);
   }
 
   for (const token of tokens) {
     await selectToken(token);
+    await resetResolverCalls();
     const response = await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
     expect(response?.ok, 'Alt+B command handler for ' + token).toBe(true);
     await expectLukeTab('Alt+B ' + token);
+    await expectSharedResolverInvocation(token);
   }
 
   for (const token of tokens) {
     await selectToken(token);
+    await resetResolverCalls();
     const response = await openFromSelection({
       type:'blbSuiteOpenSelectionText',
       text:token,
@@ -1642,6 +1671,7 @@ test('single-token selection actions share double-click positional resolution ac
     });
     expect(response?.ok, 'right-click handoff for ' + token).toBe(true);
     await expectLukeTab('right-click ' + token);
+    await expectSharedResolverInvocation(token);
   }
 });
 
