@@ -1108,8 +1108,8 @@ function getDoubleClickEquivalentSelectionContext(selectionText, preferredTarget
   // A double-click gesture selects one token. Apply that same positional
   // interpretation to one-token selections invoked through Show on BLB,
   // right-click, or Alt+B; leave multiword selections on their existing path.
-  if (!selected || /\\s/.test(selected) ||
-      !/^[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*$/u.test(selected)) return null;
+  if (!selected || /\s/.test(selected) ||
+      !/^[\p{L}\p{N}][\p{L}\p{N}.'-]*$/u.test(selected)) return null;
 
   const candidates = [];
   const addCandidate = node => {
