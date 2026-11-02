@@ -1492,8 +1492,19 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         // whitespace-separated references (e.g. "Exodus 1" and
         // "Ezra 1 1"). Keep numeric clicks tied to this exact token offset
         // before considering the standalone-number/book fallback.
-        return resolveBibleReferenceFromContextWindow(normalizedSource, start, end)
-          || resolvePositionalBookCitation(normalizedSource, start, end);
+        const contextualReference = resolveBibleReferenceFromContextWindow(normalizedSource, start, end);
+        const positionalReference = resolvePositionalBookCitation(normalizedSource, start, end);
+        const diagnosticRoot = anchor?.closest?.('[data-blb-test-diagnostics]');
+        if (diagnosticRoot) {
+          diagnosticRoot.setAttribute('data-blb-numeric-pre-diagnostic', JSON.stringify({
+            selected, start, end,
+            matchedToken: normalizedSource.slice(start, end),
+            contextSlice: normalizedSource.slice(Math.max(0, start - 80), end + 80),
+            contextualReference: contextualReference || null,
+            positionalReference: positionalReference || null
+          }));
+        }
+        return contextualReference || positionalReference;
       };
 
       // Prefer the exact physical target element over caret-derived offsets.
