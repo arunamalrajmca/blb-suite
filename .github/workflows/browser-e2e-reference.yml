@@ -327,10 +327,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATUS_SHA: ${{ github.sha }}
           EVENT_NAME: ${{ github.event_name }}
+          FULL_BROWSER_SUITE: ${{ needs.change-detection.outputs.full_browser_suite }}
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+          if [[ "$EVENT_NAME" == "workflow_dispatch" || "$FULL_BROWSER_SUITE" != "true" ]]; then
             echo "result=not_required" >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -394,7 +395,7 @@ jobs:
             reasons+=("change detection: $CHANGE_RESULT")
           fi
 
-          if [[ "$EVENT_NAME" != "workflow_dispatch" && "$GROUPS_RESULT" != "success" ]]; then
+          if [[ "$GROUPS_RESULT" != "success" && "$GROUPS_RESULT" != "not_required" ]]; then
             failed=1
             reasons+=("Group A/B browser E2E was required but was $GROUPS_RESULT")
           fi
