@@ -95,7 +95,7 @@ async function expectSourceCollectorAfterSiteOptIn({ page, extensionStorage, ext
 
   const button = page.locator(`#blb-suite-${site.key}-multiverse`);
   try {
-    await expect(button).toBeVisible({ timeout: 10000 });
+    await expect(button, `Show on BLB for ${selector} (${selectedText}) must be visible`).toBeVisible({ timeout: 10000 });
   } catch (error) {
     // Content scripts run in Chrome's isolated world, so page.evaluate() cannot
     // see their window markers. Inspect that same isolated world via scripting
