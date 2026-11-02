@@ -1626,11 +1626,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // the nearest recognizable content root instead of depending on Facebook's
     // private DOM attributes; this supports articles, Substack posts, and other
     // sites while avoiding a whole-document scan on pages with unrelated refs.
-    const messageRoot = initialNode?.closest?.(
-      '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
-      '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
-      '.entry-content, .article-body, .article-content, .content-body'
-    ) || initialNode?.closest?.('article, main, [role="main"]');
 
     // Resolve the exact physical token against its own DOM position before
     // falling through to broader text parsing. This keeps book-name, verse-cue,
