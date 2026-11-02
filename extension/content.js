@@ -1232,14 +1232,16 @@ function getDoubleClickEquivalentSelectionContext(selectionText, preferredTarget
   };
   addCandidate(preferredTarget);
   const liveSelection = window.getSelection?.();
-  if (liveSelection?.rangeCount && !liveSelection.isCollapsed) {
-    const range = liveSelection.getRangeAt(0);
-    addCandidate(range.startContainer);
-    addCandidate(range.endContainer);
-    addCandidate(range.commonAncestorContainer);
+  let liveRange = null;
+  if (liveSelection?.rangeCount && !liveSelection.isCollapsed &&
+      normalizeSelectionText(liveSelection.toString()).normalize('NFKC') === selected) {
+    liveRange = liveSelection.getRangeAt(0).cloneRange();
+    addCandidate(liveRange.startContainer);
+    addCandidate(liveRange.endContainer);
+    addCandidate(liveRange.commonAncestorContainer);
   }
   for (const target of candidates) {
-    const contextual = getDoubleClickBlockContextReference(selected, target, event);
+    const contextual = getDoubleClickBlockContextReference(selected, target, event, liveRange);
     if (contextual?.url) return contextual;
   }
   return null;
@@ -1393,7 +1395,7 @@ function isBibleVersionCodeToken(value) {
   return /^(?:KJV|NKJV|NIV|NIVUK|ESV|NASB|NASB95|NASB2020|LSB|NLT|CSB|HCSB|RSV|NRSV|NRSVUE|ASV|AMP|AMPC|NET|WEB|YLT|DARBY|BBE|WYC|TLB|MSG|GNT|NIRV|CEV|ISV|LEB|ERV|GW|ICB|NCV|NABRE|NJB|JPS|MEV|KJ21|AKJV|VOICE|PHILLIPS|TPT)$/i.test(token);
 }
 
-function getDoubleClickBlockContextReference(selectionText, target, event = null) {
+function getDoubleClickBlockContextReference(selectionText, target, event = null, selectionRange = null) {
   try {
     // textContent and Range.toString() omit <br> boundaries. Instagram captions
     // use <br> inside a single inline container, so preserve those boundaries
@@ -1728,6 +1730,19 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           numericTarget
         );
         if (exactTargetCitation) return exactTargetCitation;
+      }
+
+      // Selection actions do not have physical click coordinates. Reuse the
+      // browser's live Selection Range as the exact token position instead of
+      // falling through to a text-only parse. This is the same positional
+      // resolver used by Double-Click, but anchored to the selected Range.
+      if (selectionRange &&
+          normalizeSelectionText(selectionRange.toString()).normalize('NFKC') === selected) {
+        const selectionAnchor = selectionRange.startContainer?.nodeType === Node.TEXT_NODE
+          ? selectionRange.startContainer.parentElement
+          : initialNode;
+        const exactSelectionCitation = resolveNumericRange(selectionRange, selectionAnchor);
+        if (exactSelectionCitation) return exactSelectionCitation;
       }
 
       // Use the caret-derived range only when no exact target-element match
