@@ -1598,7 +1598,8 @@ test('single-token selection actions share double-click positional resolution ac
   });
   const expectSharedResolverInvocation = async token => {
     const calls = await readResolverCalls();
-    expect(calls, 'shared Double-Click positional resolver invocation for ' + token).toContain(token);
+    expect(calls, 'each one-token action must invoke the shared Double-Click positional resolver exactly once for ' + token)
+      .toEqual([token]);
   };
   const expectLukeTab = async label => {
     const opened = await waitForTab(extensionWorker, tab => {
