@@ -2892,12 +2892,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blbSuiteOpenCurrentSelection') {
-    if (!(await isSuiteEnabled())) return;
-    chrome.tabs.query({active:true,currentWindow:true}).then(tabs=>{
-      const tab=tabs[0];
-      if (tab?.id) openCurrentSelectionInBlb(tab.id).catch(()=>{});
-    });
-    return;
+    // Use the same guarded handler as the registered Alt+B command. Returning
+    // its result makes the handoff deterministic for callers and regression
+    // tests instead of acknowledging the message before tab creation finishes.
+    try {
+      const result = await handleOpenBibleSelectionCommand();
+      sendResponse(result || {ok:false, reason:'selection-not-opened'});
+    } catch (error) {
+      console.error('KJV Scripture Tools Alt+B message:', error);
+      sendResponse({ok:false, error:String(error)});
+    }
+    return true;
   }
 
   if (message.type === 'blbSuiteOpenSelectionText' || message.type === 'blbSuiteOpenDoubleClickSelectionText') {
@@ -5757,21 +5762,23 @@ async function openSharedSelectionAction({
   return {ok:true};
 }
 
-async function openCurrentSelectionInBlb(tabId) {
+async function openCurrentSelectionInBlb(tabId, tabUrl = '') {
   const text = await getActiveTabSelection(tabId);
-  if (!text) return;
+  if (!text) return {ok:false, reason:'empty-selection'};
 
   // Resolve positional DOM context while the user's live Range is still
   // available. Pass that exact result into the shared action instead of
   // relying on its later text-only fallback for a bare numeric token.
   const contextualReference = await getContextualSelectionReference(tabId, text);
-  return openSharedSelectionAction({
+  const result = await openSharedSelectionAction({
     tabId,
+    tabUrl,
     text,
     contextualReference,
     contextualReferenceResolved:true,
     behavior:{activeIfNew:true, activateExisting:true, altB:true}
   });
+  return {ok:true, ...result};
 }
 
 function hostnameFromTabUrl(url) {
@@ -6056,43 +6063,36 @@ async function clearPageSelectionAfterBlbAction(tabId) {
 }
 
 async function handleOpenBibleSelectionCommand() {
-  if (!(await isSuiteEnabled())) return;
+  if (!(await isSuiteEnabled())) return {ok:false, reason:'disabled'};
   try {
     const tabs = await chrome.tabs.query({active:true,currentWindow:true});
     const tab = tabs[0];
-    if (!tab?.id) return;
+    if (!tab?.id) return {ok:false, reason:'no-active-tab'};
 
     // Alt+B is an entry point for the same Show on BLB feature as the
     // floating button and right-click menu. Enforce both the BLB-site
     // exclusion and the effective per-site setting before reading selection.
     const siteKey = pageSelectionSettingKeyFromTab(tab);
-    if (!(await isPageButtonEnabledForHostname(siteKey, tab.title || ''))) return;
+    if (!(await isPageButtonEnabledForHostname(siteKey, tab.title || ''))) {
+      return {ok:false, reason:'site-disabled'};
+    }
 
     if (siteKey === BLB_HOSTNAME) {
       const selectedText = await getActiveTabSelection(tab.id);
-      if (selectedText) {
-        await openBlbPageSelection(selectedText, {activeIfNew:true, activateExisting:true});
-        await clearPageSelectionAfterBlbAction(tab.id);
-      }
-      return;
+      if (!selectedText) return {ok:false, reason:'empty-selection'};
+      const result = await openBlbPageSelection(selectedText, {activeIfNew:true, activateExisting:true});
+      await clearPageSelectionAfterBlbAction(tab.id);
+      return {ok:true, ...result};
     }
-    const selectedText = await getActiveTabSelection(tab.id);
-    if (!selectedText) return;
-    // Alt+B must use the same DOM-context resolver as the floating button and
-    // right-click. A one-token selection such as "Acts", "v.", or "10" is not
-    // independently meaningful without the adjacent citation in the page.
-    const contextualReference = await getContextualSelectionReference(tab.id, selectedText);
-    await openSharedSelectionAction({
-      tabId: tab.id,
-      tabUrl: tab.url || '',
-      text: selectedText,
-      behavior: {activeIfNew:true, activateExisting:true, altB:true},
-      contextualReference: contextualReference || null,
-      contextualReferenceResolved: true
-    });
-    await clearPageSelectionAfterBlbAction(tab.id);
+
+    // Keep the command and its regression-test message on one execution path.
+    // This also returns only after contextual resolution and tab opening finish.
+    const result = await openCurrentSelectionInBlb(tab.id, tab.url || '');
+    if (result?.ok) await clearPageSelectionAfterBlbAction(tab.id);
+    return result;
   } catch (err) {
     console.error('KJV Scripture Tools Alt+B:', err);
+    return {ok:false, error:String(err)};
   }
 }
 
