@@ -1429,8 +1429,8 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
     article.setAttribute('data-blb-test-diagnostics', 'true');
     article.innerHTML =
       '<div data-ad-comet-preview="message" data-blb-test-diagnostics>' +
-        '<div class="xdj266r x14z9mp" dir="auto" id="fb-luke-chapter-range"><span id="fb-luke-range-book">' + lri + 'Luke' + pdi + '</span> 21-<span id="fb-luke-range-end">' + lri + '22' + pdi + '</span></div>' +
-        '<div class="xdj266r x14z9mp" dir="auto" id="fb-luke-citation">' +
+        '<div class="xdj266r x14z9mp" dir="auto" style="display:contents;text-align:start" id="fb-luke-chapter-range"><span id="fb-luke-range-book">' + lri + 'Luke' + pdi + '</span> 21-<span id="fb-luke-range-end">' + lri + '22' + pdi + '</span></div>' +
+        '<div class="xdj266r x14z9mp" dir="auto" style="display:contents;text-align:start" id="fb-luke-citation">' +
           '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
           '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>:' +
           '<span><span id="fb-luke-verse">' + lri + '26' + pdi + '</span></span> ' +
@@ -1494,17 +1494,26 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
   await page.locator('#fb-luke-chapter').dblclick();
   await expectNewLukeTab();
 
-  // Floating Show on BLB must use the first line's exact range-end context.
-  await selectToken('#fb-luke-range-end');
+  // Floating Show on BLB must resolve both the book and range-end token
+  // from Facebook's dir=auto line even when its computed display is contents.
   const floatingButton = page.locator('#blb-suite-page-selection-button');
+  await selectToken('#fb-luke-range-book');
   await expect(floatingButton).toBeVisible({timeout:10000});
   await floatingButton.click();
-  await expectNewLukeTab();
+  await expectNewLukeTab('floating range book');
+  await selectToken('#fb-luke-range-end');
+  await expect(floatingButton).toBeVisible({timeout:10000});
+  await floatingButton.click();
+  await expectNewLukeTab('floating range end');
 
-  // Alt+B reads only "22", then must recover the same adjacent citation.
+  // The registered command handler must recover the same adjacent citation
+  // for both one-token selections, not just the numeric token.
+  await selectToken('#fb-luke-range-book');
+  await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
+  await expectNewLukeTab('Alt+B range book');
   await selectToken('#fb-luke-range-end');
   await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
-  await expectNewLukeTab();
+  await expectNewLukeTab('Alt+B range end');
 
   // The web right-click handoff must resolve both first-line tokens positionally.
   await selectToken('#fb-luke-range-book');
