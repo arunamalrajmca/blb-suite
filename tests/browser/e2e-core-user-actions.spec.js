@@ -1403,6 +1403,99 @@ test('Facebook resolves repeated references from each fresh plain-text selection
   expect(observedPaths).toEqual(expectedPaths.map(([, path]) => path));
 });
 
+test('Facebook Luke 22:26 context is consistent across selection actions', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    pageSelectionButtonSites: { 'facebook.com': true, 'www.facebook.com': true },
+    doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true }
+  });
+  await page.route('https://www.facebook.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Facebook Luke context test</title></head><body></body></html>'
+  }));
+  await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const lri = '\\u2066';
+    const pdi = '\\u2069';
+    const article = document.createElement('div');
+    article.setAttribute('role', 'article');
+    article.innerHTML =
+      '<div data-ad-comet-preview="message">' +
+        '<div class="xdj266r x14z9mp" dir="auto" id="fb-luke-chapter-range">Luke 21-22</div>' +
+        '<div class="xdj266r x14z9mp" dir="auto" id="fb-luke-citation">' +
+          '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
+          '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>:' +
+          '<span><span id="fb-luke-verse">' + lri + '26' + pdi + '</span></span> ' +
+          '<span>' + lri + 'KJV' + pdi + '</span>' +
+        '</div>' +
+      '</div>';
+    article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(article);
+  });
+
+  const expectedPath = '/kjv/luk/22/26/';
+  const openFromSelection = async (message) => extensionWorker.evaluate(async (payload) => {
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!tab?.id) throw new Error('No active Facebook tab');
+    const [execution] = await chrome.scripting.executeScript({
+      target: {tabId:tab.id},
+      world:'ISOLATED',
+      func: data => new Promise(resolve => chrome.runtime.sendMessage(data, result => resolve(result || null))),
+      args:[payload]
+    });
+    return execution?.result || null;
+  }, message);
+  const expectNewLukeTab = async () => {
+    const opened = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.pendingUrl || tab.url);
+        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+      } catch (_) { return false; }
+    });
+    expect(new URL(opened.pendingUrl || opened.url).pathname).toBe(expectedPath);
+    await removeTabById(extensionWorker, opened.id);
+    await page.waitForTimeout(1300);
+  };
+  const selectChapter = async () => page.locator('#fb-luke-chapter').evaluate(element => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    element.dispatchEvent(new MouseEvent('mouseup', {bubbles:true,cancelable:true,view:window}));
+  });
+
+  // Double-click must use the adjacent verse, not the earlier chapter range.
+  await page.locator('#fb-luke-book').dblclick();
+  await expectNewLukeTab();
+  await page.locator('#fb-luke-chapter').dblclick();
+  await expectNewLukeTab();
+
+  // Floating Show on BLB must preserve the exact selected chapter token context.
+  await selectChapter();
+  const floatingButton = page.locator('#blb-suite-page-selection-button');
+  await expect(floatingButton).toBeVisible({timeout:10000});
+  await floatingButton.click();
+  await expectNewLukeTab();
+
+  // Alt+B reads the selected text first, then must recover its live DOM context.
+  await selectChapter();
+  await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
+  await expectNewLukeTab();
+
+  // The right-click/context-menu handoff uses the same contextual selection resolver.
+  await selectChapter();
+  await openFromSelection({
+    type:'blbSuiteOpenSelectionText',
+    text:'22',
+    tabBehavior:{activeIfNew:true,activateExisting:true}
+  });
+  await expectNewLukeTab();
+});
+
 test('Facebook book-name double-click retains Luke 22:26 context', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
   await page.route('https://www.facebook.com/**', route => route.fulfill({
