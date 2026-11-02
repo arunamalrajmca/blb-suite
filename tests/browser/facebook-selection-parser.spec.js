@@ -295,7 +295,7 @@ test('Facebook shorthand references retain their explicitly named book', async (
   }
 });
 
-test.only('Facebook supplied div[dir=auto] DOM opens shorthand references from numeric clicks', async ({ page, extensionStorage, extensionWorker }) => {
+test('Facebook supplied div[dir=auto] DOM opens shorthand references from numeric clicks', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
   await page.route('https://www.facebook.com/**', route => route.fulfill({
     status: 200, contentType: 'text/html',
@@ -305,8 +305,6 @@ test.only('Facebook supplied div[dir=auto] DOM opens shorthand references from n
   await page.waitForTimeout(1000);
   await page.evaluate(() => {
     const outer = document.createElement('div');
-    outer.id = 'fb-godliness-exact-dom';
-    outer.setAttribute('data-blb-test-diagnostics', 'true');
     outer.className = 'html-div xdj266r x14z9mp xat24cr x1lziwak xexx8yu xyri2b x18d9i69 x1c1uobl';
     outer.innerHTML = '<div class="xdj266r x14z9mp xat24cr x1lziwak x1vvkbs x126k92a"></div>' +
       '<div class="x14z9mp xat24cr x1lziwak x1vvkbs xtlvy1s x126k92a"><div id="godliness-paragraph" dir="auto" style="text-align:start"></div></div>';
@@ -315,31 +313,6 @@ test.only('Facebook supplied div[dir=auto] DOM opens shorthand references from n
     outer.style.cssText = 'max-width:900px;margin:24px auto;padding:16px;background:#fff;color:#111;font:20px/1.6 Arial,sans-serif;';
     document.body.appendChild(outer);
   });
-  await page.evaluate(() => {
-    window.__fbLastDblClick = null;
-    document.addEventListener('dblclick', event => {
-      let caret = null;
-      try {
-        const range = document.caretRangeFromPoint?.(event.clientX, event.clientY);
-        caret = range ? {
-          nodeType: range.startContainer.nodeType,
-          nodeName: range.startContainer.nodeName,
-          offset: range.startOffset,
-          text: range.startContainer.nodeValue || range.startContainer.textContent || ''
-        } : null;
-      } catch (_) {}
-      window.__fbLastDblClick = {
-        targetTag: event.target?.tagName || null,
-        targetId: event.target?.id || null,
-        targetText: (event.target?.textContent || '').slice(0, 100),
-        selected: window.getSelection?.()?.toString() || '',
-        clientX: event.clientX,
-        clientY: event.clientY,
-        caret
-      };
-    }, true);
-  });
-
   const cases = [
     { context: 'Gal. 2:20', token: '2', occurrence: 'first', expected: '/kjv/gal/2/20/' },
     { context: 'Gal. 2:20', token: '20', expected: '/kjv/gal/2/20/' },
@@ -379,15 +352,7 @@ test.only('Facebook supplied div[dir=auto] DOM opens shorthand references from n
         }).find(pathname => pathname === item.expected) || null;
       }, { timeout: 10000 }).toBe(item.expected);
     } catch (error) {
-      const clickDiagnostic = await page.evaluate(() => ({
-        event: window.__fbLastDblClick,
-        resolver: document.querySelector('#fb-godliness-exact-dom')?.getAttribute('data-blb-numeric-context-diagnostic') || null,
-        numericPre: document.querySelector('#fb-godliness-exact-dom')?.getAttribute('data-blb-numeric-pre-diagnostic') || null,
-        internal: document.querySelector('#fb-godliness-exact-dom')?.getAttribute('data-blb-click-internal-diagnostic') || null
-      }));
-      throw new Error(error.message + '\\nObserved tabs: ' + JSON.stringify(observedTabs) +
-        '\\nClick diagnostic: ' + JSON.stringify(clickDiagnostic));
-    }
+      throw new Error(error.message + '\\nObserved tabs: ' + JSON.stringify(observedTabs));
     const blbDestinations = await extensionWorker.evaluate(async () => (await chrome.tabs.query({}))
       .map(tab => tab.pendingUrl || tab.url || '')
       .filter(value => {
