@@ -295,55 +295,62 @@ test('Facebook shorthand references retain their explicitly named book', async (
   }
 });
 
-test('Facebook Godliness shorthand citations open the clicked chapter and verse', async ({ page, extensionStorage, extensionWorker }) => {
+test('Facebook supplied div[dir=auto] DOM opens shorthand references from numeric clicks', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
   await page.route('https://www.facebook.com/**', route => route.fulfill({
     status: 200, contentType: 'text/html',
-    body: '<!doctype html><html><head><title>Facebook shorthand click fixture</title></head><body></body></html>'
+    body: '<!doctype html><html><head><title>Facebook exact DOM fixture</title></head><body></body></html>'
   }));
   await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
   await page.waitForTimeout(1000);
   await page.evaluate(() => {
-    const article = document.createElement('div');
-    article.setAttribute('role', 'article');
-    article.innerHTML = `
-      <div data-ad-comet-preview="message"><div dir="auto">The Mystery of Godliness is that Christ is manifesting Himself through the believers
-        <span id="gal-book">Gal.</span> <span id="gal-c1">2</span>:<span id="gal-v1">20</span>,
-        <span id="gal-c2">4</span>:<span id="gal-v2">6</span>;
-        <span id="eph-book">Eph.</span> <span id="eph-c1">1</span>:<span id="eph-v1">7</span>, 13, 14,
-        <span id="eph-c2">2</span>:<span id="eph-v2">8</span>, <span id="eph-v3">9</span>;
-        <span id="cor-book">2 Cor.</span> <span id="cor-c1">1</span>:<span id="cor-v1">22</span>,
-        <span id="cor-c2">4</span>:<span id="cor-v2">7</span>, 10, 11;
-        <span id="acts-book">Acts</span> <span id="acts-c1">13</span>:<span id="acts-v1">42</span>,
-        <span id="acts-c2">18</span>:<span id="acts-v2">6</span>,
-        <span id="acts-c3">28</span>:<span id="acts-v3">28</span>
-      </div></div>`;
-    article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
-    document.body.appendChild(article);
+    const outer = document.createElement('div');
+    outer.id = 'fb-godliness-exact-dom';
+    outer.className = 'html-div xdj266r x14z9mp xat24cr x1lziwak xexx8yu xyri2b x18d9i69 x1c1uobl';
+    outer.innerHTML = '<div class="xdj266r x14z9mp xat24cr x1lziwak x1vvkbs x126k92a"></div>' +
+      '<div class="x14z9mp xat24cr x1lziwak x1vvkbs xtlvy1s x126k92a"><div id="godliness-paragraph" dir="auto" style="text-align:start"></div></div>';
+    const paragraph = outer.querySelector('#godliness-paragraph');
+    paragraph.textContent = '1 Timothy 3:16 And without controversy great is the mystery of godliness: God was manifest in the flesh [the mystery of godliness is that Christ is manifesting Himself through the believers Gal. 2:20, 4:6; Rom. 5:5, 8:9; 1 Cor. 6:19; 2 Cor. 1:22, 4:7, 10, 11; Eph. 3:16, 17; Phil. 2:13; Col. 1:27; 2 Tim. 1:7] justified in the Spirit [we are declared justified when His Spirit is in us Rom. 3:26], seen of angels [the angels are watching us 1 Cor. 4:9, 1 Cor. 11:10; Eph. 3:10], preached unto the Gentiles [Paul preached Jesus Christ according to the revelation of the mystery Rom. 16:25-27; Acts 13:42, 18:6, 28:28; Rom. 11:11-13; Col. 1:23], believed on in the world [Eph. 1:7, 13, 14, 2:8, 9; Col. 1:6], received up into glory [1 Thess. 4:15-17; 1 Cor. 15:51-53].';
+    outer.style.cssText = 'max-width:900px;margin:24px auto;padding:16px;background:#fff;color:#111;font:20px/1.6 Arial,sans-serif;';
+    document.body.appendChild(outer);
   });
 
   const cases = [
-    ['#gal-c2', '/kjv/gal/4/6/'],
-    ['#eph-c2', '/kjv/eph/2/8/'],
-    ['#eph-v3', '/kjv/eph/2/9/'],
-    ['#cor-c2', '/kjv/2co/4/7/'],
-    ['#acts-c3', '/kjv/act/28/28/']
+    { context: 'Gal. 2:20, 4:6', token: '4', expected: '/kjv/gal/4/6/' },
+    { context: 'Gal. 2:20, 4:6', token: '6', expected: '/kjv/gal/4/6/' },
+    { context: 'Eph. 1:7, 13, 14, 2:8, 9', token: '9', expected: '/kjv/eph/2/9/' },
+    { context: '2 Cor. 1:22, 4:7, 10, 11', token: '10', expected: '/kjv/2co/4/10/' },
+    { context: 'Acts 13:42, 18:6, 28:28', token: '28', expected: '/kjv/act/28/28/' }
   ];
-  for (const [selector, expectedPath] of cases) {
-    await page.locator(selector).dblclick();
-    let observed = null;
+  for (const item of cases) {
+    const point = await page.evaluate(({ context, token }) => {
+      const root = document.querySelector('#godliness-paragraph');
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        const contextStart = node.nodeValue.indexOf(context);
+        if (contextStart < 0) continue;
+        const tokenOffset = context.lastIndexOf(token);
+        const range = document.createRange();
+        range.setStart(node, contextStart + tokenOffset);
+        range.setEnd(node, contextStart + tokenOffset + token.length);
+        const before = range.getBoundingClientRect();
+        window.scrollTo(0, before.top + window.scrollY - window.innerHeight / 2);
+        const rect = range.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      }
+      return null;
+    }, item);
+    expect(point, item.context + ' token ' + item.token).not.toBeNull();
+    await page.mouse.dblclick(point.x, point.y);
     let observedTabs = [];
-    try {
-      await expect.poll(async () => {
-        observedTabs = await extensionWorker.evaluate(async () => (await chrome.tabs.query({}))
-          .map(tab => tab.pendingUrl || tab.url || ''));
-        observed = observedTabs.map(value => { try { return new URL(value).pathname; } catch (_) { return ''; } })
-          .find(pathname => pathname === expectedPath) || null;
-        return observed;
-      }, { timeout: 10000 }).toBe(expectedPath);
-    } catch (error) {
-      throw new Error(error.message + '\\nObserved tabs: ' + JSON.stringify(observedTabs));
-    }
+    await expect.poll(async () => {
+      observedTabs = await extensionWorker.evaluate(async () => (await chrome.tabs.query({}))
+        .map(tab => tab.pendingUrl || tab.url || ''));
+      return observedTabs.map(value => {
+        try { return new URL(value).pathname; } catch (_) { return ''; }
+      }).find(pathname => pathname === item.expected) || null;
+    }, { timeout: 10000 }).toBe(item.expected);
     const opened = await extensionWorker.evaluate(async () => (await chrome.tabs.query({}))
       .filter(tab => {
         try { return new URL(tab.pendingUrl || tab.url || '').hostname === 'www.blueletterbible.org'; }
