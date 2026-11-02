@@ -861,6 +861,14 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
     if (book) addContextualBookForm(alias, book);
   }
   contextualBookForms.sort((a, b) => b.name.length - a.name.length);
+  const explicitBookPattern = contextualBookForms
+    .map(entry => entry.name.replace(/[.*+?^$()|[\\]\\\\]/g, '\\\\  contextualBookForms.sort((a, b) => b.name.length - a.name.length);
+  for (const entry of contextualBookForms) {').replace(/\\s+/g, '\\\\s+'))
+    .join('|');
+  const nextExplicitBookCitationRe = new RegExp(
+    '(?<![A-Za-z0-9])(?:' + explicitBookPattern + ')(?:\\\\s+|\\\\.\\\\s*)\\\\d{1,3}\\\\s*:\\\\s*\\\\d{1,3}',
+    'gi'
+  );
   for (const entry of contextualBookForms) {
     const escaped = entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
     const explicitRefRe = new RegExp(
@@ -873,7 +881,13 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
       let currentChapter = Number(explicitMatch[1]);
       const tailStart = explicitMatch.index + explicitMatch[0].length;
       const semicolonAt = source.indexOf(';', tailStart);
-      const tailEnd = semicolonAt < 0 ? source.length : semicolonAt;
+      nextExplicitBookCitationRe.lastIndex = tailStart;
+      const nextExplicitBookCitation = nextExplicitBookCitationRe.exec(source);
+      const groupEnd = semicolonAt < 0 ? source.length : semicolonAt;
+      const tailEnd = Math.min(
+        groupEnd,
+        nextExplicitBookCitation ? nextExplicitBookCitation.index : source.length
+      );
       const tail = source.slice(tailStart, tailEnd);
       const continuationRe = /,\s*(\d{1,3}(?:\s*:\s*\d{1,3})?(?:\s*[-–—]\s*\d{1,3})?)/g;
       let continuation;
