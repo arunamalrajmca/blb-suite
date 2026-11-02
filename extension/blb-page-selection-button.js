@@ -325,17 +325,18 @@
         // the single-word fast reject; ordinary unknown words remain rejected.
         const isVerseCue = /^(?:verse|verses|v)$/i.test(text);
         if (!isKjvWord && !isBookName && !isVerseCue) {
-          // A number can be a valid chapter/range endpoint even when it is not
-          // preceded by a numbered-book ordinal (e.g. "Luke 21-22" followed
-          // by "Luke 22:26"). Always ask the positional resolver first; never
-          // expose the floating action for an unresolved bare number.
-          if (/^\d{1,3}$/.test(normalizeSelectionText(text))) {
-            const contextual = getContextualBibleReference(text);
-            if (contextual?.url) {
-              blbPageButtonContextualReference = contextual;
-              lastSelectionContextualReference = contextual;
-              lastSelectionContextualText = text;
-            }
+          // A token that is not a standalone KJV word/book may still be a
+          // numbered-book suffix alias (for example, "Th" in "II Th 2:1").
+          // Resolve every unknown single token against its exact live DOM
+          // Range before rejecting it. The contextual resolver only accepts a
+          // token that belongs to a validated positional citation, so ordinary
+          // unknown prose words remain hidden. Bare numbers are also guarded
+          // there and cannot fall through to a default-book text parser.
+          const contextual = getContextualBibleReference(text);
+          if (contextual?.url) {
+            blbPageButtonContextualReference = contextual;
+            lastSelectionContextualReference = contextual;
+            lastSelectionContextualText = text;
           }
           if (!blbPageButtonContextualReference) {
             blbPageButtonSelection = '';
