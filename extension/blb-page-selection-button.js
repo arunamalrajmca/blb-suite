@@ -654,8 +654,9 @@
           const isSingleToken = !!normalizedToken && !/\\s/.test(normalizedToken) &&
             /^[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*$/u.test(normalizedToken);
           const positional = isSingleToken ? getContextualBibleReference(selected) : null;
-          const resolved = positional || cached || verseCueReference ||
-            (!isSingleToken ? getContextualBibleReference(selected) : null);
+          const resolved = isSingleToken
+            ? (positional || verseCueReference)
+            : (cached || verseCueReference || getContextualBibleReference(selected));
           sendResponse(resolved ? {ok:true, reference:resolved} : {ok:true, reference:null});
         } catch (_) { sendResponse({ok:true, reference:null}); }
         return true;
