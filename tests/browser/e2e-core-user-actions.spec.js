@@ -1429,13 +1429,13 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
     article.setAttribute('data-blb-test-diagnostics', 'true');
     article.innerHTML =
       '<div data-ad-comet-preview="message" data-blb-test-diagnostics>' +
-        '<div class="xdj266r x14z9mp" dir="auto" style="display:contents;text-align:start" id="fb-luke-chapter-range"><span id="fb-luke-range-book">' + lri + 'Luke' + pdi + '</span> 21-<span id="fb-luke-range-end">' + lri + '22' + pdi + '</span></div>' +
-        '<div class="xdj266r x14z9mp" dir="auto" style="display:contents;text-align:start" id="fb-luke-citation">' +
+        '<div class="x1-wrapper"><div class="xdj266r x14z9mp" dir="auto" style="display:contents;text-align:start" id="fb-luke-chapter-range"><span id="fb-luke-range-book">' + lri + 'Luke' + pdi + '</span> 21-<span id="fb-luke-range-end">' + lri + '22' + pdi + '</span></div></div>' +
+        '<div class="x2-wrapper"><div class="xdj266r x14z9mp" dir="auto" style="display:contents;text-align:start" id="fb-luke-citation">' +
           '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
           '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>:' +
           '<span><span id="fb-luke-verse">' + lri + '26' + pdi + '</span></span> ' +
           '<span>' + lri + 'KJV' + pdi + '</span>' +
-        '</div>' +
+        '</div></div>' +
       '</div>';
     article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
     document.body.appendChild(article);
