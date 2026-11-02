@@ -1327,7 +1327,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // line such as "Luke 21-22" cannot influence "Luke 22:26 KJV".
     const selectionContextBlock = element => {
       const candidate = element instanceof Element ? element : element?.parentElement;
-      const facebookLine = /(^|\\.)facebook\\.com$/i.test(String(location.hostname || ''))
+      const facebookLine = /(^|\.)facebook\.com$/i.test(String(location.hostname || ''))
         ? candidate?.closest?.('[dir="auto"]')
         : null;
       if (facebookLine instanceof Element && messageRoot instanceof Element &&
