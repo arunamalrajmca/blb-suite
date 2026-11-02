@@ -1313,6 +1313,63 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       selected = selected.slice(0, -1);
     }
     const initialNode = target instanceof Element ? target : (target?.parentElement || null);
+    const messageRoot = initialNode?.closest?.(
+      '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
+      '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
+      '.entry-content, .article-body, .article-content, .content-body'
+    ) || initialNode?.closest?.('article, main, [role="main"]');
+    // Facebook can put a chapter range on one line and the actual verse
+    // citation on the next line (for example, "Luke 21-22" followed by
+    // "Luke 22:26 KJV"). A click on the first line's book name or range-end
+    // number belongs to that immediately following, same-book citation.
+    // Keep this deliberately narrow: only the range endpoint may inherit the
+    // next sibling's explicit citation, and only when its book/chapter match.
+    const resolveFollowingRepeatedBookCitation = () => {
+      if (!(messageRoot instanceof Element) || !(initialNode instanceof Element)) return null;
+      const localBlock = nearestSemanticBlock(initialNode);
+      if (!(localBlock instanceof Element) || localBlock === messageRoot ||
+          !messageRoot.contains(localBlock)) return null;
+      const localText = normalizeSelectionText(domText(localBlock)).normalize('NFKC')
+        .replace(/[\u2010-\u2015\u2212]/g, '-').trim();
+      const rangeMatch = localText.match(/^(.+?)\s+(\d{1,3})\s*-\s*(\d{1,3})$/);
+      if (!rangeMatch) return null;
+      const rangeBook = resolveBibleBook(rangeMatch[1]);
+      if (!rangeBook) return null;
+      const endChapter = Number(rangeMatch[3]);
+      const selectedBook = resolveBibleBook(selected);
+      const isBookClick = !!selectedBook && selectedBook.name === rangeBook.name;
+      const isRangeEndClick = /^\d{1,3}$/.test(selected) && Number(selected) === endChapter;
+      if (!isBookClick && !isRangeEndClick) return null;
+
+      let nextBlock = localBlock.nextElementSibling;
+      while (nextBlock && !normalizeSelectionText(domText(nextBlock)).trim()) {
+        nextBlock = nextBlock.nextElementSibling;
+      }
+      if (!(nextBlock instanceof Element) || !messageRoot.contains(nextBlock)) return null;
+      const nextText = normalizeSelectionText(domText(nextBlock)).normalize('NFKC')
+        .replace(/[\u2010-\u2015\u2212]/g, '-');
+      const followingRefs = resolveBibleReferenceText(nextText);
+      for (const reference of followingRefs) {
+        const followingBook = resolveBibleBook(reference.book);
+        if (!followingBook || followingBook.name !== rangeBook.name ||
+            Number(reference.chapter) !== endChapter || reference.from == null) continue;
+        const resolved = resolveBibleReference(
+          rangeBook.name, endChapter, Number(reference.from),
+          reference.to == null ? Number(reference.from) : Number(reference.to)
+        );
+        if (resolved) return {
+          book: resolved.book,
+          chapter: resolved.chapter,
+          from: resolved.from,
+          to: resolved.to,
+          url: resolved.url
+        };
+      }
+      return null;
+    };
+    const followingRepeatedBookCitation = resolveFollowingRepeatedBookCitation();
+    if (followingRepeatedBookCitation) return followingRepeatedBookCitation;
+
     const hasExplicitBookLabel = value => {
       const labels = [
         ...(BOOKS || []).flatMap(book => [book.name, book.urlKey]),
@@ -1569,11 +1626,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // the nearest recognizable content root instead of depending on Facebook's
     // private DOM attributes; this supports articles, Substack posts, and other
     // sites while avoiding a whole-document scan on pages with unrelated refs.
-    const messageRoot = initialNode?.closest?.(
-      '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
-      '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
-      '.entry-content, .article-body, .article-content, .content-body'
-    ) || initialNode?.closest?.('article, main, [role="main"]');
 
     // Resolve the exact physical token against its own DOM position before
     // falling through to broader text parsing. This keeps book-name, verse-cue,

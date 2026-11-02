@@ -829,7 +829,7 @@ test.describe('core user-visible E2E', () => {
         if (action === 'Show on BLB') {
           const button = page.locator('#blb-suite-page-selection-button');
           if (expectedPath) {
-            await expect(button).toBeVisible({ timeout: 10000 });
+            await expect(button, `Show on BLB for ${selector} (${selectedText}) must be visible`).toBeVisible({ timeout: 10000 });
             await button.click();
           } else {
             await expect(button).toBeHidden({ timeout: 10000 });

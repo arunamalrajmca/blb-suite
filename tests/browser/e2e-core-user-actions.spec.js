@@ -1403,6 +1403,113 @@ test('Facebook resolves repeated references from each fresh plain-text selection
   expect(observedPaths).toEqual(expectedPaths.map(([, path]) => path));
 });
 
+test('Facebook Luke 22:26 context is consistent across selection actions', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    pageSelectionButtonSites: { 'facebook.com': true, 'www.facebook.com': true },
+    doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true }
+  });
+  await page.route('https://www.facebook.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Facebook Luke context test</title></head><body></body></html>'
+  }));
+  await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+
+  await page.evaluate(() => {
+    const lri = '\u2066';
+    const pdi = '\u2069';
+    const article = document.createElement('div');
+    article.setAttribute('role', 'article');
+    article.innerHTML =
+      '<div data-ad-comet-preview="message">' +
+        '<div class="xdj266r x14z9mp" dir="auto" id="fb-luke-chapter-range"><span id="fb-luke-range-book">' + lri + 'Luke' + pdi + '</span> 21-<span id="fb-luke-range-end">' + lri + '22' + pdi + '</span></div>' +
+        '<div class="xdj266r x14z9mp" dir="auto" id="fb-luke-citation">' +
+          '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
+          '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>:' +
+          '<span><span id="fb-luke-verse">' + lri + '26' + pdi + '</span></span> ' +
+          '<span>' + lri + 'KJV' + pdi + '</span>' +
+        '</div>' +
+      '</div>';
+    article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(article);
+  });
+
+  const expectedPath = '/kjv/luk/22/26/';
+  const openFromSelection = async (message) => extensionWorker.evaluate(async (payload) => {
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!tab?.id) throw new Error('No active Facebook tab');
+    const [execution] = await chrome.scripting.executeScript({
+      target: {tabId:tab.id},
+      world:'ISOLATED',
+      func: data => new Promise(resolve => chrome.runtime.sendMessage(data, result => resolve(result || null))),
+      args:[payload]
+    });
+    return execution?.result || null;
+  }, message);
+  const expectNewLukeTab = async () => {
+    const opened = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.pendingUrl || tab.url);
+        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+      } catch (_) { return false; }
+    });
+    expect(new URL(opened.pendingUrl || opened.url).pathname).toBe(expectedPath);
+    await removeTabById(extensionWorker, opened.id);
+    await page.waitForTimeout(1300);
+  };
+  const selectToken = async selector => page.locator(selector).evaluate(element => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    element.dispatchEvent(new MouseEvent('mouseup', {bubbles:true,cancelable:true,view:window}));
+  });
+
+  // Both the book name and range-end number on the first line must inherit
+  // the matching explicit verse citation on the immediately following line.
+  await page.locator('#fb-luke-range-book').dblclick();
+  await expectNewLukeTab();
+  await page.locator('#fb-luke-range-end').dblclick();
+  await expectNewLukeTab();
+
+  // The actual book/chapter/verse tokens on the second line remain exact.
+  await page.locator('#fb-luke-book').dblclick();
+  await expectNewLukeTab();
+  await page.locator('#fb-luke-chapter').dblclick();
+  await expectNewLukeTab();
+
+  // Floating Show on BLB must use the first line's exact range-end context.
+  await selectToken('#fb-luke-range-end');
+  const floatingButton = page.locator('#blb-suite-page-selection-button');
+  await expect(floatingButton).toBeVisible({timeout:10000});
+  await floatingButton.click();
+  await expectNewLukeTab();
+
+  // Alt+B reads only "22", then must recover the same adjacent citation.
+  await selectToken('#fb-luke-range-end');
+  await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
+  await expectNewLukeTab();
+
+  // The web right-click handoff must resolve both first-line tokens positionally.
+  await selectToken('#fb-luke-range-book');
+  await openFromSelection({
+    type:'blbSuiteOpenSelectionText',
+    text:'Luke',
+    tabBehavior:{activeIfNew:true,activateExisting:true}
+  });
+  await expectNewLukeTab();
+  await selectToken('#fb-luke-range-end');
+  await openFromSelection({
+    type:'blbSuiteOpenSelectionText',
+    text:'22',
+    tabBehavior:{activeIfNew:true,activateExisting:true}
+  });
+  await expectNewLukeTab();
+});
+
 test('Facebook book-name double-click retains Luke 22:26 context', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
   await page.route('https://www.facebook.com/**', route => route.fulfill({
@@ -1419,8 +1526,9 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
     const article = document.createElement('div');
     article.setAttribute('role', 'article');
     article.innerHTML =
-      '<div data-ad-comet-preview="message">' +
-        '<div dir="auto">' +
+      '<div data-ad-comet-preview="message" data-blb-test-diagnostics>' +
+        '<div dir="auto" id="fb-luke-chapter-range">Luke 21-22</div>' +
+        '<div dir="auto" id="fb-luke-citation">' +
           '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
           '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>:' +
           '<span><span id="fb-luke-verse">' + lri + '26' + pdi + '</span></span> ' +
@@ -1443,6 +1551,17 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
       } catch (_) { return false; }
     });
     expect(new URL(resolved.pendingUrl || resolved.url).pathname).toBe('/kjv/luk/22/26/');
+    const reconstruction = await page.evaluate(() => ({
+      selectedText: window.getSelection()?.toString() || '',
+      messageText: document.querySelector('[data-ad-comet-preview="message"]')?.innerText || '',
+      doubleClickDiagnostic: document.querySelector('[data-blb-test-diagnostics]')?.getAttribute('data-blb-double-click-diagnostic') || ''
+    }));
+    console.log('[Facebook Luke 22:26 reconstruction]', JSON.stringify({ selector, ...reconstruction }));
+    if (selector === '#fb-luke-book') {
+      const diagnostic = JSON.parse(reconstruction.doubleClickDiagnostic);
+      expect(diagnostic.clickedBook).toBe("luke");
+      expect(diagnostic.followingText).toBe("22:26 KJV");
+    }
     await removeTabById(extensionWorker, resolved.id);
   }
 });
