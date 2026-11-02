@@ -676,7 +676,27 @@ function getSelectionContextPosition() {
     const prefix = before ? before + ' ' : '';
     const suffix = after ? ' ' + after : '';
     const start = prefix.length;
-    return { text: prefix + selected + suffix, start, end: start + selected.length };
+    const result = { text: prefix + selected + suffix, start, end: start + selected.length };
+    // Opt-in browser-E2E diagnostics capture the exact Range reconstruction
+    // used by contextual actions. Disabled during normal extension use.
+    try {
+      if (window.__blbSuiteEnableSelectionDiagnostics === true) {
+        window.__blbSuiteSelectionContextDiagnostic = {
+          rawSelection: sel.toString(),
+          normalizedSelection: selected,
+          contextText: result.text,
+          start: result.start,
+          end: result.end,
+          selectedSlice: result.text.slice(result.start, result.end),
+          rangeStartNode: range.startContainer?.nodeValue || range.startContainer?.nodeName || '',
+          rangeStartOffset: range.startOffset,
+          rangeEndNode: range.endContainer?.nodeValue || range.endContainer?.nodeName || '',
+          rangeEndOffset: range.endOffset,
+          rangeText: rangeText(range)
+        };
+      }
+    } catch (_) {}
+    return result;
   } catch (_) { return null; }
 }
 
