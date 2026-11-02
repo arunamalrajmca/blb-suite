@@ -1407,7 +1407,7 @@ test('Facebook resolves repeated references from each fresh plain-text selection
   expect(observedPaths).toEqual(expectedPaths.map(([, path]) => path));
 });
 
-test('Facebook Luke 22:26 context is consistent across selection actions', async ({ page, extensionStorage, extensionWorker }) => {
+test('Facebook Luke 22:26 resolves only within its own dir-auto line across selection actions', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({
     masterEnabled: true,
     pageSelectionButtonSites: { 'facebook.com': true, 'www.facebook.com': true },
@@ -1422,105 +1422,230 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
   await page.waitForTimeout(1000);
 
   await page.evaluate(() => {
-    const lri = '\u2066';
-    const pdi = '\u2069';
+    const lri = '\\u2066';
+    const pdi = '\\u2069';
     const article = document.createElement('div');
     article.setAttribute('role', 'article');
-    article.setAttribute('data-blb-test-diagnostics', 'true');
     article.innerHTML =
-      '<div data-ad-comet-preview="message" data-blb-test-diagnostics>' +
-        '<div class="xdj266r x14z9mp" dir="auto" id="fb-luke-chapter-range"><span id="fb-luke-range-book">' + lri + 'Luke' + pdi + '</span> 21-<span id="fb-luke-range-end">' + lri + '22' + pdi + '</span></div>' +
-        '<div class="xdj266r x14z9mp" dir="auto" id="fb-luke-citation">' +
-          '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
-          '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>:' +
-          '<span><span id="fb-luke-verse">' + lri + '26' + pdi + '</span></span> ' +
-          '<span>' + lri + 'KJV' + pdi + '</span>' +
-        '</div>' +
+      '<div data-ad-comet-preview="message">' +
+        '<div dir="auto" id="fb-luke-chapter-range">Luke 21-22</div>' +
+        '<div dir="auto" id="fb-luke-citation">Luke 22:26 KJV</div>' +
       '</div>';
     article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
     document.body.appendChild(article);
   });
 
   const expectedPath = '/kjv/luk/22/26/';
-  const openFromSelection = async (message) => extensionWorker.evaluate(async (payload) => {
+  const openFromSelection = async message => extensionWorker.evaluate(async payload => {
     const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
     if (!tab?.id) throw new Error('No active Facebook tab');
     const [execution] = await chrome.scripting.executeScript({
-      target: {tabId:tab.id},
-      world:'ISOLATED',
-      func: data => new Promise(resolve => chrome.runtime.sendMessage(data, result => resolve(result || null))),
+      target:{tabId:tab.id}, world:'ISOLATED',
+      func:data => new Promise(resolve => chrome.runtime.sendMessage(data, result => resolve(result || null))),
       args:[payload]
     });
     return execution?.result || null;
   }, message);
-  const expectNewLukeTab = async (actionLabel = 'selection action') => {
+  const expectNewLukeTab = async actionLabel => {
     try {
+      const opened = await waitForTab(extensionWorker, tab => {
+        try {
+          const url = new URL(tab.pendingUrl || tab.url);
+          return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+        } catch (_) { return false; }
+      });
+      expect(new URL(opened.pendingUrl || opened.url).pathname, actionLabel).toBe(expectedPath);
+      await removeTabById(extensionWorker, opened.id);
+      await page.waitForTimeout(500);
+    } catch (error) {
+      const diagnostics = await page.locator('[role="article"]').evaluateAll(nodes =>
+        nodes.map(node => ({text:node.innerText, html:node.innerHTML}))
+      );
+      console.error('[Luke 22:26 line-scope diagnostics]', JSON.stringify({actionLabel, diagnostics}));
+      throw error;
+    }
+  };
+  const selectToken = async (selector, token, eventType = 'mouseup') => page.locator(selector).evaluate((element, payload) => {
+    const { value, eventType } = payload;
+    const textNode = element.firstChild;
+    if (!textNode || textNode.nodeType !== Node.TEXT_NODE) throw new Error('Expected one plain text node');
+    const start = textNode.nodeValue.indexOf(value);
+    if (start < 0) throw new Error('Token not found in Facebook text node: ' + value);
+    const range = document.createRange();
+    range.setStart(textNode, start);
+    range.setEnd(textNode, start + value.length);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    element.dispatchEvent(new MouseEvent(eventType, {bubbles:true,cancelable:true,view:window,detail:eventType === 'dblclick' ? 2 : 1}));
+  }, { value: token, eventType });
+
+  // Use real browser mouse input for the baseline. Dispatching a synthetic
+  // dblclick after manually installing a Range does not reproduce the browser's
+  // native word-selection behavior.
+  const doubleClickToken = async token => {
+    const point = await page.locator('#fb-luke-citation').evaluate((element, value) => {
+      const textNode = element.firstChild;
+      if (!textNode || textNode.nodeType !== Node.TEXT_NODE) throw new Error('Expected one plain text node');
+      const start = textNode.nodeValue.indexOf(value);
+      if (start < 0) throw new Error('Token not found in Facebook text node: ' + value);
+      const range = document.createRange();
+      range.setStart(textNode, start);
+      range.setEnd(textNode, start + value.length);
+      const rect = range.getBoundingClientRect();
+      if (!rect.width || !rect.height) throw new Error('Token has no visible browser selection rectangle: ' + value);
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }, token);
+    await page.mouse.dblclick(point.x, point.y);
+  };
+
+  // Floating Show on BLB must use only the selected token's second line.
+  const floatingButton = page.locator('#blb-suite-page-selection-button');
+  for (const [selector,label] of [
+    ['Luke','floating Luke'],
+    ['22','floating 22']
+  ]) {
+    await selectToken('#fb-luke-citation', selector);
+    await expect(floatingButton).toBeVisible({timeout:10000});
+    await floatingButton.click();
+    await expectNewLukeTab(label);
+  }
+
+  // Exercise the registered Alt+B command handler for the same second-line tokens.
+  for (const [selector,text,label] of [
+    ['Luke','Luke','Alt+B Luke'],
+    ['22','22','Alt+B 22']
+  ]) {
+    await selectToken('#fb-luke-citation', selector);
+    await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
+    await expectNewLukeTab(label);
+  }
+
+  // Right-click handoff also receives only the selected second-line token.
+  for (const [selector,text,label] of [
+    ['Luke','Luke','right-click Luke'],
+    ['22','22','right-click 22']
+  ]) {
+    await selectToken('#fb-luke-citation', selector);
+    await openFromSelection({
+      type:'blbSuiteOpenSelectionText',
+      text,
+      tabBehavior:{activeIfNew:true,activateExisting:true}
+    });
+    await expectNewLukeTab(label);
+  }
+});
+test('single-token selection actions share double-click positional resolution across sites', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    pageSelectionButtonSites: { 'example.com': true }
+  });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+  await page.evaluate(() => {
+    const article = document.createElement('article');
+    article.innerHTML = '<p id="blb-global-token-context">Luke 22:26 KJV</p>';
+    article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(article);
+  });
+
+  const expectedPath = '/kjv/luk/22/26/';
+  const selectToken = async token => page.locator('#blb-global-token-context').evaluate((element, value) => {
+    const textNode = element.firstChild;
+    if (!textNode || textNode.nodeType !== Node.TEXT_NODE) throw new Error('Expected one plain text node');
+    const start = textNode.nodeValue.indexOf(value);
+    if (start < 0) throw new Error('Token not found: ' + value);
+    const range = document.createRange();
+    range.setStart(textNode, start);
+    range.setEnd(textNode, start + value.length);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    element.dispatchEvent(new MouseEvent('mouseup', {bubbles:true,cancelable:true,view:window}));
+  }, token);
+  const openFromSelection = async message => extensionWorker.evaluate(async payload => {
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!tab?.id) throw new Error('No active example.com tab');
+    const [execution] = await chrome.scripting.executeScript({
+      target:{tabId:tab.id}, world:'ISOLATED',
+      func:data => new Promise((resolve, reject) => chrome.runtime.sendMessage(data, response => {
+        if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+        resolve(response || null);
+      })),
+      args:[payload]
+    });
+    return execution?.result || null;
+  }, message);
+  const resetResolverCalls = async () => extensionWorker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!tab?.id) throw new Error('No active example.com tab');
+    await chrome.scripting.executeScript({
+      target:{tabId:tab.id}, world:'ISOLATED',
+      func:() => {
+        window.__blbSuiteEnableDoubleClickEquivalentDiagnostics = true;
+        window.__blbSuiteDoubleClickEquivalentCalls = [];
+      }
+    });
+  });
+  const readResolverCalls = async () => extensionWorker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!tab?.id) throw new Error('No active example.com tab');
+    const [execution] = await chrome.scripting.executeScript({
+      target:{tabId:tab.id}, world:'ISOLATED',
+      func:() => window.__blbSuiteDoubleClickEquivalentCalls || []
+    });
+    return execution?.result || [];
+  });
+  const expectSharedResolverInvocation = async token => {
+    const calls = await readResolverCalls();
+    expect(calls, 'shared Double-Click positional resolver invocation for ' + token).toContain(token);
+  };
+  const expectLukeTab = async label => {
     const opened = await waitForTab(extensionWorker, tab => {
       try {
         const url = new URL(tab.pendingUrl || tab.url);
         return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
       } catch (_) { return false; }
     });
-    expect(new URL(opened.pendingUrl || opened.url).pathname).toBe(expectedPath);
+    expect(new URL(opened.pendingUrl || opened.url).pathname, label).toBe(expectedPath);
     await removeTabById(extensionWorker, opened.id);
-    await page.waitForTimeout(1300);
-    } catch (error) {
-      const diagnostics = await page.locator('[data-blb-test-diagnostics]').evaluateAll(nodes =>
-        nodes.map(node => ({text:node.innerText, diagnostic:node.getAttribute('data-blb-double-click-diagnostic')}))
-      );
-      console.error('[Luke 22:26 failed action diagnostics]', JSON.stringify({actionLabel, diagnostics}));
-      throw error;
-    }
+    await page.waitForTimeout(300);
   };
-  const selectToken = async selector => page.locator(selector).evaluate(element => {
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    const selection = window.getSelection();
-    selection.removeAllRanges();
-    selection.addRange(range);
-    element.dispatchEvent(new MouseEvent('mouseup', {bubbles:true,cancelable:true,view:window}));
-  });
 
-  // Both the book name and range-end number on the first line must inherit
-  // the matching explicit verse citation on the immediately following line.
-  await page.locator('#fb-luke-range-book').dblclick();
-  await expectNewLukeTab('range book double-click');
-  await page.locator('#fb-luke-range-end').dblclick();
-  await expectNewLukeTab('range end double-click');
-
-  // The actual book/chapter/verse tokens on the second line remain exact.
-  await page.locator('#fb-luke-book').dblclick();
-  await expectNewLukeTab();
-  await page.locator('#fb-luke-chapter').dblclick();
-  await expectNewLukeTab();
-
-  // Floating Show on BLB must use the first line's exact range-end context.
-  await selectToken('#fb-luke-range-end');
+  const tokens = ['Luke','22','26','KJV'];
   const floatingButton = page.locator('#blb-suite-page-selection-button');
-  await expect(floatingButton).toBeVisible({timeout:10000});
-  await floatingButton.click();
-  await expectNewLukeTab();
+  for (const token of tokens) {
+    await selectToken(token);
+    await expect(floatingButton, 'Floating Show on BLB for ' + token).toBeVisible({timeout:10000});
+    await resetResolverCalls();
+    await floatingButton.click();
+    await expectLukeTab('floating ' + token);
+    await expectSharedResolverInvocation(token);
+  }
 
-  // Alt+B reads only "22", then must recover the same adjacent citation.
-  await selectToken('#fb-luke-range-end');
-  await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
-  await expectNewLukeTab();
+  for (const token of tokens) {
+    await selectToken(token);
+    await expect(floatingButton, 'Alt+B selection setup for ' + token).toBeVisible({timeout:10000});
+    await resetResolverCalls();
+    const response = await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
+    expect(response?.ok, 'Alt+B command handler for ' + token).toBe(true);
+    await expectLukeTab('Alt+B ' + token);
+    await expectSharedResolverInvocation(token);
+  }
 
-  // The web right-click handoff must resolve both first-line tokens positionally.
-  await selectToken('#fb-luke-range-book');
-  await openFromSelection({
-    type:'blbSuiteOpenSelectionText',
-    text:'Luke',
-    tabBehavior:{activeIfNew:true,activateExisting:true}
-  });
-  await expectNewLukeTab();
-  await selectToken('#fb-luke-range-end');
-  await openFromSelection({
-    type:'blbSuiteOpenSelectionText',
-    text:'22',
-    tabBehavior:{activeIfNew:true,activateExisting:true}
-  });
-  await expectNewLukeTab();
+  for (const token of tokens) {
+    await selectToken(token);
+    await expect(floatingButton, 'Right-click selection setup for ' + token).toBeVisible({timeout:10000});
+    await resetResolverCalls();
+    const response = await openFromSelection({
+      type:'blbSuiteOpenSelectionText',
+      text:token,
+      tabBehavior:{activeIfNew:true,activateExisting:true}
+    });
+    expect(response?.ok, 'right-click handoff for ' + token).toBe(true);
+    await expectLukeTab('right-click ' + token);
+    await expectSharedResolverInvocation(token);
+  }
 });
 
 test('Facebook book-name double-click retains Luke 22:26 context', async ({ page, extensionStorage, extensionWorker }) => {

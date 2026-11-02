@@ -676,7 +676,32 @@ function getSelectionContextPosition() {
     const prefix = before ? before + ' ' : '';
     const suffix = after ? ' ' + after : '';
     const start = prefix.length;
-    return { text: prefix + selected + suffix, start, end: start + selected.length };
+    const result = { text: prefix + selected + suffix, start, end: start + selected.length };
+    // Opt-in browser-E2E diagnostics capture the exact Range reconstruction
+    // used by contextual actions. Disabled during normal extension use.
+    try {
+      if (window.__blbSuiteEnableSelectionDiagnostics === true) {
+        window.__blbSuiteSelectionContextDiagnostic = {
+          rawSelection: sel.toString(),
+          normalizedSelection: selected,
+          contextText: result.text,
+          start: result.start,
+          end: result.end,
+          selectedSlice: result.text.slice(result.start, result.end),
+          rangeStartNode: range.startContainer?.nodeValue || range.startContainer?.nodeName || '',
+          rangeStartOffset: range.startOffset,
+          rangeEndNode: range.endContainer?.nodeValue || range.endContainer?.nodeName || '',
+          rangeEndOffset: range.endOffset,
+          rangeText: rangeText(range),
+          commonAncestorNode: range.commonAncestorContainer?.nodeName || '',
+          commonAncestorText: range.commonAncestorContainer?.textContent || '',
+          blockText: block?.textContent || '',
+          blockHtml: block instanceof Element ? block.outerHTML.slice(0, 3000) : ''
+        };
+        console.info('[BLB selection reconstruction diagnostic]', JSON.stringify(window.__blbSuiteSelectionContextDiagnostic));
+      }
+    } catch (_) {}
+    return result;
   } catch (_) { return null; }
 }
 
@@ -778,9 +803,69 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
   return null;
 }
 
-function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionEnd) {
-  const source = normalizeSelectionText(text);
+function resolveBibleReferenceFromContextWindowCore(text, selectionStart, selectionEnd) {
+  let source = normalizeSelectionText(text);
   if (!source) return null;
+
+  // A single chapter/verse number belongs to the nearest explicit book name
+  // on its left. Once that book is found, earlier text is outside this
+  // selection's context and must not contribute another reference. This is
+  // shared by Double-Click, Show on BLB, right-click, and the Alt+B handler.
+  const selectedNumericToken = normalizeSelectionText(
+    source.slice(selectionStart, selectionEnd)
+  ).normalize('NFKC');
+  if (/^\d{1,3}$/.test(selectedNumericToken) &&
+      Number.isFinite(selectionStart) && Number.isFinite(selectionEnd)) {
+    const bookForms = [];
+    const addBookForm = (name, book) => {
+      const value = String(name || '').trim();
+      if (value && book && !bookForms.some(item => item.name.toLowerCase() === value.toLowerCase())) {
+        bookForms.push({name:value, book});
+      }
+    };
+    for (const book of BOOKS) {
+      addBookForm(book.name, book);
+      addBookForm(book.urlKey, book);
+      const numbered = String(book.name || '').match(/^([1-3])\s+(.+)$/i);
+      if (numbered) addBookForm(({'1':'I','2':'II','3':'III'})[numbered[1]] + ' ' + numbered[2], book);
+    }
+    for (const [alias, canonicalName] of Object.entries(BOOK_ALIASES || {})) {
+      const book = BOOKS.find(item => item.name === canonicalName);
+      if (!book) continue;
+      addBookForm(alias, book);
+      const numbered = String(canonicalName || '').match(/^([1-3])\s+(.+)$/i);
+      if (numbered && !/^(?:[1-3]|i{1,3})\s+/i.test(alias)) {
+        addBookForm(numbered[1] + ' ' + alias, book);
+        addBookForm(({'1':'I','2':'II','3':'III'})[numbered[1]] + ' ' + alias, book);
+      }
+    }
+    bookForms.sort((a,b) => b.name.length - a.name.length);
+    let nearestBookStart = -1;
+    let nearestBookEnd = -1;
+    for (const entry of bookForms) {
+      const needle = entry.name.toLowerCase();
+      let searchFrom = 0;
+      while (searchFrom < source.length) {
+        const foundAt = source.toLowerCase().indexOf(needle, searchFrom);
+        if (foundAt < 0) break;
+        const foundEnd = foundAt + entry.name.length;
+        const before = foundAt === 0 ? '' : source[foundAt - 1];
+        const after = foundEnd >= source.length ? '' : source[foundEnd];
+        const validBoundary = (!before || !/[A-Za-z0-9]/.test(before)) &&
+          (!after || !/[A-Za-z0-9]/.test(after));
+        if (validBoundary && foundEnd <= selectionStart && foundEnd > nearestBookEnd) {
+          nearestBookStart = foundAt;
+          nearestBookEnd = foundEnd;
+        }
+        searchFrom = foundAt + 1;
+      }
+    }
+    if (nearestBookStart >= 0) {
+      source = source.slice(nearestBookStart);
+      selectionStart -= nearestBookStart;
+      selectionEnd -= nearestBookStart;
+    }
+  }
 
   // A book-name click can be the only selected part of a comma-separated
   // same-chapter verse list (for example, "Romans 10:9,10"). Resolve the
@@ -1074,6 +1159,35 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
   };
 }
 
+/**
+ * Opt-in resolver trace for diagnosing selection-to-reference mismatches.
+ * Disabled by default; enabled only by the browser regression harness.
+ */
+function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionEnd) {
+  const result = resolveBibleReferenceFromContextWindowCore(text, selectionStart, selectionEnd);
+  try {
+    if (window.__blbSuiteEnableSelectionDiagnostics === true) {
+      const trace = {
+        inputText: String(text ?? ''),
+        selectionStart,
+        selectionEnd,
+        selectedToken: normalizeSelectionText(String(text ?? '').slice(selectionStart, selectionEnd)),
+        resolved: result ? {
+          book: result.book,
+          chapter: result.chapter,
+          from: result.from,
+          to: result.to,
+          url: result.url
+        } : null,
+        timestamp: Date.now()
+      };
+      window.__blbSuiteResolverDiagnostic = trace;
+      console.info('[BLB selection resolver diagnostic]', JSON.stringify(trace));
+    }
+  } catch (_) {}
+  return result;
+}
+
 function resolveCompactBookPart(value) {
   const raw = normalizeSelectionText(value).normalize('NFKC').trim();
   if (!raw) return null;
@@ -1111,6 +1225,20 @@ function getDoubleClickEquivalentSelectionContext(selectionText, preferredTarget
   if (!selected || /\s/.test(selected) ||
       !/^[\p{L}\p{N}][\p{L}\p{N}.'-]*$/u.test(selected)) return null;
 
+  // Opt-in regression instrumentation: record the actual shared positional
+  // resolver entry for each one-token action without changing normal runtime
+  // behavior or retaining page text when diagnostics are disabled.
+  try {
+    if (window.__blbSuiteEnableDoubleClickEquivalentDiagnostics === true) {
+      const calls = Array.isArray(window.__blbSuiteDoubleClickEquivalentCalls)
+        ? window.__blbSuiteDoubleClickEquivalentCalls
+        : [];
+      calls.push(selected);
+      if (calls.length > 100) calls.splice(0, calls.length - 100);
+      window.__blbSuiteDoubleClickEquivalentCalls = calls;
+    }
+  } catch (_) {}
+
   const candidates = [];
   const addCandidate = node => {
     const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
@@ -1118,14 +1246,16 @@ function getDoubleClickEquivalentSelectionContext(selectionText, preferredTarget
   };
   addCandidate(preferredTarget);
   const liveSelection = window.getSelection?.();
-  if (liveSelection?.rangeCount && !liveSelection.isCollapsed) {
-    const range = liveSelection.getRangeAt(0);
-    addCandidate(range.startContainer);
-    addCandidate(range.endContainer);
-    addCandidate(range.commonAncestorContainer);
+  let liveRange = null;
+  if (liveSelection?.rangeCount && !liveSelection.isCollapsed &&
+      normalizeSelectionText(liveSelection.toString()).normalize('NFKC') === selected) {
+    liveRange = liveSelection.getRangeAt(0).cloneRange();
+    addCandidate(liveRange.startContainer);
+    addCandidate(liveRange.endContainer);
+    addCandidate(liveRange.commonAncestorContainer);
   }
   for (const target of candidates) {
-    const contextual = getDoubleClickBlockContextReference(selected, target, event);
+    const contextual = getDoubleClickBlockContextReference(selected, target, event, liveRange);
     if (contextual?.url) return contextual;
   }
   return null;
@@ -1279,7 +1409,7 @@ function isBibleVersionCodeToken(value) {
   return /^(?:KJV|NKJV|NIV|NIVUK|ESV|NASB|NASB95|NASB2020|LSB|NLT|CSB|HCSB|RSV|NRSV|NRSVUE|ASV|AMP|AMPC|NET|WEB|YLT|DARBY|BBE|WYC|TLB|MSG|GNT|NIRV|CEV|ISV|LEB|ERV|GW|ICB|NCV|NABRE|NJB|JPS|MEV|KJ21|AKJV|VOICE|PHILLIPS|TPT)$/i.test(token);
 }
 
-function getDoubleClickBlockContextReference(selectionText, target, event = null) {
+function getDoubleClickBlockContextReference(selectionText, target, event = null, selectionRange = null) {
   try {
     // textContent and Range.toString() omit <br> boundaries. Instagram captions
     // use <br> inside a single inline container, so preserve those boundaries
@@ -1321,6 +1451,19 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       }
       return element instanceof Element ? element : null;
     };
+    // Facebook's dir=auto nodes are the actual visual text lines even when
+    // display:contents makes them invisible to nearestSemanticBlock().
+    // Keep every selection resolver scoped to that one line so a preceding
+    // line such as "Luke 21-22" cannot influence "Luke 22:26 KJV".
+    const selectionContextBlock = element => {
+      const candidate = element instanceof Element ? element : element?.parentElement;
+      const facebookLine = /(^|\.)facebook\.com$/i.test(String(location.hostname || ''))
+        ? candidate?.closest?.('[dir="auto"]')
+        : null;
+      if (facebookLine instanceof Element && messageRoot instanceof Element &&
+          messageRoot.contains(facebookLine)) return facebookLine;
+      return nearestSemanticBlock(candidate);
+    };
     let selected = normalizeSelectionText(selectionText).normalize('NFKC');
     // A numbered-list serial such as "1." is also a supported numeric book
     // selector when it is visibly the first token in its own list block.
@@ -1343,7 +1486,17 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // next sibling's explicit citation, and only when its book/chapter match.
     const resolveFollowingRepeatedBookCitation = () => {
       if (!(messageRoot instanceof Element) || !(initialNode instanceof Element)) return null;
-      const localBlock = nearestSemanticBlock(initialNode);
+      // Facebook may style each dir=auto line as display:contents. In that
+      // layout nearestSemanticBlock skips the actual line and climbs to a
+      // wrapper containing multiple lines, so the repeated-book/range match
+      // never runs (or reads the wrong adjacent text). Anchor this narrow
+      // cross-line rule to the physical Facebook text line instead.
+      const facebookLine = /(^|\.)facebook\.com$/i.test(String(location.hostname || ''))
+        ? initialNode.closest?.('[dir="auto"]')
+        : null;
+      const localBlock = facebookLine instanceof Element && messageRoot.contains(facebookLine)
+        ? facebookLine
+        : nearestSemanticBlock(initialNode);
       if (!(localBlock instanceof Element) || localBlock === messageRoot ||
           !messageRoot.contains(localBlock)) return null;
       const localText = normalizeSelectionText(domText(localBlock)).normalize('NFKC')
@@ -1358,9 +1511,22 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const isRangeEndClick = /^\d{1,3}$/.test(selected) && Number(selected) === endChapter;
       if (!isBookClick && !isRangeEndClick) return null;
 
-      let nextBlock = localBlock.nextElementSibling;
-      while (nextBlock && !normalizeSelectionText(domText(nextBlock)).trim()) {
-        nextBlock = nextBlock.nextElementSibling;
+      let nextBlock = null;
+      if (facebookLine) {
+        // Facebook nests visual lines inside intermediary wrappers, so the
+        // next line is not necessarily nextElementSibling. Walk dir=auto
+        // lines in DOM order and select the first later non-empty line.
+        nextBlock = Array.from(messageRoot.querySelectorAll('[dir="auto"]')).find(line =>
+          line instanceof Element &&
+          !localBlock.contains(line) &&
+          !!(localBlock.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+          normalizeSelectionText(domText(line)).trim()
+        ) || null;
+      } else {
+        nextBlock = localBlock.nextElementSibling;
+        while (nextBlock && !normalizeSelectionText(domText(nextBlock)).trim()) {
+          nextBlock = nextBlock.nextElementSibling;
+        }
       }
       if (!(nextBlock instanceof Element) || !messageRoot.contains(nextBlock)) return null;
       const nextText = normalizeSelectionText(domText(nextBlock)).normalize('NFKC')
@@ -1527,7 +1693,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // even in rich text made from adjacent inline spans.
       const resolveNumericRange = (range, anchor) => {
         if (!range || !anchor) return null;
-        const localBlock = nearestSemanticBlock(anchor);
+        const localBlock = selectionContextBlock(anchor);
         if (!(localBlock instanceof Element) || !localBlock.contains(range.startContainer)) return null;
         const rawSource = domText(localBlock);
         const normalizedSource = normalizeSelectionText(rawSource).normalize('NFKC')
@@ -1580,6 +1746,19 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         if (exactTargetCitation) return exactTargetCitation;
       }
 
+      // Selection actions do not have physical click coordinates. Reuse the
+      // browser's live Selection Range as the exact token position instead of
+      // falling through to a text-only parse. This is the same positional
+      // resolver used by Double-Click, but anchored to the selected Range.
+      if (selectionRange &&
+          normalizeSelectionText(selectionRange.toString()).normalize('NFKC') === selected) {
+        const selectionAnchor = selectionRange.startContainer?.nodeType === Node.TEXT_NODE
+          ? selectionRange.startContainer.parentElement
+          : initialNode;
+        const exactSelectionCitation = resolveNumericRange(selectionRange, selectionAnchor);
+        if (exactSelectionCitation) return exactSelectionCitation;
+      }
+
       // Use the caret-derived range only when no exact target-element match
       // identifies the clicked numeric token in its own DOM position.
       if (clickedWordRange &&
@@ -1598,7 +1777,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const numericContextAnchor = clickedWordRange?.startContainer?.nodeType === Node.TEXT_NODE
         ? clickedWordRange.startContainer.parentElement
         : initialNode;
-      const numericContextBlock = nearestSemanticBlock(numericContextAnchor);
+      const numericContextBlock = selectionContextBlock(numericContextAnchor);
       const numericContextText = numericContextBlock instanceof Element
         ? domText(numericContextBlock)
         : '';
@@ -1684,11 +1863,11 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // X and other rich-text feeds may keep an entire sentence in one text
     // node rather than wrapping each word in its own element. The physical
     // caret range still identifies the exact clicked word in that case.
-    const exactPhysicalRange = clickedWordRange &&
-      normalizeSelectionText(clickedWordText).normalize('NFKC') ===
-      normalizeSelectionText(selected).normalize('NFKC')
-      ? clickedWordRange
-      : null;
+    const exactPhysicalRange = [clickedWordRange, selectionRange].find(range =>
+      range &&
+      normalizeSelectionText(range.toString()).normalize('NFKC') ===
+        normalizeSelectionText(selected).normalize('NFKC')
+    ) || null;
     if ((exactPhysicalTarget || exactPhysicalRange) && !verseCueSelection && !/^[0-9]+$/.test(selected)) {
       // Book-name clicks on rich social feeds must bind to the citation
       // immediately following the exact clicked DOM element. Avoid deriving
@@ -1700,9 +1879,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const exactClickedBookToken = normalizeSelectionText(
         exactPhysicalTarget?.textContent || clickedWordText || selected
       ).normalize('NFKC').replace(/^\.+|\.+$/g, '');
-      const physicalBookContextRoot = messageRoot || nearestSemanticBlock(
-        exactPhysicalTarget || exactPhysicalRange?.startContainer?.parentElement
-      );
+      const physicalBookAnchor = exactPhysicalTarget || exactPhysicalRange?.startContainer?.parentElement;
+      const physicalBookContextRoot = selectionContextBlock(physicalBookAnchor) || messageRoot;
       // Prefer a valid immediately adjacent ordinal prefix before treating
       // a suffix alias (for example, "Jn") as an unnumbered book. Use the
       // physical text range when the platform does not wrap individual words
@@ -1935,7 +2113,11 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
                 normalizeSelectionText(liveSelection.toString()).normalize('NFKC') !== selected) return null;
             return liveSelection.getRangeAt(0);
           })());
-      const numericContextRoot = nearestSemanticBlock(
+      // Keep numeric selections inside the same Facebook dir=auto line
+      // used by the shared Double-Click resolver. nearestSemanticBlock skips
+      // display:contents line wrappers and can otherwise widen "22" to the
+      // whole post, where the preceding "Luke 21-22" range can interfere.
+      const numericContextRoot = selectionContextBlock(
         numericElement || numericRange?.startContainer?.parentElement || initialNode
       ) || messageRoot;
       if (numericRange && numericContextRoot instanceof Element &&
@@ -1958,6 +2140,27 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const exactStart = normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
           const exactToken = normalizeSelectionText(domRangeText(numericRange)).normalize('NFKC');
           const exactEnd = exactStart + exactToken.length;
+          // Capture the actual context supplied to the numeric resolver. The
+          // generic Range diagnostic is bypassed when this positional fast
+          // path resolves first, so record the same contract here for E2E.
+          try {
+            if (window.__blbSuiteEnableSelectionDiagnostics === true) {
+              window.__blbSuiteSelectionContextDiagnostic = {
+                rawSelection: window.getSelection?.()?.toString() || '',
+                normalizedSelection: exactToken,
+                contextText: normalizedContext,
+                start: exactStart,
+                end: exactEnd,
+                selectedSlice: normalizedContext.slice(exactStart, exactEnd),
+                rangeText: domRangeText(numericRange),
+                commonAncestorText: numericRange.commonAncestorContainer?.textContent || '',
+                blockText: numericContextRoot.textContent || '',
+                blockHtml: numericContextRoot.outerHTML.slice(0, 3000),
+                resolverPath: 'numeric-exact-context'
+              };
+              console.info('[BLB numeric selection context diagnostic]', JSON.stringify(window.__blbSuiteSelectionContextDiagnostic));
+            }
+          } catch (_) {}
           if (exactToken === selected && normalizedContext.slice(exactStart, exactEnd) === exactToken) {
             const contextualReference = resolveBibleReferenceFromContextWindow(
               normalizedContext, exactStart, exactEnd
