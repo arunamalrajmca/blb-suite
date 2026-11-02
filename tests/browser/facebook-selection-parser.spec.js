@@ -306,6 +306,7 @@ test('Facebook supplied div[dir=auto] DOM opens shorthand references from numeri
   await page.evaluate(() => {
     const outer = document.createElement('div');
     outer.id = 'fb-godliness-exact-dom';
+    outer.setAttribute('data-blb-test-diagnostics', 'true');
     outer.className = 'html-div xdj266r x14z9mp xat24cr x1lziwak xexx8yu xyri2b x18d9i69 x1c1uobl';
     outer.innerHTML = '<div class="xdj266r x14z9mp xat24cr x1lziwak x1vvkbs x126k92a"></div>' +
       '<div class="x14z9mp xat24cr x1lziwak x1vvkbs xtlvy1s x126k92a"><div id="godliness-paragraph" dir="auto" style="text-align:start"></div></div>';
@@ -377,7 +378,10 @@ test('Facebook supplied div[dir=auto] DOM opens shorthand references from numeri
         }).find(pathname => pathname === item.expected) || null;
       }, { timeout: 10000 }).toBe(item.expected);
     } catch (error) {
-      const clickDiagnostic = await page.evaluate(() => window.__fbLastDblClick);
+      const clickDiagnostic = await page.evaluate(() => ({
+        event: window.__fbLastDblClick,
+        resolver: document.querySelector('#fb-godliness-exact-dom')?.getAttribute('data-blb-numeric-context-diagnostic') || null
+      }));
       throw new Error(error.message + '\\nObserved tabs: ' + JSON.stringify(observedTabs) +
         '\\nClick diagnostic: ' + JSON.stringify(clickDiagnostic));
     }
