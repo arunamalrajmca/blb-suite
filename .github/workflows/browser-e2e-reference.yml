@@ -37,7 +37,7 @@ on:
 # Keep one active run per PR: newer commits supersede outdated PR runs.
 # Pushes to main and manual runs keep their own ref-based group and are not cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-gate-v2
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -327,6 +327,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATUS_SHA: ${{ github.sha }}
           EVENT_NAME: ${{ github.event_name }}
+          RUN_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           FULL_BROWSER_SUITE: ${{ needs.change-detection.outputs.full_browser_suite }}
         shell: bash
         run: |
@@ -341,8 +342,8 @@ jobs:
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              "${{ github.api_url }}/repos/${{ github.repository }}/actions/runs?head_sha=$STATUS_SHA&per_page=100")"
-            group_run="$(jq -c --arg sha "$STATUS_SHA" --arg event "$EVENT_NAME" \
+              "${{ github.api_url }}/repos/${{ github.repository }}/actions/runs?head_sha=$RUN_SHA&per_page=100")"
+            group_run="$(jq -c --arg sha "$RUN_SHA" --arg event "$EVENT_NAME" \
               '.workflow_runs | map(select(.name == "BLB Suite BROWSER E2E — GROUP A + GROUP B" and .head_sha == $sha and .event == $event)) | sort_by(.created_at) | last // empty' \
               <<< "$response")"
 
