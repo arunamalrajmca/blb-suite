@@ -1869,12 +1869,19 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             range.selectNodeContents(numericElement);
             return range;
           })()
-        : (exactPhysicalRange || clickedWordRange);
+        : (exactPhysicalRange || clickedWordRange || (() => {
+            const liveSelection = window.getSelection?.();
+            if (!liveSelection?.rangeCount || liveSelection.isCollapsed ||
+                normalizeSelectionText(liveSelection.toString()).normalize('NFKC') !== selected) return null;
+            return liveSelection.getRangeAt(0);
+          })());
       const numericContextRoot = nearestSemanticBlock(
-        numericElement || numericRange?.startContainer?.parentElement
+        numericElement || numericRange?.startContainer?.parentElement || initialNode
       ) || messageRoot;
       const writeNumericContextDiagnostic = details => {
-        const diagnosticRoot = numericContextRoot?.closest?.('[data-blb-test-diagnostics]');
+        const diagnosticRoot = numericContextRoot?.closest?.('[data-blb-test-diagnostics]') ||
+          initialNode?.closest?.('[data-blb-test-diagnostics]') ||
+          messageRoot?.closest?.('[data-blb-test-diagnostics]');
         if (diagnosticRoot) {
           diagnosticRoot.setAttribute('data-blb-numeric-context-diagnostic', JSON.stringify({
             selected, clickedWordText, hasMessageRoot: !!messageRoot,
