@@ -1424,7 +1424,7 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
     article.setAttribute('role', 'article');
     article.innerHTML =
       '<div data-ad-comet-preview="message">' +
-        '<div class="xdj266r x14z9mp" dir="auto" id="fb-luke-chapter-range">Luke 21-22</div>' +
+        '<div class="xdj266r x14z9mp" dir="auto" id="fb-luke-chapter-range"><span id="fb-luke-range-book">' + lri + 'Luke' + pdi + '</span> <span id="fb-luke-range-end">' + lri + '22' + pdi + '</span></div>' +
         '<div class="xdj266r x14z9mp" dir="auto" id="fb-luke-citation">' +
           '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
           '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>:' +
@@ -1459,7 +1459,7 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
     await removeTabById(extensionWorker, opened.id);
     await page.waitForTimeout(1300);
   };
-  const selectChapter = async () => page.locator('#fb-luke-chapter').evaluate(element => {
+  const selectToken = async selector => page.locator(selector).evaluate(element => {
     const range = document.createRange();
     range.selectNodeContents(element);
     const selection = window.getSelection();
@@ -1468,26 +1468,40 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
     element.dispatchEvent(new MouseEvent('mouseup', {bubbles:true,cancelable:true,view:window}));
   });
 
-  // Double-click must use the adjacent verse, not the earlier chapter range.
+  // Both the book name and range-end number on the first line must inherit
+  // the matching explicit verse citation on the immediately following line.
+  await page.locator('#fb-luke-range-book').dblclick();
+  await expectNewLukeTab();
+  await page.locator('#fb-luke-range-end').dblclick();
+  await expectNewLukeTab();
+
+  // The actual book/chapter/verse tokens on the second line remain exact.
   await page.locator('#fb-luke-book').dblclick();
   await expectNewLukeTab();
   await page.locator('#fb-luke-chapter').dblclick();
   await expectNewLukeTab();
 
-  // Floating Show on BLB must preserve the exact selected chapter token context.
-  await selectChapter();
+  // Floating Show on BLB must use the first line's exact range-end context.
+  await selectToken('#fb-luke-range-end');
   const floatingButton = page.locator('#blb-suite-page-selection-button');
   await expect(floatingButton).toBeVisible({timeout:10000});
   await floatingButton.click();
   await expectNewLukeTab();
 
-  // Alt+B reads the selected text first, then must recover its live DOM context.
-  await selectChapter();
+  // Alt+B reads only "22", then must recover the same adjacent citation.
+  await selectToken('#fb-luke-range-end');
   await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
   await expectNewLukeTab();
 
-  // The right-click/context-menu handoff uses the same contextual selection resolver.
-  await selectChapter();
+  // The web right-click handoff must resolve both first-line tokens positionally.
+  await selectToken('#fb-luke-range-book');
+  await openFromSelection({
+    type:'blbSuiteOpenSelectionText',
+    text:'Luke',
+    tabBehavior:{activeIfNew:true,activateExisting:true}
+  });
+  await expectNewLukeTab();
+  await selectToken('#fb-luke-range-end');
   await openFromSelection({
     type:'blbSuiteOpenSelectionText',
     text:'22',
