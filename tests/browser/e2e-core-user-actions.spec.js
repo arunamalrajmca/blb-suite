@@ -106,6 +106,7 @@ test.describe('core user-action E2E coverage', () => {
         func: () => new Promise((resolve, reject) => {
           chrome.runtime.sendMessage({type:'blbSuiteOpenCurrentSelection'}, response => {
             if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+            if (!response?.ok) return reject(new Error('Alt+B selection handoff failed: ' + JSON.stringify(response)));
             resolve(response);
           });
         })
