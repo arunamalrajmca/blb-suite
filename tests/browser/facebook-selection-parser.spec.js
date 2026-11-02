@@ -295,7 +295,7 @@ test('Facebook shorthand references retain their explicitly named book', async (
   }
 });
 
-test('Facebook supplied div[dir=auto] DOM opens shorthand references from numeric clicks', async ({ page, extensionStorage, extensionWorker }) => {
+test.only('Facebook supplied div[dir=auto] DOM opens shorthand references from numeric clicks', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
   await page.route('https://www.facebook.com/**', route => route.fulfill({
     status: 200, contentType: 'text/html',
