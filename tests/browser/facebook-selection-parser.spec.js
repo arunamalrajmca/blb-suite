@@ -380,7 +380,8 @@ test('Facebook supplied div[dir=auto] DOM opens shorthand references from numeri
     } catch (error) {
       const clickDiagnostic = await page.evaluate(() => ({
         event: window.__fbLastDblClick,
-        resolver: document.querySelector('#fb-godliness-exact-dom')?.getAttribute('data-blb-numeric-context-diagnostic') || null
+        resolver: document.querySelector('#fb-godliness-exact-dom')?.getAttribute('data-blb-numeric-context-diagnostic') || null,
+        internal: document.querySelector('#fb-godliness-exact-dom')?.getAttribute('data-blb-click-internal-diagnostic') || null
       }));
       throw new Error(error.message + '\\nObserved tabs: ' + JSON.stringify(observedTabs) +
         '\\nClick diagnostic: ' + JSON.stringify(clickDiagnostic));
