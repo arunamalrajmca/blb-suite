@@ -5743,9 +5743,16 @@ async function openSharedSelectionAction({
 async function openCurrentSelectionInBlb(tabId) {
   const text = await getActiveTabSelection(tabId);
   if (!text) return;
+
+  // Resolve positional DOM context while the user's live Range is still
+  // available. Pass that exact result into the shared action instead of
+  // relying on its later text-only fallback for a bare numeric token.
+  const contextualReference = await getContextualSelectionReference(tabId, text);
   return openSharedSelectionAction({
     tabId,
     text,
+    contextualReference,
+    contextualReferenceResolved:true,
     behavior:{activeIfNew:true, activateExisting:true, altB:true}
   });
 }
