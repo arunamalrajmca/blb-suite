@@ -841,6 +841,69 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
     if (resolved) return {book:resolved.book,chapter:resolved.chapter,from:resolved.from,to:resolved.to,url:resolved.url};
   }
 
+  // Resolve comma shorthand that changes chapter inside the same citation,
+  // for example "Gal. 2:20, 4:6" or "Eph. 1:7, 13, 14, 2:8, 9".
+  // A numeric double-click on the continuation has no book name of its own;
+  // bind it to the nearest explicit book/chapter:verse immediately before it,
+  // but never carry that book across a semicolon into another citation group.
+  const contextualBookForms = [];
+  const addContextualBookForm = (name, book) => {
+    const value = String(name || '').trim();
+    if (!value || !book || contextualBookForms.some(item => item.name.toLowerCase() === value.toLowerCase())) return;
+    contextualBookForms.push({name:value, book});
+  };
+  for (const book of BOOKS) {
+    addContextualBookForm(book.name, book);
+    addContextualBookForm(book.urlKey, book);
+  }
+  for (const [alias, canonicalName] of Object.entries(BOOK_ALIASES || {})) {
+    const book = BOOKS.find(item => item.name === canonicalName);
+    if (book) addContextualBookForm(alias, book);
+  }
+  contextualBookForms.sort((a, b) => b.name.length - a.name.length);
+  for (const entry of contextualBookForms) {
+    const escaped = entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+    const explicitRefRe = new RegExp(
+      '(?<![A-Za-z0-9])' + escaped + '(?:\\s+|\\.\\s*)(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?',
+      'gi'
+    );
+    let explicitMatch;
+    while ((explicitMatch = explicitRefRe.exec(source))) {
+      const book = entry.book;
+      let currentChapter = Number(explicitMatch[1]);
+      const tailStart = explicitMatch.index + explicitMatch[0].length;
+      const semicolonAt = source.indexOf(';', tailStart);
+      const tailEnd = semicolonAt < 0 ? source.length : semicolonAt;
+      const tail = source.slice(tailStart, tailEnd);
+      const continuationRe = /,\s*(\d{1,3}(?:\s*:\s*\d{1,3})?(?:\s*[-–—]\s*\d{1,3})?)/g;
+      let continuation;
+      while ((continuation = continuationRe.exec(tail))) {
+        const token = continuation[1].trim();
+        const tokenStart = tailStart + continuation.index + continuation[0].lastIndexOf(continuation[1]);
+        const tokenEnd = tokenStart + token.length;
+        if (selectionStart < tokenStart || selectionEnd > tokenEnd) continue;
+        const chapterVerse = token.match(/^(\d{1,3})\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?$/);
+        let from;
+        let to;
+        if (chapterVerse) {
+          currentChapter = Number(chapterVerse[1]);
+          from = Number(chapterVerse[2]);
+          to = Number(chapterVerse[3] || chapterVerse[2]);
+        } else {
+          const verse = token.match(/^(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?$/);
+          if (!verse) continue;
+          from = Number(verse[1]);
+          to = Number(verse[2] || verse[1]);
+        }
+        const resolved = resolveBibleReference(book.name, currentChapter, from, to);
+        if (resolved) return {
+          book:resolved.book, chapter:resolved.chapter,
+          from:resolved.from, to:resolved.to, url:resolved.url
+        };
+      }
+    }
+  }
+
   // Keep exact-token behavior for other comma continuations, e.g.
   // "Psalms 1:2, 105:1" -> selecting 105 means Psalm 105:1.
   const commaContinuationRe = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*:\s*(\d+)\s*,\s*(\d+)(?:\s*:\s*(\d+))?/gi;
@@ -1360,6 +1423,17 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       }
     }
     if (!selected) return null;
+    const clickTestDiagnosticRoot = initialNode?.closest?.('[data-blb-test-diagnostics]');
+    if (clickTestDiagnosticRoot) {
+      clickTestDiagnosticRoot.setAttribute('data-blb-click-internal-diagnostic', JSON.stringify({
+        selectionText: normalizeSelectionText(selectionText),
+        selected,
+        clickedWordText,
+        clickedWordRangeText: clickedWordRange ? domRangeText(clickedWordRange) : '',
+        initialNodeTag: initialNode?.tagName || null,
+        initialNodeText: (initialNode?.textContent || '').slice(0, 100)
+      }));
+    }
 
     // Numeric double-clicks inside a citation must be resolved from the exact
     // physical token position before standalone-number fallback. Chromium can
@@ -1764,6 +1838,90 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           compactBookChapter.book.name, compactBookChapter.chapter, from, to
         );
         if (resolved) return resolved;
+      }
+    }
+
+    if (/^\d{1,3}$/.test(selected)) {
+      // Numeric chapter/verse clicks (for example the "4" or "6" in
+      // "Gal. 2:20, 4:6") need the same exact-token context window as book
+      // clicks. Keep this path positional so an ordinary number cannot borrow
+      // an unrelated citation elsewhere in the document.
+      const numericElement = exactPhysicalTarget instanceof Element &&
+        normalizeSelectionText(exactPhysicalTarget.textContent || '').normalize('NFKC') === selected
+        ? exactPhysicalTarget
+        : null;
+      const numericRange = numericElement
+        ? (() => {
+            const range = document.createRange();
+            range.selectNodeContents(numericElement);
+            return range;
+          })()
+        : (exactPhysicalRange || clickedWordRange);
+      const numericContextRoot = nearestSemanticBlock(
+        numericElement || numericRange?.startContainer?.parentElement
+      ) || messageRoot;
+      const writeNumericContextDiagnostic = details => {
+        const diagnosticRoot = numericContextRoot?.closest?.('[data-blb-test-diagnostics]');
+        if (diagnosticRoot) {
+          diagnosticRoot.setAttribute('data-blb-numeric-context-diagnostic', JSON.stringify({
+            selected, clickedWordText, hasMessageRoot: !!messageRoot,
+            numericElementText: numericElement?.textContent || '',
+            numericRangeText: numericRange ? domRangeText(numericRange) : '',
+            contextRootTag: numericContextRoot?.tagName || null,
+            ...details
+          }));
+        }
+      };
+      writeNumericContextDiagnostic({stage:'entered', hasNumericRange:!!numericRange});
+      if (numericRange && numericContextRoot instanceof Element &&
+          numericContextRoot.contains(numericRange.startContainer)) {
+        try {
+          const normalizedContext = normalizeSelectionText(domText(numericContextRoot)).normalize('NFKC')
+            .replace(/[\u2010-\u2015\u2212]/g, '-');
+          const prefixRange = document.createRange();
+          prefixRange.selectNodeContents(numericContextRoot);
+          prefixRange.setEnd(numericRange.startContainer, numericRange.startOffset);
+          const rawPrefix = domRangeText(prefixRange);
+          const normalizedPrefix = normalizeSelectionText(rawPrefix).normalize('NFKC');
+          const suffixRange = document.createRange();
+          suffixRange.selectNodeContents(numericContextRoot);
+          suffixRange.setStart(numericRange.endContainer, numericRange.endOffset);
+          const rawSuffix = domRangeText(suffixRange);
+          const hasInteriorSeparator = normalizedPrefix.length > 0 &&
+            /[\s\u00A0\u2007\u202F][\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]*$/.test(rawPrefix) &&
+            !!normalizeSelectionText(rawSuffix);
+          const exactStart = normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
+          const exactToken = normalizeSelectionText(domRangeText(numericRange)).normalize('NFKC');
+          const exactEnd = exactStart + exactToken.length;
+          writeNumericContextDiagnostic({
+            stage:'offsets', exactStart, exactEnd, exactToken,
+            contextSlice:normalizedContext.slice(Math.max(0, exactStart - 24), exactEnd + 24),
+            prefixTail:normalizedPrefix.slice(-40),
+            separator:hasInteriorSeparator
+          });
+          if (exactToken === selected && normalizedContext.slice(exactStart, exactEnd) === exactToken) {
+            const contextualReference = resolveBibleReferenceFromContextWindow(
+              normalizedContext, exactStart, exactEnd
+            );
+            const positionalReference = resolvePositionalBookCitation(
+              normalizedContext, exactStart, exactEnd
+            );
+            writeNumericContextDiagnostic({
+              stage:'resolved',
+              contextualReference:contextualReference || null,
+              positionalReference:positionalReference || null
+            });
+            const referenceScore = reference => {
+              if (!reference) return -1;
+              if (reference.from == null) return 0;
+              return 100 + Math.max(0, Number(reference.to || reference.from) - Number(reference.from));
+            };
+            const exactReference = referenceScore(positionalReference) > referenceScore(contextualReference)
+              ? positionalReference
+              : (contextualReference || positionalReference);
+            if (exactReference) return exactReference;
+          }
+        } catch (_) {}
       }
     }
 
