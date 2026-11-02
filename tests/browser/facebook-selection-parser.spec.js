@@ -314,6 +314,30 @@ test('Facebook supplied div[dir=auto] DOM opens shorthand references from numeri
     outer.style.cssText = 'max-width:900px;margin:24px auto;padding:16px;background:#fff;color:#111;font:20px/1.6 Arial,sans-serif;';
     document.body.appendChild(outer);
   });
+  await page.evaluate(() => {
+    window.__fbLastDblClick = null;
+    document.addEventListener('dblclick', event => {
+      let caret = null;
+      try {
+        const range = document.caretRangeFromPoint?.(event.clientX, event.clientY);
+        caret = range ? {
+          nodeType: range.startContainer.nodeType,
+          nodeName: range.startContainer.nodeName,
+          offset: range.startOffset,
+          text: range.startContainer.nodeValue || range.startContainer.textContent || ''
+        } : null;
+      } catch (_) {}
+      window.__fbLastDblClick = {
+        targetTag: event.target?.tagName || null,
+        targetId: event.target?.id || null,
+        targetText: (event.target?.textContent || '').slice(0, 100),
+        selected: window.getSelection?.()?.toString() || '',
+        clientX: event.clientX,
+        clientY: event.clientY,
+        caret
+      };
+    }, true);
+  });
 
   const cases = [
     { context: 'Gal. 2:20, 4:6', token: '4', expected: '/kjv/gal/4/6/' },
@@ -344,13 +368,19 @@ test('Facebook supplied div[dir=auto] DOM opens shorthand references from numeri
     expect(point, item.context + ' token ' + item.token).not.toBeNull();
     await page.mouse.dblclick(point.x, point.y);
     let observedTabs = [];
-    await expect.poll(async () => {
-      observedTabs = await extensionWorker.evaluate(async () => (await chrome.tabs.query({}))
-        .map(tab => tab.pendingUrl || tab.url || ''));
-      return observedTabs.map(value => {
-        try { return new URL(value).pathname; } catch (_) { return ''; }
-      }).find(pathname => pathname === item.expected) || null;
-    }, { timeout: 10000 }).toBe(item.expected);
+    try {
+      await expect.poll(async () => {
+        observedTabs = await extensionWorker.evaluate(async () => (await chrome.tabs.query({}))
+          .map(tab => tab.pendingUrl || tab.url || ''));
+        return observedTabs.map(value => {
+          try { return new URL(value).pathname; } catch (_) { return ''; }
+        }).find(pathname => pathname === item.expected) || null;
+      }, { timeout: 10000 }).toBe(item.expected);
+    } catch (error) {
+      const clickDiagnostic = await page.evaluate(() => window.__fbLastDblClick);
+      throw new Error(error.message + '\\nObserved tabs: ' + JSON.stringify(observedTabs) +
+        '\\nClick diagnostic: ' + JSON.stringify(clickDiagnostic));
+    }
     const opened = await extensionWorker.evaluate(async () => (await chrome.tabs.query({}))
       .filter(tab => {
         try { return new URL(tab.pendingUrl || tab.url || '').hostname === 'www.blueletterbible.org'; }
