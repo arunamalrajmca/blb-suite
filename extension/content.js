@@ -1348,7 +1348,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // wrapper containing multiple lines, so the repeated-book/range match
       // never runs (or reads the wrong adjacent text). Anchor this narrow
       // cross-line rule to the physical Facebook text line instead.
-      const facebookLine = /(^|\\.)facebook\\.com$/i.test(String(location.hostname || ''))
+      const facebookLine = /(^|\.)facebook\.com$/i.test(String(location.hostname || ''))
         ? initialNode.closest?.('[dir="auto"]')
         : null;
       const localBlock = facebookLine instanceof Element && messageRoot.contains(facebookLine)
