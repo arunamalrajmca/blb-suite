@@ -1424,7 +1424,7 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
     article.setAttribute('role', 'article');
     article.innerHTML =
       '<div data-ad-comet-preview="message">' +
-        '<div class="xdj266r x14z9mp" dir="auto" id="fb-luke-chapter-range"><span id="fb-luke-range-book">' + lri + 'Luke' + pdi + '</span> <span id="fb-luke-range-end">' + lri + '22' + pdi + '</span></div>' +
+        '<div class="xdj266r x14z9mp" dir="auto" id="fb-luke-chapter-range"><span id="fb-luke-range-book">' + lri + 'Luke' + pdi + '</span> 21-<span id="fb-luke-range-end">' + lri + '22' + pdi + '</span></div>' +
         '<div class="xdj266r x14z9mp" dir="auto" id="fb-luke-citation">' +
           '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
           '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>:' +
