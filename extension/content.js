@@ -1368,9 +1368,22 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const isRangeEndClick = /^\d{1,3}$/.test(selected) && Number(selected) === endChapter;
       if (!isBookClick && !isRangeEndClick) return null;
 
-      let nextBlock = localBlock.nextElementSibling;
-      while (nextBlock && !normalizeSelectionText(domText(nextBlock)).trim()) {
-        nextBlock = nextBlock.nextElementSibling;
+      let nextBlock = null;
+      if (facebookLine) {
+        // Facebook nests visual lines inside intermediary wrappers, so the
+        // next line is not necessarily nextElementSibling. Walk dir=auto
+        // lines in DOM order and select the first later non-empty line.
+        nextBlock = Array.from(messageRoot.querySelectorAll('[dir="auto"]')).find(line =>
+          line instanceof Element &&
+          !localBlock.contains(line) &&
+          !!(localBlock.compareDocumentPosition(line) & Node.DOCUMENT_POSITION_FOLLOWING) &&
+          normalizeSelectionText(domText(line)).trim()
+        ) || null;
+      } else {
+        nextBlock = localBlock.nextElementSibling;
+        while (nextBlock && !normalizeSelectionText(domText(nextBlock)).trim()) {
+          nextBlock = nextBlock.nextElementSibling;
+        }
       }
       if (!(nextBlock instanceof Element) || !messageRoot.contains(nextBlock)) return null;
       const nextText = normalizeSelectionText(domText(nextBlock)).normalize('NFKC')
