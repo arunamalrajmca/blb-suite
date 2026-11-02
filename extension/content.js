@@ -789,7 +789,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
   const selectedNumericToken = normalizeSelectionText(
     source.slice(selectionStart, selectionEnd)
   ).normalize('NFKC');
-  if (/^\\d{1,3}$/.test(selectedNumericToken) &&
+  if (/^\d{1,3}$/.test(selectedNumericToken) &&
       Number.isFinite(selectionStart) && Number.isFinite(selectionEnd)) {
     const bookForms = [];
     const addBookForm = (name, book) => {
@@ -801,15 +801,15 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
     for (const book of BOOKS) {
       addBookForm(book.name, book);
       addBookForm(book.urlKey, book);
-      const numbered = String(book.name || '').match(/^([1-3])\\s+(.+)$/i);
+      const numbered = String(book.name || '').match(/^([1-3])\s+(.+)$/i);
       if (numbered) addBookForm(({'1':'I','2':'II','3':'III'})[numbered[1]] + ' ' + numbered[2], book);
     }
     for (const [alias, canonicalName] of Object.entries(BOOK_ALIASES || {})) {
       const book = BOOKS.find(item => item.name === canonicalName);
       if (!book) continue;
       addBookForm(alias, book);
-      const numbered = String(canonicalName || '').match(/^([1-3])\\s+(.+)$/i);
-      if (numbered && !/^(?:[1-3]|i{1,3})\\s+/i.test(alias)) {
+      const numbered = String(canonicalName || '').match(/^([1-3])\s+(.+)$/i);
+      if (numbered && !/^(?:[1-3]|i{1,3})\s+/i.test(alias)) {
         addBookForm(numbered[1] + ' ' + alias, book);
         addBookForm(({'1':'I','2':'II','3':'III'})[numbered[1]] + ' ' + alias, book);
       }
@@ -818,19 +818,21 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
     let nearestBookStart = -1;
     let nearestBookEnd = -1;
     for (const entry of bookForms) {
-      const escaped = entry.name.replace(/[.*+?^$()|[\\]\\\\]/g, '\\\\function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionEnd) {
-  const source = normalizeSelectionText(text);
-  if (!source) return null;
-').replace(/\\s+/g, '\\\\s+');
-      const matcher = new RegExp('(^|[^A-Za-z0-9])(' + escaped + ')(?=$|[^A-Za-z0-9])', 'gi');
-      let match;
-      while ((match = matcher.exec(source))) {
-        const bookStart = match.index + match[1].length;
-        const bookEnd = bookStart + match[2].length;
-        if (bookEnd <= selectionStart && bookEnd > nearestBookEnd) {
-          nearestBookStart = bookStart;
-          nearestBookEnd = bookEnd;
+      const needle = entry.name.toLowerCase();
+      let searchFrom = 0;
+      while (searchFrom < source.length) {
+        const foundAt = source.toLowerCase().indexOf(needle, searchFrom);
+        if (foundAt < 0) break;
+        const foundEnd = foundAt + entry.name.length;
+        const before = foundAt === 0 ? '' : source[foundAt - 1];
+        const after = foundEnd >= source.length ? '' : source[foundEnd];
+        const validBoundary = (!before || !/[A-Za-z0-9]/.test(before)) &&
+          (!after || !/[A-Za-z0-9]/.test(after));
+        if (validBoundary && foundEnd <= selectionStart && foundEnd > nearestBookEnd) {
+          nearestBookStart = foundAt;
+          nearestBookEnd = foundEnd;
         }
+        searchFrom = foundAt + 1;
       }
     }
     if (nearestBookStart >= 0) {
