@@ -1321,6 +1321,19 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       }
       return element instanceof Element ? element : null;
     };
+    // Facebook's dir=auto nodes are the actual visual text lines even when
+    // display:contents makes them invisible to nearestSemanticBlock().
+    // Keep every selection resolver scoped to that one line so a preceding
+    // line such as "Luke 21-22" cannot influence "Luke 22:26 KJV".
+    const selectionContextBlock = element => {
+      const candidate = element instanceof Element ? element : element?.parentElement;
+      const facebookLine = /(^|\\.)facebook\\.com$/i.test(String(location.hostname || ''))
+        ? candidate?.closest?.('[dir="auto"]')
+        : null;
+      if (facebookLine instanceof Element && messageRoot instanceof Element &&
+          messageRoot.contains(facebookLine)) return facebookLine;
+      return nearestSemanticBlock(candidate);
+    };
     let selected = normalizeSelectionText(selectionText).normalize('NFKC');
     // A numbered-list serial such as "1." is also a supported numeric book
     // selector when it is visibly the first token in its own list block.
@@ -1550,7 +1563,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // even in rich text made from adjacent inline spans.
       const resolveNumericRange = (range, anchor) => {
         if (!range || !anchor) return null;
-        const localBlock = nearestSemanticBlock(anchor);
+        const localBlock = selectionContextBlock(anchor);
         if (!(localBlock instanceof Element) || !localBlock.contains(range.startContainer)) return null;
         const rawSource = domText(localBlock);
         const normalizedSource = normalizeSelectionText(rawSource).normalize('NFKC')
@@ -1621,7 +1634,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const numericContextAnchor = clickedWordRange?.startContainer?.nodeType === Node.TEXT_NODE
         ? clickedWordRange.startContainer.parentElement
         : initialNode;
-      const numericContextBlock = nearestSemanticBlock(numericContextAnchor);
+      const numericContextBlock = selectionContextBlock(numericContextAnchor);
       const numericContextText = numericContextBlock instanceof Element
         ? domText(numericContextBlock)
         : '';
@@ -1723,9 +1736,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const exactClickedBookToken = normalizeSelectionText(
         exactPhysicalTarget?.textContent || clickedWordText || selected
       ).normalize('NFKC').replace(/^\.+|\.+$/g, '');
-      const physicalBookContextRoot = messageRoot || nearestSemanticBlock(
-        exactPhysicalTarget || exactPhysicalRange?.startContainer?.parentElement
-      );
+      const physicalBookAnchor = exactPhysicalTarget || exactPhysicalRange?.startContainer?.parentElement;
+      const physicalBookContextRoot = selectionContextBlock(physicalBookAnchor) || messageRoot;
       // Prefer a valid immediately adjacent ordinal prefix before treating
       // a suffix alias (for example, "Jn") as an unnumbered book. Use the
       // physical text range when the platform does not wrap individual words
