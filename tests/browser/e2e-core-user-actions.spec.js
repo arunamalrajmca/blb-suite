@@ -1433,7 +1433,7 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
         '</div></div>' +
         '<div class="x2-wrapper"><div dir="auto" style="display:contents" id="fb-luke-citation">' +
           '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
-          '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>:' +
+          '<span><span id="fb-luke-chapter">' + lri + '<span>2</span><span>2</span>' + pdi + '</span></span>:' +
           '<span><span id="fb-luke-verse">' + lri + '26' + pdi + '</span></span> ' +
           '<span id="fb-luke-version">' + lri + 'KJV' + pdi + '</span>' +
         '</div></div>' +
