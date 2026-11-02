@@ -1451,8 +1451,9 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
     }));
     console.log('[Facebook Luke 22:26 reconstruction]', JSON.stringify({ selector, ...reconstruction }));
     if (selector === '#fb-luke-book') {
-      expect(reconstruction.doubleClickDiagnostic).toContain('"clickedBook":"Luke"');
-      expect(reconstruction.doubleClickDiagnostic).toContain('"followingText":"22:26 KJV"');
+      const diagnostic = JSON.parse(reconstruction.doubleClickDiagnostic);
+      expect(diagnostic.clickedBook).toBe("luke");
+      expect(diagnostic.followingText).toBe("22:26 KJV");
     }
     await removeTabById(extensionWorker, resolved.id);
   }
