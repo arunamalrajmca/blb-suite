@@ -862,9 +862,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
   }
   contextualBookForms.sort((a, b) => b.name.length - a.name.length);
   for (const entry of contextualBookForms) {
-    const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\  // Keep exact-token behavior for other comma continuations, e.g.
-  // "Psalms 1:2, 105:1" -> selecting 105 means Psalm 105:1.
-').replace(/\\s+/g, '\\s+');
+    const escaped = entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
     const explicitRefRe = new RegExp(
       '(?<![A-Za-z0-9])' + escaped + '(?:\\s+|\\.(?=\\d)\\s*)(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?',
       'gi'
