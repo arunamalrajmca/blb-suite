@@ -365,13 +365,9 @@
       }
     
       if (text) {
-        // Fast path: an exact single reference can be resolved locally once while
-        // the selection is being classified. Retain its validated BLB URL so the
-        // click does not repeat selection classification in the background worker.
-        // A bare number is position-dependent. The text-only parser can
-        // reinterpret chapter/verse tokens such as the "10" in
-        // "Romans 10:9,10" as an unrelated default-book reference. Resolve
-        // numeric selections only through the live DOM Range context below.
+        // Keep the text-only parser for complete nonnumeric reference text.
+        // Bare numbers are positional and have already been checked only by the
+        // shared live-Range resolver above; never infer a default book from them.
         const directRefs = /^\d+$/.test(normalizeSelectionText(text))
           ? []
           : resolveBibleReferenceText(normalizeSelectionText(text));
