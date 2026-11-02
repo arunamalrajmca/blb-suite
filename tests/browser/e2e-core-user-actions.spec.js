@@ -73,7 +73,7 @@ async function dismissBlbCookieOverlay(page) {
 
 test.describe('core user-action E2E coverage', () => {
   test('Alt+B command path opens an exact selected Bible reference', async ({ page, extensionStorage, extensionWorker }) => {
-    await extensionStorage.set({ masterEnabled: true });
+    await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
 
@@ -103,8 +103,11 @@ test.describe('core user-action E2E coverage', () => {
       await chrome.scripting.executeScript({
         target: {tabId: tab.id},
         world: 'ISOLATED',
-        func: () => new Promise(resolve => {
-          chrome.runtime.sendMessage({type:'blbSuiteOpenCurrentSelection'}, () => resolve());
+        func: () => new Promise((resolve, reject) => {
+          chrome.runtime.sendMessage({type:'blbSuiteOpenCurrentSelection'}, response => {
+            if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+            resolve(response);
+          });
         })
       });
     });
