@@ -1439,18 +1439,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       }
     }
     if (!selected) return null;
-    const clickTestDiagnosticRoot = initialNode?.closest?.('[data-blb-test-diagnostics]');
-    if (clickTestDiagnosticRoot) {
-      clickTestDiagnosticRoot.setAttribute('data-blb-click-internal-diagnostic', JSON.stringify({
-        selectionText: normalizeSelectionText(selectionText),
-        selected,
-        clickedWordText,
-        clickedWordRangeText: clickedWordRange ? domRangeText(clickedWordRange) : '',
-        initialNodeTag: initialNode?.tagName || null,
-        initialNodeText: (initialNode?.textContent || '').slice(0, 100)
-      }));
-    }
-
     // Numeric double-clicks inside a citation must be resolved from the exact
     // physical token position before standalone-number fallback. Chromium can
     // expose a stale Selection or neighbouring caret range for adjacent inline
@@ -1495,19 +1483,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         // whitespace-separated references (e.g. "Exodus 1" and
         // "Ezra 1 1"). Keep numeric clicks tied to this exact token offset
         // before considering the standalone-number/book fallback.
-        const contextualReference = resolveBibleReferenceFromContextWindow(normalizedSource, start, end);
-        const positionalReference = resolvePositionalBookCitation(normalizedSource, start, end);
-        const diagnosticRoot = anchor?.closest?.('[data-blb-test-diagnostics]');
-        if (diagnosticRoot) {
-          diagnosticRoot.setAttribute('data-blb-numeric-pre-diagnostic', JSON.stringify({
-            selected, start, end,
-            matchedToken: normalizedSource.slice(start, end),
-            contextSlice: normalizedSource.slice(Math.max(0, start - 80), end + 80),
-            contextualReference: contextualReference || null,
-            positionalReference: positionalReference || null
-          }));
-        }
-        return contextualReference || positionalReference;
+        return resolveBibleReferenceFromContextWindow(normalizedSource, start, end)
+          || resolvePositionalBookCitation(normalizedSource, start, end);
       };
 
       // Prefer the exact physical target element over caret-derived offsets.
@@ -1892,21 +1869,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const numericContextRoot = nearestSemanticBlock(
         numericElement || numericRange?.startContainer?.parentElement || initialNode
       ) || messageRoot;
-      const writeNumericContextDiagnostic = details => {
-        const diagnosticRoot = numericContextRoot?.closest?.('[data-blb-test-diagnostics]') ||
-          initialNode?.closest?.('[data-blb-test-diagnostics]') ||
-          messageRoot?.closest?.('[data-blb-test-diagnostics]');
-        if (diagnosticRoot) {
-          diagnosticRoot.setAttribute('data-blb-numeric-context-diagnostic', JSON.stringify({
-            selected, clickedWordText, hasMessageRoot: !!messageRoot,
-            numericElementText: numericElement?.textContent || '',
-            numericRangeText: numericRange ? domRangeText(numericRange) : '',
-            contextRootTag: numericContextRoot?.tagName || null,
-            ...details
-          }));
-        }
-      };
-      writeNumericContextDiagnostic({stage:'entered', hasNumericRange:!!numericRange});
       if (numericRange && numericContextRoot instanceof Element &&
           numericContextRoot.contains(numericRange.startContainer)) {
         try {
@@ -1927,12 +1889,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const exactStart = normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
           const exactToken = normalizeSelectionText(domRangeText(numericRange)).normalize('NFKC');
           const exactEnd = exactStart + exactToken.length;
-          writeNumericContextDiagnostic({
-            stage:'offsets', exactStart, exactEnd, exactToken,
-            contextSlice:normalizedContext.slice(Math.max(0, exactStart - 24), exactEnd + 24),
-            prefixTail:normalizedPrefix.slice(-40),
-            separator:hasInteriorSeparator
-          });
           if (exactToken === selected && normalizedContext.slice(exactStart, exactEnd) === exactToken) {
             const contextualReference = resolveBibleReferenceFromContextWindow(
               normalizedContext, exactStart, exactEnd
@@ -1940,11 +1896,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             const positionalReference = resolvePositionalBookCitation(
               normalizedContext, exactStart, exactEnd
             );
-            writeNumericContextDiagnostic({
-              stage:'resolved',
-              contextualReference:contextualReference || null,
-              positionalReference:positionalReference || null
-            });
             const referenceScore = reference => {
               if (!reference) return -1;
               if (reference.from == null) return 0;
