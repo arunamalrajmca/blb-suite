@@ -1225,6 +1225,20 @@ function getDoubleClickEquivalentSelectionContext(selectionText, preferredTarget
   if (!selected || /\s/.test(selected) ||
       !/^[\p{L}\p{N}][\p{L}\p{N}.'-]*$/u.test(selected)) return null;
 
+  // Opt-in regression instrumentation: record the actual shared positional
+  // resolver entry for each one-token action without changing normal runtime
+  // behavior or retaining page text when diagnostics are disabled.
+  try {
+    if (window.__blbSuiteEnableDoubleClickEquivalentDiagnostics === true) {
+      const calls = Array.isArray(window.__blbSuiteDoubleClickEquivalentCalls)
+        ? window.__blbSuiteDoubleClickEquivalentCalls
+        : [];
+      calls.push(selected);
+      if (calls.length > 100) calls.splice(0, calls.length - 100);
+      window.__blbSuiteDoubleClickEquivalentCalls = calls;
+    }
+  } catch (_) {}
+
   const candidates = [];
   const addCandidate = node => {
     const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
