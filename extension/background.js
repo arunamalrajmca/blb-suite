@@ -5770,7 +5770,7 @@ async function openCurrentSelectionInBlb(tabId, tabUrl = '') {
   // available. Pass that exact result into the shared action instead of
   // relying on its later text-only fallback for a bare numeric token.
   const contextualReference = await getContextualSelectionReference(tabId, text);
-  const result = await openSharedSelectionAction({
+  return openSharedSelectionAction({
     tabId,
     tabUrl,
     text,
@@ -5778,7 +5778,6 @@ async function openCurrentSelectionInBlb(tabId, tabUrl = '') {
     contextualReferenceResolved:true,
     behavior:{activeIfNew:true, activateExisting:true, altB:true}
   });
-  return {ok:true, ...result};
 }
 
 function hostnameFromTabUrl(url) {
