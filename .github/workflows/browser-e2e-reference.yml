@@ -336,13 +336,13 @@ jobs:
           fi
 
           for attempt in $(seq 1 120); do
-            response="$(curl --fail-with-body --silent --show-error \\
-              -H "Authorization: Bearer $GH_TOKEN" \\
-              -H "Accept: application/vnd.github+json" \\
-              -H "X-GitHub-Api-Version: 2022-11-28" \\
+            response="$(curl --fail-with-body --silent --show-error \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
               "${{ github.api_url }}/repos/${{ github.repository }}/actions/runs?head_sha=$STATUS_SHA&per_page=100")"
-            group_run="$(jq -c --arg sha "$STATUS_SHA" --arg event "$EVENT_NAME" \\
-              '.workflow_runs | map(select(.name == "BLB Suite BROWSER E2E — GROUP A + GROUP B" and .head_sha == $sha and .event == $event)) | sort_by(.created_at) | last // empty' \\
+            group_run="$(jq -c --arg sha "$STATUS_SHA" --arg event "$EVENT_NAME" \
+              '.workflow_runs | map(select(.name == "BLB Suite BROWSER E2E — GROUP A + GROUP B" and .head_sha == $sha and .event == $event)) | sort_by(.created_at) | last // empty' \
               <<< "$response")"
 
             if [[ -n "$group_run" ]]; then
