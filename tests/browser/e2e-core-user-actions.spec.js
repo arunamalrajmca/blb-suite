@@ -1428,15 +1428,8 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     article.setAttribute('role', 'article');
     article.innerHTML =
       '<div data-ad-comet-preview="message">' +
-        '<div class="x1-wrapper"><div dir="auto" style="display:contents" id="fb-luke-chapter-range">' +
-          '<span> ' + lri + 'Luke' + pdi + '</span> 21-<span>' + lri + '22' + pdi + '</span>' +
-        '</div></div>' +
-        '<div class="x2-wrapper"><div dir="auto" style="display:contents" id="fb-luke-citation">' +
-          '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
-          '<span><span id="fb-luke-chapter">' + lri + '<span>2</span><span>2</span>' + pdi + '</span></span>:' +
-          '<span><span id="fb-luke-verse">' + lri + '26' + pdi + '</span></span> ' +
-          '<span id="fb-luke-version">' + lri + 'KJV' + pdi + '</span>' +
-        '</div></div>' +
+        '<div dir="auto" id="fb-luke-chapter-range">Luke 21-22</div>' +
+        '<div dir="auto" id="fb-luke-citation">Luke 22:26 KJV</div>' +
       '</div>';
     article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
     document.body.appendChild(article);
@@ -1468,7 +1461,8 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
       target:{tabId:tab.id}, world:'ISOLATED',
       func:() => ({
         nativeSelection: window.getSelection()?.toString() || '',
-        reconstructed: window.__blbSuiteSelectionContextDiagnostic || null
+        reconstructed: window.__blbSuiteSelectionContextDiagnostic || null,
+        resolver: window.__blbSuiteResolverDiagnostic || null
       })
     });
     return execution?.result || null;
@@ -1492,35 +1486,42 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
       throw error;
     }
   };
-  const selectToken = async selector => page.locator(selector).evaluate(element => {
+  const selectToken = async (selector, token, eventType = 'mouseup') => page.locator(selector).evaluate((element, value) => {
+    const textNode = element.firstChild;
+    if (!textNode || textNode.nodeType !== Node.TEXT_NODE) throw new Error('Expected one plain text node');
+    const start = textNode.nodeValue.indexOf(value);
+    if (start < 0) throw new Error('Token not found in Facebook text node: ' + value);
     const range = document.createRange();
-    range.selectNodeContents(element);
+    range.setStart(textNode, start);
+    range.setEnd(textNode, start + value.length);
     const selection = window.getSelection();
     selection.removeAllRanges();
     selection.addRange(range);
-    element.dispatchEvent(new MouseEvent('mouseup', {bubbles:true,cancelable:true,view:window}));
-  });
+    element.dispatchEvent(new MouseEvent(eventType, {bubbles:true,cancelable:true,view:window,detail:eventType === 'dblclick' ? 2 : 1}));
+  }, token);
 
   await enableSelectionDiagnostics();
 
   // Double-click on the second line remains the baseline for all four tokens.
-  for (const [selector,label] of [
-    ['#fb-luke-book','double-click Luke'],
-    ['#fb-luke-chapter','double-click 22'],
-    ['#fb-luke-verse','double-click 26'],
-    ['#fb-luke-version','double-click KJV']
+  for (const [token,label] of [
+    ['Luke','double-click Luke'],
+    ['22','double-click 22'],
+    ['26','double-click 26'],
+    ['KJV','double-click KJV']
   ]) {
-    await page.locator(selector).dblclick();
+    await selectToken('#fb-luke-citation', token, 'dblclick');
+    const diagnostic = await readSelectionDiagnostics();
+    console.log('[Facebook single-text-node double-click diagnostic]', JSON.stringify({label, ...diagnostic}));
     await expectNewLukeTab(label);
   }
 
   // Floating Show on BLB must use only the selected token's second line.
   const floatingButton = page.locator('#blb-suite-page-selection-button');
   for (const [selector,label] of [
-    ['#fb-luke-book','floating Luke'],
-    ['#fb-luke-chapter','floating 22']
+    ['Luke','floating Luke'],
+    ['22','floating 22']
   ]) {
-    await selectToken(selector);
+    await selectToken('#fb-luke-citation', selector);
     const diagnostic = await readSelectionDiagnostics();
     if (label.endsWith('22')) {
       console.log('[Facebook contextual selection diagnostic]', JSON.stringify({label, ...diagnostic}));
@@ -1534,10 +1535,10 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
 
   // Exercise the registered Alt+B command handler for the same second-line tokens.
   for (const [selector,text,label] of [
-    ['#fb-luke-book','Luke','Alt+B Luke'],
-    ['#fb-luke-chapter','22','Alt+B 22']
+    ['Luke','Luke','Alt+B Luke'],
+    ['22','22','Alt+B 22']
   ]) {
-    await selectToken(selector);
+    await selectToken('#fb-luke-citation', selector);
     const diagnostic = await readSelectionDiagnostics();
     if (label.endsWith('22')) {
       console.log('[Facebook contextual selection diagnostic]', JSON.stringify({label, ...diagnostic}));
@@ -1550,10 +1551,10 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
 
   // Right-click handoff also receives only the selected second-line token.
   for (const [selector,text,label] of [
-    ['#fb-luke-book','Luke','right-click Luke'],
-    ['#fb-luke-chapter','22','right-click 22']
+    ['Luke','Luke','right-click Luke'],
+    ['22','22','right-click 22']
   ]) {
-    await selectToken(selector);
+    await selectToken('#fb-luke-citation', selector);
     const diagnostic = await readSelectionDiagnostics();
     if (label.endsWith('22')) {
       console.log('[Facebook contextual selection diagnostic]', JSON.stringify({label, ...diagnostic}));
