@@ -362,7 +362,7 @@ test('Facebook supplied div[dir=auto] DOM opens shorthand references from numeri
         const before = range.getBoundingClientRect();
         window.scrollTo(0, before.top + window.scrollY - window.innerHeight / 2);
         const rect = range.getBoundingClientRect();
-        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+        return { x: rect.left + Math.min(rect.width * 0.25, 2), y: rect.top + rect.height / 2 };
       }
       return null;
     }, item);
