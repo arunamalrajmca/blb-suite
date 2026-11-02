@@ -2113,7 +2113,11 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
                 normalizeSelectionText(liveSelection.toString()).normalize('NFKC') !== selected) return null;
             return liveSelection.getRangeAt(0);
           })());
-      const numericContextRoot = nearestSemanticBlock(
+      // Keep numeric selections inside the same Facebook dir=auto line
+      // used by the shared Double-Click resolver. nearestSemanticBlock skips
+      // display:contents line wrappers and can otherwise widen "22" to the
+      // whole post, where the preceding "Luke 21-22" range can interfere.
+      const numericContextRoot = selectionContextBlock(
         numericElement || numericRange?.startContainer?.parentElement || initialNode
       ) || messageRoot;
       if (numericRange && numericContextRoot instanceof Element &&
@@ -2136,6 +2140,27 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const exactStart = normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
           const exactToken = normalizeSelectionText(domRangeText(numericRange)).normalize('NFKC');
           const exactEnd = exactStart + exactToken.length;
+          // Capture the actual context supplied to the numeric resolver. The
+          // generic Range diagnostic is bypassed when this positional fast
+          // path resolves first, so record the same contract here for E2E.
+          try {
+            if (window.__blbSuiteEnableSelectionDiagnostics === true) {
+              window.__blbSuiteSelectionContextDiagnostic = {
+                rawSelection: window.getSelection?.()?.toString() || '',
+                normalizedSelection: exactToken,
+                contextText: normalizedContext,
+                start: exactStart,
+                end: exactEnd,
+                selectedSlice: normalizedContext.slice(exactStart, exactEnd),
+                rangeText: domRangeText(numericRange),
+                commonAncestorText: numericRange.commonAncestorContainer?.textContent || '',
+                blockText: numericContextRoot.textContent || '',
+                blockHtml: numericContextRoot.outerHTML.slice(0, 3000),
+                resolverPath: 'numeric-exact-context'
+              };
+              console.info('[BLB numeric selection context diagnostic]', JSON.stringify(window.__blbSuiteSelectionContextDiagnostic));
+            }
+          } catch (_) {}
           if (exactToken === selected && normalizedContext.slice(exactStart, exactEnd) === exactToken) {
             const contextualReference = resolveBibleReferenceFromContextWindow(
               normalizedContext, exactStart, exactEnd
