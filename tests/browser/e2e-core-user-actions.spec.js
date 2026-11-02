@@ -96,18 +96,11 @@ test.describe('core user-action E2E coverage', () => {
     });
     expect(command?.suggested_key?.default).toBe('Alt+B');
 
-    await extensionWorker.evaluate(async () => {
-      const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
-      console.log('[E2E Alt+B] active tab before command:', tab ? {id:tab.id,url:tab.url} : null);
-      if (!tab?.id) throw new Error('No active tab for Alt+B command-path E2E');
-      await chrome.scripting.executeScript({
-        target: {tabId: tab.id},
-        world: 'ISOLATED',
-        func: () => new Promise(resolve => {
-          chrome.runtime.sendMessage({type:'blbSuiteOpenCurrentSelection'}, () => resolve());
-        })
-      });
-    });
+    // Exercise the registered Chrome keyboard command itself. Do not send
+    // blbSuiteOpenCurrentSelection directly: that bypasses chrome.commands,
+    // the command handler's site gate, and the actual Alt+B dispatch.
+    await page.bringToFront();
+    await page.keyboard.press('Alt+B');
 
     const blb = await waitForTab(extensionWorker, tab => {
       console.log('[E2E Alt+B] observed tab:', tab);
@@ -1488,9 +1481,21 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
   await floatingButton.click();
   await expectNewLukeTab();
 
-  // Alt+B reads only "22", then must recover the same adjacent citation.
+  // Resolve the live numeric Range before invoking the actual keyboard
+  // shortcut. This records whether the content script itself selected the
+  // correct adjacent citation, independently of the background tab action.
   await selectToken('#fb-luke-range-end');
-  await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
+  const contextual = await extensionWorker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!tab?.id) throw new Error('No active Facebook tab for context diagnostics');
+    return await chrome.tabs.sendMessage(tab.id, {
+      type:'blbSuiteResolveContextualSelection',
+      selectionText:'22'
+    });
+  });
+  console.log('[E2E Facebook Luke] range-end contextual result:', contextual);
+  expect(contextual?.reference?.url).toContain('/kjv/luk/22/26/');
+  await page.keyboard.press('Alt+B');
   await expectNewLukeTab();
 
   // The web right-click handoff must resolve both first-line tokens positionally.
