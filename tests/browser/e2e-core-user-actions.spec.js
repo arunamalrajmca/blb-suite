@@ -1419,8 +1419,9 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
     const article = document.createElement('div');
     article.setAttribute('role', 'article');
     article.innerHTML =
-      '<div data-ad-comet-preview="message">' +
-        '<div dir="auto">' +
+      '<div data-ad-comet-preview="message" data-blb-test-diagnostics>' +
+        '<div dir="auto" id="fb-luke-chapter-range">Luke 21-22</div>' +
+        '<div dir="auto" id="fb-luke-citation">' +
           '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
           '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>:' +
           '<span><span id="fb-luke-verse">' + lri + '26' + pdi + '</span></span> ' +
@@ -1443,6 +1444,16 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
       } catch (_) { return false; }
     });
     expect(new URL(resolved.pendingUrl || resolved.url).pathname).toBe('/kjv/luk/22/26/');
+    const reconstruction = await page.evaluate(() => ({
+      selectedText: window.getSelection()?.toString() || '',
+      messageText: document.querySelector('[data-ad-comet-preview="message"]')?.innerText || '',
+      doubleClickDiagnostic: document.querySelector('[data-blb-test-diagnostics]')?.getAttribute('data-blb-double-click-diagnostic') || ''
+    }));
+    console.log('[Facebook Luke 22:26 reconstruction]', JSON.stringify({ selector, ...reconstruction }));
+    if (selector === '#fb-luke-book') {
+      expect(reconstruction.doubleClickDiagnostic).toContain('"clickedBook":"Luke"');
+      expect(reconstruction.doubleClickDiagnostic).toContain('"followingText":"22:26 KJV"');
+    }
     await removeTabById(extensionWorker, resolved.id);
   }
 });
