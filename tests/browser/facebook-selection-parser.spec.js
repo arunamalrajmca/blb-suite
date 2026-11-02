@@ -341,7 +341,7 @@ test.only('Facebook supplied div[dir=auto] DOM opens shorthand references from n
   });
 
   const cases = [
-    { context: 'Gal. 2:20', token: '2', expected: '/kjv/gal/2/20/' },
+    { context: 'Gal. 2:20', token: '2', occurrence: 'first', expected: '/kjv/gal/2/20/' },
     { context: 'Gal. 2:20', token: '20', expected: '/kjv/gal/2/20/' },
     { context: 'Eph. 1:7, 13, 14, 2:8, 9', token: '9', expected: '/kjv/eph/2/9/' },
     { context: 'Gal. 2:20, 4:6', token: '4', expected: '/kjv/gal/4/6/' },
@@ -356,7 +356,7 @@ test.only('Facebook supplied div[dir=auto] DOM opens shorthand references from n
       while ((node = walker.nextNode())) {
         const contextStart = node.nodeValue.indexOf(context);
         if (contextStart < 0) continue;
-        const tokenOffset = context.lastIndexOf(token);
+        const tokenOffset = item.occurrence === 'first' ? context.indexOf(token) : context.lastIndexOf(token);
         const range = document.createRange();
         range.setStart(node, contextStart + tokenOffset);
         range.setEnd(node, contextStart + tokenOffset + token.length);
