@@ -1830,7 +1830,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       }
     }
 
-    if (messageRoot && /^\d{1,3}$/.test(selected)) {
+    if (/^\d{1,3}$/.test(selected)) {
       // Numeric chapter/verse clicks (for example the "4" or "6" in
       // "Gal. 2:20, 4:6") need the same exact-token context window as book
       // clicks. Keep this path positional so an ordinary number cannot borrow
@@ -1850,7 +1850,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         numericElement || numericRange?.startContainer?.parentElement
       ) || messageRoot;
       if (numericRange && numericContextRoot instanceof Element &&
-          messageRoot.contains(numericContextRoot) &&
           numericContextRoot.contains(numericRange.startContainer)) {
         try {
           const normalizedContext = normalizeSelectionText(domText(numericContextRoot)).normalize('NFKC')
