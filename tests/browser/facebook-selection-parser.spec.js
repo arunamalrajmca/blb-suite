@@ -392,5 +392,8 @@ test.only('Facebook supplied div[dir=auto] DOM opens shorthand references from n
         catch (_) { return false; }
       }).map(tab => tab.id));
     for (const id of opened) await extensionWorker.evaluate(tabId => chrome.tabs.remove(tabId).catch(() => {}), id);
+    // The content-script handler may still be settling the native Selection
+    // from the previous gesture; give it a clean interval before the next click.
+    await page.waitForTimeout(1600);
   }
 });
