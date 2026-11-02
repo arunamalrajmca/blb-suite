@@ -862,7 +862,12 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
   }
   contextualBookForms.sort((a, b) => b.name.length - a.name.length);
   const explicitBookPattern = contextualBookForms
-    .map(entry => entry.name.replace(/[.*+?^$()|[\\]\\\\]/g, '\\\\  contextualBookForms.sort((a, b) => b.name.length - a.name.length);
+    .map(entry => entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'))
+    .join('|');
+  const nextExplicitBookCitationRe = new RegExp(
+    '(?<![A-Za-z0-9])(?:' + explicitBookPattern + ')(?:\\s+|\\.\\s*)\\d{1,3}\\s*:\\s*\\d{1,3}',
+    'gi'
+  );
   for (const entry of contextualBookForms) {').replace(/\\s+/g, '\\\\s+'))
     .join('|');
   const nextExplicitBookCitationRe = new RegExp(
