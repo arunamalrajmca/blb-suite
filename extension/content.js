@@ -841,6 +841,71 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
     if (resolved) return {book:resolved.book,chapter:resolved.chapter,from:resolved.from,to:resolved.to,url:resolved.url};
   }
 
+  // Resolve comma shorthand that changes chapter inside the same citation,
+  // for example "Gal. 2:20, 4:6" or "Eph. 1:7, 13, 14, 2:8, 9".
+  // A numeric double-click on the continuation has no book name of its own;
+  // bind it to the nearest explicit book/chapter:verse immediately before it,
+  // but never carry that book across a semicolon into another citation group.
+  const contextualBookForms = [];
+  const addContextualBookForm = (name, book) => {
+    const value = String(name || '').trim();
+    if (!value || !book || contextualBookForms.some(item => item.name.toLowerCase() === value.toLowerCase())) return;
+    contextualBookForms.push({name:value, book});
+  };
+  for (const book of BOOKS) {
+    addContextualBookForm(book.name, book);
+    addContextualBookForm(book.urlKey, book);
+  }
+  for (const [alias, canonicalName] of Object.entries(BOOK_ALIASES || {})) {
+    const book = BOOKS.find(item => item.name === canonicalName);
+    if (book) addContextualBookForm(alias, book);
+  }
+  contextualBookForms.sort((a, b) => b.name.length - a.name.length);
+  for (const entry of contextualBookForms) {
+    const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\  // Keep exact-token behavior for other comma continuations, e.g.
+  // "Psalms 1:2, 105:1" -> selecting 105 means Psalm 105:1.
+').replace(/\\s+/g, '\\s+');
+    const explicitRefRe = new RegExp(
+      '(?<![A-Za-z0-9])' + escaped + '(?:\\s+|\\.(?=\\d)\\s*)(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?',
+      'gi'
+    );
+    let explicitMatch;
+    while ((explicitMatch = explicitRefRe.exec(source))) {
+      const book = entry.book;
+      let currentChapter = Number(explicitMatch[1]);
+      const tailStart = explicitMatch.index + explicitMatch[0].length;
+      const semicolonAt = source.indexOf(';', tailStart);
+      const tailEnd = semicolonAt < 0 ? source.length : semicolonAt;
+      const tail = source.slice(tailStart, tailEnd);
+      const continuationRe = /,\\s*(\\d{1,3}(?:\\s*:\\s*\\d{1,3})?(?:\\s*[-–—]\\s*\\d{1,3})?)/g;
+      let continuation;
+      while ((continuation = continuationRe.exec(tail))) {
+        const token = continuation[1].trim();
+        const tokenStart = tailStart + continuation.index + continuation[0].lastIndexOf(continuation[1]);
+        const tokenEnd = tokenStart + token.length;
+        if (selectionStart < tokenStart || selectionEnd > tokenEnd) continue;
+        const chapterVerse = token.match(/^(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?$/);
+        let from;
+        let to;
+        if (chapterVerse) {
+          currentChapter = Number(chapterVerse[1]);
+          from = Number(chapterVerse[2]);
+          to = Number(chapterVerse[3] || chapterVerse[2]);
+        } else {
+          const verse = token.match(/^(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?$/);
+          if (!verse) continue;
+          from = Number(verse[1]);
+          to = Number(verse[2] || verse[1]);
+        }
+        const resolved = resolveBibleReference(book.name, currentChapter, from, to);
+        if (resolved) return {
+          book:resolved.book, chapter:resolved.chapter,
+          from:resolved.from, to:resolved.to, url:resolved.url
+        };
+      }
+    }
+  }
+
   // Keep exact-token behavior for other comma continuations, e.g.
   // "Psalms 1:2, 105:1" -> selecting 105 means Psalm 105:1.
   const commaContinuationRe = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*:\s*(\d+)\s*,\s*(\d+)(?:\s*:\s*(\d+))?/gi;
