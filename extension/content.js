@@ -1830,6 +1830,67 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       }
     }
 
+    if (messageRoot && /^\d{1,3}$/.test(selected)) {
+      // Numeric chapter/verse clicks (for example the "4" or "6" in
+      // "Gal. 2:20, 4:6") need the same exact-token context window as book
+      // clicks. Keep this path positional so an ordinary number cannot borrow
+      // an unrelated citation elsewhere in the document.
+      const numericElement = exactPhysicalTarget instanceof Element &&
+        normalizeSelectionText(exactPhysicalTarget.textContent || '').normalize('NFKC') === selected
+        ? exactPhysicalTarget
+        : null;
+      const numericRange = numericElement
+        ? (() => {
+            const range = document.createRange();
+            range.selectNodeContents(numericElement);
+            return range;
+          })()
+        : (exactPhysicalRange || clickedWordRange);
+      const numericContextRoot = nearestSemanticBlock(
+        numericElement || numericRange?.startContainer?.parentElement
+      ) || messageRoot;
+      if (numericRange && numericContextRoot instanceof Element &&
+          messageRoot.contains(numericContextRoot) &&
+          numericContextRoot.contains(numericRange.startContainer)) {
+        try {
+          const normalizedContext = normalizeSelectionText(domText(numericContextRoot)).normalize('NFKC')
+            .replace(/[\u2010-\u2015\u2212]/g, '-');
+          const prefixRange = document.createRange();
+          prefixRange.selectNodeContents(numericContextRoot);
+          prefixRange.setEnd(numericRange.startContainer, numericRange.startOffset);
+          const rawPrefix = domRangeText(prefixRange);
+          const normalizedPrefix = normalizeSelectionText(rawPrefix).normalize('NFKC');
+          const suffixRange = document.createRange();
+          suffixRange.selectNodeContents(numericContextRoot);
+          suffixRange.setStart(numericRange.endContainer, numericRange.endOffset);
+          const rawSuffix = domRangeText(suffixRange);
+          const hasInteriorSeparator = normalizedPrefix.length > 0 &&
+            /[\s\u00A0\u2007\u202F][\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]*$/.test(rawPrefix) &&
+            !!normalizeSelectionText(rawSuffix);
+          const exactStart = normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
+          const exactToken = normalizeSelectionText(domRangeText(numericRange)).normalize('NFKC');
+          const exactEnd = exactStart + exactToken.length;
+          if (exactToken === selected && normalizedContext.slice(exactStart, exactEnd) === exactToken) {
+            const contextualReference = resolveBibleReferenceFromContextWindow(
+              normalizedContext, exactStart, exactEnd
+            );
+            const positionalReference = resolvePositionalBookCitation(
+              normalizedContext, exactStart, exactEnd
+            );
+            const referenceScore = reference => {
+              if (!reference) return -1;
+              if (reference.from == null) return 0;
+              return 100 + Math.max(0, Number(reference.to || reference.from) - Number(reference.from));
+            };
+            const exactReference = referenceScore(positionalReference) > referenceScore(contextualReference)
+              ? positionalReference
+              : (contextualReference || positionalReference);
+            if (exactReference) return exactReference;
+          }
+        } catch (_) {}
+      }
+    }
+
     if (messageRoot) {
       // Coordinate-based caret APIs can occasionally resolve against a nearby
       // overlay or a stale layout position. Accept that range only when it is
