@@ -1343,7 +1343,17 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // next sibling's explicit citation, and only when its book/chapter match.
     const resolveFollowingRepeatedBookCitation = () => {
       if (!(messageRoot instanceof Element) || !(initialNode instanceof Element)) return null;
-      const localBlock = nearestSemanticBlock(initialNode);
+      // Facebook may style each dir=auto line as display:contents. In that
+      // layout nearestSemanticBlock skips the actual line and climbs to a
+      // wrapper containing multiple lines, so the repeated-book/range match
+      // never runs (or reads the wrong adjacent text). Anchor this narrow
+      // cross-line rule to the physical Facebook text line instead.
+      const facebookLine = /(^|\\.)facebook\\.com$/i.test(String(location.hostname || ''))
+        ? initialNode.closest?.('[dir="auto"]')
+        : null;
+      const localBlock = facebookLine instanceof Element && messageRoot.contains(facebookLine)
+        ? facebookLine
+        : nearestSemanticBlock(initialNode);
       if (!(localBlock instanceof Element) || localBlock === messageRoot ||
           !messageRoot.contains(localBlock)) return null;
       const localText = normalizeSelectionText(domText(localBlock)).normalize('NFKC')
