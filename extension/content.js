@@ -1313,6 +1313,11 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       selected = selected.slice(0, -1);
     }
     const initialNode = target instanceof Element ? target : (target?.parentElement || null);
+    const messageRoot = initialNode?.closest?.(
+      '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
+      '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
+      '.entry-content, .article-body, .article-content, .content-body'
+    ) || initialNode?.closest?.('article, main, [role="main"]');
     // Facebook can put a chapter range on one line and the actual verse
     // citation on the next line (for example, "Luke 21-22" followed by
     // "Luke 22:26 KJV"). A click on the first line's book name or range-end
