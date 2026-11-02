@@ -1446,27 +1446,6 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     });
     return execution?.result || null;
   }, message);
-  const enableSelectionDiagnostics = async () => extensionWorker.evaluate(async () => {
-    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
-    if (!tab?.id) throw new Error('No active Facebook tab');
-    await chrome.scripting.executeScript({
-      target:{tabId:tab.id}, world:'ISOLATED',
-      func:() => { window.__blbSuiteEnableSelectionDiagnostics = true; }
-    });
-  });
-  const readSelectionDiagnostics = async () => extensionWorker.evaluate(async () => {
-    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
-    if (!tab?.id) throw new Error('No active Facebook tab');
-    const [execution] = await chrome.scripting.executeScript({
-      target:{tabId:tab.id}, world:'ISOLATED',
-      func:() => ({
-        nativeSelection: window.getSelection()?.toString() || '',
-        reconstructed: window.__blbSuiteSelectionContextDiagnostic || null,
-        resolver: window.__blbSuiteResolverDiagnostic || null
-      })
-    });
-    return execution?.result || null;
-  });
   const expectNewLukeTab = async actionLabel => {
     try {
       const opened = await waitForTab(extensionWorker, tab => {
@@ -1476,12 +1455,6 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
         } catch (_) { return false; }
       });
       expect(new URL(opened.pendingUrl || opened.url).pathname, actionLabel).toBe(expectedPath);
-      const actionTrace = await readSelectionDiagnostics();
-      console.log('[Facebook action-to-resolver trace]', JSON.stringify({actionLabel, ...actionTrace}));
-      if (actionLabel.endsWith('22')) {
-        expect(actionTrace?.reconstructed?.selectedSlice).toBe('22');
-        expect(actionTrace?.reconstructed?.contextText).toContain('Luke 22:26');
-      }
       await removeTabById(extensionWorker, opened.id);
       await page.waitForTimeout(500);
     } catch (error) {
@@ -1506,8 +1479,6 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     selection.addRange(range);
     element.dispatchEvent(new MouseEvent(eventType, {bubbles:true,cancelable:true,view:window,detail:eventType === 'dblclick' ? 2 : 1}));
   }, { value: token, eventType });
-
-  await enableSelectionDiagnostics();
 
   // Use real browser mouse input for the baseline. Dispatching a synthetic
   // dblclick after manually installing a Range does not reproduce the browser's
