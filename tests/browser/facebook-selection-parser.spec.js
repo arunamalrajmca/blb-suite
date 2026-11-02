@@ -349,14 +349,14 @@ test.only('Facebook supplied div[dir=auto] DOM opens shorthand references from n
     { context: '2 Cor. 1:22, 4:7, 10, 11', token: '10', expected: '/kjv/2co/4/10/' },
     { context: 'Acts 13:42, 18:6, 28:28', token: '28', expected: '/kjv/act/28/28/' }
   ];  for (const item of cases) {
-    const point = await page.evaluate(({ context, token }) => {
+    const point = await page.evaluate(({ context, token, occurrence }) => {
       const root = document.querySelector('#godliness-paragraph');
       const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
       let node;
       while ((node = walker.nextNode())) {
         const contextStart = node.nodeValue.indexOf(context);
         if (contextStart < 0) continue;
-        const tokenOffset = item.occurrence === 'first' ? context.indexOf(token) : context.lastIndexOf(token);
+        const tokenOffset = occurrence === 'first' ? context.indexOf(token) : context.lastIndexOf(token);
         const range = document.createRange();
         range.setStart(node, contextStart + tokenOffset);
         range.setEnd(node, contextStart + tokenOffset + token.length);
