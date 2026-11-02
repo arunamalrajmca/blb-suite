@@ -1508,9 +1508,7 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
   // Playwright cannot reliably dispatch a registered browser extension command
   // through page.keyboard.press on CI. Exercise the same background selection
   // action directly here; the manifest shortcut mapping is asserted separately.
-  await extensionWorker.evaluate(async () => {
-    await chrome.runtime.sendMessage({type:'blbSuiteOpenCurrentSelection'});
-  });
+  await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
   await expectNewLukeTab();
 
   // The right-click path must resolve the selected book from its exact live
