@@ -311,8 +311,8 @@
       // interpretation as Double-Click before applying button-specific
       // vocabulary filtering or any text-only reference parsing.
       const normalizedSingleToken = normalizeSelectionText(text).normalize('NFKC');
-      if (!/\\s/.test(normalizedSingleToken) &&
-          /^[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*$/u.test(normalizedSingleToken)) {
+      if (!/\s/.test(normalizedSingleToken) &&
+          /^[\p{L}\p{N}][\p{L}\p{N}.'-]*$/u.test(normalizedSingleToken)) {
         const doubleClickEquivalent = getContextualBibleReference(text);
         if (doubleClickEquivalent?.url) {
           blbPageButtonContextualReference = doubleClickEquivalent;
