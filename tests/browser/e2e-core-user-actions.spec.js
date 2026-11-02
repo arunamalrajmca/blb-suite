@@ -1524,19 +1524,6 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     await page.mouse.dblclick(point.x, point.y);
   };
 
-  // Double-click on the second line remains the baseline for all four tokens.
-  for (const [token,label] of [
-    ['Luke','double-click Luke'],
-    ['22','double-click 22'],
-    ['26','double-click 26'],
-    ['KJV','double-click KJV']
-  ]) {
-    await doubleClickToken(token);
-    const diagnostic = await readSelectionDiagnostics();
-    console.log('[Facebook single-text-node double-click diagnostic]', JSON.stringify({label, ...diagnostic}));
-    await expectNewLukeTab(label);
-  }
-
   // Floating Show on BLB must use only the selected token's second line.
   const floatingButton = page.locator('#blb-suite-page-selection-button');
   for (const [selector,label] of [
@@ -1591,6 +1578,87 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     await expectNewLukeTab(label);
   }
 });
+test('single-token selection actions share double-click positional resolution across sites', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    pageSelectionButtonSites: { 'example.com': true }
+  });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(1000);
+  await page.evaluate(() => {
+    const article = document.createElement('article');
+    article.innerHTML = '<p id="blb-global-token-context">Luke 22:26 KJV</p>';
+    article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(article);
+  });
+
+  const expectedPath = '/kjv/luk/22/26/';
+  const selectToken = async token => page.locator('#blb-global-token-context').evaluate((element, value) => {
+    const textNode = element.firstChild;
+    if (!textNode || textNode.nodeType !== Node.TEXT_NODE) throw new Error('Expected one plain text node');
+    const start = textNode.nodeValue.indexOf(value);
+    if (start < 0) throw new Error('Token not found: ' + value);
+    const range = document.createRange();
+    range.setStart(textNode, start);
+    range.setEnd(textNode, start + value.length);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    element.dispatchEvent(new MouseEvent('mouseup', {bubbles:true,cancelable:true,view:window}));
+  }, token);
+  const openFromSelection = async message => extensionWorker.evaluate(async payload => {
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!tab?.id) throw new Error('No active example.com tab');
+    const [execution] = await chrome.scripting.executeScript({
+      target:{tabId:tab.id}, world:'ISOLATED',
+      func:data => new Promise((resolve, reject) => chrome.runtime.sendMessage(data, response => {
+        if (chrome.runtime.lastError) return reject(new Error(chrome.runtime.lastError.message));
+        resolve(response || null);
+      })),
+      args:[payload]
+    });
+    return execution?.result || null;
+  }, message);
+  const expectLukeTab = async label => {
+    const opened = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.pendingUrl || tab.url);
+        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+      } catch (_) { return false; }
+    });
+    expect(new URL(opened.pendingUrl || opened.url).pathname, label).toBe(expectedPath);
+    await removeTabById(extensionWorker, opened.id);
+    await page.waitForTimeout(300);
+  };
+
+  const tokens = ['Luke','22','26','KJV'];
+  const floatingButton = page.locator('#blb-suite-page-selection-button');
+  for (const token of tokens) {
+    await selectToken(token);
+    await expect(floatingButton, 'Floating Show on BLB for ' + token).toBeVisible({timeout:10000});
+    await floatingButton.click();
+    await expectLukeTab('floating ' + token);
+  }
+
+  for (const token of tokens) {
+    await selectToken(token);
+    const response = await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
+    expect(response?.ok, 'Alt+B command handler for ' + token).toBe(true);
+    await expectLukeTab('Alt+B ' + token);
+  }
+
+  for (const token of tokens) {
+    await selectToken(token);
+    const response = await openFromSelection({
+      type:'blbSuiteOpenSelectionText',
+      text:token,
+      tabBehavior:{activeIfNew:true,activateExisting:true}
+    });
+    expect(response?.ok, 'right-click handoff for ' + token).toBe(true);
+    await expectLukeTab('right-click ' + token);
+  }
+});
+
 test('Facebook book-name double-click retains Luke 22:26 context', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
   await page.route('https://www.facebook.com/**', route => route.fulfill({
