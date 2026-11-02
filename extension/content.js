@@ -1849,11 +1849,11 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // X and other rich-text feeds may keep an entire sentence in one text
     // node rather than wrapping each word in its own element. The physical
     // caret range still identifies the exact clicked word in that case.
-    const exactPhysicalRange = clickedWordRange &&
-      normalizeSelectionText(clickedWordText).normalize('NFKC') ===
-      normalizeSelectionText(selected).normalize('NFKC')
-      ? clickedWordRange
-      : null;
+    const exactPhysicalRange = [clickedWordRange, selectionRange].find(range =>
+      range &&
+      normalizeSelectionText(range.toString()).normalize('NFKC') ===
+        normalizeSelectionText(selected).normalize('NFKC')
+    ) || null;
     if ((exactPhysicalTarget || exactPhysicalRange) && !verseCueSelection && !/^[0-9]+$/.test(selected)) {
       // Book-name clicks on rich social feeds must bind to the citation
       // immediately following the exact clicked DOM element. Avoid deriving
