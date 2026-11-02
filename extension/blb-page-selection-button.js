@@ -1,6 +1,6 @@
 // Floating Show on BLB page-selection control and its lifecycle.
 (function (global) {
-  function initialize({ BLBShared, BOOKS, BOOK_ALIASES, KJV_CORPUS_WORD_INDEX, canonicalStrongValue, resolveBibleReference, resolveBibleBook, resolveBibleReferenceText, normalizeSelectionText, normalizeDoubleClickToken, getContextualBibleReference, getSelectionContextPosition, safeRuntimeSendMessage, isSensitiveSiteHostname, isSensitiveSiteUrl, getSiteDefaultEnabled, refreshDoubleClickBlb, suiteSettingsReadyPromise, isSuiteEnabledNow, makeBlbMultiVerseButtonDraggable, getPageSelectionSiteKey }) {
+  function initialize({ BLBShared, BOOKS, BOOK_ALIASES, KJV_CORPUS_WORD_INDEX, canonicalStrongValue, resolveBibleReference, resolveBibleBook, resolveBibleReferenceText, normalizeSelectionText, normalizeDoubleClickToken, getContextualBibleReference, safeRuntimeSendMessage, isSensitiveSiteHostname, isSensitiveSiteUrl, getSiteDefaultEnabled, refreshDoubleClickBlb, suiteSettingsReadyPromise, isSuiteEnabledNow, makeBlbMultiVerseButtonDraggable, getPageSelectionSiteKey }) {
     // ---------- Floating page selection button ----------
     // This feature is intentionally dormant unless the user enables "Show on BLB".
     // Alt+B and right-click remain independent entry points.
@@ -18,6 +18,12 @@
     let pageButtonRequestSequence = 0;
     let pageButtonDomObserver = null;
     let pageButtonDomValidationFrame = 0;
+
+    function isSingleTokenSelection(value) {
+      const normalized = normalizeSelectionText(value).normalize('NFKC');
+      return !!normalized && !/\s/.test(normalized) &&
+        /^[\p{L}\p{N}][\p{L}\p{N}.'-]*$/u.test(normalized);
+    }
     
     function isBlbPageButtonExcludedSite() {
       const host = String(location.hostname || '').toLowerCase().replace(/\.$/, '').replace(/^www\./, '');
@@ -268,11 +274,8 @@
         // Re-resolve at the moment of invocation, not only when the floating
         // button became visible. This makes the action itself use the shared
         // Double-Click positional entry point and avoids stale cached context.
-        const normalizedActionToken = normalizeSelectionText(text).normalize('NFKC');
-        const actionContext = !/\s/.test(normalizedActionToken) &&
-          /^[\p{L}\p{N}][\p{L}\p{N}.'-]*$/u.test(normalizedActionToken)
-          ? getContextualBibleReference(text)
-          : null;
+        const isSingleToken = isSingleTokenSelection(text);
+        const actionContext = isSingleToken ? getContextualBibleReference(text) : null;
         const actionContextualReference = actionContext?.url
           ? actionContext
           : blbPageButtonContextualReference;
@@ -287,7 +290,10 @@
           // as double-click: do not re-scan page context after the selection has
           // already been accepted as a word. Multi-word selections still resolve
           // adjacent references through the normal background path.
-          contextualReferenceResolved: !!actionContextualReference,
+          // The shared positional resolver was consulted for every one-token
+          // action, even when it found no reference. Do not run a second,
+          // competing interpretation in the background worker.
+          contextualReferenceResolved: isSingleToken || !!actionContextualReference,
           tabBehavior:{activeIfNew:true,activateExisting:true}
         });
         clearBlbPageSelectionAfterAction();
@@ -315,15 +321,18 @@
       blbPageButtonSelection = text;
       blbPageButtonContextualReference = null;
       blbPageButtonDirectUrl = null;
+      // A same-text selection elsewhere on the page must not inherit the
+      // previous occurrence's positional result.
+      lastSelectionContextualReference = null;
+      lastSelectionContextualText = '';
       setBlbPageButtonVisible(false);
       if (!text || !isSuiteEnabledNow()) return;
 
       // Resolve every one-token selection through the same live-Range
       // interpretation as Double-Click before applying button-specific
       // vocabulary filtering or any text-only reference parsing.
-      const normalizedSingleToken = normalizeSelectionText(text).normalize('NFKC');
-      if (!/\s/.test(normalizedSingleToken) &&
-          /^[\p{L}\p{N}][\p{L}\p{N}.'-]*$/u.test(normalizedSingleToken)) {
+      const isSingleToken = isSingleTokenSelection(text);
+      if (isSingleToken) {
         const doubleClickEquivalent = getContextualBibleReference(text);
         if (doubleClickEquivalent?.url) {
           blbPageButtonContextualReference = doubleClickEquivalent;
@@ -331,7 +340,7 @@
           lastSelectionContextualText = text;
         }
       }
-    
+
       // Match the Double-Click BLB fast-reject rule for single-word selections.
       // Hide the floating button for non-ASCII tokens and English words absent
       // from the local KJV vocabulary, while allowing KJV words and book names.
@@ -350,19 +359,8 @@
         // the single-word fast reject; ordinary unknown words remain rejected.
         const isVerseCue = /^(?:verse|verses|v)$/i.test(text);
         if (!isKjvWord && !isBookName && !isVerseCue) {
-          // A token that is not a standalone KJV word/book may still be a
-          // numbered-book suffix alias (for example, "Th" in "II Th 2:1").
-          // Resolve every unknown single token against its exact live DOM
-          // Range before rejecting it. The contextual resolver only accepts a
-          // token that belongs to a validated positional citation, so ordinary
-          // unknown prose words remain hidden. Bare numbers are also guarded
-          // there and cannot fall through to a default-book text parser.
-          const contextual = getContextualBibleReference(text);
-          if (contextual?.url) {
-            blbPageButtonContextualReference = contextual;
-            lastSelectionContextualReference = contextual;
-            lastSelectionContextualText = text;
-          }
+          // The shared positional resolver already checked this token above.
+          // Do not reinterpret it through a second selection-specific path.
           if (!blbPageButtonContextualReference) {
             blbPageButtonSelection = '';
             return;
@@ -371,36 +369,9 @@
       }
     
       if (text) {
-        // Compact book/chapter tokens are ambiguous without their adjacent
-        // verse. Resolve their live DOM context before the exact-text parser,
-        // which otherwise defaults John3 to John 3:1 and caches that weaker URL.
-        const compactToken = normalizeSelectionText(text).normalize('NFKC');
-        let isCompactBookChapterToken = false;
-        if (/^[A-Za-z][A-Za-z0-9.'-]*$/.test(compactToken)) {
-          for (let split = compactToken.length - 1; split > 0; split--) {
-            const book = resolveBibleBook(compactToken.slice(0, split));
-            if (book && /^\d{1,3}$/.test(compactToken.slice(split))) {
-              isCompactBookChapterToken = true;
-              break;
-            }
-          }
-        }
-        if (isCompactBookChapterToken) {
-          const contextual = getContextualBibleReference(text);
-          if (contextual?.url) {
-            blbPageButtonContextualReference = contextual;
-            lastSelectionContextualReference = contextual;
-            lastSelectionContextualText = text;
-          }
-        }
-
-        // Fast path: an exact single reference can be resolved locally once while
-        // the selection is being classified. Retain its validated BLB URL so the
-        // click does not repeat selection classification in the background worker.
-        // A bare number is position-dependent. The text-only parser can
-        // reinterpret chapter/verse tokens such as the "10" in
-        // "Romans 10:9,10" as an unrelated default-book reference. Resolve
-        // numeric selections only through the live DOM Range context below.
+        // Keep the text-only parser for complete nonnumeric reference text.
+        // Bare numbers are positional and have already been checked only by the
+        // shared live-Range resolver above; never infer a default book from them.
         const directRefs = /^\d+$/.test(normalizeSelectionText(text))
           ? []
           : resolveBibleReferenceText(normalizeSelectionText(text));
@@ -443,50 +414,10 @@
         if (!blbPageButtonContextualReference) {
           let contextual = null;
 
-          // Numeric selections must be resolved from their exact DOM Range
-          // before the generic contextual parser. That parser may otherwise
-          // reinterpret a chapter token as a default-book verse. The shared
-          // Range serializer preserves nested inline elements and <br>/block
-          // boundaries across generic article and post DOM layouts.
-          if (/^\d+$/.test(normalizeSelectionText(text))) {
-            const position = typeof getSelectionContextPosition === 'function'
-              ? getSelectionContextPosition()
-              : null;
-            if (position?.text && Number.isFinite(position.start) && Number.isFinite(position.end)) {
-              const source = normalizeSelectionText(position.text).normalize('NFKC');
-              const selectedStart = position.start;
-              const selectedEnd = position.end;
-              const listPattern = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d{1,3})\s*:\s*(\d{1,3}(?:\s*,\s*\d{1,3})+)/gi;
-              let match;
-              while ((match = listPattern.exec(source))) {
-                const citationStart = match.index;
-                const citationEnd = citationStart + match[0].length;
-                if (selectedStart >= citationEnd || selectedEnd <= citationStart) continue;
-                const book = resolveBibleBook(match[1]);
-                if (!book) continue;
-                const verses = match[3].split(',').map(value => Number(value.trim()));
-                const consecutive = verses.every((verse, index) =>
-                  index === 0 || verse === verses[index - 1] + 1
-                );
-                if (!consecutive) continue;
-                const resolved = resolveBibleReference(
-                  book.name, Number(match[2]), verses[0], verses[verses.length - 1]
-                );
-                if (resolved) {
-                  contextual = {
-                    book: resolved.book,
-                    chapter: resolved.chapter,
-                    from: resolved.from,
-                    to: resolved.to,
-                    url: resolved.url
-                  };
-                  break;
-                }
-              }
-            }
-          }
-
-          if (!contextual?.url) contextual = getContextualBibleReference(text);
+          // Multiword selections retain the contextual fallback. One-token
+          // selections were already checked by the shared Double-Click resolver
+          // above and must not enter a second interpretation path.
+          if (!isSingleToken) contextual = getContextualBibleReference(text);
 
           // Numeric selections never fall through to the background text-only
           // parser. A bare number with no exact contextual result is rejected.
@@ -650,9 +581,7 @@
           // Every one-token selection action must enter the same positional
           // resolver, even when a previous selection-change pass populated a
           // cache. Cached context remains a fallback, never a bypass.
-          const normalizedToken = normalizeSelectionText(selected).normalize('NFKC');
-          const isSingleToken = !!normalizedToken && !/\s/.test(normalizedToken) &&
-            /^[\p{L}\p{N}][\p{L}\p{N}.'-]*$/u.test(normalizedToken);
+          const isSingleToken = isSingleTokenSelection(selected);
           const positional = isSingleToken ? getContextualBibleReference(selected) : null;
           const resolved = isSingleToken
             ? (positional || verseCueReference)
