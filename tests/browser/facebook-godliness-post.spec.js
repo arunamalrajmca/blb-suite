@@ -93,7 +93,7 @@ test('Facebook Godliness shorthand citations open the clicked chapter and verse'
     const article = document.createElement('div');
     article.setAttribute('role', 'article');
     article.innerHTML = `
-      <div dir="auto">The Mystery of Godliness is that Christ is manifesting Himself through the believers
+      <div data-ad-comet-preview="message"><div dir="auto">The Mystery of Godliness is that Christ is manifesting Himself through the believers
         <span id="gal-book">Gal.</span> <span id="gal-c1">2</span>:<span id="gal-v1">20</span>,
         <span id="gal-c2">4</span>:<span id="gal-v2">6</span>;
         <span id="eph-book">Eph.</span> <span id="eph-c1">1</span>:<span id="eph-v1">7</span>, 13, 14,
@@ -103,7 +103,7 @@ test('Facebook Godliness shorthand citations open the clicked chapter and verse'
         <span id="acts-book">Acts</span> <span id="acts-c1">13</span>:<span id="acts-v1">42</span>,
         <span id="acts-c2">18</span>:<span id="acts-v2">6</span>,
         <span id="acts-c3">28</span>:<span id="acts-v3">28</span>
-      </div>`;
+      </div></div>`;
     article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
     document.body.appendChild(article);
   });
