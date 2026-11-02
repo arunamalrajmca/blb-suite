@@ -1422,8 +1422,9 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
     const pdi = '\u2069';
     const article = document.createElement('div');
     article.setAttribute('role', 'article');
+    article.setAttribute('data-blb-test-diagnostics', 'true');
     article.innerHTML =
-      '<div data-ad-comet-preview="message">' +
+      '<div data-ad-comet-preview="message" data-blb-test-diagnostics>' +
         '<div class="xdj266r x14z9mp" dir="auto" id="fb-luke-chapter-range"><span id="fb-luke-range-book">' + lri + 'Luke' + pdi + '</span> 21-<span id="fb-luke-range-end">' + lri + '22' + pdi + '</span></div>' +
         '<div class="xdj266r x14z9mp" dir="auto" id="fb-luke-citation">' +
           '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
@@ -1448,7 +1449,8 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
     });
     return execution?.result || null;
   }, message);
-  const expectNewLukeTab = async () => {
+  const expectNewLukeTab = async (actionLabel = 'selection action') => {
+    try {
     const opened = await waitForTab(extensionWorker, tab => {
       try {
         const url = new URL(tab.pendingUrl || tab.url);
@@ -1458,6 +1460,13 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
     expect(new URL(opened.pendingUrl || opened.url).pathname).toBe(expectedPath);
     await removeTabById(extensionWorker, opened.id);
     await page.waitForTimeout(1300);
+    } catch (error) {
+      const diagnostics = await page.locator('[data-blb-test-diagnostics]').evaluateAll(nodes =>
+        nodes.map(node => ({text:node.innerText, diagnostic:node.getAttribute('data-blb-double-click-diagnostic')}))
+      );
+      console.error('[Luke 22:26 failed action diagnostics]', JSON.stringify({actionLabel, diagnostics}));
+      throw error;
+    }
   };
   const selectToken = async selector => page.locator(selector).evaluate(element => {
     const range = document.createRange();
@@ -1471,9 +1480,9 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
   // Both the book name and range-end number on the first line must inherit
   // the matching explicit verse citation on the immediately following line.
   await page.locator('#fb-luke-range-book').dblclick();
-  await expectNewLukeTab();
+  await expectNewLukeTab('range book double-click');
   await page.locator('#fb-luke-range-end').dblclick();
-  await expectNewLukeTab();
+  await expectNewLukeTab('range end double-click');
 
   // The actual book/chapter/verse tokens on the second line remain exact.
   await page.locator('#fb-luke-book').dblclick();
