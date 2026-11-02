@@ -1849,6 +1849,19 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const numericContextRoot = nearestSemanticBlock(
         numericElement || numericRange?.startContainer?.parentElement
       ) || messageRoot;
+      const writeNumericContextDiagnostic = details => {
+        const diagnosticRoot = numericContextRoot?.closest?.('[data-blb-test-diagnostics]');
+        if (diagnosticRoot) {
+          diagnosticRoot.setAttribute('data-blb-numeric-context-diagnostic', JSON.stringify({
+            selected, clickedWordText, hasMessageRoot: !!messageRoot,
+            numericElementText: numericElement?.textContent || '',
+            numericRangeText: numericRange ? domRangeText(numericRange) : '',
+            contextRootTag: numericContextRoot?.tagName || null,
+            ...details
+          }));
+        }
+      };
+      writeNumericContextDiagnostic({stage:'entered', hasNumericRange:!!numericRange});
       if (numericRange && numericContextRoot instanceof Element &&
           numericContextRoot.contains(numericRange.startContainer)) {
         try {
@@ -1869,6 +1882,12 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           const exactStart = normalizedPrefix.length + (hasInteriorSeparator ? 1 : 0);
           const exactToken = normalizeSelectionText(domRangeText(numericRange)).normalize('NFKC');
           const exactEnd = exactStart + exactToken.length;
+          writeNumericContextDiagnostic({
+            stage:'offsets', exactStart, exactEnd, exactToken,
+            contextSlice:normalizedContext.slice(Math.max(0, exactStart - 24), exactEnd + 24),
+            prefixTail:normalizedPrefix.slice(-40),
+            separator:hasInteriorSeparator
+          });
           if (exactToken === selected && normalizedContext.slice(exactStart, exactEnd) === exactToken) {
             const contextualReference = resolveBibleReferenceFromContextWindow(
               normalizedContext, exactStart, exactEnd
@@ -1876,6 +1895,11 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             const positionalReference = resolvePositionalBookCitation(
               normalizedContext, exactStart, exactEnd
             );
+            writeNumericContextDiagnostic({
+              stage:'resolved',
+              contextualReference:contextualReference || null,
+              positionalReference:positionalReference || null
+            });
             const referenceScore = reference => {
               if (!reference) return -1;
               if (reference.from == null) return 0;
