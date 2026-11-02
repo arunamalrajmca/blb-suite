@@ -1156,7 +1156,9 @@ function resolveBibleReferenceFromContextWindowCore(text, selectionStart, select
     from: winner.from,
     to: winner.to,
     url: winner.url
-  }
+  };
+}
+
 /**
  * Opt-in resolver trace for diagnosing selection-to-reference mismatches.
  * Disabled by default; enabled only by the browser regression harness.
@@ -1184,8 +1186,6 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
     }
   } catch (_) {}
   return result;
-}
-;
 }
 
 function resolveCompactBookPart(value) {
