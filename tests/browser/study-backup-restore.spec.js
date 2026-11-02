@@ -127,7 +127,10 @@ test.describe('Study Sessions backup and restore', () => {
     const topic = 'Export backup topic ' + Date.now();
     await send(page, { type: 'blbSuiteStartStudyTopic', title: topic, note: 'Exported note' });
     await extensionWorker.evaluate(() => chrome.storage.local.set({
-      masterEnabled: false,
+      // Keep the Study panel available while exporting; this test verifies that
+      // extension settings are excluded from the backup, not that Study works
+      // while the global Suite gate is OFF.
+      masterEnabled: true,
       redirectEnabled: true,
       pageSelectionButtonSites: { 'example.com': true },
       doubleClickSites: { 'example.org': true }
