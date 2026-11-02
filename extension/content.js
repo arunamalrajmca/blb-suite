@@ -1423,6 +1423,17 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       }
     }
     if (!selected) return null;
+    const clickTestDiagnosticRoot = initialNode?.closest?.('[data-blb-test-diagnostics]');
+    if (clickTestDiagnosticRoot) {
+      clickTestDiagnosticRoot.setAttribute('data-blb-click-internal-diagnostic', JSON.stringify({
+        selectionText: normalizeSelectionText(selectionText),
+        selected,
+        clickedWordText,
+        clickedWordRangeText: clickedWordRange ? domRangeText(clickedWordRange) : '',
+        initialNodeTag: initialNode?.tagName || null,
+        initialNodeText: (initialNode?.textContent || '').slice(0, 100)
+      }));
+    }
 
     // Numeric double-clicks inside a citation must be resolved from the exact
     // physical token position before standalone-number fallback. Chromium can
