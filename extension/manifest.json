@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "KJV Scripture Tools",
-  "version": "5.2.51.105",
+  "version": "5.2.51.106",
   "description": "Send Bible references and searches to Blue Letter Bible with selection tools and local KJV case-sensitive search.",
   "permissions": [
     "clipboardWrite",
