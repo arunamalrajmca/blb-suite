@@ -747,10 +747,10 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
   for (const entry of entries) {
     const escaped = entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
     const patterns = [
-      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.(?=\\d)\\s*)(\\d{1,3})\\s*[:.]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])', 'gi'),
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.\\s*)(\\d{1,3})\\s*[:.]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])', 'gi'),
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])', 'gi'),
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')\\s+(\\d{1,3})\\s+(\\d{1,3})(?=$|[^A-Za-z0-9])', 'gi'),
-      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.(?=\\d)\\s*)(\\d{1,3})(?!\\s*[:.]\\s*\\d)(?=$|[^A-Za-z0-9])', 'gi'),
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.\\s*)(\\d{1,3})(?!\\s*[:.]\\s*\\d)(?=$|[^A-Za-z0-9])', 'gi'),
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})(?!\\s*:\\s*\\d)(?=$|[^A-Za-z0-9])', 'gi')
     ];
     for (let patternIndex = 0; patternIndex < patterns.length; patternIndex++) {
