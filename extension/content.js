@@ -1103,27 +1103,44 @@ function resolveCompactBookChapterToken(value) {
   return null;
 }
 
-function getContextualBibleReference(selectionText) {  const selected = normalizeSelectionText(selectionText);
+function getDoubleClickEquivalentSelectionContext(selectionText, preferredTarget = null, event = null) {
+  const selected = normalizeSelectionText(selectionText).normalize('NFKC');
+  // A double-click gesture selects one token. Apply that same positional
+  // interpretation to one-token selections invoked through Show on BLB,
+  // right-click, or Alt+B; leave multiword selections on their existing path.
+  if (!selected || /\\s/.test(selected) ||
+      !/^[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*$/u.test(selected)) return null;
+
+  const candidates = [];
+  const addCandidate = node => {
+    const element = node?.nodeType === Node.ELEMENT_NODE ? node : node?.parentElement;
+    if (element instanceof Element && !candidates.includes(element)) candidates.push(element);
+  };
+  addCandidate(preferredTarget);
+  const liveSelection = window.getSelection?.();
+  if (liveSelection?.rangeCount && !liveSelection.isCollapsed) {
+    const range = liveSelection.getRangeAt(0);
+    addCandidate(range.startContainer);
+    addCandidate(range.endContainer);
+    addCandidate(range.commonAncestorContainer);
+  }
+  for (const target of candidates) {
+    const contextual = getDoubleClickBlockContextReference(selected, target, event);
+    if (contextual?.url) return contextual;
+  }
+  return null;
+}
+
+function getContextualBibleReference(selectionText) {
+  const selected = normalizeSelectionText(selectionText);
   if (!selected) return null;
 
-  // Reuse the exact same block-local positional resolver used by Double-Click
-  // for single-token selections. Context-menu, Alt+B, and Show on BLB also
-  // receive only a token (for example the chapter "10" in "Romans 10:9,10"),
-  // so their Range must resolve against the same surrounding DOM citation
-  // before a text-only numeric/Criteria fallback can reinterpret that token.
+  // All single-token selection actions share the positional resolver used by
+  // Double-Click. Probe the exact Range endpoints as well as its common
+  // ancestor: rich-text feeds can split the token across nested inline nodes.
   const normalizedSelectedToken = selected.normalize('NFKC');
-  if (!/\s/.test(normalizedSelectedToken) &&
-      /^[\p{L}\p{N}][\p{L}\p{N}.'-]*$/u.test(normalizedSelectedToken)) {
-    const liveSelection = window.getSelection?.();
-    if (liveSelection?.rangeCount && !liveSelection.isCollapsed) {
-      let target = liveSelection.getRangeAt(0).commonAncestorContainer;
-      if (target?.nodeType === Node.TEXT_NODE) target = target.parentElement;
-      if (target instanceof Element) {
-        const exactContext = getDoubleClickBlockContextReference(normalizedSelectedToken, target, null);
-        if (exactContext?.url) return exactContext;
-      }
-    }
-  }
+  const exactContext = getDoubleClickEquivalentSelectionContext(normalizedSelectedToken);
+  if (exactContext?.url) return exactContext;
 
   // Never send an unresolved bare number to the text-only parser: it can
   // manufacture a default Genesis reference from a chapter/verse token.
