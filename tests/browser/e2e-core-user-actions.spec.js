@@ -1505,6 +1505,25 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
 
   await enableSelectionDiagnostics();
 
+  // Use real browser mouse input for the baseline. Dispatching a synthetic
+  // dblclick after manually installing a Range does not reproduce the browser's
+  // native word-selection behavior.
+  const doubleClickToken = async token => {
+    const point = await page.locator('#fb-luke-citation').evaluate((element, value) => {
+      const textNode = element.firstChild;
+      if (!textNode || textNode.nodeType !== Node.TEXT_NODE) throw new Error('Expected one plain text node');
+      const start = textNode.nodeValue.indexOf(value);
+      if (start < 0) throw new Error('Token not found in Facebook text node: ' + value);
+      const range = document.createRange();
+      range.setStart(textNode, start);
+      range.setEnd(textNode, start + value.length);
+      const rect = range.getBoundingClientRect();
+      if (!rect.width || !rect.height) throw new Error('Token has no visible browser selection rectangle: ' + value);
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }, token);
+    await page.mouse.dblclick(point.x, point.y);
+  };
+
   // Double-click on the second line remains the baseline for all four tokens.
   for (const [token,label] of [
     ['Luke','double-click Luke'],
@@ -1512,7 +1531,7 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     ['26','double-click 26'],
     ['KJV','double-click KJV']
   ]) {
-    await selectToken('#fb-luke-citation', token, 'dblclick');
+    await doubleClickToken(token);
     const diagnostic = await readSelectionDiagnostics();
     console.log('[Facebook single-text-node double-click diagnostic]', JSON.stringify({label, ...diagnostic}));
     await expectNewLukeTab(label);
