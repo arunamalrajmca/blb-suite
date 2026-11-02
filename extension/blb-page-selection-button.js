@@ -306,6 +306,20 @@
       blbPageButtonDirectUrl = null;
       setBlbPageButtonVisible(false);
       if (!text || !isSuiteEnabledNow()) return;
+
+      // Resolve every one-token selection through the same live-Range
+      // interpretation as Double-Click before applying button-specific
+      // vocabulary filtering or any text-only reference parsing.
+      const normalizedSingleToken = normalizeSelectionText(text).normalize('NFKC');
+      if (!/\\s/.test(normalizedSingleToken) &&
+          /^[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*$/u.test(normalizedSingleToken)) {
+        const doubleClickEquivalent = getContextualBibleReference(text);
+        if (doubleClickEquivalent?.url) {
+          blbPageButtonContextualReference = doubleClickEquivalent;
+          lastSelectionContextualReference = doubleClickEquivalent;
+          lastSelectionContextualText = text;
+        }
+      }
     
       // Match the Double-Click BLB fast-reject rule for single-word selections.
       // Hide the floating button for non-ASCII tokens and English words absent
