@@ -779,8 +779,66 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
 }
 
 function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionEnd) {
+  let source = normalizeSelectionText(text);
+  if (!source) return null;
+
+  // A single chapter/verse number belongs to the nearest explicit book name
+  // on its left. Once that book is found, earlier text is outside this
+  // selection's context and must not contribute another reference. This is
+  // shared by Double-Click, Show on BLB, right-click, and the Alt+B handler.
+  const selectedNumericToken = normalizeSelectionText(
+    source.slice(selectionStart, selectionEnd)
+  ).normalize('NFKC');
+  if (/^\\d{1,3}$/.test(selectedNumericToken) &&
+      Number.isFinite(selectionStart) && Number.isFinite(selectionEnd)) {
+    const bookForms = [];
+    const addBookForm = (name, book) => {
+      const value = String(name || '').trim();
+      if (value && book && !bookForms.some(item => item.name.toLowerCase() === value.toLowerCase())) {
+        bookForms.push({name:value, book});
+      }
+    };
+    for (const book of BOOKS) {
+      addBookForm(book.name, book);
+      addBookForm(book.urlKey, book);
+      const numbered = String(book.name || '').match(/^([1-3])\\s+(.+)$/i);
+      if (numbered) addBookForm(({'1':'I','2':'II','3':'III'})[numbered[1]] + ' ' + numbered[2], book);
+    }
+    for (const [alias, canonicalName] of Object.entries(BOOK_ALIASES || {})) {
+      const book = BOOKS.find(item => item.name === canonicalName);
+      if (!book) continue;
+      addBookForm(alias, book);
+      const numbered = String(canonicalName || '').match(/^([1-3])\\s+(.+)$/i);
+      if (numbered && !/^(?:[1-3]|i{1,3})\\s+/i.test(alias)) {
+        addBookForm(numbered[1] + ' ' + alias, book);
+        addBookForm(({'1':'I','2':'II','3':'III'})[numbered[1]] + ' ' + alias, book);
+      }
+    }
+    bookForms.sort((a,b) => b.name.length - a.name.length);
+    let nearestBookStart = -1;
+    let nearestBookEnd = -1;
+    for (const entry of bookForms) {
+      const escaped = entry.name.replace(/[.*+?^$()|[\\]\\\\]/g, '\\\\function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionEnd) {
   const source = normalizeSelectionText(text);
   if (!source) return null;
+').replace(/\\s+/g, '\\\\s+');
+      const matcher = new RegExp('(^|[^A-Za-z0-9])(' + escaped + ')(?=$|[^A-Za-z0-9])', 'gi');
+      let match;
+      while ((match = matcher.exec(source))) {
+        const bookStart = match.index + match[1].length;
+        const bookEnd = bookStart + match[2].length;
+        if (bookEnd <= selectionStart && bookEnd > nearestBookEnd) {
+          nearestBookStart = bookStart;
+          nearestBookEnd = bookEnd;
+        }
+      }
+    }
+    if (nearestBookStart >= 0) {
+      source = source.slice(nearestBookStart);
+      selectionStart -= nearestBookStart;
+      selectionEnd -= nearestBookStart;
+    }
+  }
 
   // A book-name click can be the only selected part of a comma-separated
   // same-chapter verse list (for example, "Romans 10:9,10"). Resolve the
