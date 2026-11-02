@@ -875,14 +875,14 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
       const semicolonAt = source.indexOf(';', tailStart);
       const tailEnd = semicolonAt < 0 ? source.length : semicolonAt;
       const tail = source.slice(tailStart, tailEnd);
-      const continuationRe = /,\\s*(\\d{1,3}(?:\\s*:\\s*\\d{1,3})?(?:\\s*[-–—]\\s*\\d{1,3})?)/g;
+      const continuationRe = /,\s*(\d{1,3}(?:\s*:\s*\d{1,3})?(?:\s*[-–—]\s*\d{1,3})?)/g;
       let continuation;
       while ((continuation = continuationRe.exec(tail))) {
         const token = continuation[1].trim();
         const tokenStart = tailStart + continuation.index + continuation[0].lastIndexOf(continuation[1]);
         const tokenEnd = tokenStart + token.length;
         if (selectionStart < tokenStart || selectionEnd > tokenEnd) continue;
-        const chapterVerse = token.match(/^(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?$/);
+        const chapterVerse = token.match(/^(\d{1,3})\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?$/);
         let from;
         let to;
         if (chapterVerse) {
@@ -890,7 +890,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
           from = Number(chapterVerse[2]);
           to = Number(chapterVerse[3] || chapterVerse[2]);
         } else {
-          const verse = token.match(/^(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?$/);
+          const verse = token.match(/^(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?$/);
           if (!verse) continue;
           from = Number(verse[1]);
           to = Number(verse[2] || verse[1]);
