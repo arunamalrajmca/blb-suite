@@ -1453,6 +1453,26 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     });
     return execution?.result || null;
   }, message);
+  const enableSelectionDiagnostics = async () => extensionWorker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!tab?.id) throw new Error('No active Facebook tab');
+    await chrome.scripting.executeScript({
+      target:{tabId:tab.id}, world:'ISOLATED',
+      func:() => { window.__blbSuiteEnableSelectionDiagnostics = true; }
+    });
+  });
+  const readSelectionDiagnostics = async () => extensionWorker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!tab?.id) throw new Error('No active Facebook tab');
+    const [execution] = await chrome.scripting.executeScript({
+      target:{tabId:tab.id}, world:'ISOLATED',
+      func:() => ({
+        nativeSelection: window.getSelection()?.toString() || '',
+        reconstructed: window.__blbSuiteSelectionContextDiagnostic || null
+      })
+    });
+    return execution?.result || null;
+  });
   const expectNewLukeTab = async actionLabel => {
     try {
       const opened = await waitForTab(extensionWorker, tab => {
@@ -1481,6 +1501,8 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     element.dispatchEvent(new MouseEvent('mouseup', {bubbles:true,cancelable:true,view:window}));
   });
 
+  await enableSelectionDiagnostics();
+
   // Double-click on the second line remains the baseline for all four tokens.
   for (const [selector,label] of [
     ['#fb-luke-book','double-click Luke'],
@@ -1499,6 +1521,12 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     ['#fb-luke-chapter','floating 22']
   ]) {
     await selectToken(selector);
+    const diagnostic = await readSelectionDiagnostics();
+    if (label.endsWith('22')) {
+      console.log('[Facebook contextual selection diagnostic]', JSON.stringify({label, ...diagnostic}));
+      expect(diagnostic?.reconstructed?.selectedSlice).toBe('22');
+      expect(diagnostic?.reconstructed?.contextText).toContain('Luke 22:26');
+    }
     await expect(floatingButton).toBeVisible({timeout:10000});
     await floatingButton.click();
     await expectNewLukeTab(label);
@@ -1510,6 +1538,12 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     ['#fb-luke-chapter','22','Alt+B 22']
   ]) {
     await selectToken(selector);
+    const diagnostic = await readSelectionDiagnostics();
+    if (label.endsWith('22')) {
+      console.log('[Facebook contextual selection diagnostic]', JSON.stringify({label, ...diagnostic}));
+      expect(diagnostic?.reconstructed?.selectedSlice).toBe('22');
+      expect(diagnostic?.reconstructed?.contextText).toContain('Luke 22:26');
+    }
     await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
     await expectNewLukeTab(label);
   }
@@ -1520,6 +1554,12 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     ['#fb-luke-chapter','22','right-click 22']
   ]) {
     await selectToken(selector);
+    const diagnostic = await readSelectionDiagnostics();
+    if (label.endsWith('22')) {
+      console.log('[Facebook contextual selection diagnostic]', JSON.stringify({label, ...diagnostic}));
+      expect(diagnostic?.reconstructed?.selectedSlice).toBe('22');
+      expect(diagnostic?.reconstructed?.contextText).toContain('Luke 22:26');
+    }
     await openFromSelection({
       type:'blbSuiteOpenSelectionText',
       text,
