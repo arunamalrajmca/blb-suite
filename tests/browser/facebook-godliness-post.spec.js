@@ -88,7 +88,7 @@ test('Facebook Godliness shorthand citations open the clicked chapter and verse'
     body: '<!doctype html><html><head><title>Facebook shorthand click fixture</title></head><body></body></html>'
   }));
   await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(1000);
   await page.evaluate(() => {
     const article = document.createElement('div');
     article.setAttribute('role', 'article');
