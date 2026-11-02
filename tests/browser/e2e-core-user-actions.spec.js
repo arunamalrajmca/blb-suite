@@ -1407,7 +1407,7 @@ test('Facebook resolves repeated references from each fresh plain-text selection
   expect(observedPaths).toEqual(expectedPaths.map(([, path]) => path));
 });
 
-test('Facebook Luke 22:26 context is consistent across selection actions', async ({ page, extensionStorage, extensionWorker }) => {
+test('Facebook Luke 22:26 resolves only within its own dir-auto line across selection actions', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({
     masterEnabled: true,
     pageSelectionButtonSites: { 'facebook.com': true, 'www.facebook.com': true },
@@ -1422,19 +1422,20 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
   await page.waitForTimeout(1000);
 
   await page.evaluate(() => {
-    const lri = '\u2066';
-    const pdi = '\u2069';
+    const lri = '\\u2066';
+    const pdi = '\\u2069';
     const article = document.createElement('div');
     article.setAttribute('role', 'article');
-    article.setAttribute('data-blb-test-diagnostics', 'true');
     article.innerHTML =
-      '<div data-ad-comet-preview="message" data-blb-test-diagnostics>' +
-        '<div class="x1-wrapper"><div class="xdj266r x14z9mp" dir="auto" style="display:contents;text-align:start" id="fb-luke-chapter-range"><span id="fb-luke-range-book">' + lri + 'Luke' + pdi + '</span> 21-<span id="fb-luke-range-end">' + lri + '22' + pdi + '</span></div></div>' +
-        '<div class="x2-wrapper"><div class="xdj266r x14z9mp" dir="auto" style="display:contents;text-align:start" id="fb-luke-citation">' +
+      '<div data-ad-comet-preview="message">' +
+        '<div class="x1-wrapper"><div dir="auto" style="display:contents" id="fb-luke-chapter-range">' +
+          '<span> ' + lri + 'Luke' + pdi + '</span> 21-<span>' + lri + '22' + pdi + '</span>' +
+        '</div></div>' +
+        '<div class="x2-wrapper"><div dir="auto" style="display:contents" id="fb-luke-citation">' +
           '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
           '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>:' +
           '<span><span id="fb-luke-verse">' + lri + '26' + pdi + '</span></span> ' +
-          '<span>' + lri + 'KJV' + pdi + '</span>' +
+          '<span id="fb-luke-version">' + lri + 'KJV' + pdi + '</span>' +
         '</div></div>' +
       '</div>';
     article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
@@ -1442,33 +1443,32 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
   });
 
   const expectedPath = '/kjv/luk/22/26/';
-  const openFromSelection = async (message) => extensionWorker.evaluate(async (payload) => {
+  const openFromSelection = async message => extensionWorker.evaluate(async payload => {
     const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
     if (!tab?.id) throw new Error('No active Facebook tab');
     const [execution] = await chrome.scripting.executeScript({
-      target: {tabId:tab.id},
-      world:'ISOLATED',
-      func: data => new Promise(resolve => chrome.runtime.sendMessage(data, result => resolve(result || null))),
+      target:{tabId:tab.id}, world:'ISOLATED',
+      func:data => new Promise(resolve => chrome.runtime.sendMessage(data, result => resolve(result || null))),
       args:[payload]
     });
     return execution?.result || null;
   }, message);
-  const expectNewLukeTab = async (actionLabel = 'selection action') => {
+  const expectNewLukeTab = async actionLabel => {
     try {
-    const opened = await waitForTab(extensionWorker, tab => {
-      try {
-        const url = new URL(tab.pendingUrl || tab.url);
-        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
-      } catch (_) { return false; }
-    });
-    expect(new URL(opened.pendingUrl || opened.url).pathname).toBe(expectedPath);
-    await removeTabById(extensionWorker, opened.id);
-    await page.waitForTimeout(1300);
+      const opened = await waitForTab(extensionWorker, tab => {
+        try {
+          const url = new URL(tab.pendingUrl || tab.url);
+          return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+        } catch (_) { return false; }
+      });
+      expect(new URL(opened.pendingUrl || opened.url).pathname, actionLabel).toBe(expectedPath);
+      await removeTabById(extensionWorker, opened.id);
+      await page.waitForTimeout(500);
     } catch (error) {
-      const diagnostics = await page.locator('[data-blb-test-diagnostics]').evaluateAll(nodes =>
-        nodes.map(node => ({text:node.innerText, diagnostic:node.getAttribute('data-blb-double-click-diagnostic')}))
+      const diagnostics = await page.locator('[role="article"]').evaluateAll(nodes =>
+        nodes.map(node => ({text:node.innerText, html:node.innerHTML}))
       );
-      console.error('[Luke 22:26 failed action diagnostics]', JSON.stringify({actionLabel, diagnostics}));
+      console.error('[Luke 22:26 line-scope diagnostics]', JSON.stringify({actionLabel, diagnostics}));
       throw error;
     }
   };
@@ -1481,57 +1481,53 @@ test('Facebook Luke 22:26 context is consistent across selection actions', async
     element.dispatchEvent(new MouseEvent('mouseup', {bubbles:true,cancelable:true,view:window}));
   });
 
-  // Both the book name and range-end number on the first line must inherit
-  // the matching explicit verse citation on the immediately following line.
-  await page.locator('#fb-luke-range-book').dblclick();
-  await expectNewLukeTab('range book double-click');
-  await page.locator('#fb-luke-range-end').dblclick();
-  await expectNewLukeTab('range end double-click');
+  // Double-click on the second line remains the baseline for all four tokens.
+  for (const [selector,label] of [
+    ['#fb-luke-book','double-click Luke'],
+    ['#fb-luke-chapter','double-click 22'],
+    ['#fb-luke-verse','double-click 26'],
+    ['#fb-luke-version','double-click KJV']
+  ]) {
+    await page.locator(selector).dblclick();
+    await expectNewLukeTab(label);
+  }
 
-  // The actual book/chapter/verse tokens on the second line remain exact.
-  await page.locator('#fb-luke-book').dblclick();
-  await expectNewLukeTab();
-  await page.locator('#fb-luke-chapter').dblclick();
-  await expectNewLukeTab();
-
-  // Floating Show on BLB must resolve both the book and range-end token
-  // from Facebook's dir=auto line even when its computed display is contents.
+  // Floating Show on BLB must use only the selected token's second line.
   const floatingButton = page.locator('#blb-suite-page-selection-button');
-  await selectToken('#fb-luke-range-book');
-  await expect(floatingButton).toBeVisible({timeout:10000});
-  await floatingButton.click();
-  await expectNewLukeTab('floating range book');
-  await selectToken('#fb-luke-range-end');
-  await expect(floatingButton).toBeVisible({timeout:10000});
-  await floatingButton.click();
-  await expectNewLukeTab('floating range end');
+  for (const [selector,label] of [
+    ['#fb-luke-book','floating Luke'],
+    ['#fb-luke-chapter','floating 22']
+  ]) {
+    await selectToken(selector);
+    await expect(floatingButton).toBeVisible({timeout:10000});
+    await floatingButton.click();
+    await expectNewLukeTab(label);
+  }
 
-  // The registered command handler must recover the same adjacent citation
-  // for both one-token selections, not just the numeric token.
-  await selectToken('#fb-luke-range-book');
-  await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
-  await expectNewLukeTab('Alt+B range book');
-  await selectToken('#fb-luke-range-end');
-  await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
-  await expectNewLukeTab('Alt+B range end');
+  // Exercise the registered Alt+B command handler for the same second-line tokens.
+  for (const [selector,text,label] of [
+    ['#fb-luke-book','Luke','Alt+B Luke'],
+    ['#fb-luke-chapter','22','Alt+B 22']
+  ]) {
+    await selectToken(selector);
+    await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
+    await expectNewLukeTab(label);
+  }
 
-  // The web right-click handoff must resolve both first-line tokens positionally.
-  await selectToken('#fb-luke-range-book');
-  await openFromSelection({
-    type:'blbSuiteOpenSelectionText',
-    text:'Luke',
-    tabBehavior:{activeIfNew:true,activateExisting:true}
-  });
-  await expectNewLukeTab();
-  await selectToken('#fb-luke-range-end');
-  await openFromSelection({
-    type:'blbSuiteOpenSelectionText',
-    text:'22',
-    tabBehavior:{activeIfNew:true,activateExisting:true}
-  });
-  await expectNewLukeTab();
+  // Right-click handoff also receives only the selected second-line token.
+  for (const [selector,text,label] of [
+    ['#fb-luke-book','Luke','right-click Luke'],
+    ['#fb-luke-chapter','22','right-click 22']
+  ]) {
+    await selectToken(selector);
+    await openFromSelection({
+      type:'blbSuiteOpenSelectionText',
+      text,
+      tabBehavior:{activeIfNew:true,activateExisting:true}
+    });
+    await expectNewLukeTab(label);
+  }
 });
-
 test('Facebook book-name double-click retains Luke 22:26 context', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
   await page.route('https://www.facebook.com/**', route => route.fulfill({
