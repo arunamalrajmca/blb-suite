@@ -1488,7 +1488,8 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
       throw error;
     }
   };
-  const selectToken = async (selector, token, eventType = 'mouseup') => page.locator(selector).evaluate((element, value) => {
+  const selectToken = async (selector, token, eventType = 'mouseup') => page.locator(selector).evaluate((element, payload) => {
+    const { value, eventType } = payload;
     const textNode = element.firstChild;
     if (!textNode || textNode.nodeType !== Node.TEXT_NODE) throw new Error('Expected one plain text node');
     const start = textNode.nodeValue.indexOf(value);
@@ -1500,7 +1501,7 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     selection.removeAllRanges();
     selection.addRange(range);
     element.dispatchEvent(new MouseEvent(eventType, {bubbles:true,cancelable:true,view:window,detail:eventType === 'dblclick' ? 2 : 1}));
-  }, token);
+  }, { value: token, eventType });
 
   await enableSelectionDiagnostics();
 
