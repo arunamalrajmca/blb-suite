@@ -692,8 +692,13 @@ function getSelectionContextPosition() {
           rangeStartOffset: range.startOffset,
           rangeEndNode: range.endContainer?.nodeValue || range.endContainer?.nodeName || '',
           rangeEndOffset: range.endOffset,
-          rangeText: rangeText(range)
+          rangeText: rangeText(range),
+          commonAncestorNode: range.commonAncestorContainer?.nodeName || '',
+          commonAncestorText: range.commonAncestorContainer?.textContent || '',
+          blockText: block?.textContent || '',
+          blockHtml: block instanceof Element ? block.outerHTML.slice(0, 3000) : ''
         };
+        console.info('[BLB selection reconstruction diagnostic]', JSON.stringify(window.__blbSuiteSelectionContextDiagnostic));
       }
     } catch (_) {}
     return result;
@@ -798,7 +803,7 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
   return null;
 }
 
-function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionEnd) {
+function resolveBibleReferenceFromContextWindowCore(text, selectionStart, selectionEnd) {
   let source = normalizeSelectionText(text);
   if (!source) return null;
 
@@ -1151,7 +1156,36 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
     from: winner.from,
     to: winner.to,
     url: winner.url
-  };
+  }
+/**
+ * Opt-in resolver trace for diagnosing selection-to-reference mismatches.
+ * Disabled by default; enabled only by the browser regression harness.
+ */
+function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionEnd) {
+  const result = resolveBibleReferenceFromContextWindowCore(text, selectionStart, selectionEnd);
+  try {
+    if (window.__blbSuiteEnableSelectionDiagnostics === true) {
+      const trace = {
+        inputText: String(text ?? ''),
+        selectionStart,
+        selectionEnd,
+        selectedToken: normalizeSelectionText(String(text ?? '').slice(selectionStart, selectionEnd)),
+        resolved: result ? {
+          book: result.book,
+          chapter: result.chapter,
+          from: result.from,
+          to: result.to,
+          url: result.url
+        } : null,
+        timestamp: Date.now()
+      };
+      window.__blbSuiteResolverDiagnostic = trace;
+      console.info('[BLB selection resolver diagnostic]', JSON.stringify(trace));
+    }
+  } catch (_) {}
+  return result;
+}
+;
 }
 
 function resolveCompactBookPart(value) {
