@@ -3016,13 +3016,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         activeIfNew: !!message.tabBehavior.activeIfNew,
         activateExisting: !!message.tabBehavior.activateExisting
       } : {activeIfNew:true, activateExisting:true};
+      const normalizedToken = normalizeSelectedScriptureText(text).normalize('NFKC');
+      const isSingleToken = !!normalizedToken && !/\\s/.test(normalizedToken) &&
+        /^[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*$/u.test(normalizedToken);
+      // Message-based Show on BLB handoffs that do not already carry a
+      // validated positional result must resolve while the page's live Range
+      // is still available. This keeps test/integration callers on the same
+      // content-script entry point as the native right-click menu and Alt+B.
+      const contextualReference = message.contextualReference ||
+        (!message.contextualReferenceResolved && isSingleToken
+          ? await getContextualSelectionReference(sender?.tab?.id, text)
+          : null);
       const result = await openSharedSelectionAction({
         tabId:sender?.tab?.id,
         tabUrl:sender?.tab?.url || '',
         text,
         behavior,
-        contextualReference:message.contextualReference || null,
-        contextualReferenceResolved:message.contextualReferenceResolved === true,
+        contextualReference:contextualReference || null,
+        contextualReferenceResolved: message.contextualReferenceResolved === true || !!contextualReference,
         directUrl:message.directUrl || ''
       });
       sendResponse(result);
