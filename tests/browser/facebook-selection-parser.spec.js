@@ -388,6 +388,15 @@ test.only('Facebook supplied div[dir=auto] DOM opens shorthand references from n
       throw new Error(error.message + '\\nObserved tabs: ' + JSON.stringify(observedTabs) +
         '\\nClick diagnostic: ' + JSON.stringify(clickDiagnostic));
     }
+    const blbDestinations = await extensionWorker.evaluate(async () => (await chrome.tabs.query({}))
+      .map(tab => tab.pendingUrl || tab.url || '')
+      .filter(value => {
+        try { return new URL(value).hostname === 'www.blueletterbible.org'; }
+        catch (_) { return false; }
+      })
+      .map(value => new URL(value).pathname));
+    expect(blbDestinations).toEqual([item.expected]);
+
     const opened = await extensionWorker.evaluate(async () => (await chrome.tabs.query({}))
       .filter(tab => {
         try { return new URL(tab.pendingUrl || tab.url || '').hostname === 'www.blueletterbible.org'; }
