@@ -864,7 +864,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
   for (const entry of contextualBookForms) {
     const escaped = entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
     const explicitRefRe = new RegExp(
-      '(?<![A-Za-z0-9])' + escaped + '(?:\\s+|\\.(?=\\d)\\s*)(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?',
+      '(?<![A-Za-z0-9])' + escaped + '(?:\\s+|\\.\\s*)(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?',
       'gi'
     );
     let explicitMatch;
