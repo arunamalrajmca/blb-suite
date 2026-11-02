@@ -894,11 +894,13 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
         const token = continuation[1].trim();
         const tokenStart = tailStart + continuation.index + continuation[0].lastIndexOf(continuation[1]);
         const tokenEnd = tokenStart + token.length;
-        if (selectionEnd <= tokenStart || selectionStart >= tokenEnd) continue;
         const chapterVerse = token.match(/^(\d{1,3})\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?$/);
         let from;
         let to;
         if (chapterVerse) {
+          // Update the running chapter for every continuation, not only the
+          // token under the click. A later verse-only click (e.g. the 9 in
+          // "Eph. 1:7, 13, 14, 2:8, 9") belongs to the most recent chapter.
           currentChapter = Number(chapterVerse[1]);
           from = Number(chapterVerse[2]);
           to = Number(chapterVerse[3] || chapterVerse[2]);
@@ -908,6 +910,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
           from = Number(verse[1]);
           to = Number(verse[2] || verse[1]);
         }
+        if (selectionEnd <= tokenStart || selectionStart >= tokenEnd) continue;
         const resolved = resolveBibleReference(book.name, currentChapter, from, to);
         if (resolved) return {
           book:resolved.book, chapter:resolved.chapter,
