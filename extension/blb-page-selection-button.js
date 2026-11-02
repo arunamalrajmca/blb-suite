@@ -265,18 +265,29 @@
           pageButtonActionInProgress = false;
           return;
         }
+        // Re-resolve at the moment of invocation, not only when the floating
+        // button became visible. This makes the action itself use the shared
+        // Double-Click positional entry point and avoids stale cached context.
+        const normalizedActionToken = normalizeSelectionText(text).normalize('NFKC');
+        const actionContext = !/\\s/.test(normalizedActionToken) &&
+          /^[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*$/u.test(normalizedActionToken)
+          ? getContextualBibleReference(text)
+          : null;
+        const actionContextualReference = actionContext?.url
+          ? actionContext
+          : blbPageButtonContextualReference;
         // Ignore stale content-script contexts if the extension was reloaded.
         safeRuntimeSendMessage({
           type:'blbSuiteOpenSelectionText',
           requestId:`show-on-blb-${Date.now()}-${++pageButtonRequestSequence}`,
           text,
-          contextualReference: blbPageButtonContextualReference || null,
+          contextualReference: actionContextualReference || null,
           directUrl: blbPageButtonDirectUrl || null,
           // A single-token floating-button action should follow the same fast path
           // as double-click: do not re-scan page context after the selection has
           // already been accepted as a word. Multi-word selections still resolve
           // adjacent references through the normal background path.
-          contextualReferenceResolved: !!blbPageButtonContextualReference,
+          contextualReferenceResolved: !!actionContextualReference,
           tabBehavior:{activeIfNew:true,activateExisting:true}
         });
         clearBlbPageSelectionAfterAction();
@@ -636,7 +647,15 @@
               }
             }
           }
-          const resolved = cached || verseCueReference || getContextualBibleReference(selected);
+          // Every one-token selection action must enter the same positional
+          // resolver, even when a previous selection-change pass populated a
+          // cache. Cached context remains a fallback, never a bypass.
+          const normalizedToken = normalizeSelectionText(selected).normalize('NFKC');
+          const isSingleToken = !!normalizedToken && !/\\s/.test(normalizedToken) &&
+            /^[\\p{L}\\p{N}][\\p{L}\\p{N}.'-]*$/u.test(normalizedToken);
+          const positional = isSingleToken ? getContextualBibleReference(selected) : null;
+          const resolved = positional || cached || verseCueReference ||
+            (!isSingleToken ? getContextualBibleReference(selected) : null);
           sendResponse(resolved ? {ok:true, reference:resolved} : {ok:true, reference:null});
         } catch (_) { sendResponse({ok:true, reference:null}); }
         return true;
