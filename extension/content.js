@@ -3225,7 +3225,8 @@ function handleDoubleClickBlb(event) {
         const isCommaSeparatedNumericVerseSelection = /^\d{1,3}\s*,\s*\d{1,3}$/.test(selection);
         const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord||isCommaSeparatedNumericVerseSelection||isCompactBookChapterToken;
         const blockContext=needsDomContext
-          ? getDoubleClickBlockContextReference(selection,contextualTarget,event)
+          ? (getDoubleClickEquivalentSelectionContext(selection, contextualTarget, event)
+            || getDoubleClickBlockContextReference(selection, contextualTarget, event))
           : null;
 
         // A verse cue is allowed to associate only with a valid verse number
