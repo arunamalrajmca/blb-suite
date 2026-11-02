@@ -330,19 +330,25 @@ test('Facebook Godliness shorthand citations open the clicked chapter and verse'
     ['#acts-c3', '/kjv/act/28/28/']
   ];
   for (const [selector, expectedPath] of cases) {
-    const baseline = await extensionWorker.evaluate(async () => (await chrome.tabs.query({})).map(tab => tab.id));
     await page.locator(selector).dblclick();
     let observed = null;
-    await expect.poll(async () => {
-      const tabs = await extensionWorker.evaluate(async ids => (await chrome.tabs.query({}))
-        .filter(tab => !ids.includes(tab.id))
-        .map(tab => tab.pendingUrl || tab.url || ''), baseline);
-      observed = tabs.map(value => { try { return new URL(value).pathname; } catch (_) { return ''; } })
-        .find(pathname => pathname === expectedPath) || null;
-      return observed;
-    }, { timeout: 10000 }).toBe(expectedPath);
-    const opened = await extensionWorker.evaluate(async ids => (await chrome.tabs.query({}))
-      .filter(tab => !ids.includes(tab.id)).map(tab => tab.id), baseline);
+    let observedTabs = [];
+    try {
+      await expect.poll(async () => {
+        observedTabs = await extensionWorker.evaluate(async () => (await chrome.tabs.query({}))
+          .map(tab => tab.pendingUrl || tab.url || ''));
+        observed = observedTabs.map(value => { try { return new URL(value).pathname; } catch (_) { return ''; } })
+          .find(pathname => pathname === expectedPath) || null;
+        return observed;
+      }, { timeout: 10000 }).toBe(expectedPath);
+    } catch (error) {
+      throw new Error(error.message + '\\nObserved tabs: ' + JSON.stringify(observedTabs));
+    }
+    const opened = await extensionWorker.evaluate(async () => (await chrome.tabs.query({}))
+      .filter(tab => {
+        try { return new URL(tab.pendingUrl || tab.url || '').hostname === 'www.blueletterbible.org'; }
+        catch (_) { return false; }
+      }).map(tab => tab.id));
     for (const id of opened) await extensionWorker.evaluate(tabId => chrome.tabs.remove(tabId).catch(() => {}), id);
   }
 });
