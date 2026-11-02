@@ -321,6 +321,10 @@
       blbPageButtonSelection = text;
       blbPageButtonContextualReference = null;
       blbPageButtonDirectUrl = null;
+      // A same-text selection elsewhere on the page must not inherit the
+      // previous occurrence's positional result.
+      lastSelectionContextualReference = null;
+      lastSelectionContextualText = '';
       setBlbPageButtonVisible(false);
       if (!text || !isSuiteEnabledNow()) return;
 
