@@ -1478,6 +1478,10 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
       expect(new URL(opened.pendingUrl || opened.url).pathname, actionLabel).toBe(expectedPath);
       const actionTrace = await readSelectionDiagnostics();
       console.log('[Facebook action-to-resolver trace]', JSON.stringify({actionLabel, ...actionTrace}));
+      if (actionLabel.endsWith('22')) {
+        expect(actionTrace?.reconstructed?.selectedSlice).toBe('22');
+        expect(actionTrace?.reconstructed?.contextText).toContain('Luke 22:26');
+      }
       await removeTabById(extensionWorker, opened.id);
       await page.waitForTimeout(500);
     } catch (error) {
@@ -1531,12 +1535,6 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     ['22','floating 22']
   ]) {
     await selectToken('#fb-luke-citation', selector);
-    const diagnostic = await readSelectionDiagnostics();
-    if (label.endsWith('22')) {
-      console.log('[Facebook contextual selection diagnostic]', JSON.stringify({label, ...diagnostic}));
-      expect(diagnostic?.reconstructed?.selectedSlice).toBe('22');
-      expect(diagnostic?.reconstructed?.contextText).toContain('Luke 22:26');
-    }
     await expect(floatingButton).toBeVisible({timeout:10000});
     await floatingButton.click();
     await expectNewLukeTab(label);
@@ -1548,12 +1546,6 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     ['22','22','Alt+B 22']
   ]) {
     await selectToken('#fb-luke-citation', selector);
-    const diagnostic = await readSelectionDiagnostics();
-    if (label.endsWith('22')) {
-      console.log('[Facebook contextual selection diagnostic]', JSON.stringify({label, ...diagnostic}));
-      expect(diagnostic?.reconstructed?.selectedSlice).toBe('22');
-      expect(diagnostic?.reconstructed?.contextText).toContain('Luke 22:26');
-    }
     await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
     await expectNewLukeTab(label);
   }
@@ -1564,12 +1556,6 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     ['22','22','right-click 22']
   ]) {
     await selectToken('#fb-luke-citation', selector);
-    const diagnostic = await readSelectionDiagnostics();
-    if (label.endsWith('22')) {
-      console.log('[Facebook contextual selection diagnostic]', JSON.stringify({label, ...diagnostic}));
-      expect(diagnostic?.reconstructed?.selectedSlice).toBe('22');
-      expect(diagnostic?.reconstructed?.contextText).toContain('Luke 22:26');
-    }
     await openFromSelection({
       type:'blbSuiteOpenSelectionText',
       text,
