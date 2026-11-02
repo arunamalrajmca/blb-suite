@@ -894,7 +894,7 @@ function resolveBibleReferenceFromContextWindow(text, selectionStart, selectionE
         const token = continuation[1].trim();
         const tokenStart = tailStart + continuation.index + continuation[0].lastIndexOf(continuation[1]);
         const tokenEnd = tokenStart + token.length;
-        if (selectionStart < tokenStart || selectionEnd > tokenEnd) continue;
+        if (selectionEnd <= tokenStart || selectionStart >= tokenEnd) continue;
         const chapterVerse = token.match(/^(\d{1,3})\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?$/);
         let from;
         let to;
