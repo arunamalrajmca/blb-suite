@@ -1268,7 +1268,10 @@ function getSelectedNumberedBookSuffixSearchText(value) {
     const prefixRange = document.createRange();
     prefixRange.selectNodeContents(block);
     prefixRange.setEnd(range.startContainer, range.startOffset);
-    const prefixText = normalizeSelectionText(prefixRange.toString()).normalize('NFKC')
+    // Preserve the trailing whitespace before the selected suffix; the
+    // general selection normalizer trims it, but it is the boundary that proves
+    // the ordinal is immediately adjacent to this book name.
+    const prefixText = prefixRange.toString().normalize('NFKC')
       .replace(/[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '')
       .replace(/[\u00A0\u2007\u202F]/g, ' ')
       .replace(/\s+/g, ' ');
