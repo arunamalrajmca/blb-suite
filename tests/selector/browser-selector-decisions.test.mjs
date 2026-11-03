@@ -421,7 +421,6 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
 
 test("optional E2E workflows exclude selector-only and store-only scripts from broad triggers", () => {
   for (const workflowPath of [
-    "../../.github/workflows/browser-e2e-groups.yml",
     "../../.github/workflows/browser-e2e-reference.yml",
     "../../.github/workflows/browser-e2e-performance.yml"
   ]) {
@@ -453,9 +452,11 @@ test("optional E2E workflows exclude selector-only and store-only scripts from b
   }
 });
 
-test("combined Group A/B workflow classifies once and retains broad runtime fallback", () => {
+test("reusable Group A/B workflow classifies once while its caller retains broad runtime triggers", () => {
   const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
-  assert.ok(workflow.includes("      - 'extension/**'"), "combined workflow must retain the broad runtime fallback");
+  const caller = readFileSync(new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url), "utf8");
+  assert.ok(workflow.includes("  workflow_call:"), "Group A/B must be invoked as a reusable workflow");
+  assert.ok(caller.includes("      - 'extension/**'"), "References caller must retain the broad runtime fallback");
   assert.equal((workflow.match(/^  change-detection:/gm) || []).length, 1, "both groups must share one classifier job");
   assert.ok(workflow.includes("group_a_required: ${{ steps.select.outputs.group_a_required }}"));
   assert.ok(workflow.includes("group_b_required: ${{ steps.select.outputs.group_b_required }}"));
@@ -464,14 +465,13 @@ test("combined Group A/B workflow classifies once and retains broad runtime fall
   assert.match(workflow, /tests\/browser\/scripttagger-global-injection\.spec\.js/);
 });
 
-test("optional E2E workflows skip spec-only edits but retain shared-fixture triggers", () => {
-  for (const workflowPath of [
-    "../../.github/workflows/browser-e2e-groups.yml"
-  ]) {
-    const workflow = readFileSync(new URL(workflowPath, import.meta.url), "utf8");
-    assert.doesNotMatch(workflow, /^\s*-\s*['"]tests\/\*\*['"]/m);
-    assert.match(workflow, /^\s*-\s*['"]tests\/browser\/fixtures\.js['"]/m);
-  }
+test("References caller triggers reusable Group A/B for shared fixtures without a broad tests trigger", () => {
+  const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url), "utf8");
+  const groups = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
+  assert.ok(workflow.includes("      - 'tests/**'"), "caller must notice shared browser fixtures and let classification decide coverage");
+  assert.ok(workflow.includes("- '!tests/selector/**'"), "selector-only edits must remain excluded from browser E2E triggers");
+  assert.ok(!groups.includes("      - 'tests/**'"), "reusable workflow must not define independent path triggers");
+  assert.ok(groups.includes("  workflow_call:"), "Group A/B must be reusable");
 });
 
 test("browser-spec-only edit does not launch feature E2E", () => {
