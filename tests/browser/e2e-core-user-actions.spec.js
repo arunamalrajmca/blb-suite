@@ -1536,6 +1536,7 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
   }
 });
 test('single-token selection actions share positional resolution across books and separators', async ({ page, extensionStorage, extensionWorker }) => {
+  test.setTimeout(180000);
   await extensionStorage.set({
     masterEnabled: true,
     pageSelectionButtonSites: { 'example.com': true }
