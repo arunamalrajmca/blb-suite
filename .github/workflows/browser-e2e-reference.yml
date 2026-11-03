@@ -288,7 +288,17 @@ jobs:
         if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: npx playwright test ${{ matrix.files && join(matrix.files, ' ') || matrix.file || 'tests/browser/extension.spec.js' }} --grep "${{ matrix.grep }}"
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEST_FILES="${{ matrix.files && join(matrix.files, ' ') || matrix.file || 'tests/browser/extension.spec.js' }}"
+          TEST_ARGS=()
+          for spec in $TEST_FILES; do
+            # Playwright's configured testDir is tests/browser, so pass paths
+            # relative to that directory rather than repeating the prefix.
+            TEST_ARGS+=("${spec#tests/browser/}")
+          done
+          npx playwright test "${TEST_ARGS[@]}" --grep "${{ matrix.grep }}"
       - name: Upload Playwright diagnostics — ${{ matrix.group }}
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
