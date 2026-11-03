@@ -46,7 +46,7 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
               };
             }
             if (sourceSite === "sarata" && host === "sarata.com") {
-              const path = url.pathname.match(/^\/bible\/chapter\/([^/]+)\.(\d+)\.html$/i);
+              const path = url.pathname.match(/^\/bible\/(?:chapter|verses)\/([^/]+)\.(\d+)\.html$/i);
               const fragment = url.hash.match(/^#(\d+):(\d+)(?:-(\d+))?$/);
               if (!path || !fragment || Number(fragment[1]) !== Number(path[2])) return null;
               const book = path[1].replace(/-([123])$/, " $1").replace(/-/g, " ");
