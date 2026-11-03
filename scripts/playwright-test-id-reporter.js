@@ -18,7 +18,7 @@ class PlaywrightTestIdReporter {
     const files = [...new Set(tests.map(test =>
       path.relative(process.cwd(), test.location.file).split(path.sep).join('/')
     ))];
-    fs.writeFileSync(listPath, ids.join('\\n') + '\\n');
+    fs.writeFileSync(listPath, ids.join('\n') + '\n');
     fs.writeFileSync(metadataPath, JSON.stringify({ total: ids.length, files }));
   }
 
