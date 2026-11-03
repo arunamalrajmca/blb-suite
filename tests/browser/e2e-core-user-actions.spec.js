@@ -1591,6 +1591,15 @@ test('single-token selection actions share positional resolution across books an
     });
     return execution?.result || null;
   }, message);
+  const openFromRightClick = async selectedText => extensionWorker.evaluate(async selected => {
+    const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+    if (!tab?.id) throw new Error('No active example.com tab');
+    await handleBlbSelectionContextMenuClick({
+      menuItemId:'blb-suite-web-selection',
+      selectionText:selected
+    }, tab);
+    return {ok:true};
+  }, selectedText);
   const resetResolverCalls = async () => extensionWorker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
     if (!tab?.id) throw new Error('No active example.com tab');
@@ -1662,16 +1671,64 @@ test('single-token selection actions share positional resolution across books an
         await expect(floatingButton, 'Right-click setup for ' + token + ' in ' + testCase.book + ' with ' + separator)
           .toBeVisible({timeout:10000});
         await resetResolverCalls();
-        const response = await openFromSelection({
-          type:'blbSuiteOpenSelectionText',
-          text:token,
-          tabBehavior:{activeIfNew:true,activateExisting:true}
-        });
-        expect(response?.ok, 'right-click handoff for ' + token + ' in ' + testCase.book + ' with ' + separator).toBe(true);
+        await openFromRightClick(token);
         await expectResolvedTab(testCase, 'right-click ' + token + ' in ' + testCase.book + ' with ' + separator);
         await expectSharedResolverInvocation(token);
       }
     }
+  }
+});
+
+test('Show on BLB searches the complete numbered book when only its suffix is selected', async ({ page, extensionStorage, extensionWorker }) => {
+  test.setTimeout(120000);
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'example.com':true}
+  });
+  await page.goto('https://example.com/', { waitUntil:'domcontentloaded' });
+  await page.waitForTimeout(1000);
+  await page.evaluate(() => {
+    const root = document.createElement('article');
+    root.id = 'numbered-book-suffix-button-fixture';
+    root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(root);
+  });
+
+  const books = await extensionWorker.evaluate(() => BOOKS
+    .filter(book => /^(?:1|2) (?:timothy|peter|thessalonians)$/i.test(book.name))
+    .map(book => ({name:book.name,number:book.name[0],suffix:book.name.slice(2)}))
+  );
+  expect(books.map(book => book.name).sort()).toEqual([
+    '1 peter','1 thessalonians','1 timothy',
+    '2 peter','2 thessalonians','2 timothy'
+  ]);
+
+  const button = page.locator('#blb-suite-page-selection-button');
+  for (const book of books) {
+    await page.locator('#numbered-book-suffix-button-fixture').evaluate((root, item) => {
+      root.innerHTML = '<p><span class="book-prefix">' + item.number +
+        '</span> <span id="numbered-book-suffix">' + item.suffix + '</span></p>';
+      const target = root.querySelector('#numbered-book-suffix');
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));
+    }, book);
+    await expect(button, 'Show on BLB must accept the suffix of ' + book.name).toBeVisible({timeout:10000});
+    await button.click();
+    const opened = await waitForTab(extensionWorker, tab => {
+      try {
+        const url = new URL(tab.pendingUrl || tab.url);
+        return url.hostname === 'www.blueletterbible.org' &&
+          url.pathname === '/search/search.cfm' &&
+          url.searchParams.get('Criteria') === book.name;
+      } catch (_) { return false; }
+    });
+    expect(new URL(opened.pendingUrl || opened.url).searchParams.get('Criteria')).toBe(book.name);
+    await removeTabById(extensionWorker, opened.id);
+    await page.waitForTimeout(150);
   }
 });
 
@@ -1695,8 +1752,7 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
         '<div dir="auto" id="fb-luke-chapter-range">Luke 21-22</div>' +
         '<div dir="auto" id="fb-luke-citation">' +
           '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
-          '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>' +
-          '<span id="fb-luke-separator">:</span>' +
+          '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>:' +
           '<span><span id="fb-luke-verse">' + lri + '26' + pdi + '</span></span> ' +
           '<span>' + lri + 'KJV' + pdi + '</span>' +
         '</div>' +
@@ -1708,8 +1764,12 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
   // The book, chapter, and verse tokens must resolve identically with
   // either punctuation mark between chapter and verse.
   for (const separator of [':','.']) {
-    await page.locator('#fb-luke-separator').evaluate((element, value) => {
-      element.textContent = value;
+    await page.locator('#fb-luke-chapter').evaluate((element, value) => {
+      const separatorNode = element.parentElement.nextSibling;
+      if (!separatorNode || separatorNode.nodeType !== Node.TEXT_NODE) {
+        throw new Error('Expected the chapter/verse separator to remain an adjacent text node');
+      }
+      separatorNode.nodeValue = value;
     }, separator);
     for (const selector of ['#fb-luke-book', '#fb-luke-chapter', '#fb-luke-verse']) {
       await page.locator(selector).dblclick();
