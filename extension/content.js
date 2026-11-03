@@ -2619,7 +2619,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       if (compactStart != null && compactEnd > compactStart &&
           normalizedMatchSource.slice(compactStart, compactEnd) === compactToken) {
         const following = normalizedMatchSource.slice(compactEnd)
-          .match(/^\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
+          .match(/^\s*[:.]\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
         if (following) {
           const from = Number(following[1]);
           const to = following[2] ? Number(following[2]) : from;
