@@ -81,16 +81,37 @@ jobs:
 
           while IFS= read -r run_id; do
             [[ -n "$run_id" ]] || continue
-            echo "Cancelling superseded References run $run_id for PR #$PR_NUMBER."
+            echo "Requesting cancellation of superseded References run $run_id for PR #$PR_NUMBER."
             cancel_error="$(gh api --silent --method POST \
               "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/cancel" 2>&1)" || {
               if [[ "$cancel_error" == *"HTTP 409"* ]]; then
                 echo "Run $run_id completed before cancellation; treating it as already stopped."
-              else
-                printf '%s\\n' "$cancel_error" >&2
-                exit 1
+                continue
               fi
+              printf '%s\\n' "$cancel_error" >&2
+              exit 1
             }
+
+            # A normal cancel can leave a stuck run alive. Give it a brief
+            # chance to stop, then force-cancel only if this same-PR,
+            # same-workflow run is still active.
+            sleep 5
+            run_status="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" --jq '.status')"
+            if [[ "$run_status" == "queued" || "$run_status" == "in_progress" ||
+                  "$run_status" == "waiting" || "$run_status" == "requested" ]]; then
+              echo "References run $run_id is still $run_status; force-cancelling it."
+              force_cancel_error="$(gh api --silent --method POST \
+                "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/force-cancel" 2>&1)" || {
+                if [[ "$force_cancel_error" == *"HTTP 409"* ]]; then
+                  echo "Run $run_id completed before force-cancellation; treating it as stopped."
+                else
+                  printf '%s\\n' "$force_cancel_error" >&2
+                  exit 1
+                fi
+              }
+            else
+              echo "References run $run_id stopped with status $run_status."
+            fi
           done <<< "$stale_runs"
 
   change-detection:
