@@ -1808,7 +1808,7 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
           try {
             const url = new URL(tab.pendingUrl || tab.url);
             return url.hostname === 'www.blueletterbible.org' &&
-              url.pathname === '/kjv/luk/22/26/';
+              normalizeBlbKjvPath(url.pathname) === '/kjv/luk/22/26/';
           } catch (_) { return false; }
         });
       } catch (error) {
@@ -1833,7 +1833,7 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
         }));
         throw error;
       }
-      expect(new URL(resolved.pendingUrl || resolved.url).pathname).toBe('/kjv/luk/22/26/');
+      expect(normalizeBlbKjvPath(new URL(resolved.pendingUrl || resolved.url).pathname)).toBe('/kjv/luk/22/26/');
       const reconstruction = await page.evaluate(() => ({
         selectedText: window.getSelection()?.toString() || '',
         messageText: document.querySelector('[data-ad-comet-preview="message"]')?.innerText || '',
