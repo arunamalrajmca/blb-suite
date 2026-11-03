@@ -104,12 +104,12 @@ jobs:
             exit 1
           fi
           cat "$list_output"
-          grep -E 'tests/browser/[^[:space:]]+\.spec\\.js:[0-9]+:[0-9]+' "$list_output" |
+          grep -E 'tests/browser/[^[:space:]]+\.spec\.js:[0-9]+:[0-9]+' "$list_output" |
             sed -E 's/^[[:space:]]*//' > "$test_list" || true
 
           total=$(wc -l < "$test_list" | tr -d ' ')
           expected_specs=$(find tests/browser -maxdepth 1 -type f -name '*.spec.js' | wc -l | tr -d ' ')
-          listed_specs=$(grep -oE 'tests/browser/[^[:space:]]+\.spec\\.js' "$test_list" | sort -u | wc -l | tr -d ' ')
+          listed_specs=$(grep -oE 'tests/browser/[^[:space:]]+\.spec\.js' "$test_list" | sort -u | wc -l | tr -d ' ')
           echo "Browser test cases discovered: $total"
           echo "Browser spec files expected: $expected_specs"
           echo "Browser spec files represented: $listed_specs"
