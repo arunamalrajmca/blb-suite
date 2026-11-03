@@ -908,10 +908,9 @@ test('ChurchofJesusChrist and Mercy House individual verse clicks open the exact
       anchor.href = href;
       anchor.textContent = label;
       document.body.appendChild(anchor);
-      let prevented = false;
-      anchor.addEventListener('click', event => { prevented = event.defaultPrevented; });
-      anchor.dispatchEvent(new MouseEvent('click', { bubbles:true, cancelable:true, button:0 }));
-      return { prevented, target: window.__openedBlbUrl || null };
+      const click = new MouseEvent('click', { bubbles:true, cancelable:true, button:0 });
+      const dispatchAllowed = anchor.dispatchEvent(click);
+      return { prevented: !dispatchAllowed || click.defaultPrevented, target: window.__openedBlbUrl || null };
     }, source);
     expect(result.prevented, source.pageUrl).toBe(true);
     expect(result.target, source.pageUrl).toBe(source.expected);
@@ -968,10 +967,9 @@ test('OpenBible, Crossway and Sarata individual verse links open the exact BLB K
       anchor.href = href;
       anchor.textContent = label;
       document.body.appendChild(anchor);
-      let prevented = false;
-      anchor.addEventListener('click', event => { prevented = event.defaultPrevented; });
-      anchor.dispatchEvent(new MouseEvent('click', { bubbles:true, cancelable:true, button:0 }));
-      return { prevented, target: window.__openedBlbUrl || null };
+      const click = new MouseEvent('click', { bubbles:true, cancelable:true, button:0 });
+      const dispatchAllowed = anchor.dispatchEvent(click);
+      return { prevented: !dispatchAllowed || click.defaultPrevented, target: window.__openedBlbUrl || null };
     }, source);
     expect(result.prevented, source.pageUrl).toBe(true);
     expect(result.target, source.pageUrl).toBe(source.expected);
