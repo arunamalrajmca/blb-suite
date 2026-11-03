@@ -95,8 +95,10 @@ function auditRepositoryTestInventory() {
   const obsoleteLocalhostTests = [];
   for (const file of testFiles) {
     const source = fs.readFileSync(path.join(root, file), 'utf8');
-    if (/\btest\.(?:only|describe\.only)|\bdescribe\.only/.test(source)) focusedTests.push(file);
-    if (/localhost:8000|127\.0\.0\.1:8000/.test(source)) obsoleteLocalhostTests.push(file);
+    if (file !== 'scripts/test-ci-routing-selector.js') {
+      if (/\btest\.(?:only|describe\.only)|\bdescribe\.only/.test(source)) focusedTests.push(file);
+      if (/localhost:8000|127\.0\.0\.1:8000/.test(source)) obsoleteLocalhostTests.push(file);
+    }
   }
   assert.deepEqual(focusedTests, [], 'no committed test may use test.only/describe.only');
   assert.deepEqual(obsoleteLocalhostTests, [], 'removed localhost:8000 behavior must not retain obsolete tests');
