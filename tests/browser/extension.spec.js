@@ -998,6 +998,7 @@ test.describe('core user-visible E2E', () => {
     await page.evaluate(() => {
       const fixture = document.createElement('div');
       fixture.id = 'blb-e2e-substack-corinthians-reference';
+      fixture.setAttribute('data-blb-test-diagnostics', '');
       fixture.innerHTML = '<p>Essentially, you are asking yourself, “How do I apply the attributes of charity in <span>1</span> <span id="substack-cor1">Cor</span>. <span>13</span> in how I love my wife and how I live my life?”</p><p>See also <span>2</span> <span id="substack-cor2">Cor</span>. <span>13</span>.</p>';
       document.body.appendChild(fixture);
     });
@@ -1007,11 +1008,21 @@ test.describe('core user-visible E2E', () => {
       { selector: '#substack-cor2', expectedPath: '/kjv/2co/13/1/' }
     ]) {
       await page.locator(selector).dblclick();
-      await activateBlbTabForPath(extensionWorker, expectedPath, {
-        fragment: selector,
-        selector: '#blb-e2e-substack-corinthians-reference',
-        selectedText: 'Cor'
-      });
+      try {
+        await activateBlbTabForPath(extensionWorker, expectedPath, {
+          fragment: selector,
+          selector: '#blb-e2e-substack-corinthians-reference',
+          selectedText: 'Cor'
+        });
+      } catch (error) {
+        const diagnostic = await page.locator('#blb-e2e-substack-corinthians-reference')
+          .getAttribute('data-blb-double-click-diagnostic');
+        const selectedText = await page.evaluate(() => window.getSelection()?.toString() || '');
+        throw new Error(
+          error.message + '; selectedText=' + JSON.stringify(selectedText) +
+          '; resolverDiagnostic=' + (diagnostic || 'not produced')
+        );
+      }
       await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
         for (const tab of tabs) {
           try {
