@@ -252,7 +252,7 @@ jobs:
             [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
             filename="${spec##*/}"
             printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-            npx playwright test --test-match "**/$filename"
+            PLAYWRIGHT_TEST_MATCH="**/$filename" npx playwright test --config="$config_path"
           done
 
 
