@@ -110,7 +110,14 @@ jobs:
             specs+=("$spec")
           done
           if (("${#specs[@]}" > 0)); then
-            npx playwright test "${specs[@]}"
+            file_filters=()
+          for spec in "${specs[@]}"; do
+            filename="${spec##*/}"
+            escaped="$(printf '%s' "$filename" | sed -E 's/[][(){}.^$+*?|\\]/\\&/g')"
+            file_filters+=("$escaped")
+          done
+          file_filter="$(IFS='|'; printf '%s' "${file_filters[*]}")"
+          npx playwright test "$file_filter"
           else
             echo "All changed browser specs are covered by the required browser-e2e gate."
           fi
@@ -227,7 +234,14 @@ jobs:
         run: |
           set -euo pipefail
           IFS=',' read -r -a specs <<< "$UNMAPPED_SPECS"
-          npx playwright test "${specs[@]}"
+          file_filters=()
+          for spec in "${specs[@]}"; do
+            filename="${spec##*/}"
+            escaped="$(printf '%s' "$filename" | sed -E 's/[][(){}.^$+*?|\\]/\\&/g')"
+            file_filters+=("$escaped")
+          done
+          file_filter="$(IFS='|'; printf '%s' "${file_filters[*]}")"
+          npx playwright test "$file_filter"
 
 
   core-group-b:
