@@ -382,7 +382,7 @@ test.describe('core user-visible E2E', () => {
               const selection = window.getSelection();
               selection.removeAllRanges();
               selection.addRange(range);
-              document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+              element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
             });
             if (action === 'Show on BLB') {
               const button = page.locator('#blb-suite-page-selection-button');
