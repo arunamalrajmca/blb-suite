@@ -1886,7 +1886,28 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       normalizeSelectionText(range.toString()).normalize('NFKC') ===
         normalizeSelectionText(selected).normalize('NFKC')
     ) || null;
-    if ((exactPhysicalTarget || exactPhysicalRange) && !verseCueSelection && !/^[0-9]+$/.test(selected)) {
+    // Chromium may treat a dotted citation without a space (for example,
+    // "Gal.1.8,9") as one double-click word. Recover the book prefix from
+    // that selected token so book clicks retain the immediately following range.
+    const selectedBookCitation = (() => {
+      const token = normalizeSelectionText(selected).normalize('NFKC')
+        .replace(/[\\u061C\\u200B-\\u200F\\u202A-\\u202E\\u2060\\u2066-\\u2069\\uFEFF]/g, '')
+        .replace(/[\\u00A0\\u2007\\u202F]/g, ' ');
+      const labels = [
+        ...(BOOKS || []).flatMap(book => [book.name, book.urlKey]),
+        ...Object.keys(BOOK_ALIASES || {})
+      ].filter(Boolean).map(label => String(label).replace(/\\.+$/g, '').trim())
+        .filter(Boolean).sort((a, b) => b.length - a.length);
+      for (const label of labels) {
+        const escaped = label.replace(/[.*+?^$()|[\\]\\\\]/g, '\\\\$&').replace(/\\s+/g, '\\\\s+');
+        const match = token.match(new RegExp('^(' + escaped + ')\\\\.\\\\s*(?=\\\\d{1,3}[.:])', 'i'));
+        if (!match) continue;
+        const book = resolveBibleBook(label);
+        if (book) return { bookLabel: match[1], book, citationText: token.slice(match[0].length) };
+      }
+      return null;
+    })();
+    if ((exactPhysicalTarget || exactPhysicalRange || selectedBookCitation) && !verseCueSelection && !/^[0-9]+$/.test(selected)) {
       // Book-name clicks on rich social feeds must bind to the citation
       // immediately following the exact clicked DOM element. Avoid deriving
       // the book's position by adding normalized prefix lengths: Facebook can
@@ -1899,7 +1920,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // In that case the exact physical Selection Range is authoritative;
       // clickedWordText can include adjacent punctuation/citation characters.
       const exactClickedBookToken = normalizeSelectionText(
-        exactPhysicalTarget?.textContent || exactPhysicalRange?.toString() || clickedWordText || selected
+        exactPhysicalTarget?.textContent || selectedBookCitation?.bookLabel || exactPhysicalRange?.toString() || clickedWordText || selected
       ).normalize('NFKC').replace(/^\.+|\.+$/g, '');
       const physicalBookAnchor = exactPhysicalTarget || exactPhysicalRange?.startContainer?.parentElement;
       const physicalBookContextRoot = selectionContextBlock(physicalBookAnchor) || messageRoot;
@@ -1954,7 +1975,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           } else {
             followingRange.setStartAfter(exactPhysicalTarget);
           }
-          const followingText = normalizeSelectionText(
+          const followingText = selectedBookCitation?.citationText || normalizeSelectionText(
             domText(followingRange.cloneContents())
           ).normalize('NFKC');
           const writeFacebookDoubleClickDiagnostic = details => {
