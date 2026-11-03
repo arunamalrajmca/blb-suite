@@ -109,11 +109,11 @@ const featureSpecs = [
   },
   {
     paths: ["extension/redirect-bibleref-ranges.js", "extension/redirect-christianity-main-world.js"],
-    specs: ["tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-source-url-browser.spec.js", "tests/browser/redirect-hostnames.spec.js", "tests/browser/blb-non-kjv-redirect.spec.js"]
+    specs: ["tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-hostnames.spec.js", "tests/browser/blb-non-kjv-redirect.spec.js"]
   },
   {
     paths: ["extension/source-bible-redirect.js"],
-    specs: ["tests/browser/redirect-source-url-browser.spec.js", "tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-hostnames.spec.js"]
+    specs: ["tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-hostnames.spec.js"]
   },
   {
     paths: ["extension/redirect-scripttagger.js"],
@@ -225,7 +225,6 @@ const selected = [...specs].filter(path => existingBrowserSpecs.has(path)).sort(
 const mappedSpecs = new Set([
   "tests/browser/redirect-source-url-patterns.spec.js",
   "tests/browser/omnibox-boolean-operators.spec.js",
-  "tests/browser/redirect-source-url-browser.spec.js",
   "tests/browser/e2e-core-user-actions.spec.js",
   "tests/browser/kings-bible-collector-behavior.spec.js",
   "tests/browser/feature-lifecycle-regressions.spec.js",
@@ -278,7 +277,6 @@ const values = {
   group_a_required: String(has(
     "tests/browser/redirect-source-url-patterns.spec.js",
     "tests/browser/omnibox-boolean-operators.spec.js",
-    "tests/browser/redirect-source-url-browser.spec.js",
     "tests/browser/e2e-core-user-actions.spec.js",
     "tests/browser/multiverse-contiguous-range-routing.spec.js",
     "tests/browser/multiverse-disjoint-chapter-post.spec.js",
@@ -320,7 +318,6 @@ const values = {
     "tests/browser/rediscover-sagacity-button.spec.js",
     "tests/browser/research-dom-smoke.spec.js",
     "tests/browser/redirect-source-url-patterns.spec.js",
-    "tests/browser/redirect-source-url-browser.spec.js",
     "tests/browser/redirect-toggle-isolation.spec.js",
     "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
     "tests/browser/popup-master-toggle-regression.spec.js",

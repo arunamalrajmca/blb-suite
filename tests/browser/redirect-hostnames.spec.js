@@ -41,10 +41,15 @@ test('bare and www source hostnames normalize to the same native redirect key', 
     'biblehub.com',
     'bibleportal.com',
     'christianity.com',
+    'churchofjesuschrist.org',
     'crosswalk.com',
     'enduringword.com',
     'esv.org',
     'gotquestions.org',
+    'mercyhouseministry.com',
+    'openbible.info',
+    'crossway.org',
+    'sarata.com',
     'kingjamesbibleonline.org',
     'kjbo.org',
     'kjv.site',
@@ -70,7 +75,7 @@ test('MAIN-world guard registration normalizes www hosts and is limited to artic
   const registration = background.slice(registrationStart, registrationEnd);
   expect(registration).toContain("new URL(tab.url).hostname.toLowerCase().replace(/^www\\./, '')");
   expect(registration).not.toContain("replace(/^www\\\\./, '')");
-  for (const host of ['christianity.com', 'gotquestions.org', 'crosswalk.com', 'enduringword.com']) {
+  for (const host of ['christianity.com', 'gotquestions.org', 'crosswalk.com', 'enduringword.com', 'churchofjesuschrist.org', 'mercyhouseministry.com', 'openbible.info', 'crossway.org', 'sarata.com']) {
     expect(registration).toContain(host);
   }
   // ESV.org is redirect-only; it does not need the source-page click guard.

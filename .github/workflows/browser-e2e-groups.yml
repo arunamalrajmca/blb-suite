@@ -100,7 +100,7 @@ jobs:
           specs=()
           for spec in "${changed_specs[@]}"; do
             case "$spec" in
-              tests/browser/redirect-source-url-patterns.spec.js|tests/browser/redirect-source-url-browser.spec.js|tests/browser/redirect-hostnames.spec.js|tests/browser/blb-non-kjv-redirect.spec.js|tests/browser/redirect-toggle-isolation.spec.js|tests/browser/multiverse-clipboard-reference-pattern.spec.js|tests/browser/popup-master-toggle-regression.spec.js|tests/browser/facebook-selection-parser.spec.js|tests/browser/substack-selection-parser.spec.js|tests/browser/omnibox-command-routing.spec.js|tests/browser/pdf-selection-regressions.spec.js|tests/browser/shared-regex-patterns.spec.js|tests/browser/rediscover-sagacity-button.spec.js|tests/browser/research-dom-smoke.spec.js)
+              tests/browser/redirect-source-url-patterns.spec.js|tests/browser/redirect-hostnames.spec.js|tests/browser/blb-non-kjv-redirect.spec.js|tests/browser/redirect-toggle-isolation.spec.js|tests/browser/multiverse-clipboard-reference-pattern.spec.js|tests/browser/popup-master-toggle-regression.spec.js|tests/browser/facebook-selection-parser.spec.js|tests/browser/substack-selection-parser.spec.js|tests/browser/omnibox-command-routing.spec.js|tests/browser/pdf-selection-regressions.spec.js|tests/browser/shared-regex-patterns.spec.js|tests/browser/rediscover-sagacity-button.spec.js|tests/browser/research-dom-smoke.spec.js)
                 if [[ "$REFERENCE_GATE_REQUIRED" == "true" && ( "$FULL_BROWSER_SUITE" == "true" || ",$SELECTED_SPECS," == *",$spec,"* ) ]]; then
                   echo "Delegating $spec to the required browser-e2e gate."
                   continue
@@ -110,7 +110,13 @@ jobs:
             specs+=("$spec")
           done
           if (("${#specs[@]}" > 0)); then
-            npx playwright test "${specs[@]}"
+            total="${#specs[@]}"
+            for index in "${!specs[@]}"; do
+              spec="${specs[$index]}"
+              [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
+              printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
+              npx playwright test "$spec"
+            done
           else
             echo "All changed browser specs are covered by the required browser-e2e gate."
           fi
@@ -123,8 +129,8 @@ jobs:
         if: ${{ !cancelled() && ((needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/omnibox-boolean-operators.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/omnibox-boolean-operators.spec.js')) }}
         run: npx playwright test tests/browser/omnibox-boolean-operators.spec.js
       - name: Run source URL browser redirect regressions
-        if: ${{ !cancelled() && ((needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-source-url-browser.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/redirect-source-url-browser.spec.js') && !(needs.change-detection.outputs.browser_e2e_required == 'true' && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-source-url-browser.spec.js')))) }}
-        run: npx playwright test tests/browser/redirect-source-url-browser.spec.js
+        if: ${{ !cancelled() && ((needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/redirect-source-url-patterns.spec.js') && !(needs.change-detection.outputs.browser_e2e_required == 'true' && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js')))) }}
+        run: npx playwright test tests/browser/redirect-source-url-patterns.spec.js
 
 
       # Repeat the previously intermittent two-tab selection test in fresh browser contexts.
@@ -227,7 +233,13 @@ jobs:
         run: |
           set -euo pipefail
           IFS=',' read -r -a specs <<< "$UNMAPPED_SPECS"
-          npx playwright test "${specs[@]}"
+          total="${#specs[@]}"
+          for index in "${!specs[@]}"; do
+            spec="${specs[$index]}"
+            [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
+            printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
+            npx playwright test "$spec"
+          done
 
 
   core-group-b:

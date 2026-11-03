@@ -77,7 +77,6 @@ function fixture(selector = selectorSource) {
   put(root, "tests/browser/omnibox-command-routing.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/pdf-selection-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/redirect-source-url-patterns.spec.js", "import { test } from '@playwright/test';\n");
-  put(root, "tests/browser/redirect-source-url-browser.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/kings-bible-collector-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/known-host-extension.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/pr-422-feature-regressions.spec.js", "import { test } from '@playwright/test';\n");
@@ -376,7 +375,7 @@ test("test-only browser edits reuse the required reference workflow classifier",
   assert.match(workflow, /id: focused[\s\S]*?FOCUSED_SPECS=/);
   assert.match(workflow, /github\.event_name == 'pull_request'[\s\S]*?needs\.change-detection\.outputs\.runtime_changed == 'false'/);
   assert.match(workflow, /needs\.change-detection\.outputs\.focused_specs != ''/);
-  assert.match(workflow, /npx playwright test "\$\{specs\[@\]\}"/);
+  assert.match(workflow, /npx playwright test "\$spec"/);
 });
 
 test("MultiVerse tab-reuse regressions share the Group A runner with conservative full-suite coverage", () => {
@@ -406,7 +405,6 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
   const groupB = groupA;
   for (const spec of [
     "redirect-source-url-patterns",
-    "redirect-source-url-browser",
     "redirect-hostnames",
     "blb-non-kjv-redirect",
     "redirect-toggle-isolation",
@@ -428,6 +426,8 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
   assert.match(groupA, /Delegating \$spec to the required browser-e2e gate/);
   assert.match(groupA, /browser_e2e_required: \$\{\{ steps\.select\.outputs\.reference_required \}\}/);
   assert.match(groupB, /browser_e2e_required: \$\{\{ steps\.select\.outputs\.reference_required \}\}/);
+  assert.match(referenceWorkflow, /npx playwright test "\$spec"/);
+  assert.match(groupA, /npx playwright test "\$spec"/);
   assert.match(groupA, /browser_e2e_required == 'true'/);
   assert.match(groupB, /browser_e2e_required == 'true'/);
 });

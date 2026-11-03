@@ -81,9 +81,37 @@ jobs:
 
           while IFS= read -r run_id; do
             [[ -n "$run_id" ]] || continue
-            echo "Cancelling superseded References run $run_id for PR #$PR_NUMBER."
-            gh api --silent --method POST \
-              "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/cancel"
+            echo "Requesting cancellation of superseded References run $run_id for PR #$PR_NUMBER."
+            cancel_error="$(gh api --silent --method POST \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/cancel" 2>&1)" || {
+              if [[ "$cancel_error" == *"HTTP 409"* ]]; then
+                echo "Run $run_id completed before cancellation; treating it as already stopped."
+                continue
+              fi
+              printf '%s\\n' "$cancel_error" >&2
+              exit 1
+            }
+
+            # A normal cancel can leave a stuck run alive. Give it a brief
+            # chance to stop, then force-cancel only if this same-PR,
+            # same-workflow run is still active.
+            sleep 5
+            run_status="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" --jq '.status')"
+            if [[ "$run_status" == "queued" || "$run_status" == "in_progress" ||
+                  "$run_status" == "waiting" || "$run_status" == "requested" ]]; then
+              echo "References run $run_id is still $run_status; force-cancelling it."
+              force_cancel_error="$(gh api --silent --method POST \
+                "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/force-cancel" 2>&1)" || {
+                if [[ "$force_cancel_error" == *"HTTP 409"* ]]; then
+                  echo "Run $run_id completed before force-cancellation; treating it as stopped."
+                else
+                  printf '%s\\n' "$force_cancel_error" >&2
+                  exit 1
+                fi
+              }
+            else
+              echo "References run $run_id stopped with status $run_status."
+            fi
           done <<< "$stale_runs"
 
   change-detection:
@@ -281,7 +309,32 @@ jobs:
         if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: npx playwright test ${{ matrix.files && join(matrix.files, ' ') || matrix.file || 'tests/browser/extension.spec.js' }} --grep "${{ matrix.grep }}"
+        shell: bash
+        run: |
+          set -euo pipefail
+          TEST_FILES="${{ matrix.files && join(matrix.files, ' ') || matrix.file || 'tests/browser/extension.spec.js' }}"
+          MATRIX_GREP="${{ matrix.grep }}"
+          read -r -a specs <<< "$TEST_FILES"
+          total="${#specs[@]}"
+          if (( total == 0 )); then
+            echo "::error::Reference matrix group selected no spec files."
+            exit 1
+          fi
+          for index in "${!specs[@]}"; do
+            spec="${specs[$index]}"
+            if [[ ! -f "$spec" ]]; then
+              echo "::error::Selected Playwright spec does not exist: $spec"
+              exit 1
+            fi
+            printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
+            # Invoke Playwright once per exact file; never combine positional
+            # filters, which Playwright treats as intersecting expressions.
+            if [[ "$MATRIX_GREP" == ".*" ]]; then
+              npx playwright test "$spec"
+            else
+              npx playwright test "$spec" --grep "$MATRIX_GREP"
+            fi
+          done
       - name: Upload Playwright diagnostics — ${{ matrix.group }}
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -507,4 +560,10 @@ jobs:
         run: |
           set -euo pipefail
           IFS=',' read -r -a specs <<< "$FOCUSED_SPECS"
-          npx playwright test "${specs[@]}"
+          total="${#specs[@]}"
+          for index in "${!specs[@]}"; do
+            spec="${specs[$index]}"
+            [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
+            printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
+            npx playwright test "$spec"
+          fi

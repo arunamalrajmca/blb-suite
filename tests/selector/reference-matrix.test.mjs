@@ -34,7 +34,6 @@ test("dedicated reference specs remain covered by individual or batched matrix e
   for (const spec of [
     "shared-regex-patterns",
     "redirect-source-url-patterns",
-    "redirect-source-url-browser",
     "redirect-hostnames",
     "redirect-toggle-isolation",
     "multiverse-clipboard-reference-pattern",
