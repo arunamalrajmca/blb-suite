@@ -997,7 +997,7 @@ test.describe('core user-visible E2E', () => {
         expect(
           openedPaths.some(path => expectedPathPattern.test(path)),
           action + ' on ' + selector + ' must open ' + expectedPath + ' (allowing BLB canonical verse IDs)'
-        ).toBe(true);
+        ).toBe(true, JSON.stringify({ action, selector, selectedText, expectedPath, openedPaths }));
         await extensionWorker.evaluate(before => chrome.tabs.query({}).then(async tabs => {
           for (const tab of tabs) {
             if (tab.id == null || before.includes(tab.id)) continue;
@@ -2742,7 +2742,15 @@ test.describe('Alt+B toggle enforcement', () => {
         } catch (_) { return ''; }
       }).filter(Boolean)
     ), before);
-    expect(openedPaths, 'double-clicking Ephesians in "throughout Ephesians 5" must open chapter 5').toContain('/kjv/eph/5/');
+    expect(
+      openedPaths,
+      'double-clicking Ephesians in "throughout Ephesians 5" must open chapter 5; diagnostics: ' +
+        JSON.stringify({
+          selectedText: await page.evaluate(() => window.getSelection?.().toString() || ''),
+          articleDiagnostic: await page.locator('#blb-e2e-supplyofgrace-substack').getAttribute('data-blb-double-click-diagnostic'),
+          openedPaths
+        })
+    ).toContain('/kjv/eph/5/');
     expect(openedPaths, 'must not fall back to Ephesians 1:1').not.toContain('/kjv/eph/1/1/');
 
     await extensionWorker.evaluate((paths) => chrome.tabs.query({}).then(async tabs => {
