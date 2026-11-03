@@ -36,7 +36,7 @@
       Boolean(url.searchParams.get("b") && url.searchParams.get("c") &&
         /^\d+(?:[-–]\d+)?$/.test(url.searchParams.get("v") || ""));
     const isSarataVerse = host === "sarata.com" && targetHost === "sarata.com" &&
-      /^\/bible\/chapter\/[^/]+\.\d+\.html$/i.test(url.pathname) &&
+      /^\/bible\/(?:chapter|verses)\/[^/]+\.\d+\.html$/i.test(url.pathname) &&
       /^#\d+:\d+(?:-\d+)?$/.test(url.hash);
     const isReferenceLabel = /^(?:[1-3]\s*)?[A-Za-z][A-Za-z .'-]*\s+\d+(?::\d+(?:[-–]\d+)?|\s+\d+(?:[-–]\d+)?)?(?:\s*\((?:KJV|NKJV|ESV|NIV|NASB|CSB|NLT|WEB|AMP|RSV|ASV)\))?$/i.test(label);
     if (!isChristianityPassage && !isChurchOfJesusChristVerse &&
