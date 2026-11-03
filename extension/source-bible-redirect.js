@@ -85,7 +85,7 @@
   if (host==="sarata.com") {
     // Sarata chapter pages use the fragment #chapter:verse (and may
     // include a verse range). Redirect only when an exact verse fragment exists.
-    const m=u.pathname.match(/^\/bible\/chapter\/([^/]+)\.(\d+)\.html$/i);
+    const m=u.pathname.match(/^\/bible\/(?:chapter|verses)\/([^/]+)\.(\d+)\.html$/i);
     const fragment=u.hash.match(/^#(\d+):(\d+)(?:-(\d+))?$/);
     if(m&&fragment&&Number(fragment[1])===Number(m[2])) {
       const book=m[1].replace(/-([123])$/," $1").replace(/-/g," ");
