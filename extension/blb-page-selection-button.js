@@ -466,7 +466,10 @@
     }
     
     function handleBlbPageSelectionMouseUp() {
-      if (!pageButtonMonitoring) return;
+      // The floating button's own mouseup follows its guarded mousedown. Do not
+      // treat that release as a new page selection or invoke the positional
+      // resolver a second time for the same action.
+      if (!pageButtonMonitoring || pageButtonActionInProgress) return;
       scheduleFinalBlbPageSelectionButtonUpdate();
     }
     
