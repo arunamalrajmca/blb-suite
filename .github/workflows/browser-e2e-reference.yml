@@ -39,7 +39,7 @@ on:
 concurrency:
   # Bump the group generation so a stale run cannot hold up the current PR run.
   # Future PR commits still supersede older runs within this generation.
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-gate-v6
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-gate-v7
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
