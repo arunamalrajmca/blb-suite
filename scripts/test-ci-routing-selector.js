@@ -80,10 +80,14 @@ function auditRepositoryTestInventory() {
   assert.deepEqual([...routingSpecs].filter(file => !mappedSpecs.has(file)), [],
     'CI routing selector fixtures must not reference retired browser specs');
 
+  const testIdReporter = fs.readFileSync(path.join(root, 'scripts/playwright-test-id-reporter.js'), 'utf8');
+  assert.match(testIdReporter, /suite\\.allTests\\(\\)/, 'test-ID reporter must enumerate the complete Playwright suite');
+  assert.match(testIdReporter, /test\\.id/, 'test-ID reporter must emit Playwright test IDs');
+
   const workflowPath = path.join(root, '.github/workflows/manual-full-test-audit.yml');
   const workflow = fs.readFileSync(workflowPath, 'utf8');
   const auditCoverage = [
-    ['all browser test cases are collected with Playwright JSON IDs', /npx playwright test --list --reporter=json/],
+    ['all browser test cases are collected with the test-ID reporter', /npx playwright test --list --reporter=\\.\/scripts\/playwright-test-id-reporter\\.js/],
     ['full audit reruns when a labeled pull request receives new commits', /types: \[labeled, synchronize\]/],
     ['each browser test case is isolated with maxFailures one', /npx playwright test --test-list .*--max-failures=1/],
     ['every browser spec file is represented in the collected list', /find tests\/browser -maxdepth 1 -type f -name '\*\.spec\.js'/],
