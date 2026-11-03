@@ -121,6 +121,22 @@ jobs:
             exit 1
           fi
 
+          # Put failures from the preceding exhaustive run first. If either
+          # fails again, stop this audit immediately instead of spending time
+          # running the remaining browser matrix.
+          priority_list="$RUNNER_TEMP/blb-playwright-priority-list.txt"
+          : > "$priority_list"
+          for failed_title in \
+            "shared sensitive-site classifier covers known providers without keyword false positives" \
+            "payments URLs suppress selection injection and context-menu eligibility despite saved opt-ins"; do
+            grep -F "› $failed_title" "$test_list" >> "$priority_list" || true
+          done
+          cat "$test_list" >> "$priority_list"
+          awk '!seen[$0]++' "$priority_list" > "$test_list.ordered"
+          mv "$test_list.ordered" "$test_list"
+          priority_count=$(wc -l < "$priority_list" | tr -d ' ')
+          echo "Prior-run failures prioritized: $priority_count"
+
           failures=0
           skipped=0
           passed=0
@@ -144,6 +160,8 @@ jobs:
               failures=$((failures + 1))
               echo "FAILED OR NOT EXECUTED: $test_id"
               echo "SUMMARY: $summary"
+              echo "Stopping browser audit immediately after the first failed or incomplete test."
+              break
             fi
           done < "$test_list"
 
