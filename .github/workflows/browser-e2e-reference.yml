@@ -34,13 +34,12 @@ on:
     types: [opened, synchronize, reopened, labeled]
   workflow_dispatch:
 
-# Keep one active run per PR: newer commits supersede outdated PR runs.
-# Pushes to main and manual runs keep their own ref-based group and are not cancelled.
+# Give every workflow execution its own concurrency group.
+# This prevents an older or stuck References run from holding a newer run pending.
+# It also avoids cancelling sibling runs; each execution is allowed to finish independently.
 concurrency:
-  # Bump the group generation to release the stale PR run that is holding the current run pending.
-  # Future PR commits still supersede older runs within this generation.
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-gate-v8
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.run_id }}-${{ github.run_attempt }}
+  cancel-in-progress: false
 
 jobs:
   change-detection:
