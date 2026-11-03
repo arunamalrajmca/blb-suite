@@ -3,6 +3,9 @@ run-name: Full Test Audit — ${{ github.ref_name }} — Run ${{ github.run_numb
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+    types: [labeled]
 
 permissions:
   contents: read
@@ -13,7 +16,8 @@ concurrency:
 
 jobs:
   full-test-audit:
-    name: Run every browser spec and regression group
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit') }}
+    name: Run every repository test suite
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -52,6 +56,30 @@ jobs:
         continue-on-error: true
         run: node --test tests/selector/*.test.mjs
 
+      - name: Run standalone JavaScript test scripts
+        id: scripts
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test_file in scripts/test-*.js; do
+            echo "Running $test_file"
+            node "$test_file"
+          done
+
+      - name: Set up Python and install test dependency
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Python test dependency
+        run: python -m pip install Pillow
+
+      - name: Run every Python unittest
+        id: python
+        continue-on-error: true
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
@@ -72,6 +100,11 @@ jobs:
       - name: Restore production manifest before package checks
         if: always()
         run: cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json
+
+      - name: Run KJV corpus and search-index integrity tests
+        id: corpus
+        continue-on-error: true
+        run: node regression-suite/tests/kjv-corpus-integrity.mjs extension
 
       - name: Run package regression group
         id: package
@@ -107,6 +140,9 @@ jobs:
         env:
           BUILD: ${{ steps.build.outcome }}
           SELECTOR: ${{ steps.selector.outcome }}
+          SCRIPTS: ${{ steps.scripts.outcome }}
+          PYTHON: ${{ steps.python.outcome }}
+          CORPUS: ${{ steps.corpus.outcome }}
           BROWSER: ${{ steps.browser.outcome }}
           PACKAGE: ${{ steps.package.outcome }}
           RESOLVER: ${{ steps.resolver.outcome }}
@@ -120,6 +156,9 @@ jobs:
             echo "|---|---|"
             echo "| Build validation | $BUILD |"
             echo "| Selector contract tests | $SELECTOR |"
+            echo "| Standalone JavaScript test scripts | $SCRIPTS |"
+            echo "| Python unittest suite | $PYTHON |"
+            echo "| KJV corpus integrity | $CORPUS |"
             echo "| All Playwright browser specs | $BROWSER |"
             echo "| Regression package | $PACKAGE |"
             echo "| Regression resolver | $RESOLVER |"
@@ -128,7 +167,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           failed=0
-          for result in "$BUILD" "$SELECTOR" "$BROWSER" "$PACKAGE" "$RESOLVER" "$SELECTION" "$FEATURES"; do
+          for result in "$BUILD" "$SELECTOR" "$SCRIPTS" "$PYTHON" "$CORPUS" "$BROWSER" "$PACKAGE" "$RESOLVER" "$SELECTION" "$FEATURES"; do
             if [[ "$result" != "success" ]]; then failed=1; fi
           done
           if [[ "$failed" -ne 0 ]]; then
