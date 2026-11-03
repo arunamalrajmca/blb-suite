@@ -316,7 +316,10 @@ jobs:
       - browser-e2e-features
     if: ${{ always() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # The grouped workflow's longest runner is 35 minutes. Allow the full
+    # hosted-job window here so a slow/queued Group A run is never mistaken
+    # for a failed References gate merely because a short polling window ended.
+    timeout-minutes: 360
     permissions:
       actions: read
       statuses: write
@@ -337,12 +340,19 @@ jobs:
             exit 0
           fi
 
-          for attempt in $(seq 1 15); do
-            response="$(curl --fail-with-body --silent --show-error \
+          attempt=0
+          while true; do
+            attempt=$((attempt + 1))
+            if ! response="$(curl --fail-with-body --silent --show-error --retry 5 --retry-all-errors --retry-delay 2 --retry-max-time 30 \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
               -H "X-GitHub-Api-Version: 2022-11-28" \
-              "${{ github.api_url }}/repos/${{ github.repository }}/actions/runs?head_sha=$RUN_SHA&per_page=100")"
+              "${{ github.api_url }}/repos/${{ github.repository }}/actions/runs?head_sha=$RUN_SHA&per_page=100" 2>&1)"; then
+              echo "GitHub Actions API lookup failed; retrying rather than treating an active grouped run as failed (poll $attempt)."
+              echo "$response"
+              sleep 20
+              continue
+            fi
             group_run="$(jq -c --arg sha "$RUN_SHA" --arg event "$EVENT_NAME" \
               '.workflow_runs | map(select(.name == "BLB Suite BROWSER E2E — GROUP A + GROUP B" and .head_sha == $sha and .event == $event)) | sort_by(.created_at) | last // empty' \
               <<< "$response")"
@@ -351,20 +361,16 @@ jobs:
               group_status="$(jq -r '.status' <<< "$group_run")"
               if [[ "$group_status" == "completed" ]]; then
                 group_result="$(jq -r '.conclusion // "failure"' <<< "$group_run")"
-                echo "Grouped browser E2E result: $group_result"
+                echo "Grouped browser E2E completed with conclusion: $group_result"
                 echo "result=$group_result" >> "$GITHUB_OUTPUT"
                 exit 0
               fi
-              echo "Grouped browser E2E is $group_status (attempt $attempt/15)."
+              echo "Grouped browser E2E is $group_status; continuing to wait (poll $attempt)."
             else
-              echo "Waiting for grouped browser E2E workflow to be created (attempt $attempt/15)."
+              echo "Matching grouped browser E2E run has not appeared yet; continuing to wait (poll $attempt)."
             fi
             sleep 20
           done
-
-          echo "Grouped browser E2E did not complete within 5 minutes."
-          echo "result=timeout" >> "$GITHUB_OUTPUT"
-          exit 1
 
       # One shell predicate determines both the published commit status and
       # the job result, preventing the status and required-check logic drifting.
