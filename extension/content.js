@@ -238,6 +238,18 @@ function christianityBibleLinkTarget(href) {
   return ref ? blbUrl(ref.book, ref.chapter, ref.from, ref.to) : null;
 }
 
+function sarataBibleLinkTarget(href) {
+  let url;
+  try { url = new URL(href, location.href); } catch (_) { return null; }
+  if (url.hostname.toLowerCase().replace(/^www\./, "") !== "sarata.com") return null;
+  const match = url.pathname.match(/^\/bible\/chapter\/([^/]+)\.(\d+)\.html$/i);
+  const fragment = url.hash.match(/^#(\d+):(\d+)(?:-(\d+))?$/);
+  if (!match || !fragment || Number(fragment[1]) !== Number(match[2])) return null;
+  const book = match[1].replace(/-([123])$/, " $1").replace(/-/g, " ");
+  return blbUrl(book, Number(match[2]), Number(fragment[2]), fragment[3] ? Number(fragment[3]) : null);
+}
+
+
 function parseChurchOfJesusChristBibleLink(href) {
   let url;
   try { url = new URL(href, location.href); } catch (_) { return null; }
@@ -285,6 +297,12 @@ function installChristianityLinkRedirect(isEnabled) {
     const label = String(typeof detail?.label === "string" ? detail.label : "").replace(/\s+/g, " ").trim();
     const host = String(location.hostname || "").toLowerCase().replace(/^www\./, "");
     let target = christianityBibleLinkTarget(href);
+    if (!target && host === "sarata.com") target = sarataBibleLinkTarget(href);
+    if (!target && ["openbible.info", "crossway.org", "sarata.com"].includes(host)) {
+      const cleanLabel = label.replace(/\s*\((?:KJV|NKJV|ESV|NIV|NASB|CSB|NLT|WEB|AMP|RSV|ASV)\)\s*$/i, "").trim();
+      const parsed = parseRef(cleanLabel);
+      if (parsed) target = blbUrl(parsed.book, parsed.chapter, parsed.from, parsed.to);
+    }
     if (!target && host === "churchofjesuschrist.org") {
       const ref = parseChurchOfJesusChristBibleLink(href);
       if (ref) target = blbUrl(ref.book, ref.chapter, ref.from, ref.to);
@@ -494,7 +512,7 @@ const REDIRECT_HOSTS = new Set([
 ]);
 
 let sourceBibleRedirectEnabled = false;
-if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com", "churchofjesuschrist.org", "mercyhouseministry.com"].includes(location.hostname.toLowerCase().replace(/^www\./, ""))) {
+if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com", "churchofjesuschrist.org", "mercyhouseministry.com", "openbible.info", "crossway.org", "sarata.com"].includes(location.hostname.toLowerCase().replace(/^www\./, ""))) {
   installChristianityLinkRedirect(() => suiteEnabled && sourceBibleRedirectEnabled);
 }
 
