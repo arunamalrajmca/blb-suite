@@ -375,3 +375,38 @@ test('Facebook supplied div[dir=auto] DOM opens shorthand references from numeri
     await page.waitForTimeout(1600);
   }
 });
+
+
+test('Facebook double-clicking a numbered-book suffix searches only the selected KJV word when no citation follows', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
+  await page.route('https://www.facebook.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Facebook numbered-book word search</title></head><body></body></html>'
+  }));
+  await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    const line = document.createElement('div');
+    line.setAttribute('dir', 'auto');
+    line.textContent = '2 Timothy is Paul’s last heart wrenching letter to the body of Christ.';
+    line.style.cssText = 'font:20px Arial,sans-serif;margin:24px;';
+    document.body.appendChild(line);
+  });
+
+  await page.getByText(/2 Timothy is Paul/).dblclick({ position: { x: 62, y: 10 } });
+
+  await expect.poll(async () => {
+    const tabs = await extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' }))
+        .map(tab => tab.url || tab.pendingUrl || '')
+    );
+    return tabs.find(url => url.includes('/search/search.cfm?Criteria='));
+  }).toContain('Criteria=Timothy');
+
+  const tabs = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' }))
+      .map(tab => tab.url || tab.pendingUrl || '')
+  );
+  expect(tabs.some(url => url.includes('Criteria=2+timothy'))).toBe(false);
+});
