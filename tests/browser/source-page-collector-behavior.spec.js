@@ -330,3 +330,124 @@ test('Mercy House shows its BLB references button on article pages and collects 
     .toContainText('Opening 2 Bible references in BLB MultiVerse');
 });
 \n
+
+test('OpenBible, Crossway and Sarata show BLB collection buttons on content pages and collect their verse links', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    masterEnabled: true,
+    pageSelectionButtonSites: {
+      'openbible.info': true,
+      'crossway.org': true,
+      'sarata.com': true
+    },
+    doubleClickBlbSites: {}
+  });
+
+  const fixtures = [
+    {
+      host: 'www.openbible.info',
+      home: 'https://www.openbible.info/',
+      article: 'https://www.openbible.info/topics/scripture',
+      refs: [
+        '<a href="https://www.biblegateway.com/passage/?search=2%20Timothy%203%3A16">2 Timothy 3:16</a>',
+        '<a href="https://www.biblegateway.com/passage/?search=Romans%2010%3A17">Romans 10:17</a>'
+      ],
+      button: '#blb-suite-openbible-multiverse',
+      expected: [
+        ['2 timothy', 3, 16, 'https://www.blueletterbible.org/kjv/2ti/3/16/'],
+        ['romans', 10, 17, 'https://www.blueletterbible.org/kjv/rom/10/17/']
+      ]
+    },
+    {
+      host: 'www.crossway.org',
+      home: 'https://www.crossway.org/',
+      article: 'https://www.crossway.org/articles/fixture/',
+      refs: [
+        '<a href="https://www.esv.org/John+3%3A16/">John 3:16</a>',
+        '<a href="https://www.esv.org/Romans+8%3A1-2/">Romans 8:1-2</a>'
+      ],
+      button: '#blb-suite-crossway-multiverse',
+      expected: [
+        ['john', 3, 16, 'https://www.blueletterbible.org/kjv/jhn/3/16/'],
+        ['romans', 8, 1, 'https://www.blueletterbible.org/kjv/rom/8/1-2/']
+      ]
+    },
+    {
+      host: 'sarata.com',
+      home: 'https://sarata.com/',
+      article: 'https://sarata.com/bible/chapter/Psalms.23.html',
+      refs: [
+        '<a href="/bible/chapter/Psalms.23.html#23:1">The LORD is my shepherd</a>',
+        '<a href="/bible/chapter/John-2.3.html#3:16">For God so loved the world</a>'
+      ],
+      button: '#blb-suite-sarata-multiverse',
+      expected: [
+        ['psalms', 23, 1, 'https://www.blueletterbible.org/kjv/psa/23/1/'],
+        ['2 john', 3, 16, 'https://www.blueletterbible.org/kjv/2jo/3/16/']
+      ]
+    }
+  ];
+
+  await context.route('https://www.openbible.info/**', route => {
+    const home = new URL(route.request().url()).pathname === '/';
+    return route.fulfill({ status: 200, contentType: 'text/html', body:
+      home ? '<!doctype html><html><body>OpenBible home</body></html>' :
+      '<!doctype html><html><body><main><h1>OpenBible fixture</h1>' +
+        fixtures[0].refs.join('') + '</main></body></html>'
+    });
+  });
+  await context.route('https://www.crossway.org/**', route => {
+    const home = new URL(route.request().url()).pathname === '/';
+    return route.fulfill({ status: 200, contentType: 'text/html', body:
+      home ? '<!doctype html><html><body>Crossway home</body></html>' :
+      '<!doctype html><html><body><main><h1>Crossway fixture</h1>' +
+        fixtures[1].refs.join('') + '</main></body></html>'
+    });
+  });
+  await context.route('https://sarata.com/**', route => {
+    const home = new URL(route.request().url()).pathname === '/';
+    return route.fulfill({ status: 200, contentType: 'text/html', body:
+      home ? '<!doctype html><html><body>Sarata home</body></html>' :
+      '<!doctype html><html><body><main><h1>Sarata fixture</h1>' +
+        fixtures[2].refs.join('') + '</main></body></html>'
+    });
+  });
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200, contentType: 'text/html', body: '<!doctype html><title>BLB fixture</title>'
+  }));
+
+  await extensionWorker.evaluate(() => {
+    globalThis.__blbThreeSiteCapture = message => {
+      if (message?.type === 'blbSuiteOpenWebsterMultiVerse') {
+        void chrome.storage.local.set({ __blbTestThreeSiteRefs: message.refs || [] });
+      }
+    };
+    chrome.runtime.onMessage.addListener(globalThis.__blbThreeSiteCapture);
+  });
+
+  for (const fixture of fixtures) {
+    await page.goto(fixture.home, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator(fixture.button)).toHaveCount(0);
+    await page.goto(fixture.article, { waitUntil: 'domcontentloaded' });
+    const button = page.locator(fixture.button);
+    await expect(button).toHaveText('Open Bible References in BLB');
+    await button.click();
+
+    await expect.poll(async () => extensionWorker.evaluate(async () => {
+      const saved = await chrome.storage.local.get({ __blbTestThreeSiteRefs: [] });
+      return saved.__blbTestThreeSiteRefs.length;
+    }), { timeout: 10000 }).toBe(2);
+
+    const refs = await extensionWorker.evaluate(async () => {
+      const saved = await chrome.storage.local.get({ __blbTestThreeSiteRefs: [] });
+      return saved.__blbTestThreeSiteRefs.map(ref => [
+        ref.book, ref.chapter, ref.from, ref.url
+      ]);
+    });
+    expect(refs).toEqual(fixture.expected);
+    await extensionStorage.set({ __blbTestThreeSiteRefs: [] });
+  }
+});
+
