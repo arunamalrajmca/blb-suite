@@ -121,7 +121,7 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     bankingPath: BLBShared.isSensitiveSiteUrl('https://example.com/online/banking'),
     financePath: BLBShared.isSensitiveSiteUrl('https://example.com/personal/finance'),
     insurancePath: BLBShared.isSensitiveSiteUrl('https://example.com/insurance/claims'),
-    policyQuery: BLBShared.isSensitiveSiteUrl('https://example.com/search?type=policy'),
+    policyQuery: BLBShared.isSensitiveSiteUrl('https://example.com/search?type=policies'),
     doctorPath: BLBShared.isSensitiveSiteUrl('https://example.com/find-a-doctor'),
     legalPath: BLBShared.isSensitiveSiteUrl('https://example.com/legal/court-records'),
     accountPath: BLBShared.isSensitiveSiteUrl('https://example.com/account/profile'),
