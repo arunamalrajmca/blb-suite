@@ -1004,8 +1004,8 @@ test.describe('core user-visible E2E', () => {
     });
 
     for (const { selector, expectedPath } of [
-      { selector: '#substack-cor1', expectedPath: '/kjv/1co/13/1/' },
-      { selector: '#substack-cor2', expectedPath: '/kjv/2co/13/1/' }
+      { selector: '#substack-cor1', expectedPath: '/kjv/1co/13/' },
+      { selector: '#substack-cor2', expectedPath: '/kjv/2co/13/' }
     ]) {
       await page.locator(selector).dblclick();
       try {
@@ -1055,7 +1055,7 @@ test.describe('core user-visible E2E', () => {
     });
 
     await page.mouse.dblclick(point.x, point.y);
-    await activateBlbTabForPath(extensionWorker, '/kjv/1co/13/1/', {
+    await activateBlbTabForPath(extensionWorker, '/kjv/1co/13/', {
       fragment: 'plain-text',
       selector: '#blb-e2e-substack-corinthians-plain-text',
       selectedText: 'Cor'
