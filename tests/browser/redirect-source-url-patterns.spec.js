@@ -1,4 +1,5 @@
 const { test, expect } = require('@playwright/test');
+require('./source-site-redirect-integration.helper.js');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
