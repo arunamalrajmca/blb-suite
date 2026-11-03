@@ -47,7 +47,88 @@ const assertValue = (result, key, value, scenario) => {
   assert.equal(result.values[key], String(value), scenario + ': ' + key + ' expected ' + value + ', got ' + result.values[key] + '\n' + result.output);
 };
 
+
+function auditRepositoryTestInventory() {
+  const selectorSource = fs.readFileSync(selector, 'utf8');
+  const mappedBlock = selectorSource.match(/const mappedSpecs = new Set\(\[([\s\S]*?)\]\);/);
+  assert.ok(mappedBlock, 'browser selector must expose its complete mappedSpecs inventory');
+  const mappedSpecs = new Set([...mappedBlock[1].matchAll(/["'](tests\/browser\/[^"']+\.spec\.js)["']/g)]
+    .map(match => match[1]));
+  const browserSpecs = fs.readdirSync(path.join(root, 'tests/browser'))
+    .filter(file => file.endsWith('.spec.js'))
+    .map(file => 'tests/browser/' + file);
+  const missingMappings = browserSpecs.filter(file => !mappedSpecs.has(file));
+  const staleMappings = [...mappedSpecs].filter(file => !fs.existsSync(path.join(root, file)));
+  assert.deepEqual(missingMappings, [], 'every browser spec must be mapped to focused CI coverage');
+  assert.deepEqual(staleMappings, [], 'focused CI mappings must not point at deleted browser specs');
+
+  const browserDecisionFixture = fs.readFileSync(
+    path.join(root, 'tests/selector/browser-selector-decisions.test.mjs'), 'utf8'
+  );
+  const browserDecisionSpecs = new Set([...browserDecisionFixture.matchAll(/put\(root, "(tests\/browser\/[^"]+\.spec\.js)"/g)]
+    .map(match => match[1]));
+  assert.deepEqual([...mappedSpecs].filter(file => !browserDecisionSpecs.has(file)), [],
+    'browser-selector decision fixtures must include every mapped browser spec');
+  assert.deepEqual([...browserDecisionSpecs].filter(file => !mappedSpecs.has(file)), [],
+    'browser-selector decision fixtures must not reference retired specs');
+
+  const routingFixture = fs.readFileSync(path.join(root, 'scripts/test-ci-routing-selector.js'), 'utf8');
+  const routingSpecs = new Set([...routingFixture.matchAll(/'((?:tests\/browser\/)[^']+\.spec\.js)'/g)]
+    .map(match => match[1]));
+  assert.deepEqual([...mappedSpecs].filter(file => !routingSpecs.has(file)), [],
+    'CI routing selector fixtures must include every mapped browser spec');
+  assert.deepEqual([...routingSpecs].filter(file => !mappedSpecs.has(file)), [],
+    'CI routing selector fixtures must not reference retired browser specs');
+
+  const workflowPath = path.join(root, '.github/workflows/manual-full-test-audit.yml');
+  const workflow = fs.readFileSync(workflowPath, 'utf8');
+  const auditCoverage = [
+    ['all browser test cases are collected', /npx playwright test --list --reporter=list/],
+    ['each browser test case is isolated with maxFailures one', /npx playwright test --test-list .*--max-failures=1/],
+    ['every browser spec file is represented in the collected list', /find tests\/browser -maxdepth 1 -type f -name '\*\.spec\.js'/],
+    ['all standalone JavaScript tests', /for test_file in scripts\/test-\*\.js/],
+    ['all selector tests', /node --test tests\/selector\/\*\.test\.mjs/],
+    ['all Python unittest files', /python -m unittest discover -s tests -p 'test_\*\.py'/],
+    ['KJV corpus integrity', /node regression-suite\/tests\/kjv-corpus-integrity\.mjs extension/],
+    ['package regression group', /--group=package/],
+    ['resolver regression group', /--group=resolver/],
+    ['selection regression group', /--group=selection/],
+    ['features regression group', /--group=features/]
+  ];
+  for (const [label, pattern] of auditCoverage) {
+    assert.match(workflow, pattern, 'full-test audit must execute ' + label);
+  }
+  assert.doesNotMatch(workflow, /--max-failures=0/, 'full-test audit must not disable the repository maxFailures: 1 policy');
+
+  const testFiles = [
+    ...browserSpecs,
+    ...fs.readdirSync(path.join(root, 'tests/selector'))
+      .filter(file => file.endsWith('.test.mjs'))
+      .map(file => 'tests/selector/' + file),
+    ...fs.readdirSync(path.join(root, 'scripts'))
+      .filter(file => /^test-.*\.js$/.test(file))
+      .map(file => 'scripts/' + file),
+    ...fs.readdirSync(path.join(root, 'tests'))
+      .filter(file => /^test_.*\.py$/.test(file))
+      .map(file => 'tests/' + file)
+  ];
+  const focusedTests = [];
+  const obsoleteLocalhostTests = [];
+  for (const file of testFiles) {
+    const source = fs.readFileSync(path.join(root, file), 'utf8');
+    if (file !== 'scripts/test-ci-routing-selector.js') {
+      if (/\btest\.(?:only|describe\.only)|\bdescribe\.only/.test(source)) focusedTests.push(file);
+      if (/localhost:8000|127\.0\.0\.1:8000/.test(source)) obsoleteLocalhostTests.push(file);
+    }
+  }
+  assert.deepEqual(focusedTests, [], 'no committed test may use test.only/describe.only');
+  assert.deepEqual(obsoleteLocalhostTests, [], 'removed localhost:8000 behavior must not retain obsolete tests');
+  console.log('PASS: inventory covers ' + browserSpecs.length + ' browser specs and every full-audit test category');
+}
+
+
 try {
+  auditRepositoryTestInventory();
   run(['git', 'init', '-q']);
   run(['git', 'config', 'user.name', 'CI Routing Test']);
   run(['git', 'config', 'user.email', 'ci-routing@example.invalid']);
@@ -59,6 +140,8 @@ try {
     'tests/browser/scripttagger-global-injection.spec.js',
     'tests/browser/e2e-core-user-actions.spec.js',
     'tests/browser/multiverse-tab-reuse.spec.js',
+    'tests/browser/multiverse-contiguous-range-routing.spec.js',
+    'tests/browser/multiverse-disjoint-chapter-post.spec.js',
     'tests/browser/multiverse-tool-view.spec.js',
     'tests/browser/multiverse-handoff.spec.js',
     'tests/browser/blb-passive-new-tab-targets.spec.js',
@@ -80,6 +163,8 @@ try {
     'tests/browser/shared-regex-patterns.spec.js',
     'tests/browser/rediscover-sagacity-button.spec.js',
     'tests/browser/research-dom-smoke.spec.js',
+    'tests/browser/known-host-extension.spec.js',
+    'tests/browser/pr-422-feature-regressions.spec.js',
     'tests/browser/omnibox-boolean-operators.spec.js',
     'tests/browser/kings-bible-collector-behavior.spec.js',
     'tests/browser/webster-collector-behavior.spec.js',
@@ -98,6 +183,12 @@ try {
   write('extension/blb-auto-hyperlinker.js');
   write('extension/blb-draggable-button.js');
   write('extension/multiverse-tool-view.js');
+  write('extension/multiverse-reference-helpers.js');
+  write('extension/multiverse-post.js');
+  write('extension/multiverse-post.html');
+  write('extension/blb-page-selection-button.js');
+  write('extension/Tutorial.html');
+  write('extension/Tutorial.js');
   write('extension/blb-passive-new-tab-targets.js');
   write('extension/blb-parse-popup.js');
   write('extension/blb-verse-link-navigation.js');
@@ -201,6 +292,10 @@ try {
   // Newly extracted feature modules select their established focused browser coverage.
   const extractedFeatureCases = [
     ['extension/multiverse-copy.js', 'e2e-core-user-actions.spec.js'],
+    ['extension/multiverse-reference-helpers.js', 'multiverse-contiguous-range-routing.spec.js'],
+    ['extension/multiverse-post.js', 'multiverse-disjoint-chapter-post.spec.js'],
+    ['extension/blb-page-selection-button.js', 'research-dom-smoke.spec.js'],
+    ['extension/Tutorial.html', 'pr-422-feature-regressions.spec.js'],
     ['extension/multiverse-handoff.js', 'multiverse-handoff.spec.js'],
     ['extension/multiverse-tool-view.js', 'multiverse-tool-view.spec.js'],
     ['extension/blb-parse-popup.js', 'e2e-core-user-actions.spec.js'],
@@ -241,6 +336,18 @@ try {
         file + ' must select direct visibility behavior coverage');
       assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
         file + ' must not select unrelated generic core coverage');
+    }
+    if (file === 'extension/multiverse-reference-helpers.js' || file === 'extension/multiverse-post.js' || file === 'extension/Tutorial.html') {
+      assertValue(result, 'group_a_required', true, file);
+      assertValue(result, 'reference_required', true, file);
+    }
+    if (file === 'extension/blb-page-selection-button.js') {
+      assert(result.values.changed_specs.includes('tests/browser/known-host-extension.spec.js'),
+        'page-selection changes must select the explicit Bible.com opt-in regression');
+      assert(result.values.changed_specs.includes('tests/browser/research-dom-smoke.spec.js'),
+        'page-selection changes must select the expanded DOM-selection regression matrix');
+      assertValue(result, 'group_a_required', true, file);
+      assertValue(result, 'reference_required', true, file);
     }
     if (file === 'extension/blb-passive-new-tab-targets.js') {
       assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),

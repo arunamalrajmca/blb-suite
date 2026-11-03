@@ -3,17 +3,21 @@ run-name: Full Test Audit — ${{ github.ref_name }} — Run ${{ github.run_numb
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+    types: [labeled]
 
 permissions:
   contents: read
 
 concurrency:
   group: full-test-audit-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   full-test-audit:
-    name: Run every browser spec and regression group
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-full-test-audit') }}
+    name: Run every repository test suite
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -40,7 +44,7 @@ jobs:
         run: cp extension/manifest.json "$RUNNER_TEMP/blb-manifest-original.json"
 
       - name: Grant test-only generic host access
-        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
 
       - name: Validate extension build and module contracts
         id: build
@@ -52,26 +56,112 @@ jobs:
         continue-on-error: true
         run: node --test tests/selector/*.test.mjs
 
+      - name: Run standalone JavaScript test scripts
+        id: scripts
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test_file in scripts/test-*.js; do
+            echo "Running $test_file"
+            node "$test_file"
+          done
+
+      - name: Set up Python and install test dependency
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Python test dependency
+        run: python -m pip install Pillow
+
+      - name: Run every Python unittest
+        id: python
+        continue-on-error: true
+        run: python -m unittest discover -s tests -p 'test_*.py' -v
+
       - name: Install Playwright Chromium
         run: npx playwright install --with-deps chromium
 
       # Deliberately bypass select-browser-specs.mjs, changed-file routing,
-      # group routing, and workflow-level spec filters. Playwright receives the
-      # entire tests/browser suite in one command. Its own explicit test.skip()
-      # conditions remain visible in the report.
-      - name: Run every browser spec without CI selector filtering
+      # group routing, and workflow-level spec filters. Collect Playwright's
+      # complete test list, then run each individual test in its own invocation.
+      # This preserves maxFailures: 1 while ensuring one failing test cannot
+      # prevent any later test case from executing.
+      - name: Run every browser test case independently without CI selector filtering
         id: browser
         continue-on-error: true
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
           BLB_PERF_OUTPUT: ${{ runner.temp }}/blb-performance.jsonl
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
+        shell: bash
         run: |
           : > "$BLB_PERF_OUTPUT"
-          npx playwright test --max-failures=0
+          list_output="$RUNNER_TEMP/blb-playwright-list.txt"
+          test_list="$RUNNER_TEMP/blb-playwright-test-ids.txt"
+          if ! npx playwright test --list --reporter=list > "$list_output" 2>&1; then
+            cat "$list_output"
+            exit 1
+          fi
+          cat "$list_output"
+          grep -E 'tests/browser/[^[:space:]]+\.spec\.js:[0-9]+:[0-9]+' "$list_output" |
+            sed -E 's/^[[:space:]]*//' > "$test_list" || true
+
+          total=$(wc -l < "$test_list" | tr -d ' ')
+          expected_specs=$(find tests/browser -maxdepth 1 -type f -name '*.spec.js' | wc -l | tr -d ' ')
+          listed_specs=$(grep -oE 'tests/browser/[^[:space:]]+\.spec\.js' "$test_list" | sort -u | wc -l | tr -d ' ')
+          echo "Browser test cases discovered: $total"
+          echo "Browser spec files expected: $expected_specs"
+          echo "Browser spec files represented: $listed_specs"
+          if [[ "$total" -eq 0 || "$listed_specs" -ne "$expected_specs" ]]; then
+            echo "Playwright's test list does not cover every browser spec file."
+            exit 1
+          fi
+
+          failures=0
+          skipped=0
+          passed=0
+          executed=0
+          current_test="$RUNNER_TEMP/blb-current-test.txt"
+          current_log="$RUNNER_TEMP/blb-current-test.log"
+          while IFS= read -r test_id; do
+            executed=$((executed + 1))
+            printf '[%s/%s] %s\n' "$executed" "$total" "$test_id"
+            printf '%s\n' "$test_id" > "$current_test"
+            command_status=0
+            npx playwright test --test-list "$current_test" --max-failures=1 > "$current_log" 2>&1 || command_status=$?
+            cat "$current_log"
+            summary=$(grep 'Test summary:' "$current_log" | tail -n 1 || true)
+            if [[ "$command_status" -eq 0 && "$summary" == *"1/1 completed"* && "$summary" == *"1 passed, 0 failed, 0 skipped"* ]]; then
+              passed=$((passed + 1))
+            else
+              if [[ "$summary" == *"skipped"* && "$summary" != *"0 skipped"* ]]; then
+                skipped=$((skipped + 1))
+              fi
+              failures=$((failures + 1))
+              echo "FAILED OR NOT EXECUTED: $test_id"
+              echo "SUMMARY: $summary"
+            fi
+          done < "$test_list"
+
+          echo "Browser test cases executed: $executed/$total"
+          echo "Browser test cases passed: $passed"
+          echo "Browser test cases failed or incomplete: $failures"
+          echo "Browser test cases skipped: $skipped"
+          if [[ "$executed" -ne "$total" || "$failures" -gt 0 || "$skipped" -gt 0 ]]; then
+            exit 1
+          fi
 
       - name: Restore production manifest before package checks
         if: always()
         run: cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json
+
+      - name: Run KJV corpus and search-index integrity tests
+        id: corpus
+        continue-on-error: true
+        run: node regression-suite/tests/kjv-corpus-integrity.mjs extension
 
       - name: Run package regression group
         id: package
@@ -107,6 +197,9 @@ jobs:
         env:
           BUILD: ${{ steps.build.outcome }}
           SELECTOR: ${{ steps.selector.outcome }}
+          SCRIPTS: ${{ steps.scripts.outcome }}
+          PYTHON: ${{ steps.python.outcome }}
+          CORPUS: ${{ steps.corpus.outcome }}
           BROWSER: ${{ steps.browser.outcome }}
           PACKAGE: ${{ steps.package.outcome }}
           RESOLVER: ${{ steps.resolver.outcome }}
@@ -120,6 +213,9 @@ jobs:
             echo "|---|---|"
             echo "| Build validation | $BUILD |"
             echo "| Selector contract tests | $SELECTOR |"
+            echo "| Standalone JavaScript test scripts | $SCRIPTS |"
+            echo "| Python unittest suite | $PYTHON |"
+            echo "| KJV corpus integrity | $CORPUS |"
             echo "| All Playwright browser specs | $BROWSER |"
             echo "| Regression package | $PACKAGE |"
             echo "| Regression resolver | $RESOLVER |"
@@ -128,7 +224,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           failed=0
-          for result in "$BUILD" "$SELECTOR" "$BROWSER" "$PACKAGE" "$RESOLVER" "$SELECTION" "$FEATURES"; do
+          for result in "$BUILD" "$SELECTOR" "$SCRIPTS" "$PYTHON" "$CORPUS" "$BROWSER" "$PACKAGE" "$RESOLVER" "$SELECTION" "$FEATURES"; do
             if [[ "$result" != "success" ]]; then failed=1; fi
           done
           if [[ "$failed" -ne 0 ]]; then

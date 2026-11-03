@@ -105,7 +105,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/multiverse-reference-helpers.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js"]
+    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/multiverse-contiguous-range-routing.spec.js"]
   },
   {
     paths: ["extension/redirect-bibleref-ranges.js", "extension/redirect-christianity-main-world.js"],
@@ -121,15 +121,15 @@ const featureSpecs = [
   },
   {
     paths: ["extension/multiverse-post.html", "extension/multiverse-post.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js"]
+    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/multiverse-disjoint-chapter-post.spec.js"]
   },
   {
     paths: ["extension/popup.html", "extension/popup.js"],
-    specs: ["tests/browser/site-feature-defaults.spec.js", "tests/browser/study-session-popup-ui-regression.spec.js", "tests/browser/study-backup-restore.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/redirect-toggle-isolation.spec.js", "tests/browser/popup-master-toggle-regression.spec.js"]
+    specs: ["tests/browser/site-feature-defaults.spec.js", "tests/browser/study-session-popup-ui-regression.spec.js", "tests/browser/study-backup-restore.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/redirect-toggle-isolation.spec.js", "tests/browser/popup-master-toggle-regression.spec.js", "tests/browser/pr-422-feature-regressions.spec.js"]
   },
   {
     paths: ["extension/kings-bible-collector.js"],
-    specs: ["tests/browser/kings-bible-collector-behavior.spec.js"]
+    specs: ["tests/browser/kings-bible-collector-behavior.spec.js", "tests/browser/pr-422-feature-regressions.spec.js"]
   },
   {
     paths: ["extension/webster-collector.js"],
@@ -177,7 +177,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/blb-page-selection-button.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/site-feature-defaults.spec.js"]
+    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/site-feature-defaults.spec.js", "tests/browser/research-dom-smoke.spec.js", "tests/browser/known-host-extension.spec.js"]
   },
   {
     paths: ["extension/multiverse-handoff.js"],
@@ -185,13 +185,13 @@ const featureSpecs = [
   },
   {
     paths: ["extension/Tutorial.html", "extension/Tutorial.js"],
-    specs: []
+    specs: ["tests/browser/pr-422-feature-regressions.spec.js"]
   }
 ];
 const ignoredNonRuntime = path =>
   /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/))/.test(path)
   || /^(?:store-assets\/|assets\/store\/|extension\/(?:icons|store-assets)\/)/.test(path)
-  || /^extension\/(?:Tutorial\.html|Tutorial\.js|THIRD-PARTY-NOTICES\.txt)$/.test(path)
+  || /^extension\/THIRD-PARTY-NOTICES\.txt$/.test(path)
   || /^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path)
   || path === "scripts/test-ci-routing-selector.js"
   || path === "scripts/reference-e2e-matrix.json"
@@ -233,6 +233,9 @@ const mappedSpecs = new Set([
   "tests/browser/study-reference-capture.spec.js",
   "tests/browser/study-session-export.spec.js",
   "tests/browser/extension.spec.js",
+  "tests/browser/known-host-extension.spec.js",
+  "tests/browser/pr-422-feature-regressions.spec.js",
+ 
   "tests/browser/redirect-hostnames.spec.js",
   "tests/browser/blb-non-kjv-redirect.spec.js",
   "tests/browser/scripttagger-global-injection.spec.js",
@@ -240,6 +243,8 @@ const mappedSpecs = new Set([
   "tests/browser/rediscover-sagacity-button.spec.js",
   "tests/browser/research-dom-smoke.spec.js",
   "tests/browser/multiverse-tab-reuse.spec.js",
+  "tests/browser/multiverse-contiguous-range-routing.spec.js",
+  "tests/browser/multiverse-disjoint-chapter-post.spec.js",
   "tests/browser/multiverse-tool-view.spec.js",
   "tests/browser/multiverse-handoff.spec.js",
   "tests/browser/blb-passive-new-tab-targets.spec.js",
@@ -275,6 +280,8 @@ const values = {
     "tests/browser/omnibox-boolean-operators.spec.js",
     "tests/browser/redirect-source-url-browser.spec.js",
     "tests/browser/e2e-core-user-actions.spec.js",
+    "tests/browser/multiverse-contiguous-range-routing.spec.js",
+    "tests/browser/multiverse-disjoint-chapter-post.spec.js",
     "tests/browser/multiverse-tool-view.spec.js",
     "tests/browser/multiverse-handoff.spec.js",
     "tests/browser/blb-passive-new-tab-targets.spec.js",
@@ -291,6 +298,9 @@ const values = {
     "tests/browser/study-reference-capture.spec.js",
     "tests/browser/study-session-export.spec.js",
     "tests/browser/extension.spec.js",
+    "tests/browser/known-host-extension.spec.js",
+    "tests/browser/pr-422-feature-regressions.spec.js",
+   
     "tests/browser/site-feature-defaults.spec.js",
     "tests/browser/study-session-popup-ui-regression.spec.js"
   ) || unmapped.length > 0 || changedBrowserSpecs.length > 0),
@@ -301,6 +311,11 @@ const values = {
   )),
   reference_required: String(has(
     "tests/browser/extension.spec.js",
+    "tests/browser/known-host-extension.spec.js",
+    "tests/browser/pr-422-feature-regressions.spec.js",
+   
+    "tests/browser/multiverse-contiguous-range-routing.spec.js",
+    "tests/browser/multiverse-disjoint-chapter-post.spec.js",
     "tests/browser/shared-regex-patterns.spec.js",
     "tests/browser/rediscover-sagacity-button.spec.js",
     "tests/browser/research-dom-smoke.spec.js",

@@ -44,6 +44,19 @@ for (const book of books) {
       [[book.name, 1, 1, 1]],
       `expected ${book.name} to resolve with separator "${separator}" in: ${input}`
     );
+
+    const rangeInput = `${book.name} 1${separator}1-2`;
+    assert.deepEqual(
+      tuples(rangeInput),
+      [[book.name, 1, 1, 2]],
+      `expected ${book.name} verse range to resolve with separator "${separator}" in: ${rangeInput}`
+    );
+    const shorthandInput = `${book.name} 1${separator}1,2`;
+    assert.deepEqual(
+      tuples(shorthandInput),
+      [[book.name, 1, 1, 1], [book.name, 1, 2, 2]],
+      `expected ${book.name} shorthand verse list to resolve with separator "${separator}" in: ${shorthandInput}`
+    );
   }
 }
 
