@@ -292,16 +292,24 @@ jobs:
         run: |
           set -euo pipefail
           TEST_FILES="${{ matrix.files && join(matrix.files, ' ') || matrix.file || 'tests/browser/extension.spec.js' }}"
-          TEST_FILTERS=()
-          for spec in $TEST_FILES; do
-            # Playwright combines multiple positional filters with AND. Match
-            # the selected basenames through one regex alternation instead.
-            filename="${spec##*/}"
-            escaped="$(printf '%s' "$filename" | sed -E 's/[][(){}.^$+*?|\\]/\\&/g')"
-            TEST_FILTERS+=("$escaped")
+          read -r -a specs <<< "$TEST_FILES"
+          total="${#specs[@]}"
+          if (( total == 0 )); then
+            echo "::error::Reference matrix group selected no spec files."
+            exit 1
+          fi
+          for index in "${!specs[@]}"; do
+            spec="${specs[$index]}"
+            if [[ ! -f "$spec" ]]; then
+              echo "::error::Selected Playwright spec does not exist: $spec"
+              exit 1
+            fi
+            printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
+            # Pass each exact path as its own Playwright invocation. This
+            # avoids ambiguous multi-file regex matching and preserves the
+            # configured maxFailures: 1 for each file.
+            npx playwright test "$spec" --grep "${{ matrix.grep }}"
           done
-          TEST_FILTER="$(IFS='|'; printf '%s' "${TEST_FILTERS[*]}")"
-          npx playwright test "$TEST_FILTER" --grep "${{ matrix.grep }}"
       - name: Upload Playwright diagnostics — ${{ matrix.group }}
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
