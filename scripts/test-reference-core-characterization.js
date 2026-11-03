@@ -34,8 +34,9 @@ function tuples(input) {
 
 // Every canonical KJV book must accept both chapter-verse separators.
 // This is exhaustive across the 66-book table, rather than a sample of books.
-assert.equal(context.BOOKS.length, 66, 'the regression matrix must cover all 66 KJV books');
-for (const book of context.BOOKS) {
+const books = vm.runInContext('BOOKS', context);
+assert.equal(books.length, 66, 'the regression matrix must cover all 66 KJV books');
+for (const book of books) {
   for (const separator of [':', '.']) {
     const input = `${book.name} 1${separator}1`;
     assert.deepEqual(
