@@ -238,6 +238,39 @@ function christianityBibleLinkTarget(href) {
   return ref ? blbUrl(ref.book, ref.chapter, ref.from, ref.to) : null;
 }
 
+function parseChurchOfJesusChristBibleLink(href) {
+  let url;
+  try { url = new URL(href, location.href); } catch (_) { return null; }
+  if (url.hostname.toLowerCase().replace(/^www\./, "") !== "churchofjesuschrist.org") return null;
+  const match = url.pathname.match(/^\/study\/scriptures\/(?:ot|nt)\/([^/]+)\/(\d+)\/?$/i);
+  if (!match) return null;
+  const verses = (url.searchParams.get("id") || "").match(/^p(\d+)(?:-p?(\d+))?$/i);
+  if (!verses) return null;
+  return {
+    book: normalizeSourceBibleBook(match[1].replace(/-/g, " ")),
+    chapter: Number(match[2]),
+    from: Number(verses[1]),
+    to: verses[2] ? Number(verses[2]) : null
+  };
+}
+
+function parseMercyHouseBibleLink(href) {
+  let url;
+  try { url = new URL(href, location.href); } catch (_) { return null; }
+  if (url.hostname.toLowerCase().replace(/^www\./, "") !== "mercyhouseministry.com" ||
+      !/^\/bible\/?$/i.test(url.pathname)) return null;
+  const book = url.searchParams.get("b");
+  const chapter = Number(url.searchParams.get("c"));
+  const verses = (url.searchParams.get("v") || "").match(/^(\d+)(?:[-–](\d+))?$/);
+  if (!book || !Number.isInteger(chapter) || chapter < 1 || !verses) return null;
+  return {
+    book: normalizeSourceBibleBook(book),
+    chapter,
+    from: Number(verses[1]),
+    to: verses[2] ? Number(verses[2]) : null
+  };
+}
+
 // Handle passage-click requests raised by the tiny MAIN-world guard.
 // The page-world guard can cancel native handlers only after this isolated-world
 // resolver confirms that the link maps to a valid KJV passage.
@@ -252,7 +285,15 @@ function installChristianityLinkRedirect(isEnabled) {
     const label = String(typeof detail?.label === "string" ? detail.label : "").replace(/\s+/g, " ").trim();
     const host = String(location.hostname || "").toLowerCase().replace(/^www\./, "");
     let target = christianityBibleLinkTarget(href);
-    if (!target && ["crosswalk.com", "enduringword.com", "gotquestions.org"].includes(host)) {
+    if (!target && host === "churchofjesuschrist.org") {
+      const ref = parseChurchOfJesusChristBibleLink(href);
+      if (ref) target = blbUrl(ref.book, ref.chapter, ref.from, ref.to);
+    }
+    if (!target && host === "mercyhouseministry.com") {
+      const ref = parseMercyHouseBibleLink(href);
+      if (ref) target = blbUrl(ref.book, ref.chapter, ref.from, ref.to);
+    }
+    if (!target && ["crosswalk.com", "enduringword.com", "gotquestions.org", "churchofjesuschrist.org", "mercyhouseministry.com"].includes(host)) {
       const cleanLabel = label.replace(/\s*\((?:KJV|NKJV|ESV|NIV|NASB|CSB|NLT|WEB|AMP|RSV|ASV)\)\s*$/i, "").trim();
       const parsed = parseRef(cleanLabel);
       if (parsed) target = blbUrl(parsed.book, parsed.chapter, parsed.from, parsed.to);
@@ -445,7 +486,7 @@ function redirectBlbNet() {
 // This makes bare and "www." variants resolve to the same supported source.
 const REDIRECT_HOSTS = new Set([
   'bible.com', 'biblegateway.com', 'bibleref.com', 'biblehub.com',
-  'christianity.com', 'crosswalk.com', 'enduringword.com', 'esv.org', 'gotquestions.org',
+  'christianity.com', 'churchofjesuschrist.org', 'crosswalk.com', 'enduringword.com', 'esv.org', 'gotquestions.org', 'mercyhouseministry.com',
   'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com',
   'bibleportal.com', 'kingjamesbibleonline.org', 'kjbo.org',
   'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com', 'thekingsbible.com',
@@ -453,7 +494,7 @@ const REDIRECT_HOSTS = new Set([
 ]);
 
 let sourceBibleRedirectEnabled = false;
-if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com"].includes(location.hostname.toLowerCase().replace(/^www\./, ""))) {
+if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com", "churchofjesuschrist.org", "mercyhouseministry.com"].includes(location.hostname.toLowerCase().replace(/^www\./, ""))) {
   installChristianityLinkRedirect(() => suiteEnabled && sourceBibleRedirectEnabled);
 }
 
