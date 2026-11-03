@@ -12,7 +12,8 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
         "rediscover.bible":"rediscover",
         "sagacityweb.com":"sagacity",
         "thetreasuryofscriptureknowledge.com":"treasury",
-        "dailyverses.net":"dailyverses"
+        "dailyverses.net":"dailyverses",
+        "churchofjesuschrist.org":"churchofjesuschrist"
       })[host] || "";
       // These sites' homepages are general landing pages, not article/reference
       // pages. Keep the page-wide collection button limited to nested pages.
