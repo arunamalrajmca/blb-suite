@@ -3200,10 +3200,11 @@ function handleDoubleClickBlb(event) {
         // Declare this outside the fast-rejection block because target selection
         // and the DOM-context resolver also need the same cue classification.
         const isVerseContextWord = /^(?:v\.?|verse|verses)$/i.test(selection);
-        // Numbered-book suffixes must reach the adjacent-prefix resolver even
-        // when they are not KJV words (for example, "Sam" or "Jn"). Keep this
-        // candidate set aligned with the suffix alternatives in the context
-        // matcher below; KJV-word overlaps still retain ordinary word search.
+        // Numbered-book suffixes must reach the adjacent-prefix resolver
+        // even when an abbreviation is not a KJV word (for example, "Th" or
+        // "Cor"). Full suffixes such as "Timothy" are KJV words and retain
+        // their ordinary word-search behavior when no citation follows.
+        // Keep this candidate set aligned with the context matcher below.
         const numberedBookSuffixAliases=getNumberedBookSuffixAliases();
         const isNumberedBookSuffixCandidate=isNumberedBookSuffixCandidateToken(selection);
         const normalizedSelectionToken = normalizeDoubleClickToken(selection).replace(/’/g, "'");
