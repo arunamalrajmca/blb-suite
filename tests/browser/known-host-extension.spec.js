@@ -9,9 +9,7 @@ test('Bible.com selection control initializes after explicit site opt-in', async
     doubleClickBlbSites: {}
   });
   await page.goto('https://www.bible.com/', { waitUntil: 'domcontentloaded', timeout: 45000 });
-  await page.waitForTimeout(1000);
-  const count = await page.locator('#blb-suite-page-selection-button').count();
+  await expect(page.locator('#blb-suite-page-selection-button')).toHaveCount(1, { timeout: 10000 });
   // The control is intentionally hidden until there is a valid selection, but
   // its existence is evidence that the declarative content script initialized.
-  expect(count).toBe(1);
 });
