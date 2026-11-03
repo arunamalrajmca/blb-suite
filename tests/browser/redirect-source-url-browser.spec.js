@@ -935,3 +935,53 @@ test('direct ChurchofJesusChrist and Mercy House verse URLs resolve to exact BLB
   }
 });
 \n
+
+test('OpenBible, Crossway and Sarata individual verse links open the exact BLB KJV passage', async ({ page }) => {
+  const cases = [
+    {
+      pageUrl: 'https://www.openbible.info/topics/scripture',
+      href: 'https://www.biblegateway.com/passage/?search=2%20Timothy%203%3A16',
+      label: '2 Timothy 3:16',
+      expected: 'https://www.blueletterbible.org/kjv/2ti/3/16/'
+    },
+    {
+      pageUrl: 'https://www.crossway.org/articles/fixture/',
+      href: 'https://www.esv.org/Romans+8%3A1-2/',
+      label: 'Romans 8:1-2',
+      expected: 'https://www.blueletterbible.org/kjv/rom/8/1-2/'
+    },
+    {
+      pageUrl: 'https://sarata.com/bible/chapter/Psalms.23.html',
+      href: 'https://sarata.com/bible/chapter/Psalms.23.html#23:1',
+      label: 'The LORD is my shepherd',
+      expected: 'https://www.blueletterbible.org/kjv/psa/23/1/'
+    }
+  ];
+
+  for (const source of cases) {
+    await loadProductionRedirect(page, source.pageUrl);
+    await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+    await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
+    const result = await page.evaluate(({href,label}) => {
+      document.body.innerHTML = '';
+      const anchor = document.createElement('a');
+      anchor.href = href;
+      anchor.textContent = label;
+      document.body.appendChild(anchor);
+      let prevented = false;
+      anchor.addEventListener('click', event => { prevented = event.defaultPrevented; });
+      anchor.dispatchEvent(new MouseEvent('click', { bubbles:true, cancelable:true, button:0 }));
+      return { prevented, target: window.__openedBlbUrl || null };
+    }, source);
+    expect(result.prevented, source.pageUrl).toBe(true);
+    expect(result.target, source.pageUrl).toBe(source.expected);
+  }
+});
+
+test('direct Sarata chapter fragment URLs resolve to the exact BLB KJV verse', async ({ page }) => {
+  await loadProductionRedirect(page, 'https://sarata.com/bible/chapter/Psalms.23.html#23:1');
+  await page.evaluate(() => redirectBibleSite());
+  expect(await page.evaluate(() => window.__redirectedTo || null))
+    .toBe('https://www.blueletterbible.org/kjv/psa/23/1/');
+});
+
