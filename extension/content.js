@@ -1563,6 +1563,73 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       return nearestSemanticBlock(candidate);
     };
     let selected = normalizeSelectionText(selectionText).normalize('NFKC');
+
+    // Resolve a numbered-book suffix from its exact live Range before the
+    // broader word/context fallbacks. Require an immediately adjacent ordinal
+    // on the left and a numeric chapter on the right in this same semantic
+    // block, so "1 Timothy 2:1" works without borrowing context from prose or
+    // another paragraph.
+    const resolveNumberedSuffixCitationAtRange = () => {
+      if (!isNumberedBookSuffixCandidateToken(selected)) return null;
+      const liveSelection = window.getSelection?.();
+      const ranges = [
+        selectionRange,
+        liveSelection?.rangeCount === 1 && !liveSelection.isCollapsed
+          ? liveSelection.getRangeAt(0).cloneRange()
+          : null
+      ];
+      for (const range of ranges) {
+        if (!range || normalizeSelectionText(range.toString()).normalize('NFKC').toLowerCase() !== selected.toLowerCase()) continue;
+        const anchor = range.startContainer?.nodeType === Node.TEXT_NODE
+          ? range.startContainer.parentElement
+          : range.startContainer;
+        const block = selectionContextBlock(anchor);
+        if (!(block instanceof Element) || !block.contains(range.startContainer) || !block.contains(range.endContainer)) continue;
+
+        const prefixRange = document.createRange();
+        prefixRange.selectNodeContents(block);
+        prefixRange.setEnd(range.startContainer, range.startOffset);
+        const prefixText = domRangeText(prefixRange)
+          .normalize('NFKC')
+          .replace(/[\\u061C\\u200B-\\u200F\\u202A-\\u202E\\u2060\\u2066-\\u2069\\uFEFF]/g, '')
+          .replace(/[\\u00A0\\u2007\\u202F]/g, ' ')
+          .replace(/[\\u2010-\\u2015\\u2212]/g, '-')
+          .replace(/\\s+/g, ' ');
+        const ordinalMatch = prefixText.match(/(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\\s+$/i);
+        if (!ordinalMatch) continue;
+        const ordinal = /^[1-3]$/.test(ordinalMatch[1])
+          ? ordinalMatch[1]
+          : ({ I: '1', II: '2', III: '3' }[ordinalMatch[1].toUpperCase()] || '');
+        if (!ordinal) continue;
+        const book = resolveBibleBook(ordinal + ' ' + selected);
+        if (!book) continue;
+
+        const followingRange = document.createRange();
+        followingRange.selectNodeContents(block);
+        followingRange.setStart(range.endContainer, range.endOffset);
+        const followingText = domRangeText(followingRange)
+          .normalize('NFKC')
+          .replace(/[\\u061C\\u200B-\\u200F\\u202A-\\u202E\\u2060\\u2066-\\u2069\\uFEFF]/g, '')
+          .replace(/[\\u00A0\\u2007\\u202F]/g, ' ')
+          .replace(/[\\u2010-\\u2015\\u2212]/g, '-');
+        const citation = followingText.match(
+          /^\\s*[.]?\\s*(\\d{1,3})(?:(?:\\s*[:.]\\s*|\\s+)(\\d{1,3}(?:\\s*,\\s*\\d{1,3})*)(?:\\s*[-–—]\\s*(\\d{1,3}))?)?/
+        );
+        if (!citation) continue;
+        const chapter = Number(citation[1]);
+        const verses = citation[2] ? citation[2].split(',').map(value => Number(value.trim())) : [];
+        const consecutive = verses.every((verse, index) => index === 0 || verse === verses[index - 1] + 1);
+        const from = verses.length ? verses[0] : 1;
+        const listedTo = verses.length ? verses[verses.length - 1] : from;
+        const to = citation[3] ? Number(citation[3]) : (consecutive ? listedTo : from);
+        const resolved = resolveBibleReference(book.name, chapter, from, to);
+        if (resolved) return resolved;
+      }
+      return null;
+    };
+    const numberedSuffixCitation = resolveNumberedSuffixCitationAtRange();
+    if (numberedSuffixCitation) return numberedSuffixCitation;
+
     // A numbered-list serial such as "1." is also a supported numeric book
     // selector when it is visibly the first token in its own list block.
     // Normalize only that verified label to its digits before positional
