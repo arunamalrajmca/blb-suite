@@ -326,6 +326,7 @@ test.describe('core user-visible E2E', () => {
 
   test('all 66 canonical book suffixes resolve through all four actions with both separators', async ({ page, extensionStorage, extensionWorker }) => {
     test.setTimeout(900000);
+    page.setDefaultTimeout(5000);
     await extensionStorage.set({
       masterEnabled: true,
       pageSelectionButtonSites: { 'example.com': true },
@@ -389,7 +390,7 @@ test.describe('core user-visible E2E', () => {
               });
               if (action === 'Show on BLB') {
                 const button = page.locator('#blb-suite-page-selection-button');
-                await expect(button).toBeVisible({ timeout: 1800 });
+                await expect(button).toBeVisible({ timeout: 1200 });
                 await button.click();
               } else if (action === 'Alt+B') {
                 await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
