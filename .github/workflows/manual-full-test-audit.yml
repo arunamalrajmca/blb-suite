@@ -94,6 +94,8 @@ jobs:
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
           BLB_PERF_OUTPUT: ${{ runner.temp }}/blb-performance.jsonl
+          NO_COLOR: '1'
+          FORCE_COLOR: '0'
         shell: bash
         run: |
           : > "$BLB_PERF_OUTPUT"
