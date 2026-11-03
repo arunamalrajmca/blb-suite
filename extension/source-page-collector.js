@@ -14,7 +14,10 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
         "thetreasuryofscriptureknowledge.com":"treasury",
         "dailyverses.net":"dailyverses",
         "churchofjesuschrist.org":"churchofjesuschrist",
-        "mercyhouseministry.com":"mercyhouse"
+        "mercyhouseministry.com":"mercyhouse",
+        "openbible.info":"openbible",
+        "crossway.org":"crossway",
+        "sarata.com":"sarata"
       })[host] || "";
       // These sites' homepages are general landing pages, not article/reference
       // pages. Keep the page-wide collection button limited to nested pages.
@@ -40,6 +43,18 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
                 chapter: Number(path[2]),
                 from: Number(verses[1]),
                 to: verses[2] ? Number(verses[2]) : null
+              };
+            }
+            if (sourceSite === "sarata" && host === "sarata.com") {
+              const path = url.pathname.match(/^\/bible\/chapter\/([^/]+)\.(\d+)\.html$/i);
+              const fragment = url.hash.match(/^#(\d+):(\d+)(?:-(\d+))?$/);
+              if (!path || !fragment || Number(fragment[1]) !== Number(path[2])) return null;
+              const book = path[1].replace(/-([123])$/, " $1").replace(/-/g, " ");
+              return {
+                book,
+                chapter: Number(path[2]),
+                from: Number(fragment[2]),
+                to: fragment[3] ? Number(fragment[3]) : null
               };
             }
             if (sourceSite === "mercyhouse" && host === "mercyhouseministry.com" &&
