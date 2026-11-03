@@ -1576,7 +1576,13 @@ test('single-token selection actions share double-click positional resolution ac
     });
     return execution?.result || null;
   }, message);
-  const resetResolverCalls = async () => extensionWorker.evaluate(async () => {
+  const resetResolverCalls = async () => {
+    // Let any selection-update task queued by the setup mouseup finish before
+    // clearing diagnostics, so only calls caused by the action are counted.
+    await page.evaluate(() => new Promise(resolve =>
+      requestAnimationFrame(() => requestAnimationFrame(resolve))
+    ));
+    return extensionWorker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
     if (!tab?.id) throw new Error('No active example.com tab');
     await chrome.scripting.executeScript({
@@ -1586,7 +1592,8 @@ test('single-token selection actions share double-click positional resolution ac
         window.__blbSuiteDoubleClickEquivalentCalls = [];
       }
     });
-  });
+    });
+  };
   const readResolverCalls = async () => extensionWorker.evaluate(async () => {
     const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
     if (!tab?.id) throw new Error('No active example.com tab');
