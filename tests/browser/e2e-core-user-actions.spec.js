@@ -1802,13 +1802,37 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
     }, separator);
     for (const selector of ['#fb-luke-book', '#fb-luke-chapter', '#fb-luke-verse']) {
       await doubleClickToken(selector);
-      const resolved = await waitForTab(extensionWorker, tab => {
-        try {
-          const url = new URL(tab.pendingUrl || tab.url);
-          return url.hostname === 'www.blueletterbible.org' &&
-            url.pathname === '/kjv/luk/22/26/';
-        } catch (_) { return false; }
-      });
+      let resolved;
+      try {
+        resolved = await waitForTab(extensionWorker, tab => {
+          try {
+            const url = new URL(tab.pendingUrl || tab.url);
+            return url.hostname === 'www.blueletterbible.org' &&
+              url.pathname === '/kjv/luk/22/26/';
+          } catch (_) { return false; }
+        });
+      } catch (error) {
+        const failureDiagnostics = await page.evaluate(() => {
+          const target = document.querySelector('#fb-luke-book');
+          const root = document.querySelector('[data-blb-test-diagnostics]');
+          const point = target?.getBoundingClientRect();
+          return {
+            selectedText: window.getSelection()?.toString() || '',
+            activeElement: document.activeElement?.outerHTML?.slice(0, 500) || '',
+            bookText: target?.textContent || '',
+            citationText: document.querySelector('#fb-luke-citation')?.innerText || '',
+            diagnostic: root?.getAttribute('data-blb-double-click-diagnostic') || '',
+            targetRect: point ? {left:point.left,top:point.top,width:point.width,height:point.height} : null
+          };
+        });
+        const observedTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+          tabs.map(tab => ({url:tab.url || '',pendingUrl:tab.pendingUrl || ''}))
+        ));
+        console.error('[Facebook Luke double-click failure]', JSON.stringify({
+          separator, selector, failureDiagnostics, observedTabs
+        }));
+        throw error;
+      }
       expect(new URL(resolved.pendingUrl || resolved.url).pathname).toBe('/kjv/luk/22/26/');
       const reconstruction = await page.evaluate(() => ({
         selectedText: window.getSelection()?.toString() || '',
