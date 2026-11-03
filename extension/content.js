@@ -1281,6 +1281,21 @@ function getSelectedNumberedBookSuffixSearchText(value) {
       ? match[1]
       : ({ I:'1', II:'2', III:'3' }[match[1].toUpperCase()] || '');
     if (!ordinal) return '';
+    // A numbered suffix in ordinary prose remains a word search ("2 Timothy
+    // is Paul's letter"). Use the complete book name only when the whole local
+    // block is just that numbered book label, with optional terminal punctuation.
+    const blockText = normalizeSelectionText(block.textContent || '').normalize('NFKC')
+      .replace(/[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '')
+      .replace(/[\u00A0\u2007\u202F]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .replace(/[.,;:!?]+$/g, '')
+      .trim()
+      .toLowerCase();
+    const exactLabels = [
+      match[1] + ' ' + selected,
+      ordinal + ' ' + selected
+    ].map(label => label.toLowerCase());
+    if (!exactLabels.includes(blockText)) return '';
     return resolveBibleBook(ordinal + ' ' + selected)?.name || '';
   } catch (_) {
     return '';
