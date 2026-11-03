@@ -112,6 +112,11 @@ if (!dynamicFilesMatch) {
   fail('runtime-injected content scripts declare their dependency list');
 } else {
   const dynamicFiles = [...dynamicFilesMatch[1].matchAll(/['\"]([^'\"]+\.js)['\"]/g)].map(match => match[1]);
+  if (!contentEntry || JSON.stringify(dynamicFiles) !== JSON.stringify(contentEntry.js || [])) {
+    fail('runtime-injected content scripts exactly match the manifest content-script list and order');
+  } else {
+    pass('runtime-injected content scripts exactly match the manifest list and order');
+  }
   const requiredDynamic = ['regex-patterns.js', 'kjv-corpus-word-index.js', 'books.js', 'book-aliases.js', 'reference-core.js', 'kings-bible-collector.js', 'webster-collector.js', 'source-page-collector.js', 'source-bible-redirect.js', 'multiverse-copy.js', 'study-reference-capture.js', 'criteria-search-navigation.js', 'blb-auto-hyperlinker.js', 'blb-passive-new-tab-targets.js', 'blb-draggable-button.js', 'blb-parse-popup.js', 'blb-verse-link-navigation.js', 'blb-page-selection-button.js', 'multiverse-handoff.js', 'multiverse-tool-view.js', 'content.js'];
   const positions = requiredDynamic.map(name => dynamicFiles.indexOf(name));
   if (positions.some(index => index < 0)
