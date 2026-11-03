@@ -305,14 +305,14 @@ jobs:
               echo "::error::Selected Playwright spec does not exist: $spec"
               exit 1
             fi
+            filename="${spec##*/}"
             printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-            # Pass each exact path as its own Playwright invocation. This
-            # avoids ambiguous multi-file regex matching and preserves the
-            # configured maxFailures: 1 for each file.
+            # Explicitly match one spec file per invocation. This avoids
+            # positional-regex ambiguity and preserves maxFailures: 1.
             if [[ "$MATRIX_GREP" == ".*" ]]; then
-              npx playwright test "$spec"
+              npx playwright test --test-match "**/$filename"
             else
-              npx playwright test "$spec" --grep "$MATRIX_GREP"
+              npx playwright test --test-match "**/$filename" --grep "$MATRIX_GREP"
             fi
           done
       - name: Upload Playwright diagnostics — ${{ matrix.group }}
