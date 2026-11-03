@@ -169,3 +169,89 @@ test('DailyVerses shows its BLB references button only on non-homepage pages', a
   await expect(page.locator('#blb-suite-dailyverses-multiverse-status'))
     .toContainText('Opening 3 Bible references in BLB MultiVerse');
 });
+
+test('ChurchofJesusChrist shows its BLB references button on scripture-study pages, not the homepage', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    masterEnabled: true,
+    pageSelectionButtonSites: { 'churchofjesuschrist.org': true },
+    doubleClickBlbSites: {}
+  });
+
+  await context.route('https://www.churchofjesuschrist.org/**', route => {
+    const isHome = new URL(route.request().url()).pathname === '/';
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      body: isHome
+        ? '<!doctype html><html><head><title>Church home</title></head><body><a href="/study/scriptures/nt/john/3?lang=eng">John 3</a></body></html>'
+        : `<!doctype html><html><head><title>Scripture study fixture</title></head><body>
+            <main>
+              <h1>Scripture study</h1>
+              <a href="/study/scriptures/nt/john/3?lang=eng#p16">John 3:16</a>
+              <a href="/study/scriptures/nt/rom/8?lang=eng#p1">Romans 8:1-2</a>
+              <a href="/study/manual/lesson?lang=eng">Study lesson</a>
+            </main>
+          </body></html>`
+    });
+  });
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>BLB fixture</title></head><body>BLB fixture</body></html>'
+  }));
+
+  await extensionWorker.evaluate(() => {
+    globalThis.__blbChurchOfJesusChristCapture = message => {
+      if (message?.type === 'blbSuiteOpenWebsterMultiVerse') {
+        void chrome.storage.local.set({ __blbTestChurchOfJesusChristRefs: message.refs || [] });
+      }
+    };
+    chrome.runtime.onMessage.addListener(globalThis.__blbChurchOfJesusChristCapture);
+  });
+
+  await page.goto('https://www.churchofjesuschrist.org/', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#blb-suite-churchofjesuschrist-multiverse')).toHaveCount(0);
+
+  await page.goto('https://www.churchofjesuschrist.org/study/manual/fixture?lang=eng', { waitUntil: 'domcontentloaded' });
+  const button = page.locator('#blb-suite-churchofjesuschrist-multiverse');
+  await expect(button).toHaveText('Open Bible References in BLB');
+  await button.click();
+
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const saved = await chrome.storage.local.get({ __blbTestChurchOfJesusChristRefs: [] });
+    return saved.__blbTestChurchOfJesusChristRefs.length;
+  }), { timeout: 10000 }).toBe(2);
+
+  const refs = await extensionWorker.evaluate(async () => {
+    const saved = await chrome.storage.local.get({ __blbTestChurchOfJesusChristRefs: [] });
+    return saved.__blbTestChurchOfJesusChristRefs.map(ref => ({
+      book: ref.book,
+      chapter: ref.chapter,
+      from: ref.from,
+      to: ref.to,
+      url: ref.url
+    }));
+  });
+  expect(refs).toEqual([
+    {
+      book: 'john',
+      chapter: 3,
+      from: 16,
+      to: 16,
+      url: 'https://www.blueletterbible.org/kjv/jhn/3/16/'
+    },
+    {
+      book: 'romans',
+      chapter: 8,
+      from: 1,
+      to: 2,
+      url: 'https://www.blueletterbible.org/kjv/rom/8/1-2/'
+    }
+  ]);
+  await expect(page.locator('#blb-suite-churchofjesuschrist-multiverse-status'))
+    .toContainText('Opening 2 Bible references in BLB MultiVerse');
+});
+
