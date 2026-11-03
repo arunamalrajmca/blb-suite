@@ -114,8 +114,9 @@ jobs:
             for index in "${!specs[@]}"; do
               spec="${specs[$index]}"
               [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
+              filename="${spec##*/}"
               printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-              npx playwright test "$spec"
+              npx playwright test --test-match "**/$filename"
             done
           else
             echo "All changed browser specs are covered by the required browser-e2e gate."
@@ -237,8 +238,9 @@ jobs:
           for index in "${!specs[@]}"; do
             spec="${specs[$index]}"
             [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
+            filename="${spec##*/}"
             printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-            npx playwright test "$spec"
+            npx playwright test --test-match "**/$filename"
           done
 
 
