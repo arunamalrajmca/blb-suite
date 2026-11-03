@@ -1766,6 +1766,30 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
     document.body.appendChild(article);
   });
 
+  // Use the actual visible word range for native Chromium double-clicks.
+  // The bidi isolates surrounding Facebook tokens are zero-width controls;
+  // clicking the wrapper's center can land on an isolate instead of the word.
+  const doubleClickToken = async selector => {
+    const point = await page.locator(selector).evaluate(element => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+      let node;
+      while ((node = walker.nextNode())) {
+        const value = node.nodeValue || '';
+        const start = value.search(/[\\p{L}\\p{N}]/u);
+        if (start < 0) continue;
+        let end = start + 1;
+        while (end < value.length && /[\\p{L}\\p{N}]/u.test(value[end])) end++;
+        const range = document.createRange();
+        range.setStart(node, start);
+        range.setEnd(node, end);
+        const rect = range.getBoundingClientRect();
+        if (rect.width && rect.height) return {x:rect.left + rect.width / 2, y:rect.top + rect.height / 2};
+      }
+      throw new Error('Could not locate visible token text for native double-click: ' + selector);
+    });
+    await page.mouse.dblclick(point.x, point.y);
+  };
+
   // The book, chapter, and verse tokens must resolve identically with
   // either punctuation mark between chapter and verse.
   for (const separator of [':','.']) {
@@ -1777,7 +1801,7 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
       separatorNode.nodeValue = value;
     }, separator);
     for (const selector of ['#fb-luke-book', '#fb-luke-chapter', '#fb-luke-verse']) {
-      await page.locator(selector).dblclick();
+      await doubleClickToken(selector);
       const resolved = await waitForTab(extensionWorker, tab => {
         try {
           const url = new URL(tab.pendingUrl || tab.url);
