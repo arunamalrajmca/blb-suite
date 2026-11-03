@@ -115,9 +115,12 @@ test.describe('research-derived DOM regression smoke', () => {
   test('D20 dynamically inserted reference remains actionable', async ({ page, extensionStorage, extensionWorker }) => {
     await setup(page, extensionStorage);
     await page.evaluate(() => {
-      const node = document.getElementById('dynamic');
-      node.innerHTML = '<span>John</span> <strong>3:16</strong>';
+      document.getElementById('insert-dynamic').addEventListener('click', () => {
+        document.getElementById('dynamic').innerHTML = '<span>John</span> <strong>3:16</strong>';
+      }, { once: true });
     });
+    await page.locator('#insert-dynamic').click();
+    await expect(page.locator('#dynamic')).toContainText('John 3:16');
     await selectText(page, 'dynamic');
     await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
   });
