@@ -952,9 +952,9 @@ test('OpenBible, Crossway and Sarata individual verse links open the exact BLB K
     },
     {
       pageUrl: 'https://sarata.com/bible/chapter/Psalms.23.html',
-      href: 'https://sarata.com/bible/chapter/Psalms.23.html#23:1',
-      label: 'The LORD is my shepherd',
-      expected: 'https://www.blueletterbible.org/kjv/psa/23/1/'
+      href: 'https://sarata.com/bible/verses/Exodus.3.html#3:2',
+      label: 'The LORD appeared unto Moses',
+      expected: 'https://www.blueletterbible.org/kjv/exo/3/2/'
     }
   ];
 
