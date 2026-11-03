@@ -16,6 +16,7 @@ const testHosts = [
   'https://x.com/*',
   'https://www.gotquestions.org/*',
   'https://www.dailyverses.net/*',
+  'https://www.bible.com/*',
   'https://www.christianity.com/*',
   'https://www.crosswalk.com/*',
   'https://www.enduringword.com/*',

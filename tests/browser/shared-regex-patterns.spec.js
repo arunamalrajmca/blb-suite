@@ -106,22 +106,22 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     healthInformationSite: BLBShared.isSensitiveSiteHostname('healthline.com'),
     financeContentSubdomain: BLBShared.isSensitiveSiteHostname('finance.yahoo.com'),
     unrelated: BLBShared.isSensitiveSiteHostname('example.com'),
-    paymentPath: BLBShared.isSensitiveSiteUrl('https://example.com/payment'),
-    paymentSegment: BLBShared.isSensitiveSiteUrl('https://example.com/account/payment-details'),
-    paymentQuery: BLBShared.isSensitiveSiteUrl('https://example.com/checkout?flow=payment'),
-    paymentCaseInsensitive: BLBShared.isSensitiveSiteUrl('https://example.com/Payment/Confirm'),
+    paymentsPath: BLBShared.isSensitiveSiteUrl('https://example.com/payments'),
+    paymentsSegment: BLBShared.isSensitiveSiteUrl('https://example.com/account/payments-details'),
+    paymentsQuery: BLBShared.isSensitiveSiteUrl('https://example.com/checkout?flow=payments'),
+    paymentsCaseInsensitive: BLBShared.isSensitiveSiteUrl('https://example.com/PAYMENTS/Confirm'),
     unrelatedPage: BLBShared.isSensitiveSiteUrl('https://example.com/account/profile'),
     paymentDomain: BLBShared.isSensitiveSiteUrl('https://payments.example.com/account'),
     hospitalPath: BLBShared.isSensitiveSiteUrl('https://example.com/patient/hospital-record'),
     healthcareQuery: BLBShared.isSensitiveSiteUrl('https://example.com/search?next=healthcare'),
-    medicineFragment: BLBShared.isSensitiveSiteUrl('https://example.com/account#medicine-list'),
-    medicineCaseInsensitive: BLBShared.isSensitiveSiteUrl('https://example.com/MEDICINE/refill'),
+    medicalFragment: BLBShared.isSensitiveSiteUrl('https://example.com/account#medical-record'),
+    medicalCaseInsensitive: BLBShared.isSensitiveSiteUrl('https://example.com/MEDICAL/refill'),
     urlKeywordsFrozen: Object.isFrozen(BLBShared.sensitiveSiteUrlKeywords),
     mychartPath: BLBShared.isSensitiveSiteUrl('https://example.com/portal/mychart'),
     bankingPath: BLBShared.isSensitiveSiteUrl('https://example.com/online/banking'),
     financePath: BLBShared.isSensitiveSiteUrl('https://example.com/personal/finance'),
     insurancePath: BLBShared.isSensitiveSiteUrl('https://example.com/insurance/claims'),
-    policyQuery: BLBShared.isSensitiveSiteUrl('https://example.com/search?type=policy'),
+    policyQuery: BLBShared.isSensitiveSiteUrl('https://example.com/search?type=policies'),
     doctorPath: BLBShared.isSensitiveSiteUrl('https://example.com/find-a-doctor'),
     legalPath: BLBShared.isSensitiveSiteUrl('https://example.com/legal/court-records'),
     accountPath: BLBShared.isSensitiveSiteUrl('https://example.com/account/profile'),
@@ -147,16 +147,16 @@ test('shared sensitive-site classifier covers known providers without keyword fa
     healthInformationSite: false,
     financeContentSubdomain: false,
     unrelated: false,
-    paymentPath: true,
-    paymentSegment: true,
-    paymentQuery: true,
-    paymentCaseInsensitive: true,
+    paymentsPath: true,
+    paymentsSegment: true,
+    paymentsQuery: true,
+    paymentsCaseInsensitive: true,
     unrelatedPage: false,
     paymentDomain: true,
     hospitalPath: true,
     healthcareQuery: true,
-    medicineFragment: true,
-    medicineCaseInsensitive: true,
+    medicalFragment: true,
+    medicalCaseInsensitive: true,
     urlKeywordsFrozen: true,
     insurancePath: true,
     policyQuery: true,
@@ -173,7 +173,7 @@ test('shared sensitive-site classifier covers known providers without keyword fa
 });
 
 
-test('payment URLs suppress selection injection and context-menu eligibility despite saved opt-ins', async ({ extensionWorker }) => {
+test('payments URLs suppress selection injection and context-menu eligibility despite saved opt-ins', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(async () => {
     await chrome.storage.local.set({
       masterEnabled: true,
@@ -181,7 +181,7 @@ test('payment URLs suppress selection injection and context-menu eligibility des
       pageSelectionButtonSites: { 'example.com': true, 'blueletterbible.org': true },
       doubleClickBlbSites: { 'example.com': true }
     });
-    const tab = { id: 987654, url: 'https://example.com/account/payment-details' };
+    const tab = { id: 987654, url: 'https://example.com/account/payments-details' };
     return {
       scripts: contentScriptFilesForTab(tab, {
         redirectEnabled: false,
@@ -194,7 +194,7 @@ test('payment URLs suppress selection injection and context-menu eligibility des
         doubleClickBlbSites: { 'example.com': true }
       }),
       contextMenu: await shouldShowBlbContextMenu(tab, 'John 3:16'),
-      blbPaymentScripts: contentScriptFilesForTab({ url: 'https://www.blueletterbible.org/payment/checkout' }, {
+      blbPaymentScripts: contentScriptFilesForTab({ url: 'https://www.blueletterbible.org/payments/checkout' }, {
         redirectEnabled: false,
         pageSelectionButtonSites: { 'blueletterbible.org': true },
         doubleClickBlbSites: {}

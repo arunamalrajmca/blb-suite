@@ -1235,6 +1235,19 @@ function isNumberedBookSuffixCandidateToken(value) {
   );
 }
 
+function isCanonicalBookSuffixCandidateToken(value) {
+  const selected = normalizeBibleBookKey(value);
+  if (!selected) return false;
+  const labels = [
+    ...BOOKS.map(book => book.name),
+    ...Object.keys(BOOK_ALIASES || {})
+  ];
+  return labels.some(label => {
+    const parts = normalizeBibleBookKey(label).split(/\s+/);
+    return parts.length > 1 && normalizeBibleBookKey(parts[parts.length - 1]) === selected;
+  });
+}
+
 /**
  * Return the canonical numbered-book name when the live selection is exactly
  * a numbered book's suffix and its immediately preceding token is a valid
@@ -1550,6 +1563,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       return nearestSemanticBlock(candidate);
     };
     let selected = normalizeSelectionText(selectionText).normalize('NFKC');
+
     // A numbered-list serial such as "1." is also a supported numeric book
     // selector when it is visibly the first token in its own list block.
     // Normalize only that verified label to its digits before positional
@@ -1563,6 +1577,92 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
       '.entry-content, .article-body, .article-content, .content-body'
     ) || initialNode?.closest?.('article, main, [role="main"]');
+    // Resolve a numbered-book suffix from its exact live Range before the
+    // broader word/context fallbacks. Require an immediately adjacent ordinal
+    // on the left and a numeric chapter on the right in this same semantic
+    // block, so "1 Timothy 2:1" works without borrowing context from prose or
+    // another paragraph.
+    const resolveNumberedSuffixCitationAtRange = () => {
+      if (!isNumberedBookSuffixCandidateToken(selected)) return null;
+      const liveSelection = window.getSelection?.();
+      const ranges = [
+        selectionRange,
+        liveSelection?.rangeCount === 1 && !liveSelection.isCollapsed
+          ? liveSelection.getRangeAt(0).cloneRange()
+          : null
+      ];
+      for (const range of ranges) {
+        if (!range || normalizeSelectionText(range.toString()).normalize('NFKC').toLowerCase() !== selected.toLowerCase()) continue;
+        const anchor = range.startContainer?.nodeType === Node.TEXT_NODE
+          ? range.startContainer.parentElement
+          : range.startContainer;
+        const block = selectionContextBlock(anchor);
+        if (!(block instanceof Element) || !block.contains(range.startContainer) || !block.contains(range.endContainer)) continue;
+
+        const prefixRange = document.createRange();
+        prefixRange.selectNodeContents(block);
+        prefixRange.setEnd(range.startContainer, range.startOffset);
+        const prefixText = domRangeText(prefixRange)
+          .normalize('NFKC')
+          .replace(/[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '')
+          .replace(/[\u00A0\u2007\u202F]/g, ' ')
+          .replace(/[\u2010-\u2015\u2212]/g, '-')
+          .replace(/\s+/g, ' ');
+        const ordinalMatch = prefixText.match(/(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\s+$/i);
+        if (!ordinalMatch) continue;
+        const ordinal = /^[1-3]$/.test(ordinalMatch[1])
+          ? ordinalMatch[1]
+          : ({ I: '1', II: '2', III: '3' }[ordinalMatch[1].toUpperCase()] || '');
+        if (!ordinal) continue;
+        const book = resolveBibleBook(ordinal + ' ' + selected);
+        if (!book) continue;
+
+        const followingRange = document.createRange();
+        followingRange.selectNodeContents(block);
+        followingRange.setStart(range.endContainer, range.endOffset);
+        const followingText = domRangeText(followingRange)
+          .normalize('NFKC')
+          .replace(/[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '')
+          .replace(/[\u00A0\u2007\u202F]/g, ' ')
+          .replace(/[\u2010-\u2015\u2212]/g, '-');
+        const citation = followingText.match(
+          /^\s*[.]?\s*(\d{1,3})(?:(?:\s*[:.]\s*|\s+)(\d{1,3}(?:\s*,\s*\d{1,3})*)(?:\s*[-–—]\s*(\d{1,3}))?)?/
+        );
+        if (!citation) continue;
+        const chapter = Number(citation[1]);
+        const verses = citation[2] ? citation[2].split(',').map(value => Number(value.trim())) : [];
+        const consecutive = verses.every((verse, index) => index === 0 || verse === verses[index - 1] + 1);
+        const from = verses.length ? verses[0] : 1;
+        const listedTo = verses.length ? verses[verses.length - 1] : from;
+        const to = citation[3] ? Number(citation[3]) : (consecutive ? listedTo : from);
+        const resolved = resolveBibleReference(book.name, chapter, from, to);
+        const diagnosticRoot = block.closest?.('[data-blb-test-diagnostics]');
+        if (diagnosticRoot) {
+          diagnosticRoot.setAttribute(
+            'data-blb-double-click-diagnostic',
+            JSON.stringify({
+              selected,
+              clickedWordText: range.toString(),
+              physicalLabel: anchor instanceof Element ? (anchor.textContent || '') : '',
+              clickedBookToken: selected,
+              clickedBook: book.name,
+              prefixText,
+              followingText,
+              followingCitation: citation[0] || null,
+              parsedChapter: chapter,
+              parsedVerses: verses,
+              parsedRangeEnd: citation[3] ? Number(citation[3]) : null,
+              resolvedReference: resolved || null
+            })
+          );
+        }
+        if (resolved) return resolved;
+      }
+      return null;
+    };
+    const numberedSuffixCitation = resolveNumberedSuffixCitationAtRange();
+    if (numberedSuffixCitation) return numberedSuffixCitation;
+
     // Facebook can put a chapter range on one line and the actual verse
     // citation on the next line (for example, "Luke 21-22" followed by
     // "Luke 22:26 KJV"). A click on the first line's book name or range-end
@@ -1997,7 +2097,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // in elements (as X commonly does).
       const exactPhysicalLabel = normalizeSelectionText(
         exactPhysicalTarget?.textContent || ''
-      ).normalize('NFKC').match(/^(?:([1-3])|(I{1,3}))\\s+(.+)$/i);
+      ).normalize('NFKC').match(/^(?:([1-3])|(I{1,3}))\s+(.+)$/i);
       // When Facebook wraps "2 Samuel" as one bidi-isolated label, use
       // that label's DOM boundaries for both sides of the citation. A caret
       // Range can end before the closing isolate, which otherwise makes the
@@ -2030,7 +2130,34 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             ' ' + exactClickedBookToken
           )
         : null;
-      const exactClickedBook = exactPrefixedBook || resolveBibleBook(exactClickedBookToken);
+      // A selected final word can be the actionable suffix of a multiword
+      // canonical book name (for example, "Solomon" in "Song of Solomon").
+      // Resolve it only when the immediately preceding DOM text ends with
+      // the exact canonical prefix; never search unrelated text elsewhere in
+      // the article or borrow a book name from another line.
+      const exactSuffixBook = (() => {
+        const selectedSuffix = normalizeBibleBookKey(exactClickedBookToken);
+        if (!selectedSuffix) return null;
+        const precedingText = normalizeBibleBookKey(exactPrefixText);
+        if (!precedingText) return null;
+        const labels = [
+          ...(BOOKS || []).flatMap(book => [book.name, book.urlKey]),
+          ...Object.keys(BOOK_ALIASES || {})
+        ].filter(Boolean).map(label => normalizeBibleReferenceText(label).replace(/[.]$/g, '').trim())
+          .filter(label => {
+            const parts = label.split(/\s+/);
+            return parts.length > 1 && normalizeBibleBookKey(parts[parts.length - 1]) === selectedSuffix;
+          })
+          .sort((a, b) => b.length - a.length);
+        for (const label of labels) {
+          const prefix = normalizeBibleBookKey(label.split(/\s+/).slice(0, -1).join(' '));
+          if (!prefix || !(precedingText === prefix || precedingText.endsWith(' ' + prefix))) continue;
+          const book = resolveBibleBook(label);
+          if (book) return book;
+        }
+        return null;
+      })();
+      const exactClickedBook = exactPrefixedBook || exactSuffixBook || resolveBibleBook(exactClickedBookToken);
       if (exactClickedBook) {
         try {
           const followingRange = document.createRange();
@@ -2096,6 +2223,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             const to = followingCitation[3]
               ? Number(followingCitation[3])
               : (consecutive ? listedTo : from);
+            // Preserve chapter URLs for ordinary book-name selections;
+            // numbered-book suffixes use the exact-range resolver above.
             const bookClickReference = from == null
               ? resolveBibleReference(exactClickedBook.name, chapter)
               : resolveBibleReference(exactClickedBook.name, chapter, from, to);
@@ -3306,6 +3435,10 @@ function handleDoubleClickBlb(event) {
         // Keep this candidate set aligned with the context matcher below.
         const numberedBookSuffixAliases=getNumberedBookSuffixAliases();
         const isNumberedBookSuffixCandidate=isNumberedBookSuffixCandidateToken(selection);
+        // Final words of multiword canonical book names (for example,
+        // "Solomon" in "Song of Solomon") must reach the exact DOM-prefix
+        // resolver even when they are ordinary KJV words or lack corpus entries.
+        const isCanonicalBookSuffixCandidate=isCanonicalBookSuffixCandidateToken(selection);
         const normalizedSelectionToken = normalizeDoubleClickToken(selection).replace(/’/g, "'");
         const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
           && KJV_CORPUS_WORD_INDEX.has(normalizedSelectionToken);
@@ -3329,7 +3462,7 @@ function handleDoubleClickBlb(event) {
           // reference check below; without a valid nearby prefix they remain
           // inert and are not sent to ordinary word lookup.
           const isRomanBookPrefixToken = /^(?:I|II|III)$/i.test(selection);
-          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isNumberedBookSuffixCandidate && !isRomanBookPrefixToken && !isVerseContextWord && !isCompactBookChapterToken) return true;
+          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isNumberedBookSuffixCandidate && !isCanonicalBookSuffixCandidate && !isRomanBookPrefixToken && !isVerseContextWord && !isCompactBookChapterToken) return true;
         }
 
         // DOM context is useful only when the clicked token can identify a
@@ -3360,7 +3493,8 @@ function handleDoubleClickBlb(event) {
           /^(?:v\.?|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
         );
         const possibleNumberedBookSuffix=isNumberedBookSuffixCandidate;
-        const contextualTarget = possibleNumberedBookSuffix
+        const possibleCanonicalBookSuffix=isCanonicalBookSuffixCandidate;
+        const contextualTarget = (possibleNumberedBookSuffix || possibleCanonicalBookSuffix)
           ? physicalTarget
           : (isVerseContextWord
             ? (cueElement || getDoubleClickTargetElement(event) || event.target)
@@ -3510,7 +3644,7 @@ function handleDoubleClickBlb(event) {
         // existing positional DOM resolver, which uses the physical caret token to
         // identify the exact citation and can expand consecutive verses to a range.
         const isCommaSeparatedNumericVerseSelection = /^\d{1,3}\s*,\s*\d{1,3}$/.test(selection);
-        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord||isCommaSeparatedNumericVerseSelection||isCompactBookChapterToken;
+        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isCanonicalBookSuffixCandidate||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord||isCommaSeparatedNumericVerseSelection||isCompactBookChapterToken;
         const blockContext=needsDomContext
           ? (getDoubleClickEquivalentSelectionContext(selection, contextualTarget, event)
             || getDoubleClickBlockContextReference(selection, contextualTarget, event))

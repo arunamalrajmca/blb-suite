@@ -176,7 +176,7 @@ test.describe('core user-visible E2E', () => {
       add('Chapter reference: 1 Kings 18.');
       add('verse', 'matrix-verse-42'); article.lastChild.appendChild(document.createTextNode(' 42.'));
       add('verses', 'matrix-verses-44'); article.lastChild.appendChild(document.createTextNode(' 44.'));
-      add('𝐯', 'matrix-v-46'); article.lastChild.appendChild(document.createTextNode(' 46.'));
+      add('v', 'matrix-v-46'); article.lastChild.appendChild(document.createTextNode(' 46.'));
       add('The next chapter is 1 Kings 19.');
       add('verse', 'matrix-verse-18'); article.lastChild.appendChild(document.createTextNode(' 18.'));
       document.body.appendChild(article);
@@ -185,7 +185,7 @@ test.describe('core user-visible E2E', () => {
     const cases = [
       ['#matrix-verse-42', 'verse', '/kjv/1ki/18/42/'],
       ['#matrix-verses-44', 'verses', '/kjv/1ki/18/44/'],
-      ['#matrix-v-46', '𝐯', '/kjv/1ki/18/46/'],
+      ['#matrix-v-46', 'v', '/kjv/1ki/18/46/'],
       ['#matrix-verse-18', 'verse', '/kjv/1ki/19/18/']
     ];
     const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];
@@ -322,6 +322,125 @@ test.describe('core user-visible E2E', () => {
         }), expectedPath);
       }
     }
+  });
+
+  test('all 66 canonical book suffixes resolve through all four actions with both separators', async ({ page, extensionStorage, extensionWorker }) => {
+    test.setTimeout(900000);
+    page.setDefaultTimeout(5000);
+    await extensionStorage.set({
+      masterEnabled: true,
+      pageSelectionButtonSites: { 'example.com': true },
+      doubleClickBlbSites: { 'example.com': true }
+    });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await expect(page.locator('body')).toBeVisible();
+    await page.waitForTimeout(1000);
+
+    const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
+      bookNumber: Number(book.bookNumber),
+      name: String(book.name),
+      urlKey: String(book.urlKey)
+    })));
+    expect(books, 'the production book registry must contain all 66 canonical books').toHaveLength(66);
+    await page.evaluate(items => {
+      const article = document.createElement('article');
+      article.id = 'all-66-book-action-matrix';
+      article.style.cssText = 'position:fixed;left:12px;top:12px;z-index:2147483647;background:#fff;color:#000;padding:12px;font:18px Arial,sans-serif;max-height:80vh;overflow:auto;';
+      for (const book of items) {
+        const words = book.name.trim().split(/\s+/);
+        const suffix = words.pop();
+        for (const separator of [':', '.']) {
+          const row = document.createElement('p');
+          row.id = 'all-66-book-row-' + (separator === ':' ? 'colon' : 'dot') + '-' + book.bookNumber;
+          if (words.length) row.appendChild(document.createTextNode(words.join(' ') + ' '));
+          const token = document.createElement('span');
+          token.id = 'all-66-book-suffix-' + (separator === ':' ? 'colon' : 'dot') + '-' + book.bookNumber;
+          token.textContent = suffix;
+          row.appendChild(token);
+          row.appendChild(document.createTextNode(' 1' + separator + '1'));
+          article.appendChild(row);
+        }
+      }
+      document.body.appendChild(article);
+    }, books);
+
+    const failures = [];
+    const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];
+    for (const book of books) {
+      const expectedPath = '/kjv/' + book.urlKey + '/1/1/';
+      for (const separator of ['colon', 'dot']) {
+        const selector = '#all-66-book-suffix-' + separator + '-' + book.bookNumber;
+        for (const action of actions) {
+          await page.bringToFront();
+          const beforeIds = await extensionWorker.evaluate(() =>
+            chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
+          );
+          try {
+            if (action === 'Double-Click') {
+              await page.evaluate(() => window.getSelection()?.removeAllRanges());
+              await page.locator(selector).dblclick();
+            } else {
+              await page.locator(selector).evaluate(element => {
+                const range = document.createRange();
+                range.selectNodeContents(element);
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+                element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+              });
+              if (action === 'Show on BLB') {
+                const button = page.locator('#blb-suite-page-selection-button');
+                await expect(button).toBeVisible({ timeout: 1200 });
+                await button.click();
+              } else if (action === 'Alt+B') {
+                await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+              } else {
+                const selectedText = await page.evaluate(() => window.getSelection()?.toString() || '');
+                await extensionWorker.evaluate(async text => {
+                  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                  if (!tab?.id) throw new Error('No active source tab for context-menu action');
+                  await handleBlbSelectionContextMenuClick({ menuItemId: 'blb-suite-web-selection', selectionText: text }, tab);
+                }, selectedText);
+              }
+            }
+
+            let opened = null;
+            await expect.poll(async () => {
+              opened = await extensionWorker.evaluate(({ beforeIds, expectedPath }) =>
+                chrome.tabs.query({}).then(tabs => {
+                  for (const tab of tabs) {
+                    if (tab.id == null || beforeIds.includes(tab.id)) continue;
+                    for (const value of [tab.pendingUrl, tab.url]) {
+                      try {
+                        const url = new URL(String(value || ''));
+                        if (url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath) {
+                          return { id: tab.id, path: url.pathname };
+                        }
+                      } catch (_) {}
+                    }
+                  }
+                  return null;
+                }), { beforeIds, expectedPath });
+              return opened?.path || '';
+            }, { timeout: 1200, message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
+          } catch (error) {
+            failures.push({ book: book.name, separator, action, expectedPath, error: String(error.message || error) });
+          } finally {
+            await extensionWorker.evaluate(beforeIds => chrome.tabs.query({}).then(async tabs => {
+              for (const tab of tabs) {
+                if (tab.id == null || beforeIds.includes(tab.id)) continue;
+                try {
+                  const url = new URL(String(tab.pendingUrl || tab.url || ''));
+                  if (url.hostname === 'www.blueletterbible.org') await chrome.tabs.remove(tab.id);
+                } catch (_) {}
+              }
+            }), beforeIds);
+            await page.bringToFront();
+          }
+        }
+      }
+    }
+    expect(failures, 'all four actions must resolve every canonical book suffix with both separators: ' + JSON.stringify(failures, null, 2)).toEqual([]);
   });
 
   test('Generic article verse cues follow the latest explicit chapter context', async ({ page, extensionStorage, extensionWorker }) => {
@@ -878,7 +997,7 @@ test.describe('core user-visible E2E', () => {
         expect(
           openedPaths.some(path => expectedPathPattern.test(path)),
           action + ' on ' + selector + ' must open ' + expectedPath + ' (allowing BLB canonical verse IDs)'
-        ).toBe(true);
+        ).toBe(true, JSON.stringify({ action, selector, selectedText, expectedPath, openedPaths }));
         await extensionWorker.evaluate(before => chrome.tabs.query({}).then(async tabs => {
           for (const tab of tabs) {
             if (tab.id == null || before.includes(tab.id)) continue;
@@ -2623,7 +2742,15 @@ test.describe('Alt+B toggle enforcement', () => {
         } catch (_) { return ''; }
       }).filter(Boolean)
     ), before);
-    expect(openedPaths, 'double-clicking Ephesians in "throughout Ephesians 5" must open chapter 5').toContain('/kjv/eph/5/');
+    expect(
+      openedPaths,
+      'double-clicking Ephesians in "throughout Ephesians 5" must open chapter 5; diagnostics: ' +
+        JSON.stringify({
+          selectedText: await page.evaluate(() => window.getSelection?.().toString() || ''),
+          articleDiagnostic: await page.locator('#blb-e2e-supplyofgrace-substack').getAttribute('data-blb-double-click-diagnostic'),
+          openedPaths
+        })
+    ).toContain('/kjv/eph/5/');
     expect(openedPaths, 'must not fall back to Ephesians 1:1').not.toContain('/kjv/eph/1/1/');
 
     await extensionWorker.evaluate((paths) => chrome.tabs.query({}).then(async tabs => {

@@ -1,12 +1,15 @@
 const { test, expect } = require('./fixtures');
 
-// These tests intentionally verify only behavior that is deterministic without
-// granting optional host permissions or interacting with native browser UI.
-test('Bible.com content-script page has the extension selection control available in the DOM', async ({ page }) => {
+// The fixture grants Bible.com test-host access; this checks that explicit
+// per-site opt-in initializes the selection control without native browser UI.
+test('Bible.com selection control initializes after explicit site opt-in', async ({ page, extensionStorage }) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    pageSelectionButtonSites: { 'bible.com': true },
+    doubleClickBlbSites: {}
+  });
   await page.goto('https://www.bible.com/', { waitUntil: 'domcontentloaded', timeout: 45000 });
-  await page.waitForTimeout(2500);
-  const count = await page.locator('#blb-suite-page-selection-button').count();
+  await expect(page.locator('#blb-suite-page-selection-button')).toHaveCount(1, { timeout: 10000 });
   // The control is intentionally hidden until there is a valid selection, but
   // its existence is evidence that the declarative content script initialized.
-  expect(count).toBe(1);
 });
