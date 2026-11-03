@@ -3027,6 +3027,21 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         (!message.contextualReferenceResolved && isSingleToken
           ? await getContextualSelectionReference(sender?.tab?.id, text)
           : null);
+      const criteriaSearchText = String(message.criteriaSearchText || '').trim();
+      if (!contextualReference && criteriaSearchText) {
+        const criteriaBook = resolveBibleBook(criteriaSearchText);
+        if (!criteriaBook) {
+          sendResponse({ok:false, reason:'invalid-numbered-book-search'});
+          return true;
+        }
+        await openBlbDestination(
+          `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(criteriaBook.name).replace(/%20/g,'+')}`,
+          !!behavior.activeIfNew,
+          !!behavior.activateExisting
+        );
+        sendResponse({ok:true,criteriaSearch:true,actionSource:'show-on-blb'});
+        return true;
+      }
       const result = await openSharedSelectionAction({
         tabId:sender?.tab?.id,
         tabUrl:sender?.tab?.url || '',
