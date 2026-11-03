@@ -1775,10 +1775,10 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
       let node;
       while ((node = walker.nextNode())) {
         const value = node.nodeValue || '';
-        const start = value.search(/[\\p{L}\\p{N}]/u);
+        const start = value.search(/[\p{L}\p{N}]/u);
         if (start < 0) continue;
         let end = start + 1;
-        while (end < value.length && /[\\p{L}\\p{N}]/u.test(value[end])) end++;
+        while (end < value.length && /[\p{L}\p{N}]/u.test(value[end])) end++;
         const range = document.createRange();
         range.setStart(node, start);
         range.setEnd(node, end);
