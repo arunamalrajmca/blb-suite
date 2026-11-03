@@ -294,12 +294,6 @@ jobs:
           TEST_FILES="${{ matrix.files && join(matrix.files, ' ') || matrix.file || 'tests/browser/extension.spec.js' }}"
           MATRIX_GREP="${{ matrix.grep }}"
           read -r -a specs <<< "$TEST_FILES"
-          config_path=".playwright-single-file.config.cjs"
-          trap 'rm -f "$config_path"' EXIT
-          cat > "$config_path" <<'PLAYWRIGHT_CONFIG'
-          const base = require('./playwright.config.js');
-          module.exports = { ...base, testMatch: [process.env.PLAYWRIGHT_TEST_MATCH] };
-          PLAYWRIGHT_CONFIG
           total="${#specs[@]}"
           if (( total == 0 )); then
             echo "::error::Reference matrix group selected no spec files."
@@ -311,14 +305,13 @@ jobs:
               echo "::error::Selected Playwright spec does not exist: $spec"
               exit 1
             fi
-            filename="${spec##*/}"
             printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-            # Use Playwright's config-level testMatch rather than positional
-            # CLI filters; this reliably selects exactly one spec file.
+            # Invoke Playwright once per exact file; never combine positional
+            # filters, which Playwright treats as intersecting expressions.
             if [[ "$MATRIX_GREP" == ".*" ]]; then
-              PLAYWRIGHT_TEST_MATCH="**/$filename" npx playwright test --config="$config_path"
+              npx playwright test "$spec"
             else
-              PLAYWRIGHT_TEST_MATCH="**/$filename" npx playwright test --config="$config_path" --grep "$MATRIX_GREP"
+              npx playwright test "$spec" --grep "$MATRIX_GREP"
             fi
           done
       - name: Upload Playwright diagnostics — ${{ matrix.group }}
@@ -545,18 +538,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          config_path=".playwright-single-file.config.cjs"
-          trap 'rm -f "$config_path"' EXIT
-          cat > "$config_path" <<'PLAYWRIGHT_CONFIG'
-          const base = require('./playwright.config.js');
-          module.exports = { ...base, testMatch: [process.env.PLAYWRIGHT_TEST_MATCH] };
-          PLAYWRIGHT_CONFIG
           IFS=',' read -r -a specs <<< "$FOCUSED_SPECS"
           total="${#specs[@]}"
           for index in "${!specs[@]}"; do
             spec="${specs[$index]}"
             [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
-            filename="${spec##*/}"
             printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-            PLAYWRIGHT_TEST_MATCH="**/$filename" npx playwright test --config="$config_path"
+            npx playwright test "$spec"
           fi
