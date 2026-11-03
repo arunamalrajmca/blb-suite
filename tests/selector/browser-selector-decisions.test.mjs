@@ -77,7 +77,6 @@ function fixture(selector = selectorSource) {
   put(root, "tests/browser/omnibox-command-routing.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/pdf-selection-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/redirect-source-url-patterns.spec.js", "import { test } from '@playwright/test';\n");
-  put(root, "tests/browser/source-site-redirect-integration.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/kings-bible-collector-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/known-host-extension.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/pr-422-feature-regressions.spec.js", "import { test } from '@playwright/test';\n");
@@ -406,7 +405,6 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
   const groupB = groupA;
   for (const spec of [
     "redirect-source-url-patterns",
-    "source-site-redirect-integration",
     "redirect-hostnames",
     "blb-non-kjv-redirect",
     "redirect-toggle-isolation",
