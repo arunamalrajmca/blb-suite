@@ -659,7 +659,9 @@ test.describe('real-browser source URL redirect regressions', () => {
     for (const source of [
       { url:'https://www.gotquestions.org/example-question.html', href:'/question-about-john-3-16', label:'John 3:16' },
       { url:'https://www.crosswalk.com/faith/bible-study/example.html', href:'/john-3-16', label:'John 3:16' },
-      { url:'https://www.enduringword.com/bible-commentary/john-3/', href:'/john-3-16', label:'John 3:16' }
+      { url:'https://www.enduringword.com/bible-commentary/john-3/', href:'/john-3-16', label:'John 3:16' },
+      { url:'https://www.churchofjesuschrist.org/study/scriptures/nt/matt/3?lang=eng', href:'/study/scriptures/nt/matt/3?id=p16&lang=eng', label:'Matt. 3:16' },
+      { url:'https://mercyhouseministry.com/bible-study/article/', href:'/bible/?b=John&c=3&v=16', label:'John 3:16' }
     ]) {
       await loadProductionRedirect(page, source.url);
       await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => false);' });
