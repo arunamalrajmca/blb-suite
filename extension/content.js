@@ -1613,7 +1613,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           .replace(/[\u00A0\u2007\u202F]/g, ' ')
           .replace(/[\u2010-\u2015\u2212]/g, '-');
         const citation = followingText.match(
-          /^\s*[.]?\s*(\\d{1,3})(?:(?:\s*[:.]\s*|\s+)(\\d{1,3}(?:\s*,\s*\\d{1,3})*)(?:\s*[-–—]\s*(\\d{1,3}))?)?/
+          /^\s*[.]?\s*(\d{1,3})(?:(?:\s*[:.]\s*|\s+)(\d{1,3}(?:\s*,\s*\d{1,3})*)(?:\s*[-–—]\s*(\d{1,3}))?)?/
         );
         if (!citation) continue;
         const chapter = Number(citation[1]);
