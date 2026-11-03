@@ -32,6 +32,17 @@ function tuples(input) {
 }
 
 // Full references, verse ranges, and Unicode dash normalization.
+assert.deepEqual(tuples('Luke 22.26'), [['luke', 22, 26, 26]]);
+assert.deepEqual(tuples('Romans 1.3-4'), [['romans', 1, 3, 4]]);
+assert.deepEqual(tuples('1 Tim. 1.15, 16'), [
+  ['1 timothy', 1, 15, 15],
+  ['1 timothy', 1, 16, 16]
+]);
+assert.deepEqual(tuples('John 3.16,17; 4.8'), [
+  ['john', 3, 16, 16],
+  ['john', 3, 17, 17],
+  ['john', 4, 8, 8]
+]);
 assert.deepEqual(tuples('Romans 1:3–4'), [['romans', 1, 3, 4]]);
 assert.deepEqual(tuples('John 3:16'), [['john', 3, 16, 16]]);
 assert.deepEqual(tuples('1 John 2:3-5'), [['1 john', 2, 3, 5]]);
