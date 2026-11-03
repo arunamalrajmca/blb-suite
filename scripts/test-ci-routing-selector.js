@@ -80,6 +80,7 @@ function auditRepositoryTestInventory() {
   for (const [label, pattern] of auditCoverage) {
     assert.match(workflow, pattern, 'full-test audit must execute ' + label);
   }
+  assert.doesNotMatch(workflow, /--max-failures=0/, 'full-test audit must not disable the repository maxFailures: 1 policy');
 
   const testFiles = [
     ...browserSpecs,
