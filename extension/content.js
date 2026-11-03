@@ -2136,8 +2136,10 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             const to = followingCitation[3]
               ? Number(followingCitation[3])
               : (consecutive ? listedTo : from);
+            // A book-name double-click followed by a chapter-only token
+            // keeps the established chapter-to-verse-1 fallback.
             const bookClickReference = from == null
-              ? resolveBibleReference(exactClickedBook.name, chapter)
+              ? resolveBibleReference(exactClickedBook.name, chapter, 1)
               : resolveBibleReference(exactClickedBook.name, chapter, from, to);
             writeFacebookDoubleClickDiagnostic({
               followingCitation: followingCitation[0],
