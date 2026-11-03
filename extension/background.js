@@ -2339,7 +2339,7 @@ const BIBLEREF_RANGE_CONTENT_SCRIPT_FILES = ['redirect-bibleref-ranges.js'];
 const REDIRECT_HOSTNAMES = new Set([
   'bible.com', 'biblegateway.com', 'bibleref.com',
   'biblehub.com', 'bibleportal.com',
-  'christianity.com', 'churchofjesuschrist.org', 'crosswalk.com', 'enduringword.com', 'esv.org', 'gotquestions.org', 'mercyhouseministry.com',
+  'christianity.com', 'churchofjesuschrist.org', 'crosswalk.com', 'enduringword.com', 'esv.org', 'gotquestions.org', 'mercyhouseministry.com', 'openbible.info', 'crossway.org', 'sarata.com',
   'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com',
   'kingjamesbibleonline.org', 'kjbo.org',
   'kjv.site', 'm.kjv.site',
@@ -2440,7 +2440,7 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
     // when the isolated-world resolver claims the link.
     let hostname = '';
     try { hostname = new URL(tab.url).hostname.toLowerCase().replace(/^www\./, ''); } catch (_) {}
-    if (['christianity.com','gotquestions.org','crosswalk.com','enduringword.com','churchofjesuschrist.org','mercyhouseministry.com'].includes(hostname) && files.includes('content.js')) {
+    if (['christianity.com','gotquestions.org','crosswalk.com','enduringword.com','churchofjesuschrist.org','mercyhouseministry.com','openbible.info','crossway.org','sarata.com'].includes(hostname) && files.includes('content.js')) {
       const mainWorldId = `${id}-main-world`;
       const mainWorldFiles = ['redirect-christianity-main-world.js'];
       const registeredMain = await chrome.scripting.getRegisteredContentScripts({ids:[mainWorldId]});
@@ -2508,7 +2508,7 @@ async function ensureContentScriptInTab(tabId) {
       // A newly enabled site may already be open, so install the MAIN-world
       // guard in that current document too. The registration above covers
       // future navigations; the script's own marker makes this idempotent.
-      if (['christianity.com','gotquestions.org','crosswalk.com','enduringword.com','churchofjesuschrist.org','mercyhouseministry.com'].includes(normalizeSiteHostname(hostnameFromTabUrl(tab.url))) &&
+      if (['christianity.com','gotquestions.org','crosswalk.com','enduringword.com','churchofjesuschrist.org','mercyhouseministry.com','openbible.info','crossway.org','sarata.com'].includes(normalizeSiteHostname(hostnameFromTabUrl(tab.url))) &&
           files.includes('content.js')) {
         try {
           await chrome.scripting.executeScript({
