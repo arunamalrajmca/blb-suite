@@ -476,6 +476,8 @@ test('Facebook floating Show on BLB accepts a numbered-book suffix as a word sea
     const selection = window.getSelection();
     selection.removeAllRanges();
     selection.addRange(range);
+    // Exercise the same selection-finalization event emitted by a real drag.
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
   });
 
   const button = page.locator('#blb-suite-page-selection-button');
