@@ -1235,6 +1235,19 @@ function isNumberedBookSuffixCandidateToken(value) {
   );
 }
 
+function isCanonicalBookSuffixCandidateToken(value) {
+  const selected = normalizeBibleBookKey(value);
+  if (!selected) return false;
+  const labels = [
+    ...BOOKS.map(book => book.name),
+    ...Object.keys(BOOK_ALIASES || {})
+  ];
+  return labels.some(label => {
+    const parts = normalizeBibleBookKey(label).split(/\s+/);
+    return parts.length > 1 && normalizeBibleBookKey(parts[parts.length - 1]) === selected;
+  });
+}
+
 /**
  * Return the canonical numbered-book name when the live selection is exactly
  * a numbered book's suffix and its immediately preceding token is a valid
@@ -3333,6 +3346,10 @@ function handleDoubleClickBlb(event) {
         // Keep this candidate set aligned with the context matcher below.
         const numberedBookSuffixAliases=getNumberedBookSuffixAliases();
         const isNumberedBookSuffixCandidate=isNumberedBookSuffixCandidateToken(selection);
+        // Final words of multiword canonical book names (for example,
+        // "Solomon" in "Song of Solomon") must reach the exact DOM-prefix
+        // resolver even when they are ordinary KJV words or lack corpus entries.
+        const isCanonicalBookSuffixCandidate=isCanonicalBookSuffixCandidateToken(selection);
         const normalizedSelectionToken = normalizeDoubleClickToken(selection).replace(/’/g, "'");
         const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
           && KJV_CORPUS_WORD_INDEX.has(normalizedSelectionToken);
@@ -3356,7 +3373,7 @@ function handleDoubleClickBlb(event) {
           // reference check below; without a valid nearby prefix they remain
           // inert and are not sent to ordinary word lookup.
           const isRomanBookPrefixToken = /^(?:I|II|III)$/i.test(selection);
-          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isNumberedBookSuffixCandidate && !isRomanBookPrefixToken && !isVerseContextWord && !isCompactBookChapterToken) return true;
+          if (!isBibleVersionCode && !isKjvWord && !isBookName && !isNumberedBookSuffixCandidate && !isCanonicalBookSuffixCandidate && !isRomanBookPrefixToken && !isVerseContextWord && !isCompactBookChapterToken) return true;
         }
 
         // DOM context is useful only when the clicked token can identify a
@@ -3387,7 +3404,8 @@ function handleDoubleClickBlb(event) {
           /^(?:v\.?|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
         );
         const possibleNumberedBookSuffix=isNumberedBookSuffixCandidate;
-        const contextualTarget = possibleNumberedBookSuffix
+        const possibleCanonicalBookSuffix=isCanonicalBookSuffixCandidate;
+        const contextualTarget = (possibleNumberedBookSuffix || possibleCanonicalBookSuffix)
           ? physicalTarget
           : (isVerseContextWord
             ? (cueElement || getDoubleClickTargetElement(event) || event.target)
@@ -3537,7 +3555,7 @@ function handleDoubleClickBlb(event) {
         // existing positional DOM resolver, which uses the physical caret token to
         // identify the exact citation and can expand consecutive verses to a range.
         const isCommaSeparatedNumericVerseSelection = /^\d{1,3}\s*,\s*\d{1,3}$/.test(selection);
-        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord||isCommaSeparatedNumericVerseSelection||isCompactBookChapterToken;
+        const needsDomContext=isNumericBookCandidate||isBookName||isPrefixedBookName||hasValidNearbyBookPrefix||hasValidNearbyRomanBookPrefix||isCanonicalBookSuffixCandidate||isBibleVersionCode||isReferenceDashGesture||isVerseContextWord||isCommaSeparatedNumericVerseSelection||isCompactBookChapterToken;
         const blockContext=needsDomContext
           ? (getDoubleClickEquivalentSelectionContext(selection, contextualTarget, event)
             || getDoubleClickBlockContextReference(selection, contextualTarget, event))
