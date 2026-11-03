@@ -242,7 +242,7 @@ function sarataBibleLinkTarget(href) {
   let url;
   try { url = new URL(href, location.href); } catch (_) { return null; }
   if (url.hostname.toLowerCase().replace(/^www\./, "") !== "sarata.com") return null;
-  const match = url.pathname.match(/^\/bible\/chapter\/([^/]+)\.(\d+)\.html$/i);
+  const match = url.pathname.match(/^\/bible\/(?:chapter|verses)\/([^/]+)\.(\d+)\.html$/i);
   const fragment = url.hash.match(/^#(\d+):(\d+)(?:-(\d+))?$/);
   if (!match || !fragment || Number(fragment[1]) !== Number(match[2])) return null;
   const book = match[1].replace(/-([123])$/, " $1").replace(/-/g, " ");
