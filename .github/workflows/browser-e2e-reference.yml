@@ -294,6 +294,12 @@ jobs:
           TEST_FILES="${{ matrix.files && join(matrix.files, ' ') || matrix.file || 'tests/browser/extension.spec.js' }}"
           MATRIX_GREP="${{ matrix.grep }}"
           read -r -a specs <<< "$TEST_FILES"
+          config_path=".playwright-single-file.config.cjs"
+          trap 'rm -f "$config_path"' EXIT
+          cat > "$config_path" <<'PLAYWRIGHT_CONFIG'
+          const base = require('./playwright.config.js');
+          module.exports = { ...base, testMatch: [process.env.PLAYWRIGHT_TEST_MATCH] };
+          PLAYWRIGHT_CONFIG
           total="${#specs[@]}"
           if (( total == 0 )); then
             echo "::error::Reference matrix group selected no spec files."
@@ -307,12 +313,12 @@ jobs:
             fi
             filename="${spec##*/}"
             printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-            # Explicitly match one spec file per invocation. This avoids
-            # positional-regex ambiguity and preserves maxFailures: 1.
+            # Use Playwright's config-level testMatch rather than positional
+            # CLI filters; this reliably selects exactly one spec file.
             if [[ "$MATRIX_GREP" == ".*" ]]; then
-              npx playwright test --test-match "**/$filename"
+              PLAYWRIGHT_TEST_MATCH="**/$filename" npx playwright test --config="$config_path"
             else
-              npx playwright test --test-match "**/$filename" --grep "$MATRIX_GREP"
+              PLAYWRIGHT_TEST_MATCH="**/$filename" npx playwright test --config="$config_path" --grep "$MATRIX_GREP"
             fi
           done
       - name: Upload Playwright diagnostics — ${{ matrix.group }}
