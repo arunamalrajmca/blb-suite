@@ -1253,7 +1253,7 @@ function getSelectedNumberedBookSuffixSearchText(value) {
     let anchor = range.startContainer;
     if (anchor?.nodeType === Node.TEXT_NODE) anchor = anchor.parentElement;
     if (!(anchor instanceof Element)) return '';
-    const facebookLine = /(^|\\.)facebook\\.com$/i.test(String(location.hostname || ''))
+    const facebookLine = /(^|\.)facebook\.com$/i.test(String(location.hostname || ''))
       ? anchor.closest('[dir="auto"]')
       : null;
     const block = facebookLine || anchor.closest('p,li,td,th,blockquote,article,section,div') || document.body;
@@ -1263,16 +1263,16 @@ function getSelectedNumberedBookSuffixSearchText(value) {
     followingRange.selectNodeContents(block);
     followingRange.setStart(range.endContainer, range.endOffset);
     const followingText = normalizeSelectionText(followingRange.toString()).normalize('NFKC');
-    if (/^\\s*\\d{1,3}(?:\\s*[:.]\\s*\\d{1,3})?/.test(followingText)) return '';
+    if (/^\s*\d{1,3}(?:\s*[:.]\s*\d{1,3})?/.test(followingText)) return '';
 
     const prefixRange = document.createRange();
     prefixRange.selectNodeContents(block);
     prefixRange.setEnd(range.startContainer, range.startOffset);
     const prefixText = normalizeSelectionText(prefixRange.toString()).normalize('NFKC')
-      .replace(/[\\u061C\\u200B-\\u200F\\u202A-\\u202E\\u2060\\u2066-\\u2069\\uFEFF]/g, '')
-      .replace(/[\\u00A0\\u2007\\u202F]/g, ' ')
-      .replace(/\\s+/g, ' ');
-    const match = prefixText.match(/(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\\s+$/i);
+      .replace(/[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '')
+      .replace(/[\u00A0\u2007\u202F]/g, ' ')
+      .replace(/\s+/g, ' ');
+    const match = prefixText.match(/(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\s+$/i);
     if (!match) return '';
     const ordinal = /^[1-3]$/.test(match[1])
       ? match[1]
