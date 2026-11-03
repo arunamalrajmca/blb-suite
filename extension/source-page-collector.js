@@ -13,7 +13,8 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
         "sagacityweb.com":"sagacity",
         "thetreasuryofscriptureknowledge.com":"treasury",
         "dailyverses.net":"dailyverses",
-        "churchofjesuschrist.org":"churchofjesuschrist"
+        "churchofjesuschrist.org":"churchofjesuschrist",
+        "mercyhouseministry.com":"mercyhouse"
       })[host] || "";
       // These sites' homepages are general landing pages, not article/reference
       // pages. Keep the page-wide collection button limited to nested pages.
@@ -25,6 +26,37 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
         function collectSourcePageBibleReferences() {
           const refs = [];
           const seen = new Set();
+
+          function parseSourceVerseUrl(href) {
+            let url;
+            try { url = new URL(href, location.href); } catch (_) { return null; }
+            const host = url.hostname.toLowerCase().replace(/^www\\./, "");
+            if (sourceSite === "churchofjesuschrist" && host === "churchofjesuschrist.org") {
+              const path = url.pathname.match(/^\\/study\\/scriptures\\/(?:ot|nt)\\/([^/]+)\\/(\\d+)\\/?$/i);
+              const verses = (url.searchParams.get("id") || "").match(/^p(\\d+)(?:-p?(\\d+))?$/i);
+              if (!path || !verses) return null;
+              return {
+                book: path[1].replace(/-/g, " "),
+                chapter: Number(path[2]),
+                from: Number(verses[1]),
+                to: verses[2] ? Number(verses[2]) : null
+              };
+            }
+            if (sourceSite === "mercyhouse" && host === "mercyhouseministry.com" &&
+                /^\\/bible\\/?$/i.test(url.pathname)) {
+              const book = url.searchParams.get("b");
+              const chapter = Number(url.searchParams.get("c"));
+              const verses = (url.searchParams.get("v") || "").match(/^(\\d+)(?:[-–](\\d+))?$/);
+              if (!book || !Number.isInteger(chapter) || chapter < 1 || !verses) return null;
+              return {
+                book,
+                chapter,
+                from: Number(verses[1]),
+                to: verses[2] ? Number(verses[2]) : null
+              };
+            }
+            return null;
+          }
           // Enduring Word must use only its two structured cross-reference sections.
           // Require chapter-page URLs too, so individual verse links can never enter.
           const enduringSectionAnchors = sourceSite === "enduringword"
@@ -44,6 +76,7 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
             const dataReference = sourceSite !== "enduringword"
               ? anchor.getAttribute("data-bible-ref-link")
               : null;
+            const sourceUrlReference = parseSourceVerseUrl(anchor.href);
             // Keep Sagacity's URL-derived citation as a fallback candidate only.
             // Parsing the URL first can override valid captions and regress the
             // previously working page-wide collection.
@@ -74,7 +107,7 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
             }
             // Structured metadata or a BLB URL citation can qualify anchors with
             // empty captions caused by malformed/nested HTML.
-            if ((!label || label.length > 100) && !dataReference && !sagacityCriteriaReference) continue;
+            if ((!label || label.length > 100) && !dataReference && !sagacityCriteriaReference && !sourceUrlReference) continue;
             let parsed;
             if (sourceSite === "enduringword") {
               let url;
@@ -86,6 +119,10 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
               if (!chapterPath) continue;
               parsed = { book: chapterPath[1].replace(/-/g, " "), chapter: Number(chapterPath[2]), from: 1, to: null };
             } else {
+              // These two sites encode the exact passage in their own URL:
+              // ChurchofJesusChrist uses id=p16-p17; Mercy House uses b/c/v.
+              // Prefer that canonical URL data over abbreviated captions.
+              if (sourceUrlReference) parsed = sourceUrlReference;
               // Prefer structured Bible-reference metadata when a site's visible
               // caption is abbreviated (e.g. "3:11") or otherwise not a full
               // reference. Ignore the source translation; BLB resolves to KJV.
