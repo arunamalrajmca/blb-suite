@@ -65,7 +65,9 @@ function auditRepositoryTestInventory() {
   const workflowPath = path.join(root, '.github/workflows/manual-full-test-audit.yml');
   const workflow = fs.readFileSync(workflowPath, 'utf8');
   const auditCoverage = [
-    ['all browser spec files', /for spec in tests\/browser\/\*\.spec\.js/],
+    ['all browser test cases are collected', /npx playwright test --list/],
+    ['each browser test case is isolated with maxFailures one', /npx playwright test --test-list .*--max-failures=1/],
+    ['every browser spec file is represented in the collected list', /find tests\/browser -maxdepth 1 -type f -name '\*\.spec\.js'/],
     ['all standalone JavaScript tests', /for test_file in scripts\/test-\*\.js/],
     ['all selector tests', /node --test tests\/selector\/\*\.test\.mjs/],
     ['all Python unittest files', /python -m unittest discover -s tests -p 'test_\*\.py'/],
