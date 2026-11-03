@@ -94,55 +94,36 @@ jobs:
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
           BLB_PERF_OUTPUT: ${{ runner.temp }}/blb-performance.jsonl
+          BLB_PLAYWRIGHT_TEST_LIST: ${{ runner.temp }}/blb-playwright-test-ids.txt
+          BLB_PLAYWRIGHT_TEST_METADATA: ${{ runner.temp }}/blb-playwright-list-metadata.json
           NO_COLOR: '1'
           FORCE_COLOR: '0'
         shell: bash
         run: |
           : > "$BLB_PERF_OUTPUT"
-          list_output="$RUNNER_TEMP/blb-playwright-list.json"
-          test_list="$RUNNER_TEMP/blb-playwright-test-ids.txt"
-          list_metadata="$RUNNER_TEMP/blb-playwright-list-metadata.json"
-          if ! npx playwright test --list --reporter=json > "$list_output" 2>&1; then
+          list_output="$RUNNER_TEMP/blb-playwright-list.log"
+          test_list="$BLB_PLAYWRIGHT_TEST_LIST"
+          list_metadata="$BLB_PLAYWRIGHT_TEST_METADATA"
+          if ! npx playwright test --list --reporter=./scripts/playwright-test-id-reporter.js > "$list_output" 2>&1; then
             cat "$list_output"
             exit 1
           fi
-          # --test-list consumes Playwright's opaque test IDs, not source
-          # locations. Build the list from the JSON reporter so every isolated
-          # invocation selects exactly one real test instead of silently
-          # reporting 0/0 when given a file:line:column location.
-          node - "$list_output" "$test_list" "$list_metadata" <<'NODE'
-          const fs = require('node:fs');
-          const path = require('node:path');
-          const report = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-          const ids = [];
-          const files = new Set();
-          const visit = suite => {
-            for (const spec of suite.specs || []) {
-              if (spec.file) {
-                const absolute = path.isAbsolute(spec.file) ? spec.file : path.resolve(spec.file);
-                files.add(path.relative(process.cwd(), absolute).split(path.sep).join('/'));
-              }
-              for (const test of spec.tests || []) {
-                if (test.id) ids.push(test.id);
-              }
-            }
-            for (const child of suite.suites || []) visit(child);
-          };
-          for (const suite of report.suites || []) visit(suite);
-          const uniqueIds = [...new Set(ids)];
-          if (!uniqueIds.length) throw new Error('Playwright JSON report contained no test IDs');
-          fs.writeFileSync(process.argv[3], uniqueIds.join('\n') + '\n');
-          fs.writeFileSync(process.argv[4], JSON.stringify({ total: uniqueIds.length, files: [...files] }));
-          NODE
-          
+          cat "$list_output"
+          # Validate the reporter output before starting 376+ isolated invocations.
+          # The file must contain opaque Playwright test IDs, never source locations.
+          if [[ ! -s "$test_list" || ! -s "$list_metadata" ]]; then
+            echo "Playwright test-ID reporter did not produce its required output files."
+            exit 1
+          fi
           total=$(wc -l < "$test_list" | tr -d ' ')
           expected_specs=$(find tests/browser -maxdepth 1 -type f -name '*.spec.js' | wc -l | tr -d ' ')
           listed_specs=$(node -e "const m=require(process.argv[1]); console.log(m.files.length)" "$list_metadata")
+          reported_total=$(node -e "const m=require(process.argv[1]); console.log(m.total)" "$list_metadata")
           echo "Browser test IDs discovered: $total"
           echo "Browser spec files expected: $expected_specs"
           echo "Browser spec files represented: $listed_specs"
-          if [[ "$total" -eq 0 || "$listed_specs" -ne "$expected_specs" ]]; then
-            echo "Playwright's test list does not cover every browser spec file."
+          if [[ "$total" -eq 0 || "$total" -ne "$reported_total" || "$listed_specs" -ne "$expected_specs" ]]; then
+            echo "Playwright's test-ID report does not cover every browser test/spec file."
             exit 1
           fi
 
