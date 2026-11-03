@@ -380,12 +380,12 @@ test('OpenBible, Crossway and Sarata show BLB collection buttons on content page
       article: 'https://sarata.com/bible/chapter/Psalms.23.html',
       refs: [
         '<a href="/bible/chapter/Psalms.23.html#23:1">The LORD is my shepherd</a>',
-        '<a href="/bible/chapter/John-2.3.html#3:16">For God so loved the world</a>'
+        '<a href="/bible/chapter/John.3.html#3:16">For God so loved the world</a>'
       ],
       button: '#blb-suite-sarata-multiverse',
       expected: [
         ['psalms', 23, 1, 'https://www.blueletterbible.org/kjv/psa/23/1/'],
-        ['2 john', 3, 16, 'https://www.blueletterbible.org/kjv/2jo/3/16/']
+        ['john', 3, 16, 'https://www.blueletterbible.org/kjv/jhn/3/16/']
       ]
     }
   ];
