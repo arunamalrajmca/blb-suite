@@ -1235,6 +1235,55 @@ function isNumberedBookSuffixCandidateToken(value) {
   );
 }
 
+/**
+ * Return the canonical numbered-book name when the live selection is exactly
+ * a numbered book's suffix and its immediately preceding token is a valid
+ * Arabic/Roman ordinal. This is used for book-only Criteria Search actions;
+ * a following chapter number means the normal positional reference resolver
+ * must handle the selection instead.
+ */
+function getSelectedNumberedBookSuffixSearchText(value) {
+  const selected = normalizeSelectionText(value).normalize('NFKC');
+  if (!selected || !isNumberedBookSuffixCandidateToken(selected)) return '';
+  try {
+    const selection = window.getSelection?.();
+    if (!selection || selection.rangeCount !== 1 || selection.isCollapsed) return '';
+    const range = selection.getRangeAt(0).cloneRange();
+    if (normalizeSelectionText(range.toString()).normalize('NFKC').toLowerCase() !== selected.toLowerCase()) return '';
+    let anchor = range.startContainer;
+    if (anchor?.nodeType === Node.TEXT_NODE) anchor = anchor.parentElement;
+    if (!(anchor instanceof Element)) return '';
+    const facebookLine = /(^|\\.)facebook\\.com$/i.test(String(location.hostname || ''))
+      ? anchor.closest('[dir="auto"]')
+      : null;
+    const block = facebookLine || anchor.closest('p,li,td,th,blockquote,article,section,div') || document.body;
+    if (!(block instanceof Element) || !block.contains(range.startContainer) || !block.contains(range.endContainer)) return '';
+
+    const followingRange = document.createRange();
+    followingRange.selectNodeContents(block);
+    followingRange.setStart(range.endContainer, range.endOffset);
+    const followingText = normalizeSelectionText(followingRange.toString()).normalize('NFKC');
+    if (/^\\s*\\d{1,3}(?:\\s*[:.]\\s*\\d{1,3})?/.test(followingText)) return '';
+
+    const prefixRange = document.createRange();
+    prefixRange.selectNodeContents(block);
+    prefixRange.setEnd(range.startContainer, range.startOffset);
+    const prefixText = normalizeSelectionText(prefixRange.toString()).normalize('NFKC')
+      .replace(/[\\u061C\\u200B-\\u200F\\u202A-\\u202E\\u2060\\u2066-\\u2069\\uFEFF]/g, '')
+      .replace(/[\\u00A0\\u2007\\u202F]/g, ' ')
+      .replace(/\\s+/g, ' ');
+    const match = prefixText.match(/(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\\s+$/i);
+    if (!match) return '';
+    const ordinal = /^[1-3]$/.test(match[1])
+      ? match[1]
+      : ({ I:'1', II:'2', III:'3' }[match[1].toUpperCase()] || '');
+    if (!ordinal) return '';
+    return resolveBibleBook(ordinal + ' ' + selected)?.name || '';
+  } catch (_) {
+    return '';
+  }
+}
+
 function getDoubleClickEquivalentSelectionContext(selectionText, preferredTarget = null, event = null) {
   const selected = normalizeSelectionText(selectionText).normalize('NFKC');
   // A double-click gesture selects one token. Apply that same positional
@@ -3502,11 +3551,15 @@ function handleDoubleClickBlb(event) {
               if (now-previous<1200) return true;
               recentDoubleClickDestinations.set(gestureTarget,now);
             }
+            const numberedBookSuffixSearchText = isNumberedBookSuffixCandidate && hasValidNearbyBookPrefix
+              ? getSelectedNumberedBookSuffixSearchText(selection)
+              : '';
             safeRuntimeSendMessage({
               type:'blbSuiteOpenDoubleClickSelectionText',
               text:selection,
               contextualReference:null,
               contextualReferenceResolved:true,
+              ...(numberedBookSuffixSearchText ? {criteriaSearchText:numberedBookSuffixSearchText} : {}),
               requestId,
               tabBehavior:{activeIfNew:false,activateExisting:true}
             });
@@ -3649,6 +3702,7 @@ const blbPageSelectionButton = globalThis.BLBPageSelectionButtonModule.initializ
   BOOK_ALIASES: BOOK_ALIASES,
   KJV_CORPUS_WORD_INDEX: KJV_CORPUS_WORD_INDEX,
   isNumberedBookSuffixCandidate: isNumberedBookSuffixCandidateToken,
+  getNumberedBookSuffixSearchText: getSelectedNumberedBookSuffixSearchText,
   canonicalStrongValue: canonicalStrongValue,
   resolveBibleReference: resolveBibleReference,
   resolveBibleBook: resolveBibleBook,
