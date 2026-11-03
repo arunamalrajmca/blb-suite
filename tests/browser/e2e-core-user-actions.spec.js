@@ -1403,7 +1403,7 @@ test('Facebook resolves repeated references from each fresh plain-text selection
     }))
   ) + '\\n');
   expect(reconstructionDiagnostics).toHaveLength(3);
-  expect(reconstructionDiagnostics.every(Boolean)).toBe(true);
+  expect(reconstructionDiagnostics.every(Boolean), JSON.stringify({ reconstructionDiagnostics, observedPaths, expectedPaths })).toBe(true);
   expect(observedPaths).toEqual(expectedPaths.map(([, path]) => path));
 });
 
