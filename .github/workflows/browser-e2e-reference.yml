@@ -324,12 +324,9 @@ jobs:
       - grouped-browser-e2e
     if: ${{ always() }}
     runs-on: ubuntu-latest
-    # The grouped workflow's longest runner is 35 minutes. Allow the full
-    # hosted-job window here so a slow/queued Group A run is never mistaken
-    # for a failed References gate merely because a short polling window ended.
-    timeout-minutes: 360
+    # This job is scheduled only after all required browser suites complete.
+    timeout-minutes: 10
     permissions:
-      actions: read
       statuses: write
     steps:
       # One shell predicate determines both the published commit status and
