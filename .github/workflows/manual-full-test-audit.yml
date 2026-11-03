@@ -109,10 +109,10 @@ jobs:
           # --test-list expects the complete entry emitted by --list, including
           # project, spec location, suite path, and test title. A bare file:line:column
           # is not a test-list entry and silently selects zero tests.
-          sed -nE 's/^[[:space:]]*(\\[[^]]+\\] › [^[:space:]]+\\.spec\\.js:[0-9]+:[0-9]+ › .*)$/\\1/p' "$list_output" > "$test_list"
+          sed -nE 's/^[[:space:]]*(\[[^]]+\] › [^[:space:]]+\.spec\.js:[0-9]+:[0-9]+ › .*)$/\1/p' "$list_output" > "$test_list"
           total=$(wc -l < "$test_list" | tr -d ' ')
           expected_specs=$(find tests/browser -maxdepth 1 -type f -name '*.spec.js' | wc -l | tr -d ' ')
-          listed_specs=$(sed -nE 's/^[[:space:]]*\\[[^]]+\\] › ([^[:space:]]+\\.spec\\.js):[0-9]+:[0-9]+ › .*/\\1/p' "$test_list" | sort -u | wc -l | tr -d ' ')
+          listed_specs=$(sed -nE 's/^[[:space:]]*\[[^]]+\] › ([^[:space:]]+\.spec\.js):[0-9]+:[0-9]+ › .*/\1/p' "$test_list" | sort -u | wc -l | tr -d ' ')
           echo "Browser test cases discovered: $total"
           echo "Browser spec files expected: $expected_specs"
           echo "Browser spec files represented: $listed_specs"
