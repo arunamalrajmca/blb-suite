@@ -1535,7 +1535,7 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     await expectNewLukeTab(label);
   }
 });
-test('single-token selection actions share double-click positional resolution across sites', async ({ page, extensionStorage, extensionWorker }) => {
+test('single-token selection actions share positional resolution across books and separators', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({
     masterEnabled: true,
     pageSelectionButtonSites: { 'example.com': true }
@@ -1544,13 +1544,27 @@ test('single-token selection actions share double-click positional resolution ac
   await page.waitForTimeout(1000);
   await page.evaluate(() => {
     const article = document.createElement('article');
-    article.innerHTML = '<p id="blb-global-token-context">Luke 22:26 KJV</p>';
+    article.innerHTML = '<p id="blb-global-token-context"></p>';
     article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
     document.body.appendChild(article);
   });
 
-  const expectedPath = '/kjv/luk/22/26/';
-  const selectToken = async token => page.locator('#blb-global-token-context').evaluate((element, value) => {
+  // Cover distinct book-name shapes and canonical sections. The parser-core
+  // characterization matrix covers all 66 books; this browser matrix checks
+  // that real action handoffs preserve context across representative books.
+  const cases = [
+    { book:'Genesis', chapter:1, verse:1, path:'/kjv/gen/1/1/' },
+    { book:'Psalms', chapter:23, verse:1, path:'/kjv/psa/23/1/' },
+    { book:'1 Samuel', chapter:3, verse:1, path:'/kjv/1sa/3/1/' },
+    { book:'2 Corinthians', chapter:5, verse:1, path:'/kjv/2co/5/1/' },
+    { book:'Philemon', chapter:1, verse:1, path:'/kjv/phm/1/1/' },
+    { book:'Revelation', chapter:1, verse:1, path:'/kjv/rev/1/1/' }
+  ];
+  const citation = page.locator('#blb-global-token-context');
+  const setCitation = async (testCase, separator) => citation.evaluate((element, value) => {
+    element.textContent = value.book + ' ' + value.chapter + value.separator + value.verse + ' KJV';
+  }, { ...testCase, separator });
+  const selectToken = async token => citation.evaluate((element, value) => {
     const textNode = element.firstChild;
     if (!textNode || textNode.nodeType !== Node.TEXT_NODE) throw new Error('Expected one plain text node');
     const start = textNode.nodeValue.indexOf(value);
@@ -1603,58 +1617,59 @@ test('single-token selection actions share double-click positional resolution ac
     expect(calls, 'every resolver invocation must receive only the selected token')
       .toEqual(calls.map(() => token));
   };
-  const expectLukeTab = async label => {
+  const expectResolvedTab = async (testCase, label) => {
     const opened = await waitForTab(extensionWorker, tab => {
       try {
         const url = new URL(tab.pendingUrl || tab.url);
-        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+        return url.hostname === 'www.blueletterbible.org' && url.pathname === testCase.path;
       } catch (_) { return false; }
     });
-    expect(new URL(opened.pendingUrl || opened.url).pathname, label).toBe(expectedPath);
+    expect(new URL(opened.pendingUrl || opened.url).pathname, label).toBe(testCase.path);
     await removeTabById(extensionWorker, opened.id);
-    await page.waitForTimeout(300);
+    await page.waitForTimeout(150);
   };
 
-  const tokens = ['Luke','22','26','KJV'];
   const floatingButton = page.locator('#blb-suite-page-selection-button');
-  const setCitationSeparator = separator => page.locator('#blb-global-token-context').evaluate(
-    (element, value) => { element.firstChild.nodeValue = 'Luke 22' + value + '26 KJV'; },
-    separator
-  );
-
   for (const separator of [':','.']) {
-    await setCitationSeparator(separator);
-    for (const token of tokens) {
-      await selectToken(token);
-      await expect(floatingButton, 'Floating Show on BLB for ' + token + ' with ' + separator).toBeVisible({timeout:10000});
-      await resetResolverCalls();
-      await floatingButton.click();
-      await expectLukeTab('floating ' + token + ' with ' + separator);
-      await expectSharedResolverInvocation(token);
-    }
+    for (const testCase of cases) {
+      await setCitation(testCase, separator);
+      const tokens = [testCase.book, String(testCase.chapter), String(testCase.verse), 'KJV'];
 
-    for (const token of tokens) {
-      await selectToken(token);
-      await expect(floatingButton, 'Alt+B selection setup for ' + token + ' with ' + separator).toBeVisible({timeout:10000});
-      await resetResolverCalls();
-      const response = await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
-      expect(response?.ok, 'Alt+B command handler for ' + token + ' with ' + separator).toBe(true);
-      await expectLukeTab('Alt+B ' + token + ' with ' + separator);
-      await expectSharedResolverInvocation(token);
-    }
+      for (const token of tokens) {
+        await selectToken(token);
+        await expect(floatingButton, 'Floating Show on BLB for ' + token + ' in ' + testCase.book + ' with ' + separator)
+          .toBeVisible({timeout:10000});
+        await resetResolverCalls();
+        await floatingButton.click();
+        await expectResolvedTab(testCase, 'floating ' + token + ' in ' + testCase.book + ' with ' + separator);
+        await expectSharedResolverInvocation(token);
+      }
 
-    for (const token of tokens) {
-      await selectToken(token);
-      await expect(floatingButton, 'Right-click selection setup for ' + token + ' with ' + separator).toBeVisible({timeout:10000});
-      await resetResolverCalls();
-      const response = await openFromSelection({
-        type:'blbSuiteOpenSelectionText',
-        text:token,
-        tabBehavior:{activeIfNew:true,activateExisting:true}
-      });
-      expect(response?.ok, 'right-click handoff for ' + token + ' with ' + separator).toBe(true);
-      await expectLukeTab('right-click ' + token + ' with ' + separator);
-      await expectSharedResolverInvocation(token);
+      for (const token of tokens) {
+        await selectToken(token);
+        await expect(floatingButton, 'Alt+B setup for ' + token + ' in ' + testCase.book + ' with ' + separator)
+          .toBeVisible({timeout:10000});
+        await resetResolverCalls();
+        const response = await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
+        expect(response?.ok, 'Alt+B handler for ' + token + ' in ' + testCase.book + ' with ' + separator).toBe(true);
+        await expectResolvedTab(testCase, 'Alt+B ' + token + ' in ' + testCase.book + ' with ' + separator);
+        await expectSharedResolverInvocation(token);
+      }
+
+      for (const token of tokens) {
+        await selectToken(token);
+        await expect(floatingButton, 'Right-click setup for ' + token + ' in ' + testCase.book + ' with ' + separator)
+          .toBeVisible({timeout:10000});
+        await resetResolverCalls();
+        const response = await openFromSelection({
+          type:'blbSuiteOpenSelectionText',
+          text:token,
+          tabBehavior:{activeIfNew:true,activateExisting:true}
+        });
+        expect(response?.ok, 'right-click handoff for ' + token + ' in ' + testCase.book + ' with ' + separator).toBe(true);
+        await expectResolvedTab(testCase, 'right-click ' + token + ' in ' + testCase.book + ' with ' + separator);
+        await expectSharedResolverInvocation(token);
+      }
     }
   }
 });
