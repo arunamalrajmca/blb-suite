@@ -148,8 +148,8 @@ test('DailyVerses shows its BLB references button only on non-homepage pages', a
       book: 'mark',
       chapter: 11,
       from: 24,
-      to: null,
-      url: 'https://www.blueletterbible.org/kjv/mrk/11/24/'
+      to: 24,
+      url: 'https://www.blueletterbible.org/kjv/mar/11/24/'
     },
     {
       book: 'ephesians',
@@ -162,7 +162,7 @@ test('DailyVerses shows its BLB references button only on non-homepage pages', a
       book: 'hebrews',
       chapter: 11,
       from: 6,
-      to: null,
+      to: 6,
       url: 'https://www.blueletterbible.org/kjv/heb/11/6/'
     }
   ]);
