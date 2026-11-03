@@ -406,7 +406,7 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
   const groupB = groupA;
   for (const spec of [
     "redirect-source-url-patterns",
-    "redirect-source-url-browser",
+    "source-site-redirect-integration",
     "redirect-hostnames",
     "blb-non-kjv-redirect",
     "redirect-toggle-isolation",
