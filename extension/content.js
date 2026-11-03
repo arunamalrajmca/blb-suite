@@ -1007,7 +1007,7 @@ function resolveBibleReferenceFromContextWindowCore(text, selectionStart, select
 
   // Keep exact-token behavior for other comma continuations, e.g.
   // "Psalms 1:2, 105:1" -> selecting 105 means Psalm 105:1.
-  const commaContinuationRe = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*:\s*(\d+)\s*,\s*(\d+)(?:\s*:\s*(\d+))?/gi;
+  const commaContinuationRe = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*[:.]\s*(\d+)\s*,\s*(\d+)(?:\s*[:.]\s*(\d+))?/gi;
   let commaMatch;
   while ((commaMatch = commaContinuationRe.exec(source))) {
     const secondNumberStart = commaMatch.index + commaMatch[0].lastIndexOf(commaMatch[4]);
@@ -1360,7 +1360,7 @@ function getContextualBibleReference(selectionText) {
         // omit punctuation at an inline-span boundary. Fall back to the live
         // Selection's immediate after-text; the leading-colon requirement keeps
         // this positional and prevents borrowing a verse elsewhere in the post.
-        const followingPattern = /^\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/;
+        const followingPattern = /^\s*[:.]\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/;
         const following = contextText.slice(position.end).match(followingPattern)
           || getAdjacentBoundaryText('after', 40).match(followingPattern);
         if (!following) continue;
@@ -2099,7 +2099,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           afterText = normalizeSelectionText(domText(afterRange.cloneContents())).normalize('NFKC');
         }
       }
-      const following = afterText.match(/^\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
+      const following = afterText.match(/^\s*[:.]\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
       if (following) {
         const from = Number(following[1]);
         const to = following[2] ? Number(following[2]) : from;
@@ -2587,7 +2587,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // the exact citation, including the book name; the previous numeric-only
     // path could resolve 9 or 10 but let a click on Romans fall back to Rom 1:1.
     if (selectionStart != null && selectionEnd != null &&
-        /\b\d{1,3}\s*:\s*\d{1,3}\s*,\s*\d{1,3}\b/.test(normalizedMatchSource)) {
+        /\b\d{1,3}\s*[:.]\s*\d{1,3}\s*,\s*\d{1,3}\b/.test(normalizedMatchSource)) {
       const commaListReference = resolveBibleReferenceFromContextWindow(
         normalizedMatchSource, selectionStart, selectionEnd
       );
@@ -2717,7 +2717,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // reference (e.g. clicking "Cor" in prose opening Ezekiel).
     // Preserve nonconsecutive comma lists as individual MultiVerse references.
     if (selectionStart != null && selectionEnd != null) {
-      const abbreviatedBookCitationPattern = /\b((?:[1-3]\s+|i{1,3}\s+)?[A-Za-z][A-Za-z.'-]*(?:\s+[A-Za-z][A-Za-z.'-]*){0,3})(?:\s+|\.(?=\d)\s*|(?<=[A-Za-z])(?=\d))(\d+)\s*:\s*(\d+(?:\s*,\s*\d+)*)(?:\s*[-–—]\s*(\d+))?/gi;
+      const abbreviatedBookCitationPattern = /\b((?:[1-3]\s+|i{1,3}\s+)?[A-Za-z][A-Za-z.'-]*(?:\s+[A-Za-z][A-Za-z.'-]*){0,3})(?:\s+|\.(?=\d)\s*|(?<=[A-Za-z])(?=\d))(\d+)\s*[:.]\s*(\d+(?:\s*,\s*\d+)*)(?:\s*[-–—]\s*(\d+))?/gi;
       let citationMatch;
       while ((citationMatch = abbreviatedBookCitationPattern.exec(normalizedMatchSource))) {
         const rawBookLabel = citationMatch[1];
