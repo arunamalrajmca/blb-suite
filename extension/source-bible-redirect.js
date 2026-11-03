@@ -47,16 +47,16 @@
   if (host==="churchofjesuschrist.org") {
     // Scripture cross-reference links use chapter routes with id=p16 or
     // id=p16-p17. A chapter URL without an individual verse id is not redirected.
-    const m=u.pathname.match(/^\\/study\\/scriptures\\/(?:ot|nt)\\/([^/]+)\\/(\\d+)\\/?$/i);
-    const verses=(u.searchParams.get("id")||"").match(/^p(\\d+)(?:-p?(\\d+))?$/i);
+    const m=u.pathname.match(/^\/study\/scriptures\/(?:ot|nt)\/([^/]+)\/(\d+)\/?$/i);
+    const verses=(u.searchParams.get("id")||"").match(/^p(\d+)(?:-p?(\d+))?$/i);
     if(m&&verses) ref={book:m[1].replace(/-/g," "),chapter:+m[2],from:+verses[1],to:verses[2]?+verses[2]:null};
   }
 
-  if (host==="mercyhouseministry.com" && /^\\/bible\\/?$/i.test(u.pathname)) {
+  if (host==="mercyhouseministry.com" && /^\/bible\/?$/i.test(u.pathname)) {
     // Mercy House verse links carry book, chapter and verse in query parameters.
     const book=u.searchParams.get("b");
     const chapter=Number(u.searchParams.get("c"));
-    const verses=(u.searchParams.get("v")||"").match(/^(\\d+)(?:[-–](\\d+))?$/);
+    const verses=(u.searchParams.get("v")||"").match(/^(\d+)(?:[-–](\d+))?$/);
     if(book&&Number.isInteger(chapter)&&chapter>0&&verses) {
       ref={book,chapter,from:+verses[1],to:verses[2]?+verses[2]:null};
     }
