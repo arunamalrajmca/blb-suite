@@ -2030,7 +2030,34 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             ' ' + exactClickedBookToken
           )
         : null;
-      const exactClickedBook = exactPrefixedBook || resolveBibleBook(exactClickedBookToken);
+      // A selected final word can be the actionable suffix of a multiword
+      // canonical book name (for example, "Solomon" in "Song of Solomon").
+      // Resolve it only when the immediately preceding DOM text ends with
+      // the exact canonical prefix; never search unrelated text elsewhere in
+      // the article or borrow a book name from another line.
+      const exactSuffixBook = (() => {
+        const selectedSuffix = normalizeBibleBookKey(exactClickedBookToken);
+        if (!selectedSuffix) return null;
+        const precedingText = normalizeBibleBookKey(exactPrefixText);
+        if (!precedingText) return null;
+        const labels = [
+          ...(BOOKS || []).flatMap(book => [book.name, book.urlKey]),
+          ...Object.keys(BOOK_ALIASES || {})
+        ].filter(Boolean).map(label => normalizeBibleReferenceText(label).replace(/[.]$/g, '').trim())
+          .filter(label => {
+            const parts = label.split(/\\s+/);
+            return parts.length > 1 && normalizeBibleBookKey(parts[parts.length - 1]) === selectedSuffix;
+          })
+          .sort((a, b) => b.length - a.length);
+        for (const label of labels) {
+          const prefix = normalizeBibleBookKey(label.split(/\\s+/).slice(0, -1).join(' '));
+          if (!prefix || !(precedingText === prefix || precedingText.endsWith(' ' + prefix))) continue;
+          const book = resolveBibleBook(label);
+          if (book) return book;
+        }
+        return null;
+      })();
+      const exactClickedBook = exactPrefixedBook || exactSuffixBook || resolveBibleBook(exactClickedBookToken);
       if (exactClickedBook) {
         try {
           const followingRange = document.createRange();
