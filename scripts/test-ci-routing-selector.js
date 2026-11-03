@@ -59,6 +59,8 @@ try {
     'tests/browser/scripttagger-global-injection.spec.js',
     'tests/browser/e2e-core-user-actions.spec.js',
     'tests/browser/multiverse-tab-reuse.spec.js',
+    'tests/browser/multiverse-contiguous-range-routing.spec.js',
+    'tests/browser/multiverse-disjoint-chapter-post.spec.js',
     'tests/browser/multiverse-tool-view.spec.js',
     'tests/browser/multiverse-handoff.spec.js',
     'tests/browser/blb-passive-new-tab-targets.spec.js',
@@ -80,6 +82,9 @@ try {
     'tests/browser/shared-regex-patterns.spec.js',
     'tests/browser/rediscover-sagacity-button.spec.js',
     'tests/browser/research-dom-smoke.spec.js',
+    'tests/browser/research-derived-regression.spec.js',
+    'tests/browser/known-host-extension.spec.js',
+    'tests/browser/pr-422-feature-regressions.spec.js',
     'tests/browser/omnibox-boolean-operators.spec.js',
     'tests/browser/kings-bible-collector-behavior.spec.js',
     'tests/browser/webster-collector-behavior.spec.js',
@@ -98,6 +103,12 @@ try {
   write('extension/blb-auto-hyperlinker.js');
   write('extension/blb-draggable-button.js');
   write('extension/multiverse-tool-view.js');
+  write('extension/multiverse-reference-helpers.js');
+  write('extension/multiverse-post.js');
+  write('extension/multiverse-post.html');
+  write('extension/blb-page-selection-button.js');
+  write('extension/Tutorial.html');
+  write('extension/Tutorial.js');
   write('extension/blb-passive-new-tab-targets.js');
   write('extension/blb-parse-popup.js');
   write('extension/blb-verse-link-navigation.js');
@@ -201,6 +212,10 @@ try {
   // Newly extracted feature modules select their established focused browser coverage.
   const extractedFeatureCases = [
     ['extension/multiverse-copy.js', 'e2e-core-user-actions.spec.js'],
+    ['extension/multiverse-reference-helpers.js', 'multiverse-contiguous-range-routing.spec.js'],
+    ['extension/multiverse-post.js', 'multiverse-disjoint-chapter-post.spec.js'],
+    ['extension/blb-page-selection-button.js', 'research-derived-regression.spec.js'],
+    ['extension/Tutorial.html', 'pr-422-feature-regressions.spec.js'],
     ['extension/multiverse-handoff.js', 'multiverse-handoff.spec.js'],
     ['extension/multiverse-tool-view.js', 'multiverse-tool-view.spec.js'],
     ['extension/blb-parse-popup.js', 'e2e-core-user-actions.spec.js'],
@@ -241,6 +256,18 @@ try {
         file + ' must select direct visibility behavior coverage');
       assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
         file + ' must not select unrelated generic core coverage');
+    }
+    if (file === 'extension/multiverse-reference-helpers.js' || file === 'extension/multiverse-post.js' || file === 'extension/Tutorial.html') {
+      assertValue(result, 'group_a_required', true, file);
+      assertValue(result, 'reference_required', true, file);
+    }
+    if (file === 'extension/blb-page-selection-button.js') {
+      assert(result.values.changed_specs.includes('tests/browser/known-host-extension.spec.js'),
+        'page-selection changes must select the explicit Bible.com opt-in regression');
+      assert(result.values.changed_specs.includes('tests/browser/research-dom-smoke.spec.js'),
+        'page-selection changes must select the expanded DOM-selection regression matrix');
+      assertValue(result, 'group_a_required', true, file);
+      assertValue(result, 'reference_required', true, file);
     }
     if (file === 'extension/blb-passive-new-tab-targets.js') {
       assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
