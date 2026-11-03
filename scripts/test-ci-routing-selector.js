@@ -62,6 +62,24 @@ function auditRepositoryTestInventory() {
   assert.deepEqual(missingMappings, [], 'every browser spec must be mapped to focused CI coverage');
   assert.deepEqual(staleMappings, [], 'focused CI mappings must not point at deleted browser specs');
 
+  const browserDecisionFixture = fs.readFileSync(
+    path.join(root, 'tests/selector/browser-selector-decisions.test.mjs'), 'utf8'
+  );
+  const browserDecisionSpecs = new Set([...browserDecisionFixture.matchAll(/put\(root, "(tests\/browser\/[^"]+\.spec\.js)"/g)]
+    .map(match => match[1]));
+  assert.deepEqual([...mappedSpecs].filter(file => !browserDecisionSpecs.has(file)), [],
+    'browser-selector decision fixtures must include every mapped browser spec');
+  assert.deepEqual([...browserDecisionSpecs].filter(file => !mappedSpecs.has(file)), [],
+    'browser-selector decision fixtures must not reference retired specs');
+
+  const routingFixture = fs.readFileSync(path.join(root, 'scripts/test-ci-routing-selector.js'), 'utf8');
+  const routingSpecs = new Set([...routingFixture.matchAll(/'((?:tests\/browser\/)[^']+\.spec\.js)'/g)]
+    .map(match => match[1]));
+  assert.deepEqual([...mappedSpecs].filter(file => !routingSpecs.has(file)), [],
+    'CI routing selector fixtures must include every mapped browser spec');
+  assert.deepEqual([...routingSpecs].filter(file => !mappedSpecs.has(file)), [],
+    'CI routing selector fixtures must not reference retired browser specs');
+
   const workflowPath = path.join(root, '.github/workflows/manual-full-test-audit.yml');
   const workflow = fs.readFileSync(workflowPath, 'utf8');
   const auditCoverage = [
