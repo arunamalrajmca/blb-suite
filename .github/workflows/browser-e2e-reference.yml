@@ -82,8 +82,15 @@ jobs:
           while IFS= read -r run_id; do
             [[ -n "$run_id" ]] || continue
             echo "Cancelling superseded References run $run_id for PR #$PR_NUMBER."
-            gh api --silent --method POST \
-              "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/cancel"
+            cancel_error="$(gh api --silent --method POST \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/cancel" 2>&1)" || {
+              if [[ "$cancel_error" == *"HTTP 409"* ]]; then
+                echo "Run $run_id completed before cancellation; treating it as already stopped."
+              else
+                printf '%s\\n' "$cancel_error" >&2
+                exit 1
+              fi
+            }
           done <<< "$stale_runs"
 
   change-detection:
