@@ -1828,10 +1828,10 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
         const observedTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
           tabs.map(tab => ({url:tab.url || '',pendingUrl:tab.pendingUrl || ''}))
         ));
-        console.error('[Facebook Luke double-click failure]', JSON.stringify({
-          separator, selector, failureDiagnostics, observedTabs
-        }));
-        throw error;
+        throw new Error(
+          error.message + '\n[Facebook Luke double-click failure] ' +
+          JSON.stringify({ separator, selector, failureDiagnostics, observedTabs })
+        );
       }
       expect(normalizeBlbKjvPath(new URL(resolved.pendingUrl || resolved.url).pathname)).toBe('/kjv/luk/22/26/');
       const reconstruction = await page.evaluate(() => ({
