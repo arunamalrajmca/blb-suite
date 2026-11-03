@@ -357,7 +357,7 @@ jobs:
               fi
               echo "Grouped browser E2E is $group_status (attempt $attempt/15)."
             else
-              echo "Waiting for grouped browser E2E workflow to be created (attempt $attempt/120)."
+              echo "Waiting for grouped browser E2E workflow to be created (attempt $attempt/15)."
             fi
             sleep 20
           done
