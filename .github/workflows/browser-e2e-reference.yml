@@ -316,7 +316,7 @@ jobs:
       - browser-e2e-features
     if: ${{ always() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 10
     permissions:
       actions: read
       statuses: write
@@ -337,7 +337,7 @@ jobs:
             exit 0
           fi
 
-          for attempt in $(seq 1 120); do
+          for attempt in $(seq 1 15); do
             response="$(curl --fail-with-body --silent --show-error \
               -H "Authorization: Bearer $GH_TOKEN" \
               -H "Accept: application/vnd.github+json" \
@@ -355,14 +355,14 @@ jobs:
                 echo "result=$group_result" >> "$GITHUB_OUTPUT"
                 exit 0
               fi
-              echo "Grouped browser E2E is $group_status (attempt $attempt/120)."
+              echo "Grouped browser E2E is $group_status (attempt $attempt/15)."
             else
               echo "Waiting for grouped browser E2E workflow to be created (attempt $attempt/120)."
             fi
             sleep 20
           done
 
-          echo "Grouped browser E2E did not complete within 40 minutes."
+          echo "Grouped browser E2E did not complete within 5 minutes."
           echo "result=timeout" >> "$GITHUB_OUTPUT"
           exit 1
 
