@@ -376,7 +376,7 @@ test("test-only browser edits reuse the required reference workflow classifier",
   assert.match(workflow, /id: focused[\s\S]*?FOCUSED_SPECS=/);
   assert.match(workflow, /github\.event_name == 'pull_request'[\s\S]*?needs\.change-detection\.outputs\.runtime_changed == 'false'/);
   assert.match(workflow, /needs\.change-detection\.outputs\.focused_specs != ''/);
-  assert.match(workflow, /npx playwright test "\$spec"/);
+  assert.match(workflow, /npx playwright test --test-match "\*\*\/\$filename"/);
 });
 
 test("MultiVerse tab-reuse regressions share the Group A runner with conservative full-suite coverage", () => {
@@ -428,8 +428,8 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
   assert.match(groupA, /Delegating \$spec to the required browser-e2e gate/);
   assert.match(groupA, /browser_e2e_required: \$\{\{ steps\.select\.outputs\.reference_required \}\}/);
   assert.match(groupB, /browser_e2e_required: \$\{\{ steps\.select\.outputs\.reference_required \}\}/);
-  assert.match(referenceWorkflow, /npx playwright test "\$spec" --grep/);
-  assert.match(groupA, /npx playwright test "\$spec"/);
+  assert.match(referenceWorkflow, /npx playwright test --test-match "\*\*\/\$filename" --grep/);
+  assert.match(groupA, /npx playwright test --test-match "\*\*\/\$filename"/);
   assert.match(groupA, /browser_e2e_required == 'true'/);
   assert.match(groupB, /browser_e2e_required == 'true'/);
 });
