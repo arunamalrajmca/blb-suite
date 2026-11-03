@@ -878,3 +878,58 @@ test("The King's Bible Concordance button collects and deduplicates references a
     "https://www.blueletterbible.org/kjv/jdg/6/15/"
   ]);
 });
+
+test('ChurchofJesusChrist and Mercy House individual verse clicks open the exact BLB KJV verse', async ({ page }) => {
+  const cases = [
+    {
+      pageUrl: 'https://www.churchofjesuschrist.org/study/scriptures/bible-reference/1?lang=eng',
+      href: 'https://www.churchofjesuschrist.org/study/scriptures/nt/matt/3?id=p16-p17&lang=eng',
+      label: 'Matt. 3:16-17',
+      expected: 'https://www.blueletterbible.org/kjv/mat/3/16-17/'
+    },
+    {
+      pageUrl: 'https://mercyhouseministry.com/bible-study/his-mercies-are-new-every-morning/',
+      href: 'https://mercyhouseministry.com/bible/?b=Lamentations&c=3&v=22-23',
+      label: 'Lamentations 3:22-23',
+      expected: 'https://www.blueletterbible.org/kjv/lam/3/22-23/'
+    }
+  ];
+
+  for (const source of cases) {
+    await loadProductionRedirect(page, source.pageUrl);
+    await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+    await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
+    const result = await page.evaluate(({href,label}) => {
+      document.body.innerHTML = '';
+      const anchor = document.createElement('a');
+      anchor.href = href;
+      anchor.textContent = label;
+      document.body.appendChild(anchor);
+      let prevented = false;
+      anchor.addEventListener('click', event => { prevented = event.defaultPrevented; });
+      anchor.dispatchEvent(new MouseEvent('click', { bubbles:true, cancelable:true, button:0 }));
+      return { prevented, target: window.__openedBlbUrl || null };
+    }, source);
+    expect(result.prevented, source.pageUrl).toBe(true);
+    expect(result.target, source.pageUrl).toBe(source.expected);
+  }
+});
+
+test('direct ChurchofJesusChrist and Mercy House verse URLs resolve to exact BLB KJV passages', async ({ page }) => {
+  const cases = [
+    {
+      url: 'https://www.churchofjesuschrist.org/study/scriptures/nt/matt/3?id=p16-p17&lang=eng',
+      expected: 'https://www.blueletterbible.org/kjv/mat/3/16-17/'
+    },
+    {
+      url: 'https://mercyhouseministry.com/bible/?b=Lamentations&c=3&v=22-23',
+      expected: 'https://www.blueletterbible.org/kjv/lam/3/22-23/'
+    }
+  ];
+  for (const source of cases) {
+    await loadProductionRedirect(page, source.url);
+    await page.evaluate(() => redirectBibleSite());
+    expect(await page.evaluate(() => window.__redirectedTo || null), source.url).toBe(source.expected);
+  }
+});
+\n
