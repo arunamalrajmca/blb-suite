@@ -190,8 +190,8 @@ test('ChurchofJesusChrist shows its BLB references button on scripture-study pag
         : `<!doctype html><html><head><title>Scripture study fixture</title></head><body>
             <main>
               <h1>Scripture study</h1>
-              <a href="/study/scriptures/nt/john/3?lang=eng#p16">John 3:16</a>
-              <a href="/study/scriptures/nt/rom/8?lang=eng#p1">Romans 8:1-2</a>
+              <a href="/study/scriptures/nt/john/3?id=p16&lang=eng">John 3:16</a>
+              <a href="/study/scriptures/nt/rom/8?id=p1-p2&lang=eng">8:1-2</a>
               <a href="/study/manual/lesson?lang=eng">Study lesson</a>
             </main>
           </body></html>`
@@ -255,3 +255,78 @@ test('ChurchofJesusChrist shows its BLB references button on scripture-study pag
     .toContainText('Opening 2 Bible references in BLB MultiVerse');
 });
 
+test('Mercy House shows its BLB references button on article pages and collects linked verse URLs', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    masterEnabled: true,
+    pageSelectionButtonSites: { 'mercyhouseministry.com': true },
+    doubleClickBlbSites: {}
+  });
+
+  await context.route('https://mercyhouseministry.com/**', route => {
+    const isHome = new URL(route.request().url()).pathname === '/';
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      body: isHome
+        ? '<!doctype html><html><head><title>Mercy House home</title></head><body><a href="/bible-study/">Bible Study</a></body></html>'
+        : `<!doctype html><html><head><title>Mercy House article</title></head><body>
+            <main>
+              <h1>His Mercies Are New Every Morning</h1>
+              <a href="/bible/?b=Lamentations&c=3&v=22-23">Lamentations 3:22-23</a>
+              <a href="/bible/?b=Exodus&c=16&v=21">Exodus 16:21</a>
+              <a href="/about/">About Mercy House</a>
+            </main>
+          </body></html>`
+    });
+  });
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>BLB fixture</title></head><body>BLB fixture</body></html>'
+  }));
+
+  await extensionWorker.evaluate(() => {
+    globalThis.__blbMercyHouseCapture = message => {
+      if (message?.type === 'blbSuiteOpenWebsterMultiVerse') {
+        void chrome.storage.local.set({ __blbTestMercyHouseRefs: message.refs || [] });
+      }
+    };
+    chrome.runtime.onMessage.addListener(globalThis.__blbMercyHouseCapture);
+  });
+
+  await page.goto('https://mercyhouseministry.com/', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#blb-suite-mercyhouse-multiverse')).toHaveCount(0);
+
+  await page.goto('https://mercyhouseministry.com/bible-study/article/', { waitUntil: 'domcontentloaded' });
+  const button = page.locator('#blb-suite-mercyhouse-multiverse');
+  await expect(button).toHaveText('Open Bible References in BLB');
+  await button.click();
+
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const saved = await chrome.storage.local.get({ __blbTestMercyHouseRefs: [] });
+    return saved.__blbTestMercyHouseRefs.length;
+  }), { timeout: 10000 }).toBe(2);
+
+  const refs = await extensionWorker.evaluate(async () => {
+    const saved = await chrome.storage.local.get({ __blbTestMercyHouseRefs: [] });
+    return saved.__blbTestMercyHouseRefs.map(ref => ({
+      book: ref.book, chapter: ref.chapter, from: ref.from, to: ref.to, url: ref.url
+    }));
+  });
+  expect(refs).toEqual([
+    {
+      book: 'lamentations', chapter: 3, from: 22, to: 23,
+      url: 'https://www.blueletterbible.org/kjv/lam/3/22-23/'
+    },
+    {
+      book: 'exodus', chapter: 16, from: 21, to: 21,
+      url: 'https://www.blueletterbible.org/kjv/exo/16/21/'
+    }
+  ]);
+  await expect(page.locator('#blb-suite-mercyhouse-multiverse-status'))
+    .toContainText('Opening 2 Bible references in BLB MultiVerse');
+});
+\n
