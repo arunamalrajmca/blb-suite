@@ -101,7 +101,7 @@ jobs:
           : > "$BLB_PERF_OUTPUT"
           list_output="$RUNNER_TEMP/blb-playwright-list.txt"
           test_list="$RUNNER_TEMP/blb-playwright-test-ids.txt"
-          if ! npx playwright test --list > "$list_output" 2>&1; then
+          if ! npx playwright test --list --reporter=list > "$list_output" 2>&1; then
             cat "$list_output"
             exit 1
           fi
