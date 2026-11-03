@@ -410,3 +410,85 @@ test('Facebook double-clicking a numbered-book suffix searches only the selected
   );
   expect(tabs.some(url => url.includes('Criteria=2+timothy'))).toBe(false);
 });
+
+
+test('Facebook Double-Click preserves the full comma-separated range when a numbered-book suffix is clicked', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
+  await page.route('https://www.facebook.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Facebook numbered-book range</title></head><body></body></html>'
+  }));
+  await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    const line = document.createElement('div');
+    line.id = 'fb-numbered-book-range';
+    line.setAttribute('dir', 'auto');
+    line.textContent = 'Apostle Paul, our pattern (1 Tim. 1:15, 16), said...';
+    line.style.cssText = 'font:20px Arial,sans-serif;margin:24px;';
+    document.body.appendChild(line);
+  });
+  const point = await page.locator('#fb-numbered-book-range').evaluate(element => {
+    const node = element.firstChild;
+    const start = node.textContent.indexOf('Tim');
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, start + 3);
+    const rect = range.getBoundingClientRect();
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  });
+  await page.mouse.dblclick(point.x, point.y);
+
+  await expect.poll(async () => {
+    const tabs = await extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' }))
+        .map(tab => tab.url || tab.pendingUrl || '')
+    );
+    return tabs.find(url => url.includes('/kjv/1ti/1/'));
+  }).toContain('/kjv/1ti/1/15-16/');
+});
+
+test('Facebook floating Show on BLB accepts a numbered-book suffix as a word search without a nearby citation', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    pageSelectionButtonSites: { 'facebook.com': true, 'www.facebook.com': true }
+  });
+  await page.route('https://www.facebook.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Facebook numbered-book word search</title></head><body></body></html>'
+  }));
+  await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    const line = document.createElement('div');
+    line.id = 'fb-numbered-book-word';
+    line.setAttribute('dir', 'auto');
+    line.textContent = '2 Timothy is Paul’s last heart wrenching letter to the body of Christ.';
+    line.style.cssText = 'font:20px Arial,sans-serif;margin:24px;';
+    document.body.appendChild(line);
+    const node = line.firstChild;
+    const start = node.textContent.indexOf('Timothy');
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, start + 'Timothy'.length);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    // Exercise the same selection-finalization event emitted by a real drag.
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 0 }));
+  });
+
+  const button = page.locator('#blb-suite-page-selection-button');
+  await expect(button).toBeVisible({ timeout: 5000 });
+  await button.click();
+
+  await expect.poll(async () => {
+    const tabs = await extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' }))
+        .map(tab => tab.url || tab.pendingUrl || '')
+    );
+    return tabs.find(url => url.includes('/search/search.cfm?Criteria='));
+  }).toContain('Criteria=Timothy');
+});

@@ -1217,6 +1217,24 @@ function resolveCompactBookChapterToken(value) {
   return null;
 }
 
+function getNumberedBookSuffixAliases() {
+  return [...new Set([
+    ...Object.values(NUMBERED_BOOK_SUFFIX_ALIASES || {}).flat(),
+    ...BOOKS.map(book => String(book.name || '').match(/^[1-3]\s+(.+)$/)?.[1]).filter(Boolean),
+    ...Object.keys(BOOK_ALIASES || {}).map(alias => {
+      const match = String(alias).match(/^[1-3]\s+(.+)$/);
+      return match?.[1] || '';
+    }).filter(Boolean)
+  ])];
+}
+
+function isNumberedBookSuffixCandidateToken(value) {
+  const selected = normalizeDoubleClickToken(value).toLowerCase();
+  return !!selected && getNumberedBookSuffixAliases().some(alias =>
+    normalizeDoubleClickToken(alias).toLowerCase() === selected
+  );
+}
+
 function getDoubleClickEquivalentSelectionContext(selectionText, preferredTarget = null, event = null) {
   const selected = normalizeSelectionText(selectionText).normalize('NFKC');
   // A double-click gesture selects one token. Apply that same positional
@@ -3186,19 +3204,8 @@ function handleDoubleClickBlb(event) {
         // when they are not KJV words (for example, "Sam" or "Jn"). Keep this
         // candidate set aligned with the suffix alternatives in the context
         // matcher below; KJV-word overlaps still retain ordinary word search.
-        const numberedBookSuffixAliases=[...new Set([
-          ...Object.values(NUMBERED_BOOK_SUFFIX_ALIASES || {}).flat(),
-          // Include the complete suffix of every numbered canonical book and
-          // numbered-book alias (e.g. "Samuel" in "2 Samuel", "John" in "III John").
-          ...BOOKS.map(book => String(book.name || '').match(/^[1-3]\s+(.+)$/)?.[1]).filter(Boolean),
-          ...Object.keys(BOOK_ALIASES || {}).map(alias => {
-            const match=String(alias).match(/^[1-3]\s+(.+)$/);
-            return match?.[1] || '';
-          }).filter(Boolean)
-        ])];
-        const isNumberedBookSuffixCandidate=numberedBookSuffixAliases.some(alias=>
-          String(alias).toLowerCase()===String(selection).toLowerCase()
-        );
+        const numberedBookSuffixAliases=getNumberedBookSuffixAliases();
+        const isNumberedBookSuffixCandidate=isNumberedBookSuffixCandidateToken(selection);
         const normalizedSelectionToken = normalizeDoubleClickToken(selection).replace(/’/g, "'");
         const isKjvWord = typeof KJV_CORPUS_WORD_INDEX !== 'undefined'
           && KJV_CORPUS_WORD_INDEX.has(normalizedSelectionToken);
@@ -3263,7 +3270,6 @@ function handleDoubleClickBlb(event) {
         const isRomanBookPrefix=/^(?:I|II|III)$/i.test(selection);
         let hasValidNearbyBookPrefix=false;
         let hasValidNearbyRomanBookPrefix=false;
-        let numberedSuffixReference=null;
         if ((possibleNumberedBookSuffix||isRomanBookPrefix) && !hasNumericPrefix) {
           try {
             const contextNode=contextualTarget instanceof Element
@@ -3390,25 +3396,10 @@ function handleDoubleClickBlb(event) {
               && isRomanBookPrefix
               && match[1].toUpperCase()===selection.toUpperCase());
 
-            // A numbered-book suffix such as "Cor" may be the clicked part of
-            // a chapter-only citation ("1 Cor. 13"). Resolve that exact nearby
-            // citation directly instead of letting the generic DOM resolver
-            // borrow an unrelated reference from an ancestor or stale selection.
-            if (completeBook && possibleNumberedBookSuffix
-                && match[2].toLowerCase()===selection.toLowerCase()) {
-              const afterBook=contextText.slice(match.index+match[0].length);
-              const chapterMatch=afterBook.match(/^\s*\.?\s*(\d{1,3})\b/);
-              const chapter=chapterMatch ? Number(chapterMatch[1]) : 0;
-              const resolvedBook=resolveBibleBook(prefixNumber+' '+match[2]);
-              const verseMatch=afterBook.match(/^\s*\.?\s*\d{1,3}\s*[:.]\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
-              if (chapter>0 && resolvedBook) {
-                // Resolve this exact numbered-book occurrence for Arabic and
-                // Roman prefixes; do not fall back to the bare suffix alias.
-                const from=verseMatch ? Number(verseMatch[1]) : 1;
-                const to=verseMatch?.[2] ? Number(verseMatch[2]) : from;
-                numberedSuffixReference=resolveBibleReference(resolvedBook.name,chapter,from,to);
-              }
-            }
+            // Numbered-book suffixes use the same exact positional resolver
+            // as every other one-token selection. Do not create a narrower
+            // verse-only fallback here: it can truncate comma lists such as
+            // "1 Tim. 1:15, 16".
           } catch (_) {}
         }
         // "verse" is not guaranteed to be in the local KJV word index on
@@ -3458,10 +3449,9 @@ function handleDoubleClickBlb(event) {
         // layouts. If no citation resolves in their own nearest block, retain
         // the standalone book-number gesture.
         const isStandaloneNumericBook=isNumericBookCandidate && standaloneBook && !blockContext;
-        const contextualReference=numberedSuffixReference
-          || (isNumberedListSerial && standaloneBook
-            ? standaloneBook
-            : (isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook)));
+        const contextualReference=(isNumberedListSerial && standaloneBook
+          ? standaloneBook
+          : (isStandaloneNumericBook ? standaloneBook : (blockContext||standaloneBook)));
         if (!contextualReference) {
           // Numbered-book suffix candidates without a valid adjacent prefix
           // must not be mistaken for Bible references. If the suffix is also
@@ -3625,6 +3615,7 @@ const blbPageSelectionButton = globalThis.BLBPageSelectionButtonModule.initializ
   BOOKS: BOOKS,
   BOOK_ALIASES: BOOK_ALIASES,
   KJV_CORPUS_WORD_INDEX: KJV_CORPUS_WORD_INDEX,
+  isNumberedBookSuffixCandidate: isNumberedBookSuffixCandidateToken,
   canonicalStrongValue: canonicalStrongValue,
   resolveBibleReference: resolveBibleReference,
   resolveBibleBook: resolveBibleBook,
