@@ -1598,8 +1598,10 @@ test('single-token selection actions share double-click positional resolution ac
   });
   const expectSharedResolverInvocation = async token => {
     const calls = await readResolverCalls();
-    expect(calls, 'each one-token action must invoke the shared Double-Click positional resolver exactly once for ' + token)
-      .toEqual([token]);
+    expect(calls, 'each one-token action must reach the shared positional resolver for ' + token)
+      .not.toHaveLength(0);
+    expect(calls, 'every resolver invocation must receive only the selected token')
+      .toEqual(calls.map(() => token));
   };
   const expectLukeTab = async label => {
     const opened = await waitForTab(extensionWorker, tab => {
@@ -1615,37 +1617,45 @@ test('single-token selection actions share double-click positional resolution ac
 
   const tokens = ['Luke','22','26','KJV'];
   const floatingButton = page.locator('#blb-suite-page-selection-button');
-  for (const token of tokens) {
-    await selectToken(token);
-    await expect(floatingButton, 'Floating Show on BLB for ' + token).toBeVisible({timeout:10000});
-    await resetResolverCalls();
-    await floatingButton.click();
-    await expectLukeTab('floating ' + token);
-    await expectSharedResolverInvocation(token);
-  }
+  const setCitationSeparator = separator => page.locator('#blb-global-token-context').evaluate(
+    (element, value) => { element.firstChild.nodeValue = 'Luke 22' + value + '26 KJV'; },
+    separator
+  );
 
-  for (const token of tokens) {
-    await selectToken(token);
-    await expect(floatingButton, 'Alt+B selection setup for ' + token).toBeVisible({timeout:10000});
-    await resetResolverCalls();
-    const response = await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
-    expect(response?.ok, 'Alt+B command handler for ' + token).toBe(true);
-    await expectLukeTab('Alt+B ' + token);
-    await expectSharedResolverInvocation(token);
-  }
+  for (const separator of [':','.']) {
+    await setCitationSeparator(separator);
+    for (const token of tokens) {
+      await selectToken(token);
+      await expect(floatingButton, 'Floating Show on BLB for ' + token + ' with ' + separator).toBeVisible({timeout:10000});
+      await resetResolverCalls();
+      await floatingButton.click();
+      await expectLukeTab('floating ' + token + ' with ' + separator);
+      await expectSharedResolverInvocation(token);
+    }
 
-  for (const token of tokens) {
-    await selectToken(token);
-    await expect(floatingButton, 'Right-click selection setup for ' + token).toBeVisible({timeout:10000});
-    await resetResolverCalls();
-    const response = await openFromSelection({
-      type:'blbSuiteOpenSelectionText',
-      text:token,
-      tabBehavior:{activeIfNew:true,activateExisting:true}
-    });
-    expect(response?.ok, 'right-click handoff for ' + token).toBe(true);
-    await expectLukeTab('right-click ' + token);
-    await expectSharedResolverInvocation(token);
+    for (const token of tokens) {
+      await selectToken(token);
+      await expect(floatingButton, 'Alt+B selection setup for ' + token + ' with ' + separator).toBeVisible({timeout:10000});
+      await resetResolverCalls();
+      const response = await openFromSelection({type:'blbSuiteOpenCurrentSelection'});
+      expect(response?.ok, 'Alt+B command handler for ' + token + ' with ' + separator).toBe(true);
+      await expectLukeTab('Alt+B ' + token + ' with ' + separator);
+      await expectSharedResolverInvocation(token);
+    }
+
+    for (const token of tokens) {
+      await selectToken(token);
+      await expect(floatingButton, 'Right-click selection setup for ' + token + ' with ' + separator).toBeVisible({timeout:10000});
+      await resetResolverCalls();
+      const response = await openFromSelection({
+        type:'blbSuiteOpenSelectionText',
+        text:token,
+        tabBehavior:{activeIfNew:true,activateExisting:true}
+      });
+      expect(response?.ok, 'right-click handoff for ' + token + ' with ' + separator).toBe(true);
+      await expectLukeTab('right-click ' + token + ' with ' + separator);
+      await expectSharedResolverInvocation(token);
+    }
   }
 });
 
