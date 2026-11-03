@@ -346,7 +346,7 @@ test.describe('core user-visible E2E', () => {
       article.id = 'all-66-book-action-matrix';
       article.style.cssText = 'position:fixed;left:12px;top:12px;z-index:2147483647;background:#fff;color:#000;padding:12px;font:18px Arial,sans-serif;max-height:80vh;overflow:auto;';
       for (const book of items) {
-        const words = book.name.trim().split(/\\s+/);
+        const words = book.name.trim().split(/\s+/);
         const suffix = words.pop();
         const row = document.createElement('p');
         row.id = 'all-66-book-row-' + book.bookNumber;
