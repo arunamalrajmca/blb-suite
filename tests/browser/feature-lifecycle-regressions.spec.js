@@ -134,6 +134,14 @@ test('Study Sessions confirmation cancel preserves active recording for topic-de
 
   const page = await context.newPage();
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await page.waitForFunction(
+    () => !document.body.classList.contains('popup-loading') &&
+      !document.body.classList.contains('sensitive-restricted'),
+    null,
+    { timeout: 10000 }
+  );
+  await expect(page.locator('#studyTopic')).toBeVisible();
+  await expect(page.locator('#studyTopic')).toBeEnabled();
   await page.evaluate(() => { window.confirm = () => false; });
   await page.locator('#studyTopic').fill(normalizedTopic);
   await expect(page.locator('#clearSelectedTopic')).toBeEnabled();

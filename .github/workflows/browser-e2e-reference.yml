@@ -37,7 +37,7 @@ on:
 # Keep one active run per PR: newer commits supersede outdated PR runs.
 # Pushes to main and manual runs keep their own ref-based group and are not cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-gate-v2
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-gate-v3
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -169,7 +169,7 @@ jobs:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: npx playwright test tests/browser/extension.spec.js --grep 'Generic article verse cues follow the latest explicit chapter context|Article verse cues resolve context outside Facebook'
       - name: Upload generic verse-context diagnostics
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: blb-suite-generic-verse-context-gate
@@ -237,7 +237,7 @@ jobs:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: npx playwright test ${{ matrix.files && join(matrix.files, ' ') || matrix.file || 'tests/browser/extension.spec.js' }} --grep "${{ matrix.grep }}"
       - name: Upload Playwright diagnostics — ${{ matrix.group }}
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: blb-suite-browser-e2e-references-${{ matrix.group }}
@@ -297,7 +297,7 @@ jobs:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: npx playwright test tests/browser/extension.spec.js --grep 'MV3 service worker|popup loads|Show on BLB|Alt\+B toggle enforcement'
       - name: Upload Playwright diagnostics — FEATURES
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: blb-suite-browser-e2e-features
@@ -307,6 +307,13 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  grouped-browser-e2e:
+    name: BROWSER E2E — GROUP A + GROUP B
+    needs: change-detection
+    if: ${{ always() && needs.change-detection.result == 'success' }}
+    uses: ./.github/workflows/browser-e2e-groups.yml
+    secrets: inherit
+
   browser-e2e-summary:
     name: browser-e2e
     needs:
@@ -314,58 +321,14 @@ jobs:
       - verse-context-regression
       - browser-e2e
       - browser-e2e-features
+      - grouped-browser-e2e
     if: ${{ always() }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # This job is scheduled only after all required browser suites complete.
+    timeout-minutes: 10
     permissions:
-      actions: read
       statuses: write
     steps:
-      - name: Wait for the grouped browser E2E workflow
-        id: groups
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          STATUS_SHA: ${{ github.sha }}
-          EVENT_NAME: ${{ github.event_name }}
-          RUN_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
-          FULL_BROWSER_SUITE: ${{ needs.change-detection.outputs.full_browser_suite }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [[ "$EVENT_NAME" == "workflow_dispatch" || "$FULL_BROWSER_SUITE" != "true" ]]; then
-            echo "result=not_required" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-
-          for attempt in $(seq 1 120); do
-            response="$(curl --fail-with-body --silent --show-error \
-              -H "Authorization: Bearer $GH_TOKEN" \
-              -H "Accept: application/vnd.github+json" \
-              -H "X-GitHub-Api-Version: 2022-11-28" \
-              "${{ github.api_url }}/repos/${{ github.repository }}/actions/runs?head_sha=$RUN_SHA&per_page=100")"
-            group_run="$(jq -c --arg sha "$RUN_SHA" --arg event "$EVENT_NAME" \
-              '.workflow_runs | map(select(.name == "BLB Suite BROWSER E2E — GROUP A + GROUP B" and .head_sha == $sha and .event == $event)) | sort_by(.created_at) | last // empty' \
-              <<< "$response")"
-
-            if [[ -n "$group_run" ]]; then
-              group_status="$(jq -r '.status' <<< "$group_run")"
-              if [[ "$group_status" == "completed" ]]; then
-                group_result="$(jq -r '.conclusion // "failure"' <<< "$group_run")"
-                echo "Grouped browser E2E result: $group_result"
-                echo "result=$group_result" >> "$GITHUB_OUTPUT"
-                exit 0
-              fi
-              echo "Grouped browser E2E is $group_status (attempt $attempt/120)."
-            else
-              echo "Waiting for grouped browser E2E workflow to be created (attempt $attempt/120)."
-            fi
-            sleep 20
-          done
-
-          echo "Grouped browser E2E did not complete within 40 minutes."
-          echo "result=timeout" >> "$GITHUB_OUTPUT"
-          exit 1
-
       # One shell predicate determines both the published commit status and
       # the job result, preventing the status and required-check logic drifting.
       - name: Validate all applicable browser suites and publish final status
@@ -383,7 +346,7 @@ jobs:
           VERSE_CONTEXT_RESULT: ${{ needs.verse-context-regression.result }}
           REFERENCE_MATRIX_RESULT: ${{ needs.browser-e2e.result }}
           FEATURES_RESULT: ${{ needs.browser-e2e-features.result }}
-          GROUPS_RESULT: ${{ steps.groups.outputs.result }}
+          GROUPS_RESULT: ${{ needs.grouped-browser-e2e.result }}
         shell: bash
         run: |
           set -euo pipefail

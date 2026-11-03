@@ -998,20 +998,31 @@ test.describe('core user-visible E2E', () => {
     await page.evaluate(() => {
       const fixture = document.createElement('div');
       fixture.id = 'blb-e2e-substack-corinthians-reference';
+      fixture.setAttribute('data-blb-test-diagnostics', '');
       fixture.innerHTML = '<p>Essentially, you are asking yourself, “How do I apply the attributes of charity in <span>1</span> <span id="substack-cor1">Cor</span>. <span>13</span> in how I love my wife and how I live my life?”</p><p>See also <span>2</span> <span id="substack-cor2">Cor</span>. <span>13</span>.</p>';
       document.body.appendChild(fixture);
     });
 
     for (const { selector, expectedPath } of [
-      { selector: '#substack-cor1', expectedPath: '/kjv/1co/13/1/' },
-      { selector: '#substack-cor2', expectedPath: '/kjv/2co/13/1/' }
+      { selector: '#substack-cor1', expectedPath: '/kjv/1co/13/' },
+      { selector: '#substack-cor2', expectedPath: '/kjv/2co/13/' }
     ]) {
       await page.locator(selector).dblclick();
-      await activateBlbTabForPath(extensionWorker, expectedPath, {
-        fragment: selector,
-        selector: '#blb-e2e-substack-corinthians-reference',
-        selectedText: 'Cor'
-      });
+      try {
+        await activateBlbTabForPath(extensionWorker, expectedPath, {
+          fragment: selector,
+          selector: '#blb-e2e-substack-corinthians-reference',
+          selectedText: 'Cor'
+        });
+      } catch (error) {
+        const diagnostic = await page.locator('#blb-e2e-substack-corinthians-reference')
+          .getAttribute('data-blb-double-click-diagnostic');
+        const selectedText = await page.evaluate(() => window.getSelection()?.toString() || '');
+        throw new Error(
+          error.message + '; selectedText=' + JSON.stringify(selectedText) +
+          '; resolverDiagnostic=' + (diagnostic || 'not produced')
+        );
+      }
       await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
         for (const tab of tabs) {
           try {
@@ -1044,7 +1055,7 @@ test.describe('core user-visible E2E', () => {
     });
 
     await page.mouse.dblclick(point.x, point.y);
-    await activateBlbTabForPath(extensionWorker, '/kjv/1co/13/1/', {
+    await activateBlbTabForPath(extensionWorker, '/kjv/1co/13/', {
       fragment: 'plain-text',
       selector: '#blb-e2e-substack-corinthians-plain-text',
       selectedText: 'Cor'
@@ -2021,6 +2032,29 @@ test.describe('core user-visible E2E', () => {
       await assertDoubleClickPath(
         page, context, extensionWorker, '#ref .book-suffix',
         `/kjv/${book.urlKey}/${item.chapter}/1/`
+      );
+    }
+  });
+
+  test('Double-click abbreviated book names inherit the immediately following dotted multi-verse citation', async ({ page, context, extensionStorage, extensionWorker }) => {
+    const cases = [
+      {
+        label: 'Gal.',
+        html: '<p id="ref"><span class="book-token">Gal.</span><span class="citation-token">1.8,9</span></p>',
+        expectedPath: '/kjv/gal/1/8-9/'
+      },
+      {
+        label: 'Rev.',
+        html: '<p id="ref"><span class="book-token">Rev.</span><span class="citation-token">14.6,7</span></p>',
+        expectedPath: '/kjv/rev/14/6-7/'
+      }
+    ];
+
+    for (const item of cases) {
+      await setupDoubleClickReferencePage(page, extensionStorage, item.html);
+      await runDoubleClickReferenceToken(
+        page, context, extensionWorker, '#ref .book-token',
+        item.label.slice(0, -1), item.expectedPath
       );
     }
   });

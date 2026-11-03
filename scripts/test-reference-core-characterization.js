@@ -31,7 +31,34 @@ function tuples(input) {
   ));
 }
 
+
+// Every canonical KJV book must accept both chapter-verse separators.
+// This is exhaustive across the 66-book table, rather than a sample of books.
+const books = vm.runInContext('BOOKS', context);
+assert.equal(books.length, 66, 'the regression matrix must cover all 66 KJV books');
+for (const book of books) {
+  for (const separator of [':', '.']) {
+    const input = `${book.name} 1${separator}1`;
+    assert.deepEqual(
+      tuples(input),
+      [[book.name, 1, 1, 1]],
+      `expected ${book.name} to resolve with separator "${separator}" in: ${input}`
+    );
+  }
+}
+
 // Full references, verse ranges, and Unicode dash normalization.
+assert.deepEqual(tuples('Luke 22.26'), [['luke', 22, 26, 26]]);
+assert.deepEqual(tuples('Romans 1.3-4'), [['romans', 1, 3, 4]]);
+assert.deepEqual(tuples('1 Tim. 1.15, 16'), [
+  ['1 timothy', 1, 15, 15],
+  ['1 timothy', 1, 16, 16]
+]);
+assert.deepEqual(tuples('John 3.16,17; 4.8'), [
+  ['john', 3, 16, 16],
+  ['john', 3, 17, 17],
+  ['john', 4, 8, 8]
+]);
 assert.deepEqual(tuples('Romans 1:3–4'), [['romans', 1, 3, 4]]);
 assert.deepEqual(tuples('John 3:16'), [['john', 3, 16, 16]]);
 assert.deepEqual(tuples('1 John 2:3-5'), [['1 john', 2, 3, 5]]);

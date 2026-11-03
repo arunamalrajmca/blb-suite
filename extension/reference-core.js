@@ -203,7 +203,7 @@ function resolveBibleReferenceText(text, options = {}) {
   };
 
   let m;
-  const colonRangeRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)\s*:\s*(-?\d+)\s*[-–—]\s*(-?\d+)(?:[a-z])?(?![A-Za-z0-9])/gi;
+  const colonRangeRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)\s*[:.]\s*(-?\d+)\s*[-–—]\s*(-?\d+)(?:[a-z])?(?![A-Za-z0-9])/gi;
   while ((m = colonRangeRe.exec(source))) {
     if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
     const match = resolveBibleBookCapture(m);
@@ -285,7 +285,7 @@ function resolveBibleReferenceText(text, options = {}) {
 
   // Match both shorthand forms in one pass so context always comes from the
   // immediately preceding reference already encountered in the source.
-  const shorthandEntryRe = /[,;]\s*(\d+)\s*:\s*(\d+)(?:\s*[-–—]\s*(\d+))?(?![A-Za-z0-9])|,\s*(\d+)(?!\s*[:.]\s*\d)(?![A-Za-z0-9])(?!\s+[A-Za-z])/g;
+  const shorthandEntryRe = /[,;]\s*(\d+)\s*[:.]\s*(\d+)(?:\s*[-–—]\s*(\d+))?(?![A-Za-z0-9])|,\s*(\d+)(?!\s*[:.]\s*\d)(?![A-Za-z0-9])(?!\s+[A-Za-z])/g;
   while ((m = shorthandEntryRe.exec(source))) {
     const entryStart = m.index + m[0].search(/\d/);
     const prior = findPriorReference(m.index);
