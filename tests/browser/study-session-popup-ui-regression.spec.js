@@ -1,5 +1,16 @@
 const { test, expect } = require('./fixtures');
 
+async function waitForStudyPopupReady(page) {
+  await page.waitForFunction(
+    () => !document.body.classList.contains('popup-loading') &&
+      !document.body.classList.contains('sensitive-restricted'),
+    null,
+    { timeout: 10000 }
+  );
+  await expect(page.locator('#studyTopic')).toBeVisible();
+  await expect(page.locator('#studyTopic')).toBeEnabled();
+}
+
 test('Study Sessions popup starts recording, saves a note, and stops without losing history', async ({
   context,
   extensionId,
@@ -10,6 +21,7 @@ test('Study Sessions popup starts recording, saves a note, and stops without los
 
   const page = await context.newPage();
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(page);
 
   const topic = 'Popup UI regression ' + Date.now();
   const note = 'Note saved through the visible popup controls';
@@ -59,6 +71,7 @@ test('Study Sessions popup pauses and restarts the selected recording without cr
   await extensionStorage.clear();
   const page = await context.newPage();
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(page);
   const topic = 'Popup pause resume ' + Date.now();
   const normalizedTopic = topic.split(' ').map(word =>
     word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
@@ -99,6 +112,7 @@ test('Study Sessions popup rejects an empty topic without starting a recording',
   await extensionStorage.clear();
   const page = await context.newPage();
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(page);
 
   await expect(page.locator('#startTopic')).toBeDisabled();
   await expect(page.locator('#studyStatus')).not.toContainText('Recording started');
