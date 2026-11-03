@@ -935,7 +935,6 @@ test('direct ChurchofJesusChrist and Mercy House verse URLs resolve to exact BLB
     expect(await page.evaluate(() => window.__redirectedTo || null), source.url).toBe(source.expected);
   }
 });
-\n
 
 test('OpenBible, Crossway and Sarata individual verse links open the exact BLB KJV passage', async ({ page }) => {
   const cases = [
