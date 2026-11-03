@@ -47,7 +47,65 @@ const assertValue = (result, key, value, scenario) => {
   assert.equal(result.values[key], String(value), scenario + ': ' + key + ' expected ' + value + ', got ' + result.values[key] + '\n' + result.output);
 };
 
+
+function auditRepositoryTestInventory() {
+  const selectorSource = fs.readFileSync(selector, 'utf8');
+  const mappedBlock = selectorSource.match(/const mappedSpecs = new Set\(\[([\s\S]*?)\]\);/);
+  assert.ok(mappedBlock, 'browser selector must expose its complete mappedSpecs inventory');
+  const mappedSpecs = new Set([...mappedBlock[1].matchAll(/["'](tests\/browser\/[^"']+\.spec\.js)["']/g)]
+    .map(match => match[1]));
+  const browserSpecs = fs.readdirSync(path.join(root, 'tests/browser'))
+    .filter(file => file.endsWith('.spec.js'))
+    .map(file => 'tests/browser/' + file);
+  const missingMappings = browserSpecs.filter(file => !mappedSpecs.has(file));
+  const staleMappings = [...mappedSpecs].filter(file => !fs.existsSync(path.join(root, file)));
+  assert.deepEqual(missingMappings, [], 'every browser spec must be mapped to focused CI coverage');
+  assert.deepEqual(staleMappings, [], 'focused CI mappings must not point at deleted browser specs');
+
+  const workflowPath = path.join(root, '.github/workflows/manual-full-test-audit.yml');
+  const workflow = fs.readFileSync(workflowPath, 'utf8');
+  const auditCoverage = [
+    ['all browser spec files', /for spec in tests\/browser\/\*\.spec\.js/],
+    ['all standalone JavaScript tests', /for test_file in scripts\/test-\*\.js/],
+    ['all selector tests', /node --test tests\/selector\/\*\.test\.mjs/],
+    ['all Python unittest files', /python -m unittest discover -s tests -p 'test_\*\.py'/],
+    ['KJV corpus integrity', /node regression-suite\/tests\/kjv-corpus-integrity\.mjs extension/],
+    ['package regression group', /--group=package/],
+    ['resolver regression group', /--group=resolver/],
+    ['selection regression group', /--group=selection/],
+    ['features regression group', /--group=features/]
+  ];
+  for (const [label, pattern] of auditCoverage) {
+    assert.match(workflow, pattern, 'full-test audit must execute ' + label);
+  }
+
+  const testFiles = [
+    ...browserSpecs,
+    ...fs.readdirSync(path.join(root, 'tests/selector'))
+      .filter(file => file.endsWith('.test.mjs'))
+      .map(file => 'tests/selector/' + file),
+    ...fs.readdirSync(path.join(root, 'scripts'))
+      .filter(file => /^test-.*\.js$/.test(file))
+      .map(file => 'scripts/' + file),
+    ...fs.readdirSync(path.join(root, 'tests'))
+      .filter(file => /^test_.*\.py$/.test(file))
+      .map(file => 'tests/' + file)
+  ];
+  const focusedTests = [];
+  const obsoleteLocalhostTests = [];
+  for (const file of testFiles) {
+    const source = fs.readFileSync(path.join(root, file), 'utf8');
+    if (/\btest\.(?:only|describe\.only)|\bdescribe\.only/.test(source)) focusedTests.push(file);
+    if (/localhost:8000|127\.0\.0\.1:8000/.test(source)) obsoleteLocalhostTests.push(file);
+  }
+  assert.deepEqual(focusedTests, [], 'no committed test may use test.only/describe.only');
+  assert.deepEqual(obsoleteLocalhostTests, [], 'removed localhost:8000 behavior must not retain obsolete tests');
+  console.log('PASS: inventory covers ' + browserSpecs.length + ' browser specs and every full-audit test category');
+}
+
+
 try {
+  auditRepositoryTestInventory();
   run(['git', 'init', '-q']);
   run(['git', 'config', 'user.name', 'CI Routing Test']);
   run(['git', 'config', 'user.email', 'ci-routing@example.invalid']);
