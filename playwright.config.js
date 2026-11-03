@@ -7,8 +7,9 @@ module.exports = defineConfig({
   expect: { timeout: 10000 },
   fullyParallel: false,
   workers: 1,
-  // Continue through the complete selected suite after failures so every
-  // existing test in each changed browser spec still reports its result.
+  // Keep feedback fast by stopping each Playwright invocation after its first
+  // failure. The full repository audit isolates every test case in its own
+  // invocation so one failure cannot suppress later test cases.
   maxFailures: 1,
   retries: 0,
   reporter: [['./tests/browser/progress-reporter.js'], ['html', { outputFolder: 'playwright-report', open: 'never' }], ['json', { outputFile: 'test-results/results.json' }]],
