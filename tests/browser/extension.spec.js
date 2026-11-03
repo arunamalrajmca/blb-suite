@@ -324,7 +324,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('all 66 canonical book suffixes resolve through all four selection actions', async ({ page, extensionStorage, extensionWorker }) => {
+  test('all 66 canonical book suffixes resolve through all four actions with both separators', async ({ page, extensionStorage, extensionWorker }) => {
     test.setTimeout(900000);
     await extensionStorage.set({
       masterEnabled: true,
@@ -348,15 +348,17 @@ test.describe('core user-visible E2E', () => {
       for (const book of items) {
         const words = book.name.trim().split(/\s+/);
         const suffix = words.pop();
-        const row = document.createElement('p');
-        row.id = 'all-66-book-row-' + book.bookNumber;
-        if (words.length) row.appendChild(document.createTextNode(words.join(' ') + ' '));
-        const token = document.createElement('span');
-        token.id = 'all-66-book-suffix-' + book.bookNumber;
-        token.textContent = suffix;
-        row.appendChild(token);
-        row.appendChild(document.createTextNode(' 1:1'));
-        article.appendChild(row);
+        for (const separator of [':', '.']) {
+          const row = document.createElement('p');
+          row.id = 'all-66-book-row-' + (separator === ':' ? 'colon' : 'dot') + '-' + book.bookNumber;
+          if (words.length) row.appendChild(document.createTextNode(words.join(' ') + ' '));
+          const token = document.createElement('span');
+          token.id = 'all-66-book-suffix-' + (separator === ':' ? 'colon' : 'dot') + '-' + book.bookNumber;
+          token.textContent = suffix;
+          row.appendChild(token);
+          row.appendChild(document.createTextNode(' 1' + separator + '1'));
+          article.appendChild(row);
+        }
       }
       document.body.appendChild(article);
     }, books);
@@ -364,78 +366,80 @@ test.describe('core user-visible E2E', () => {
     const failures = [];
     const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];
     for (const book of books) {
-      const selector = '#all-66-book-suffix-' + book.bookNumber;
       const expectedPath = '/kjv/' + book.urlKey + '/1/1/';
-      for (const action of actions) {
-        await page.bringToFront();
-        const beforeIds = await extensionWorker.evaluate(() =>
-          chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
-        );
-        try {
-          if (action === 'Double-Click') {
-            await page.evaluate(() => window.getSelection()?.removeAllRanges());
-            await page.locator(selector).dblclick();
-          } else {
-            await page.locator(selector).evaluate(element => {
-              const range = document.createRange();
-              range.selectNodeContents(element);
-              const selection = window.getSelection();
-              selection.removeAllRanges();
-              selection.addRange(range);
-              element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-            });
-            if (action === 'Show on BLB') {
-              const button = page.locator('#blb-suite-page-selection-button');
-              await expect(button).toBeVisible({ timeout: 5000 });
-              await button.click();
-            } else if (action === 'Alt+B') {
-              await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
-            } else {
-              const selectedText = await page.evaluate(() => window.getSelection()?.toString() || '');
-              await extensionWorker.evaluate(async text => {
-                const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-                if (!tab?.id) throw new Error('No active source tab for context-menu action');
-                await handleBlbSelectionContextMenuClick({ menuItemId: 'blb-suite-web-selection', selectionText: text }, tab);
-              }, selectedText);
-            }
-          }
-
-          let opened = null;
-          await expect.poll(async () => {
-            opened = await extensionWorker.evaluate(({ beforeIds, expectedPath }) =>
-              chrome.tabs.query({}).then(tabs => {
-                for (const tab of tabs) {
-                  if (tab.id == null || beforeIds.includes(tab.id)) continue;
-                  for (const value of [tab.pendingUrl, tab.url]) {
-                    try {
-                      const url = new URL(String(value || ''));
-                      if (url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath) {
-                        return { id: tab.id, path: url.pathname };
-                      }
-                    } catch (_) {}
-                  }
-                }
-                return null;
-              }), { beforeIds, expectedPath });
-            return opened?.path || '';
-          }, { timeout: 2500, message: action + ' must resolve ' + book.name + ' 1:1' }).toBe(expectedPath);
-        } catch (error) {
-          failures.push({ book: book.name, action, expectedPath, error: String(error.message || error) });
-        } finally {
-          await extensionWorker.evaluate(beforeIds => chrome.tabs.query({}).then(async tabs => {
-            for (const tab of tabs) {
-              if (tab.id == null || beforeIds.includes(tab.id)) continue;
-              try {
-                const url = new URL(String(tab.pendingUrl || tab.url || ''));
-                if (url.hostname === 'www.blueletterbible.org') await chrome.tabs.remove(tab.id);
-              } catch (_) {}
-            }
-          }), beforeIds);
+      for (const separator of ['colon', 'dot']) {
+        const selector = '#all-66-book-suffix-' + separator + '-' + book.bookNumber;
+        for (const action of actions) {
           await page.bringToFront();
+          const beforeIds = await extensionWorker.evaluate(() =>
+            chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
+          );
+          try {
+            if (action === 'Double-Click') {
+              await page.evaluate(() => window.getSelection()?.removeAllRanges());
+              await page.locator(selector).dblclick();
+            } else {
+              await page.locator(selector).evaluate(element => {
+                const range = document.createRange();
+                range.selectNodeContents(element);
+                const selection = window.getSelection();
+                selection.removeAllRanges();
+                selection.addRange(range);
+                element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+              });
+              if (action === 'Show on BLB') {
+                const button = page.locator('#blb-suite-page-selection-button');
+                await expect(button).toBeVisible({ timeout: 1800 });
+                await button.click();
+              } else if (action === 'Alt+B') {
+                await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+              } else {
+                const selectedText = await page.evaluate(() => window.getSelection()?.toString() || '');
+                await extensionWorker.evaluate(async text => {
+                  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+                  if (!tab?.id) throw new Error('No active source tab for context-menu action');
+                  await handleBlbSelectionContextMenuClick({ menuItemId: 'blb-suite-web-selection', selectionText: text }, tab);
+                }, selectedText);
+              }
+            }
+
+            let opened = null;
+            await expect.poll(async () => {
+              opened = await extensionWorker.evaluate(({ beforeIds, expectedPath }) =>
+                chrome.tabs.query({}).then(tabs => {
+                  for (const tab of tabs) {
+                    if (tab.id == null || beforeIds.includes(tab.id)) continue;
+                    for (const value of [tab.pendingUrl, tab.url]) {
+                      try {
+                        const url = new URL(String(value || ''));
+                        if (url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath) {
+                          return { id: tab.id, path: url.pathname };
+                        }
+                      } catch (_) {}
+                    }
+                  }
+                  return null;
+                }), { beforeIds, expectedPath });
+              return opened?.path || '';
+            }, { timeout: 1200, message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
+          } catch (error) {
+            failures.push({ book: book.name, separator, action, expectedPath, error: String(error.message || error) });
+          } finally {
+            await extensionWorker.evaluate(beforeIds => chrome.tabs.query({}).then(async tabs => {
+              for (const tab of tabs) {
+                if (tab.id == null || beforeIds.includes(tab.id)) continue;
+                try {
+                  const url = new URL(String(tab.pendingUrl || tab.url || ''));
+                  if (url.hostname === 'www.blueletterbible.org') await chrome.tabs.remove(tab.id);
+                } catch (_) {}
+              }
+            }), beforeIds);
+            await page.bringToFront();
+          }
         }
       }
     }
-    expect(failures, 'all four actions must resolve the suffix token for every canonical book: ' + JSON.stringify(failures, null, 2)).toEqual([]);
+    expect(failures, 'all four actions must resolve every canonical book suffix with both separators: ' + JSON.stringify(failures, null, 2)).toEqual([]);
   });
 
   test('Generic article verse cues follow the latest explicit chapter context', async ({ page, extensionStorage, extensionWorker }) => {
