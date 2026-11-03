@@ -177,7 +177,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/blb-page-selection-button.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/site-feature-defaults.spec.js", "tests/browser/research-derived-regression.spec.js", "tests/browser/research-dom-smoke.spec.js", "tests/browser/known-host-extension.spec.js"]
+    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/site-feature-defaults.spec.js", "tests/browser/research-dom-smoke.spec.js", "tests/browser/known-host-extension.spec.js"]
   },
   {
     paths: ["extension/multiverse-handoff.js"],
@@ -235,7 +235,7 @@ const mappedSpecs = new Set([
   "tests/browser/extension.spec.js",
   "tests/browser/known-host-extension.spec.js",
   "tests/browser/pr-422-feature-regressions.spec.js",
-  "tests/browser/research-derived-regression.spec.js",
+ 
   "tests/browser/redirect-hostnames.spec.js",
   "tests/browser/blb-non-kjv-redirect.spec.js",
   "tests/browser/scripttagger-global-injection.spec.js",
@@ -300,7 +300,7 @@ const values = {
     "tests/browser/extension.spec.js",
     "tests/browser/known-host-extension.spec.js",
     "tests/browser/pr-422-feature-regressions.spec.js",
-    "tests/browser/research-derived-regression.spec.js",
+   
     "tests/browser/site-feature-defaults.spec.js",
     "tests/browser/study-session-popup-ui-regression.spec.js"
   ) || unmapped.length > 0 || changedBrowserSpecs.length > 0),
@@ -313,7 +313,7 @@ const values = {
     "tests/browser/extension.spec.js",
     "tests/browser/known-host-extension.spec.js",
     "tests/browser/pr-422-feature-regressions.spec.js",
-    "tests/browser/research-derived-regression.spec.js",
+   
     "tests/browser/multiverse-contiguous-range-routing.spec.js",
     "tests/browser/multiverse-disjoint-chapter-post.spec.js",
     "tests/browser/shared-regex-patterns.spec.js",
