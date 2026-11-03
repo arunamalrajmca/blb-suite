@@ -2029,13 +2029,11 @@ test.describe('core user-visible E2E', () => {
     const cases = [
       {
         label: 'Gal.',
-        citation: '1.8,9',
         html: '<p id="ref"><span class="book-token">Gal.</span><span class="citation-token">1.8,9</span></p>',
         expectedPath: '/kjv/gal/1/8-9/'
       },
       {
         label: 'Rev.',
-        citation: '14.6,7',
         html: '<p id="ref"><span class="book-token">Rev.</span><span class="citation-token">14.6,7</span></p>',
         expectedPath: '/kjv/rev/14/6-7/'
       }
@@ -2045,7 +2043,7 @@ test.describe('core user-visible E2E', () => {
       await setupDoubleClickReferencePage(page, extensionStorage, item.html);
       await runDoubleClickReferenceToken(
         page, context, extensionWorker, '#ref .book-token',
-        item.label.replace(/\\.$/, ''), item.expectedPath
+        item.label.slice(0, -1), item.expectedPath
       );
     }
   });
