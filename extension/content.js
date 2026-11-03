@@ -656,9 +656,9 @@ function getSelectionContextPosition() {
               continue;
             }
             const blockLike = /^(ADDRESS|ARTICLE|ASIDE|BLOCKQUOTE|DD|DIV|DL|DT|FIELDSET|FIGCAPTION|FIGURE|FOOTER|FORM|H[1-6]|HEADER|LI|MAIN|NAV|OL|P|PRE|SECTION|TABLE|TR|UL)$/.test(tag);
-            if (blockLike && pieces.length && !/\s$/.test(pieces[pieces.length - 1])) pieces.push(' ');
+            if (blockLike && pieces.length && !/\\s$/.test(pieces[pieces.length - 1])) pieces.push(' ');
             walk(child);
-            if (blockLike && pieces.length && !/^\s/.test(pieces[pieces.length - 1])) pieces.push(' ');
+            if (blockLike && pieces.length && !/^\\s/.test(pieces[pieces.length - 1])) pieces.push(' ');
           }
         }
       };
@@ -770,13 +770,13 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
   entries.sort((a, b) => b.name.length - a.name.length);
 
   for (const entry of entries) {
-    const escaped = entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\s+');
+    const escaped = entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
     const patterns = [
-      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\s+|\\.\s*)(\\d{1,3})\s*[:.]\s*(\\d{1,3})(?:\s*[-–—]\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])', 'gi'),
-      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})\s*:\s*(\\d{1,3})(?:\s*[-–—]\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])', 'gi'),
-      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')\s+(\\d{1,3})\s+(\\d{1,3})(?=$|[^A-Za-z0-9])', 'gi'),
-      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\s+|\\.\s*)(\\d{1,3})(?!\s*[:.]\s*\\d)(?=$|[^A-Za-z0-9])', 'gi'),
-      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})(?!\s*:\s*\\d)(?=$|[^A-Za-z0-9])', 'gi')
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.\\s*)(\\d{1,3})\\s*[:.]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])', 'gi'),
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])', 'gi'),
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')\\s+(\\d{1,3})\\s+(\\d{1,3})(?=$|[^A-Za-z0-9])', 'gi'),
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.\\s*)(\\d{1,3})(?!\\s*[:.]\\s*\\d)(?=$|[^A-Za-z0-9])', 'gi'),
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})(?!\\s*:\\s*\\d)(?=$|[^A-Za-z0-9])', 'gi')
     ];
     for (let patternIndex = 0; patternIndex < patterns.length; patternIndex++) {
       const pattern = patterns[patternIndex];
@@ -947,16 +947,16 @@ function resolveBibleReferenceFromContextWindowCore(text, selectionStart, select
   }
   contextualBookForms.sort((a, b) => b.name.length - a.name.length);
   const explicitBookPattern = contextualBookForms
-    .map(entry => entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\s+'))
+    .map(entry => entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'))
     .join('|');
   const nextExplicitBookCitationRe = new RegExp(
-    '(?<![A-Za-z0-9])(?:' + explicitBookPattern + ')(?:\s+|\\.\s*)\\d{1,3}\s*:\s*\\d{1,3}',
+    '(?<![A-Za-z0-9])(?:' + explicitBookPattern + ')(?:\\s+|\\.\\s*)\\d{1,3}\\s*:\\s*\\d{1,3}',
     'gi'
   );
   for (const entry of contextualBookForms) {
-    const escaped = entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\s+');
+    const escaped = entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
     const explicitRefRe = new RegExp(
-      '(?<![A-Za-z0-9])' + escaped + '(?:\s+|\\.\s*)(\\d{1,3})\s*:\s*(\\d{1,3})(?:\s*[-–—]\s*(\\d{1,3}))?',
+      '(?<![A-Za-z0-9])' + escaped + '(?:\\s+|\\.\\s*)(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?',
       'gi'
     );
     let explicitMatch;
@@ -1046,9 +1046,9 @@ function resolveBibleReferenceFromContextWindowCore(text, selectionStart, select
   }
   compactBookEntries.sort((a,b) => b.name.length-a.name.length);
   for (const entry of compactBookEntries) {
-    const escaped = entry.name.replace(/[.*+?^$()|[\]{}\\]/g, '\\$&').replace(/\s+/g, '\s+');
+    const escaped = entry.name.replace(/[.*+?^$()|[\]{}\\]/g, '\\$&').replace(/\s+/g, '\\s+');
     const compactPattern = new RegExp(
-      `(?:^|[^A-Za-z0-9])${escaped}(\\d{1,3})(?::(\\d{1,3})(?:\s*[-–]\s*(\\d{1,3}))?)?(?=$|[^A-Za-z0-9])`,
+      `(?:^|[^A-Za-z0-9])${escaped}(\\d{1,3})(?::(\\d{1,3})(?:\\s*[-–]\\s*(\\d{1,3}))?)?(?=$|[^A-Za-z0-9])`,
       'gi'
     );
     let compactMatch;
@@ -1577,7 +1577,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         ...Object.keys(BOOK_ALIASES || {})
       ].filter(Boolean);
       return labels.some(label => {
-        const escaped = String(label).replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\s+');
+        const escaped = String(label).replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
         return new RegExp('(?:^|[^A-Za-z0-9])' + escaped + '(?=$|[^A-Za-z0-9]|\\d)', 'i').test(value);
       });
     };
@@ -1905,7 +1905,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // in elements (as X commonly does).
       const exactPhysicalLabel = normalizeSelectionText(
         exactPhysicalTarget?.textContent || ''
-      ).normalize('NFKC').match(/^(?:([1-3])|(I{1,3}))\s+(.+)$/i);
+      ).normalize('NFKC').match(/^(?:([1-3])|(I{1,3}))\\s+(.+)$/i);
       // When Facebook wraps "2 Samuel" as one bidi-isolated label, use
       // that label's DOM boundaries for both sides of the citation. A caret
       // Range can end before the closing isolate, which otherwise makes the
@@ -2304,9 +2304,9 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           entries.sort((a, b) => b.name.length - a.name.length);
           const candidates = [];
           for (const entry of entries) {
-            const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\s+');
+            const escaped = entry.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
             const pattern = new RegExp(
-              `(?:^|[^A-Za-z0-9])${escaped}\\.?\s+(\\d{1,3})(?:(?::|\\.)\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])`,
+              `(?:^|[^A-Za-z0-9])${escaped}\\.?\\s+(\\d{1,3})(?:(?::|\\.)\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])`,
               'gi'
             );
             let match;
@@ -2567,7 +2567,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       const escapeRegex = part => part.replace(/[.*+?^\${}()|[\]\\]/g, '\\$&');
       const parts = value.split(/\s+/).map(part => escapeRegex(part).replace(/[\u2010-\u2015\u2212]/g, '-').replace(/-/g, '[-\\u2010-\\u2015\\u2212]'));
       if (!parts.length) return [];
-      const pattern = new RegExp(parts.join('\s+'), 'gi');
+      const pattern = new RegExp(parts.join('\\s+'), 'gi');
       const occurrences = [];
       let match;
       while ((match = pattern.exec(normalizedMatchSource))) {
@@ -3277,7 +3277,7 @@ function handleDoubleClickBlb(event) {
               : (event.target?.parentElement||event.target);
             const contextText=normalizeSelectionText(contextNode?.textContent||'').normalize('NFKC');
             const numberedBookSuffixPattern=numberedBookSuffixAliases.slice().sort((a,b)=>b.length-a.length).join('|');
-            const numberedBookSuffixRegex=new RegExp('(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\s+('+numberedBookSuffixPattern+')\\b','gi');
+            const numberedBookSuffixRegex=new RegExp('(?:^|[^A-Za-z0-9])([1-3]|I{1,3})\\s+('+numberedBookSuffixPattern+')\\b','gi');
             const suffixMatches=[...contextText.matchAll(numberedBookSuffixRegex)];
             // Repeated numbered-book references can share one Facebook post.
             // Select the prefix occurrence containing this physical gesture;
