@@ -504,7 +504,7 @@ function redirectBlbNet() {
 // This makes bare and "www." variants resolve to the same supported source.
 const REDIRECT_HOSTS = new Set([
   'bible.com', 'biblegateway.com', 'bibleref.com', 'biblehub.com',
-  'christianity.com', 'churchofjesuschrist.org', 'crosswalk.com', 'enduringword.com', 'esv.org', 'gotquestions.org', 'mercyhouseministry.com',
+  'christianity.com', 'churchofjesuschrist.org', 'crosswalk.com', 'enduringword.com', 'esv.org', 'gotquestions.org', 'mercyhouseministry.com', 'openbible.info', 'crossway.org', 'sarata.com',
   'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com',
   'bibleportal.com', 'kingjamesbibleonline.org', 'kjbo.org',
   'kjv.site', 'm.kjv.site', 'officialkingjamesbible.com', 'thekingsbible.com',
