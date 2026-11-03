@@ -773,10 +773,10 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
     const escaped = entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
     const patterns = [
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.\\s*)(\\d{1,3})\\s*[:.]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])', 'gi'),
-      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])', 'gi'),
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})\\s*[:.]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?=$|[^A-Za-z0-9])', 'gi'),
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')\\s+(\\d{1,3})\\s+(\\d{1,3})(?=$|[^A-Za-z0-9])', 'gi'),
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.\\s*)(\\d{1,3})(?!\\s*[:.]\\s*\\d)(?=$|[^A-Za-z0-9])', 'gi'),
-      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})(?!\\s*:\\s*\\d)(?=$|[^A-Za-z0-9])', 'gi')
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})(?!\\s*[:.]\\s*\\d)(?=$|[^A-Za-z0-9])', 'gi')
     ];
     for (let patternIndex = 0; patternIndex < patterns.length; patternIndex++) {
       const pattern = patterns[patternIndex];
@@ -881,7 +881,7 @@ function resolveBibleReferenceFromContextWindowCore(text, selectionStart, select
     const selectedBook = resolveBibleBook(selectedBookToken);
     if (selectedBook) {
       const followingCitation = source.slice(selectionEnd).match(
-        /^(?:\s+|\.(?=\d)\s*)(\d{1,3})\s*:\s*(\d{1,3}(?:\s*,\s*\d{1,3})+)/
+        /^(?:\s+|\.(?=\d)\s*)(\d{1,3})\s*[:.]\s*(\d{1,3}(?:\s*,\s*\d{1,3})+)/
       );
       if (followingCitation) {
         const chapter = Number(followingCitation[1]);
@@ -909,7 +909,7 @@ function resolveBibleReferenceFromContextWindowCore(text, selectionStart, select
   // verse, comma, or continuation verse) opens the consecutive range.
   // Separate comma continuations such as "Psalms 1:2, 105:1" still use the
   // exact selected-token rule below.
-  const verseListRe = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*:\s*(\d+(?:\s*,\s*\d+)+)/gi;
+  const verseListRe = /((?:[1-3]\s*|i{1,3}\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s+(\d+)\s*[:.]\s*(\d+(?:\s*,\s*\d+)+)/gi;
   let verseListMatch;
   while ((verseListMatch = verseListRe.exec(source))) {
     const book = resolveBibleBook(verseListMatch[1]);
@@ -950,13 +950,13 @@ function resolveBibleReferenceFromContextWindowCore(text, selectionStart, select
     .map(entry => entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+'))
     .join('|');
   const nextExplicitBookCitationRe = new RegExp(
-    '(?<![A-Za-z0-9])(?:' + explicitBookPattern + ')(?:\\s+|\\.\\s*)\\d{1,3}\\s*:\\s*\\d{1,3}',
+    '(?<![A-Za-z0-9])(?:' + explicitBookPattern + ')(?:\\s+|\\.\\s*)\\d{1,3}\\s*[:.]\\s*\\d{1,3}',
     'gi'
   );
   for (const entry of contextualBookForms) {
     const escaped = entry.name.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
     const explicitRefRe = new RegExp(
-      '(?<![A-Za-z0-9])' + escaped + '(?:\\s+|\\.\\s*)(\\d{1,3})\\s*:\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?',
+      '(?<![A-Za-z0-9])' + escaped + '(?:\\s+|\\.\\s*)(\\d{1,3})\\s*[:.]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?',
       'gi'
     );
     let explicitMatch;
@@ -973,13 +973,13 @@ function resolveBibleReferenceFromContextWindowCore(text, selectionStart, select
         nextExplicitBookCitation ? nextExplicitBookCitation.index : source.length
       );
       const tail = source.slice(tailStart, tailEnd);
-      const continuationRe = /,\s*(\d{1,3}(?:\s*:\s*\d{1,3})?(?:\s*[-–—]\s*\d{1,3})?)/g;
+      const continuationRe = /,\s*(\d{1,3}(?:\s*[:.]\s*\d{1,3})?(?:\s*[-–—]\s*\d{1,3})?)/g;
       let continuation;
       while ((continuation = continuationRe.exec(tail))) {
         const token = continuation[1].trim();
         const tokenStart = tailStart + continuation.index + continuation[0].lastIndexOf(continuation[1]);
         const tokenEnd = tokenStart + token.length;
-        const chapterVerse = token.match(/^(\d{1,3})\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?$/);
+        const chapterVerse = token.match(/^(\d{1,3})\s*[:.]\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?$/);
         let from;
         let to;
         if (chapterVerse) {
@@ -1048,7 +1048,7 @@ function resolveBibleReferenceFromContextWindowCore(text, selectionStart, select
   for (const entry of compactBookEntries) {
     const escaped = entry.name.replace(/[.*+?^$()|[\]{}\\]/g, '\\$&').replace(/\s+/g, '\\s+');
     const compactPattern = new RegExp(
-      `(?:^|[^A-Za-z0-9])${escaped}(\\d{1,3})(?::(\\d{1,3})(?:\\s*[-–]\\s*(\\d{1,3}))?)?(?=$|[^A-Za-z0-9])`,
+      `(?:^|[^A-Za-z0-9])${escaped}(\\d{1,3})(?:[:.](\\d{1,3})(?:\\s*[-–]\\s*(\\d{1,3}))?)?(?=$|[^A-Za-z0-9])`,
       'gi'
     );
     let compactMatch;
@@ -1313,7 +1313,7 @@ function getContextualBibleReference(selectionText) {
         afterRange.selectNodeContents(rangeBlock);
         afterRange.setStart(liveRange.endContainer, liveRange.endOffset);
         const afterText = afterRange.toString();
-        const following = afterText.match(/^\s*:\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
+        const following = afterText.match(/^\s*[:.]\s*(\d{1,3})(?:\s*[-–—]\s*(\d{1,3}))?/);
         if (following) {
           const from = Number(following[1]);
           const to = following[2] ? Number(following[2]) : from;
