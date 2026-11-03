@@ -1,6 +1,6 @@
 // Floating Show on BLB page-selection control and its lifecycle.
 (function (global) {
-  function initialize({ BLBShared, BOOKS, BOOK_ALIASES, KJV_CORPUS_WORD_INDEX, isNumberedBookSuffixCandidate, canonicalStrongValue, resolveBibleReference, resolveBibleBook, resolveBibleReferenceText, normalizeSelectionText, normalizeDoubleClickToken, getContextualBibleReference, safeRuntimeSendMessage, isSensitiveSiteHostname, isSensitiveSiteUrl, getSiteDefaultEnabled, refreshDoubleClickBlb, suiteSettingsReadyPromise, isSuiteEnabledNow, makeBlbMultiVerseButtonDraggable, getPageSelectionSiteKey }) {
+  function initialize({ BLBShared, BOOKS, BOOK_ALIASES, KJV_CORPUS_WORD_INDEX, isNumberedBookSuffixCandidate, getNumberedBookSuffixSearchText, canonicalStrongValue, resolveBibleReference, resolveBibleBook, resolveBibleReferenceText, normalizeSelectionText, normalizeDoubleClickToken, getContextualBibleReference, safeRuntimeSendMessage, isSensitiveSiteHostname, isSensitiveSiteUrl, getSiteDefaultEnabled, refreshDoubleClickBlb, suiteSettingsReadyPromise, isSuiteEnabledNow, makeBlbMultiVerseButtonDraggable, getPageSelectionSiteKey }) {
     // ---------- Floating page selection button ----------
     // This feature is intentionally dormant unless the user enables "Show on BLB".
     // Alt+B and right-click remain independent entry points.
@@ -8,6 +8,7 @@
     let blbPageButtonSelection = '';
     let blbPageButtonContextualReference = null;
     let blbPageButtonDirectUrl = null;
+    let blbPageButtonCriteriaSearchText = '';
     let lastSelectionContextualReference = null;
     let lastSelectionContextualText = '';
     let blbPageButtonVisible = false;
@@ -174,6 +175,7 @@
       blbPageButtonSelection = '';
       blbPageButtonContextualReference = null;
       blbPageButtonDirectUrl = null;
+      blbPageButtonCriteriaSearchText = '';
       lastSelectionContextualReference = null;
       lastSelectionContextualText = '';
       blbPageButtonVisible = false;
@@ -279,12 +281,16 @@
         const actionContextualReference = actionContext?.url
           ? actionContext
           : blbPageButtonContextualReference;
+        const actionCriteriaSearchText = actionContextualReference
+          ? ''
+          : (getNumberedBookSuffixSearchText?.(text) || blbPageButtonCriteriaSearchText);
         // Ignore stale content-script contexts if the extension was reloaded.
         safeRuntimeSendMessage({
           type:'blbSuiteOpenSelectionText',
           requestId:`show-on-blb-${Date.now()}-${++pageButtonRequestSequence}`,
           text,
           contextualReference: actionContextualReference || null,
+          ...(actionCriteriaSearchText ? {criteriaSearchText:actionCriteriaSearchText} : {}),
           directUrl: blbPageButtonDirectUrl || null,
           // A single-token floating-button action should follow the same fast path
           // as double-click: do not re-scan page context after the selection has
@@ -321,6 +327,7 @@
       blbPageButtonSelection = text;
       blbPageButtonContextualReference = null;
       blbPageButtonDirectUrl = null;
+      blbPageButtonCriteriaSearchText = '';
       // A same-text selection elsewhere on the page must not inherit the
       // previous occurrence's positional result.
       lastSelectionContextualReference = null;
@@ -338,6 +345,8 @@
           blbPageButtonContextualReference = doubleClickEquivalent;
           lastSelectionContextualReference = doubleClickEquivalent;
           lastSelectionContextualText = text;
+        } else if (isNumberedBookSuffixCandidate?.(text)) {
+          blbPageButtonCriteriaSearchText = getNumberedBookSuffixSearchText?.(text) || '';
         }
       }
 
@@ -358,13 +367,13 @@
         // "Th" selected). Resolve that narrow positional case before applying
         // the single-word fast reject; ordinary unknown words remain rejected.
         const isVerseCue = /^(?:verse|verses|v)$/i.test(text);
-        if (!isKjvWord && !isBookName && !isVerseCue && !isNumberedBookSuffixCandidate?.(text)) {
-          // The shared positional resolver already checked this token above.
-          // Do not reinterpret it through a second selection-specific path.
-          if (!blbPageButtonContextualReference) {
-            blbPageButtonSelection = '';
-            return;
-          }
+        if (!isKjvWord && !isBookName && !isVerseCue &&
+            !blbPageButtonContextualReference && !blbPageButtonCriteriaSearchText) {
+          // A numbered-book suffix is only actionable when the exact live
+          // selection has a valid adjacent ordinal. Merely matching an alias
+          // (for example, a standalone "Th") is not enough to expose the button.
+          blbPageButtonSelection = '';
+          return;
         }
       }
     
@@ -539,6 +548,7 @@
       blbPageButtonSelection = '';
       blbPageButtonContextualReference = null;
       blbPageButtonDirectUrl = null;
+      blbPageButtonCriteriaSearchText = '';
       lastSelectionContextualReference = null;
       lastSelectionContextualText = '';
       try { window.getSelection?.()?.removeAllRanges(); } catch (_) {}
