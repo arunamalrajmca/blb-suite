@@ -377,7 +377,7 @@ test('Facebook supplied div[dir=auto] DOM opens shorthand references from numeri
 });
 
 
-test('Facebook double-clicking a numbered-book suffix searches only the selected KJV word when no citation follows', async ({ page, extensionStorage, extensionWorker }) => {
+test('Facebook Double-Click keeps KJV word Timothy as a word search after a numbered-book prefix with no citation', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true } });
   await page.route('https://www.facebook.com/**', route => route.fulfill({
     status: 200,
@@ -449,7 +449,7 @@ test('Facebook Double-Click preserves the full comma-separated range when a numb
   }).toContain('/kjv/1ti/1/15-16/');
 });
 
-test('Facebook floating Show on BLB accepts a numbered-book suffix as a word search without a nearby citation', async ({ page, extensionStorage, extensionWorker }) => {
+test('Facebook floating Show on BLB keeps KJV word Timothy selectable after a numbered-book prefix with no citation', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({
     masterEnabled: true,
     pageSelectionButtonSites: { 'facebook.com': true, 'www.facebook.com': true }
