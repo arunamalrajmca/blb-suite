@@ -1894,8 +1894,12 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // so raw DOM offsets and normalized text offsets are not interchangeable.
       // Treat terminal periods as book-name punctuation (e.g. "Luke."),
       // but do not alter punctuation inside a reference or arbitrary prose.
+      // If the click is inside a rich text node (Facebook/X), the nearest
+      // element may be the entire paragraph rather than a book-token wrapper.
+      // In that case the exact physical Selection Range is authoritative;
+      // clickedWordText can include adjacent punctuation/citation characters.
       const exactClickedBookToken = normalizeSelectionText(
-        exactPhysicalTarget?.textContent || clickedWordText || selected
+        exactPhysicalTarget?.textContent || exactPhysicalRange?.toString() || clickedWordText || selected
       ).normalize('NFKC').replace(/^\.+|\.+$/g, '');
       const physicalBookAnchor = exactPhysicalTarget || exactPhysicalRange?.startContainer?.parentElement;
       const physicalBookContextRoot = selectionContextBlock(physicalBookAnchor) || messageRoot;
