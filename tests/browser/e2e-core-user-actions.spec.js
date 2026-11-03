@@ -1792,7 +1792,12 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
 
   // The book, chapter, and verse tokens must resolve identically with
   // either punctuation mark between chapter and verse.
-  for (const separator of [':','.']) {
+  for (const [separatorIndex, separator] of [':','.'].entries()) {
+    // Double-click requests on the same physical element are intentionally
+    // deduplicated for 1.2 seconds. This test reuses the exact same Facebook
+    // book node for both separator variants, so let that guard expire before
+    // exercising the second independent gesture.
+    if (separatorIndex > 0) await page.waitForTimeout(1250);
     await page.locator('#fb-luke-chapter').evaluate((element, value) => {
       const separatorNode = element.parentElement.nextSibling;
       if (!separatorNode || separatorNode.nodeType !== Node.TEXT_NODE) {
