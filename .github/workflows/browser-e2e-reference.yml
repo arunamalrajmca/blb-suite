@@ -292,13 +292,16 @@ jobs:
         run: |
           set -euo pipefail
           TEST_FILES="${{ matrix.files && join(matrix.files, ' ') || matrix.file || 'tests/browser/extension.spec.js' }}"
-          TEST_ARGS=()
+          TEST_FILTERS=()
           for spec in $TEST_FILES; do
-            # Playwright's configured testDir is tests/browser, so pass paths
-            # relative to that directory rather than repeating the prefix.
-            TEST_ARGS+=("${spec#tests/browser/}")
+            # Playwright combines multiple positional filters with AND. Match
+            # the selected basenames through one regex alternation instead.
+            filename="${spec##*/}"
+            escaped="$(printf '%s' "$filename" | sed -E 's/[][(){}.^$+*?|\\]/\\&/g')"
+            TEST_FILTERS+=("$escaped")
           done
-          npx playwright test "${TEST_ARGS[@]}" --grep "${{ matrix.grep }}"
+          TEST_FILTER="$(IFS='|'; printf '%s' "${TEST_FILTERS[*]}")"
+          npx playwright test "$TEST_FILTER" --grep "${{ matrix.grep }}"
       - name: Upload Playwright diagnostics — ${{ matrix.group }}
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
@@ -524,4 +527,12 @@ jobs:
         run: |
           set -euo pipefail
           IFS=',' read -r -a specs <<< "$FOCUSED_SPECS"
-          npx playwright test "${specs[@]}"
+          # Use one alternation filter for all changed files.
+          file_filters=()
+          for spec in "${specs[@]}"; do
+            filename="${spec##*/}"
+            escaped="$(printf '%s' "$filename" | sed -E 's/[][(){}.^$+*?|\\]/\\&/g')"
+            file_filters+=("$escaped")
+          done
+          file_filter="$(IFS='|'; printf '%s' "${file_filters[*]}")"
+          npx playwright test "$file_filter"
