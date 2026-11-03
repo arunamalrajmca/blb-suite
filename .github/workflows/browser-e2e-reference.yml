@@ -535,12 +535,10 @@ jobs:
         run: |
           set -euo pipefail
           IFS=',' read -r -a specs <<< "$FOCUSED_SPECS"
-          # Use one alternation filter for all changed files.
-          file_filters=()
-          for spec in "${specs[@]}"; do
-            filename="${spec##*/}"
-            escaped="$(printf '%s' "$filename" | sed -E 's/[][(){}.^$+*?|\\]/\\&/g')"
-            file_filters+=("$escaped")
-          done
-          file_filter="$(IFS='|'; printf '%s' "${file_filters[*]}")"
-          npx playwright test "$file_filter"
+          total="${#specs[@]}"
+          for index in "${!specs[@]}"; do
+            spec="${specs[$index]}"
+            [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
+            printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
+            npx playwright test "$spec"
+          fi
