@@ -2045,12 +2045,12 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           ...Object.keys(BOOK_ALIASES || {})
         ].filter(Boolean).map(label => normalizeBibleReferenceText(label).replace(/[.]$/g, '').trim())
           .filter(label => {
-            const parts = label.split(/\\s+/);
+            const parts = label.split(/\s+/);
             return parts.length > 1 && normalizeBibleBookKey(parts[parts.length - 1]) === selectedSuffix;
           })
           .sort((a, b) => b.length - a.length);
         for (const label of labels) {
-          const prefix = normalizeBibleBookKey(label.split(/\\s+/).slice(0, -1).join(' '));
+          const prefix = normalizeBibleBookKey(label.split(/\s+/).slice(0, -1).join(' '));
           if (!prefix || !(precedingText === prefix || precedingText.endsWith(' ' + prefix))) continue;
           const book = resolveBibleBook(label);
           if (book) return book;
