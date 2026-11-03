@@ -18,24 +18,24 @@
 
     let url;
     try { url = new URL(anchor.href, location.href); } catch (_) { return; }
-    const host = location.hostname.toLowerCase().replace(/^www\\./, "");
+    const host = location.hostname.toLowerCase().replace(/^www\./, "");
     if (!["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com",
           "churchofjesuschrist.org", "mercyhouseministry.com"].includes(host)) return;
-    const label = String(anchor.innerText || anchor.textContent || "").replace(/\\s+/g, " ").trim();
-    const targetHost = url.hostname.toLowerCase().replace(/^www\\./, "");
+    const label = String(anchor.innerText || anchor.textContent || "").replace(/\s+/g, " ").trim();
+    const targetHost = url.hostname.toLowerCase().replace(/^www\./, "");
     const isChristianityPassage = host === "christianity.com" &&
       targetHost === "christianity.com" &&
-      /^\\/bible\\/[^/]+\\/[^/]+\\/\\d+(?:-\\d+(?:-\\d+)?)?\\/?$/i.test(url.pathname);
+      /^\/bible\/[^/]+\/[^/]+\/\d+(?:-\d+(?:-\d+)?)?\/?$/i.test(url.pathname);
     const isChurchOfJesusChristVerse = host === "churchofjesuschrist.org" &&
       targetHost === "churchofjesuschrist.org" &&
-      /^\\/study\\/scriptures\\/(?:ot|nt)\\/[^/]+\\/\\d+\\/?$/i.test(url.pathname) &&
-      /^p\\d+(?:-p?\\d+)?$/i.test(url.searchParams.get("id") || "");
+      /^\/study\/scriptures\/(?:ot|nt)\/[^/]+\/\d+\/?$/i.test(url.pathname) &&
+      /^p\d+(?:-p?\d+)?$/i.test(url.searchParams.get("id") || "");
     const isMercyHouseVerse = host === "mercyhouseministry.com" &&
       targetHost === "mercyhouseministry.com" &&
-      /^\\/bible\\/?$/i.test(url.pathname) &&
+      /^\/bible\/?$/i.test(url.pathname) &&
       Boolean(url.searchParams.get("b") && url.searchParams.get("c") &&
-        /^\\d+(?:[-–]\\d+)?$/.test(url.searchParams.get("v") || ""));
-    const isReferenceLabel = /^(?:[1-3]\\s*)?[A-Za-z][A-Za-z .'-]*\\s+\\d+(?::\\d+(?:[-–]\\d+)?|\\s+\\d+(?:[-–]\\d+)?)?(?:\\s*\\((?:KJV|NKJV|ESV|NIV|NASB|CSB|NLT|WEB|AMP|RSV|ASV)\\))?$/i.test(label);
+        /^\d+(?:[-–]\d+)?$/.test(url.searchParams.get("v") || ""));
+    const isReferenceLabel = /^(?:[1-3]\s*)?[A-Za-z][A-Za-z .'-]*\s+\d+(?::\d+(?:[-–]\d+)?|\s+\d+(?:[-–]\d+)?)?(?:\s*\((?:KJV|NKJV|ESV|NIV|NASB|CSB|NLT|WEB|AMP|RSV|ASV)\))?$/i.test(label);
     if (!isChristianityPassage && !isChurchOfJesusChristVerse &&
         !isMercyHouseVerse && !isReferenceLabel) return;
 
