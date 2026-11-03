@@ -125,7 +125,7 @@ test('DailyVerses shows its BLB references button only on non-homepage pages', a
 
   await page.goto('https://www.dailyverses.net/faith', { waitUntil: 'domcontentloaded' });
   const button = page.locator('#blb-suite-dailyverses-multiverse');
-  await expect(button).toHaveText('Open Bible References on BLB');
+  await expect(button).toHaveText('Open Bible References in BLB');
   await button.click();
 
   await expect.poll(async () => extensionWorker.evaluate(async () => {
