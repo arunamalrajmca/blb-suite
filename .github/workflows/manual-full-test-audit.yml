@@ -94,36 +94,30 @@ jobs:
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
           BLB_PERF_OUTPUT: ${{ runner.temp }}/blb-performance.jsonl
-          BLB_PLAYWRIGHT_TEST_LIST: ${{ runner.temp }}/blb-playwright-test-ids.txt
-          BLB_PLAYWRIGHT_TEST_METADATA: ${{ runner.temp }}/blb-playwright-list-metadata.json
           NO_COLOR: '1'
           FORCE_COLOR: '0'
         shell: bash
         run: |
           : > "$BLB_PERF_OUTPUT"
-          list_output="$RUNNER_TEMP/blb-playwright-list.log"
-          test_list="$BLB_PLAYWRIGHT_TEST_LIST"
-          list_metadata="$BLB_PLAYWRIGHT_TEST_METADATA"
-          if ! npx playwright test --list --reporter=./scripts/playwright-test-id-reporter.js > "$list_output" 2>&1; then
+          list_output="$RUNNER_TEMP/blb-playwright-list.txt"
+          test_list="$RUNNER_TEMP/blb-playwright-test-list.txt"
+          if ! npx playwright test --list --reporter=list > "$list_output" 2>&1; then
             cat "$list_output"
             exit 1
           fi
           cat "$list_output"
-          # Validate the reporter output before starting 376+ isolated invocations.
-          # The file must contain opaque Playwright test IDs, never source locations.
-          if [[ ! -s "$test_list" || ! -s "$list_metadata" ]]; then
-            echo "Playwright test-ID reporter did not produce its required output files."
-            exit 1
-          fi
+          # --test-list expects the complete entry emitted by --list, including
+          # project, spec location, suite path, and test title. A bare file:line:column
+          # is not a test-list entry and silently selects zero tests.
+          sed -nE 's/^[[:space:]]*(\\[[^]]+\\] › [^[:space:]]+\\.spec\\.js:[0-9]+:[0-9]+ › .*)$/\\1/p' "$list_output" > "$test_list"
           total=$(wc -l < "$test_list" | tr -d ' ')
           expected_specs=$(find tests/browser -maxdepth 1 -type f -name '*.spec.js' | wc -l | tr -d ' ')
-          listed_specs=$(node -e "const m=require(process.argv[1]); console.log(m.files.length)" "$list_metadata")
-          reported_total=$(node -e "const m=require(process.argv[1]); console.log(m.total)" "$list_metadata")
-          echo "Browser test IDs discovered: $total"
+          listed_specs=$(sed -nE 's/^[[:space:]]*\\[[^]]+\\] › ([^[:space:]]+\\.spec\\.js):[0-9]+:[0-9]+ › .*/\\1/p' "$test_list" | sort -u | wc -l | tr -d ' ')
+          echo "Browser test cases discovered: $total"
           echo "Browser spec files expected: $expected_specs"
           echo "Browser spec files represented: $listed_specs"
-          if [[ "$total" -eq 0 || "$total" -ne "$reported_total" || "$listed_specs" -ne "$expected_specs" ]]; then
-            echo "Playwright's test-ID report does not cover every browser test/spec file."
+          if [[ "$total" -eq 0 || "$listed_specs" -ne "$expected_specs" ]]; then
+            echo "Playwright's test list does not cover every browser spec file."
             exit 1
           fi
 
