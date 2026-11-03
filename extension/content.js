@@ -1564,6 +1564,19 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     };
     let selected = normalizeSelectionText(selectionText).normalize('NFKC');
 
+    // A numbered-list serial such as "1." is also a supported numeric book
+    // selector when it is visibly the first token in its own list block.
+    // Normalize only that verified label to its digits before positional
+    // resolution so all four actions share the same Genesis/Exodus book path.
+    if (/^\d+\.$/.test(selected) && isNumberedListSerialDoubleClick(selected, event)) {
+      selected = selected.slice(0, -1);
+    }
+    const initialNode = target instanceof Element ? target : (target?.parentElement || null);
+    const messageRoot = initialNode?.closest?.(
+      '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
+      '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
+      '.entry-content, .article-body, .article-content, .content-body'
+    ) || initialNode?.closest?.('article, main, [role="main"]');
     // Resolve a numbered-book suffix from its exact live Range before the
     // broader word/context fallbacks. Require an immediately adjacent ordinal
     // on the left and a numeric chapter on the right in this same semantic
@@ -1630,19 +1643,6 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     const numberedSuffixCitation = resolveNumberedSuffixCitationAtRange();
     if (numberedSuffixCitation) return numberedSuffixCitation;
 
-    // A numbered-list serial such as "1." is also a supported numeric book
-    // selector when it is visibly the first token in its own list block.
-    // Normalize only that verified label to its digits before positional
-    // resolution so all four actions share the same Genesis/Exodus book path.
-    if (/^\d+\.$/.test(selected) && isNumberedListSerialDoubleClick(selected, event)) {
-      selected = selected.slice(0, -1);
-    }
-    const initialNode = target instanceof Element ? target : (target?.parentElement || null);
-    const messageRoot = initialNode?.closest?.(
-      '[data-ad-comet-preview="message"], [role="article"], article, main, [role="main"], ' +
-      '[itemprop="articleBody"], .dt-post-body, .available-content, .post-content, ' +
-      '.entry-content, .article-body, .article-content, .content-body'
-    ) || initialNode?.closest?.('article, main, [role="main"]');
     // Facebook can put a chapter range on one line and the actual verse
     // citation on the next line (for example, "Luke 21-22" followed by
     // "Luke 22:26 KJV"). A click on the first line's book name or range-end
