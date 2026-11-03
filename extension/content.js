@@ -1891,16 +1891,16 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // that selected token so book clicks retain the immediately following range.
     const selectedBookCitation = (() => {
       const token = normalizeSelectionText(selected).normalize('NFKC')
-        .replace(/[\\u061C\\u200B-\\u200F\\u202A-\\u202E\\u2060\\u2066-\\u2069\\uFEFF]/g, '')
-        .replace(/[\\u00A0\\u2007\\u202F]/g, ' ');
+        .replace(/[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '')
+        .replace(/[\u00A0\u2007\u202F]/g, ' ');
       const labels = [
         ...(BOOKS || []).flatMap(book => [book.name, book.urlKey]),
         ...Object.keys(BOOK_ALIASES || {})
-      ].filter(Boolean).map(label => String(label).replace(/\\.+$/g, '').trim())
+      ].filter(Boolean).map(label => String(label).replace(/\.+$/g, '').trim())
         .filter(Boolean).sort((a, b) => b.length - a.length);
       for (const label of labels) {
-        const escaped = label.replace(/[.*+?^$()|[\\]\\\\]/g, '\\\\$&').replace(/\\s+/g, '\\\\s+');
-        const match = token.match(new RegExp('^(' + escaped + ')\\\\.\\\\s*(?=\\\\d{1,3}[.:])', 'i'));
+        const escaped = label.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s+');
+        const match = token.match(new RegExp('^(' + escaped + ')\\.\\s*(?=\\d{1,3}[.:])', 'i'));
         if (!match) continue;
         const book = resolveBibleBook(label);
         if (book) return { bookLabel: match[1], book, citationText: token.slice(match[0].length) };
