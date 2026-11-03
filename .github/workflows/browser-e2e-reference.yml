@@ -42,8 +42,50 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  cancel-superseded-runs:
+    name: Cancel older References runs for this PR
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      pull-requests: read
+    steps:
+      - name: Cancel older queued or running attempts for this PR
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          CURRENT_RUN_ID: ${{ github.run_id }}
+          CURRENT_RUN_NUMBER: ${{ github.run_number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # This endpoint is scoped to this workflow file, then we additionally
+          # match the PR number and only cancel runs older than this execution.
+          stale_runs="$(gh api --paginate \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/browser-e2e-reference.yml/runs?per_page=100" \
+            --jq '.workflow_runs[]
+              | select(.id != (env.CURRENT_RUN_ID | tonumber))
+              | select(.run_number < (env.CURRENT_RUN_NUMBER | tonumber))
+              | select([.pull_requests[].number] | index(env.PR_NUMBER | tonumber) != null)
+              | select(.status == "queued" or .status == "in_progress" or .status == "waiting")
+              | .id')"
+
+          if [[ -z "$stale_runs" ]]; then
+            echo "No older queued or running References runs found for PR #$PR_NUMBER."
+            exit 0
+          fi
+
+          while IFS= read -r run_id; do
+            [[ -n "$run_id" ]] || continue
+            echo "Cancelling superseded References run $run_id for PR #$PR_NUMBER."
+            gh api --silent --method POST \
+              "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/cancel"
+          done <<< "$stale_runs"
+
   change-detection:
     name: Select requested CI suite
+    needs: cancel-superseded-runs
     runs-on: ubuntu-latest
     permissions:
       statuses: write
