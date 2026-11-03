@@ -9,7 +9,7 @@ module.exports = defineConfig({
   workers: 1,
   // Continue through the complete selected suite after failures so every
   // existing test in each changed browser spec still reports its result.
-  maxFailures: 0,
+  maxFailures: 1,
   retries: 0,
   reporter: [['./tests/browser/progress-reporter.js'], ['html', { outputFolder: 'playwright-report', open: 'never' }], ['json', { outputFile: 'test-results/results.json' }]],
   use: {
