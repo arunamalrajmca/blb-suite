@@ -329,7 +329,6 @@ test('Mercy House shows its BLB references button on article pages and collects 
   await expect(page.locator('#blb-suite-mercyhouse-multiverse-status'))
     .toContainText('Opening 2 Bible references in BLB MultiVerse');
 });
-\n
 
 test('OpenBible, Crossway and Sarata show BLB collection buttons on content pages and collect their verse links', async ({
   page, context, extensionStorage, extensionWorker
