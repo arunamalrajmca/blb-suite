@@ -85,7 +85,7 @@ function auditRepositoryTestInventory() {
   const workflow = fs.readFileSync(workflowPath, 'utf8');
   const auditCoverage = [
     ['all browser test cases are collected with Playwright list output', /npx playwright test --list --reporter=list/],
-    ['isolated test-list entries retain project, location, and title', /\\.spec\\.js:\\[0-9\\]+:\\[0-9\\]+ ›/],
+    ['isolated test-list entries retain project, location, and title', /\.spec\.js:\[0-9\]+:\[0-9\]+ ›/],
     ['full audit reruns when a labeled pull request receives new commits', /types: \[labeled, synchronize\]/],
     ['each browser test case is isolated with maxFailures one', /npx playwright test --test-list .*--max-failures=1/],
     ['every browser spec file is represented in the collected list', /find tests\/browser -maxdepth 1 -type f -name '\*\.spec\.js'/],
