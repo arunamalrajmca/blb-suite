@@ -84,9 +84,10 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       # Deliberately bypass select-browser-specs.mjs, changed-file routing,
-      # group routing, and workflow-level spec filters. Playwright receives the
-      # entire tests/browser suite in one command. Its own explicit test.skip()
-      # conditions remain visible in the report.
+      # group routing, and workflow-level spec filters. Invoke every browser
+      # spec file separately so one failed spec cannot prevent later spec files
+      # from running. Keep the repository's configured maxFailures: 1 intact;
+      # explicit test.skip() conditions remain visible in each spec report.
       - name: Run every browser spec without CI selector filtering
         id: browser
         continue-on-error: true
@@ -95,7 +96,21 @@ jobs:
           BLB_PERF_OUTPUT: ${{ runner.temp }}/blb-performance.jsonl
         run: |
           : > "$BLB_PERF_OUTPUT"
-          npx playwright test --max-failures=0
+          failures=0
+          specs_run=0
+          for spec in tests/browser/*.spec.js; do
+            specs_run=$((specs_run + 1))
+            echo "=== [$specs_run] Running complete spec file: $spec ==="
+            if npx playwright test "$spec"; then
+              echo "PASS: $spec"
+            else
+              echo "FAIL: $spec"
+              failures=$((failures + 1))
+            fi
+          done
+          echo "Browser spec files executed: $specs_run"
+          echo "Browser spec files with failures: $failures"
+          if [[ "$specs_run" -eq 0 || "$failures" -gt 0 ]]; then exit 1; fi
 
       - name: Restore production manifest before package checks
         if: always()
