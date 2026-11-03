@@ -40,7 +40,7 @@ concurrency:
   # Bump the group generation so a legacy stuck run cannot hold up the current PR run.
   # Future PR commits still cancel older runs within this new generation.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-gate-v4
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   change-detection:
