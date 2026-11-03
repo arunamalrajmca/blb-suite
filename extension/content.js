@@ -2097,7 +2097,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // in elements (as X commonly does).
       const exactPhysicalLabel = normalizeSelectionText(
         exactPhysicalTarget?.textContent || ''
-      ).normalize('NFKC').match(/^(?:([1-3])|(I{1,3}))\\s+(.+)$/i);
+      ).normalize('NFKC').match(/^(?:([1-3])|(I{1,3}))\s+(.+)$/i);
       // When Facebook wraps "2 Samuel" as one bidi-isolated label, use
       // that label's DOM boundaries for both sides of the citation. A caret
       // Range can end before the closing isolate, which otherwise makes the
