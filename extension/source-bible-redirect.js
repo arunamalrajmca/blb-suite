@@ -82,6 +82,17 @@
     }
   }
 
+  if (host==="sarata.com") {
+    // Sarata chapter pages use the fragment #chapter:verse (and may
+    // include a verse range). Redirect only when an exact verse fragment exists.
+    const m=u.pathname.match(/^\/bible\/chapter\/([^/]+)\.(\d+)\.html$/i);
+    const fragment=u.hash.match(/^#(\d+):(\d+)(?:-(\d+))?$/);
+    if(m&&fragment&&Number(fragment[1])===Number(m[2])) {
+      const book=m[1].replace(/-([123])$/," $1").replace(/-/g," ");
+      ref={book,chapter:+m[2],from:+fragment[2],to:fragment[3]?+fragment[3]:null};
+    }
+  }
+
   if (host==="biblegateway.com" && u.pathname.toLowerCase()==="/passage/") {
     // The version=... parameter is deliberately ignored; always target KJV.
     ref=parseRef(u.searchParams.get("search")||"");
