@@ -1636,6 +1636,26 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         const listedTo = verses.length ? verses[verses.length - 1] : from;
         const to = citation[3] ? Number(citation[3]) : (consecutive ? listedTo : from);
         const resolved = resolveBibleReference(book.name, chapter, from, to);
+        const diagnosticRoot = block.closest?.('[data-blb-test-diagnostics]');
+        if (diagnosticRoot) {
+          diagnosticRoot.setAttribute(
+            'data-blb-double-click-diagnostic',
+            JSON.stringify({
+              selected,
+              clickedWordText: range.toString(),
+              physicalLabel: anchor instanceof Element ? (anchor.textContent || '') : '',
+              clickedBookToken: selected,
+              clickedBook: book.name,
+              prefixText,
+              followingText,
+              followingCitation: citation[0] || null,
+              parsedChapter: chapter,
+              parsedVerses: verses,
+              parsedRangeEnd: citation[3] ? Number(citation[3]) : null,
+              resolvedReference: resolved || null
+            })
+          );
+        }
         if (resolved) return resolved;
       }
       return null;
@@ -2203,10 +2223,10 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             const to = followingCitation[3]
               ? Number(followingCitation[3])
               : (consecutive ? listedTo : from);
-            // A book-name double-click followed by a chapter-only token
-            // keeps the established chapter-to-verse-1 fallback.
+            // Preserve chapter URLs for ordinary book-name selections;
+            // numbered-book suffixes use the exact-range resolver above.
             const bookClickReference = from == null
-              ? resolveBibleReference(exactClickedBook.name, chapter, 1)
+              ? resolveBibleReference(exactClickedBook.name, chapter)
               : resolveBibleReference(exactClickedBook.name, chapter, from, to);
             writeFacebookDoubleClickDiagnostic({
               followingCitation: followingCitation[0],
