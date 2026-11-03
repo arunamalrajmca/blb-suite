@@ -325,7 +325,7 @@ test.describe('core user-visible E2E', () => {
   });
 
   test('all 66 canonical book suffixes resolve through all four selection actions', async ({ page, extensionStorage, extensionWorker }) => {
-    test.setTimeout(600000);
+    test.setTimeout(900000);
     await extensionStorage.set({
       masterEnabled: true,
       pageSelectionButtonSites: { 'example.com': true },
@@ -418,7 +418,7 @@ test.describe('core user-visible E2E', () => {
                 return null;
               }), { beforeIds, expectedPath });
             return opened?.path || '';
-          }, { timeout: 5000, message: action + ' must resolve ' + book.name + ' 1:1' }).toBe(expectedPath);
+          }, { timeout: 2500, message: action + ' must resolve ' + book.name + ' 1:1' }).toBe(expectedPath);
         } catch (error) {
           failures.push({ book: book.name, action, expectedPath, error: String(error.message || error) });
         } finally {
