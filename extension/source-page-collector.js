@@ -11,7 +11,8 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
         "enduringword.com":"enduringword",
         "rediscover.bible":"rediscover",
         "sagacityweb.com":"sagacity",
-        "thetreasuryofscriptureknowledge.com":"treasury"
+        "thetreasuryofscriptureknowledge.com":"treasury",
+        "dailyverses.net":"dailyverses"
       })[host] || "";
       // These sites' homepages are general landing pages, not article/reference
       // pages. Keep the page-wide collection button limited to nested pages.
@@ -205,7 +206,9 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
           const button = document.createElement("button");
           button.id = buttonId;
           button.type = "button";
-          button.textContent = "Open Bible References in BLB";
+          button.textContent = sourceSite === "dailyverses"
+            ? "Open Bible References on BLB"
+            : "Open Bible References in BLB";
           button.title = "Collect all linked Bible references on this page and open them together in BLB MultiVerse.";
           button.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:2147483647;background:#292a2d;color:#f1f3f4;border:1px solid #505257;border-radius:7px;padding:9px 12px;font:600 13px Arial,sans-serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.42)";
           button.addEventListener("click", event => {
