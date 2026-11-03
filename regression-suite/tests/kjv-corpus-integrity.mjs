@@ -19,7 +19,8 @@ for (const file of [
   'kjv-corpus-verses.js',
   'kjv-corpus-phrase-index.js',
   'kjv-corpus-original-case.js',
-  'kjv-corpus-case-verse-index.js'
+  'kjv-corpus-case-verse-index.js',
+  'regex-patterns.js'
 ]) vm.runInContext(read(file), context, { filename: file });
 
 const books = vm.runInContext('BOOKS', context);
@@ -27,6 +28,13 @@ const verses = vm.runInContext('KJV_CORPUS_VERSES', context);
 const originalCase = vm.runInContext('KJV_CORPUS_ORIGINAL_CASE', context);
 const words = vm.runInContext('KJV_CORPUS_WORD_INDEX', context);
 const postings = vm.runInContext('KJV_CORPUS_WORD_VERSE_INDEX', context);
+const sensitiveKeywords = vm.runInContext('BLBShared.sensitiveSiteUrlKeywords', context);
+assert(Array.isArray(sensitiveKeywords), 'Sensitive-site URL keywords must be an array');
+const sensitiveKjvWords = sensitiveKeywords
+  .map(keyword => String(keyword).toLowerCase())
+  .filter(keyword => words.has(keyword));
+assert.deepEqual(sensitiveKjvWords, [],
+  'Sensitive-site URL keywords must not contain KJV corpus words: ' + sensitiveKjvWords.join(', '));
 
 assert(Array.isArray(books) && books.length === 66, 'Expected 66 canonical books; got ' + books?.length);
 assert(Array.isArray(verses), 'KJV_CORPUS_VERSES must be an array');

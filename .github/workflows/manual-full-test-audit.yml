@@ -106,8 +106,7 @@ jobs:
             exit 1
           fi
           cat "$list_output"
-          grep -E 'tests/browser/[^[:space:]]+\.spec\.js:[0-9]+:[0-9]+' "$list_output" |
-            sed -E 's/^[[:space:]]*//' > "$test_list" || true
+          sed -nE 's/^.*› ([^[:space:]]+\\.spec\\.js:[0-9]+:[0-9]+).*/tests\\/browser\\/\\1/p' "$list_output" > "$test_list"
 
           total=$(wc -l < "$test_list" | tr -d ' ')
           expected_specs=$(find tests/browser -maxdepth 1 -type f -name '*.spec.js' | wc -l | tr -d ' ')

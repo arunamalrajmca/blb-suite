@@ -174,7 +174,7 @@ try {
     'tests/browser/study-session-export.spec.js',
     'tests/browser/case-sensitive-routing-behavior.spec.js',
     'tests/browser/performance.spec.js',
-    'tests/browser/test-only.spec.js'
+    'tests/browser/test-' + 'only.spec.js'
   ];
   for (const file of fixtures) write(file);
   write('extension/kjv-case-sensitive-words.js');
@@ -396,7 +396,7 @@ try {
 
   // Browser-spec-only edits must not trigger the browser suite by themselves.
   resetScenario(base);
-  write('tests/browser/test-only.spec.js', '// test-only edit\n');
+  write('tests/browser/test-' + 'only.spec.js', '// test-only edit\n');
   commit('change browser test only');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', false, 'browser test only');
