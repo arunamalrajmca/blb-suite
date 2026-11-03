@@ -309,7 +309,7 @@ test('Facebook supplied div[dir=auto] DOM opens shorthand references from numeri
     outer.innerHTML = '<div class="xdj266r x14z9mp xat24cr x1lziwak x1vvkbs x126k92a"></div>' +
       '<div class="x14z9mp xat24cr x1lziwak x1vvkbs xtlvy1s x126k92a"><div id="godliness-paragraph" dir="auto" style="text-align:start"></div></div>';
     const paragraph = outer.querySelector('#godliness-paragraph');
-    paragraph.textContent = '1 Timothy 3:16 And without controversy great is the mystery of godliness: God was manifest in the flesh [the mystery of godliness is that Christ is manifesting Himself through the believers Gal. 2:20, 4:6; Rom. 5:5, 8:9; 1 Cor. 6:19; 2 Cor. 1:22, 4:7, 10, 11; Eph. 3:16, 17; Phil. 2:13; Col. 1:27; 2 Tim. 1:7] justified in the Spirit [we are declared justified when His Spirit is in us Rom. 3:26], seen of angels [the angels are watching us 1 Cor. 4:9, 1 Cor. 11:10; Eph. 3:10], preached unto the Gentiles [Paul preached Jesus Christ according to the revelation of the mystery Rom. 16:25-27; Acts 13:42, 18:6, 28:28; Rom. 11:11-13; Col. 1:23], believed on in the world [Eph. 1:7, 13, 14, 2:8, 9; Col. 1:6], received up into glory [1 Thess. 4:15-17; 1 Cor. 15:51-53].';
+    paragraph.textContent = '1 Timothy 3:16 And without controversy great is the mystery of godliness: God was manifest in the flesh [the mystery of godliness is that Christ is manifesting Himself through the believers Gal. 2:20, 4:6; Rom. 5:5, 8:9; 1 Cor. 6:19; 2 Cor. 1:22, 4:7, 10, 11; Eph. 3:16, 17; Phil. 2:13; Col. 1:27; 2 Tim. 1:7] justified in the Spirit [we are declared justified when His Spirit is in us Rom. 3:26], seen of angels [the angels are watching us 1 Cor. 4:9, 1 Cor. 11:10; Eph. 3:10], preached unto the Gentiles [Paul preached Jesus Christ according to the revelation of the mystery Rom. 16:25-27; Acts 13:42, 18:6, 28:28; Rom. 11:11-13; Col. 1:23], believed on in the world [Eph. 1:7, 13, 14, 2:8, 9; Col. 1:6], received up into glory [1 Thess. 4:15-17; 1 Cor. 15:51-53]. Gal.1.8,9 and Rev.14.6,7.';
     outer.style.cssText = 'max-width:900px;margin:24px auto;padding:16px;background:#fff;color:#111;font:20px/1.6 Arial,sans-serif;';
     document.body.appendChild(outer);
   });
@@ -321,6 +321,8 @@ test('Facebook supplied div[dir=auto] DOM opens shorthand references from numeri
     { context: 'Gal. 2:20, 4:6', token: '6', expected: '/kjv/gal/4/6/' },
     { context: '2 Cor. 1:22, 4:7, 10, 11', token: '10', expected: '/kjv/2co/4/10/' },
     { context: 'Acts 13:42, 18:6, 28:28', token: '28', expected: '/kjv/act/28/28/' }
+    ,{ context: 'Gal.1.8,9', token: 'Gal', expected: '/kjv/gal/1/8-9/' }
+    ,{ context: 'Rev.14.6,7', token: 'Rev', expected: '/kjv/rev/14/6-7/' }
   ];
   for (const item of cases) {
     const point = await page.evaluate(({ context, token, occurrence }) => {
