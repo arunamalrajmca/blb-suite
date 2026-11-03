@@ -37,9 +37,9 @@ on:
 # Keep one active run per PR: newer commits supersede outdated PR runs.
 # Pushes to main and manual runs keep their own ref-based group and are not cancelled.
 concurrency:
-  # Bump the group generation so a stale run cannot hold up the current PR run.
+  # Bump the group generation to release the stale PR run that is holding the current run pending.
   # Future PR commits still supersede older runs within this generation.
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-gate-v7
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-gate-v8
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
