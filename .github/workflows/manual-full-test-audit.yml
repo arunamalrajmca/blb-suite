@@ -44,7 +44,7 @@ jobs:
         run: cp extension/manifest.json "$RUNNER_TEMP/blb-manifest-original.json"
 
       - name: Grant test-only generic host access
-        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; for (const cs of (m.content_scripts||[])) cs.matches=[...(cs.matches||[]),'https://example.com/*','https://www.supplyofgrace.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
 
       - name: Validate extension build and module contracts
         id: build
@@ -92,8 +92,8 @@ jobs:
         id: browser
         continue-on-error: true
         env:
-          BLB_EXPECTED_VERSION: \${{ steps.version.outputs.version }}
-          BLB_PERF_OUTPUT: \${{ runner.temp }}/blb-performance.jsonl
+          BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
+          BLB_PERF_OUTPUT: ${{ runner.temp }}/blb-performance.jsonl
         shell: bash
         run: |
           : > "$BLB_PERF_OUTPUT"
@@ -104,12 +104,12 @@ jobs:
             exit 1
           fi
           cat "$list_output"
-          grep -E 'tests/browser/[^[:space:]]+\\.spec\\.js:[0-9]+:[0-9]+' "$list_output" |
+          grep -E 'tests/browser/[^[:space:]]+\.spec\\.js:[0-9]+:[0-9]+' "$list_output" |
             sed -E 's/^[[:space:]]*//' > "$test_list" || true
 
           total=$(wc -l < "$test_list" | tr -d ' ')
           expected_specs=$(find tests/browser -maxdepth 1 -type f -name '*.spec.js' | wc -l | tr -d ' ')
-          listed_specs=$(grep -oE 'tests/browser/[^[:space:]]+\\.spec\\.js' "$test_list" | sort -u | wc -l | tr -d ' ')
+          listed_specs=$(grep -oE 'tests/browser/[^[:space:]]+\.spec\\.js' "$test_list" | sort -u | wc -l | tr -d ' ')
           echo "Browser test cases discovered: $total"
           echo "Browser spec files expected: $expected_specs"
           echo "Browser spec files represented: $listed_specs"
@@ -126,8 +126,8 @@ jobs:
           current_log="$RUNNER_TEMP/blb-current-test.log"
           while IFS= read -r test_id; do
             executed=$((executed + 1))
-            printf '[%s/%s] %s\\n' "$executed" "$total" "$test_id"
-            printf '%s\\n' "$test_id" > "$current_test"
+            printf '[%s/%s] %s\n' "$executed" "$total" "$test_id"
+            printf '%s\n' "$test_id" > "$current_test"
             command_status=0
             npx playwright test --test-list "$current_test" --max-failures=1 > "$current_log" 2>&1 || command_status=$?
             cat "$current_log"
