@@ -37,7 +37,7 @@ on:
 # Keep one active run per PR: newer commits supersede outdated PR runs.
 # Pushes to main and manual runs keep their own ref-based group and are not cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-gate-v2
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}-gate-v3
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -169,7 +169,7 @@ jobs:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: npx playwright test tests/browser/extension.spec.js --grep 'Generic article verse cues follow the latest explicit chapter context|Article verse cues resolve context outside Facebook'
       - name: Upload generic verse-context diagnostics
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: blb-suite-generic-verse-context-gate
@@ -237,7 +237,7 @@ jobs:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: npx playwright test ${{ matrix.files && join(matrix.files, ' ') || matrix.file || 'tests/browser/extension.spec.js' }} --grep "${{ matrix.grep }}"
       - name: Upload Playwright diagnostics — ${{ matrix.group }}
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: blb-suite-browser-e2e-references-${{ matrix.group }}
@@ -297,7 +297,7 @@ jobs:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
         run: npx playwright test tests/browser/extension.spec.js --grep 'MV3 service worker|popup loads|Show on BLB|Alt\+B toggle enforcement'
       - name: Upload Playwright diagnostics — FEATURES
-        if: always()
+        if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v4
         with:
           name: blb-suite-browser-e2e-features
