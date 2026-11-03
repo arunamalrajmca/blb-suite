@@ -33,7 +33,7 @@ assert(Array.isArray(sensitiveKeywords), 'Sensitive-site URL keywords must be an
 const sensitiveKjvWords = sensitiveKeywords
   .map(keyword => String(keyword).toLowerCase())
   .filter(keyword => words.has(keyword));
-assert.deepEqual(sensitiveKjvWords, [],
+assert.equal(sensitiveKjvWords.length, 0,
   'Sensitive-site URL keywords must not contain KJV corpus words: ' + sensitiveKjvWords.join(', '));
 
 assert(Array.isArray(books) && books.length === 66, 'Expected 66 canonical books; got ' + books?.length);
