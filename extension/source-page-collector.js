@@ -206,9 +206,7 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
           const button = document.createElement("button");
           button.id = buttonId;
           button.type = "button";
-          button.textContent = sourceSite === "dailyverses"
-            ? "Open Bible References on BLB"
-            : "Open Bible References in BLB";
+          button.textContent = "Open Bible References in BLB";
           button.title = "Collect all linked Bible references on this page and open them together in BLB MultiVerse.";
           button.style.cssText = "position:fixed;right:18px;bottom:18px;z-index:2147483647;background:#292a2d;color:#f1f3f4;border:1px solid #505257;border-radius:7px;padding:9px 12px;font:600 13px Arial,sans-serif;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.42)";
           button.addEventListener("click", event => {
