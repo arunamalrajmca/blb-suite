@@ -20,7 +20,7 @@
     try { url = new URL(anchor.href, location.href); } catch (_) { return; }
     const host = location.hostname.toLowerCase().replace(/^www\./, "");
     if (!["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com",
-          "churchofjesuschrist.org", "mercyhouseministry.com"].includes(host)) return;
+          "churchofjesuschrist.org", "mercyhouseministry.com", "openbible.info", "crossway.org", "sarata.com"].includes(host)) return;
     const label = String(anchor.innerText || anchor.textContent || "").replace(/\s+/g, " ").trim();
     const targetHost = url.hostname.toLowerCase().replace(/^www\./, "");
     const isChristianityPassage = host === "christianity.com" &&
@@ -35,9 +35,12 @@
       /^\/bible\/?$/i.test(url.pathname) &&
       Boolean(url.searchParams.get("b") && url.searchParams.get("c") &&
         /^\d+(?:[-–]\d+)?$/.test(url.searchParams.get("v") || ""));
+    const isSarataVerse = host === "sarata.com" && targetHost === "sarata.com" &&
+      /^\/bible\/chapter\/[^/]+\.\d+\.html$/i.test(url.pathname) &&
+      /^#\d+:\d+(?:-\d+)?$/.test(url.hash);
     const isReferenceLabel = /^(?:[1-3]\s*)?[A-Za-z][A-Za-z .'-]*\s+\d+(?::\d+(?:[-–]\d+)?|\s+\d+(?:[-–]\d+)?)?(?:\s*\((?:KJV|NKJV|ESV|NIV|NASB|CSB|NLT|WEB|AMP|RSV|ASV)\))?$/i.test(label);
     if (!isChristianityPassage && !isChurchOfJesusChristVerse &&
-        !isMercyHouseVerse && !isReferenceLabel) return;
+        !isMercyHouseVerse && !isSarataVerse && !isReferenceLabel) return;
 
     const request = new CustomEvent("blb-suite-source-passage-click", {
       detail: JSON.stringify({ href:url.href, label }),
