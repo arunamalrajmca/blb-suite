@@ -96,12 +96,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          config_path=".playwright-single-file.config.cjs"
-          trap 'rm -f "$config_path"' EXIT
-          cat > "$config_path" <<'PLAYWRIGHT_CONFIG'
-          const base = require('./playwright.config.js');
-          module.exports = { ...base, testMatch: [process.env.PLAYWRIGHT_TEST_MATCH] };
-          PLAYWRIGHT_CONFIG
           IFS=',' read -r -a changed_specs <<< "$CHANGED_BROWSER_SPECS"
           specs=()
           for spec in "${changed_specs[@]}"; do
@@ -120,9 +114,8 @@ jobs:
             for index in "${!specs[@]}"; do
               spec="${specs[$index]}"
               [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
-              filename="${spec##*/}"
               printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-              PLAYWRIGHT_TEST_MATCH="**/$filename" npx playwright test --config="$config_path"
+              npx playwright test "$spec"
             done
           else
             echo "All changed browser specs are covered by the required browser-e2e gate."
@@ -239,20 +232,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          config_path=".playwright-single-file.config.cjs"
-          trap 'rm -f "$config_path"' EXIT
-          cat > "$config_path" <<'PLAYWRIGHT_CONFIG'
-          const base = require('./playwright.config.js');
-          module.exports = { ...base, testMatch: [process.env.PLAYWRIGHT_TEST_MATCH] };
-          PLAYWRIGHT_CONFIG
           IFS=',' read -r -a specs <<< "$UNMAPPED_SPECS"
           total="${#specs[@]}"
           for index in "${!specs[@]}"; do
             spec="${specs[$index]}"
             [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
-            filename="${spec##*/}"
             printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-            PLAYWRIGHT_TEST_MATCH="**/$filename" npx playwright test --config="$config_path"
+            npx playwright test "$spec"
           done
 
 
