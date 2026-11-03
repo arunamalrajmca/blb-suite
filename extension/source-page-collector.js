@@ -30,10 +30,10 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
           function parseSourceVerseUrl(href) {
             let url;
             try { url = new URL(href, location.href); } catch (_) { return null; }
-            const host = url.hostname.toLowerCase().replace(/^www\\./, "");
+            const host = url.hostname.toLowerCase().replace(/^www\./, "");
             if (sourceSite === "churchofjesuschrist" && host === "churchofjesuschrist.org") {
-              const path = url.pathname.match(/^\\/study\\/scriptures\\/(?:ot|nt)\\/([^/]+)\\/(\\d+)\\/?$/i);
-              const verses = (url.searchParams.get("id") || "").match(/^p(\\d+)(?:-p?(\\d+))?$/i);
+              const path = url.pathname.match(/^\/study\/scriptures\/(?:ot|nt)\/([^/]+)\/(\d+)\/?$/i);
+              const verses = (url.searchParams.get("id") || "").match(/^p(\d+)(?:-p?(\d+))?$/i);
               if (!path || !verses) return null;
               return {
                 book: path[1].replace(/-/g, " "),
@@ -43,10 +43,10 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
               };
             }
             if (sourceSite === "mercyhouse" && host === "mercyhouseministry.com" &&
-                /^\\/bible\\/?$/i.test(url.pathname)) {
+                /^\/bible\/?$/i.test(url.pathname)) {
               const book = url.searchParams.get("b");
               const chapter = Number(url.searchParams.get("c"));
-              const verses = (url.searchParams.get("v") || "").match(/^(\\d+)(?:[-–](\\d+))?$/);
+              const verses = (url.searchParams.get("v") || "").match(/^(\d+)(?:[-–](\d+))?$/);
               if (!book || !Number.isInteger(chapter) || chapter < 1 || !verses) return null;
               return {
                 book,
