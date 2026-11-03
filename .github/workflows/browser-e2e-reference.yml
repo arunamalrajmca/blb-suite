@@ -62,7 +62,7 @@ jobs:
 
           # This endpoint is scoped to this workflow file, then we additionally
           # match the PR number and only cancel runs older than this execution.
-          stale_runs="$(gh api \
+          stale_runs="$(gh api -X GET \
             -f branch="$GITHUB_HEAD_REF" \
             -f event=pull_request \
             -f per_page=100 \
