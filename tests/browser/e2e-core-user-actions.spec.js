@@ -1679,7 +1679,8 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
         '<div dir="auto" id="fb-luke-chapter-range">Luke 21-22</div>' +
         '<div dir="auto" id="fb-luke-citation">' +
           '<span><span id="fb-luke-book">' + lri + 'Luke' + pdi + '</span></span> ' +
-          '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>:' +
+          '<span><span id="fb-luke-chapter">' + lri + '22' + pdi + '</span></span>' +
+          '<span id="fb-luke-separator">:</span>' +
           '<span><span id="fb-luke-verse">' + lri + '26' + pdi + '</span></span> ' +
           '<span>' + lri + 'KJV' + pdi + '</span>' +
         '</div>' +
@@ -1688,30 +1689,35 @@ test('Facebook book-name double-click retains Luke 22:26 context', async ({ page
     document.body.appendChild(article);
   });
 
-  // The reported Facebook regression is specifically the book-name click:
-  // Luke must inherit chapter 22 and verse 26 from this same citation.
-  for (const selector of ['#fb-luke-book', '#fb-luke-chapter', '#fb-luke-verse']) {
-    await page.locator(selector).dblclick();
-    const resolved = await waitForTab(extensionWorker, tab => {
-      try {
-        const url = new URL(tab.pendingUrl || tab.url);
-        return url.hostname === 'www.blueletterbible.org' &&
-          url.pathname === '/kjv/luk/22/26/';
-      } catch (_) { return false; }
-    });
-    expect(new URL(resolved.pendingUrl || resolved.url).pathname).toBe('/kjv/luk/22/26/');
-    const reconstruction = await page.evaluate(() => ({
-      selectedText: window.getSelection()?.toString() || '',
-      messageText: document.querySelector('[data-ad-comet-preview="message"]')?.innerText || '',
-      doubleClickDiagnostic: document.querySelector('[data-blb-test-diagnostics]')?.getAttribute('data-blb-double-click-diagnostic') || ''
-    }));
-    console.log('[Facebook Luke 22:26 reconstruction]', JSON.stringify({ selector, ...reconstruction }));
-    if (selector === '#fb-luke-book') {
-      const diagnostic = JSON.parse(reconstruction.doubleClickDiagnostic);
-      expect(diagnostic.clickedBook).toBe("luke");
-      expect(diagnostic.followingText).toBe("22:26 KJV");
+  // The book, chapter, and verse tokens must resolve identically with
+  // either punctuation mark between chapter and verse.
+  for (const separator of [':','.']) {
+    await page.locator('#fb-luke-separator').evaluate((element, value) => {
+      element.textContent = value;
+    }, separator);
+    for (const selector of ['#fb-luke-book', '#fb-luke-chapter', '#fb-luke-verse']) {
+      await page.locator(selector).dblclick();
+      const resolved = await waitForTab(extensionWorker, tab => {
+        try {
+          const url = new URL(tab.pendingUrl || tab.url);
+          return url.hostname === 'www.blueletterbible.org' &&
+            url.pathname === '/kjv/luk/22/26/';
+        } catch (_) { return false; }
+      });
+      expect(new URL(resolved.pendingUrl || resolved.url).pathname).toBe('/kjv/luk/22/26/');
+      const reconstruction = await page.evaluate(() => ({
+        selectedText: window.getSelection()?.toString() || '',
+        messageText: document.querySelector('[data-ad-comet-preview="message"]')?.innerText || '',
+        doubleClickDiagnostic: document.querySelector('[data-blb-test-diagnostics]')?.getAttribute('data-blb-double-click-diagnostic') || ''
+      }));
+      console.log('[Facebook Luke chapter-verse reconstruction]', JSON.stringify({ separator, selector, ...reconstruction }));
+      if (selector === '#fb-luke-book') {
+        const diagnostic = JSON.parse(reconstruction.doubleClickDiagnostic);
+        expect(diagnostic.clickedBook).toBe("luke");
+        expect(diagnostic.followingText).toBe('22' + separator + '26 KJV');
+      }
+      await removeTabById(extensionWorker, resolved.id);
     }
-    await removeTabById(extensionWorker, resolved.id);
   }
 });
 
