@@ -1975,9 +1975,16 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
           } else {
             followingRange.setStartAfter(exactPhysicalTarget);
           }
-          const followingText = selectedBookCitation?.citationText || normalizeSelectionText(
+          const physicalFollowingText = normalizeSelectionText(
             domText(followingRange.cloneContents())
           ).normalize('NFKC');
+          // Chromium's double-click word boundary can stop at the next comma
+          // in a compact dotted citation ("Gal.1.8,9"). Keep the suffix
+          // recovered from the selected token, then append the immediately
+          // adjacent physical text so comma shorthand/range endings survive.
+          const followingText = selectedBookCitation
+            ? selectedBookCitation.citationText + physicalFollowingText
+            : physicalFollowingText;
           const writeFacebookDoubleClickDiagnostic = details => {
             const diagnosticRoot = physicalBookContextRoot?.closest?.('[data-blb-test-diagnostics]');
             if (diagnosticRoot) {
