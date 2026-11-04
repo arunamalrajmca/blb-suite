@@ -200,8 +200,8 @@ test("mixed runtime and Study Sessions spec edits delegate the changed spec to i
     assert.match(output, /group_a_required=true/);
   });
   const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
-  assert.match(workflow, /Delegating \\$spec to the dedicated Study Sessions job/);
-  assert.match(workflow, /contains\\(inputs\\.changed_browser_specs, 'tests\\/browser\\/study-session-export\\.spec\\.js'\\)/);
+  assert.ok(workflow.includes("Delegating $spec to the dedicated Study Sessions job."));
+  assert.ok(workflow.includes("contains(inputs.changed_browser_specs, 'tests/browser/study-session-export.spec.js')"));
 });
 
 test("BLB auto-hyperlinker source selects its rich-clipboard browser spec", () => {
