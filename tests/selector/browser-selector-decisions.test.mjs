@@ -219,7 +219,7 @@ test("References-only changes do not schedule Study Sessions browser regressions
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /study_sessions_required=false/);
-    assert.match(output, /reference_required=false/);
+    assert.match(output, /reference_required=true/);
   });
 });
 
@@ -533,6 +533,7 @@ test("unknown runtime file conservatively selects broad browser coverage", () =>
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=true/);
     assert.match(output, /reference_required=true/);
+    assert.match(output, /study_sessions_required=true/);
   });
 });
 
