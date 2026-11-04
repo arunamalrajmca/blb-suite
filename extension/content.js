@@ -89,7 +89,7 @@ function ensureBlbRightPanelExpandedAfterLoad() {
       if (!expandControl || expandControl.classList.contains('hidden')) return;
 
       const nativeHandler = expandControl.getAttribute('onclick') || '';
-      if (!/BLB\\.siteResizeToggle\\(\\s*['"]right['"]\\s*\\)/.test(nativeHandler)) return;
+      if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(nativeHandler)) return;
 
       // Use the same one-shot native right-expand action on verse, MultiVerse,
       // and Criteria Search pages. Do not infer panel state from page-specific
