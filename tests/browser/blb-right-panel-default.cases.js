@@ -130,26 +130,25 @@ test('BLB expands a collapsed verse-page parallel Bible panel through its native
   expect(result.rightControlClass).toContain('hidden');
 });
 
-test('BLB verse view uses the same one-shot right-expand action after layout settles', async ({ context, extensionStorage }) => {
+test('BLB verse panel state prevents a blind toggle while the native control is temporarily visible', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openFixture(
     context,
     'https://www.blueletterbible.org/kjv/gen/1/1/',
-    versePageHtml({ panel: 'collapsed', restoreAfterLoadMs: 700 })
+    versePageHtml({ panel: 'expanded' }).replace(
+      'site-expand-container right hidden',
+      'site-expand-container right'
+    )
   );
 
-  await page.waitForFunction(() => window.__rightToggleCalls.length === 1);
   await page.waitForTimeout(500);
-
-  // As with MultiVerse and Criteria Search, the default is a single native
-  // click, not a page-specific observer that repeatedly overrides later state.
   expect(await page.evaluate(() => ({
     calls: window.__rightToggleCalls,
-    rightPanelCollapsed: document.getElementById('bodyCol1A').classList.contains('hidden'),
+    rightPanelExpanded: !document.getElementById('bodyCol1A').classList.contains('hidden'),
     rightControlVisible: !document.getElementById('siteExpandRight').classList.contains('hidden')
   }))).toEqual({
-    calls: ['right'],
-    rightPanelCollapsed: true,
+    calls: [],
+    rightPanelExpanded: true,
     rightControlVisible: true
   });
 });
