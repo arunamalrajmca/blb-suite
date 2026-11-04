@@ -7,7 +7,7 @@ async function installToolViewFixture(context) {
   await context.route('https://www.blueletterbible.org/**', route => {
     const url = new URL(route.request().url());
     const body = url.pathname.toLowerCase() === '/tools/multiverse.cfm'
-      ? '<!doctype html><html><head><title>MultiVerse fixture</title></head><body><a id="tool-view-verse" href="' + VERSE_URL + '">John 3:16</a></body></html>'
+      ? '<!doctype html><html><head><title>MultiVerse fixture</title></head><body><button id="formatButton" class="byVerseResults">Tool View</button><a id="tool-view-verse" href="' + VERSE_URL + '">John 3:16</a><script>document.querySelector("#formatButton").addEventListener("click", function () { this.className = this.classList.contains("byVerseResults") ? "multiVerseResults" : "byVerseResults"; });</script></body></html>'
       : '<!doctype html><html><head><title>John 3:16 fixture</title></head><body><main>John 3:16</main></body></html>';
     return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body });
   });
@@ -75,4 +75,34 @@ test('MultiVerse KJV verse links retain native same-tab navigation when the Suit
       new URL(tab.url || tab.pendingUrl || '').pathname.toLowerCase() === '/kjv/jhn/3/16/'
     );
   }, { timeout: 10000 }).toBe(true);
+});
+
+
+test('direct MultiVerse visits default to Tool View even when Suite features are disabled', async ({
+  page, context, extensionStorage
+}) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({ masterEnabled: false });
+  await installToolViewFixture(context);
+
+  await page.goto(TOOL_URL, { waitUntil: 'load' });
+  await expect(page.locator('#formatButton.multiVerseResults')).toBeVisible({ timeout: 10000 });
+
+  // The extension applies the default once; it must not fight a later manual
+  // switch back to MultiVerse View.
+  await page.locator('#formatButton.multiVerseResults').click();
+  await expect(page.locator('#formatButton.byVerseResults')).toBeVisible();
+  await page.waitForTimeout(750);
+  await expect(page.locator('#formatButton.byVerseResults')).toBeVisible();
+});
+
+test('Suite-created MultiVerse URLs also default to Tool View', async ({
+  page, context, extensionStorage
+}) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({ masterEnabled: true });
+  await installToolViewFixture(context);
+
+  await page.goto(TOOL_URL + '?blbSuiteMultiVerse=1', { waitUntil: 'load' });
+  await expect(page.locator('#formatButton.multiVerseResults')).toBeVisible({ timeout: 10000 });
 });
