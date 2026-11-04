@@ -293,14 +293,14 @@ try {
 
   // Newly extracted feature modules select their established focused browser coverage.
   const extractedFeatureCases = [
-    ['extension/multiverse-copy.js', 'e2e-core-user-actions.spec.js'],
+    ['extension/multiverse-copy.js', 'core-user-actions.spec.js'],
     ['extension/multiverse-reference-helpers.js', 'multiverse-contiguous-range-routing.spec.js'],
     ['extension/multiverse-post.js', 'multiverse-disjoint-chapter-post.spec.js'],
     ['extension/blb-page-selection-button.js', 'research-dom-smoke.spec.js'],
     ['extension/Tutorial.html', 'pr-422-feature-regressions.spec.js'],
     ['extension/multiverse-handoff.js', 'multiverse-handoff.spec.js'],
     ['extension/multiverse-tool-view.js', 'multiverse-tool-view.spec.js'],
-    ['extension/blb-parse-popup.js', 'e2e-core-user-actions.spec.js'],
+    ['extension/blb-parse-popup.js', 'core-user-actions.spec.js'],
     ['extension/blb-verse-link-navigation.js', 'blb-verse-link-navigation.spec.js'],
     ['extension/study-reference-capture.js', 'study-reference-capture.spec.js'],
     ['extension/criteria-search-navigation.js', 'criteria-search-navigation.spec.js'],
