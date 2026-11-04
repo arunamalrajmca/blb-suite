@@ -136,7 +136,7 @@ function ensureBlbRightPanelExpandedAfterLoad() {
         }
         if (expandControl.classList.contains('hidden')) return;
         const currentHandler = expandControl.getAttribute('onclick') || '';
-        if (!/BLB\\.siteResizeToggle\\(\\s*['"]right['"]\\s*\\)/.test(currentHandler)) {
+        if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(currentHandler)) {
           stopObserving();
           return;
         }
