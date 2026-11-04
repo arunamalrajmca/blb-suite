@@ -88,7 +88,6 @@ const forceFull = alwaysFull || changed.some(path =>
     || path === "package-lock.json"
     || path === "playwright.config.js"
     || path === "playwright.config.ts"
-    || path === "extension/manifest.json"
     || (path === "extension/background.js" && !focusedOmniboxBackgroundChange)
     || path === "extension/content.js"
     || path === "extension/reference-core.js"
