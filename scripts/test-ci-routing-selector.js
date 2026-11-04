@@ -149,7 +149,6 @@ try {
     'tests/browser/blb-passive-new-tab-targets.spec.js',
     'tests/browser/source-page-collector-behavior.spec.js',
     'tests/browser/blb-verse-link-navigation.spec.js',
-    'tests/browser/blb-right-panel-expanded.spec.js',
     'tests/browser/criteria-search-navigation.spec.js',
     'tests/browser/site-feature-defaults.spec.js',
     'tests/browser/redirect-toggle-isolation.spec.js',
