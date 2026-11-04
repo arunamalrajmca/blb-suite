@@ -92,12 +92,12 @@ function versePageHtml({ panel = 'collapsed', restoreAfterLoadMs = null } = {}) 
     ? 'site-expand-container right'
     : 'site-expand-container right hidden';
   const restoreScript = restoreAfterLoadMs === null ? '' : `
-    window.addEventListener('load', () => {
+    window.__scheduleSavedLayoutRestore = () => {
       window.setTimeout(() => {
         document.getElementById('bodyCol1A')?.classList.add('hidden');
         document.getElementById('siteExpandRight')?.classList.remove('hidden');
       }, ${restoreAfterLoadMs});
-    });
+    };
   `;
   return `<!doctype html>
 <html lang="en">
@@ -111,6 +111,11 @@ function versePageHtml({ panel = 'collapsed', restoreAfterLoadMs = null } = {}) 
         if (side !== 'right') return;
         document.getElementById('bodyCol1A')?.classList.remove('hidden');
         document.getElementById('siteExpandRight')?.classList.add('hidden');
+        if (!window.__savedLayoutRestoreScheduled &&
+            typeof window.__scheduleSavedLayoutRestore === 'function') {
+          window.__savedLayoutRestoreScheduled = true;
+          window.__scheduleSavedLayoutRestore();
+        }
       }
     };
   </script>
