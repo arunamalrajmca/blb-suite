@@ -28,6 +28,23 @@ const normalSelectors = [
 const sensitiveSelectors = ['body', '#sensitiveNotice', '#sensitiveNoticeTitle', '#sensitiveNoticeMessage'];
 const slug = value => value.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
+// Chromium can briefly retain profile files (notably "Account Web Data")
+// after the persistent context reports closed on Windows runners. Retry
+// transient Windows sharing violations instead of failing an otherwise
+// successful diagnostic during temporary-profile cleanup.
+async function removeUserDataDir(userDataDir) {
+  try {
+    await fs.promises.rm(userDataDir, {
+      recursive: true,
+      force: true,
+      maxRetries: 12,
+      retryDelay: 500
+    });
+  } catch (error) {
+    console.warn('Could not fully remove temporary browser profile ' + userDataDir + ': ' + error.message);
+  }
+}
+
 async function launchBrowser(name) {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-popup-'));
   const options = {
@@ -49,7 +66,7 @@ async function launchBrowser(name) {
     if (!match) throw new Error('Could not determine extension ID from service worker.');
     return { context, userDataDir, worker, extensionId: match[1] };
   } catch (error) {
-    fs.rmSync(userDataDir, { recursive: true, force: true });
+    await removeUserDataDir(userDataDir);
     throw error;
   }
 }
@@ -159,7 +176,7 @@ async function inspectBrowser(name) {
     return { name, snapshots };
   } finally {
     await context.close();
-    fs.rmSync(userDataDir, { recursive: true, force: true });
+    await removeUserDataDir(userDataDir);
   }
 }
 
