@@ -194,6 +194,8 @@ const ignoredNonRuntime = path =>
   || /^extension\/THIRD-PARTY-NOTICES\.txt$/.test(path)
   || /^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path)
   || path === "scripts/test-ci-routing-selector.js"
+  // Cross-browser diagnostic harness; it validates the test environment, not extension behavior.
+  || path === "scripts/test-popup-cross-browser-rendering.js"
   || path === "scripts/reference-e2e-matrix.json"
   || /^tests\/selector\//.test(path);
 
