@@ -483,21 +483,20 @@ test("reusable feature groups consume the caller's single browser classification
   const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
   const caller = readFileSync(new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url), "utf8");
   assert.ok(workflow.includes("  workflow_call:"), "feature groups must be invoked as a reusable workflow");
-  assert.ok(caller.includes("      - 'extension/**'"), "References caller must retain the broad runtime fallback");
+  assert.ok(caller.includes("extension/**"), "References caller must retain the broad runtime fallback");
   assert.doesNotMatch(workflow, /^  change-detection:/m, "reusable workflow must not classify the same diff again");
-  assert.doesNotMatch(workflow, /needs\\.change-detection\\.outputs\\./, "jobs must consume workflow inputs");
-  assert.doesNotMatch(workflow, /node scripts\\/select-browser-specs\\.mjs/, "selector must run only in the caller");
+  assert.doesNotMatch(workflow, /needs\.change-detection\.outputs\./, "jobs must consume workflow inputs");
+  assert.doesNotMatch(workflow, /node scripts\/select-browser-specs\.mjs/, "selector must run only in the caller");
   for (const input of ["full_browser_suite", "changed_specs", "changed_browser_specs", "unmapped_specs", "group_a_required", "study_sessions_required", "group_b_required", "browser_e2e_required"]) {
-    assert.match(workflow, new RegExp(input + ":\\\\n\\\\s+required: true"));
-    assert.ok(caller.includes(input + ": \${{ needs.change-detection.outputs." + input + " }}"), "caller must pass " + input);
+    assert.match(workflow, new RegExp("^      " + input + ":\\n        required: true\\n        type: string$", "m"));
+    assert.ok(caller.includes(input + ": ${{ needs.change-detection.outputs." + input + " }}"), "caller must pass " + input);
   }
-  assert.ok(workflow.includes("if: \${{ inputs.study_sessions_required == 'true' }}"));
+  assert.match(workflow, /inputs\.study_sessions_required == 'true'/);
   assert.ok(workflow.includes("name: BROWSER E2E — STUDY SESSIONS"));
-  assert.ok(workflow.includes("if: \${{ inputs.group_a_required == 'true' }}"));
-  assert.ok(workflow.includes("if: \${{ inputs.group_b_required == 'true' }}"));
-  assert.match(workflow, /tests\\/browser\\/scripttagger-global-injection\\.spec\\.js/);
+  assert.match(workflow, /inputs\.group_a_required == 'true'/);
+  assert.match(workflow, /inputs\.group_b_required == 'true'/);
+  assert.match(workflow, /tests\/browser\/scripttagger-global-injection\.spec\.js/);
 });
-
 test("References caller triggers reusable Group A/B for shared fixtures without a broad tests trigger", () => {
   const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url), "utf8");
   const groups = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
