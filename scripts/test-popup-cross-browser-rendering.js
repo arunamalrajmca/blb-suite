@@ -129,6 +129,8 @@ async function launchBrowser(name) {
     // Windows. Use the normal browser UI process; hosted Windows runners have
     // a desktop session and can run it without a virtual display.
     headless: false,
+    // Playwright disables extensions by default; allow the explicitly loaded MV3 extension.
+    ignoreDefaultArgs: ['--disable-extensions'],
     args: [
       '--no-sandbox',
       '--disable-dev-shm-usage',
