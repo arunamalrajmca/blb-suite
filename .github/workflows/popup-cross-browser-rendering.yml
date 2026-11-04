@@ -85,7 +85,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $chromeRoot = Join-Path $env:LOCALAPPDATA 'ChromeForTesting'
-          $chromePath = Join-Path $chromeRoot 'chrome-win64\\chrome.exe'
+          $chromePath = Join-Path $chromeRoot 'chrome-win64\chrome.exe'
           if (-not (Test-Path $chromePath)) {
             $release = Invoke-RestMethod -Uri 'https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json'
             $download = $release.channels.Stable.downloads.chrome | Where-Object { $_.platform -eq 'win64' } | Select-Object -First 1
