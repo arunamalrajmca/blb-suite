@@ -30,15 +30,28 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install Brave
+      # Cache the installed browsers and the exact Playwright dependency.
+      # The versioned key is intentionally stable across runs; bump its vN
+      # suffix only when deliberately refreshing the browser toolchain.
+      - name: Restore popup browser and Playwright cache
+        id: popup-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            node_modules
+            C:\Program Files\Google\Chrome
+            C:\Program Files (x86)\Google\Chrome
+            C:\Program Files\BraveSoftware\Brave-Browser
+            C:\Users\runneradmin\AppData\Local\ms-playwright
+          key: ${{ runner.os }}-popup-toolchain-v1-pw-1.63.0-${{ hashFiles('package.json') }}
+
+      - name: Install Brave only when it is not cached
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $programFiles = $env:ProgramFiles
-          $localAppData = $env:LOCALAPPDATA
           $braveCandidates = @(
-            (Join-Path $programFiles 'BraveSoftware\Brave-Browser\Application\brave.exe'),
-            (Join-Path $localAppData 'BraveSoftware\Brave-Browser\Application\brave.exe')
+            (Join-Path $env:ProgramFiles 'BraveSoftware\Brave-Browser\Application\brave.exe'),
+            (Join-Path $env:LOCALAPPDATA 'BraveSoftware\Brave-Browser\Application\brave.exe')
           )
           $bravePath = $braveCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
           if (-not $bravePath) {
@@ -46,13 +59,40 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw "Brave installation failed with exit code $LASTEXITCODE." }
             $bravePath = $braveCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
           }
-          if (-not $bravePath) { throw 'Brave executable was not found after installation.' }
+          if (-not $bravePath) { throw 'Brave executable was not found after cache restore/install.' }
           "BLB_BRAVE_EXECUTABLE=$bravePath" >> $env:GITHUB_ENV
+          Write-Host "Using Brave: $bravePath"
 
-      - name: Install Playwright test runner and Chrome
+      - name: Install Playwright test runner only when it is not cached
+        shell: pwsh
         run: |
-          npm install --no-save --package-lock=false @playwright/test@1.63.0
-          npx playwright install chrome
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path 'node_modules/@playwright/test/package.json')) {
+            npm install --no-save --package-lock=false @playwright/test@1.63.0
+            if ($LASTEXITCODE -ne 0) { throw "Playwright test runner installation failed with exit code $LASTEXITCODE." }
+          } else {
+            Write-Host 'Using cached @playwright/test 1.63.0.'
+          }
+          $installedVersion = node -p "require('./node_modules/@playwright/test/package.json').version"
+          if ($installedVersion -ne '1.63.0') { throw "Unexpected @playwright/test version: $installedVersion" }
+
+      - name: Install Chrome only when it is not cached
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $chromeCandidates = @(
+            (Join-Path $env:ProgramFiles 'Google\Chrome\Application\chrome.exe'),
+            (Join-Path ${env:ProgramFiles(x86)} 'Google\Chrome\Application\chrome.exe')
+          )
+          $chromePath = $chromeCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          if (-not $chromePath) {
+            npx playwright install chrome
+            if ($LASTEXITCODE -ne 0) { throw "Chrome installation failed with exit code $LASTEXITCODE." }
+            $chromePath = $chromeCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          } else {
+            Write-Host "Using cached Chrome: $chromePath"
+          }
+          if (-not $chromePath) { throw 'Google Chrome was not found after cache restore/install.' }
 
       - name: Compare computed popup styles and text metrics
         run: node scripts/test-popup-cross-browser-rendering.js
