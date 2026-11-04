@@ -64,7 +64,7 @@ async function collectStartupDiagnostics(name, context, userDataDir, startupErro
   const backgroundPath = path.join(extensionPath, manifest.background.service_worker);
   if (fs.existsSync(backgroundPath)) {
     const source = fs.readFileSync(backgroundPath, 'utf8');
-    const imports = [...source.matchAll(/importScripts\\s*\\(([^)]*)\\)/g)];
+    const imports = [...source.matchAll(/importScripts\s*\(([^)]*)\)/g)];
     for (const match of imports) {
       for (const item of match[1].matchAll(/['"]([^'"]+)['"]/g)) {
         const importedPath = path.resolve(extensionPath, item[1]);
