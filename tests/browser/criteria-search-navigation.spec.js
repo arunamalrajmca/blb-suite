@@ -94,3 +94,6 @@ test('global Suite OFF preserves native same-tab Criteria Search popup navigatio
   )).toBe(true);
   expect(after.some(tab => (tab.url || tab.pendingUrl || '') === STRONG_SEARCH_URL)).toBe(false);
 });
+
+// Run BLB right-panel defaults alongside the dedicated Criteria Search browser coverage.
+require('./blb-right-panel-default.cases.js');
