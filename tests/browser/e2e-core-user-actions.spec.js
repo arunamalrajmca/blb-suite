@@ -1,5 +1,7 @@
 const { test, expect } = require('./fixtures');
 
+test.describe.configure({ mode: 'serial' });
+
 function normalizeBlbKjvPath(pathname) {
   return String(pathname || '').replace(/\/s_\d+\/?$/i, '/');
 }
