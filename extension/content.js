@@ -70,17 +70,20 @@ async function isSuiteEnabled() {
 }
 
 /*
- * Verse pages expose their actual parallel Bible panel as #bodyCol1A.
- * BLB may restore its saved layout after the content script has run, so keep
- * a bounded observer through the initial layout window. The panel state is
- * authoritative: invoke BLB's native control only when the panel is hidden.
+ * Every BLB page exposes the native right-panel expand control when its
+ * parallel Bible panel is collapsed. Use that shared affordance instead of
+ * guessing page types from URL paths or requiring the verse-only #bodyCol1A.
+ *
+ * BLB can restore a saved collapsed layout after the content script starts,
+ * so observe the initial page layout window and re-expand whenever its native
+ * control becomes visible. A hidden control indicates the panel is expanded.
  */
-let blbVerseRightPanelExpansionStarted = false;
-function ensureBlbVerseRightPanelExpanded() {
+let blbDefaultRightPanelExpansionStarted = false;
+function ensureBlbDefaultRightPanelExpanded() {
   let hostname = String(location.hostname || '').toLowerCase();
   if (hostname.startsWith('www.')) hostname = hostname.slice(4);
-  if (hostname !== BLB_HOSTNAME || blbVerseRightPanelExpansionStarted) return;
-  blbVerseRightPanelExpansionStarted = true;
+  if (hostname !== BLB_HOSTNAME || blbDefaultRightPanelExpansionStarted) return;
+  blbDefaultRightPanelExpansionStarted = true;
 
   let observer = null;
   let expansionPending = false;
@@ -94,90 +97,27 @@ function ensureBlbVerseRightPanelExpanded() {
     }
   };
   const inspect = () => {
-    const panel = document.getElementById('bodyCol1A');
-    if (!panel) return false;
-
-    // A successful native expansion clears the pending state. Keeping the
-    // observer active lets us detect BLB applying a saved collapsed layout
-    // later in the same page initialization.
-    if (!panel.classList.contains('hidden')) {
+    const expandControl = document.getElementById('siteExpandRight');
+    if (!expandControl) return false;
+    if (expandControl.classList.contains('hidden')) {
       expansionPending = false;
       return true;
     }
     if (expansionPending) return false;
-
-    const expandControl = document.getElementById('siteExpandRight');
-    if (!expandControl || expandControl.classList.contains('hidden')) return false;
     const nativeHandler = expandControl.getAttribute('onclick') || '';
     if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(nativeHandler)) return false;
-
     expansionPending = true;
     expandControl.click();
     return true;
   };
-  const check = () => { inspect(); };
 
-  // Attach regardless of readyState. Content scripts commonly run after the
-  // document is complete, while BLB's panel/layout can still be initialized
-  // or restored asynchronously.
-  observer = new MutationObserver(check);
+  observer = new MutationObserver(() => { inspect(); });
   observer.observe(document.documentElement || document, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['class']
+    childList: true, subtree: true, attributes: true, attributeFilter: ['class']
   });
-  check();
-
-  // This is intentionally bounded: it covers BLB's initial/saved-layout
-  // restoration without leaving a permanent observer on every verse page.
+  inspect();
   observerTimeout = window.setTimeout(stopObserving, 12000);
 }
-
-/*
- * MultiVerse and Criteria Search do not expose #bodyCol1A. Their native
- * #siteExpandRight control is the available right-panel affordance, so use
- * its one-shot action after BLB's load-time layout initialization.
- */
-let blbToolRightPanelExpansionScheduled = false;
-function ensureBlbToolRightPanelExpandedAfterLoad() {
-  let hostname = String(location.hostname || '').toLowerCase();
-  if (hostname.startsWith('www.')) hostname = hostname.slice(4);
-  if (hostname !== BLB_HOSTNAME || blbToolRightPanelExpansionScheduled) return;
-  blbToolRightPanelExpansionScheduled = true;
-
-  const startAfterLoad = () => {
-    window.setTimeout(() => {
-      const expandControl = document.getElementById('siteExpandRight');
-      if (!expandControl || expandControl.classList.contains('hidden')) return;
-      const nativeHandler = expandControl.getAttribute('onclick') || '';
-      if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(nativeHandler)) return;
-      expandControl.click();
-    }, 350);
-  };
-
-  if (document.readyState === 'complete') {
-    startAfterLoad();
-  } else {
-    window.addEventListener('load', startAfterLoad, { once: true });
-  }
-}
-
-function ensureBlbDefaultRightPanelExpanded() {
-  const path = String(location.pathname || '').toLowerCase();
-  const isToolPage = path.includes('/tools/multiverse.cfm') ||
-    path.includes('/search/search.cfm');
-  if (isToolPage) {
-    ensureBlbToolRightPanelExpandedAfterLoad();
-  } else {
-    ensureBlbVerseRightPanelExpanded();
-  }
-}
-
-void suiteSettingsReadyPromise.then(() => {
-  if (suiteEnabled) ensureBlbDefaultRightPanelExpanded();
-}).catch(() => {});
-
 // Runtime messaging can throw synchronously when an extension is reloaded or
 // updated while an old content script is still attached to a page. Keep that
 // stale-page condition silent and fail closed instead of surfacing
