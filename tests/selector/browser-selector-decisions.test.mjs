@@ -438,8 +438,9 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
   }
   assert.match(groupA, /REFERENCE_GATE_REQUIRED:/);
   assert.match(groupA, /Delegating \$spec to the required browser-e2e gate/);
-  assert.match(groupA, /browser_e2e_required: \$\{\{ steps\.select\.outputs\.reference_required \}\}/);
-  assert.match(groupB, /browser_e2e_required: \$\{\{ steps\.select\.outputs\.reference_required \}\}/);
+  assert.match(groupA, /browser_e2e_required:/);
+  assert.match(groupB, /inputs\\.browser_e2e_required == 'true'/);
+  assert.ok(referenceWorkflow.includes("browser_e2e_required: ${{ needs.change-detection.outputs.browser_e2e_required }}"));
   assert.match(referenceWorkflow, /npx playwright test "\$spec"/);
   assert.match(groupA, /npx playwright test "\$spec"/);
   assert.match(groupA, /browser_e2e_required == 'true'/);
