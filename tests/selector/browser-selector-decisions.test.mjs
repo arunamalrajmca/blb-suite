@@ -688,7 +688,7 @@ test("popup Chrome-Brave diagnostic harness does not trigger unrelated browser r
     commitChange(root, "scripts/test-popup-cross-browser-rendering.js", "// diagnostic-only browser harness\\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=\\n/);
+    assert.match(output, /changed_specs=\n/);
     assert.match(output, /group_a_required=false/);
     assert.match(output, /group_b_required=false/);
     assert.match(output, /reference_required=false/);
