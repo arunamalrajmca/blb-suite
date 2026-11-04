@@ -358,16 +358,16 @@ test('native right-panel expansion is one-shot even when BLB leaves its control 
   });
 });
 
-test('BLB repeated late verse-layout collapses are corrected without a toggle loop', async ({ context, extensionStorage }) => {
+test('BLB keeps the verse-page right panel expanded after delayed layout restores beyond startup', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
-  const html = versePageHtml({ panel: 'collapsed', restoreAfterLoadMs: 700 }).replace(
+  const html = versePageHtml({ panel: 'collapsed' }).replace(
     '</body>',
     `<script>
       window.addEventListener('load', () => {
         window.setTimeout(() => {
           document.getElementById('bodyCol1A')?.classList.add('hidden');
           document.getElementById('siteExpandRight')?.classList.remove('hidden');
-        }, 1300);
+        }, 6200);
       });
     </script></body>`
   );
@@ -378,17 +378,20 @@ test('BLB repeated late verse-layout collapses are corrected without a toggle lo
   );
 
   await page.waitForFunction(() =>
-    window.__rightToggleCalls.length === 3 &&
+    window.__rightToggleCalls.length === 1 &&
     document.getElementById('bodyCol1A')?.classList.contains('hidden') === false
   );
-  await page.waitForTimeout(150);
+  await page.waitForFunction(() =>
+    window.__rightToggleCalls.length === 2 &&
+    document.getElementById('bodyCol1A')?.classList.contains('hidden') === false
+  , { timeout: 9000 });
 
   expect(await page.evaluate(() => ({
     calls: window.__rightToggleCalls,
     panelExpanded: !document.getElementById('bodyCol1A').classList.contains('hidden'),
     rightControlHidden: document.getElementById('siteExpandRight').classList.contains('hidden')
   }))).toEqual({
-    calls: ['right', 'right', 'right'],
+    calls: ['right', 'right'],
     panelExpanded: true,
     rightControlHidden: true
   });
