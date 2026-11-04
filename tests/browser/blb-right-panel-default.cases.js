@@ -130,6 +130,31 @@ test('BLB expands a collapsed verse-page parallel Bible panel through its native
   expect(result.rightControlClass).toContain('hidden');
 });
 
+test('BLB verse panel is re-expanded when a delayed saved-layout restore collapses it', async ({ context, extensionStorage }) => {
+  await extensionStorage.set({ masterEnabled: true });
+  const page = await openFixture(
+    context,
+    'https://www.blueletterbible.org/kjv/gen/1/1/',
+    versePageHtml({ panel: 'collapsed', restoreAfterLoadMs: 1200 })
+  );
+
+  await page.waitForFunction(() =>
+    window.__rightToggleCalls.length === 2 &&
+    document.getElementById('bodyCol1A')?.classList.contains('hidden') === false
+  );
+
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => ({
+    calls: window.__rightToggleCalls,
+    rightPanelExpanded: !document.getElementById('bodyCol1A').classList.contains('hidden'),
+    rightControlHidden: document.getElementById('siteExpandRight').classList.contains('hidden')
+  }))).toEqual({
+    calls: ['right', 'right'],
+    rightPanelExpanded: true,
+    rightControlHidden: true
+  });
+});
+
 test('BLB verse panel state prevents a blind toggle while the native control is temporarily visible', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openFixture(
