@@ -2862,4 +2862,3 @@ test('Double-clicking the Mt abbreviation opens its complete chapter-and-verse r
   ), beforeIds);
   expect(openedPaths).toContain('/kjv/mat/10/32-33/');
 });
-
