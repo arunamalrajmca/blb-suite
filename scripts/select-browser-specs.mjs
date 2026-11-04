@@ -34,6 +34,19 @@ const existingBrowserSpecs = new Set(run(["ls-tree", "-r", "--name-only", "HEAD"
 // An explicit workflow_dispatch or main push remains a full verification run.
 const changedBrowserSpecs = [];
 const specs = new Set();
+const ignoredNonRuntime = path =>
+  /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/))/.test(path)
+  || /^(?:store-assets\/|assets\/store\/|extension\/(?:icons|store-assets)\/)/.test(path)
+  || /^extension\/THIRD-PARTY-NOTICES\.txt$/.test(path)
+  || /^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path)
+  || path === "scripts/test-ci-routing-selector.js"
+  // Dedicated store verifiers have their own workflows and do not affect runtime browser behavior.
+  || /^scripts\/verify-store-(?:assets|branding|package|submission-assets)\.py$/.test(path)
+  || /^tests\/test_verify_store_(?:package|submission_assets)\.py$/.test(path)
+  // Cross-browser diagnostic harness; it validates the test environment, not extension behavior.
+  || path === "scripts/test-popup-cross-browser-rendering.js"
+  || path === "scripts/reference-e2e-matrix.json"
+  || /^tests\/selector\//.test(path);
 // Shared-core, test-infrastructure, package, manifest, and unknown production
 // changes remain conservative and may require the full applicable browser suite.
 // Shared background changes remain broad by default. Narrow only the exact, isolated
@@ -43,24 +56,26 @@ const focusedOmniboxBackgroundChange = changed.length === 2
   && changed.includes("extension/background.js")
   && changed.includes("tests/browser/omnibox-command-routing.spec.js");
 const forceFull = alwaysFull || changed.some(path =>
-  (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js" && path !== "scripts/test-popup-cross-browser-rendering.js" && path !== "scripts/reference-e2e-matrix.json")
-  || path.startsWith("regression-suite/")
-  || (path.startsWith("tests/") && !/^tests\/selector\//.test(path) && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path))
-  || path === "package.json"
-  || path === "package-lock.json"
-  || path === "playwright.config.js"
-  || path === "playwright.config.ts"
-  || path === "extension/manifest.json"
-  || (path === "extension/background.js" && !focusedOmniboxBackgroundChange)
-  || path === "extension/content.js"
-  || path === "extension/reference-core.js"
-  || path === "extension/regex-patterns.js"
-  || path === "extension/books.js"
-  || path === "extension/book-aliases.js"
-  || path.startsWith("extension/kjv-corpus-")
-  || path === "extension/case-sensitive-search-core.js"
-  || path === "extension/case-sensitive-routing.js"
-  || path === "tests/browser/fixtures.js"
+  !ignoredNonRuntime(path) && (
+    (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js" && path !== "scripts/test-popup-cross-browser-rendering.js" && path !== "scripts/reference-e2e-matrix.json")
+    || path.startsWith("regression-suite/")
+    || (path.startsWith("tests/") && !/^tests\/selector\//.test(path) && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path))
+    || path === "package.json"
+    || path === "package-lock.json"
+    || path === "playwright.config.js"
+    || path === "playwright.config.ts"
+    || path === "extension/manifest.json"
+    || (path === "extension/background.js" && !focusedOmniboxBackgroundChange)
+    || path === "extension/content.js"
+    || path === "extension/reference-core.js"
+    || path === "extension/regex-patterns.js"
+    || path === "extension/books.js"
+    || path === "extension/book-aliases.js"
+    || path.startsWith("extension/kjv-corpus-")
+    || path === "extension/case-sensitive-search-core.js"
+    || path === "extension/case-sensitive-routing.js"
+    || path === "tests/browser/fixtures.js"
+  )
 );
 
 // Explicit, conservative file-to-feature map. Mapped files only narrow browser
@@ -188,16 +203,7 @@ const featureSpecs = [
     specs: ["tests/browser/pr-422-feature-regressions.spec.js"]
   }
 ];
-const ignoredNonRuntime = path =>
-  /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/))/.test(path)
-  || /^(?:store-assets\/|assets\/store\/|extension\/(?:icons|store-assets)\/)/.test(path)
-  || /^extension\/THIRD-PARTY-NOTICES\.txt$/.test(path)
-  || /^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path)
-  || path === "scripts/test-ci-routing-selector.js"
-  // Cross-browser diagnostic harness; it validates the test environment, not extension behavior.
-  || path === "scripts/test-popup-cross-browser-rendering.js"
-  || path === "scripts/reference-e2e-matrix.json"
-  || /^tests\/selector\//.test(path);
+
 
 let unknownRuntime = false;
 const hasRuntimeChangeAlongsideBrowserSpec = changed.some(path =>
