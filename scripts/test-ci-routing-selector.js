@@ -165,6 +165,7 @@ try {
     'tests/browser/shared-regex-patterns.spec.js',
     'tests/browser/rediscover-sagacity-button.spec.js',
     'tests/browser/research-dom-smoke.spec.js',
+    'tests/browser/right-panel-default-expanded.spec.js',
     'tests/browser/known-host-extension.spec.js',
     'tests/browser/pr-422-feature-regressions.spec.js',
     'tests/browser/omnibox-boolean-operators.spec.js',
