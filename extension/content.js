@@ -138,8 +138,11 @@ function ensureBlbRightPanelExpandedAfterLoad() {
         stopObserving();
         expandControl.click();
       });
+      // Only panel class transitions describe the panel's expanded state.
+      // The expand control also changes class during BLB layout work; mixing
+      // those records with panel records can fabricate an expanded→collapsed
+      // transition and invoke the toggle a second time (undoing the expansion).
       observer.observe(panel, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
-      observer.observe(expandControl, {attributes:true, attributeFilter:['class']});
 
       // If initially collapsed, perform the first expansion. If already
       // expanded, keep watching briefly in case BLB restores a stale saved
