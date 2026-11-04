@@ -4004,6 +4004,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.masterEnabled) {
     suiteEnabled = changes.masterEnabled.newValue !== false;
     blbPassiveNewTabTargets?.refresh?.();
+    if (suiteEnabled) ensureBlbRightPanelExpanded();
     if (!suiteEnabled) {
       document.getElementById('blb-suite-webster-multiverse')?.remove();
       document.getElementById('blb-suite-webster-multiverse-reset-position')?.remove();
