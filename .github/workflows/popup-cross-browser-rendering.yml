@@ -43,8 +43,9 @@ jobs:
             C:\Users\runneradmin\AppData\Local\ChromeForTesting
             C:\Users\runneradmin\AppData\Local\BraveSoftware\Brave-Browser
             C:\Users\runneradmin\AppData\Local\ms-playwright
-          key: ${{ runner.os }}-popup-toolchain-v3-pw-1.63.0-${{ hashFiles('package.json') }}
+          key: ${{ runner.os }}-popup-toolchain-v4-pw-1.63.0-${{ hashFiles('package.json') }}
           restore-keys: |
+            ${{ runner.os }}-popup-toolchain-v3-pw-1.63.0-
             ${{ runner.os }}-popup-toolchain-v2-pw-1.63.0-
 
       - name: Install Brave only when it is not cached
@@ -87,7 +88,7 @@ jobs:
           $chromeRoot = Join-Path $env:LOCALAPPDATA 'ChromeForTesting'
           $chromePath = Join-Path $chromeRoot 'chrome-win64\chrome.exe'
           if (-not (Test-Path $chromePath)) {
-            $release = Invoke-RestMethod -Uri 'https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json'
+            $release = Invoke-RestMethod -Uri 'https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json'
             $download = $release.channels.Stable.downloads.chrome | Where-Object { $_.platform -eq 'win64' } | Select-Object -First 1
             if (-not $download) { throw 'Stable Chrome for Testing win64 download was not found in the official release metadata.' }
             New-Item -ItemType Directory -Force -Path $chromeRoot | Out-Null
@@ -115,7 +116,7 @@ jobs:
             C:\Users\runneradmin\AppData\Local\ChromeForTesting
             C:\Users\runneradmin\AppData\Local\BraveSoftware\Brave-Browser
             C:\Users\runneradmin\AppData\Local\ms-playwright
-          key: ${{ runner.os }}-popup-toolchain-v3-pw-1.63.0-${{ hashFiles('package.json') }}
+          key: ${{ runner.os }}-popup-toolchain-v4-pw-1.63.0-${{ hashFiles('package.json') }}
 
       - name: Compare computed popup styles and text metrics
         env:
