@@ -358,6 +358,42 @@ test('native right-panel expansion is one-shot even when BLB leaves its control 
   });
 });
 
+test('BLB repeated late verse-layout collapses are corrected without a toggle loop', async ({ context, extensionStorage }) => {
+  await extensionStorage.set({ masterEnabled: true });
+  const html = versePageHtml({ panel: 'collapsed', restoreAfterLoadMs: 700 }).replace(
+    '</body>',
+    `<script>
+      window.addEventListener('load', () => {
+        window.setTimeout(() => {
+          document.getElementById('bodyCol1A')?.classList.add('hidden');
+          document.getElementById('siteExpandRight')?.classList.remove('hidden');
+        }, 1300);
+      });
+    </script></body>`
+  );
+  const page = await openFixture(
+    context,
+    'https://www.blueletterbible.org/kjv/gen/1/1/',
+    html
+  );
+
+  await page.waitForFunction(() =>
+    window.__rightToggleCalls.length === 3 &&
+    document.getElementById('bodyCol1A')?.classList.contains('hidden') === false
+  );
+  await page.waitForTimeout(150);
+
+  expect(await page.evaluate(() => ({
+    calls: window.__rightToggleCalls,
+    panelExpanded: !document.getElementById('bodyCol1A').classList.contains('hidden'),
+    rightControlHidden: document.getElementById('siteExpandRight').classList.contains('hidden')
+  }))).toEqual({
+    calls: ['right', 'right', 'right'],
+    panelExpanded: true,
+    rightControlHidden: true
+  });
+});
+
 test('BLB right-control class mutations do not falsely trigger a second verse-panel toggle', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openFixture(
