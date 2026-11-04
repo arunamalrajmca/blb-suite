@@ -48,6 +48,7 @@ function nonRuntimePath(path) {
     || path === "scripts/package-release.sh"
     || path === "regression-suite/Verify-BLB-Zip.ps1"
     || path === "scripts/validate-build.js"
+    || path === "regression-suite/Run-BLB-Regression.ps1"
     || path === "regression-suite/README.md"
     || /^regression-suite\/tests\//.test(path)
     || path === "scripts/test-popup-cross-browser-rendering.js"
@@ -81,7 +82,9 @@ function packageValidationPath(path) {
 
 let runtimeChanged = false;
 let packageValidationRequired = false;
-const regressionSuiteChanged = changed.some(path => path.startsWith("regression-suite/tests/"));
+const regressionSuiteChanged = changed.some(path =>
+  path.startsWith("regression-suite/tests/") || path === "regression-suite/Run-BLB-Regression.ps1"
+);
 const reasons = [];
 for (const path of changed) {
   if (packageValidationPath(path)) packageValidationRequired = true;
