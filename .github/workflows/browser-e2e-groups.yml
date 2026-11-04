@@ -43,7 +43,7 @@ jobs:
     needs: change-detection
     # Skip the runner entirely when the selector says this group is irrelevant.
     if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}
-    name: BROWSER E2E — GROUP A — REFERENCE
+    name: BROWSER E2E — GROUP A — FEATURES
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
