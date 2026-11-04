@@ -85,6 +85,7 @@ function fixture(selector = selectorSource) {
   put(root, "tests/browser/shared-regex-patterns.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/rediscover-sagacity-button.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/research-dom-smoke.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/right-panel-default-expanded.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/multiverse-contiguous-range-routing.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/multiverse-disjoint-chapter-post.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/performance.spec.js", "import { test } from '@playwright/test';\n");
