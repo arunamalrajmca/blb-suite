@@ -33,12 +33,12 @@ function blbPageHtml({ panel = 'collapsed' } = {}) {
 
 async function openFixture(context, url, html) {
   const parsed = new URL(url);
-  await context.route(`${parsed.origin}/**`, route => route.fulfill({
+  const page = await context.newPage();
+  await page.route(`${parsed.origin}/**`, route => route.fulfill({
     status: 200,
     contentType: 'text/html',
     body: html
   }));
-  const page = await context.newPage();
   await page.goto(url);
   await page.waitForLoadState('domcontentloaded');
   return page;
