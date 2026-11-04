@@ -197,6 +197,10 @@ async function openActualToolbarPopup(context, extensionId, targetUrl) {
   const popup = await context.newPage();
   const popupUrl = 'chrome-extension://' + extensionId + '/' + manifest.action.default_popup.replace(/^\/+/, '');
   await popup.goto(popupUrl, { waitUntil: 'domcontentloaded' });
+  // Opening the inspectable extension page makes that page the active tab.
+  // The popup reads chrome.tabs.query({active:true}) to determine the page it
+  // belongs to, so restore the test page as the active tab before initialization.
+  await target.bringToFront();
   return { target, popup };
 }
 
