@@ -303,4 +303,41 @@ jobs:
       - name: Run ScriptTagger injection and toggle regression tests
         if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/scripttagger-global-injection.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/scripttagger-global-injection.spec.js')) }}
         run: npx playwright test tests/browser/scripttagger-global-injection.spec.js
-
+  feature-groups-summary:
+    name: Validate selected feature groups
+    needs:
+      - core-group-a
+      - core-study-sessions
+      - core-group-b
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every selected group to finish successfully
+        env:
+          GROUP_A_REQUIRED: ${{ inputs.group_a_required }}
+          GROUP_A_RESULT: ${{ needs.core-group-a.result }}
+          STUDY_REQUIRED: ${{ inputs.study_sessions_required }}
+          STUDY_RESULT: ${{ needs.core-study-sessions.result }}
+          GROUP_B_REQUIRED: ${{ inputs.group_b_required }}
+          GROUP_B_RESULT: ${{ needs.core-group-b.result }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          failed=0
+          check_group() {
+            local label="$1" required="$2" result="$3"
+            if [[ "$required" == "true" ]]; then
+              if [[ "$result" != "success" ]]; then
+                echo "::error::$label was required but finished as $result"
+                failed=1
+              fi
+            elif [[ "$result" != "skipped" && "$result" != "success" ]]; then
+              echo "::error::$label was not selected but finished as $result"
+              failed=1
+            fi
+          }
+          check_group "Group A features" "$GROUP_A_REQUIRED" "$GROUP_A_RESULT"
+          check_group "Study Sessions" "$STUDY_REQUIRED" "$STUDY_RESULT"
+          check_group "Group B links" "$GROUP_B_REQUIRED" "$GROUP_B_RESULT"
+          if [[ "$failed" -ne 0 ]]; then exit 1; fi
+          echo "Every selected feature group passed; unselected groups were skipped."
