@@ -89,21 +89,18 @@ function ensureBlbRightPanelExpandedAfterLoad() {
       if (!expandControl) return;
 
       const panel = document.getElementById('bodyCol1A');
-      if (panel && !panel.classList.contains('hidden')) return;
-      if (expandControl.classList.contains('hidden')) return;
-
       const nativeHandler = expandControl.getAttribute('onclick') || '';
-      if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(nativeHandler)) return;
+      if (!/BLB\\.siteResizeToggle\\(\\s*['"]right['"]\\s*\\)/.test(nativeHandler)) return;
 
       // MultiVerse and Criteria Search do not expose #bodyCol1A. Their native
       // control is still reliable, so retain the single-click path there.
       if (!panel) {
-        expandControl.click();
+        if (!expandControl.classList.contains('hidden')) expandControl.click();
         return;
       }
 
-      let clickCount = 1;
-      let sawExpandedState = false;
+      let clickCount = 0;
+      let sawExpandedState = !panel.classList.contains('hidden');
       let observer;
       const stopObserving = () => {
         if (observer) observer.disconnect();
@@ -117,12 +114,12 @@ function ensureBlbRightPanelExpandedAfterLoad() {
         }
 
         // Only a confirmed expanded -> collapsed transition is a saved-layout
-        // overwrite. Ignore intermediate changes until the first expansion
-        // has actually completed, and permit at most one corrective click.
+        // overwrite. Ignore intermediate changes until the panel has actually
+        // been expanded, and permit at most one corrective click.
         if (!sawExpandedState || clickCount >= 2) return;
         if (expandControl.classList.contains('hidden')) return;
         const currentHandler = expandControl.getAttribute('onclick') || '';
-        if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(currentHandler)) {
+        if (!/BLB\\.siteResizeToggle\\(\\s*['"]right['"]\\s*\\)/.test(currentHandler)) {
           stopObserving();
           return;
         }
@@ -134,9 +131,19 @@ function ensureBlbRightPanelExpandedAfterLoad() {
       observer.observe(panel, {attributes:true, attributeFilter:['class']});
       observer.observe(expandControl, {attributes:true, attributeFilter:['class']});
 
-      // Start observing before dispatch so even a synchronous native toggle
-      // is recorded. The observer is narrowly scoped and always self-terminates.
-      expandControl.click();
+      // If initially collapsed, perform the first expansion. If already
+      // expanded, keep watching briefly in case BLB restores a stale saved
+      // layout immediately afterward.
+      if (!sawExpandedState) {
+        if (expandControl.classList.contains('hidden')) {
+          stopObserving();
+          return;
+        }
+        clickCount = 1;
+        expandControl.click();
+      }
+
+      // The observer is narrowly scoped and always self-terminates.
       window.setTimeout(stopObserving, 5000);
     };
 
