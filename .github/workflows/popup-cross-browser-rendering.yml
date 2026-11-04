@@ -44,7 +44,7 @@ jobs:
             C:\Program Files\BraveSoftware\Brave-Browser
             C:\Users\runneradmin\AppData\Local\BraveSoftware\Brave-Browser
             C:\Users\runneradmin\AppData\Local\ms-playwright
-          key: ${{ runner.os }}-popup-toolchain-v1-pw-1.63.0-${{ hashFiles('package.json') }}
+          key: ${{ runner.os }}-popup-toolchain-v2-pw-1.63.0-${{ hashFiles('package.json') }}
 
       - name: Install Brave only when it is not cached
         id: brave-setup
@@ -111,7 +111,7 @@ jobs:
             C:\Program Files\BraveSoftware\Brave-Browser
             C:\Users\runneradmin\AppData\Local\BraveSoftware\Brave-Browser
             C:\Users\runneradmin\AppData\Local\ms-playwright
-          key: ${{ runner.os }}-popup-toolchain-v1-pw-1.63.0-${{ hashFiles('package.json') }}
+          key: ${{ runner.os }}-popup-toolchain-v2-pw-1.63.0-${{ hashFiles('package.json') }}
 
       - name: Compare computed popup styles and text metrics
         env:
