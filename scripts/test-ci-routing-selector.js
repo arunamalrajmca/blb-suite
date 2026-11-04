@@ -140,7 +140,7 @@ try {
     'tests/browser/redirect-hostnames.spec.js',
     'tests/browser/blb-non-kjv-redirect.spec.js',
     'tests/browser/scripttagger-global-injection.spec.js',
-    'tests/browser/e2e-e2e-core-user-actions.spec.js',
+    'tests/browser/e2e-core-user-actions.spec.js',
     'tests/browser/multiverse-tab-reuse.spec.js',
     'tests/browser/multiverse-contiguous-range-routing.spec.js',
     'tests/browser/multiverse-disjoint-chapter-post.spec.js',
@@ -261,7 +261,7 @@ try {
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', false, 'Criteria Search navigation');
   assert(result.values.changed_specs.includes('tests/browser/criteria-search-navigation.spec.js'));
-  assert(!result.values.changed_specs.includes('tests/browser/e2e-e2e-core-user-actions.spec.js'));
+  assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'));
   assertValue(result, 'group_a_required', true, 'Criteria Search navigation');
   assertValue(result, 'group_b_required', false, 'Criteria Search navigation');
   assertValue(result, 'reference_required', false, 'Criteria Search navigation');
@@ -278,7 +278,7 @@ try {
     'background changes must select focused omnibox routing coverage');
   assert(result.values.changed_browser_specs.includes('tests/browser/omnibox-command-routing.spec.js'),
     'the explicitly paired omnibox regression must execute');
-  assert(!result.values.changed_specs.includes('tests/browser/e2e-e2e-core-user-actions.spec.js'),
+  assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
     'isolated omnibox changes must not pull in unrelated core user-action regressions');
   console.log('PASS: isolated background omnibox changes honor focused browser coverage');
 
@@ -293,14 +293,14 @@ try {
 
   // Newly extracted feature modules select their established focused browser coverage.
   const extractedFeatureCases = [
-    ['extension/multiverse-copy.js', 'e2e-e2e-core-user-actions.spec.js'],
+    ['extension/multiverse-copy.js', 'e2e-core-user-actions.spec.js'],
     ['extension/multiverse-reference-helpers.js', 'multiverse-contiguous-range-routing.spec.js'],
     ['extension/multiverse-post.js', 'multiverse-disjoint-chapter-post.spec.js'],
     ['extension/blb-page-selection-button.js', 'research-dom-smoke.spec.js'],
     ['extension/Tutorial.html', 'pr-422-feature-regressions.spec.js'],
     ['extension/multiverse-handoff.js', 'multiverse-handoff.spec.js'],
     ['extension/multiverse-tool-view.js', 'multiverse-tool-view.spec.js'],
-    ['extension/blb-parse-popup.js', 'e2e-e2e-core-user-actions.spec.js'],
+    ['extension/blb-parse-popup.js', 'e2e-core-user-actions.spec.js'],
     ['extension/blb-verse-link-navigation.js', 'blb-verse-link-navigation.spec.js'],
     ['extension/study-reference-capture.js', 'study-reference-capture.spec.js'],
     ['extension/criteria-search-navigation.js', 'criteria-search-navigation.spec.js'],
@@ -326,17 +326,17 @@ try {
         file + ' must not select unrelated Study lifecycle tests');
     }
     if (file === 'extension/blb-verse-link-navigation.js') {
-      assert(!result.values.changed_specs.includes('tests/browser/e2e-e2e-core-user-actions.spec.js'),
+      assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
         file + ' must select direct target and click-routing behavior coverage');
     }
     if (file === 'extension/criteria-search-navigation.js') {
-      assert(!result.values.changed_specs.includes('tests/browser/e2e-e2e-core-user-actions.spec.js'),
+      assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
         file + ' must select direct Criteria Search navigation behavior coverage');
     }
     if (file === 'extension/multiverse-handoff.js') {
       assert(result.values.changed_specs.includes('tests/browser/multiverse-handoff.spec.js'),
         file + ' must select direct visibility behavior coverage');
-      assert(!result.values.changed_specs.includes('tests/browser/e2e-e2e-core-user-actions.spec.js'),
+      assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
         file + ' must not select unrelated generic core coverage');
     }
     if (file === 'extension/multiverse-reference-helpers.js' || file === 'extension/multiverse-post.js' || file === 'extension/Tutorial.html') {
@@ -352,7 +352,7 @@ try {
       assertValue(result, 'reference_required', true, file);
     }
     if (file === 'extension/blb-passive-new-tab-targets.js') {
-      assert(!result.values.changed_specs.includes('tests/browser/e2e-e2e-core-user-actions.spec.js'),
+      assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
         file + ' must select direct passive-target behavior coverage');
     }
     if (file === 'extension/source-page-collector.js') {
