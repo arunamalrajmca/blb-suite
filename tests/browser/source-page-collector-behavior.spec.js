@@ -227,7 +227,7 @@ test('ChurchofJesusChrist shows its BLB references button on scripture-study pag
   await expect.poll(async () => extensionWorker.evaluate(async () => {
     const saved = await chrome.storage.local.get({ __blbTestChurchOfJesusChristRefs: [] });
     return saved.__blbTestChurchOfJesusChristRefs.length;
-  }), { timeout: 10000 }).toBe(2);
+  }), { timeout: 10000 }).toBe(6);
 
   const refs = await extensionWorker.evaluate(async () => {
     const saved = await chrome.storage.local.get({ __blbTestChurchOfJesusChristRefs: [] });
