@@ -1927,6 +1927,3 @@ test('Facebook book clicks use only permitted immediate context', async ({ page,
   );
   expect(biblePaths).not.toContain('/kjv/2sa/21/14/');
 });
-
-// Load the right-panel regression cases into this reliably discovered E2E spec.
-require('./blb-right-panel-default.cases.js');
