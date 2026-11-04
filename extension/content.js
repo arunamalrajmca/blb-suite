@@ -69,6 +69,69 @@ async function isSuiteEnabled() {
   return suiteEnabled;
 }
 
+/*
+ * BLB exposes #siteExpandRight when the right-side parallel Bible panel is
+ * collapsed. Use that native control across page templates instead of
+ * relying on verse-page-only panel IDs.
+ *
+ * BLB may restore a saved collapsed layout after this content script starts.
+ * Observe the initial layout window and re-expand when the native control
+ * becomes visible. A hidden control means the right panel is expanded.
+ */
+let blbDefaultRightPanelExpansionStarted = false;
+function ensureBlbDefaultRightPanelExpanded() {
+  let hostname = String(location.hostname || '').toLowerCase();
+  if (hostname.startsWith('www.')) hostname = hostname.slice(4);
+  if (hostname !== BLB_HOSTNAME || blbDefaultRightPanelExpansionStarted) return;
+  blbDefaultRightPanelExpansionStarted = true;
+
+  let observer = null;
+  let expansionPending = false;
+  let observerTimeout = null;
+  const stopObserving = () => {
+    try { observer?.disconnect(); } catch (_) {}
+    observer = null;
+    if (observerTimeout !== null) {
+      window.clearTimeout(observerTimeout);
+      observerTimeout = null;
+    }
+  };
+  const inspect = () => {
+    const rightPanel = document.getElementById('bodyCol1A');
+    // Verse pages expose the panel itself; its state is authoritative when
+    // present, because BLB can briefly leave the native control visible.
+    if (rightPanel && !rightPanel.classList.contains('hidden')) {
+      expansionPending = false;
+      return true;
+    }
+    const expandControl = document.getElementById('siteExpandRight');
+    if (!expandControl) return false;
+    if (expandControl.classList.contains('hidden')) {
+      expansionPending = false;
+      return true;
+    }
+    if (expansionPending) return false;
+    const nativeHandler = expandControl.getAttribute('onclick') || '';
+    if (!nativeHandler.includes("BLB.siteResizeToggle('right')") &&
+        !nativeHandler.includes('BLB.siteResizeToggle("right")')) return false;
+    expansionPending = true;
+    expandControl.click();
+    return true;
+  };
+
+  observer = new MutationObserver(() => { inspect(); });
+  observer.observe(document.documentElement || document, {
+    childList: true, subtree: true, attributes: true, attributeFilter: ['class']
+  });
+  inspect();
+  observerTimeout = window.setTimeout(stopObserving, 12000);
+}
+// Initialize for the setting value already present at page load. The storage
+// listener below handles subsequent changes but does not fire for initial state.
+void suiteSettingsReadyPromise.then(enabled => {
+  if (enabled) ensureBlbDefaultRightPanelExpanded();
+}).catch(() => {});
+
 // Runtime messaging can throw synchronously when an extension is reloaded or
 // updated while an old content script is still attached to a page. Keep that
 // stale-page condition silent and fail closed instead of surfacing
@@ -3943,6 +4006,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.masterEnabled) {
     suiteEnabled = changes.masterEnabled.newValue !== false;
     blbPassiveNewTabTargets?.refresh?.();
+    if (suiteEnabled) ensureBlbDefaultRightPanelExpanded();
     if (!suiteEnabled) {
       document.getElementById('blb-suite-webster-multiverse')?.remove();
       document.getElementById('blb-suite-webster-multiverse-reset-position')?.remove();

@@ -241,6 +241,7 @@ const mappedSpecs = new Set([
   "tests/browser/shared-regex-patterns.spec.js",
   "tests/browser/rediscover-sagacity-button.spec.js",
   "tests/browser/research-dom-smoke.spec.js",
+  "tests/browser/right-panel-default-expanded.spec.js",
   "tests/browser/multiverse-tab-reuse.spec.js",
   "tests/browser/multiverse-contiguous-range-routing.spec.js",
   "tests/browser/multiverse-disjoint-chapter-post.spec.js",
