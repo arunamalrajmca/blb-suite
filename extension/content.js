@@ -70,10 +70,11 @@ async function isSuiteEnabled() {
 }
 
 /*
- * BLB's parallel Bible panel (#bodyCol1A) can be initialized and then
- * restored from the site's own saved layout state during page startup.
- * Wait until the window load event, then keep an observer briefly so a late
- * BLB restore cannot immediately undo the default expansion.
+ * BLB can restore its saved layout after the first parallel-panel expansion.
+ * Use the native right control on every supported template, but observe only
+ * the verse-page panel for a confirmed expanded -> collapsed transition.
+ * This avoids interpreting BLB's intermediate DOM mutations as repeated
+ * requests while still correcting one late saved-layout overwrite.
  */
 let blbRightPanelExpansionScheduled = false;
 function ensureBlbRightPanelExpandedAfterLoad() {
@@ -87,26 +88,61 @@ function ensureBlbRightPanelExpandedAfterLoad() {
       const expandControl = document.getElementById('siteExpandRight');
       if (!expandControl) return;
 
-      // Verse pages expose the parallel Bible panel directly. If it is
-      // already expanded, do not invoke BLB's toggle.
       const panel = document.getElementById('bodyCol1A');
       if (panel && !panel.classList.contains('hidden')) return;
       if (expandControl.classList.contains('hidden')) return;
 
-      // Content scripts run in an isolated JavaScript world. Verify the
-      // native page-world inline handler, then dispatch it through the DOM.
       const nativeHandler = expandControl.getAttribute('onclick') || '';
       if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(nativeHandler)) return;
 
-      // Intentionally perform exactly one native toggle. Do not observe DOM
-      // mutations or retry: BLB's layout code can leave this control visible
-      // during its asynchronous work, and repeated clicks cause rapid
-      // expand/collapse requests to the remote CFC endpoint.
+      // MultiVerse and Criteria Search do not expose #bodyCol1A. Their native
+      // control is still reliable, so retain the single-click path there.
+      if (!panel) {
+        expandControl.click();
+        return;
+      }
+
+      let clickCount = 1;
+      let sawExpandedState = false;
+      let observer;
+      const stopObserving = () => {
+        if (observer) observer.disconnect();
+        observer = null;
+      };
+      observer = new MutationObserver(() => {
+        const isExpanded = !panel.classList.contains('hidden');
+        if (isExpanded) {
+          sawExpandedState = true;
+          return;
+        }
+
+        // Only a confirmed expanded -> collapsed transition is a saved-layout
+        // overwrite. Ignore intermediate changes until the first expansion
+        // has actually completed, and permit at most one corrective click.
+        if (!sawExpandedState || clickCount >= 2) return;
+        if (expandControl.classList.contains('hidden')) return;
+        const currentHandler = expandControl.getAttribute('onclick') || '';
+        if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(currentHandler)) {
+          stopObserving();
+          return;
+        }
+
+        clickCount += 1;
+        stopObserving();
+        expandControl.click();
+      });
+      observer.observe(panel, {attributes:true, attributeFilter:['class']});
+      observer.observe(expandControl, {attributes:true, attributeFilter:['class']});
+
+      // Start observing before dispatch so even a synchronous native toggle
+      // is recorded. The observer is narrowly scoped and always self-terminates.
       expandControl.click();
+      window.setTimeout(stopObserving, 5000);
     };
 
-    // Run once after BLB's load-time layout restoration has had a chance to
-    // settle. The action is deliberately not retried after it is dispatched.
+    // BLB's initial layout restoration runs during page startup. The first
+    // expansion is delayed slightly; a single verified late collapse may be
+    // corrected during the following five seconds.
     window.setTimeout(inspectOnce, 350);
   };
 

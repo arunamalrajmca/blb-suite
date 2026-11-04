@@ -135,7 +135,7 @@ test('BLB late saved-layout restoration cannot collapse the default verse-page r
   const page = await openFixture(
     context,
     'https://www.blueletterbible.org/kjv/gen/1/1/',
-    versePageHtml({ panel: 'expanded', restoreAfterLoadMs: 100 })
+    versePageHtml({ panel: 'collapsed', restoreAfterLoadMs: 700 })
   );
 
   await page.waitForFunction(() =>
@@ -150,7 +150,7 @@ test('BLB late saved-layout restoration cannot collapse the default verse-page r
     rightControlClass: document.getElementById('siteExpandRight').className
   }));
 
-  expect(result.calls).toEqual(['right']);
+  expect(result.calls).toEqual(['right', 'right']);
   expect(result.rightPanelClass).toBe('bodyColumns');
   expect(result.rightControlClass).toContain('hidden');
 });
