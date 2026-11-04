@@ -263,7 +263,8 @@ const mappedSpecs = new Set([
   "tests/browser/facebook-selection-parser.spec.js",
   "tests/browser/substack-selection-parser.spec.js",
   "tests/browser/omnibox-command-routing.spec.js",
-  "tests/browser/pdf-selection-regressions.spec.js"
+  "tests/browser/pdf-selection-regressions.spec.js",
+  "tests/browser/blb-right-panel-default.spec.js"
 ]);
 const separatelyManagedSpecs = new Set(["tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/performance.spec.js"]);
 const unmapped = selected.filter(path => !mappedSpecs.has(path) && !separatelyManagedSpecs.has(path));
