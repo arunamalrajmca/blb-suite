@@ -44,7 +44,9 @@ jobs:
             C:\Program Files\BraveSoftware\Brave-Browser
             C:\Users\runneradmin\AppData\Local\BraveSoftware\Brave-Browser
             C:\Users\runneradmin\AppData\Local\ms-playwright
-          key: ${{ runner.os }}-popup-toolchain-v2-pw-1.63.0-${{ hashFiles('package.json') }}
+          key: ${{ runner.os }}-popup-toolchain-v3-pw-1.63.0-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-popup-toolchain-v2-pw-1.63.0-
 
       - name: Install Brave only when it is not cached
         id: brave-setup
@@ -79,23 +81,27 @@ jobs:
           $installedVersion = node -p "require('./node_modules/@playwright/test/package.json').version"
           if ($installedVersion -ne '1.63.0') { throw "Unexpected @playwright/test version: $installedVersion" }
 
-      - name: Install Chrome only when it is not cached
+      - name: Install Chrome for Testing only when it is not cached
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $chromeCandidates = @(
-            (Join-Path $env:ProgramFiles 'Google\Chrome\Application\chrome.exe'),
-            (Join-Path ${env:ProgramFiles(x86)} 'Google\Chrome\Application\chrome.exe')
-          )
-          $chromePath = $chromeCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
-          if (-not $chromePath) {
-            npx playwright install chrome
-            if ($LASTEXITCODE -ne 0) { throw "Chrome installation failed with exit code $LASTEXITCODE." }
-            $chromePath = $chromeCandidates | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          $chromeRoot = Join-Path $env:LOCALAPPDATA 'ChromeForTesting'
+          $chromePath = Join-Path $chromeRoot 'chrome-win64\\chrome.exe'
+          if (-not (Test-Path $chromePath)) {
+            $release = Invoke-RestMethod -Uri 'https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions.json'
+            $download = $release.channels.Stable.downloads.chrome | Where-Object { $_.platform -eq 'win64' } | Select-Object -First 1
+            if (-not $download) { throw 'Stable Chrome for Testing win64 download was not found in the official release metadata.' }
+            New-Item -ItemType Directory -Force -Path $chromeRoot | Out-Null
+            $archive = Join-Path $env:TEMP 'chrome-for-testing-win64.zip'
+            Invoke-WebRequest -Uri $download.url -OutFile $archive
+            Expand-Archive -Path $archive -DestinationPath $chromeRoot -Force
+            Remove-Item $archive -Force
           } else {
-            Write-Host "Using cached Chrome: $chromePath"
+            Write-Host "Using cached Chrome for Testing: $chromePath"
           }
-          if (-not $chromePath) { throw 'Google Chrome was not found after cache restore/install.' }
+          if (-not (Test-Path $chromePath)) { throw "Chrome for Testing executable was not found at $chromePath." }
+          "BLB_CHROME_EXECUTABLE=$chromePath" >> $env:GITHUB_ENV
+          Write-Host "Using Chrome for Testing: $chromePath"
 
       # Save immediately after provisioning, before the diagnostic can fail.
       # This makes a successfully installed Brave reusable on the next fresh runner
