@@ -357,3 +357,28 @@ test('native right-panel expansion is one-shot even when BLB leaves its control 
     controlStillVisible: true
   });
 });
+
+test('BLB right-control class mutations do not falsely trigger a second verse-panel toggle', async ({ context, extensionStorage }) => {
+  await extensionStorage.set({ masterEnabled: true });
+  const page = await openFixture(
+    context,
+    'https://www.blueletterbible.org/kjv/gen/1/1/',
+    versePageHtml({ panel: 'collapsed' })
+  );
+
+  await page.waitForFunction(() =>
+    document.getElementById('bodyCol1A')?.classList.contains('hidden') === false &&
+    window.__rightToggleCalls.length === 1
+  );
+  await page.evaluate(() => {
+    const control = document.getElementById('siteExpandRight');
+    control.classList.remove('hidden');
+    control.classList.add('hidden');
+  });
+  await page.waitForTimeout(250);
+
+  expect(await page.evaluate(() => ({
+    calls: window.__rightToggleCalls,
+    panelExpanded: !document.getElementById('bodyCol1A').classList.contains('hidden')
+  }))).toEqual({ calls: ['right'], panelExpanded: true });
+});
