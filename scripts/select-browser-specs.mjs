@@ -327,17 +327,19 @@ const values = {
     "tests/browser/blb-auto-hyperlinker.spec.js",
     "tests/browser/blb-draggable-button.spec.js",
     "tests/browser/case-sensitive-routing-behavior.spec.js",
-    "tests/browser/feature-lifecycle-regressions.spec.js",
-    "tests/browser/study-backup-restore.spec.js",
-    "tests/browser/study-reference-capture.spec.js",
-    "tests/browser/study-session-export.spec.js",
     "tests/browser/extension.spec.js",
     "tests/browser/known-host-extension.spec.js",
     "tests/browser/pr-422-feature-regressions.spec.js",
    
     "tests/browser/site-feature-defaults.spec.js",
-    "tests/browser/study-session-popup-ui-regression.spec.js"
   ) || unmapped.length > 0 || changedBrowserSpecs.length > 0),
+  study_sessions_required: String(full || selected.some(path => [
+    "tests/browser/feature-lifecycle-regressions.spec.js",
+    "tests/browser/study-backup-restore.spec.js",
+    "tests/browser/study-reference-capture.spec.js",
+    "tests/browser/study-session-export.spec.js",
+    "tests/browser/study-session-popup-ui-regression.spec.js"
+  ].includes(path))),
   group_b_required: String(has(
     "tests/browser/redirect-hostnames.spec.js",
     "tests/browser/blb-non-kjv-redirect.spec.js",
