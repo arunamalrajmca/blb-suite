@@ -104,6 +104,22 @@ assert.equal(resolveDirectBibleReference('Please read John 3:16'), null);
 assert.equal(resolveDirectBibleReference('John 3:16; 17'), null);
 assert.equal(resolveDirectBibleReference(''), null);
 
+// Aliases must work in the shared URL/reference resolver too, not only
+// in text parsing and book-name lookup. Source-page collectors pass these
+// abbreviated book names directly from linked URL paths.
+for (const [alias, expectedBook] of [
+  ['ps', 'psalms'],
+  ['psalm', 'psalms'],
+  ['prov', 'proverbs'],
+  ['1 pet', '1 peter'],
+  ['2 pet', '2 peter'],
+  ['1 thes', '1 thessalonians'],
+  ['2 thes', '2 thessalonians']
+]) {
+  const resolved = resolveBibleReference(alias, 3, 1, 2);
+  assert.equal(resolved?.book.name, expectedBook, alias);
+}
+
 // Common normalization hazards and ambiguous short aliases.
 assert.equal(normalizeBibleReferenceText('John\u00a03:16\u2007'), 'John 3:16');
 assert.equal(resolveBibleBook('II John').name, '2 john');
