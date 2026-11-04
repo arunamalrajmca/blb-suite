@@ -274,3 +274,31 @@ test('right-panel behavior does not run on non-BLB sites', async ({ context, ext
   expect(result.calls).toEqual([]);
   expect(result.rightPanelClass).toBe('bodyColumns hidden');
 });
+
+
+test('native right-panel expansion is one-shot even when BLB leaves its control visible', async ({ context, extensionStorage }) => {
+  await extensionStorage.set({ masterEnabled: true });
+  // Model BLB doing layout work that mutates the document but does not
+  // immediately hide #siteExpandRight. The observer must not interpret those
+  // mutations as permission to invoke the remote-backed toggle repeatedly.
+  const html = toolPageHtml('multiverse').replace(
+    "document.getElementById('siteExpandRight')?.classList.add('hidden');",
+    "document.documentElement.classList.toggle('blb-layout-pulse');"
+  );
+  const page = await openFixture(
+    context,
+    'https://www.blueletterbible.org/tools/MultiVerse.cfm',
+    html
+  );
+
+  await page.waitForFunction(() => window.__rightToggleCalls.length === 1);
+  await page.waitForTimeout(700);
+
+  expect(await page.evaluate(() => ({
+    calls: window.__rightToggleCalls,
+    controlStillVisible: !document.getElementById('siteExpandRight').classList.contains('hidden')
+  }))).toEqual({
+    calls: ['right'],
+    controlStillVisible: true
+  });
+});

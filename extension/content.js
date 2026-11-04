@@ -112,6 +112,13 @@ function ensureBlbRightPanelExpandedAfterLoad() {
       const nativeHandler = expandControl.getAttribute('onclick') || '';
       if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(nativeHandler)) return;
 
+      // This is deliberately a one-shot action. BLB may leave the expand
+      // control visible while its page-world layout work is running, and its
+      // own mutations must never cause this observer to toggle the panel again.
+      // Disconnect before dispatching the native click to prevent a
+      // self-triggered expand/collapse loop and repeated remote CFC requests.
+      stopObserving();
+
       // Delegate to BLB's own handler; it knows the active page template and
       // its corresponding right-side container.
       expandControl.click();
