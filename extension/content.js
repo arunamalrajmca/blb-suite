@@ -102,9 +102,14 @@ function ensureBlbRightPanelExpandedAfterLoad() {
       let clickCount = 0;
       let sawExpandedState = !panel.classList.contains('hidden');
       let observer;
+      let observationTimeout;
       const stopObserving = () => {
         if (observer) observer.disconnect();
         observer = null;
+        if (observationTimeout !== undefined) {
+          window.clearTimeout(observationTimeout);
+          observationTimeout = undefined;
+        }
       };
       observer = new MutationObserver(records => {
         // BLB can add and remove "hidden" synchronously during one layout
@@ -160,9 +165,10 @@ function ensureBlbRightPanelExpandedAfterLoad() {
         expandControl.click();
       }
 
-      // Keep observing until this document is left. The observer watches
-      // only #bodyCol1A's class, so normal page activity cannot trigger it.
-      // Disconnect on navigation to release the page-local observer.
+      // BLB may restore a stale saved layout after its initial startup pass.
+      // Keep this narrowly scoped observer only for a bounded settling window;
+      // later page activity must not leave a permanent observer attached.
+      observationTimeout = window.setTimeout(stopObserving, 10000);
       window.addEventListener('pagehide', stopObserving, { once: true });
     };
 
