@@ -83,6 +83,7 @@ jobs:
           REFERENCE_GATE_REQUIRED: ${{ inputs.browser_e2e_required }}
           FULL_BROWSER_SUITE: ${{ inputs.full_browser_suite }}
           SELECTED_SPECS: ${{ inputs.changed_specs }}
+          STUDY_SESSIONS_REQUIRED: ${{ inputs.study_sessions_required }}
         shell: bash
         run: |
           set -euo pipefail
@@ -90,6 +91,12 @@ jobs:
           specs=()
           for spec in "${changed_specs[@]}"; do
             case "$spec" in
+              tests/browser/feature-lifecycle-regressions.spec.js|tests/browser/study-backup-restore.spec.js|tests/browser/study-reference-capture.spec.js|tests/browser/study-session-export.spec.js|tests/browser/study-session-popup-ui-regression.spec.js)
+                if [[ "$STUDY_SESSIONS_REQUIRED" == "true" ]]; then
+                  echo "Delegating $spec to the dedicated Study Sessions job."
+                  continue
+                fi
+                ;;
               tests/browser/redirect-source-url-patterns.spec.js|tests/browser/redirect-hostnames.spec.js|tests/browser/blb-non-kjv-redirect.spec.js|tests/browser/redirect-toggle-isolation.spec.js|tests/browser/multiverse-clipboard-reference-pattern.spec.js|tests/browser/popup-master-toggle-regression.spec.js|tests/browser/facebook-selection-parser.spec.js|tests/browser/substack-selection-parser.spec.js|tests/browser/omnibox-command-routing.spec.js|tests/browser/pdf-selection-regressions.spec.js|tests/browser/shared-regex-patterns.spec.js|tests/browser/rediscover-sagacity-button.spec.js|tests/browser/research-dom-smoke.spec.js)
                 if [[ "$REFERENCE_GATE_REQUIRED" == "true" && ( "$FULL_BROWSER_SUITE" == "true" || ",$SELECTED_SPECS," == *",$spec,"* ) ]]; then
                   echo "Delegating $spec to the required browser-e2e gate."
@@ -244,19 +251,19 @@ jobs:
       - name: Grant test-only generic host access
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
       - name: Run Study Sessions popup UI regressions
-        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/study-session-popup-ui-regression.spec.js') }}
+        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/study-session-popup-ui-regression.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/study-session-popup-ui-regression.spec.js') }}
         run: npx playwright test tests/browser/study-session-popup-ui-regression.spec.js
       - name: Run Study Sessions lifecycle regressions
-        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/feature-lifecycle-regressions.spec.js') }}
+        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/feature-lifecycle-regressions.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/feature-lifecycle-regressions.spec.js') }}
         run: npx playwright test tests/browser/feature-lifecycle-regressions.spec.js
       - name: Run Study Sessions backup and restore regressions
-        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/study-backup-restore.spec.js') }}
+        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/study-backup-restore.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/study-backup-restore.spec.js') }}
         run: npx playwright test tests/browser/study-backup-restore.spec.js
       - name: Run Study reference capture behavior regressions
-        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/study-reference-capture.spec.js') }}
+        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/study-reference-capture.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/study-reference-capture.spec.js') }}
         run: npx playwright test tests/browser/study-reference-capture.spec.js
       - name: Run Study PDF export behavior regressions
-        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/study-session-export.spec.js') }}
+        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/study-session-export.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/study-session-export.spec.js') }}
         run: npx playwright test tests/browser/study-session-export.spec.js
 
   core-group-b:
