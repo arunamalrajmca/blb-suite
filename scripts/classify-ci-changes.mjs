@@ -44,6 +44,7 @@ function sameExceptVersion(path) {
 }
 function nonRuntimePath(path) {
   return /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/)|tests\/selector\/|scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs|scripts\/reference-e2e-matrix\.json$|scripts\/test-ci-routing-selector\.js)/i.test(path)
+    || path === "scripts/test-popup-cross-browser-rendering.js"
     || /^tests\/browser\/[^/]+\.spec\.js$/i.test(path)
     // These store-only verifiers and their tests have dedicated workflows; they do not change extension runtime behavior.
     || /^(?:scripts\/(?:verify-store-assets|verify-store-branding|verify-store-package|verify-store-submission-assets)\.py|tests\/test_verify_store_(?:package|submission_assets)\.py)$/i.test(path)
@@ -61,6 +62,7 @@ function packageValidationPath(path) {
     || path === "scripts/select-reference-matrix.mjs"
     || path === "scripts/reference-e2e-matrix.json"
     || path === "scripts/test-ci-routing-selector.js"
+    || path === "scripts/test-popup-cross-browser-rendering.js"
     || path === "scripts/validate-build.js"
     || path === "package.json"
     || path === "package-lock.json"
