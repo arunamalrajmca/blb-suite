@@ -110,7 +110,7 @@ function ensureBlbRightPanelExpandedAfterLoad() {
       // supplied native control carries BLB's inline right-toggle handler;
       // clicking the DOM control dispatches it in the page's own world.
       const nativeHandler = expandControl.getAttribute('onclick') || '';
-      if (!/BLB\\.siteResizeToggle\\(\\s*['"]right['"]\\s*\\)/.test(nativeHandler)) return;
+      if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(nativeHandler)) return;
 
       // Delegate to BLB's own handler; it knows the active page template and
       // its corresponding right-side container.
