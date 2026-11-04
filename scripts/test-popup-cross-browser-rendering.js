@@ -66,8 +66,15 @@ async function launchBrowser(name) {
     // starting between those operations cannot be missed.
     let worker = context.serviceWorkers()[0];
     if (!worker) {
-      const workerStarted = context.waitForEvent('serviceworker', { timeout: 30000 });
-      worker = context.serviceWorkers()[0] || await workerStarted;
+      const workerStarted = context.waitForEvent('serviceworker', { timeout: 30000 })
+        .then(startedWorker => ({ worker: startedWorker }))
+        .catch(startupError => ({ startupError }));
+      worker = context.serviceWorkers()[0];
+      if (!worker) {
+        const started = await workerStarted;
+        if (started.startupError) throw started.startupError;
+        worker = started.worker;
+      }
     }
 
     const match = worker.url().match(/^chrome-extension:\/\/([^/]+)\//);
