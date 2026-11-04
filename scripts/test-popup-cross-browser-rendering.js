@@ -48,7 +48,10 @@ async function removeUserDataDir(userDataDir) {
 async function launchBrowser(name) {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-popup-'));
   const options = {
-    headless: true,
+    // Chromium's headless mode does not reliably load unpacked extensions on
+    // Windows. Use the normal browser UI process; hosted Windows runners have
+    // a desktop session and can run it without a virtual display.
+    headless: false,
     args: [
       '--no-sandbox',
       '--disable-dev-shm-usage',
