@@ -97,6 +97,13 @@ function ensureBlbDefaultRightPanelExpanded() {
     }
   };
   const inspect = () => {
+    const rightPanel = document.getElementById('bodyCol1A');
+    // Verse pages expose the panel itself; its state is authoritative when
+    // present, because BLB can briefly leave the native control visible.
+    if (rightPanel && !rightPanel.classList.contains('hidden')) {
+      expansionPending = false;
+      return true;
+    }
     const expandControl = document.getElementById('siteExpandRight');
     if (!expandControl) return false;
     if (expandControl.classList.contains('hidden')) {
