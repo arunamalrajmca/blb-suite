@@ -61,6 +61,7 @@ function packageValidationPath(path) {
     || path === "scripts/select-reference-matrix.mjs"
     || path === "scripts/reference-e2e-matrix.json"
     || path === "scripts/test-ci-routing-selector.js"
+    || path === "scripts/test-popup-cross-browser-rendering.js"
     || path === "scripts/validate-build.js"
     || path === "package.json"
     || path === "package-lock.json"
