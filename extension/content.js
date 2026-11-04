@@ -106,20 +106,30 @@ function ensureBlbRightPanelExpandedAfterLoad() {
         if (observer) observer.disconnect();
         observer = null;
       };
-      observer = new MutationObserver(() => {
-        const isExpanded = !panel.classList.contains('hidden');
-        if (isExpanded) {
-          sawExpandedState = true;
-          return;
+      observer = new MutationObserver(records => {
+        // BLB can add and remove "hidden" synchronously during one layout
+        // pass. MutationObserver then delivers both records together, while
+        // reading panel.classList only exposes the final (collapsed) state.
+        // Reconstruct each class transition from oldValue + the next record.
+        let collapsedAfterExpansion = false;
+        for (let index = 0; index < records.length; index += 1) {
+          const oldClasses = records[index].oldValue || '';
+          const nextClasses = index + 1 < records.length
+            ? (records[index + 1].oldValue || '')
+            : panel.getAttribute('class') || '';
+          const wasExpanded = !oldClasses.split(/\\s+/).includes('hidden');
+          const isExpanded = !nextClasses.split(/\\s+/).includes('hidden');
+
+          if (isExpanded) sawExpandedState = true;
+          if (sawExpandedState && wasExpanded && !isExpanded) {
+            collapsedAfterExpansion = true;
+          }
         }
 
-        // Only a confirmed expanded -> collapsed transition is a saved-layout
-        // overwrite. Ignore intermediate changes until the panel has actually
-        // been expanded, and permit at most one corrective click.
-        if (!sawExpandedState || clickCount >= 2) return;
+        if (!collapsedAfterExpansion || clickCount >= 2) return;
         if (expandControl.classList.contains('hidden')) return;
         const currentHandler = expandControl.getAttribute('onclick') || '';
-        if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(currentHandler)) {
+        if (!/BLB\\.siteResizeToggle\\(\\s*['"]right['"]\\s*\\)/.test(currentHandler)) {
           stopObserving();
           return;
         }
@@ -128,7 +138,7 @@ function ensureBlbRightPanelExpandedAfterLoad() {
         stopObserving();
         expandControl.click();
       });
-      observer.observe(panel, {attributes:true, attributeFilter:['class']});
+      observer.observe(panel, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
       observer.observe(expandControl, {attributes:true, attributeFilter:['class']});
 
       // If initially collapsed, perform the first expansion. If already

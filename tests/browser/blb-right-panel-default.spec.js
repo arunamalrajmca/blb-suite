@@ -155,6 +155,33 @@ test('BLB late saved-layout restoration cannot collapse the default verse-page r
   expect(result.rightControlClass).toContain('hidden');
 });
 
+test('BLB rapid same-task verse-panel collapse is detected and corrected', async ({ context, extensionStorage }) => {
+  await extensionStorage.set({ masterEnabled: true });
+  const html = versePageHtml({ panel: 'collapsed' }).replace(
+    "document.getElementById('bodyCol1A')?.classList.remove('hidden');",
+    "const panel = document.getElementById('bodyCol1A');\n        panel?.classList.remove('hidden');\n        if (window.__rightToggleCalls.length === 1) panel?.classList.add('hidden');"
+  );
+  const page = await openFixture(
+    context,
+    'https://www.blueletterbible.org/kjv/gen/1/1/',
+    html
+  );
+
+  await page.waitForFunction(() =>
+    window.__rightToggleCalls.length === 2 &&
+    document.getElementById('bodyCol1A')?.classList.contains('hidden') === false
+  );
+  expect(await page.evaluate(() => ({
+    calls: window.__rightToggleCalls,
+    rightPanelClass: document.getElementById('bodyCol1A').className,
+    rightControlHidden: document.getElementById('siteExpandRight').classList.contains('hidden')
+  }))).toEqual({
+    calls: ['right', 'right'],
+    rightPanelClass: 'bodyColumns',
+    rightControlHidden: false
+  });
+});
+
 test('BLB re-expands a verse panel if delayed saved-layout restoration collapses it', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openFixture(
