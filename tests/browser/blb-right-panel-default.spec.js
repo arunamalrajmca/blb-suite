@@ -155,6 +155,31 @@ test('BLB late saved-layout restoration cannot collapse the default verse-page r
   expect(result.rightControlClass).toContain('hidden');
 });
 
+test('BLB re-expands a verse panel if delayed saved-layout restoration collapses it', async ({ context, extensionStorage }) => {
+  await extensionStorage.set({ masterEnabled: true });
+  const page = await openFixture(
+    context,
+    'https://www.blueletterbible.org/kjv/gen/1/1/',
+    versePageHtml({ panel: 'expanded', restoreAfterLoadMs: 700 })
+  );
+
+  await page.waitForFunction(() =>
+    document.getElementById('bodyCol1A')?.classList.contains('hidden') === false &&
+    window.__rightToggleCalls.length === 1
+  );
+  await page.waitForTimeout(300);
+
+  expect(await page.evaluate(() => ({
+    calls: window.__rightToggleCalls,
+    rightPanelClass: document.getElementById('bodyCol1A').className,
+    rightControlClass: document.getElementById('siteExpandRight').className
+  }))).toEqual({
+    calls: ['right'],
+    rightPanelClass: 'bodyColumns',
+    rightControlClass: 'site-expand-container right hidden'
+  });
+});
+
 test('BLB leaves an already-expanded verse panel and pages without a right control unchanged', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
 
