@@ -138,8 +138,15 @@ async function launchBrowser(name) {
       '--load-extension=' + extensionPath
     ]
   };
-  if (name === 'Google Chrome') options.channel = 'chrome';
-  else options.executablePath = bravePath;
+  if (name === 'Google Chrome for Testing') {
+    const chromeForTestingPath = process.env.BLB_CHROME_EXECUTABLE;
+    if (!chromeForTestingPath || !fs.existsSync(chromeForTestingPath)) {
+      throw new Error('Chrome for Testing executable was not found. Set BLB_CHROME_EXECUTABLE to its chrome.exe path.');
+    }
+    options.executablePath = chromeForTestingPath;
+  } else {
+    options.executablePath = bravePath;
+  }
   let context;
   try {
     context = await chromium.launchPersistentContext(userDataDir, options);
@@ -318,7 +325,7 @@ function compareBrowsers(results) {
 }
 
 (async () => {
-  const results = [await inspectBrowser('Google Chrome'), await inspectBrowser('Brave')];
+  const results = [await inspectBrowser('Google Chrome for Testing'), await inspectBrowser('Brave')];
   const differences = compareBrowsers(results);
   fs.writeFileSync(path.resolve(process.cwd(), 'popup-rendering-metrics.json'), JSON.stringify({ results, differences }, null, 2));
   if (differences.length) {
