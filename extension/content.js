@@ -70,64 +70,82 @@ async function isSuiteEnabled() {
 }
 
 /*
- * BLB's parallel Bible panel (#bodyCol1A) is collapsed with the "hidden"
- * class. The site's own #siteExpandRight control is exposed in that state
- * and calls BLB.siteResizeToggle('right'). Use that control only when both
- * signals agree; never call the toggle blindly because it is not idempotent.
+ * BLB's parallel Bible panel (#bodyCol1A) can be initialized and then
+ * restored from the site's own saved layout state during page startup.
+ * Wait until the window load event, then keep an observer briefly so a late
+ * BLB restore cannot immediately undo the default expansion.
  */
-let blbRightPanelExpansionStarted = false;
-function ensureBlbRightPanelExpanded() {
-  const hostname = String(location.hostname || '').toLowerCase().replace(/^www\./, '');
-  if (hostname !== BLB_HOSTNAME || blbRightPanelExpansionStarted) return;
-  blbRightPanelExpansionStarted = true;
+let blbRightPanelExpansionScheduled = false;
+function ensureBlbRightPanelExpandedAfterLoad() {
+  const hostname = String(location.hostname || '').toLowerCase().replace(/^www\\./, '');
+  if (hostname !== BLB_HOSTNAME || blbRightPanelExpansionScheduled) return;
+  blbRightPanelExpansionScheduled = true;
 
-  let observer = null;
-  const stopObserving = () => {
-    try { observer?.disconnect(); } catch (_) {}
-    observer = null;
-  };
-  const inspect = () => {
-    const panel = document.getElementById('bodyCol1A');
-    const expandControl = document.getElementById('siteExpandRight');
-    if (!panel || !expandControl) return false;
+  const startAfterLoad = () => {
+    let observer = null;
+    let checkTimer = null;
+    let disposed = false;
 
-    // An already-visible panel needs no action. If the expand control is
-    // hidden while the panel is hidden, the page does not expose a safe
-    // expansion action; wait for BLB to finish rendering rather than guessing.
-    if (!panel.classList.contains('hidden')) return true;
-    if (expandControl.classList.contains('hidden')) return false;
+    const stopObserving = () => {
+      if (disposed) return;
+      disposed = true;
+      if (checkTimer !== null) window.clearTimeout(checkTimer);
+      if (observer) observer.disconnect();
+      observer = null;
+    };
 
-    // Click BLB's own control so its layout, sizing, and session logic remain
-    // authoritative. The control's inline handler runs in the page context.
-    expandControl.click();
-    return true;
-  };
-  const check = () => {
-    if (inspect()) {
-      stopObserving();
-      return;
-    }
-    // Pages without a parallel Bible panel have nothing to expand.
-    if (document.readyState !== 'loading' && !document.getElementById('bodyCol1A')) {
-      stopObserving();
-    }
-  };
+    const inspect = () => {
+      const panel = document.getElementById('bodyCol1A');
+      const expandControl = document.getElementById('siteExpandRight');
+      if (!panel || !expandControl) return;
 
-  check();
-  if (!observer && document.readyState === 'loading') {
-    observer = new MutationObserver(check);
-    observer.observe(document, {
+      // The panel is already open; never call BLB's non-idempotent toggle.
+      if (!panel.classList.contains('hidden')) return;
+
+      // Only use BLB's own control when its collapsed-state affordance is
+      // visible and the site's toggle implementation is ready.
+      if (expandControl.classList.contains('hidden')) return;
+      if (typeof window.BLB?.siteResizeToggle !== 'function') return;
+
+      expandControl.click();
+    };
+
+    const scheduleCheck = () => {
+      if (disposed) return;
+      if (checkTimer !== null) window.clearTimeout(checkTimer);
+      checkTimer = window.setTimeout(() => {
+        checkTimer = null;
+        inspect();
+      }, 50);
+    };
+
+    // Observe BLB's own post-load state restoration. Keep this short-lived so
+    // a user's deliberate collapse after initialization remains respected.
+    observer = new MutationObserver(scheduleCheck);
+    observer.observe(document.documentElement || document, {
       childList: true,
       subtree: true,
       attributes: true,
       attributeFilter: ['class']
     });
+
+    inspect();
+    checkTimer = window.setTimeout(() => {
+      checkTimer = null;
+      inspect();
+    }, 350);
+    window.setTimeout(stopObserving, 3000);
+  };
+
+  if (document.readyState === 'complete') {
+    startAfterLoad();
+  } else {
+    window.addEventListener('load', startAfterLoad, { once: true });
   }
-  document.addEventListener('DOMContentLoaded', check, { once: true });
 }
 
 void suiteSettingsReadyPromise.then(() => {
-  if (suiteEnabled) ensureBlbRightPanelExpanded();
+  if (suiteEnabled) ensureBlbRightPanelExpandedAfterLoad();
 }).catch(() => {});
 
 // Runtime messaging can throw synchronously when an extension is reloaded or
