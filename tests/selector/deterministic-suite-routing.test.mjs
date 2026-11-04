@@ -8,6 +8,7 @@ import { dirname, join } from "node:path";
 const selectorSource = readFileSync(new URL("../../scripts/select-browser-specs.mjs", import.meta.url), "utf8");
 const classifierSource = readFileSync(new URL("../../scripts/classify-ci-changes.mjs", import.meta.url), "utf8");
 const workflowSource = readFileSync(new URL("../../.github/workflows/browser-tests.yml", import.meta.url), "utf8");
+const zipWorkflowSource = readFileSync(new URL("../../.github/workflows/zip-integrity.yml", import.meta.url), "utf8");
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -60,6 +61,8 @@ test("deterministic regression-suite edits run behavioral gates but skip browser
     assert.match(browser, /group_b_required=false/, path);
     assert.match(browser, /reference_required=false/, path);
   }
+  assert.match(zipWorkflowSource, /scripts\/package-release\.sh/);
+  assert.match(zipWorkflowSource, /regression-suite\/Verify-BLB-Zip\.ps1/);
 });
 
 test("build and package tooling edits run package validation without browser or behavioral suites", () => {
