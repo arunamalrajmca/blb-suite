@@ -369,6 +369,11 @@ test('BLB keeps the verse-page right panel expanded after delayed layout restore
           document.getElementById('siteExpandRight')?.classList.remove('hidden');
         }, 6200);
       });
+      window.setTimeout(() => {
+        window.__postWindowCollapseRan = true;
+        document.getElementById('bodyCol1A')?.classList.add('hidden');
+        document.getElementById('siteExpandRight')?.classList.remove('hidden');
+      }, 11000);
     </script></body>`
   );
   const page = await openFixture(
@@ -395,6 +400,15 @@ test('BLB keeps the verse-page right panel expanded after delayed layout restore
     panelExpanded: true,
     rightControlHidden: true
   });
+
+  // The observer is deliberately bounded. A later page-state change must not
+  // keep triggering corrections after the ten-second settling window.
+  await page.waitForFunction(() => window.__postWindowCollapseRan === true, null, { timeout: 14000 });
+  await page.waitForTimeout(250);
+  expect(await page.evaluate(() => ({
+    calls: window.__rightToggleCalls,
+    panelExpanded: !document.getElementById('bodyCol1A').classList.contains('hidden')
+  }))).toEqual({ calls: ['right', 'right'], panelExpanded: false });
 });
 
 test('BLB right-control class mutations do not falsely trigger a second verse-panel toggle', async ({ context, extensionStorage }) => {
