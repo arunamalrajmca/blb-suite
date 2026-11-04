@@ -71,6 +71,7 @@ async function dismissBlbCookieOverlay(page) {
   });
 }
 
+test.describe('core user-action E2E coverage', () => {
   test('Alt+B command path opens an exact selected Bible reference', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
