@@ -58,14 +58,29 @@ async function launchBrowser(name) {
   };
   if (name === 'Google Chrome') options.channel = 'chrome';
   else options.executablePath = bravePath;
+  let context;
   try {
-    const context = await chromium.launchPersistentContext(userDataDir, options);
+    context = await chromium.launchPersistentContext(userDataDir, options);
+
+    // Subscribe before checking the current worker list so a service worker
+    // starting between those operations cannot be missed.
     let worker = context.serviceWorkers()[0];
-    if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 30000 });
+    if (!worker) {
+      const workerStarted = context.waitForEvent('serviceworker', { timeout: 30000 });
+      worker = context.serviceWorkers()[0] || await workerStarted;
+    }
+
     const match = worker.url().match(/^chrome-extension:\/\/([^/]+)\//);
     if (!match) throw new Error('Could not determine extension ID from service worker.');
     return { context, userDataDir, worker, extensionId: match[1] };
   } catch (error) {
+    // A failed startup can still leave Chromium holding the profile open.
+    // Always close a context that was successfully launched before cleanup.
+    if (context) {
+      await context.close().catch(closeError => {
+        console.warn('Could not close failed ' + name + ' browser context: ' + closeError.message);
+      });
+    }
     await removeUserDataDir(userDataDir);
     throw error;
   }
