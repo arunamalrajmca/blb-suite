@@ -93,7 +93,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/selection-text-helpers.js"],
-    specs: ["tests/browser/extension.spec.js", "tests/browser/e2e-core-user-actions.spec.js"]
+    specs: ["tests/browser/extension.spec.js", "tests/browser/core-user-actions.spec.js"]
   },
   {
     paths: ["extension/study-session-export.js"],
@@ -105,7 +105,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/multiverse-reference-helpers.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/multiverse-contiguous-range-routing.spec.js"]
+    specs: ["tests/browser/core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/multiverse-contiguous-range-routing.spec.js"]
   },
   {
     paths: ["extension/redirect-bibleref-ranges.js", "extension/redirect-christianity-main-world.js"],
@@ -121,7 +121,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/multiverse-post.html", "extension/multiverse-post.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/multiverse-disjoint-chapter-post.spec.js"]
+    specs: ["tests/browser/core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/multiverse-disjoint-chapter-post.spec.js"]
   },
   {
     paths: ["extension/popup.html", "extension/popup.js"],
@@ -141,7 +141,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/multiverse-copy.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js"]
+    specs: ["tests/browser/core-user-actions.spec.js"]
   },
   {
     paths: ["extension/multiverse-tool-view.js"],
@@ -169,7 +169,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/blb-parse-popup.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js"]
+    specs: ["tests/browser/core-user-actions.spec.js"]
   },
   {
     paths: ["extension/blb-verse-link-navigation.js"],
@@ -177,7 +177,7 @@ const featureSpecs = [
   },
   {
     paths: ["extension/blb-page-selection-button.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/site-feature-defaults.spec.js", "tests/browser/research-dom-smoke.spec.js", "tests/browser/known-host-extension.spec.js"]
+    specs: ["tests/browser/core-user-actions.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/site-feature-defaults.spec.js", "tests/browser/research-dom-smoke.spec.js", "tests/browser/known-host-extension.spec.js"]
   },
   {
     paths: ["extension/multiverse-handoff.js"],
@@ -225,7 +225,7 @@ const selected = [...specs].filter(path => existingBrowserSpecs.has(path)).sort(
 const mappedSpecs = new Set([
   "tests/browser/redirect-source-url-patterns.spec.js",
   "tests/browser/omnibox-boolean-operators.spec.js",
-  "tests/browser/e2e-core-user-actions.spec.js",
+  "tests/browser/core-user-actions.spec.js",
   "tests/browser/kings-bible-collector-behavior.spec.js",
   "tests/browser/feature-lifecycle-regressions.spec.js",
   "tests/browser/study-backup-restore.spec.js",
@@ -277,7 +277,7 @@ const values = {
   group_a_required: String(has(
     "tests/browser/redirect-source-url-patterns.spec.js",
     "tests/browser/omnibox-boolean-operators.spec.js",
-    "tests/browser/e2e-core-user-actions.spec.js",
+    "tests/browser/core-user-actions.spec.js",
     "tests/browser/multiverse-contiguous-range-routing.spec.js",
     "tests/browser/multiverse-disjoint-chapter-post.spec.js",
     "tests/browser/multiverse-tool-view.spec.js",
