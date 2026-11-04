@@ -77,7 +77,8 @@ async function isSuiteEnabled() {
  */
 let blbRightPanelExpansionScheduled = false;
 function ensureBlbRightPanelExpandedAfterLoad() {
-  const hostname = String(location.hostname || '').toLowerCase().replace(/^www\\./, '');
+  let hostname = String(location.hostname || '').toLowerCase();
+  if (hostname.startsWith('www.')) hostname = hostname.slice(4);
   if (hostname !== BLB_HOSTNAME || blbRightPanelExpansionScheduled) return;
   blbRightPanelExpansionScheduled = true;
 
