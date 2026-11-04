@@ -130,7 +130,7 @@ test('BLB expands a collapsed verse-page parallel Bible panel through its native
   expect(result.rightControlClass).toContain('hidden');
 });
 
-test('BLB late saved-layout restoration cannot collapse the default verse-page right panel', async ({ context, extensionStorage }) => {
+test('BLB verse view uses the same one-shot right-expand action after layout settles', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openFixture(
     context,
@@ -138,75 +138,19 @@ test('BLB late saved-layout restoration cannot collapse the default verse-page r
     versePageHtml({ panel: 'collapsed', restoreAfterLoadMs: 700 })
   );
 
-  await page.waitForFunction(() =>
-    document.getElementById('bodyCol1A')?.classList.contains('hidden') === false &&
-    window.__rightToggleCalls.length === 1
-  );
+  await page.waitForFunction(() => window.__rightToggleCalls.length === 1);
   await page.waitForTimeout(500);
 
-  const result = await page.evaluate(() => ({
-    calls: window.__rightToggleCalls,
-    rightPanelClass: document.getElementById('bodyCol1A').className,
-    rightControlClass: document.getElementById('siteExpandRight').className
-  }));
-
-  expect(result.calls).toEqual(['right', 'right']);
-  expect(result.rightPanelClass).toBe('bodyColumns');
-  expect(result.rightControlClass).toContain('hidden');
-});
-
-test('BLB rapid same-task verse-panel collapse is detected and corrected', async ({ context, extensionStorage }) => {
-  await extensionStorage.set({ masterEnabled: true });
-  const html = versePageHtml({ panel: 'collapsed' }).replace(
-    "document.getElementById('bodyCol1A')?.classList.remove('hidden');",
-    "const panel = document.getElementById('bodyCol1A');\n        panel?.classList.remove('hidden');\n        if (window.__rightToggleCalls.length === 1) panel?.classList.add('hidden');"
-  ).replace(
-    "document.getElementById('siteExpandRight')?.classList.add('hidden');",
-    "if (window.__rightToggleCalls.length > 1) document.getElementById('siteExpandRight')?.classList.add('hidden');\n        else document.getElementById('siteExpandRight')?.classList.remove('hidden');"
-  );
-  const page = await openFixture(
-    context,
-    'https://www.blueletterbible.org/kjv/gen/1/1/',
-    html
-  );
-
-  await page.waitForFunction(() =>
-    window.__rightToggleCalls.length === 2 &&
-    document.getElementById('bodyCol1A')?.classList.contains('hidden') === false
-  );
+  // As with MultiVerse and Criteria Search, the default is a single native
+  // click, not a page-specific observer that repeatedly overrides later state.
   expect(await page.evaluate(() => ({
     calls: window.__rightToggleCalls,
-    rightPanelClass: document.getElementById('bodyCol1A').className,
-    rightControlHidden: document.getElementById('siteExpandRight').classList.contains('hidden')
-  }))).toEqual({
-    calls: ['right', 'right'],
-    rightPanelClass: 'bodyColumns',
-    rightControlHidden: false
-  });
-});
-
-test('BLB re-expands a verse panel if delayed saved-layout restoration collapses it', async ({ context, extensionStorage }) => {
-  await extensionStorage.set({ masterEnabled: true });
-  const page = await openFixture(
-    context,
-    'https://www.blueletterbible.org/kjv/gen/1/1/',
-    versePageHtml({ panel: 'expanded', restoreAfterLoadMs: 700 })
-  );
-
-  await page.waitForFunction(() =>
-    document.getElementById('bodyCol1A')?.classList.contains('hidden') === false &&
-    window.__rightToggleCalls.length === 1
-  );
-  await page.waitForTimeout(300);
-
-  expect(await page.evaluate(() => ({
-    calls: window.__rightToggleCalls,
-    rightPanelClass: document.getElementById('bodyCol1A').className,
-    rightControlClass: document.getElementById('siteExpandRight').className
+    rightPanelCollapsed: document.getElementById('bodyCol1A').classList.contains('hidden'),
+    rightControlVisible: !document.getElementById('siteExpandRight').classList.contains('hidden')
   }))).toEqual({
     calls: ['right'],
-    rightPanelClass: 'bodyColumns',
-    rightControlClass: 'site-expand-container right hidden'
+    rightPanelCollapsed: true,
+    rightControlVisible: true
   });
 });
 
@@ -358,80 +302,3 @@ test('native right-panel expansion is one-shot even when BLB leaves its control 
   });
 });
 
-test('BLB keeps the verse-page right panel expanded after delayed layout restores beyond startup', async ({ context, extensionStorage }) => {
-  await extensionStorage.set({ masterEnabled: true });
-  const html = versePageHtml({ panel: 'collapsed' }).replace(
-    '</body>',
-    `<script>
-      window.addEventListener('load', () => {
-        window.setTimeout(() => {
-          document.getElementById('bodyCol1A')?.classList.add('hidden');
-          document.getElementById('siteExpandRight')?.classList.remove('hidden');
-        }, 6200);
-      });
-      window.setTimeout(() => {
-        window.__postWindowCollapseRan = true;
-        document.getElementById('bodyCol1A')?.classList.add('hidden');
-        document.getElementById('siteExpandRight')?.classList.remove('hidden');
-      }, 11000);
-    </script></body>`
-  );
-  const page = await openFixture(
-    context,
-    'https://www.blueletterbible.org/kjv/gen/1/1/',
-    html
-  );
-
-  await page.waitForFunction(() =>
-    window.__rightToggleCalls.length === 1 &&
-    document.getElementById('bodyCol1A')?.classList.contains('hidden') === false
-  );
-  await page.waitForFunction(() =>
-    window.__rightToggleCalls.length === 2 &&
-    document.getElementById('bodyCol1A')?.classList.contains('hidden') === false
-  , null, { timeout: 9000 });
-
-  expect(await page.evaluate(() => ({
-    calls: window.__rightToggleCalls,
-    panelExpanded: !document.getElementById('bodyCol1A').classList.contains('hidden'),
-    rightControlHidden: document.getElementById('siteExpandRight').classList.contains('hidden')
-  }))).toEqual({
-    calls: ['right', 'right'],
-    panelExpanded: true,
-    rightControlHidden: true
-  });
-
-  // The observer is deliberately bounded. A later page-state change must not
-  // keep triggering corrections after the ten-second settling window.
-  await page.waitForFunction(() => window.__postWindowCollapseRan === true, null, { timeout: 14000 });
-  await page.waitForTimeout(250);
-  expect(await page.evaluate(() => ({
-    calls: window.__rightToggleCalls,
-    panelExpanded: !document.getElementById('bodyCol1A').classList.contains('hidden')
-  }))).toEqual({ calls: ['right', 'right'], panelExpanded: false });
-});
-
-test('BLB right-control class mutations do not falsely trigger a second verse-panel toggle', async ({ context, extensionStorage }) => {
-  await extensionStorage.set({ masterEnabled: true });
-  const page = await openFixture(
-    context,
-    'https://www.blueletterbible.org/kjv/gen/1/1/',
-    versePageHtml({ panel: 'collapsed' })
-  );
-
-  await page.waitForFunction(() =>
-    document.getElementById('bodyCol1A')?.classList.contains('hidden') === false &&
-    window.__rightToggleCalls.length === 1
-  );
-  await page.evaluate(() => {
-    const control = document.getElementById('siteExpandRight');
-    control.classList.remove('hidden');
-    control.classList.add('hidden');
-  });
-  await page.waitForTimeout(250);
-
-  expect(await page.evaluate(() => ({
-    calls: window.__rightToggleCalls,
-    panelExpanded: !document.getElementById('bodyCol1A').classList.contains('hidden')
-  }))).toEqual({ calls: ['right'], panelExpanded: true });
-});
