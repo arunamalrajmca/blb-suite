@@ -118,7 +118,7 @@ jobs:
               if [[ "$spec" == "tests/browser/e2e-core-user-actions.spec.js" ]]; then
                 # This aggregate suite is selected by its describe title; grep
                 # avoids the zero-test file-path filter in this runner.
-                npx playwright test --grep 'core user-action E2E coverage|\\[right-panel\\]'
+                npx playwright test --grep 'core user-action E2E coverage|\[right-panel\]'
               else
                 npx playwright test "$spec"
               fi
