@@ -84,9 +84,9 @@ jobs:
   regression-behavioral:
     name: Regression — ${{ matrix.group }}
     needs: change-detection
-    # The hard gate always runs behavioral groups on PRs/main. Runtime-change
-    # detection remains useful to other workflows, but a hard gate must never
-    # report green while behavioral coverage was silently skipped.
+    # Run deterministic behavioral groups for runtime changes and edits to the
+    # regression-suite tests/runner. Package-only and CI/test-tooling changes keep
+    # unrelated behavioral groups skipped without bypassing package validation.
     if: ${{ needs.change-detection.result == 'success' && (needs.change-detection.outputs.behavioral_validation_required == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-hard-gate')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
