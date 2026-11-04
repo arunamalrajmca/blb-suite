@@ -70,7 +70,8 @@ const featureSpecs = [
     paths: ["extension/content.js"],
     specs: [
       "tests/browser/redirect-toggle-isolation.spec.js",
-      "tests/browser/multiverse-clipboard-reference-pattern.spec.js"
+      "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
+      "tests/browser/right-panel-default-expanded.spec.js"
     ]
   },
   {
