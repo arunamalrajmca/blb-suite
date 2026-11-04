@@ -118,6 +118,13 @@ function ensureBlbDefaultRightPanelExpanded() {
   inspect();
   observerTimeout = window.setTimeout(stopObserving, 12000);
 }
+// Run the default-panel initializer after the master setting is known. The
+// storage-change listener below handles later toggles, but it does not fire
+// for the setting value that was already present when this content script loaded.
+void suiteSettingsReadyPromise.then(enabled => {
+  if (enabled) ensureBlbDefaultRightPanelExpanded();
+}).catch(() => {});
+
 // Runtime messaging can throw synchronously when an extension is reloaded or
 // updated while an old content script is still attached to a page. Keep that
 // stale-page condition silent and fail closed instead of surfacing
