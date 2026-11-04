@@ -109,7 +109,7 @@ function ensureBlbVerseRightPanelExpanded() {
     const expandControl = document.getElementById('siteExpandRight');
     if (!expandControl || expandControl.classList.contains('hidden')) return false;
     const nativeHandler = expandControl.getAttribute('onclick') || '';
-    if (!/BLB\\.siteResizeToggle\\(\\s*['"]right['"]\\s*\\)/.test(nativeHandler)) return false;
+    if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(nativeHandler)) return false;
 
     expansionPending = true;
     expandControl.click();
