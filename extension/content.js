@@ -96,18 +96,19 @@ function ensureBlbRightPanelExpandedAfterLoad() {
     };
 
     const inspect = () => {
-      const panel = document.getElementById('bodyCol1A');
       const expandControl = document.getElementById('siteExpandRight');
-      if (!panel || !expandControl) return;
+      if (!expandControl) return;
 
-      // The panel is already open; never call BLB's non-idempotent toggle.
-      if (!panel.classList.contains('hidden')) return;
-
-      // Only use BLB's own control when its collapsed-state affordance is
-      // visible and the site's toggle implementation is ready.
+      // On verse pages BLB exposes #bodyCol1A. Other BLB templates can use a
+      // different right-panel container, so the native expand control is the
+      // common state signal: it is exposed only while the right panel is shut.
+      const panel = document.getElementById('bodyCol1A');
+      if (panel && !panel.classList.contains('hidden')) return;
       if (expandControl.classList.contains('hidden')) return;
       if (typeof window.BLB?.siteResizeToggle !== 'function') return;
 
+      // Delegate to BLB's own handler; it knows the active page template and
+      // its corresponding right-side container.
       expandControl.click();
     };
 
@@ -4023,7 +4024,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.masterEnabled) {
     suiteEnabled = changes.masterEnabled.newValue !== false;
     blbPassiveNewTabTargets?.refresh?.();
-    if (suiteEnabled) ensureBlbRightPanelExpanded();
+    if (suiteEnabled) ensureBlbRightPanelExpandedAfterLoad();
     if (!suiteEnabled) {
       document.getElementById('blb-suite-webster-multiverse')?.remove();
       document.getElementById('blb-suite-webster-multiverse-reset-position')?.remove();
