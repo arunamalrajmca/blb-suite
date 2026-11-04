@@ -171,6 +171,26 @@ test('Criteria Search pages expand their right panel by default', async ({ conte
   });
 });
 
+
+test('enabling the Suite after page load applies the right-panel default', async ({ context, extensionStorage }) => {
+  await extensionStorage.set({ masterEnabled: false });
+  const page = await openFixture(
+    context,
+    'https://www.blueletterbible.org/tools/MultiVerse.cfm',
+    blbPageHtml({ panel: 'collapsed', panelId: 'multiVerseRightPanel' })
+  );
+
+  await page.waitForTimeout(200);
+  expect(await page.evaluate(() => window.__rightToggleCalls)).toEqual([]);
+
+  await extensionStorage.set({ masterEnabled: true });
+  await page.waitForFunction(() =>
+    document.getElementById('multiVerseRightPanel')?.classList.contains('hidden') === false
+  );
+
+  expect(await page.evaluate(() => window.__rightToggleCalls)).toEqual(['right']);
+});
+
 test('right-panel behavior does not run on non-BLB sites', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openFixture(
