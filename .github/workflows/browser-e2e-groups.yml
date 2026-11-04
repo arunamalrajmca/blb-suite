@@ -115,13 +115,7 @@ jobs:
               spec="${specs[$index]}"
               [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
               printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-              if [[ "$spec" == "tests/browser/e2e-core-user-actions.spec.js" ]]; then
-                # This aggregate suite is selected by its describe title; grep
-                # avoids the zero-test file-path filter in this runner.
-                npx playwright test --grep 'core user-action E2E coverage|\[right-panel\]'
-              else
-                npx playwright test "$spec"
-              fi
+              npx playwright test "$spec"
             done
           else
             echo "All changed browser specs are covered by the required browser-e2e gate."
