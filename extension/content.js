@@ -90,7 +90,7 @@ function ensureBlbRightPanelExpandedAfterLoad() {
 
       const panel = document.getElementById('bodyCol1A');
       const nativeHandler = expandControl.getAttribute('onclick') || '';
-      if (!/BLB\\.siteResizeToggle\\(\\s*['"]right['"]\\s*\\)/.test(nativeHandler)) return;
+      if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(nativeHandler)) return;
 
       // MultiVerse and Criteria Search do not expose #bodyCol1A. Their native
       // control is still reliable, so retain the single-click path there.
@@ -119,7 +119,7 @@ function ensureBlbRightPanelExpandedAfterLoad() {
         if (!sawExpandedState || clickCount >= 2) return;
         if (expandControl.classList.contains('hidden')) return;
         const currentHandler = expandControl.getAttribute('onclick') || '';
-        if (!/BLB\\.siteResizeToggle\\(\\s*['"]right['"]\\s*\\)/.test(currentHandler)) {
+        if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(currentHandler)) {
           stopObserving();
           return;
         }
