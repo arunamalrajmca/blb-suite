@@ -47,7 +47,7 @@ test('source-page collector parses, canonicalizes, and deduplicates linked Bible
   await expect.poll(async () => extensionWorker.evaluate(async () => {
     const saved = await chrome.storage.local.get({ __blbTestSourceCollectorRefs: [] });
     return saved.__blbTestSourceCollectorRefs.length;
-  }), { timeout: 10000 }).toBe(2);
+  }), { timeout: 10000 }).toBe(6);
 
   const refs = await extensionWorker.evaluate(async () => {
     const saved = await chrome.storage.local.get({ __blbTestSourceCollectorRefs: [] });
@@ -192,6 +192,10 @@ test('ChurchofJesusChrist shows its BLB references button on scripture-study pag
               <h1>Scripture study</h1>
               <a href="/study/scriptures/nt/john/3?id=p16&lang=eng">John 3:16</a>
               <a href="/study/scriptures/nt/rom/8?id=p1-p2&lang=eng">8:1-2</a>
+              <a href="/study/scriptures/ot/ps/16?id=p9&lang=eng">Psalm 16:9</a>
+              <a href="/study/scriptures/ot/prov/14?id=p32&lang=eng">Proverbs 14:32</a>
+              <a href="/study/scriptures/nt/1-pet/1?id=p3-p4&lang=eng">1 Peter 1:3-4</a>
+              <a href="/study/scriptures/nt/1-thes/5?id=p8&lang=eng">1 Thessalonians 5:8</a>
               <a href="/study/manual/lesson?lang=eng">Study lesson</a>
             </main>
           </body></html>`
@@ -249,6 +253,34 @@ test('ChurchofJesusChrist shows its BLB references button on scripture-study pag
       from: 1,
       to: 2,
       url: 'https://www.blueletterbible.org/kjv/rom/8/1-2/'
+    },
+    {
+      book: 'psalms',
+      chapter: 16,
+      from: 9,
+      to: 9,
+      url: 'https://www.blueletterbible.org/kjv/psa/16/9/'
+    },
+    {
+      book: 'proverbs',
+      chapter: 14,
+      from: 32,
+      to: 32,
+      url: 'https://www.blueletterbible.org/kjv/pro/14/32/'
+    },
+    {
+      book: '1 peter',
+      chapter: 1,
+      from: 3,
+      to: 4,
+      url: 'https://www.blueletterbible.org/kjv/1pe/1/3-4/'
+    },
+    {
+      book: '1 thessalonians',
+      chapter: 5,
+      from: 8,
+      to: 8,
+      url: 'https://www.blueletterbible.org/kjv/1th/5/8/'
     }
   ]);
   await expect(page.locator('#blb-suite-churchofjesuschrist-multiverse-status'))
