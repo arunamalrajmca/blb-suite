@@ -398,8 +398,8 @@ test("MultiVerse tab-reuse regressions share the Group A runner with conservativ
     "utf8"
   );
   assert.match(workflow, /Run MultiVerse tab reuse and 22-batch persistence regressions/);
-  assert.match(workflow, /needs\.change-detection\.outputs\.full_browser_suite == 'true'[\s\S]*?contains\(needs\.change-detection\.outputs\.changed_specs, 'tests\/browser\/multiverse-tab-reuse\.spec\.js'\)/);
-  assert.match(workflow, /!contains\(needs\.change-detection\.outputs\.changed_browser_specs, 'tests\/browser\/multiverse-tab-reuse\.spec\.js'\)/);
+  assert.match(workflow, /inputs\.full_browser_suite == 'true'[\s\S]*?contains\(inputs\.changed_specs, 'tests\/browser\/multiverse-tab-reuse\.spec\.js'\)/);
+  assert.match(workflow, /!contains\(inputs\.changed_browser_specs, 'tests\/browser\/multiverse-tab-reuse\.spec\.js'\)/);
   assert.match(workflow, /npx playwright test tests\/browser\/multiverse-tab-reuse\.spec\.js --workers=1/);
 });
 
