@@ -1,7 +1,6 @@
 const { test, expect } = require('./fixtures');
 
-function blbPageHtml({ panel = 'collapsed', panelId = 'bodyCol1A', restoreAfterLoadMs = null } = {}) {
-  const hasPanel = panel !== 'absent';
+function versePageHtml({ panel = 'collapsed', restoreAfterLoadMs = null } = {}) {
   const panelClass = panel === 'expanded' ? 'bodyColumns' : 'bodyColumns hidden';
   const toggleClass = panel === 'collapsed'
     ? 'site-expand-container right'
@@ -9,7 +8,7 @@ function blbPageHtml({ panel = 'collapsed', panelId = 'bodyCol1A', restoreAfterL
   const restoreScript = restoreAfterLoadMs === null ? '' : `
     window.addEventListener('load', () => {
       window.setTimeout(() => {
-        document.getElementById('${panelId}')?.classList.add('hidden');
+        document.getElementById('bodyCol1A')?.classList.add('hidden');
         document.getElementById('siteExpandRight')?.classList.remove('hidden');
       }, ${restoreAfterLoadMs});
     });
@@ -24,7 +23,7 @@ function blbPageHtml({ panel = 'collapsed', panelId = 'bodyCol1A', restoreAfterL
       siteResizeToggle(side) {
         window.__rightToggleCalls.push(side);
         if (side !== 'right') return;
-        document.getElementById('${panelId}')?.classList.remove('hidden');
+        document.getElementById('bodyCol1A')?.classList.remove('hidden');
         document.getElementById('siteExpandRight')?.classList.add('hidden');
       }
     };
@@ -32,10 +31,63 @@ function blbPageHtml({ panel = 'collapsed', panelId = 'bodyCol1A', restoreAfterL
   <script>${restoreScript}</script>
 </head>
 <body>
-  <div id="bodyCol1" class="bodyColumns">Left panel</div>
-  ${hasPanel ? `<div id="${panelId}" class="${panelClass}">Right panel</div>` : ''}
-  <div id="siteExpandLeft" class="site-expand-container left hidden"></div>
+  <div id="bodyCol1" class="bodyColumns">Main / left column</div>
+  <div id="bodyCol1A" class="${panelClass}">Parallel Bible panel</div>
+  <div id="siteExpandLeft" class="site-expand-container left"></div>
   <div id="siteExpandRight" class="${toggleClass}" onclick="BLB.siteResizeToggle('right')"></div>
+</body>
+</html>`;
+}
+
+// MultiVerse and Criteria Search use the shared BLB page shell, but the
+// supplied live markup does not expose #bodyCol1A or a named right-panel
+// container. Their real right-side expansion affordance is #siteExpandRight.
+function toolPageHtml(kind) {
+  const pageContent = kind === 'multiverse'
+    ? `
+      <div id="mvMain">
+        <form id="multiForm"></form>
+        <div id="multiResults"></div>
+        <div id="byVerseResults"></div>
+      </div>`
+    : `
+      <div id="bubBody">
+        <div id="words">
+          <div id="interruptDiv"></div>
+          <div id="wordsData"><table><tbody id="wordsTbody">
+            <tr id="bVerse_gen_1_1"><td>Genesis 1:1</td></tr>
+          </tbody></table></div>
+        </div>
+      </div>`;
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <script>
+    window.__rightToggleCalls = [];
+    window.BLB = {
+      siteResizeToggle(side) {
+        window.__rightToggleCalls.push(side);
+        if (side === 'right') {
+          document.getElementById('siteExpandRight')?.classList.add('hidden');
+        }
+      }
+    };
+  </script>
+</head>
+<body>
+  <header>
+    <div id="pCol-toggleIcon" class="bubHeadIcon"
+         data-ev-cat="Bible" data-ev-action="[Parallel] Show"
+         data-ev-label="[Parallel] Show" title="Parallel Bible">
+      <i class="fa fa-columns"></i>
+    </div>
+  </header>
+  <div id="bodyCol1" class="bodyColumns">${pageContent}</div>
+  <div id="siteExpandLeft" class="site-expand-container left" draggable="true"
+       onclick="BLB.siteResizeToggle('left')"></div>
+  <div id="siteExpandRight" class="site-expand-container right"
+       onclick="BLB.siteResizeToggle('right')"></div>
 </body>
 </html>`;
 }
@@ -53,12 +105,12 @@ async function openFixture(context, url, html) {
   return page;
 }
 
-test('BLB expands a collapsed parallel Bible panel through its own right control', async ({ context, extensionStorage }) => {
+test('BLB expands a collapsed verse-page parallel Bible panel through its native right control', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openFixture(
     context,
     'https://www.blueletterbible.org/kjv/gen/1/1/',
-    blbPageHtml({ panel: 'collapsed' })
+    versePageHtml({ panel: 'collapsed' })
   );
 
   await page.waitForFunction(() =>
@@ -78,13 +130,12 @@ test('BLB expands a collapsed parallel Bible panel through its own right control
   expect(result.rightControlClass).toContain('hidden');
 });
 
-
-test('BLB late saved-layout restoration cannot collapse the default right panel', async ({ context, extensionStorage }) => {
+test('BLB late saved-layout restoration cannot collapse the default verse-page right panel', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openFixture(
     context,
     'https://www.blueletterbible.org/kjv/gen/1/1/',
-    blbPageHtml({ panel: 'expanded', restoreAfterLoadMs: 100 })
+    versePageHtml({ panel: 'expanded', restoreAfterLoadMs: 100 })
   );
 
   await page.waitForFunction(() =>
@@ -104,80 +155,95 @@ test('BLB late saved-layout restoration cannot collapse the default right panel'
   expect(result.rightControlClass).toContain('hidden');
 });
 
-test('BLB does not toggle an already-expanded panel or pages without a parallel panel', async ({ context, extensionStorage }) => {
+test('BLB leaves an already-expanded verse panel and pages without a right control unchanged', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
 
   const expandedPage = await openFixture(
     context,
     'https://www.blueletterbible.org/kjv/gen/1/1/',
-    blbPageHtml({ panel: 'expanded' })
+    versePageHtml({ panel: 'expanded' })
   );
   await expandedPage.waitForTimeout(500);
   expect(await expandedPage.evaluate(() => window.__rightToggleCalls)).toEqual([]);
   expect(await expandedPage.locator('#bodyCol1A').getAttribute('class')).toBe('bodyColumns');
 
-  const noPanelPage = await openFixture(
+  const noControlHtml = `<!doctype html><html><body>
+    <div id="bodyCol1" class="bodyColumns">Main column</div>
+    <div id="bodyCol1A" class="bodyColumns hidden">No native expand control</div>
+  </body></html>`;
+  const noControlPage = await openFixture(
     context,
     'https://www.blueletterbible.org/lexicon/g3088/kjv/tr/0-1/',
-    blbPageHtml({ panel: 'absent' })
+    noControlHtml
   );
-  await noPanelPage.waitForTimeout(500);
-  expect(await noPanelPage.evaluate(() => window.__rightToggleCalls)).toEqual([]);
-  expect(await noPanelPage.locator('#siteExpandRight').getAttribute('class')).toContain('hidden');
+  await noControlPage.waitForTimeout(500);
+  expect(await noControlPage.locator('#bodyCol1A').getAttribute('class')).toBe('bodyColumns hidden');
 });
 
-
-test('MultiVerse pages expand their right panel by default', async ({ context, extensionStorage }) => {
+test('MultiVerse uses the actual shared BLB right-expand control without assuming a panel ID', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openFixture(
     context,
     'https://www.blueletterbible.org/tools/MultiVerse.cfm',
-    blbPageHtml({ panel: 'collapsed', panelId: 'multiVerseRightPanel' })
+    toolPageHtml('multiverse')
   );
 
   await page.waitForFunction(() =>
-    document.getElementById('multiVerseRightPanel')?.classList.contains('hidden') === false
+    window.__rightToggleCalls.length === 1 &&
+    document.getElementById('siteExpandRight').classList.contains('hidden')
   );
   expect(await page.evaluate(() => ({
     calls: window.__rightToggleCalls,
     left: document.getElementById('bodyCol1').className,
-    right: document.getElementById('multiVerseRightPanel').className
+    leftToggleCalls: window.__rightToggleCalls.filter(side => side === 'left').length,
+    parallelControl: document.getElementById('pCol-toggleIcon').getAttribute('title'),
+    rightControl: document.getElementById('siteExpandRight').className,
+    actualContent: Boolean(document.getElementById('mvMain') && document.getElementById('multiForm'))
   }))).toEqual({
     calls: ['right'],
     left: 'bodyColumns',
-    right: 'bodyColumns'
-  });
+    leftToggleCalls: 0,
+    parallelControl: 'Parallel Bible',
+    rightControl: 'site-expand-container right hidden',
+    actualContent: true
+  }));
 });
 
-test('Criteria Search pages expand their right panel by default', async ({ context, extensionStorage }) => {
+test('Criteria Search uses the actual shared BLB right-expand control without assuming a panel ID', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openFixture(
     context,
     'https://www.blueletterbible.org/search/search.cfm?Criteria=grace',
-    blbPageHtml({ panel: 'collapsed', panelId: 'criteriaRightPanel' })
+    toolPageHtml('criteria')
   );
 
   await page.waitForFunction(() =>
-    document.getElementById('criteriaRightPanel')?.classList.contains('hidden') === false
+    window.__rightToggleCalls.length === 1 &&
+    document.getElementById('siteExpandRight').classList.contains('hidden')
   );
   expect(await page.evaluate(() => ({
     calls: window.__rightToggleCalls,
     left: document.getElementById('bodyCol1').className,
-    right: document.getElementById('criteriaRightPanel').className
+    leftToggleCalls: window.__rightToggleCalls.filter(side => side === 'left').length,
+    parallelControl: document.getElementById('pCol-toggleIcon').getAttribute('title'),
+    rightControl: document.getElementById('siteExpandRight').className,
+    actualContent: Boolean(document.getElementById('bubBody') && document.getElementById('wordsTbody'))
   }))).toEqual({
     calls: ['right'],
     left: 'bodyColumns',
-    right: 'bodyColumns'
-  });
+    leftToggleCalls: 0,
+    parallelControl: 'Parallel Bible',
+    rightControl: 'site-expand-container right hidden',
+    actualContent: true
+  }));
 });
 
-
-test('enabling the Suite after page load applies the right-panel default', async ({ context, extensionStorage }) => {
+test('enabling the Suite after page load applies the MultiVerse right-panel default', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: false });
   const page = await openFixture(
     context,
     'https://www.blueletterbible.org/tools/MultiVerse.cfm',
-    blbPageHtml({ panel: 'collapsed', panelId: 'multiVerseRightPanel' })
+    toolPageHtml('multiverse')
   );
 
   await page.waitForTimeout(200);
@@ -185,7 +251,8 @@ test('enabling the Suite after page load applies the right-panel default', async
 
   await extensionStorage.set({ masterEnabled: true });
   await page.waitForFunction(() =>
-    document.getElementById('multiVerseRightPanel')?.classList.contains('hidden') === false
+    window.__rightToggleCalls.length === 1 &&
+    document.getElementById('siteExpandRight').classList.contains('hidden')
   );
 
   expect(await page.evaluate(() => window.__rightToggleCalls)).toEqual(['right']);
@@ -196,7 +263,7 @@ test('right-panel behavior does not run on non-BLB sites', async ({ context, ext
   const page = await openFixture(
     context,
     'https://example.com/article',
-    blbPageHtml({ panel: 'collapsed' })
+    versePageHtml({ panel: 'collapsed' })
   );
 
   await page.waitForTimeout(500);

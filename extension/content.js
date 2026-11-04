@@ -105,7 +105,12 @@ function ensureBlbRightPanelExpandedAfterLoad() {
       const panel = document.getElementById('bodyCol1A');
       if (panel && !panel.classList.contains('hidden')) return;
       if (expandControl.classList.contains('hidden')) return;
-      if (typeof window.BLB?.siteResizeToggle !== 'function') return;
+      // Content scripts run in an isolated JavaScript world, so BLB's
+      // page-world window.BLB object is not reliably readable here. The
+      // supplied native control carries BLB's inline right-toggle handler;
+      // clicking the DOM control dispatches it in the page's own world.
+      const nativeHandler = expandControl.getAttribute('onclick') || '';
+      if (!/BLB\\.siteResizeToggle\\(\\s*['"]right['"]\\s*\\)/.test(nativeHandler)) return;
 
       // Delegate to BLB's own handler; it knows the active page template and
       // its corresponding right-side container.
