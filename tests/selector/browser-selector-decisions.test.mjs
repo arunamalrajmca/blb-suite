@@ -189,6 +189,21 @@ test("mixed Group B runtime and unrelated browser-spec edits still run the chang
   });
 });
 
+test("mixed runtime and Study Sessions spec edits delegate the changed spec to its dedicated job", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/blb-draggable-button.js", "// changed drag behavior\\n");
+    commitChange(root, "tests/browser/study-session-export.spec.js", "// adjusted Study export coverage\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /changed_browser_specs=tests\\/browser\\/study-session-export\\.spec\\.js/);
+    assert.match(output, /study_sessions_required=true/);
+    assert.match(output, /group_a_required=true/);
+  });
+  const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
+  assert.match(workflow, /Delegating \\$spec to the dedicated Study Sessions job/);
+  assert.match(workflow, /contains\\(inputs\\.changed_browser_specs, 'tests\\/browser\\/study-session-export\\.spec\\.js'\\)/);
+});
+
 test("BLB auto-hyperlinker source selects its rich-clipboard browser spec", () => {
   withFixture((root, base) => {
     commitChange(root, "extension/blb-auto-hyperlinker.js", "// changed clipboard handler\n");
