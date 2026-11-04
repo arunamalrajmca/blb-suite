@@ -127,6 +127,10 @@ jobs:
       full_browser_suite: ${{ steps.browser-select.outputs.full_browser_suite }}
       changed_specs: ${{ steps.browser-select.outputs.changed_specs }}
       changed_browser_specs: ${{ steps.browser-select.outputs.changed_browser_specs }}
+      unmapped_specs: ${{ steps.browser-select.outputs.unmapped_specs }}
+      group_a_required: ${{ steps.browser-select.outputs.group_a_required }}
+      study_sessions_required: ${{ steps.browser-select.outputs.study_sessions_required }}
+      group_b_required: ${{ steps.browser-select.outputs.group_b_required }}
       extension_spec_required: ${{ steps.browser-select.outputs.extension_spec_required }}
       browser_e2e_required: ${{ steps.browser-select.outputs.reference_required }}
       reference_matrix: ${{ steps.matrix-select.outputs.reference_matrix }}
@@ -409,10 +413,19 @@ jobs:
           retention-days: 14
 
   grouped-browser-e2e:
-    name: BROWSER E2E — GROUP A + GROUP B
+    name: BROWSER E2E — FEATURE GROUPS
     needs: change-detection
     if: ${{ always() && needs.change-detection.result == 'success' }}
     uses: ./.github/workflows/browser-e2e-groups.yml
+    with:
+      full_browser_suite: ${{ needs.change-detection.outputs.full_browser_suite }}
+      changed_specs: ${{ needs.change-detection.outputs.changed_specs }}
+      changed_browser_specs: ${{ needs.change-detection.outputs.changed_browser_specs }}
+      unmapped_specs: ${{ needs.change-detection.outputs.unmapped_specs }}
+      group_a_required: ${{ needs.change-detection.outputs.group_a_required }}
+      study_sessions_required: ${{ needs.change-detection.outputs.study_sessions_required }}
+      group_b_required: ${{ needs.change-detection.outputs.group_b_required }}
+      browser_e2e_required: ${{ needs.change-detection.outputs.browser_e2e_required }}
     secrets: inherit
 
   browser-e2e-summary:
