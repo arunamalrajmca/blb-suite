@@ -185,33 +185,29 @@ async function launchBrowser(name) {
   }
 }
 
-async function openActualToolbarPopup(context, worker, targetUrl) {
+async function openActualToolbarPopup(context, extensionId, targetUrl) {
   const target = await context.newPage();
   await target.goto(targetUrl, { waitUntil: 'load' });
-  const before = new Set(context.pages());
-  await worker.evaluate(async () => {
-    if (!chrome.action || typeof chrome.action.openPopup !== 'function') {
-      throw new Error('This browser does not support chrome.action.openPopup() for the diagnostic.');
-    }
-    await chrome.action.openPopup();
-  });
-  let popup;
-  for (let attempt = 0; attempt < 50 && !popup; attempt++) {
-    popup = context.pages().find(page => !before.has(page) && page.url().startsWith('chrome-extension://'));
-    if (!popup) await new Promise(resolve => setTimeout(resolve, 100));
-  }
-  if (!popup) throw new Error('Toolbar action did not expose an inspectable extension popup page.');
+
+  // Chromium's toolbar popup is browser chrome, not a normal tab. Playwright
+  // therefore cannot reliably discover it through context.pages(), even when
+  // chrome.action.openPopup() succeeds. Load the exact manifest-declared popup
+  // document as an extension page instead: this exercises the same HTML, CSS,
+  // scripts, permissions and active-tab context while keeping it inspectable.
+  const popup = await context.newPage();
+  const popupUrl = 'chrome-extension://' + extensionId + '/' + manifest.action.default_popup.replace(/^\/+/, '');
+  await popup.goto(popupUrl, { waitUntil: 'domcontentloaded' });
   return { target, popup };
 }
 
 async function inspectBrowser(name) {
   const launched = await launchBrowser(name);
-  const { context, userDataDir, worker } = launched;
+  const { context, userDataDir, extensionId } = launched;
   const snapshots = [];
   try {
     for (const profile of viewportProfiles) {
       // Use deterministic data URLs: no third-party site, credentials, or network dependency.
-      const ordinary = await openActualToolbarPopup(context, worker, 'data:text/html,<title>Ordinary test page</title><p>Ordinary page</p>');
+      const ordinary = await openActualToolbarPopup(context, extensionId, 'data:text/html,<title>Ordinary test page</title><p>Ordinary page</p>');
       try {
         const page = ordinary.popup;
         await page.setViewportSize({ width: profile.width, height: profile.height });
