@@ -71,8 +71,9 @@ async function isSuiteEnabled() {
 
 /*
  * Verse pages expose their actual parallel Bible panel as #bodyCol1A.
- * Use that panel's state, rather than the expand control alone, because BLB
- * can leave #siteExpandRight visible during layout initialization.
+ * BLB may restore its saved layout after the content script has run, so keep
+ * a bounded observer through the initial layout window. The panel state is
+ * authoritative: invoke BLB's native control only when the panel is hidden.
  */
 let blbVerseRightPanelExpansionStarted = false;
 function ensureBlbVerseRightPanelExpanded() {
@@ -82,46 +83,55 @@ function ensureBlbVerseRightPanelExpanded() {
   blbVerseRightPanelExpansionStarted = true;
 
   let observer = null;
+  let expansionPending = false;
+  let observerTimeout = null;
   const stopObserving = () => {
     try { observer?.disconnect(); } catch (_) {}
     observer = null;
+    if (observerTimeout !== null) {
+      window.clearTimeout(observerTimeout);
+      observerTimeout = null;
+    }
   };
   const inspect = () => {
     const panel = document.getElementById('bodyCol1A');
+    if (!panel) return false;
+
+    // A successful native expansion clears the pending state. Keeping the
+    // observer active lets us detect BLB applying a saved collapsed layout
+    // later in the same page initialization.
+    if (!panel.classList.contains('hidden')) {
+      expansionPending = false;
+      return true;
+    }
+    if (expansionPending) return false;
+
     const expandControl = document.getElementById('siteExpandRight');
-    if (!panel || !expandControl) return false;
-
-    // The panel itself is authoritative on verse pages. Never toggle an
-    // already-expanded panel, even if BLB has not hidden its control yet.
-    if (!panel.classList.contains('hidden')) return true;
-    if (expandControl.classList.contains('hidden')) return false;
-
+    if (!expandControl || expandControl.classList.contains('hidden')) return false;
     const nativeHandler = expandControl.getAttribute('onclick') || '';
-    if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(nativeHandler)) return false;
+    if (!/BLB\\.siteResizeToggle\\(\\s*['"]right['"]\\s*\\)/.test(nativeHandler)) return false;
+
+    expansionPending = true;
     expandControl.click();
     return true;
   };
-  const check = () => {
-    if (inspect()) {
-      stopObserving();
-      return;
-    }
-    if (document.readyState !== 'loading' && !document.getElementById('bodyCol1A')) {
-      stopObserving();
-    }
-  };
+  const check = () => { inspect(); };
 
+  // Attach regardless of readyState. Content scripts commonly run after the
+  // document is complete, while BLB's panel/layout can still be initialized
+  // or restored asynchronously.
+  observer = new MutationObserver(check);
+  observer.observe(document.documentElement || document, {
+    childList: true,
+    subtree: true,
+    attributes: true,
+    attributeFilter: ['class']
+  });
   check();
-  if (!observer && document.readyState === 'loading') {
-    observer = new MutationObserver(check);
-    observer.observe(document, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['class']
-    });
-  }
-  document.addEventListener('DOMContentLoaded', check, { once: true });
+
+  // This is intentionally bounded: it covers BLB's initial/saved-layout
+  // restoration without leaving a permanent observer on every verse page.
+  observerTimeout = window.setTimeout(stopObserving, 12000);
 }
 
 /*
