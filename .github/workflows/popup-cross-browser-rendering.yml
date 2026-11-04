@@ -35,7 +35,7 @@ jobs:
       # suffix only when deliberately refreshing the browser toolchain.
       - name: Restore popup browser and Playwright cache
         id: popup-cache
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: |
             node_modules
@@ -46,6 +46,7 @@ jobs:
           key: ${{ runner.os }}-popup-toolchain-v1-pw-1.63.0-${{ hashFiles('package.json') }}
 
       - name: Install Brave only when it is not cached
+        id: brave-setup
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -61,6 +62,7 @@ jobs:
           }
           if (-not $bravePath) { throw 'Brave executable was not found after cache restore/install.' }
           "BLB_BRAVE_EXECUTABLE=$bravePath" >> $env:GITHUB_ENV
+          "executable=$bravePath" >> $env:GITHUB_OUTPUT
           Write-Host "Using Brave: $bravePath"
 
       - name: Install Playwright test runner only when it is not cached
@@ -93,6 +95,21 @@ jobs:
             Write-Host "Using cached Chrome: $chromePath"
           }
           if (-not $chromePath) { throw 'Google Chrome was not found after cache restore/install.' }
+
+      # Save immediately after provisioning, before the diagnostic can fail.
+      # This makes a successfully installed Brave reusable on the next fresh runner
+      # even when the popup comparison itself fails.
+      - name: Save popup browser and Playwright cache
+        if: always() && steps.popup-cache.outputs.cache-hit != 'true' && steps.brave-setup.outputs.executable != ''
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            node_modules
+            C:\\Program Files\\Google\\Chrome
+            C:\\Program Files (x86)\\Google\\Chrome
+            C:\\Program Files\\BraveSoftware\\Brave-Browser
+            C:\\Users\\runneradmin\\AppData\\Local\\ms-playwright
+          key: ${{ runner.os }}-popup-toolchain-v1-pw-1.63.0-${{ hashFiles('package.json') }}
 
       - name: Compare computed popup styles and text metrics
         env:
