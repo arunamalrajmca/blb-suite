@@ -62,15 +62,21 @@ test("deterministic regression-suite edits run behavioral gates but skip browser
   }
 });
 
-test("build validation harness edits run package validation without browser or behavioral suites", () => {
-  const { browser, classification } = runScenario("scripts/validate-build.js");
-  assert.match(classification, /runtime_changed=false/);
-  assert.match(classification, /behavioral_validation_required=false/);
-  assert.match(classification, /package_validation_required=true/);
-  assert.match(browser, /full_browser_suite=false/);
-  assert.match(browser, /group_a_required=false/);
-  assert.match(browser, /group_b_required=false/);
-  assert.match(browser, /reference_required=false/);
+test("build and package tooling edits run package validation without browser or behavioral suites", () => {
+  for (const path of [
+    "scripts/validate-build.js",
+    "scripts/package-release.sh",
+    "regression-suite/Verify-BLB-Zip.ps1"
+  ]) {
+    const { browser, classification } = runScenario(path);
+    assert.match(classification, /runtime_changed=false/, path);
+    assert.match(classification, /behavioral_validation_required=false/, path);
+    assert.match(classification, /package_validation_required=true/, path);
+    assert.match(browser, /full_browser_suite=false/, path);
+    assert.match(browser, /group_a_required=false/, path);
+    assert.match(browser, /group_b_required=false/, path);
+    assert.match(browser, /reference_required=false/, path);
+  }
 });
 
 test("deterministic regression changes remain required by the HARD-GATE", () => {
