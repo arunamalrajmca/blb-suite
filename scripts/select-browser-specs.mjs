@@ -2,10 +2,9 @@
 /**
  * Conservative feature-aware browser coverage selector.
  *
- * Runtime files with an explicit feature mapping select the corresponding
- * existing browser specs. Shared-core, workflow/test-infrastructure, package,
- * manifest, and unknown changes use the full suite. This intentionally keeps
- * the current test commands and browser-install/cache workflow unchanged.
+ * Runtime files with an explicit feature mapping select the corresponding browser specs.
+ * Shared-core, dependency, non-version package/manifest, and unknown runtime changes use the full suite.
+ * Known CI, deterministic-test, and package-only tooling changes skip browser E2E while retaining their own gates.
  */
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
@@ -16,6 +15,23 @@ const ref = process.env.GITHUB_REF || "";
 // Main pushes should select coverage from the pushed diff, just like PRs. Keep a full run for manual dispatches and first pushes where GitHub provides an all-zero before SHA.
 const alwaysFull = event === "workflow_dispatch" || (event === "push" && ref === "refs/heads/main" && (!base || /^0+$/.test(base)));
 const run = (args) => execFileSync("git", args, { encoding: "utf8" }).trimEnd();
+function readAt(ref, path) {
+  try { return run(["show", `${ref}:${path}`]); }
+  catch { return null; }
+}
+function sameExceptVersion(path) {
+  const before = readAt(base, path);
+  const after = readAt("HEAD", path);
+  if (before === null || after === null) return false;
+  try {
+    const a = JSON.parse(before);
+    const b = JSON.parse(after);
+    if (typeof a.version !== "string" || typeof b.version !== "string") return false;
+    delete a.version;
+    delete b.version;
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch { return false; }
+}
 let changed = [];
 if (!alwaysFull) {
   if (!base || !/^[0-9a-f]{7,40}$/i.test(base)) {
@@ -47,8 +63,14 @@ const ignoredNonRuntime = path =>
   // Cross-browser diagnostic harness; it validates the test environment, not extension behavior.
   || path === "scripts/test-popup-cross-browser-rendering.js"
   || path === "scripts/reference-e2e-matrix.json"
+  || path === "scripts/package-release.sh"
+  || path === "scripts/validate-build.js"
+  || path === "regression-suite/Verify-BLB-Zip.ps1"
+  || path === "regression-suite/Run-BLB-Regression.ps1"
+  || path === "regression-suite/README.md"
+  || /^regression-suite\/tests\//.test(path)
   || /^tests\/selector\//.test(path);
-// Shared-core, test-infrastructure, package, manifest, and unknown production
+// Shared-core, dependency, non-version package/manifest, and unknown runtime
 // changes remain conservative and may require the full applicable browser suite.
 // Shared background changes remain broad by default. Narrow only the exact, isolated
 // omnibox runtime + regression-spec pair so an unrelated core E2E failure cannot
@@ -61,11 +83,10 @@ const forceFull = alwaysFull || changed.some(path =>
     (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js" && path !== "scripts/test-popup-cross-browser-rendering.js" && path !== "scripts/reference-e2e-matrix.json")
     || path.startsWith("regression-suite/")
     || (path.startsWith("tests/") && !/^tests\/selector\//.test(path) && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path))
-    || path === "package.json"
+    || ((path === "package.json" || path === "extension/manifest.json") && !sameExceptVersion(path))
     || path === "package-lock.json"
     || path === "playwright.config.js"
     || path === "playwright.config.ts"
-    || path === "extension/manifest.json"
     || (path === "extension/background.js" && !focusedOmniboxBackgroundChange)
     || path === "extension/content.js"
     || path === "extension/reference-core.js"
@@ -218,6 +239,7 @@ for (const path of changed) {
     continue;
   }
   if (ignoredNonRuntime(path)) continue;
+  if ((path === "package.json" || path === "extension/manifest.json") && sameExceptVersion(path)) continue;
   const mapped = featureSpecs.find(group => group.paths.includes(path));
   if (mapped) {
     for (const spec of mapped.specs) specs.add(spec);

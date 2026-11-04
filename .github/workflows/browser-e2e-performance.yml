@@ -23,8 +23,6 @@ on:
       - '!scripts/verify-store-package.py'
       - '!scripts/verify-store-submission-assets.py'
       - '!scripts/test-*.js'
-      - 'regression-suite/**'
-      - '!regression-suite/Verify-BLB-Zip.ps1'
       - 'package.json'
       - 'package-lock.json'
       - 'playwright.config.js'
