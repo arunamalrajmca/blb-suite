@@ -160,6 +160,9 @@ test('BLB rapid same-task verse-panel collapse is detected and corrected', async
   const html = versePageHtml({ panel: 'collapsed' }).replace(
     "document.getElementById('bodyCol1A')?.classList.remove('hidden');",
     "const panel = document.getElementById('bodyCol1A');\n        panel?.classList.remove('hidden');\n        if (window.__rightToggleCalls.length === 1) panel?.classList.add('hidden');"
+  ).replace(
+    "document.getElementById('siteExpandRight')?.classList.add('hidden');",
+    "if (window.__rightToggleCalls.length > 1) document.getElementById('siteExpandRight')?.classList.add('hidden');\n        else document.getElementById('siteExpandRight')?.classList.remove('hidden');"
   );
   const page = await openFixture(
     context,
