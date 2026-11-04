@@ -70,30 +70,78 @@ async function isSuiteEnabled() {
 }
 
 /*
- * BLB can restore its saved layout after the first parallel-panel expansion.
- * Use the native right control on every supported template, but observe only
- * the verse-page panel for a confirmed expanded -> collapsed transition.
- * This avoids interpreting BLB's intermediate DOM mutations as repeated
- * requests while still correcting one late saved-layout overwrite.
+ * Verse pages expose their actual parallel Bible panel as #bodyCol1A.
+ * Use that panel's state, rather than the expand control alone, because BLB
+ * can leave #siteExpandRight visible during layout initialization.
  */
-let blbRightPanelExpansionScheduled = false;
-function ensureBlbRightPanelExpandedAfterLoad() {
+let blbVerseRightPanelExpansionStarted = false;
+function ensureBlbVerseRightPanelExpanded() {
   let hostname = String(location.hostname || '').toLowerCase();
   if (hostname.startsWith('www.')) hostname = hostname.slice(4);
-  if (hostname !== BLB_HOSTNAME || blbRightPanelExpansionScheduled) return;
-  blbRightPanelExpansionScheduled = true;
+  if (hostname !== BLB_HOSTNAME || blbVerseRightPanelExpansionStarted) return;
+  blbVerseRightPanelExpansionStarted = true;
+
+  let observer = null;
+  const stopObserving = () => {
+    try { observer?.disconnect(); } catch (_) {}
+    observer = null;
+  };
+  const inspect = () => {
+    const panel = document.getElementById('bodyCol1A');
+    const expandControl = document.getElementById('siteExpandRight');
+    if (!panel || !expandControl) return false;
+
+    // The panel itself is authoritative on verse pages. Never toggle an
+    // already-expanded panel, even if BLB has not hidden its control yet.
+    if (!panel.classList.contains('hidden')) return true;
+    if (expandControl.classList.contains('hidden')) return false;
+
+    const nativeHandler = expandControl.getAttribute('onclick') || '';
+    if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(nativeHandler)) return false;
+    expandControl.click();
+    return true;
+  };
+  const check = () => {
+    if (inspect()) {
+      stopObserving();
+      return;
+    }
+    if (document.readyState !== 'loading' && !document.getElementById('bodyCol1A')) {
+      stopObserving();
+    }
+  };
+
+  check();
+  if (!observer && document.readyState === 'loading') {
+    observer = new MutationObserver(check);
+    observer.observe(document, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class']
+    });
+  }
+  document.addEventListener('DOMContentLoaded', check, { once: true });
+}
+
+/*
+ * MultiVerse and Criteria Search do not expose #bodyCol1A. Their native
+ * #siteExpandRight control is the available right-panel affordance, so use
+ * its one-shot action after BLB's load-time layout initialization.
+ */
+let blbToolRightPanelExpansionScheduled = false;
+function ensureBlbToolRightPanelExpandedAfterLoad() {
+  let hostname = String(location.hostname || '').toLowerCase();
+  if (hostname.startsWith('www.')) hostname = hostname.slice(4);
+  if (hostname !== BLB_HOSTNAME || blbToolRightPanelExpansionScheduled) return;
+  blbToolRightPanelExpansionScheduled = true;
 
   const startAfterLoad = () => {
     window.setTimeout(() => {
       const expandControl = document.getElementById('siteExpandRight');
       if (!expandControl || expandControl.classList.contains('hidden')) return;
-
       const nativeHandler = expandControl.getAttribute('onclick') || '';
       if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(nativeHandler)) return;
-
-      // Use the same one-shot native right-expand action on verse, MultiVerse,
-      // and Criteria Search pages. Do not infer panel state from page-specific
-      // containers or keep observers attached after the initial layout settles.
       expandControl.click();
     }, 350);
   };
@@ -104,8 +152,20 @@ function ensureBlbRightPanelExpandedAfterLoad() {
     window.addEventListener('load', startAfterLoad, { once: true });
   }
 }
+
+function ensureBlbDefaultRightPanelExpanded() {
+  const path = String(location.pathname || '').toLowerCase();
+  const isToolPage = path.includes('/tools/multiverse.cfm') ||
+    path.includes('/search/search.cfm');
+  if (isToolPage) {
+    ensureBlbToolRightPanelExpandedAfterLoad();
+  } else {
+    ensureBlbVerseRightPanelExpanded();
+  }
+}
+
 void suiteSettingsReadyPromise.then(() => {
-  if (suiteEnabled) ensureBlbRightPanelExpandedAfterLoad();
+  if (suiteEnabled) ensureBlbDefaultRightPanelExpanded();
 }).catch(() => {});
 
 // Runtime messaging can throw synchronously when an extension is reloaded or
@@ -3982,7 +4042,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.masterEnabled) {
     suiteEnabled = changes.masterEnabled.newValue !== false;
     blbPassiveNewTabTargets?.refresh?.();
-    if (suiteEnabled) ensureBlbRightPanelExpandedAfterLoad();
+    if (suiteEnabled) ensureBlbDefaultRightPanelExpanded();
     if (!suiteEnabled) {
       document.getElementById('blb-suite-webster-multiverse')?.remove();
       document.getElementById('blb-suite-webster-multiverse-reset-position')?.remove();
