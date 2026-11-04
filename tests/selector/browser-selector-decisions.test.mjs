@@ -681,3 +681,19 @@ test("same-condition extension reference regressions share one Playwright invoca
   assert.ok(groupsWorkflow.includes("source-page collector initializes on|Facebook nested dir-auto reference resolves from book, chapter, and verse-range gestures|Supply of Grace Substack Ephesians chapter context does not fall back to Ephesians 1:1"));
   assert.doesNotMatch(groupsWorkflow, /Run source-page collector initialization regressions|Run Facebook and Supply of Grace reference-context regressions|Run Facebook nested reference token regression|Run Supply of Grace Ephesians chapter-context regression/);
 });
+
+
+test("popup Chrome-Brave diagnostic harness does not trigger unrelated browser regressions", () => {
+  withFixture((root, base) => {
+    commitChange(root, "scripts/test-popup-cross-browser-rendering.js", "// diagnostic-only browser harness\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /changed_specs=\\n/);
+    assert.match(output, /group_a_required=false/);
+    assert.match(output, /group_b_required=false/);
+    assert.match(output, /reference_required=false/);
+    const classification = execFileSync("node", ["scripts/classify-ci-changes.mjs", base], { cwd: root, encoding: "utf8" });
+    assert.match(classification, /runtime_changed=false/);
+    assert.match(classification, /package_validation_required=true/);
+  });
+});
