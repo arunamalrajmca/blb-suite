@@ -7,6 +7,9 @@ on:
     types: [opened, synchronize, reopened, labeled]
     paths:
       - 'extension/**'
+      - '!extension/icons/**'
+      - '!extension/store-assets/**'
+      - '!extension/THIRD-PARTY-NOTICES.txt'
       - 'tests/**'
       - '!tests/selector/**'
       - '!tests/test_verify_store_package.py'
@@ -17,6 +20,7 @@ on:
       - '!scripts/select-reference-matrix.mjs'
       - '!scripts/reference-e2e-matrix.json'
       - '!scripts/test-ci-routing-selector.js'
+      - '!scripts/validate-build.js'
       - '!scripts/package-release.sh'
       - '!scripts/verify-store-assets.py'
       - '!scripts/verify-store-branding.py'
