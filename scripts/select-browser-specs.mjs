@@ -82,7 +82,7 @@ const forceFull = alwaysFull || changed.some(path =>
   !ignoredNonRuntime(path) && (
     (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js" && path !== "scripts/test-popup-cross-browser-rendering.js" && path !== "scripts/reference-e2e-matrix.json")
     || path.startsWith("regression-suite/")
-    || (path.startsWith("tests/") && !/^tests\/selector\//.test(path) && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path))
+    || (path.startsWith("tests/") && !/^tests\/selector\//.test(path) && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path) && path !== "tests/pages/research-derived-smoke.html")
     || ((path === "package.json" || path === "extension/manifest.json") && !sameExceptVersion(path))
     || path === "package-lock.json"
     || path === "playwright.config.js"
@@ -103,6 +103,10 @@ const forceFull = alwaysFull || changed.some(path =>
 // Explicit, conservative file-to-feature map. Mapped files only narrow browser
 // coverage when the implementation is genuinely feature-scoped.
 const featureSpecs = [
+  {
+    paths: ["tests/pages/research-derived-smoke.html"],
+    specs: ["tests/browser/research-dom-smoke.spec.js"]
+  },
   {
     paths: ["extension/content.js"],
     specs: [
