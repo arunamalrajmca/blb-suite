@@ -43,6 +43,17 @@ function runScenario(changedPath) {
   }
 }
 
+test("unknown test-script paths retain conservative full browser coverage", () => {
+  const { browser, classification } = runScenario("scripts/test-unmapped.js");
+  assert.match(classification, /runtime_changed=true/);
+  assert.match(classification, /behavioral_validation_required=true/);
+  assert.match(classification, /package_validation_required=true/);
+  assert.match(browser, /full_browser_suite=true/);
+  assert.match(browser, /group_a_required=true/);
+  assert.match(browser, /group_b_required=true/);
+  assert.match(browser, /reference_required=true/);
+});
+
 for (const path of [
   "scripts/test-cross-feature-contracts.js",
   "scripts/test-extraction-safety-contracts.js",

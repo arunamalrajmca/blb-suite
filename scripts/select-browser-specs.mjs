@@ -56,7 +56,7 @@ const ignoredNonRuntime = path =>
   || /^extension\/THIRD-PARTY-NOTICES\.txt$/.test(path)
   || /^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path)
   || path === "scripts/test-ci-routing-selector.js"
-  || /^scripts\/test-(?!popup-cross-browser-rendering\.js$)[^/]+\.js$/i.test(path)
+  || /^scripts\/test-(?:cross-feature-contracts|extraction-safety-contracts|module-loading-contracts|multiverse-reference-helpers|omnibox-boolean-operators|omnibox-gibberish-filter|omnibox-search-normalization|reference-core-characterization|selection-marker-stripping|selection-text-normalization|single-word-selection-normalization|study-session-export|study-session-normalization)\.js$/i.test(path)
   // Dedicated store verifiers have their own workflows and do not affect runtime browser behavior.
   || /^scripts\/verify-store-(?:assets|branding|package|submission-assets)\.py$/.test(path)
   || /^tests\/test_verify_store_(?:package|submission_assets)\.py$/.test(path)
@@ -82,7 +82,7 @@ const forceFull = alwaysFull || changed.some(path =>
   !ignoredNonRuntime(path) && (
     (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js" && path !== "scripts/test-popup-cross-browser-rendering.js" && path !== "scripts/reference-e2e-matrix.json")
     || path.startsWith("regression-suite/")
-    || (path.startsWith("tests/") && !/^tests\/selector\//.test(path) && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path))
+    || (path.startsWith("tests/") && !/^tests\/selector\//.test(path) && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path) && path !== "tests/pages/research-derived-smoke.html")
     || ((path === "package.json" || path === "extension/manifest.json") && !sameExceptVersion(path))
     || path === "package-lock.json"
     || path === "playwright.config.js"
@@ -103,6 +103,10 @@ const forceFull = alwaysFull || changed.some(path =>
 // Explicit, conservative file-to-feature map. Mapped files only narrow browser
 // coverage when the implementation is genuinely feature-scoped.
 const featureSpecs = [
+  {
+    paths: ["tests/pages/research-derived-smoke.html"],
+    specs: ["tests/browser/research-dom-smoke.spec.js"]
+  },
   {
     paths: ["extension/content.js"],
     specs: [
