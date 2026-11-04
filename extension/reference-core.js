@@ -326,18 +326,14 @@ function resolveBibleReferenceText(text, options = {}) {
 // so Omnibox, Alt+B, Show on BLB, and site redirects resolve out-of-range
 // references consistently without asking BLB to interpret an invalid URL.
 function resolveBibleReference(bookOrName, chapter, fromVerse = null, toVerse = null) {
-  const raw = String(bookOrName || '').toLowerCase().trim();
+  const raw = String(bookOrName || '').trim();
   if (!raw) return null;
-  const compact = raw.replace(/[.]/g, '').replace(/\s+/g, '');
-  const normalized = raw.replace(/[.]/g, '').replace(/\s+/g, ' ');
 
-  const book = BOOKS.find(b => {
-    const names = [b.name, b.urlKey, b.bookNumber, b.name.replace(/\s/g, '')];
-    return names.some(name => {
-      const n = String(name).toLowerCase();
-      return n === normalized || n.replace(/\s/g, '') === compact;
-    });
-  });
+  // Resolve every accepted canonical name and alias through the shared
+  // registry. The previous direct BOOKS scan bypassed BOOK_ALIASES, which
+  // meant source-page URLs such as /ot/ps/, /ot/prov/, /nt/1-pet/, and
+  // /nt/1-thes/ were silently discarded by page-wide reference collection.
+  const book = resolveBibleBook(raw);
   if (!book) return null;
 
   // Chapter-only references remain chapter URLs. Invalid chapter numbers are
