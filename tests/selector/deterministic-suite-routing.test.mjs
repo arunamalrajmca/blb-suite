@@ -86,7 +86,7 @@ test("build and package tooling edits run package validation without browser or 
 
 test("regression-suite edits do not trigger browser or performance workflows by path", () => {
   for (const workflow of [browserReferenceWorkflowSource, performanceWorkflowSource]) {
-    assert.doesNotMatch(workflow, /^\\s*-\\s*['"]regression-suite\\/\\*\\*['"]/m);
+    assert.doesNotMatch(workflow, /^\s*-\s*['"]regression-suite\/\*\*['"]/m);
   }
 });
 
