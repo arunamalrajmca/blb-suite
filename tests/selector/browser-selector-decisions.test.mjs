@@ -195,7 +195,7 @@ test("mixed runtime and Study Sessions spec edits delegate the changed spec to i
     commitChange(root, "tests/browser/study-session-export.spec.js", "// adjusted Study export coverage\\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_browser_specs=tests\\/browser\\/study-session-export\\.spec\\.js/);
+    assert.ok(output.includes("changed_browser_specs=tests/browser/study-session-export.spec.js"));
     assert.match(output, /study_sessions_required=true/);
     assert.match(output, /group_a_required=true/);
   });
