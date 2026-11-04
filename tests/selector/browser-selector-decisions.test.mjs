@@ -216,7 +216,7 @@ test("MultiVerse copy changes select clipboard coverage without unrelated tab-re
     commitChange(root, "extension/multiverse-copy.js", "// changed MultiVerse clipboard behavior\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=tests\/browser\/e2e-e2e-core-user-actions\.spec\.js/);
+    assert.match(output, /changed_specs=tests\/browser\/e2e-core-user-actions\.spec\.js/);
     assert.doesNotMatch(output, /multiverse-tab-reuse\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
@@ -228,7 +228,7 @@ test("parse-popup changes select popup-link coverage without unrelated tab-reuse
     commitChange(root, "extension/blb-parse-popup.js", "// changed parse popup behavior\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=tests\/browser\/e2e-e2e-core-user-actions\.spec\.js/);
+    assert.match(output, /changed_specs=tests\/browser\/e2e-core-user-actions\.spec\.js/);
     assert.doesNotMatch(output, /multiverse-tab-reuse\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
@@ -253,7 +253,7 @@ test("passive new-tab target changes select direct target behavior coverage only
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /changed_specs=tests\/browser\/blb-passive-new-tab-targets\.spec\.js/);
-    assert.doesNotMatch(output, /e2e-e2e-core-user-actions\.spec\.js/);
+    assert.doesNotMatch(output, /e2e-core-user-actions\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
     assert.match(output, /reference_required=false/);
@@ -266,7 +266,7 @@ test("MultiVerse tool-view changes select direct click-routing coverage only", (
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /changed_specs=tests\/browser\/multiverse-tool-view\.spec\.js/);
-    assert.doesNotMatch(output, /e2e-e2e-core-user-actions\.spec\.js/);
+    assert.doesNotMatch(output, /e2e-core-user-actions\.spec\.js/);
     assert.doesNotMatch(output, /multiverse-tab-reuse\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
@@ -280,7 +280,7 @@ test("MultiVerse handoff selects direct visibility coverage without unrelated su
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /changed_specs=tests\/browser\/multiverse-handoff\.spec\.js/);
-    assert.doesNotMatch(output, /e2e-e2e-core-user-actions\.spec\.js/);
+    assert.doesNotMatch(output, /e2e-core-user-actions\.spec\.js/);
     assert.doesNotMatch(output, /multiverse-tab-reuse\.spec\.js/);
     assert.doesNotMatch(output, /feature-lifecycle-regressions\.spec\.js/);
     assert.match(output, /group_a_required=true/);
@@ -295,7 +295,7 @@ test("verse-link navigation selects direct link-target and click-routing behavio
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /changed_specs=tests\/browser\/blb-verse-link-navigation\.spec\.js/);
-    assert.doesNotMatch(output, /e2e-e2e-core-user-actions\.spec\.js/);
+    assert.doesNotMatch(output, /e2e-core-user-actions\.spec\.js/);
     assert.doesNotMatch(output, /feature-lifecycle-regressions\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
@@ -358,7 +358,7 @@ test("Criteria Search navigation selects direct popup navigation behavior only",
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /changed_specs=tests\/browser\/criteria-search-navigation\.spec\.js/);
-    assert.doesNotMatch(output, /e2e-e2e-core-user-actions\.spec\.js/);
+    assert.doesNotMatch(output, /e2e-core-user-actions\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
     assert.match(output, /reference_required=false/);
