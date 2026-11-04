@@ -1,7 +1,5 @@
 const { test, expect } = require('./fixtures');
 
-test.describe.configure({ mode: 'serial' });
-
 function normalizeBlbKjvPath(pathname) {
   return String(pathname || '').replace(/\/s_\d+\/?$/i, '/');
 }
@@ -73,7 +71,6 @@ async function dismissBlbCookieOverlay(page) {
   });
 }
 
-test.describe('core user-action E2E coverage', () => {
   test('Alt+B command path opens an exact selected Bible reference', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
@@ -1928,8 +1925,6 @@ test('Facebook book clicks use only permitted immediate context', async ({ page,
     }).filter(Boolean)
   );
   expect(biblePaths).not.toContain('/kjv/2sa/21/14/');
-});
-
 // BLB right-panel default and saved-layout restoration regressions.
 function versePageHtml({ panel = 'collapsed', restoreAfterLoadMs = null } = {}) {
   const panelClass = panel === 'expanded' ? 'bodyColumns' : 'bodyColumns hidden';
