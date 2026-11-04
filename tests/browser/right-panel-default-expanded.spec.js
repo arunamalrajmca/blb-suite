@@ -10,7 +10,7 @@ const PAGE_TEMPLATES = [
   { name: 'BLB home', path: '/', hasPanel: false }
 ];
 
-function blbPageFixture({ hasPanel, restoreMs = null }) {
+function blbPageFixture({ hasPanel, restoreMs = null, panelExpanded = false }) {
   const restore = restoreMs === null ? '' : [
     'window.setTimeout(() => {',
     '  const panel = document.getElementById("bodyCol1A");',
@@ -18,7 +18,9 @@ function blbPageFixture({ hasPanel, restoreMs = null }) {
     '  document.getElementById("siteExpandRight").classList.remove("hidden");',
     '}, ' + restoreMs + ');'
   ].join('\n');
-  const panelMarkup = hasPanel ? '<div id="bodyCol1A" class="bodyColumns hidden">Parallel Bible</div>' : '';
+  const panelMarkup = hasPanel
+    ? '<div id="bodyCol1A" class="bodyColumns' + (panelExpanded ? '' : ' hidden') + '">Parallel Bible</div>'
+    : '';
   return '<!doctype html><html><head><script>' +
     'window.__calls = []; window.BLB = { siteResizeToggle(side) {' +
     'window.__calls.push(side); if (side !== "right") return;' +
@@ -76,4 +78,22 @@ test('right panel remains untouched when the global Suite switch is OFF', async 
     calls: window.__calls,
     controlHidden: document.getElementById('siteExpandRight').classList.contains('hidden')
   }))).toEqual({ calls: [], controlHidden: false });
+});
+
+test('an already-expanded verse panel is not toggled when BLB temporarily leaves the native control visible', async ({ context, extensionStorage }) => {
+  await extensionStorage.set({ masterEnabled: true });
+  const page = await openBlbFixture(context, '/kjv/gen/1/1/', {
+    hasPanel: true,
+    panelExpanded: true
+  });
+  await page.waitForTimeout(300);
+  expect(await page.evaluate(() => ({
+    calls: window.__calls,
+    panelExpanded: !document.getElementById('bodyCol1A').classList.contains('hidden'),
+    controlVisible: !document.getElementById('siteExpandRight').classList.contains('hidden')
+  }))).toEqual({
+    calls: [],
+    panelExpanded: true,
+    controlVisible: true
+  });
 });
