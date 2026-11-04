@@ -214,7 +214,7 @@ test("draggable-button source selects the focused spec that exercises drag, rest
 
 test("References-only changes do not schedule Study Sessions browser regressions", () => {
   withFixture((root, base) => {
-    commitChange(root, "extension/multiverse-copy.js", "// changed reference selection flow\\n");
+    commitChange(root, "extension/redirect-bibleref-ranges.js", "// changed Bible reference redirect behavior\\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /group_a_required=true/);
