@@ -304,6 +304,14 @@ const mappedSpecs = new Set([
 const separatelyManagedSpecs = new Set(["tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/performance.spec.js"]);
 const unmapped = selected.filter(path => !mappedSpecs.has(path) && !separatelyManagedSpecs.has(path));
 const has = (...names) => full || selected.some(path => names.includes(path));
+const studySessionSpecs = new Set([
+  "tests/browser/feature-lifecycle-regressions.spec.js",
+  "tests/browser/study-backup-restore.spec.js",
+  "tests/browser/study-reference-capture.spec.js",
+  "tests/browser/study-session-export.spec.js",
+  "tests/browser/study-session-popup-ui-regression.spec.js"
+]);
+
 const values = {
   full_browser_suite: String(full),
   changed_specs: selected.join(","),
@@ -327,17 +335,13 @@ const values = {
     "tests/browser/blb-auto-hyperlinker.spec.js",
     "tests/browser/blb-draggable-button.spec.js",
     "tests/browser/case-sensitive-routing-behavior.spec.js",
-    "tests/browser/feature-lifecycle-regressions.spec.js",
-    "tests/browser/study-backup-restore.spec.js",
-    "tests/browser/study-reference-capture.spec.js",
-    "tests/browser/study-session-export.spec.js",
     "tests/browser/extension.spec.js",
     "tests/browser/known-host-extension.spec.js",
     "tests/browser/pr-422-feature-regressions.spec.js",
    
     "tests/browser/site-feature-defaults.spec.js",
-    "tests/browser/study-session-popup-ui-regression.spec.js"
-  ) || unmapped.length > 0 || changedBrowserSpecs.length > 0),
+  ) || unmapped.length > 0 || changedBrowserSpecs.some(path => !studySessionSpecs.has(path))),
+  study_sessions_required: String(full || [...selected, ...changedBrowserSpecs].some(path => studySessionSpecs.has(path))),
   group_b_required: String(has(
     "tests/browser/redirect-hostnames.spec.js",
     "tests/browser/blb-non-kjv-redirect.spec.js",

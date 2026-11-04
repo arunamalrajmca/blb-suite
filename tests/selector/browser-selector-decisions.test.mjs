@@ -189,6 +189,21 @@ test("mixed Group B runtime and unrelated browser-spec edits still run the chang
   });
 });
 
+test("mixed runtime and Study Sessions spec edits delegate the changed spec to its dedicated job", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/blb-draggable-button.js", "// changed drag behavior\\n");
+    commitChange(root, "tests/browser/study-session-export.spec.js", "// adjusted Study export coverage\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.ok(output.includes("changed_browser_specs=tests/browser/study-session-export.spec.js"));
+    assert.match(output, /study_sessions_required=true/);
+    assert.match(output, /group_a_required=true/);
+  });
+  const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
+  assert.ok(workflow.includes("Delegating $spec to the dedicated Study Sessions job."));
+  assert.ok(workflow.includes("contains(inputs.changed_browser_specs, 'tests/browser/study-session-export.spec.js')"));
+});
+
 test("BLB auto-hyperlinker source selects its rich-clipboard browser spec", () => {
   withFixture((root, base) => {
     commitChange(root, "extension/blb-auto-hyperlinker.js", "// changed clipboard handler\n");
@@ -209,6 +224,17 @@ test("draggable-button source selects the focused spec that exercises drag, rest
     assert.match(output, /changed_specs=tests\/browser\/blb-draggable-button\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
+  });
+});
+
+test("References-only changes do not schedule Study Sessions browser regressions", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/redirect-bibleref-ranges.js", "// changed Bible reference redirect behavior\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /study_sessions_required=false/);
+    assert.match(output, /reference_required=true/);
   });
 });
 
@@ -242,7 +268,8 @@ test("Study reference capture source selects its focused browser behavior spec",
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /changed_specs=tests\/browser\/study-reference-capture\.spec\.js/);
-    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_a_required=false/);
+    assert.match(output, /study_sessions_required=true/);
     assert.match(output, /group_b_required=false/);
     assert.match(output, /reference_required=false/);
   });
@@ -307,10 +334,13 @@ test("verse-link navigation selects direct link-target and click-routing behavio
 test("Study session export source selects its focused PDF download browser spec", () => {
   withFixture((root, base) => {
     commitChange(root, "extension/study-session-export.js", "// changed Study PDF export\n");
+    commitChange(root, "tests/browser/study-session-export.spec.js", "// updated Study export assertions\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /changed_specs=tests\/browser\/study-session-export\.spec\.js/);
-    assert.match(output, /group_a_required=true/);
+    assert.match(output, /changed_browser_specs=tests\/browser\/study-session-export\.spec\.js/);
+    assert.match(output, /group_a_required=false/);
+    assert.match(output, /study_sessions_required=true/);
     assert.match(output, /group_b_required=false/);
     assert.match(output, /reference_required=false/);
   });
@@ -385,8 +415,8 @@ test("MultiVerse tab-reuse regressions share the Group A runner with conservativ
     "utf8"
   );
   assert.match(workflow, /Run MultiVerse tab reuse and 22-batch persistence regressions/);
-  assert.match(workflow, /needs\.change-detection\.outputs\.full_browser_suite == 'true'[\s\S]*?contains\(needs\.change-detection\.outputs\.changed_specs, 'tests\/browser\/multiverse-tab-reuse\.spec\.js'\)/);
-  assert.match(workflow, /!contains\(needs\.change-detection\.outputs\.changed_browser_specs, 'tests\/browser\/multiverse-tab-reuse\.spec\.js'\)/);
+  assert.match(workflow, /inputs\.full_browser_suite == 'true'[\s\S]*?contains\(inputs\.changed_specs, 'tests\/browser\/multiverse-tab-reuse\.spec\.js'\)/);
+  assert.match(workflow, /!contains\(inputs\.changed_browser_specs, 'tests\/browser\/multiverse-tab-reuse\.spec\.js'\)/);
   assert.match(workflow, /npx playwright test tests\/browser\/multiverse-tab-reuse\.spec\.js --workers=1/);
 });
 
@@ -425,8 +455,9 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
   }
   assert.match(groupA, /REFERENCE_GATE_REQUIRED:/);
   assert.match(groupA, /Delegating \$spec to the required browser-e2e gate/);
-  assert.match(groupA, /browser_e2e_required: \$\{\{ steps\.select\.outputs\.reference_required \}\}/);
-  assert.match(groupB, /browser_e2e_required: \$\{\{ steps\.select\.outputs\.reference_required \}\}/);
+  assert.match(groupA, /browser_e2e_required:/);
+  assert.match(groupB, /inputs\.browser_e2e_required == 'true'/);
+  assert.ok(referenceWorkflow.includes("browser_e2e_required: ${{ needs.change-detection.outputs.browser_e2e_required }}"));
   assert.match(referenceWorkflow, /npx playwright test "\$spec"/);
   assert.match(groupA, /npx playwright test "\$spec"/);
   assert.match(groupA, /browser_e2e_required == 'true'/);
@@ -466,19 +497,27 @@ test("optional E2E workflows exclude selector-only and store-only scripts from b
   }
 });
 
-test("reusable Group A/B workflow classifies once while its caller retains broad runtime triggers", () => {
+test("reusable feature groups consume the caller's single browser classification", () => {
   const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
   const caller = readFileSync(new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url), "utf8");
-  assert.ok(workflow.includes("  workflow_call:"), "Group A/B must be invoked as a reusable workflow");
-  assert.ok(caller.includes("      - 'extension/**'"), "References caller must retain the broad runtime fallback");
-  assert.equal((workflow.match(/^  change-detection:/gm) || []).length, 1, "both groups must share one classifier job");
-  assert.ok(workflow.includes("group_a_required: ${{ steps.select.outputs.group_a_required }}"));
-  assert.ok(workflow.includes("group_b_required: ${{ steps.select.outputs.group_b_required }}"));
-  assert.ok(workflow.includes("if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}"));
-  assert.ok(workflow.includes("if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}"));
+  assert.ok(workflow.includes("  workflow_call:"), "feature groups must be invoked as a reusable workflow");
+  assert.ok(caller.includes("extension/**"), "References caller must retain the broad runtime fallback");
+  assert.doesNotMatch(workflow, /^  change-detection:/m, "reusable workflow must not classify the same diff again");
+  assert.doesNotMatch(workflow, /needs\.change-detection\.outputs\./, "jobs must consume workflow inputs");
+  assert.doesNotMatch(workflow, /node scripts\/select-browser-specs\.mjs/, "selector must run only in the caller");
+  for (const input of ["full_browser_suite", "changed_specs", "changed_browser_specs", "unmapped_specs", "group_a_required", "study_sessions_required", "group_b_required", "browser_e2e_required"]) {
+    assert.match(workflow, new RegExp("^      " + input + ":\\n        required: true\\n        type: string$", "m"));
+    assert.ok(caller.includes(input + ": ${{ needs.change-detection.outputs." + input + " }}"), "caller must pass " + input);
+  }
+  assert.match(workflow, /inputs\.study_sessions_required == 'true'/);
+  assert.ok(workflow.includes("name: BROWSER E2E — STUDY SESSIONS"));
+  assert.match(workflow, /inputs\.group_a_required == 'true'/);
+  assert.match(workflow, /inputs\.group_b_required == 'true'/);
   assert.match(workflow, /tests\/browser\/scripttagger-global-injection\.spec\.js/);
+  assert.ok(workflow.includes("feature-groups-summary:"), "reusable workflow needs an always-run aggregate");
+  assert.ok(workflow.includes("- core-group-a") && workflow.includes("- core-study-sessions") && workflow.includes("- core-group-b"));
+  assert.ok(workflow.includes('check_group "Study Sessions" "$STUDY_REQUIRED" "$STUDY_RESULT"'));
 });
-
 test("References caller triggers reusable Group A/B for shared fixtures without a broad tests trigger", () => {
   const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url), "utf8");
   const groups = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
@@ -517,6 +556,7 @@ test("unknown runtime file conservatively selects broad browser coverage", () =>
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=true/);
     assert.match(output, /reference_required=true/);
+    assert.match(output, /study_sessions_required=true/);
   });
 });
 
