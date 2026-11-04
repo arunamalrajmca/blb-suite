@@ -79,6 +79,7 @@
         "blb-verse-link-navigation.js",
         "blb-page-selection-button.js",
         "multiverse-handoff.js",
+        "multiverse-default-tool-view.js",
         "multiverse-tool-view.js",
         "content.js"
       ],
