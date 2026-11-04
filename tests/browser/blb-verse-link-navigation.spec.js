@@ -84,3 +84,7 @@ test('global Suite OFF leaves bVerse targets and ordinary nowrap navigation unch
       tab.id === sourceId && new URL(tab.url || tab.pendingUrl || '').pathname === '/lexicon/g3056/kjv/tr/0-1/'
     ), sourceTab.id), { timeout: 10000 }).toBe(true);
 });
+
+
+// Load the right-panel cases into this established, reliably discovered spec.
+require('./blb-right-panel-default.cases.js');
