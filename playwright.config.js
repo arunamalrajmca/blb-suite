@@ -3,6 +3,10 @@ const path = require('path');
 
 module.exports = defineConfig({
   testDir: './tests/browser',
+  // CI runners may carry global Git ignore rules. Tracked Playwright specs must
+  // remain discoverable regardless of those external ignore patterns.
+  respectGitIgnore: false,
+  testMatch: '**/*.spec.js',
   timeout: 60000,
   expect: { timeout: 10000 },
   fullyParallel: false,
