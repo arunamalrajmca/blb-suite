@@ -384,7 +384,7 @@ test('BLB keeps the verse-page right panel expanded after delayed layout restore
   await page.waitForFunction(() =>
     window.__rightToggleCalls.length === 2 &&
     document.getElementById('bodyCol1A')?.classList.contains('hidden') === false
-  , { timeout: 9000 });
+  , null, { timeout: 9000 });
 
   expect(await page.evaluate(() => ({
     calls: window.__rightToggleCalls,
