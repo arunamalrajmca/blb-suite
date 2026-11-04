@@ -1,11 +1,19 @@
 const { test, expect } = require('./fixtures');
 
-function blbPageHtml({ panel = 'collapsed' } = {}) {
+function blbPageHtml({ panel = 'collapsed', restoreAfterLoadMs = null } = {}) {
   const hasPanel = panel !== 'absent';
   const panelClass = panel === 'expanded' ? 'bodyColumns' : 'bodyColumns hidden';
   const toggleClass = panel === 'collapsed'
     ? 'site-expand-container right'
     : 'site-expand-container right hidden';
+  const restoreScript = restoreAfterLoadMs === null ? '' : `
+    window.addEventListener('load', () => {
+      window.setTimeout(() => {
+        document.getElementById('bodyCol1A')?.classList.add('hidden');
+        document.getElementById('siteExpandRight')?.classList.remove('hidden');
+      }, ${restoreAfterLoadMs});
+    });
+  `;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -21,6 +29,7 @@ function blbPageHtml({ panel = 'collapsed' } = {}) {
       }
     };
   </script>
+  <script>${restoreScript}</script>
 </head>
 <body>
   <div id="bodyCol1" class="bodyColumns">Left panel</div>
@@ -65,6 +74,32 @@ test('BLB expands a collapsed parallel Bible panel through its own right control
 
   expect(result.calls).toEqual(['right']);
   expect(result.leftPanelClass).toBe('bodyColumns');
+  expect(result.rightPanelClass).toBe('bodyColumns');
+  expect(result.rightControlClass).toContain('hidden');
+});
+
+
+test('BLB late saved-layout restoration cannot collapse the default right panel', async ({ context, extensionStorage }) => {
+  await extensionStorage.set({ masterEnabled: true });
+  const page = await openFixture(
+    context,
+    'https://www.blueletterbible.org/kjv/gen/1/1/',
+    blbPageHtml({ panel: 'expanded', restoreAfterLoadMs: 100 })
+  );
+
+  await page.waitForFunction(() =>
+    document.getElementById('bodyCol1A')?.classList.contains('hidden') === false &&
+    window.__rightToggleCalls.length === 1
+  );
+  await page.waitForTimeout(500);
+
+  const result = await page.evaluate(() => ({
+    calls: window.__rightToggleCalls,
+    rightPanelClass: document.getElementById('bodyCol1A').className,
+    rightControlClass: document.getElementById('siteExpandRight').className
+  }));
+
+  expect(result.calls).toEqual(['right']);
   expect(result.rightPanelClass).toBe('bodyColumns');
   expect(result.rightControlClass).toContain('hidden');
 });
