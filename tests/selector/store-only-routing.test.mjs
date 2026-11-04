@@ -44,7 +44,10 @@ for (const changedPath of [
   "scripts/verify-store-package.py",
   "scripts/verify-store-submission-assets.py",
   "tests/test_verify_store_package.py",
-  "tests/test_verify_store_submission_assets.py"
+  "tests/test_verify_store_submission_assets.py",
+  "extension/icons/icon16.png",
+  "extension/store-assets/branding.png",
+  "extension/THIRD-PARTY-NOTICES.txt"
 ]) {
   test(changedPath + " skips browser regression groups", () => {
     const output = runScenario(changedPath);
