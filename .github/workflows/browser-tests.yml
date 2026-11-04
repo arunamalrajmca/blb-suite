@@ -29,6 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       runtime_changed: ${{ steps.classify.outputs.runtime_changed }}
+      behavioral_validation_required: ${{ steps.classify.outputs.behavioral_validation_required }}
       package_validation_required: ${{ steps.classify.outputs.package_validation_required }}
     steps:
       - name: Checkout for change classification
@@ -45,6 +46,7 @@ jobs:
           BASE="$BASE_SHA"
           if [[ -z "$BASE" || "$BASE" =~ ^0+$ ]]; then
             echo "runtime_changed=true" >> "$GITHUB_OUTPUT"
+            echo "behavioral_validation_required=true" >> "$GITHUB_OUTPUT"
             echo "package_validation_required=true" >> "$GITHUB_OUTPUT"
           else
             node scripts/classify-ci-changes.mjs "$BASE"
@@ -85,7 +87,7 @@ jobs:
     # The hard gate always runs behavioral groups on PRs/main. Runtime-change
     # detection remains useful to other workflows, but a hard gate must never
     # report green while behavioral coverage was silently skipped.
-    if: ${{ needs.change-detection.result == 'success' && (needs.change-detection.outputs.runtime_changed == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-hard-gate')) }}
+    if: ${{ needs.change-detection.result == 'success' && (needs.change-detection.outputs.behavioral_validation_required == 'true' || github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-hard-gate')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -128,7 +130,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           STATUS_SHA: ${{ github.sha }}
-          STATUS_STATE: ${{ needs.change-detection.result == 'success' && (needs.regression-package.result == 'success' || (needs.regression-package.result == 'skipped' && needs.change-detection.outputs.package_validation_required == 'false')) && (needs.regression-behavioral.result == 'success' || (needs.regression-behavioral.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && 'success' || 'failure' }}
+          STATUS_STATE: ${{ needs.change-detection.result == 'success' && (needs.regression-package.result == 'success' || (needs.regression-package.result == 'skipped' && needs.change-detection.outputs.package_validation_required == 'false')) && (needs.regression-behavioral.result == 'success' || (needs.regression-behavioral.result == 'skipped' && needs.change-detection.outputs.behavioral_validation_required == 'false')) && 'success' || 'failure' }}
           STATUS_DESCRIPTION: ${{ needs.change-detection.result == 'success' && (needs.regression-package.result == 'success' || (needs.regression-package.result == 'skipped' && needs.change-detection.outputs.package_validation_required == 'false')) && (needs.regression-behavioral.result == 'success' || (needs.regression-behavioral.result == 'skipped' && needs.change-detection.outputs.runtime_changed == 'false')) && 'success' || 'failure' }}
         shell: bash
         run: |
