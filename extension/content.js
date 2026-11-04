@@ -77,7 +77,7 @@ async function isSuiteEnabled() {
  */
 let blbRightPanelExpansionStarted = false;
 function ensureBlbRightPanelExpanded() {
-  const hostname = String(location.hostname || '').toLowerCase().replace(/^www\\./, '');
+  const hostname = String(location.hostname || '').toLowerCase().replace(/^www\./, '');
   if (hostname !== BLB_HOSTNAME || blbRightPanelExpansionStarted) return;
   blbRightPanelExpansionStarted = true;
 
