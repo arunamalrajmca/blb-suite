@@ -2039,7 +2039,7 @@ async function openFixture(context, url, html) {
   return page;
 }
 
-test('BLB expands a collapsed verse-page parallel Bible panel through its native right control', async ({ context, extensionStorage }) => {
+test('BLB expands a collapsed verse-page parallel Bible panel through its native right control [right-panel]', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openFixture(
     context,
@@ -2064,7 +2064,7 @@ test('BLB expands a collapsed verse-page parallel Bible panel through its native
   expect(result.rightControlClass).toContain('hidden');
 });
 
-test('BLB verse panel is re-expanded when a delayed saved-layout restore collapses it', async ({ context, extensionStorage }) => {
+test('BLB verse panel is re-expanded when a delayed saved-layout restore collapses it [right-panel]', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openFixture(
     context,
@@ -2089,7 +2089,7 @@ test('BLB verse panel is re-expanded when a delayed saved-layout restore collaps
   });
 });
 
-test('BLB verse panel state prevents a blind toggle while the native control is temporarily visible', async ({ context, extensionStorage }) => {
+test('BLB verse panel state prevents a blind toggle while the native control is temporarily visible [right-panel]', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openFixture(
     context,
@@ -2112,7 +2112,7 @@ test('BLB verse panel state prevents a blind toggle while the native control is 
   });
 });
 
-test('BLB leaves an already-expanded verse panel and pages without a right control unchanged', async ({ context, extensionStorage }) => {
+test('BLB leaves an already-expanded verse panel and pages without a right control unchanged [right-panel]', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
 
   const expandedPage = await openFixture(
@@ -2137,7 +2137,7 @@ test('BLB leaves an already-expanded verse panel and pages without a right contr
   expect(await noControlPage.locator('#bodyCol1A').getAttribute('class')).toBe('bodyColumns hidden');
 });
 
-test('MultiVerse uses the actual shared BLB right-expand control without assuming a panel ID', async ({ context, extensionStorage }) => {
+test('MultiVerse uses the actual shared BLB right-expand control without assuming a panel ID [right-panel]', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openFixture(
     context,
@@ -2166,7 +2166,7 @@ test('MultiVerse uses the actual shared BLB right-expand control without assumin
   }));
 });
 
-test('Criteria Search uses the actual shared BLB right-expand control without assuming a panel ID', async ({ context, extensionStorage }) => {
+test('Criteria Search uses the actual shared BLB right-expand control without assuming a panel ID [right-panel]', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openFixture(
     context,
@@ -2195,7 +2195,7 @@ test('Criteria Search uses the actual shared BLB right-expand control without as
   }));
 });
 
-test('enabling the Suite after page load applies the MultiVerse right-panel default', async ({ context, extensionStorage }) => {
+test('enabling the Suite after page load applies the MultiVerse right-panel default [right-panel]', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: false });
   const page = await openFixture(
     context,
@@ -2215,7 +2215,7 @@ test('enabling the Suite after page load applies the MultiVerse right-panel defa
   expect(await page.evaluate(() => window.__rightToggleCalls)).toEqual(['right']);
 });
 
-test('right-panel behavior does not run on non-BLB sites', async ({ context, extensionStorage }) => {
+test('right-panel behavior does not run on non-BLB sites [right-panel]', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openFixture(
     context,
@@ -2233,7 +2233,7 @@ test('right-panel behavior does not run on non-BLB sites', async ({ context, ext
 });
 
 
-test('native right-panel expansion is one-shot even when BLB leaves its control visible', async ({ context, extensionStorage }) => {
+test('native right-panel expansion is one-shot even when BLB leaves its control visible [right-panel]', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   // Model BLB doing layout work that mutates the document but does not
   // immediately hide #siteExpandRight. The observer must not interpret those
