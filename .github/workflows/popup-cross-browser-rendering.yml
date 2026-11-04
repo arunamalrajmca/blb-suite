@@ -105,10 +105,10 @@ jobs:
         with:
           path: |
             node_modules
-            C:\\Program Files\\Google\\Chrome
-            C:\\Program Files (x86)\\Google\\Chrome
-            C:\\Program Files\\BraveSoftware\\Brave-Browser
-            C:\\Users\\runneradmin\\AppData\\Local\\ms-playwright
+            C:\Program Files\\Google\\Chrome
+            C:\Program Files (x86)\\Google\\Chrome
+            C:\Program Files\\BraveSoftware\\Brave-Browser
+            C:\Users\\runneradmin\\AppData\\Local\\ms-playwright
           key: ${{ runner.os }}-popup-toolchain-v1-pw-1.63.0-${{ hashFiles('package.json') }}
 
       - name: Compare computed popup styles and text metrics
