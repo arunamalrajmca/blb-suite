@@ -333,7 +333,7 @@ const values = {
    
     "tests/browser/site-feature-defaults.spec.js",
   ) || unmapped.length > 0 || changedBrowserSpecs.length > 0),
-  study_sessions_required: String(full || selected.some(path => [
+  study_sessions_required: String(full || [...selected, ...changedBrowserSpecs].some(path => [
     "tests/browser/feature-lifecycle-regressions.spec.js",
     "tests/browser/study-backup-restore.spec.js",
     "tests/browser/study-reference-capture.spec.js",
