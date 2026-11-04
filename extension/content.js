@@ -83,72 +83,31 @@ function ensureBlbRightPanelExpandedAfterLoad() {
   blbRightPanelExpansionScheduled = true;
 
   const startAfterLoad = () => {
-    let observer = null;
-    let checkTimer = null;
-    let disposed = false;
-
-    const stopObserving = () => {
-      if (disposed) return;
-      disposed = true;
-      if (checkTimer !== null) window.clearTimeout(checkTimer);
-      if (observer) observer.disconnect();
-      observer = null;
-    };
-
-    const inspect = () => {
+    const inspectOnce = () => {
       const expandControl = document.getElementById('siteExpandRight');
       if (!expandControl) return;
 
-      // On verse pages BLB exposes #bodyCol1A. Other BLB templates can use a
-      // different right-panel container, so the native expand control is the
-      // common state signal: it is exposed only while the right panel is shut.
+      // Verse pages expose the parallel Bible panel directly. If it is
+      // already expanded, do not invoke BLB's toggle.
       const panel = document.getElementById('bodyCol1A');
       if (panel && !panel.classList.contains('hidden')) return;
       if (expandControl.classList.contains('hidden')) return;
-      // Content scripts run in an isolated JavaScript world, so BLB's
-      // page-world window.BLB object is not reliably readable here. The
-      // supplied native control carries BLB's inline right-toggle handler;
-      // clicking the DOM control dispatches it in the page's own world.
+
+      // Content scripts run in an isolated JavaScript world. Verify the
+      // native page-world inline handler, then dispatch it through the DOM.
       const nativeHandler = expandControl.getAttribute('onclick') || '';
       if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(nativeHandler)) return;
 
-      // This is deliberately a one-shot action. BLB may leave the expand
-      // control visible while its page-world layout work is running, and its
-      // own mutations must never cause this observer to toggle the panel again.
-      // Disconnect before dispatching the native click to prevent a
-      // self-triggered expand/collapse loop and repeated remote CFC requests.
-      stopObserving();
-
-      // Delegate to BLB's own handler; it knows the active page template and
-      // its corresponding right-side container.
+      // Intentionally perform exactly one native toggle. Do not observe DOM
+      // mutations or retry: BLB's layout code can leave this control visible
+      // during its asynchronous work, and repeated clicks cause rapid
+      // expand/collapse requests to the remote CFC endpoint.
       expandControl.click();
     };
 
-    const scheduleCheck = () => {
-      if (disposed) return;
-      if (checkTimer !== null) window.clearTimeout(checkTimer);
-      checkTimer = window.setTimeout(() => {
-        checkTimer = null;
-        inspect();
-      }, 50);
-    };
-
-    // Observe BLB's own post-load state restoration. Keep this short-lived so
-    // a user's deliberate collapse after initialization remains respected.
-    observer = new MutationObserver(scheduleCheck);
-    observer.observe(document.documentElement || document, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-      attributeFilter: ['class']
-    });
-
-    inspect();
-    checkTimer = window.setTimeout(() => {
-      checkTimer = null;
-      inspect();
-    }, 350);
-    window.setTimeout(stopObserving, 3000);
+    // Run once after BLB's load-time layout restoration has had a chance to
+    // settle. The action is deliberately not retried after it is dispatched.
+    window.setTimeout(inspectOnce, 350);
   };
 
   if (document.readyState === 'complete') {
