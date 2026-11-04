@@ -47,7 +47,9 @@ const ignoredNonRuntime = path =>
   // Cross-browser diagnostic harness; it validates the test environment, not extension behavior.
   || path === "scripts/test-popup-cross-browser-rendering.js"
   || path === "scripts/reference-e2e-matrix.json"
+  || path === "scripts/package-release.sh"
   || path === "scripts/validate-build.js"
+  || path === "regression-suite/Verify-BLB-Zip.ps1"
   || path === "regression-suite/README.md"
   || /^regression-suite\/tests\//.test(path)
   || /^tests\/selector\//.test(path);
