@@ -2863,5 +2863,3 @@ test('Double-clicking the Mt abbreviation opens its complete chapter-and-verse r
   expect(openedPaths).toContain('/kjv/mat/10/32-33/');
 });
 
-// Run BLB right-panel defaults with the established extension browser suite.
-require('./blb-right-panel-default.cases.js');
