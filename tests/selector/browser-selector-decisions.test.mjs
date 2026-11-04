@@ -59,7 +59,7 @@ function fixture(selector = selectorSource) {
   put(root, "tests/browser/study-session-export.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/case-sensitive-routing-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/omnibox-boolean-operators.spec.js", "import { test } from '@playwright/test';\n");
-  put(root, "tests/browser/e2e-core-user-actions.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/core-user-actions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/multiverse-tab-reuse.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/multiverse-tool-view.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/multiverse-handoff.spec.js", "import { test } from '@playwright/test';\n");
