@@ -158,7 +158,6 @@ try {
     'tests/browser/substack-selection-parser.spec.js',
     'tests/browser/omnibox-command-routing.spec.js',
     'tests/browser/pdf-selection-regressions.spec.js',
-    'tests/browser/blb-right-panel-default.spec.js',
     'tests/browser/study-session-popup-ui-regression.spec.js',
     'tests/browser/study-backup-restore.spec.js',
     'tests/browser/feature-lifecycle-regressions.spec.js',
