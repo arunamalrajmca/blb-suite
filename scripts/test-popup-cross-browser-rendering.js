@@ -45,6 +45,83 @@ async function removeUserDataDir(userDataDir) {
   }
 }
 
+async function collectStartupDiagnostics(name, context, userDataDir, startupError) {
+  const diagnostics = {
+    browser: name,
+    timestamp: new Date().toISOString(),
+    extensionPath,
+    userDataDir,
+    startupError: { name: startupError.name, message: startupError.message, stack: startupError.stack },
+    serviceWorkers: context.serviceWorkers().map(worker => ({ url: worker.url() })),
+    pages: context.pages().map(page => ({ url: page.url() })),
+    backgroundScript: manifest.background.service_worker,
+    importedScripts: [],
+    extensionsPage: null
+  };
+
+  // Record whether every importScripts() dependency exists before relying on
+  // Chromium's internal extension diagnostics.
+  const backgroundPath = path.join(extensionPath, manifest.background.service_worker);
+  if (fs.existsSync(backgroundPath)) {
+    const source = fs.readFileSync(backgroundPath, 'utf8');
+    const imports = [...source.matchAll(/importScripts\\s*\\(([^)]*)\\)/g)];
+    for (const match of imports) {
+      for (const item of match[1].matchAll(/['"]([^'"]+)['"]/g)) {
+        const importedPath = path.resolve(extensionPath, item[1]);
+        diagnostics.importedScripts.push({
+          name: item[1],
+          exists: fs.existsSync(importedPath),
+          path: importedPath
+        });
+      }
+    }
+  } else {
+    diagnostics.backgroundScriptMissing = backgroundPath;
+  }
+
+  let diagnosticPage;
+  try {
+    diagnosticPage = await context.newPage();
+    await diagnosticPage.goto('chrome://extensions', { waitUntil: 'domcontentloaded', timeout: 10000 });
+    await diagnosticPage.waitForTimeout(1000);
+    diagnostics.extensionsPage = await diagnosticPage.evaluate(() => {
+      const collect = root => {
+        let result = '';
+        if (!root) return result;
+        for (const node of root.childNodes || []) {
+          if (node.nodeType === Node.TEXT_NODE) result += node.textContent + ' ';
+          else if (node.nodeType === Node.ELEMENT_NODE) {
+            result += collect(node);
+            if (node.shadowRoot) result += collect(node.shadowRoot);
+          }
+        }
+        return result.replace(/\\s+/g, ' ').trim();
+      };
+      return {
+        title: document.title,
+        bodyText: collect(document.body).slice(0, 16000),
+        itemCount: document.querySelectorAll('extensions-item').length
+      };
+    });
+    await diagnosticPage.screenshot({ path: 'popup-startup-diagnostic-' + slug(name) + '.png', fullPage: true }).catch(() => {});
+  } catch (diagnosticError) {
+    diagnostics.extensionsPageError = diagnosticError.message;
+  } finally {
+    if (diagnosticPage) await diagnosticPage.close().catch(() => {});
+  }
+
+  let previous = [];
+  try {
+    const file = path.resolve(process.cwd(), 'popup-startup-diagnostics.json');
+    if (fs.existsSync(file)) previous = JSON.parse(fs.readFileSync(file, 'utf8'));
+    previous.push(diagnostics);
+    fs.writeFileSync(file, JSON.stringify(previous, null, 2));
+  } catch (writeError) {
+    console.warn('Could not write startup diagnostics: ' + writeError.message);
+  }
+  console.error(name + ' extension startup diagnostics: ' + JSON.stringify(diagnostics, null, 2));
+}
+
 async function launchBrowser(name) {
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-popup-'));
   const options = {
@@ -75,7 +152,10 @@ async function launchBrowser(name) {
       worker = context.serviceWorkers()[0];
       if (!worker) {
         const started = await workerStarted;
-        if (started.startupError) throw started.startupError;
+        if (started.startupError) {
+          await collectStartupDiagnostics(name, context, userDataDir, started.startupError);
+          throw started.startupError;
+        }
         worker = started.worker;
       }
     }
