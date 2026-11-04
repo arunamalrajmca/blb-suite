@@ -9,6 +9,8 @@ const selectorSource = readFileSync(new URL("../../scripts/select-browser-specs.
 const classifierSource = readFileSync(new URL("../../scripts/classify-ci-changes.mjs", import.meta.url), "utf8");
 const workflowSource = readFileSync(new URL("../../.github/workflows/browser-tests.yml", import.meta.url), "utf8");
 const zipWorkflowSource = readFileSync(new URL("../../.github/workflows/zip-integrity.yml", import.meta.url), "utf8");
+const browserReferenceWorkflowSource = readFileSync(new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url), "utf8");
+const performanceWorkflowSource = readFileSync(new URL("../../.github/workflows/browser-e2e-performance.yml", import.meta.url), "utf8");
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -79,6 +81,12 @@ test("build and package tooling edits run package validation without browser or 
     assert.match(browser, /group_a_required=false/, path);
     assert.match(browser, /group_b_required=false/, path);
     assert.match(browser, /reference_required=false/, path);
+  }
+});
+
+test("regression-suite edits do not trigger browser or performance workflows by path", () => {
+  for (const workflow of [browserReferenceWorkflowSource, performanceWorkflowSource]) {
+    assert.doesNotMatch(workflow, /^\\s*-\\s*['"]regression-suite\\/\\*\\*['"]/m);
   }
 });
 
