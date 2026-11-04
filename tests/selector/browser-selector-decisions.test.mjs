@@ -212,6 +212,17 @@ test("draggable-button source selects the focused spec that exercises drag, rest
   });
 });
 
+test("References-only changes do not schedule Study Sessions browser regressions", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/multiverse-copy.js", "// changed reference selection flow\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /study_sessions_required=false/);
+    assert.match(output, /reference_required=false/);
+  });
+});
+
 test("MultiVerse copy changes select clipboard coverage without unrelated tab-reuse tests", () => {
   withFixture((root, base) => {
     commitChange(root, "extension/multiverse-copy.js", "// changed MultiVerse clipboard behavior\n");
@@ -242,7 +253,8 @@ test("Study reference capture source selects its focused browser behavior spec",
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /changed_specs=tests\/browser\/study-reference-capture\.spec\.js/);
-    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_a_required=false/);
+    assert.match(output, /study_sessions_required=true/);
     assert.match(output, /group_b_required=false/);
     assert.match(output, /reference_required=false/);
   });
@@ -310,7 +322,8 @@ test("Study session export source selects its focused PDF download browser spec"
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /changed_specs=tests\/browser\/study-session-export\.spec\.js/);
-    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_a_required=false/);
+    assert.match(output, /study_sessions_required=true/);
     assert.match(output, /group_b_required=false/);
     assert.match(output, /reference_required=false/);
   });
@@ -473,6 +486,9 @@ test("reusable Group A/B workflow classifies once while its caller retains broad
   assert.ok(caller.includes("      - 'extension/**'"), "References caller must retain the broad runtime fallback");
   assert.equal((workflow.match(/^  change-detection:/gm) || []).length, 1, "both groups must share one classifier job");
   assert.ok(workflow.includes("group_a_required: ${{ steps.select.outputs.group_a_required }}"));
+  assert.ok(workflow.includes("study_sessions_required: ${{ steps.select.outputs.study_sessions_required }}"));
+  assert.ok(workflow.includes("if: ${{ needs.change-detection.outputs.study_sessions_required == 'true' }}"));
+  assert.ok(workflow.includes("name: BROWSER E2E — STUDY SESSIONS"));
   assert.ok(workflow.includes("group_b_required: ${{ steps.select.outputs.group_b_required }}"));
   assert.ok(workflow.includes("if: ${{ needs.change-detection.outputs.group_a_required == 'true' }}"));
   assert.ok(workflow.includes("if: ${{ needs.change-detection.outputs.group_b_required == 'true' }}"));
