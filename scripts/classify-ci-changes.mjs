@@ -45,6 +45,9 @@ function sameExceptVersion(path) {
 function nonRuntimePath(path) {
   return /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/)|tests\/selector\/|scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs|scripts\/reference-e2e-matrix\.json$|scripts\/test-ci-routing-selector\.js)/i.test(path)
     || /^scripts\/test-(?:cross-feature-contracts|extraction-safety-contracts|module-loading-contracts|multiverse-reference-helpers|omnibox-boolean-operators|omnibox-gibberish-filter|omnibox-search-normalization|reference-core-characterization|selection-marker-stripping|selection-text-normalization|single-word-selection-normalization|study-session-export|study-session-normalization)\.js$/i.test(path)
+    || path === "scripts/validate-build.js"
+    || path === "regression-suite/README.md"
+    || /^regression-suite\/tests\//.test(path)
     || path === "scripts/test-popup-cross-browser-rendering.js"
     || /^tests\/browser\/[^/]+\.spec\.js$/i.test(path)
     // These store-only verifiers and their tests have dedicated workflows; they do not change extension runtime behavior.
@@ -75,6 +78,7 @@ function packageValidationPath(path) {
 
 let runtimeChanged = false;
 let packageValidationRequired = false;
+const regressionSuiteChanged = changed.some(path => path.startsWith("regression-suite/tests/"));
 const reasons = [];
 for (const path of changed) {
   if (packageValidationPath(path)) packageValidationRequired = true;
@@ -89,9 +93,11 @@ for (const path of changed) {
   reasons.push(path);
 }
 
+const behavioralValidationRequired = runtimeChanged || regressionSuiteChanged;
 const output = process.env.GITHUB_OUTPUT;
-if (output) appendFileSync(output, `runtime_changed=${runtimeChanged}\npackage_validation_required=${packageValidationRequired}\n`);
+if (output) appendFileSync(output, `runtime_changed=${runtimeChanged}\nbehavioral_validation_required=${behavioralValidationRequired}\npackage_validation_required=${packageValidationRequired}\n`);
 console.log(`runtime_changed=${runtimeChanged}`);
+console.log(`behavioral_validation_required=${behavioralValidationRequired}`);
 console.log(`package_validation_required=${packageValidationRequired}`);
 console.log(`changed_files=${changed.length}`);
 if (reasons.length) console.log(`runtime_or_unknown_paths:\n- ${reasons.join("\n- ")}`);
