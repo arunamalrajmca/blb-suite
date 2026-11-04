@@ -126,16 +126,22 @@ function ensureBlbRightPanelExpandedAfterLoad() {
           }
         }
 
-        if (!collapsedAfterExpansion || clickCount >= 2) return;
+        // BLB can run more than one delayed layout restoration pass on
+        // verse pages. Permit a small, finite number of corrections while
+        // observing only the actual panel state; never react to control-class
+        // or unrelated document mutations.
+        if (!collapsedAfterExpansion || clickCount >= 3) {
+          if (clickCount >= 3) stopObserving();
+          return;
+        }
         if (expandControl.classList.contains('hidden')) return;
         const currentHandler = expandControl.getAttribute('onclick') || '';
-        if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(currentHandler)) {
+        if (!/BLB\\.siteResizeToggle\\(\\s*['"]right['"]\\s*\\)/.test(currentHandler)) {
           stopObserving();
           return;
         }
 
         clickCount += 1;
-        stopObserving();
         expandControl.click();
       });
       // Only panel class transitions describe the panel's expanded state.
