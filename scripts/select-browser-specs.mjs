@@ -16,6 +16,23 @@ const ref = process.env.GITHUB_REF || "";
 // Main pushes should select coverage from the pushed diff, just like PRs. Keep a full run for manual dispatches and first pushes where GitHub provides an all-zero before SHA.
 const alwaysFull = event === "workflow_dispatch" || (event === "push" && ref === "refs/heads/main" && (!base || /^0+$/.test(base)));
 const run = (args) => execFileSync("git", args, { encoding: "utf8" }).trimEnd();
+function readAt(ref, path) {
+  try { return run(["show", `${ref}:${path}`]); }
+  catch { return null; }
+}
+function sameExceptVersion(path) {
+  const before = readAt(base, path);
+  const after = readAt("HEAD", path);
+  if (before === null || after === null) return false;
+  try {
+    const a = JSON.parse(before);
+    const b = JSON.parse(after);
+    if (typeof a.version !== "string" || typeof b.version !== "string") return false;
+    delete a.version;
+    delete b.version;
+    return JSON.stringify(a) === JSON.stringify(b);
+  } catch { return false; }
+}
 let changed = [];
 if (!alwaysFull) {
   if (!base || !/^[0-9a-f]{7,40}$/i.test(base)) {
@@ -67,7 +84,7 @@ const forceFull = alwaysFull || changed.some(path =>
     (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js" && path !== "scripts/test-popup-cross-browser-rendering.js" && path !== "scripts/reference-e2e-matrix.json")
     || path.startsWith("regression-suite/")
     || (path.startsWith("tests/") && !/^tests\/selector\//.test(path) && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path))
-    || path === "package.json"
+    || ((path === "package.json" || path === "extension/manifest.json") && !sameExceptVersion(path))
     || path === "package-lock.json"
     || path === "playwright.config.js"
     || path === "playwright.config.ts"
@@ -224,6 +241,7 @@ for (const path of changed) {
     continue;
   }
   if (ignoredNonRuntime(path)) continue;
+  if ((path === "package.json" || path === "extension/manifest.json") && sameExceptVersion(path)) continue;
   const mapped = featureSpecs.find(group => group.paths.includes(path));
   if (mapped) {
     for (const spec of mapped.specs) specs.add(spec);
