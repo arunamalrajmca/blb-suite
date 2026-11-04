@@ -110,4 +110,36 @@ assert.equal(resolveBibleBook('II John').name, '2 john');
 assert.equal(resolveBibleBook('I'), null);
 assert.equal(resolveBibleBook('is'), null);
 
+// Common Psalm/Proverbs aliases and numbered Thessalonians/Peter aliases.
+// Keep these in the shared resolver contract so every action using the core
+// recognizes the same abbreviations.
+const aliasCases = [
+  ['Ps', 'psalms', 'Ps 23:1', ['psalms', 23, 1, 1]],
+  ['Psalm', 'psalms', 'Psalm 23:1', ['psalms', 23, 1, 1]],
+  ['Psalms', 'psalms', 'Psalms 23:1', ['psalms', 23, 1, 1]],
+  ['Prov', 'proverbs', 'Prov 3:5', ['proverbs', 3, 5, 5]],
+  ['1 Thes', '1 thessalonians', '1 Thes 4:16', ['1 thessalonians', 4, 16, 16]],
+  ['2 Thes', '2 thessalonians', '2 Thes 2:3', ['2 thessalonians', 2, 3, 3]],
+  ['1 Pet', '1 peter', '1 Pet 3:15', ['1 peter', 3, 15, 15]],
+  ['2 Pet', '2 peter', '2 Pet 1:4', ['2 peter', 1, 4, 4]]
+];
+for (const [alias, expectedBook, reference, expectedTuple] of aliasCases) {
+  assert.equal(
+    resolveBibleBook(alias)?.name,
+    expectedBook,
+    `expected alias "${alias}" to resolve to ${expectedBook}`
+  );
+  assert.deepEqual(
+    tuples(reference),
+    [expectedTuple],
+    `expected reference "${reference}" to resolve through alias "${alias}"`
+  );
+}
+
+// These suffixes are ambiguous without their numbered prefix; do not silently
+// choose 1 or 2 Thessalonians/Peter.
+assert.equal(resolveBibleBook('Thes'), null);
+assert.equal(resolveBibleBook('Pet'), null);
+
+
 console.log('PASS: shared Bible-reference parsing and resolution contracts');
