@@ -40,6 +40,7 @@ const ignoredNonRuntime = path =>
   || /^extension\/THIRD-PARTY-NOTICES\.txt$/.test(path)
   || /^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path)
   || path === "scripts/test-ci-routing-selector.js"
+  || /^scripts\/test-(?!popup-cross-browser-rendering\\.js$)[^/]+\\.js$/i.test(path)
   // Dedicated store verifiers have their own workflows and do not affect runtime browser behavior.
   || /^scripts\/verify-store-(?:assets|branding|package|submission-assets)\.py$/.test(path)
   || /^tests\/test_verify_store_(?:package|submission_assets)\.py$/.test(path)
