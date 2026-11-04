@@ -95,6 +95,8 @@ jobs:
           if (-not $chromePath) { throw 'Google Chrome was not found after cache restore/install.' }
 
       - name: Compare computed popup styles and text metrics
+        env:
+          DEBUG: pw:browser
         run: node scripts/test-popup-cross-browser-rendering.js
 
       - name: Upload browser screenshots and metrics
