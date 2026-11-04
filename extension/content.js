@@ -117,8 +117,8 @@ function ensureBlbRightPanelExpandedAfterLoad() {
           const nextClasses = index + 1 < records.length
             ? (records[index + 1].oldValue || '')
             : panel.getAttribute('class') || '';
-          const wasExpanded = !oldClasses.split(/\\s+/).includes('hidden');
-          const isExpanded = !nextClasses.split(/\\s+/).includes('hidden');
+          const wasExpanded = !oldClasses.split(/\s+/).includes('hidden');
+          const isExpanded = !nextClasses.split(/\s+/).includes('hidden');
 
           if (isExpanded) sawExpandedState = true;
           if (sawExpandedState && wasExpanded && !isExpanded) {
@@ -129,7 +129,7 @@ function ensureBlbRightPanelExpandedAfterLoad() {
         if (!collapsedAfterExpansion || clickCount >= 2) return;
         if (expandControl.classList.contains('hidden')) return;
         const currentHandler = expandControl.getAttribute('onclick') || '';
-        if (!/BLB\\.siteResizeToggle\\(\\s*['"]right['"]\\s*\\)/.test(currentHandler)) {
+        if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(currentHandler)) {
           stopObserving();
           return;
         }
