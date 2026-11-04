@@ -197,8 +197,12 @@ async function inspectBrowser(name) {
     console.log(JSON.stringify({ browser: name, snapshots }, null, 2));
     return { name, snapshots };
   } finally {
-    await context.close();
-    await removeUserDataDir(userDataDir);
+    try {
+      await context.close();
+    } finally {
+      // Profile cleanup must still run if Chromium reports an error while closing.
+      await removeUserDataDir(userDataDir);
+    }
   }
 }
 
