@@ -497,6 +497,9 @@ test("reusable feature groups consume the caller's single browser classification
   assert.match(workflow, /inputs\.group_a_required == 'true'/);
   assert.match(workflow, /inputs\.group_b_required == 'true'/);
   assert.match(workflow, /tests\/browser\/scripttagger-global-injection\.spec\.js/);
+  assert.ok(workflow.includes("feature-groups-summary:"), "reusable workflow needs an always-run aggregate");
+  assert.ok(workflow.includes("- core-group-a") && workflow.includes("- core-study-sessions") && workflow.includes("- core-group-b"));
+  assert.ok(workflow.includes('check_group "Study Sessions" "$STUDY_REQUIRED" "$STUDY_RESULT"'));
 });
 test("References caller triggers reusable Group A/B for shared fixtures without a broad tests trigger", () => {
   const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url), "utf8");
