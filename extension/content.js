@@ -84,98 +84,18 @@ function ensureBlbRightPanelExpandedAfterLoad() {
   blbRightPanelExpansionScheduled = true;
 
   const startAfterLoad = () => {
-    const inspectOnce = () => {
+    window.setTimeout(() => {
       const expandControl = document.getElementById('siteExpandRight');
-      if (!expandControl) return;
+      if (!expandControl || expandControl.classList.contains('hidden')) return;
 
-      const panel = document.getElementById('bodyCol1A');
       const nativeHandler = expandControl.getAttribute('onclick') || '';
-      if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(nativeHandler)) return;
+      if (!/BLB\\.siteResizeToggle\\(\\s*['"]right['"]\\s*\\)/.test(nativeHandler)) return;
 
-      // MultiVerse and Criteria Search do not expose #bodyCol1A. Their native
-      // control is still reliable, so retain the single-click path there.
-      if (!panel) {
-        if (!expandControl.classList.contains('hidden')) expandControl.click();
-        return;
-      }
-
-      let clickCount = 0;
-      let sawExpandedState = !panel.classList.contains('hidden');
-      let observer;
-      let observationTimeout;
-      const stopObserving = () => {
-        if (observer) observer.disconnect();
-        observer = null;
-        if (observationTimeout !== undefined) {
-          window.clearTimeout(observationTimeout);
-          observationTimeout = undefined;
-        }
-      };
-      observer = new MutationObserver(records => {
-        // BLB can add and remove "hidden" synchronously during one layout
-        // pass. MutationObserver then delivers both records together, while
-        // reading panel.classList only exposes the final (collapsed) state.
-        // Reconstruct each class transition from oldValue + the next record.
-        let collapsedAfterExpansion = false;
-        for (let index = 0; index < records.length; index += 1) {
-          const oldClasses = records[index].oldValue || '';
-          const nextClasses = index + 1 < records.length
-            ? (records[index + 1].oldValue || '')
-            : panel.getAttribute('class') || '';
-          const wasExpanded = !oldClasses.split(/\s+/).includes('hidden');
-          const isExpanded = !nextClasses.split(/\s+/).includes('hidden');
-
-          if (isExpanded) sawExpandedState = true;
-          if (sawExpandedState && wasExpanded && !isExpanded) {
-            collapsedAfterExpansion = true;
-          }
-        }
-
-        // Keep the verse-page right panel expanded for the lifetime of
-        // this page. BLB can restore saved layout state well after startup,
-        // so a short observation window or a fixed correction count is not
-        // sufficient. Only a real expanded→collapsed panel transition can
-        // trigger a correction; unrelated/control mutations are ignored.
-        if (!collapsedAfterExpansion) return;
-        if (expandControl.classList.contains('hidden')) return;
-        const currentHandler = expandControl.getAttribute('onclick') || '';
-        if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(currentHandler)) {
-          stopObserving();
-          return;
-        }
-
-        clickCount += 1;
-        expandControl.click();
-      });
-      // Only panel class transitions describe the panel's expanded state.
-      // The expand control also changes class during BLB layout work; mixing
-      // those records with panel records can fabricate an expanded→collapsed
-      // transition and invoke the toggle a second time (undoing the expansion).
-      observer.observe(panel, { attributes: true, attributeFilter: ['class'], attributeOldValue: true });
-
-      // If initially collapsed, perform the first expansion. If already
-      // expanded, keep watching briefly in case BLB restores a stale saved
-      // layout immediately afterward.
-      if (!sawExpandedState) {
-        if (expandControl.classList.contains('hidden')) {
-          stopObserving();
-          return;
-        }
-        clickCount = 1;
-        expandControl.click();
-      }
-
-      // BLB may restore a stale saved layout after its initial startup pass.
-      // Keep this narrowly scoped observer only for a bounded settling window;
-      // later page activity must not leave a permanent observer attached.
-      observationTimeout = window.setTimeout(stopObserving, 10000);
-      window.addEventListener('pagehide', stopObserving, { once: true });
-    };
-
-    // BLB's initial layout restoration runs during page startup. Expand
-    // after that first pass, then keep the actual verse panel state monitored
-    // until navigation so later saved-layout restores cannot undo the default.
-    window.setTimeout(inspectOnce, 350);
+      // Use the same one-shot native right-expand action on verse, MultiVerse,
+      // and Criteria Search pages. Do not infer panel state from page-specific
+      // containers or keep observers attached after the initial layout settles.
+      expandControl.click();
+    }, 350);
   };
 
   if (document.readyState === 'complete') {
@@ -184,7 +104,6 @@ function ensureBlbRightPanelExpandedAfterLoad() {
     window.addEventListener('load', startAfterLoad, { once: true });
   }
 }
-
 void suiteSettingsReadyPromise.then(() => {
   if (suiteEnabled) ensureBlbRightPanelExpandedAfterLoad();
 }).catch(() => {});
