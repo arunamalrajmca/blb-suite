@@ -126,14 +126,12 @@ function ensureBlbRightPanelExpandedAfterLoad() {
           }
         }
 
-        // BLB can run more than one delayed layout restoration pass on
-        // verse pages. Permit a small, finite number of corrections while
-        // observing only the actual panel state; never react to control-class
-        // or unrelated document mutations.
-        if (!collapsedAfterExpansion || clickCount >= 3) {
-          if (clickCount >= 3) stopObserving();
-          return;
-        }
+        // Keep the verse-page right panel expanded for the lifetime of
+        // this page. BLB can restore saved layout state well after startup,
+        // so a short observation window or a fixed correction count is not
+        // sufficient. Only a real expanded→collapsed panel transition can
+        // trigger a correction; unrelated/control mutations are ignored.
+        if (!collapsedAfterExpansion) return;
         if (expandControl.classList.contains('hidden')) return;
         const currentHandler = expandControl.getAttribute('onclick') || '';
         if (!/BLB\.siteResizeToggle\(\s*['"]right['"]\s*\)/.test(currentHandler)) {
@@ -162,13 +160,15 @@ function ensureBlbRightPanelExpandedAfterLoad() {
         expandControl.click();
       }
 
-      // The observer is narrowly scoped and always self-terminates.
-      window.setTimeout(stopObserving, 5000);
+      // Keep observing until this document is left. The observer watches
+      // only #bodyCol1A's class, so normal page activity cannot trigger it.
+      // Disconnect on navigation to release the page-local observer.
+      window.addEventListener('pagehide', stopObserving, { once: true });
     };
 
-    // BLB's initial layout restoration runs during page startup. The first
-    // expansion is delayed slightly; a single verified late collapse may be
-    // corrected during the following five seconds.
+    // BLB's initial layout restoration runs during page startup. Expand
+    // after that first pass, then keep the actual verse panel state monitored
+    // until navigation so later saved-layout restores cannot undo the default.
     window.setTimeout(inspectOnce, 350);
   };
 
