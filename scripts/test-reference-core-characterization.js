@@ -142,4 +142,15 @@ assert.equal(resolveBibleBook('Thes'), null);
 assert.equal(resolveBibleBook('Pet'), null);
 
 
+// URL-derived aliases must also resolve through the shared reference resolver.
+// The Church of Jesus Christ collector passes URL path abbreviations directly.
+for (const [alias, expectedBook] of [
+  ['ps', 'psalms'], ['psalm', 'psalms'], ['prov', 'proverbs'],
+  ['1 pet', '1 peter'], ['2 pet', '2 peter'],
+  ['1 thes', '1 thessalonians'], ['2 thes', '2 thessalonians']
+]) {
+  const resolved = resolveBibleReference(alias, 3, 1, 2);
+  assert.equal(resolved?.book.name, expectedBook, alias);
+}
+
 console.log('PASS: shared Bible-reference parsing and resolution contracts');
