@@ -389,6 +389,14 @@ test.describe('core user-visible E2E', () => {
     await expect(page.locator('body')).toBeVisible();
     await page.waitForTimeout(1000);
 
+    const sourceTab = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs => {
+      const tab = tabs.find(item => {
+        try { return new URL(String(item.url || '')).hostname === 'example.com'; } catch (_) { return false; }
+      });
+      return tab ? { id: tab.id, windowId: tab.windowId } : null;
+    }));
+    expect(sourceTab, 'the example.com source tab must be present for the reference matrix').toBeTruthy();
+
     const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
       bookNumber: Number(book.bookNumber),
       name: String(book.name),
@@ -436,13 +444,18 @@ test.describe('core user-visible E2E', () => {
         for (const action of actions) {
           const iterationStartedAt = process.hrtime.bigint();
           let phaseStartedAt = process.hrtime.bigint();
+          const tabSnapshot = await extensionWorker.evaluate(source => chrome.tabs.query({}).then(tabs => ({
+            beforeIds: tabs.map(tab => tab.id).filter(id => id != null),
+            activeTabId: tabs.find(tab => tab.windowId === source.windowId && tab.active)?.id ?? null
+          })), sourceTab);
+          recordMatrixPhase('action-existing-tab-snapshot', phaseStartedAt, { book: book.name, separator, action });
+          recordMatrixPhase('action-source-tab-active-before-bring-to-front', process.hrtime.bigint(), {
+            book: book.name, separator, action, sourceAlreadyActive: tabSnapshot.activeTabId === sourceTab.id
+          });
+          phaseStartedAt = process.hrtime.bigint();
           await page.bringToFront();
           recordMatrixPhase('action-page-bring-to-front', phaseStartedAt, { book: book.name, separator, action });
-          phaseStartedAt = process.hrtime.bigint();
-          const beforeIds = await extensionWorker.evaluate(() =>
-            chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
-          );
-          recordMatrixPhase('action-existing-tab-snapshot', phaseStartedAt, { book: book.name, separator, action });
+          const beforeIds = tabSnapshot.beforeIds;
           try {
             const actionStartedAt = process.hrtime.bigint();
             if (action === 'Double-Click') {
