@@ -1641,7 +1641,6 @@ test('single-token selection actions share positional resolution across books an
     });
     expect(new URL(opened.pendingUrl || opened.url).pathname, label).toBe(testCase.path);
     await removeTabById(extensionWorker, opened.id);
-    await page.waitForTimeout(150);
   };
 
   const floatingButton = page.locator('#blb-suite-page-selection-button');
