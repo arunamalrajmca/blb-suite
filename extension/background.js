@@ -1838,7 +1838,7 @@ async function ensureKjvOriginalCaseCorpusLoaded() {
       const source = await response.text();
       const assignment = 'const KJV_CORPUS_ORIGINAL_CASE = ';
       const start = source.indexOf(assignment);
-      const end = source.indexOf(';\\nif (typeof self', start);
+      const end = source.indexOf(';\nif (typeof self', start);
       if (start < 0 || end < 0) {
         throw new Error('The packaged original-case KJV corpus has an unexpected format');
       }
