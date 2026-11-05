@@ -444,6 +444,7 @@ test.describe('core user-visible E2E', () => {
           recordMatrixPhase('snapshot-existing-tabs', phaseStartedAt, { book: book.name, separator, action });
           try {
             phaseStartedAt = process.hrtime.bigint();
+            const actionStartedAt = phaseStartedAt;
             if (action === 'Double-Click') {
               await page.evaluate(() => window.getSelection()?.removeAllRanges());
               await page.locator(selector).dblclick();
@@ -479,7 +480,7 @@ test.describe('core user-visible E2E', () => {
                 recordMatrixPhase('action-context-menu-worker-handler', phaseStartedAt, { book, separator, action });
               }
             }
-            recordMatrixPhase('selection-and-action-trigger', iterationStartedAt, { book: book.name, separator, action });
+            recordMatrixPhase('selection-and-action-trigger', actionStartedAt, { book: book.name, separator, action });
 
             let opened = null;
             let destinationPollAttempts = 0;
