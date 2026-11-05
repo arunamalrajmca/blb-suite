@@ -1696,8 +1696,8 @@ test.describe('core user-visible E2E', () => {
     // navigating again would add a needless reload and readiness delay.
     if (page.url() !== 'https://example.com/') {
       await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-      // Wait only for the initial content-script injection in this test.
-      await page.waitForTimeout(1000);
+      // The double-click handler itself waits for its settings initialization
+      // and replays the event, so no fixed post-navigation sleep is needed.
     }
 
     await page.evaluate((html) => {
