@@ -25,6 +25,12 @@ const normalSelectors = [
   'input[type="text"]', '.notes-header > span:first-child',
   '.notes-help', 'textarea', '.topic-hint'
 ];
+const controlSelectors = [
+  '.master-switch', '.small-switch', '.theme-toggle', '.secondary-control',
+  'input[type="text"]', 'textarea', '.topic-arrow', '.topic-import-btn',
+  '.topic-clear-btn', '.topic-start-btn', '.topic-stop-btn',
+  '.autostop-row select', '.action-row .action-btn'
+];
 const sensitiveSelectors = ['body', '#sensitiveNotice', '#sensitiveNoticeTitle', '#sensitiveNoticeMessage'];
 const slug = value => value.toLowerCase().replace(/[^a-z0-9]+/g, '-');
 
@@ -258,9 +264,16 @@ async function inspectBrowser(name) {
               actualBoundingBoxDescent: round(m.actualBoundingBoxDescent)
             }];
           }));
+          const controlGeometry = Object.fromEntries([".master-switch",".small-switch",".theme-toggle",".secondary-control","input[type=\"text\"]","textarea",".topic-arrow",".topic-import-btn",".topic-clear-btn",".topic-start-btn",".topic-stop-btn",".autostop-row select",".action-row .action-btn"].map(selector => {
+            const el = document.querySelector(selector);
+            if (!el) return [selector, null];
+            const rect = el.getBoundingClientRect();
+            return [selector, { width: round(rect.width), height: round(rect.height) }];
+          }));
           return { devicePixelRatio: devicePixelRatio, fontStatus: document.fonts.status,
             title: document.querySelector('.header-subtitle')?.textContent.trim() || '',
-            htmlClasses: document.documentElement.className, bodyClasses: document.body.className, elements };
+            htmlClasses: document.documentElement.className, bodyClasses: document.body.className,
+            elements, controlGeometry };
         }, normalSelectors);
         const missing = normalSelectors.filter(selector => !normal.elements[selector]);
         if (missing.length) throw new Error(name + ' ordinary ' + profile.name + ': missing popup elements: ' + missing.join(', '));
@@ -343,11 +356,21 @@ function compareBrowsers(results) {
         differences.push(profile.name + ' ' + selector + ' Chrome text-size adjustment: expected 1.1, got ' + fontSizeRatio.toFixed(3));
       }
       const visualFontRatio = Number(right.visualFontSize) ? Number(left.visualFontSize) / Number(right.visualFontSize) : 1;
-      if (Math.abs(visualFontRatio - 1.32) > 0.04) {
-        differences.push(profile.name + ' ' + selector + ' visual font scale: expected 1.32 (1.1 text × 1.2 popup zoom), got ' + visualFontRatio.toFixed(3));
+      if (Math.abs(visualFontRatio - 1.1) > 0.02) {
+        differences.push(profile.name + ' ' + selector + ' visual font scale: expected 1.1 from typography only, got ' + visualFontRatio.toFixed(3));
       }
-      if (left.effectiveZoom !== 1.2 || right.effectiveZoom !== 1) {
-        differences.push(profile.name + ' ' + selector + ' effective zoom: expected Chrome=1.2 and Brave=1; Chrome=' + left.effectiveZoom + ', Brave=' + right.effectiveZoom);
+      if (left.effectiveZoom !== 1 || right.effectiveZoom !== 1) {
+        differences.push(profile.name + ' ' + selector + ' effective zoom: expected 1 in both browsers; Chrome=' + left.effectiveZoom + ', Brave=' + right.effectiveZoom);
+      }
+    }
+    for (const selector of controlSelectors) {
+      const left = a.controlGeometry?.[selector], right = b.controlGeometry?.[selector];
+      if (!left || !right) { differences.push(profile.name + ' ' + selector + ': control geometry missing'); continue; }
+      for (const dimension of ['width', 'height']) {
+        if (Math.abs(left[dimension] - right[dimension]) > 1) {
+          differences.push(profile.name + ' ' + selector + ' ' + dimension +
+            ': control size changed; Chrome=' + left[dimension] + ', Brave=' + right[dimension]);
+        }
       }
     }
     const chromeBody = a.elements.body, braveBody = b.elements.body;
@@ -355,10 +378,7 @@ function compareBrowsers(results) {
     if (Math.abs(widthRatio - 1) > 0.03) {
       differences.push(profile.name + ' popup document width changed: expected unchanged physical width, got ratio ' + widthRatio.toFixed(3));
     }
-    const heightRatio = Number(braveBody.height) ? Number(chromeBody.height) / Number(braveBody.height) : 1;
-    if (Math.abs(heightRatio - 1.2) > 0.08) {
-      differences.push(profile.name + ' popup document height/spacing scale: expected about 1.2, got ' + heightRatio.toFixed(3));
-    }
+    
     const sa = chrome.snapshots.find(x => x.profile === profile.name && x.scenario === 'sensitive');
     const sb = brave.snapshots.find(x => x.profile === profile.name && x.scenario === 'sensitive');
     if (!sa || !sb || !sa.noticeVisible || !sb.noticeVisible || !sa.controlsHidden || !sb.controlsHidden) {
@@ -376,6 +396,6 @@ function compareBrowsers(results) {
     console.error('Popup rendering/ privacy regression differences:\n' + differences.join('\n'));
     process.exitCode = 1;
   } else {
-    console.log('PASS: inspectable popup documents render in Chrome and Brave; Chrome density class, 1.1x text-size adjustment on top of 1.2x popup zoom, unchanged popup width, and sensitive-page privacy behavior validated. The actual browser-toolbar popup is not opened or measured by this test.');
+    console.log('PASS: inspectable popup documents render in Chrome and Brave; Chrome receives 1.1x typography only, popup/control geometry remains unchanged, and sensitive-page privacy behavior is preserved. The actual browser-toolbar popup is not opened or measured by this test.');
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });
