@@ -317,7 +317,7 @@ async function inspectBrowser(name) {
 
 function compareBrowsers(results) {
   const chrome = results[0], brave = results[1], differences = [];
-  const sharedProperties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight',
+  const sharedProperties = ['fontFamily', 'fontWeight', 'lineHeight',
     'letterSpacing', 'textRendering', 'webkitTextSizeAdjust', 'boxSizing'];
   for (const profile of viewportProfiles) {
     const a = chrome.snapshots.find(x => x.profile === profile.name && x.scenario === 'ordinary');
@@ -338,9 +338,13 @@ function compareBrowsers(results) {
           differences.push(profile.name + ' ' + selector + ' ' + property + ': Chrome=' + left[property] + ', Brave=' + right[property]);
         }
       }
+      const fontSizeRatio = Number(right.fontSize.replace('px', '')) ? Number(left.fontSize.replace('px', '')) / Number(right.fontSize.replace('px', '')) : 1;
+      if (Math.abs(fontSizeRatio - 1.1) > 0.02) {
+        differences.push(profile.name + ' ' + selector + ' Chrome text-size adjustment: expected 1.1, got ' + fontSizeRatio.toFixed(3));
+      }
       const visualFontRatio = Number(right.visualFontSize) ? Number(left.visualFontSize) / Number(right.visualFontSize) : 1;
-      if (Math.abs(visualFontRatio - 1.2) > 0.03) {
-        differences.push(profile.name + ' ' + selector + ' visual font scale: expected 1.2, got ' + visualFontRatio.toFixed(3));
+      if (Math.abs(visualFontRatio - 1.32) > 0.04) {
+        differences.push(profile.name + ' ' + selector + ' visual font scale: expected 1.32 (1.1 text × 1.2 popup zoom), got ' + visualFontRatio.toFixed(3));
       }
       if (left.effectiveZoom !== 1.2 || right.effectiveZoom !== 1) {
         differences.push(profile.name + ' ' + selector + ' effective zoom: expected Chrome=1.2 and Brave=1; Chrome=' + left.effectiveZoom + ', Brave=' + right.effectiveZoom);
@@ -372,6 +376,6 @@ function compareBrowsers(results) {
     console.error('Popup rendering/ privacy regression differences:\n' + differences.join('\n'));
     process.exitCode = 1;
   } else {
-    console.log('PASS: inspectable popup documents render in Chrome and Brave; Chrome density class, 1.2x visual typography/spacing scale, unchanged popup width, and sensitive-page privacy behavior validated. The actual browser-toolbar popup is not opened or measured by this test.');
+    console.log('PASS: inspectable popup documents render in Chrome and Brave; Chrome density class, 1.1x text-size adjustment on top of 1.2x popup zoom, unchanged popup width, and sensitive-page privacy behavior validated. The actual browser-toolbar popup is not opened or measured by this test.');
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });
