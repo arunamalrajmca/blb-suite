@@ -146,13 +146,8 @@ body.light .date-quick-divider{background:#d7dce2}
 body.light .topic-start-btn:disabled,body.light .action-btn:disabled{opacity:.55}
 
 
-/* Chrome renders this popup more compactly than Brave on the target setup.
-   Increase the visual scale of the popup only; keep its controls and behavior unchanged. */
-/* Keep the popup's physical width at 360px while enlarging its text and spacing. */
-html.chrome-popup-density body { zoom: 1.2; width: 300px; }
-
-
-/* Improve Chrome text readability without increasing control or section spacing. */
+/* Chrome needs slightly larger typography, not a scaled popup. Keep all control
+   geometry, spacing, and the 360px popup width at their native CSS dimensions. */
 html.chrome-popup-density body { font-size: calc(12px * 1.1); }
 html.chrome-popup-density .sensitive-notice-title { font-size: calc(12px * 1.1); }
 html.chrome-popup-density .sensitive-notice-message { font-size: calc(10px * 1.1); }
@@ -178,8 +173,6 @@ html.chrome-popup-density .topic-status strong { font-size: calc(10px * 1.1); }
 html.chrome-popup-density .notes-header>span:first-child { font-size: calc(9px * 1.1); }
 html.chrome-popup-density .notes-help { font-size: calc(8px * 1.1); }
 html.chrome-popup-density .status { font-size: calc(8.5px * 1.1); }
-html.chrome-popup-density .master-switch .slider:after { font-size: calc(10px * 1.1); }
-html.chrome-popup-density .master-switch .slider:before { font-size: calc(15px * 1.1); }
 html.chrome-popup-density .header-master-label { font-size: calc(8px * 1.1); }
 html.chrome-popup-density .guide-version { font-size: calc(9px * 1.1); }
 </style>
