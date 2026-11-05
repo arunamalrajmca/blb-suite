@@ -1,4 +1,5 @@
 name: Browser fixture and reference polling profile
+# Repeat event-driven destination timing without changing test behavior.
 
 on:
   push:
