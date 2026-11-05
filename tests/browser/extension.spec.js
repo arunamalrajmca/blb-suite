@@ -2475,7 +2475,7 @@ test.describe('core user-visible E2E', () => {
 
 
 test('Standalone book-name and KJV-word collision policy is consistent across all books and aliases', async ({ extensionWorker }) => {
-  const audit = await extensionWorker.evaluate(() => {
+  const audit = await extensionWorker.evaluate(async () => {
     const candidates = new Map();
     const add = (token, source, expectedBook = null) => {
       const key = String(token || '').trim().toLowerCase();
@@ -2492,9 +2492,9 @@ test('Standalone book-name and KJV-word collision policy is consistent across al
       for (const alias of aliases || []) add(alias, 'numbered-suffix:' + family);
     }
 
-    const rows = [...candidates.values()].map(candidate => {
+    const rows = await Promise.all([...candidates.values()].map(async candidate => {
       const book = resolveBibleBook(candidate.token);
-      const decision = classifySelectionForBlb(candidate.token);
+      const decision = await classifySelectionForBlb(candidate.token);
       const isKjvWord = isKjvVocabularySelection(candidate.token);
       const singleMatch = isKjvWord ? findSingleKjvPhraseMatch(candidate.token) : null;
       const expectedBook = candidate.expectedBooks[0] || null;
@@ -2512,7 +2512,7 @@ test('Standalone book-name and KJV-word collision policy is consistent across al
         } : null,
         expectedPolicy: book ? 'BOOK' : (isKjvWord ? 'KJV_WORD' : 'NON_KJV_SINGLE_WORD')
       };
-    });
+    }));
 
     const wordCollisions = rows.filter(row => row.isKjvWord);
     return {
@@ -2520,8 +2520,8 @@ test('Standalone book-name and KJV-word collision policy is consistent across al
       aliases: rows.filter(row => row.sources.includes('configured-alias')),
       suffixes: rows.filter(row => row.sources.some(source => source.startsWith('numbered-suffix:'))),
       wordCollisions,
-      explicit: ['John', '1 John', '1 Cor 13:4', '2 Ti 1:1', '1 Sam 1:1', 'Cor', 'Sam'].map(input => {
-        const decision = classifySelectionForBlb(input);
+      explicit: await Promise.all(['John', '1 John', '1 Cor 13:4', '2 Ti 1:1', '1 Sam 1:1', 'Cor', 'Sam'].map(async input => {
+        const decision = await classifySelectionForBlb(input);
         const direct = resolveDirectBibleReference(input);
         return {
           input,
@@ -2534,7 +2534,7 @@ test('Standalone book-name and KJV-word collision policy is consistent across al
             ? findSingleKjvPhraseMatch(input).slice(0, 3).map(Number)
             : null
         };
-      })
+      }))
     };
   });
 
