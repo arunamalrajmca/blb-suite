@@ -155,7 +155,7 @@ jobs:
             "${{ github.api_url }}/repos/${{ github.repository }}/statuses/$STATUS_SHA" \
             -d '{"state":"pending","target_url":"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}","description":"Browser E2E validation is running","context":"browser-e2e"}'
       - name: Checkout for change classification
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Classify changed files
@@ -212,24 +212,24 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 1
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Cache Playwright browsers
         id: playwright-cache
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) && (matrix.file || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package.json', 'package-lock.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.npm
           key: ${{ runner.os }}-npm-${{ hashFiles('package.json', 'package-lock.json') }}
@@ -250,7 +250,7 @@ jobs:
         run: npx playwright test tests/browser/extension.spec.js --grep 'Generic article verse cues follow the latest explicit chapter context|Article verse cues resolve context outside Facebook'
       - name: Upload generic verse-context diagnostics
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: blb-suite-generic-verse-context-gate
           path: |
@@ -273,18 +273,18 @@ jobs:
     steps:
       - name: Checkout
         if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 1
       - name: Setup Node
         if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Cache Playwright browsers
         if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
         id: playwright-cache
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package.json', 'package-lock.json') }}
@@ -292,7 +292,7 @@ jobs:
             playwright-${{ runner.os }}-
       - name: Cache npm downloads
         if: ${{ matrix.file || matrix.files || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js') }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.npm
           key: ${{ runner.os }}-npm-${{ hashFiles('package.json', 'package-lock.json') }}
@@ -343,7 +343,7 @@ jobs:
           done
       - name: Upload Playwright diagnostics — ${{ matrix.group }}
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: blb-suite-browser-e2e-references-${{ matrix.group }}
           path: |
@@ -365,24 +365,24 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 1
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Cache Playwright browsers
         id: playwright-cache
         if: ${{ (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, matrix.file || 'tests/browser/extension.spec.js')) && (matrix.file || !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension.spec.js')) }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package.json', 'package-lock.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm downloads
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.npm
           key: ${{ runner.os }}-npm-${{ hashFiles('package.json', 'package-lock.json') }}
@@ -403,7 +403,7 @@ jobs:
         run: npx playwright test tests/browser/extension.spec.js --grep 'MV3 service worker|popup loads|Show on BLB|Alt\+B toggle enforcement'
       - name: Upload Playwright diagnostics — FEATURES
         if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: blb-suite-browser-e2e-features
           path: |
@@ -559,9 +559,9 @@ jobs:
       contents: read
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Install dependencies

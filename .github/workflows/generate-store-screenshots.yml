@@ -23,13 +23,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out screenshot branch
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: chore/chrome-web-store-screenshots
           token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up Python and Chromium
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 

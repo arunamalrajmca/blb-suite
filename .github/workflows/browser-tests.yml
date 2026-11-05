@@ -33,7 +33,7 @@ jobs:
       package_validation_required: ${{ steps.classify.outputs.package_validation_required }}
     steps:
       - name: Checkout for change classification
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: Classify changed files
@@ -60,9 +60,9 @@ jobs:
     timeout-minutes: 20
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Read manifest version
@@ -99,9 +99,9 @@ jobs:
           - features
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Read manifest version

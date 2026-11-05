@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Main
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Build Main ZIP
         run: |
           mkdir -p dist
@@ -24,7 +24,7 @@ jobs:
           unzip -t "$ZIP"
           sha256sum "$ZIP" | tee "$ZIP.sha256"
       - name: Upload Main ZIP
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: blb-main-build
           path: |

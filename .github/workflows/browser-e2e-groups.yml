@@ -36,18 +36,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # Test execution does not need history; the selector job handles the base diff.
           fetch-depth: 1
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: ${{ inputs.group_a_required == 'true' }}
         with:
           node-version: 22
       - name: Cache Playwright browsers
         id: playwright-cache
         if: ${{ inputs.group_a_required == 'true' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package.json', 'package-lock.json') }}
@@ -55,7 +55,7 @@ jobs:
             playwright-${{ runner.os }}-
       - name: Cache npm download data
         if: ${{ inputs.group_a_required == 'true' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.npm
           key: ${{ runner.os }}-node22-npm-${{ hashFiles('package.json', 'package-lock.json') }}
@@ -225,21 +225,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 1
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Cache Playwright browsers
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package.json', 'package-lock.json') }}
           restore-keys: |
             playwright-${{ runner.os }}-
       - name: Cache npm download data
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.npm
           key: ${{ runner.os }}-node22-npm-${{ hashFiles('package.json', 'package-lock.json') }}
@@ -273,17 +273,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 1
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: ${{ inputs.group_b_required == 'true' }}
         with:
           node-version: 22
       - name: Cache Playwright browsers
         id: playwright-cache
         if: ${{ inputs.group_b_required == 'true' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('package.json', 'package-lock.json') }}
@@ -291,7 +291,7 @@ jobs:
             playwright-${{ runner.os }}-
       - name: Cache npm download data
         if: ${{ inputs.group_b_required == 'true' }}
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.npm
           key: ${{ runner.os }}-node22-npm-${{ hashFiles('package.json', 'package-lock.json') }}
