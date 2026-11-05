@@ -148,7 +148,8 @@ body.light .topic-start-btn:disabled,body.light .action-btn:disabled{opacity:.55
 
 /* Chrome renders this popup more compactly than Brave on the target setup.
    Increase the visual scale of the popup only; keep its controls and behavior unchanged. */
-html.chrome-popup-density body { zoom: 1.2; }
+/* Keep the popup's physical width at 360px while enlarging its text and spacing. */
+html.chrome-popup-density body { zoom: 1.2; width: 300px; }
 </style>
 </head>
 <body class="popup-loading">
