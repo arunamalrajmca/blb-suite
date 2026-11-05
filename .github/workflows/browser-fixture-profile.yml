@@ -2,7 +2,7 @@ name: Browser fixture and reference polling profile
 
 on:
   push:
-    branches: [audit/extension-storage-startup-profiling, audit/canonical-doubleclick-action-profile]
+    branches: [audit/extension-storage-startup-profiling, audit/canonical-doubleclick-action-profile], audit/canonical-doubleclick-action-profile-repeat2
     paths:
       - '.github/workflows/browser-fixture-profile.yml'
       - 'tests/browser/fixtures.js'
