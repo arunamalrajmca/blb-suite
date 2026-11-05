@@ -1,3 +1,7 @@
+// Keep the Chrome action popup typography and spacing visually aligned with Brave.
+// Brave exposes navigator.brave; other Chromium browsers use the slightly roomier layout.
+if (!navigator.brave) document.documentElement.classList.add('chrome-popup-density');
+
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
 let currentSiteOrigin = '';
 let currentSiteUrl = '';
