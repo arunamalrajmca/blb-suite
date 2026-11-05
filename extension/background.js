@@ -517,14 +517,27 @@ async function findMatchingMultiVerseTab(setKey, tabs) {
 
 const BLB_MULTIVERSE_MAX_VERSES = 200;
 
+function recordBlbMultiVerseProfile(phase, startedAt, details = {}) {
+  const profile = globalThis.__BLB_MULTIVERSE_PROFILE__;
+  if (!Array.isArray(profile)) return;
+  profile.push({
+    phase,
+    durationMs:performance.now() - startedAt,
+    ...details
+  });
+}
+
 // Keep independent MultiVerse commands concurrent. Per-destination identity locks
 // below prevent duplicate tabs for overlapping requests without making a new
 // command wait for every batch of an unrelated request to finish opening.
 async function openBlbMultiVerseRefs(refs, active = true, options = {}) {
+  const profileTotalStartedAt = performance.now();
   // Universal MultiVerse policy: BLB renders at most 200 verses per view.
   // Expand, canonicalize, and deduplicate once, then deliver every verse in
   // ordered batches. No caller may silently lose verses after the first 200.
+  const expandStartedAt = performance.now();
   const allVerses = expandMultiVerseRefsToVerses(refs);
+  recordBlbMultiVerseProfile('expand-and-deduplicate-references', expandStartedAt, {verseCount:allVerses.length});
   if (!allVerses.length) return {ok:false, reason:"not-enough-references", count:0, batchCount:0};
 
   // A MultiVerse request that resolves to one uninterrupted range within
@@ -571,16 +584,21 @@ async function openBlbMultiVerseRefs(refs, active = true, options = {}) {
   // list by count rather than by chapter: a batch may end mid-chapter, and
   // the next tab must resume with the very next selected verse. This preserves
   // disjoint selections without filling gaps between them.
+  const partitionStartedAt = performance.now();
   const batches = [];
   for (let offset = 0; offset < allVerses.length; offset += BLB_MULTIVERSE_MAX_VERSES) {
     batches.push(allVerses.slice(offset, offset + BLB_MULTIVERSE_MAX_VERSES));
   }
+  recordBlbMultiVerseProfile('partition-into-200-verse-batches', partitionStartedAt, {batchCount:batches.length});
 
   // Create all handoff tabs concurrently so every requested batch starts
   // loading immediately. Every ready handoff uses the same shared FIFO POST
   // queue and normal submission interval, regardless of where it originated.
   const batchResults = await Promise.all(batches.map(async (batchVerses, index) => {
+    const compactStartedAt = performance.now();
     const compactRefs = compactMultiVerseVerses(batchVerses);
+    recordBlbMultiVerseProfile('compact-batch-references', compactStartedAt, {batch:index + 1, verseCount:batchVerses.length, compactRefCount:compactRefs.length});
+    const batchOpenStartedAt = performance.now();
     const result = await openBlbMultiVerseRefsSingleBatch(
       compactRefs,
       index === 0 ? !!active : false,
@@ -588,10 +606,12 @@ async function openBlbMultiVerseRefs(refs, active = true, options = {}) {
       index === 0 ? options.preferredTabId : null,
       batchVerses,
     );
+    recordBlbMultiVerseProfile('open-single-batch', batchOpenStartedAt, {batch:index + 1, verseCount:batchVerses.length, ok:!!result?.ok});
     return result?.ok
       ? {...result, count:batchVerses.length, batch:index + 1}
       : {ok:false, reason:result?.reason || 'batch-open-failed', batch:index + 1, result};
   }));
+  recordBlbMultiVerseProfile('open-all-batches-total', profileTotalStartedAt, {batchCount:batches.length, verseCount:allVerses.length});
   const failed = batchResults.find(item => !item.ok);
   const results = batchResults.filter(item => item.ok);
   if (failed) {
@@ -618,11 +638,14 @@ async function openBlbMultiVerseRefs(refs, active = true, options = {}) {
 const pendingBlbDestinationOperations = new Map();
 
 async function openBlbDestinationByIdentity({key, active = false, findExisting, create}) {
+  const identityStartedAt = performance.now();
   const identity = String(key || '');
   if (!identity) throw new Error('A BLB destination identity is required');
   const pending = pendingBlbDestinationOperations.get(identity);
   if (pending) {
+    const waitStartedAt = performance.now();
     const result = await pending;
+    recordBlbMultiVerseProfile('destination-identity-lock-wait', waitStartedAt);
     if (active && result?.tab?.id != null) {
       await chrome.tabs.update(result.tab.id, {active:true}).catch(()=>{});
       if (result.tab.windowId != null) await chrome.windows.update(result.tab.windowId, {focused:true}).catch(()=>{});
@@ -630,7 +653,9 @@ async function openBlbDestinationByIdentity({key, active = false, findExisting, 
     return result;
   }
   const operation = (async () => {
+    const findStartedAt = performance.now();
     const existing = await findExisting();
+    recordBlbMultiVerseProfile('destination-find-existing', findStartedAt, {found:existing?.id != null});
     if (existing?.id != null) {
       if (active) {
         await chrome.tabs.update(existing.id, {active:true}).catch(()=>{});
@@ -638,7 +663,10 @@ async function openBlbDestinationByIdentity({key, active = false, findExisting, 
       }
       return {tab:existing, reused:true};
     }
-    return {tab:await create(), reused:false};
+    const createStartedAt = performance.now();
+    const created = await create();
+    recordBlbMultiVerseProfile('destination-create-handoff-tab', createStartedAt);
+    return {tab:created, reused:false};
   })();
   pendingBlbDestinationOperations.set(identity, operation);
   try { return await operation; }
@@ -648,6 +676,7 @@ async function openBlbDestinationByIdentity({key, active = false, findExisting, 
 }
 
 async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingleVerseBatch = false, preferredTabId = null, preparedVerses = null) {
+  const prepareStartedAt = performance.now();
   // Enforce the cap again at the final handoff boundary. This ensures the
   // references actually stored for the MultiVerse textbox cannot expand to
   // more than 200 individual verses after canonicalization.
@@ -656,6 +685,7 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
     : expandMultiVerseRefsToVerses(refs)).slice(0, BLB_MULTIVERSE_MAX_VERSES);
   const finalRefs = compactMultiVerseVerses(finalVerses);
   const canonical = canonicalMultiVerseSet(finalRefs);
+  recordBlbMultiVerseProfile('prepare-canonicalize-batch-payload', prepareStartedAt, {verseCount:finalVerses.length, compactRefCount:finalRefs.length});
   if (!canonical.key || (finalVerses.length < 2 && !allowSingleVerseBatch) || !canonical.refs.length) {
     return {ok:false, reason:"not-enough-references", count:finalVerses.length};
   }
@@ -670,6 +700,7 @@ async function openBlbMultiVerseRefsSingleBatch(refs, active = true, allowSingle
   let navigationError = null;
   let result;
   try {
+    const destinationStartedAt = performance.now();
     result = await openBlbDestinationByIdentity({
       key:`multiverse|${verseSetKey}`, active:!!active,
       findExisting:async () => {
