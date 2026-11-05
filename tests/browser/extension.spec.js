@@ -1930,6 +1930,7 @@ test.describe('core user-visible E2E', () => {
   });
 
   async function assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath) {
+    const profileStartedAt = process.hrtime.bigint();
     const token = (await page.locator(selector).textContent() || '').trim();
     const isContextCandidate = await extensionWorker.evaluate(token => {
       const key = String(token || '').toLowerCase();
