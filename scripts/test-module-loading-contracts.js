@@ -101,7 +101,9 @@ if (!importMatch) {
       || !lazyPhraseLoader[1].includes('kjv-corpus-phrase-index.js')
       || !lazyPhraseLoader[1].includes('fetchPackagedJsonAssignment(')
       || !lazyPhraseLoader[1].includes('Object.freeze(index)')
-      || !lazyPhraseLoader[1].includes('kjvPhraseIndexLoadPromise')) {
+      || !lazyPhraseLoader[1].includes('kjvPhraseIndexLoadPromise')
+      || !lazyPhraseLoader[1].includes("');',\n        true")
+      || !background.includes('allowTrailingObjectComma ? json.replace(')) {
     fail('KJV phrase candidate index is fetched as data with a guarded, promise-deduplicated loader');
   } else {
     pass('KJV phrase candidate index has a guarded, promise-deduplicated data loader');
