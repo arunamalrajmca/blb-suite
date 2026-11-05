@@ -2295,13 +2295,23 @@ test.describe('core user-visible E2E', () => {
     const data = await extensionWorker.evaluate(() => {
       const byBook = Object.create(null);
       for (const book of BOOKS) byBook[book.name] = { name: book.name, urlKey: book.urlKey };
-      return Object.entries(BOOK_ALIASES || {}).map(([alias, target]) => ({
-        alias, book: byBook[target]?.name, urlKey: byBook[target]?.urlKey
-      })).filter(x => x.book && x.alias);
+      return {
+        aliases: Object.entries(BOOK_ALIASES || {}).map(([alias, target]) => ({
+          alias, book: byBook[target]?.name, urlKey: byBook[target]?.urlKey
+        })).filter(x => x.book && x.alias),
+        candidates: [
+          ...(BOOKS || []).map(book => String(book.name || '').toLowerCase()),
+          ...Object.keys(BOOK_ALIASES || {}).map(alias => String(alias).toLowerCase()),
+          ...Object.values(NUMBERED_BOOK_SUFFIX_ALIASES || {}).flat().map(alias => String(alias).toLowerCase()),
+          ...Array.from({ length: 176 }, (_, index) => String(index + 1)),
+          'i', 'ii', 'iii'
+        ]
+      };
     });
+    const contextCandidates = new Set(data.candidates);
 
-    expect(data.length).toBeGreaterThan(0);
-    for (const item of data) {
+    expect(data.aliases.length).toBeGreaterThan(0);
+    for (const item of data.aliases) {
       // "Sam" is context-dependent. Skip every alias containing that token
       // here because this loop double-clicks each token independently, without
       // preserving an alias-internal numbered prefix. The dedicated Sam test
@@ -2318,7 +2328,7 @@ test.describe('core user-visible E2E', () => {
       // Every token in a multi-token alias must resolve through the same
       // surrounding reference, not be reinterpreted independently.
       for (let i = 0; i < tokens.length; i++) {
-        await assertDoubleClickPath(page, context, extensionWorker, `#ref .alias-token[data-index="${i}"]`, expectedPath);
+        await assertDoubleClickPath(page, context, extensionWorker, `#ref .alias-token[data-index="${i}"]`, expectedPath, contextCandidates);
       }
     }
   });
