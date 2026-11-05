@@ -1826,7 +1826,7 @@ let kjvCaseSensitiveWordsLoadPromise = null;
 let kjvOriginalCaseCorpusLoadPromise = null;
 let kjvPhraseIndexLoadPromise = null;
 
-async function fetchPackagedJsonAssignment(filename, assignment, terminator) {
+async function fetchPackagedJsonAssignment(filename, assignment, terminator, allowTrailingObjectComma = false) {
   const response = await fetch(chrome.runtime.getURL(filename));
   if (!response.ok) {
     throw new Error('Unable to fetch packaged KJV search data ' + filename + ': HTTP ' + response.status);
@@ -1839,7 +1839,10 @@ async function fetchPackagedJsonAssignment(filename, assignment, terminator) {
   if (start < 0 || end < 0) {
     throw new Error('Packaged KJV search data has an unexpected format: ' + filename);
   }
-  return JSON.parse(source.slice(start + assignment.length, end));
+  const json = source.slice(start + assignment.length, end);
+  // Generated object indexes may use a JavaScript trailing comma even though
+  // the payload is parsed as JSON. Normalize only the final object-entry comma.
+  return JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);
 }
 
 async function ensureKjvPhraseIndexLoaded() {
@@ -1852,7 +1855,8 @@ async function ensureKjvPhraseIndexLoaded() {
       const index = await fetchPackagedJsonAssignment(
         'kjv-corpus-phrase-index.js',
         'const KJV_CORPUS_PHRASE_INDEX = Object.freeze(',
-        ');'
+        ');',
+        true
       );
       if (!index || typeof index !== 'object' || Array.isArray(index) || !Object.keys(index).length) {
         throw new Error('The packaged KJV phrase candidate index is empty or invalid');
