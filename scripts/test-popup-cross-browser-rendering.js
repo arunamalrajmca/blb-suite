@@ -195,7 +195,7 @@ async function openActualToolbarPopup(context, extensionId, targetUrl) {
   // document as an extension page instead: this exercises the same HTML, CSS,
   // scripts, permissions and active-tab context while keeping it inspectable.
   const popup = await context.newPage();
-  const popupUrl = 'chrome-extension://' + extensionId + '/' + manifest.action.default_popup.replace(/^\\/+/, '');
+  const popupUrl = 'chrome-extension://' + extensionId + '/' + manifest.action.default_popup.replace(/^\/+/, '');
   // Navigate only after restoring the target tab as active. The popup script
   // initializes as soon as its document loads and immediately queries the
   // active tab; bringing the target forward after navigation is too late.
