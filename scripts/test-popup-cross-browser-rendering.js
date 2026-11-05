@@ -20,7 +20,7 @@ const viewportProfiles = [
   { name: 'tall', width: 455, height: 669 }
 ];
 const normalSelectors = [
-  'body', '.app-header', '.header-subtitle', '.header-subtitle',
+  'body', '.app-header', '.header-subtitle',
   '.suite-group-label', '.secondary-control > span', '.section-title',
   'input[type="text"]', '.notes-header > span:first-child',
   '.notes-help', 'textarea', '.topic-hint'
@@ -286,7 +286,7 @@ async function inspectBrowser(name) {
           message: document.querySelector('#sensitiveNoticeMessage')?.textContent.trim() || '',
           noticeVisible: getComputedStyle(document.querySelector('#sensitiveNotice')).display !== 'none',
           controlsHidden: [...document.querySelectorAll('.app-header, .suite-section, #studyPanel')]
-            .every(el => getComputedStyle(el).display === 'none')
+            .every(el => el.getClientRects().length === 0)
         }), sensitiveSelectors);
         if (!state.noticeVisible || !state.controlsHidden ||
             state.title !== 'Features paused on this page' ||
