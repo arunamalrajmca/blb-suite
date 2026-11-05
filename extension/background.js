@@ -1842,7 +1842,7 @@ async function fetchPackagedJsonAssignment(filename, assignment, terminator, all
   const json = source.slice(start + assignment.length, end);
   // Generated object indexes may use a JavaScript trailing comma even though
   // the payload is parsed as JSON. Normalize only the final object-entry comma.
-  return JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);
+  return JSON.parse(allowTrailingObjectComma ? json.replace(/,(\s*})$/, '$1') : json);
 }
 
 async function ensureKjvPhraseIndexLoaded() {
