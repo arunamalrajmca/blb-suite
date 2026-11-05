@@ -99,7 +99,7 @@ if (!importMatch) {
   } else {
     pass('service-worker import dependency order remains stable');
   }
-  const lazyCorpusLoader = background.match(/function ensureKjvOriginalCaseCorpusLoaded\(\) \{([\\s\\S]*?)\\n\}/);
+  const lazyCorpusLoader = background.match(/function ensureKjvOriginalCaseCorpusLoaded\(\) \{([\s\S]*?)\n\}/);
   if (!lazyCorpusLoader
       || !lazyCorpusLoader[1].includes("typeof KJV_CORPUS_ORIGINAL_CASE === 'undefined'")
       || !lazyCorpusLoader[1].includes("importScripts('kjv-corpus-original-case.js')")) {
