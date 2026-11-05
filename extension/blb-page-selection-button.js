@@ -268,6 +268,8 @@
       button.addEventListener('click', e => {
         e.preventDefault();
         e.stopPropagation();
+        const actionProfileStartedAt = performance.now();
+        let contextualResolveMs = 0;
         const text = blbPageButtonSelection || getSelectedPageText();
         if (!text || !isSuiteEnabledNow()) {
           pageButtonActionInProgress = false;
@@ -277,7 +279,9 @@
         // button became visible. This makes the action itself use the shared
         // Double-Click positional entry point and avoids stale cached context.
         const isSingleToken = isSingleTokenSelection(text);
+        const contextualResolveStartedAt = performance.now();
         const actionContext = isSingleToken ? getContextualBibleReference(text) : null;
+        contextualResolveMs = performance.now() - contextualResolveStartedAt;
         const actionContextualReference = actionContext?.url
           ? actionContext
           : blbPageButtonContextualReference;
@@ -287,6 +291,7 @@
         // Ignore stale content-script contexts if the extension was reloaded.
         safeRuntimeSendMessage({
           type:'blbSuiteOpenSelectionText',
+          clientProfile:{source:'show-on-blb',contextualResolveMs,totalBeforeDispatchMs:performance.now()-actionProfileStartedAt},
           requestId:`show-on-blb-${Date.now()}-${++pageButtonRequestSequence}`,
           text,
           contextualReference: actionContextualReference || null,
