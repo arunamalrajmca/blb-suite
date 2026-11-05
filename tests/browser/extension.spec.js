@@ -447,6 +447,7 @@ test.describe('core user-visible E2E', () => {
             if (action === 'Double-Click') {
               await page.evaluate(() => window.getSelection()?.removeAllRanges());
               await page.locator(selector).dblclick();
+              recordMatrixPhase('action-double-click-gesture', phaseStartedAt, { book, separator, action });
             } else {
               await page.locator(selector).evaluate(element => {
                 const range = document.createRange();
@@ -456,12 +457,18 @@ test.describe('core user-visible E2E', () => {
                 selection.addRange(range);
                 element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
               });
+              recordMatrixPhase('action-selection-and-mouseup', phaseStartedAt, { book, separator, action });
+              phaseStartedAt = process.hrtime.bigint();
               if (action === 'Show on BLB') {
                 const button = page.locator('#blb-suite-page-selection-button');
                 await expect(button).toBeVisible({ timeout: 1200 });
+                recordMatrixPhase('action-show-button-readiness', phaseStartedAt, { book, separator, action });
+                phaseStartedAt = process.hrtime.bigint();
                 await button.click();
+                recordMatrixPhase('action-show-button-click', phaseStartedAt, { book, separator, action });
               } else if (action === 'Alt+B') {
                 await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+                recordMatrixPhase('action-alt-b-worker-command', phaseStartedAt, { book, separator, action });
               } else {
                 const selectedText = await page.evaluate(() => window.getSelection()?.toString() || '');
                 await extensionWorker.evaluate(async text => {
@@ -469,9 +476,10 @@ test.describe('core user-visible E2E', () => {
                   if (!tab?.id) throw new Error('No active source tab for context-menu action');
                   await handleBlbSelectionContextMenuClick({ menuItemId: 'blb-suite-web-selection', selectionText: text }, tab);
                 }, selectedText);
+                recordMatrixPhase('action-context-menu-worker-handler', phaseStartedAt, { book, separator, action });
               }
             }
-            recordMatrixPhase('selection-and-action-trigger', phaseStartedAt, { book: book.name, separator, action });
+            recordMatrixPhase('selection-and-action-trigger', iterationStartedAt, { book: book.name, separator, action });
 
             let opened = null;
             let destinationPollAttempts = 0;
@@ -497,7 +505,7 @@ test.describe('core user-visible E2E', () => {
                 }), { beforeIds, expectedPath });
               destinationQueryDurationMs += Number(process.hrtime.bigint() - queryStartedAt) / 1e6;
               return opened?.path || '';
-            }, { timeout: 1200, message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
+            }, { timeout: 1200, intervals: [20, 40, 80, 160], message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
             recordMatrixPhase('destination-poll-and-confirmation', phaseStartedAt, {
               book, separator, action, openedTabId: opened?.id || null,
               destinationPollAttempts, destinationQueryDurationMs
