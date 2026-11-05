@@ -574,6 +574,7 @@
       }
       if (message?.type === 'blbSuiteResolveContextualSelection') {
         try {
+          const resolverStartedAt = performance.now();
           const selected = String(message.selectionText || '').trim();
           const cached = lastSelectionContextualText === selected ? lastSelectionContextualReference : null;
           let verseCueReference = null;
@@ -601,7 +602,7 @@
           const resolved = isSingleToken
             ? (positional || verseCueReference)
             : (cached || verseCueReference || getContextualBibleReference(selected));
-          sendResponse(resolved ? {ok:true, reference:resolved} : {ok:true, reference:null});
+          sendResponse(resolved ? {ok:true, reference:resolved, profile:{resolverMs:performance.now()-resolverStartedAt}} : {ok:true, reference:null, profile:{resolverMs:performance.now()-resolverStartedAt}});
         } catch (_) { sendResponse({ok:true, reference:null}); }
         return true;
       }
