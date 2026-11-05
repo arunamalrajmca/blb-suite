@@ -67,8 +67,8 @@ jobs:
             '[' + (index + 1) + '/' + tests.length + '] ' + item.durationMs + 'ms ' + item.status + ' — ' + item.title
           ));
           const phases = new Map();
-          for (const line of fs.readFileSync(process.env.RUNNER_TEMP + '/browser-profile/profile.log', 'utf8').split(/\\r?\\n/)) {
-            const match = line.match(/(?:BLB_SETUP_PROFILE|BLB_POLL_PROFILE|BLB_FIXTURE_PROFILE) (\\{.*\\})/);
+          for (const line of fs.readFileSync(process.env.RUNNER_TEMP + '/browser-profile/profile.log', 'utf8').split(/\r?\n/)) {
+            const match = line.match(/(?:BLB_SETUP_PROFILE|BLB_POLL_PROFILE|BLB_FIXTURE_PROFILE) (\{.*\})/);
             if (!match) continue;
             try {
               const entry = JSON.parse(match[1]);
@@ -91,6 +91,8 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: browser-fixture-reference-profile
-          path: ${{ runner.temp }}/browser-profile/profile.log
+          path: |
+            ${{ runner.temp }}/browser-profile/profile.log
+            ${{ runner.temp }}/browser-profile/reference-test-results.json
           if-no-files-found: warn
           retention-days: 14
