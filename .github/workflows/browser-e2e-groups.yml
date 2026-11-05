@@ -125,13 +125,6 @@ jobs:
       - name: Run omnibox behavior regressions
         if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/omnibox-boolean-operators.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/omnibox-boolean-operators.spec.js')) }}
         run: npx playwright test tests/browser/omnibox-boolean-operators.spec.js
-      - name: Run source URL browser redirect regressions
-        if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/redirect-source-url-patterns.spec.js') && !(inputs.browser_e2e_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js')))) }}
-        run: npx playwright test tests/browser/redirect-source-url-patterns.spec.js
-
-
-      # Repeat the previously intermittent two-tab selection test in fresh browser contexts.
-      # Preserve each attempt's result but continue so we can compare reproducibility.
       - name: Diagnose reference-plus-prose selection in three isolated runs
         if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/e2e-core-user-actions.spec.js') }}
         continue-on-error: true
