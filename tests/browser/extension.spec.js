@@ -2282,10 +2282,10 @@ test.describe('core user-visible E2E', () => {
       );
       const expectedPath = `/kjv/${book.urlKey}/1/1/`;
       for (let index = 0; index < bookTokens.length; index++) {
-        await assertDoubleClickPath(page, context, extensionWorker, `#ref .book[data-index="${index}"]`, expectedPath);
+        await assertDoubleClickPath(page, context, extensionWorker, `#ref .book[data-index="${index}"]`, expectedPath, contextCandidates);
       }
       for (const selector of ['#ref .chapter', '#ref .verse']) {
-        await assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath);
+        await assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath, contextCandidates);
       }
     }
   });
