@@ -538,22 +538,20 @@ test.describe('core user-visible E2E', () => {
                 const queryMs = performance.now() - queryStartedAt;
                 const scanStartedAt = performance.now();
                 let parsedTabs = 0;
-                let removedTabs = 0;
-                let removeMs = 0;
+                const candidateTabIds = [];
                 for (const tab of tabs) {
                   if (tab.id == null || beforeIds.includes(tab.id)) continue;
                   try {
                     parsedTabs += 1;
                     const url = new URL(String(tab.pendingUrl || tab.url || ''));
-                    if (url.hostname === 'www.blueletterbible.org') {
-                      const removeStartedAt = performance.now();
-                      await chrome.tabs.remove(tab.id);
-                      removeMs += performance.now() - removeStartedAt;
-                      removedTabs += 1;
-                    }
+                    if (url.hostname === 'www.blueletterbible.org') candidateTabIds.push(tab.id);
                   } catch (_) {}
                 }
-                return { queryMs, scanMs: performance.now() - scanStartedAt, parsedTabs, removeMs, removedTabs };
+                const scanMs = performance.now() - scanStartedAt;
+                const removeStartedAt = performance.now();
+                if (candidateTabIds.length) await chrome.tabs.remove(candidateTabIds);
+                const removeMs = performance.now() - removeStartedAt;
+                return { queryMs, scanMs, parsedTabs, candidateTabs: candidateTabIds.length, removeMs, removedTabs: candidateTabIds.length };
               });
             }, beforeIds);
             phaseProfile.cleanup.queries += 1;
