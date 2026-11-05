@@ -6,7 +6,6 @@ on:
       - 'extension/popup.html'
       - 'extension/popup.js'
       - 'scripts/test-popup-cross-browser-rendering.js'
-      - '.github/workflows/popup-cross-browser-rendering.yml'
   workflow_dispatch:
 
 permissions:
