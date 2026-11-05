@@ -215,11 +215,26 @@ async function inspectBrowser(name) {
       try {
         const page = ordinary.popup;
         await page.setViewportSize({ width: profile.width, height: profile.height });
-        await page.waitForFunction(() =>
-          !document.body.classList.contains('popup-loading') &&
-          !document.body.classList.contains('sensitive-restricted') &&
-          document.querySelector('.header-title')?.textContent.trim() === 'KJV Scripture Tools',
-          null, { timeout: 20000 });
+        try {
+          await page.waitForFunction(() =>
+            !document.body.classList.contains('popup-loading') &&
+            !document.body.classList.contains('sensitive-restricted') &&
+            document.querySelector('.header-title')?.textContent.trim() === 'KJV Scripture Tools',
+            null, { timeout: 20000 });
+        } catch (error) {
+          const state = await page.evaluate(async () => ({
+            url: location.href,
+            title: document.title,
+            bodyClasses: document.body?.className || '',
+            headerTitle: document.querySelector('.header-title')?.textContent.trim() || '',
+            bodyText: document.body?.innerText?.slice(0, 1200) || '',
+            activeTabs: await chrome.tabs.query({ active: true, currentWindow: true })
+              .then(tabs => tabs.map(tab => ({ url: tab.url, title: tab.title, id: tab.id })))
+              .catch(tabError => [{ error: tabError.message }])
+          })).catch(evaluateError => ({ evaluateError: evaluateError.message }));
+          throw new Error(name + ' ordinary ' + profile.name + ' popup readiness failed: ' +
+            error.message + '; diagnostics=' + JSON.stringify(state));
+        }
         const normal = await page.evaluate(selectors => {
           const round = n => Number.isFinite(n) ? Math.round(n * 100) / 100 : null;
           const canvas = document.createElement('canvas');
