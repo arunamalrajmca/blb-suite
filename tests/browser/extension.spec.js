@@ -2450,9 +2450,9 @@ test.describe('core user-visible E2E', () => {
   });
 
   test('All 66 canonical books resolve correctly through the shared reference resolver', async ({ extensionWorker }) => {
-    const results = await extensionWorker.evaluate(() => BOOKS.map(book => {
+    const results = await extensionWorker.evaluate(async () => Promise.all(BOOKS.map(async book => {
       const text = `${book.name} 1:1`;
-      const decision = classifySelectionForBlb(text);
+      const decision = await classifySelectionForBlb(text);
       const ref = decision.directRef || decision.refs?.[0] || null;
       return {
         book: book.name,
@@ -2461,7 +2461,7 @@ test.describe('core user-visible E2E', () => {
         chapter: ref?.chapter ?? null,
         verse: ref?.from ?? null
       };
-    }));
+    })));
 
     expect(results).toHaveLength(66);
     expect(results.every(item =>
