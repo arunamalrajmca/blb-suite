@@ -2,7 +2,7 @@ name: Browser fixture and reference polling profile
 
 on:
   push:
-    branches: [audit/extension-storage-startup-profiling]
+    branches: [audit/extension-storage-startup-profiling, audit/reference-test-phase-profiling]
     paths:
       - '.github/workflows/browser-fixture-profile.yml'
       - 'tests/browser/fixtures.js'
@@ -19,7 +19,7 @@ jobs:
   profile:
     name: Profile browser fixture and reference tests
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       BLB_PROFILE_BROWSER_FIXTURES: '1'
     steps:
@@ -31,17 +31,61 @@ jobs:
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run long reference-coverage tests with phase profiling
+      - name: Profile long reference-coverage and MultiVerse tests
         shell: bash
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_NAME: ${{ runner.temp }}/browser-profile/reference-test-results.json
         run: |
-          set -o pipefail
+          set -euo pipefail
           mkdir -p "$RUNNER_TEMP/browser-profile"
           START_MS="$(node -p 'Date.now()')"
-          npx playwright test tests/browser/extension.spec.js \
-            --grep 'Double-click generic reference grammar — exhaustive token coverage — NT' \
-            --workers=1 --repeat-each=3 --reporter=line 2>&1 | tee "$RUNNER_TEMP/browser-profile/profile.log"
+          npx playwright test tests/browser/extension.spec.js tests/browser/multiverse-tab-reuse.spec.js \
+            --grep 'all 66 canonical book suffixes|Same-chapter range resolution covers all 66 books|Double-click generic reference grammar — exhaustive token coverage — (OT|NT)|Double-click generic canonical references|Double-click generic aliases — every shared alias|MultiVerse opens every batch for requests exceeding 20 tabs' \
+            --workers=1 --reporter=line,json 2>&1 | tee "$RUNNER_TEMP/browser-profile/profile.log"
           END_MS="$(node -p 'Date.now()')"
           echo "Profile process wall time: $((END_MS - START_MS))ms" | tee -a "$RUNNER_TEMP/browser-profile/profile.log"
+          node <<'NODE' | tee -a "$RUNNER_TEMP/browser-profile/profile.log"
+          const fs = require('fs');
+          const reportPath = process.env.PLAYWRIGHT_JSON_OUTPUT_NAME;
+          const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+          const tests = [];
+          function visit(suite, ancestry = []) {
+            const next = suite.title ? [...ancestry, suite.title] : ancestry;
+            for (const spec of suite.specs || []) {
+              for (const test of spec.tests || []) {
+                for (const result of test.results || []) {
+                  tests.push({ title: [...next, spec.title].filter(Boolean).join(' › '), status: result.status, durationMs: result.duration });
+                }
+              }
+            }
+            for (const child of suite.suites || []) visit(child, next);
+          }
+          for (const suite of report.suites || []) visit(suite);
+          tests.sort((a, b) => b.durationMs - a.durationMs);
+          console.log('REFERENCE_TEST_DURATION_SUMMARY');
+          tests.forEach((item, index) => console.log(
+            '[' + (index + 1) + '/' + tests.length + '] ' + item.durationMs + 'ms ' + item.status + ' — ' + item.title
+          ));
+          const phases = new Map();
+          for (const line of fs.readFileSync(process.env.RUNNER_TEMP + '/browser-profile/profile.log', 'utf8').split(/\\r?\\n/)) {
+            const match = line.match(/(?:BLB_SETUP_PROFILE|BLB_POLL_PROFILE|BLB_FIXTURE_PROFILE) (\\{.*\\})/);
+            if (!match) continue;
+            try {
+              const entry = JSON.parse(match[1]);
+              if (!Number.isFinite(entry.durationMs)) continue;
+              const key = entry.phase || 'unknown';
+              const values = phases.get(key) || [];
+              values.push(entry.durationMs);
+              phases.set(key, values);
+            } catch (_) {}
+          }
+          console.log('REFERENCE_PHASE_SUMMARY');
+          for (const [phase, values] of [...phases].sort((a, b) => b[1].reduce((x,y)=>x+y,0) - a[1].reduce((x,y)=>x+y,0))) {
+            const sorted = [...values].sort((a,b)=>a-b);
+            const sum = values.reduce((a,b)=>a+b,0);
+            console.log(phase + ': count=' + values.length + ' total=' + Math.round(sum) + 'ms median=' + Math.round(sorted[Math.floor(sorted.length/2)]) + 'ms p95=' + Math.round(sorted[Math.min(sorted.length-1, Math.ceil(sorted.length*.95)-1)]) + 'ms');
+          }
+          NODE
       - name: Upload profile log
         if: always()
         uses: actions/upload-artifact@v6
