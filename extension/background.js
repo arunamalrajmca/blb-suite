@@ -1,4 +1,4 @@
-importScripts('study-session-normalization.js', 'multiverse-reference-helpers.js', 'study-session-export.js', 'selection-text-helpers.js', 'omnibox-search-helpers.js', 'regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js');
+importScripts('study-session-normalization.js', 'multiverse-reference-helpers.js', 'study-session-export.js', 'selection-text-helpers.js', 'omnibox-search-helpers.js', 'regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'books.js', 'book-aliases.js', 'reference-core.js');
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
@@ -1821,32 +1821,76 @@ async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
     await paceCaseSensitiveTab(openBlbDestination(targets[i], false, false));
   }
 }
+let kjvCaseSensitiveWordsLoadPromise = null;
 let kjvOriginalCaseCorpusLoadPromise = null;
 
+async function fetchPackagedJsonAssignment(filename, assignment, terminator) {
+  const response = await fetch(chrome.runtime.getURL(filename));
+  if (!response.ok) {
+    throw new Error('Unable to fetch packaged KJV search data ' + filename + ': HTTP ' + response.status);
+  }
+  const source = await response.text();
+  const start = source.indexOf(assignment);
+  const end = terminator
+    ? source.indexOf(terminator, start)
+    : source.lastIndexOf(';');
+  if (start < 0 || end < 0) {
+    throw new Error('Packaged KJV search data has an unexpected format: ' + filename);
+  }
+  return JSON.parse(source.slice(start + assignment.length, end));
+}
+
+async function ensureKjvCaseSensitiveWordsLoaded() {
+  // This small routing set is consulted only by explicit `b cs` commands.
+  // Keep it out of ordinary worker startup and load it before local routing.
+  if (typeof KJV_CASE_SENSITIVE_WORDS !== 'undefined') return;
+  if (!kjvCaseSensitiveWordsLoadPromise) {
+    kjvCaseSensitiveWordsLoadPromise = (async () => {
+      const words = await fetchPackagedJsonAssignment(
+        'kjv-case-sensitive-words.js',
+        'const KJV_CASE_SENSITIVE_WORDS = new Set(',
+        ');\nif (typeof self'
+      );
+      if (!Array.isArray(words) || !words.length) {
+        throw new Error('The packaged case-sensitive KJV word set is empty or invalid');
+      }
+      self.KJV_CASE_SENSITIVE_WORDS = new Set(words);
+    })().catch(error => {
+      kjvCaseSensitiveWordsLoadPromise = null;
+      throw error;
+    });
+  }
+  await kjvCaseSensitiveWordsLoadPromise;
+}
+
 async function ensureKjvOriginalCaseCorpusLoaded() {
-  // The 4.5 MB original-case corpus is needed only by explicit `b cs` searches.
-  // Fetch the packaged classic-script resource as data: MV3 workers cannot
-  // reliably import a script after startup, but can fetch their own resources.
-  // Parse only its JSON array; never evaluate downloaded JavaScript.
-  if (typeof KJV_CORPUS_ORIGINAL_CASE !== 'undefined') return;
+  // The 4.5 MB original-case corpus and its compact verse index are needed
+  // only by explicit `b cs` searches that pass the local-routing gate.
+  // Fetch packaged classic-script resources as data; never evaluate JS.
+  if (typeof KJV_CORPUS_ORIGINAL_CASE !== 'undefined'
+      && typeof KJV_CORPUS_CASE_VERSE_INDEX !== 'undefined') return;
   if (!kjvOriginalCaseCorpusLoadPromise) {
     kjvOriginalCaseCorpusLoadPromise = (async () => {
-      const response = await fetch(chrome.runtime.getURL('kjv-corpus-original-case.js'));
-      if (!response.ok) {
-        throw new Error('Unable to fetch the packaged original-case KJV corpus: HTTP ' + response.status);
-      }
-      const source = await response.text();
-      const assignment = 'const KJV_CORPUS_ORIGINAL_CASE = ';
-      const start = source.indexOf(assignment);
-      const end = source.indexOf(';\nif (typeof self', start);
-      if (start < 0 || end < 0) {
-        throw new Error('The packaged original-case KJV corpus has an unexpected format');
-      }
-      const corpus = JSON.parse(source.slice(start + assignment.length, end));
+      const [corpus, index] = await Promise.all([
+        fetchPackagedJsonAssignment(
+          'kjv-corpus-original-case.js',
+          'const KJV_CORPUS_ORIGINAL_CASE = ',
+          ';\nif (typeof self'
+        ),
+        fetchPackagedJsonAssignment(
+          'kjv-corpus-case-verse-index.js',
+          'const KJV_CORPUS_CASE_VERSE_INDEX = ',
+          null
+        )
+      ]);
       if (!Array.isArray(corpus) || !corpus.length) {
         throw new Error('The packaged original-case KJV corpus is empty or invalid');
       }
+      if (!index || typeof index !== 'object' || Array.isArray(index) || !Object.keys(index).length) {
+        throw new Error('The packaged case-sensitive KJV verse index is empty or invalid');
+      }
       self.KJV_CORPUS_ORIGINAL_CASE = corpus;
+      self.KJV_CORPUS_CASE_VERSE_INDEX = index;
     })().catch(error => {
       kjvOriginalCaseCorpusLoadPromise = null;
       throw error;
@@ -1898,9 +1942,12 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
   // corpus for apostrophe queries, preserving distinctions such as LORD's,
   // Lord's, and lord's. Scrambled capitalization is still rejected above.
   const hasApostrophe = /['’]/.test(parsed.query);
-  if (!hasApostrophe && !shouldUseCaseSensitiveRouting(parsed.query)) {
-    await openCaseSensitiveNativeSearch(parsed.rawQuery, disposition);
-    return true;
+  if (!hasApostrophe) {
+    await ensureKjvCaseSensitiveWordsLoaded();
+    if (!shouldUseCaseSensitiveRouting(parsed.query)) {
+      await openCaseSensitiveNativeSearch(parsed.rawQuery, disposition);
+      return true;
+    }
   }
 
   await ensureKjvOriginalCaseCorpusLoaded();

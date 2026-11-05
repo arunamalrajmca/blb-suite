@@ -84,10 +84,8 @@ if (!importMatch) {
     'kjv-corpus-word-verse-index.js',
     'kjv-corpus-verses.js',
     'kjv-corpus-phrase-index.js',
-    'kjv-case-sensitive-words.js',
     'case-sensitive-search-core.js',
     'case-sensitive-routing.js',
-    'kjv-corpus-case-verse-index.js',
     'books.js',
     'book-aliases.js',
     'reference-core.js'
@@ -99,25 +97,40 @@ if (!importMatch) {
   } else {
     pass('service-worker import dependency order remains stable');
   }
+  const lazyWordsLoader = background.match(/async function ensureKjvCaseSensitiveWordsLoaded\(\) \{([\s\S]*?)\n\}/);
+  if (!lazyWordsLoader
+      || !lazyWordsLoader[1].includes("kjv-case-sensitive-words.js")
+      || !lazyWordsLoader[1].includes('fetchPackagedJsonAssignment(')
+      || !lazyWordsLoader[1].includes('new Set(words)')
+      || !lazyWordsLoader[1].includes('kjvCaseSensitiveWordsLoadPromise')) {
+    fail('case-sensitive routing words are fetched as data and shared across concurrent lazy loads');
+  } else {
+    pass('case-sensitive routing words have a guarded, promise-deduplicated loader');
+  }
   const lazyCorpusLoader = background.match(/async function ensureKjvOriginalCaseCorpusLoaded\(\) \{([\s\S]*?)\n\}/);
   if (!lazyCorpusLoader
       || !lazyCorpusLoader[1].includes("typeof KJV_CORPUS_ORIGINAL_CASE !== 'undefined'")
-      || !lazyCorpusLoader[1].includes("fetch(chrome.runtime.getURL('kjv-corpus-original-case.js'))")
-      || !lazyCorpusLoader[1].includes('JSON.parse(')
+      || !lazyCorpusLoader[1].includes("kjv-corpus-original-case.js")
+      || !lazyCorpusLoader[1].includes("kjv-corpus-case-verse-index.js")
+      || !lazyCorpusLoader[1].includes('fetchPackagedJsonAssignment(')
+      || !lazyCorpusLoader[1].includes('Promise.all(')
       || !lazyCorpusLoader[1].includes('kjvOriginalCaseCorpusLoadPromise')) {
-    fail('original-case corpus is fetched, parsed as data, and shared across concurrent lazy loads');
+    fail('original-case corpus and case verse index are fetched as data and shared across concurrent lazy loads');
   } else {
-    pass('original-case corpus has a guarded, promise-deduplicated resource loader');
+    pass('original-case corpus and case verse index have a guarded, promise-deduplicated resource loader');
   }
-  if (background.includes("importScripts('kjv-corpus-original-case.js')")) {
-    fail('original-case corpus is not dynamically imported after worker startup');
-  } else {
-    pass('original-case corpus is not dynamically imported after worker startup');
+  for (const file of ['kjv-case-sensitive-words.js', 'kjv-corpus-case-verse-index.js', 'kjv-corpus-original-case.js']) {
+    if (background.includes("importScripts('" + file + "')")) {
+      fail(file + ' is not imported during ordinary worker startup');
+    } else {
+      pass(file + ' is not imported during ordinary worker startup');
+    }
   }
-  if (!background.includes('await ensureKjvOriginalCaseCorpusLoaded();')) {
-    fail('case-sensitive search awaits original-case corpus readiness');
+  if (!background.includes('await ensureKjvCaseSensitiveWordsLoaded();')
+      || !background.includes('await ensureKjvOriginalCaseCorpusLoaded();')) {
+    fail('case-sensitive search awaits the routing data and corpus readiness at their respective decision points');
   } else {
-    pass('case-sensitive search awaits original-case corpus readiness');
+    pass('case-sensitive search awaits the routing data and corpus readiness at their respective decision points');
   }
 }
 

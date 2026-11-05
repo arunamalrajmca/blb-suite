@@ -67,12 +67,14 @@ test.describe('KJV case-sensitive word-set and routing behavior', () => {
     expect(core.parseCaseSensitiveQuery('faith and hope')).toBe(null);
   });
 
-  test('background loads the generated set before the routing helper', () => {
-    const wordsIndex = backgroundSource.indexOf("'kjv-case-sensitive-words.js'");
-    const routingIndex = backgroundSource.indexOf("'case-sensitive-routing.js'");
-    expect(wordsIndex).toBeGreaterThan(-1);
-    expect(routingIndex).toBeGreaterThan(wordsIndex);
-    expect(backgroundSource.includes('shouldUseCaseSensitiveRouting')).toBe(true);
+  test('background loads the generated routing set on demand before using it', () => {
+    const loaderIndex = backgroundSource.indexOf('async function ensureKjvCaseSensitiveWordsLoaded');
+    const useIndex = backgroundSource.indexOf('await ensureKjvCaseSensitiveWordsLoaded();');
+    const routeIndex = backgroundSource.indexOf('shouldUseCaseSensitiveRouting(parsed.query)');
+    expect(loaderIndex).toBeGreaterThan(-1);
+    expect(useIndex).toBeGreaterThan(loaderIndex);
+    expect(routeIndex).toBeGreaterThan(useIndex);
+    expect(backgroundSource.includes("'case-sensitive-routing.js'")).toBe(true);
   });
 });
 
@@ -85,16 +87,16 @@ test('MV3 worker routes a real exact-case KJV word to its single matching verse'
   // Verify ordinary worker startup omits the original-case corpus, then exercise
   // the real omnibox entry point before deriving the exact expected destination.
   const runtimeRouting = await extensionWorker.evaluate(() => ({
-    generatedWordPresent: KJV_CASE_SENSITIVE_WORDS.has('fathers'),
-    routingSelected: shouldUseCaseSensitiveRouting('Fathers'),
-    originalCaseLoaded: typeof KJV_CORPUS_ORIGINAL_CASE !== 'undefined'
+    caseSensitiveWordsLoaded: typeof KJV_CASE_SENSITIVE_WORDS !== 'undefined',
+    originalCaseLoaded: typeof KJV_CORPUS_ORIGINAL_CASE !== 'undefined',
+    caseVerseIndexLoaded: typeof KJV_CORPUS_CASE_VERSE_INDEX !== 'undefined'
   }));
-  expect(runtimeRouting.generatedWordPresent,
-    'the generated set must be loaded in the live MV3 worker').toBe(true);
-  expect(runtimeRouting.routingSelected,
-    'the live worker must select exact-case routing for a generated word').toBe(true);
+  expect(runtimeRouting.caseSensitiveWordsLoaded,
+    'the case-sensitive routing set must stay unloaded during ordinary worker startup').toBe(false);
   expect(runtimeRouting.originalCaseLoaded,
     'the multi-megabyte original-case corpus must stay unloaded during ordinary worker startup').toBe(false);
+  expect(runtimeRouting.caseVerseIndexLoaded,
+    'the case-sensitive verse index must stay unloaded during ordinary worker startup').toBe(false);
 
   let expected = null;
   try {
@@ -124,11 +126,17 @@ test('MV3 worker routes a real exact-case KJV word to its single matching verse'
     expect(expected.text.split(/[^A-Za-z]+/).includes('Fathers'),
       'the selected original-case verse must contain the requested capitalization').toBe(true);
     expect(expected.url).toMatch(/^https:\/\/www\.blueletterbible\.org\/kjv\//);
-    const loadedAfterSearch = await extensionWorker.evaluate(() =>
-      typeof KJV_CORPUS_ORIGINAL_CASE !== 'undefined'
-    );
-    expect(loadedAfterSearch,
+    const loadedAfterSearch = await extensionWorker.evaluate(() => ({
+      caseSensitiveWords: typeof KJV_CASE_SENSITIVE_WORDS !== 'undefined',
+      originalCaseCorpus: typeof KJV_CORPUS_ORIGINAL_CASE !== 'undefined',
+      caseVerseIndex: typeof KJV_CORPUS_CASE_VERSE_INDEX !== 'undefined'
+    }));
+    expect(loadedAfterSearch.caseSensitiveWords,
+      'the exact-case routing set must load before the local routing decision').toBe(true);
+    expect(loadedAfterSearch.originalCaseCorpus,
       'an actual exact-case search must load the original-case corpus before matching').toBe(true);
+    expect(loadedAfterSearch.caseVerseIndex,
+      'an actual exact-case search must load its verse index before matching').toBe(true);
 
     await expect.poll(async () => extensionWorker.evaluate(({ beforeIds, expectedUrl }) =>
       chrome.tabs.query({}).then(tabs => tabs.some(tab =>
@@ -153,5 +161,36 @@ test('MV3 worker routes a real exact-case KJV word to its single matching verse'
         })
       , { beforeIds, expectedUrl: expected.url });
     }
+  }
+});
+
+test('MV3 worker keeps the large exact-case corpus unloaded for a native-fallback cs query', async ({ extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true });
+  const beforeIds = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+  );
+  try {
+    await extensionWorker.evaluate(async () => {
+      await handleOmniboxCommand('cs faith', 'newBackgroundTab');
+    });
+    const loaded = await extensionWorker.evaluate(() => ({
+      caseSensitiveWords: typeof KJV_CASE_SENSITIVE_WORDS !== 'undefined',
+      originalCaseCorpus: typeof KJV_CORPUS_ORIGINAL_CASE !== 'undefined',
+      caseVerseIndex: typeof KJV_CORPUS_CASE_VERSE_INDEX !== 'undefined'
+    }));
+    expect(loaded.caseSensitiveWords,
+      'the compact routing set is needed to decide whether local exact-case search applies').toBe(true);
+    expect(loaded.originalCaseCorpus,
+      'a query outside the local case-sensitive routing set must not load the large corpus').toBe(false);
+    expect(loaded.caseVerseIndex,
+      'a native-fallback query must not load the local exact-case verse index').toBe(false);
+  } finally {
+    await extensionWorker.evaluate(beforeIds => chrome.tabs.query({}).then(async tabs => {
+      for (const tab of tabs) {
+        if (!beforeIds.includes(tab.id) && Number.isInteger(tab.id)) {
+          await chrome.tabs.remove(tab.id).catch(() => {});
+        }
+      }
+    }), beforeIds);
   }
 });
