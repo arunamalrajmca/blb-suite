@@ -84,6 +84,49 @@ test('MV3 service worker starts', async ({ context, extensionId }) => {
   expect(context.serviceWorkers().length).toBeGreaterThan(0);
 });
 
+test('KJV phrase candidate index loads only when multi-word classification needs it', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.set({ masterEnabled: true });
+  const initial = await extensionWorker.evaluate(() => ({
+    loaded: KJV_CORPUS_PHRASE_INDEX !== null,
+    keys: KJV_CORPUS_PHRASE_INDEX ? Object.keys(KJV_CORPUS_PHRASE_INDEX).length : 0
+  }));
+  expect(initial).toEqual({ loaded: false, keys: 0 });
+
+  const directReference = await extensionWorker.evaluate(() =>
+    chrome.runtime.sendMessage({ type: 'blbSuiteClassifySelection', text: 'John 3:16' })
+  );
+  expect(directReference.valid).toBe(true);
+  expect(directReference.type).toBe('REFERENCE');
+  expect(await extensionWorker.evaluate(() => KJV_CORPUS_PHRASE_INDEX)).toBeNull();
+
+  const bookOnly = await extensionWorker.evaluate(() =>
+    chrome.runtime.sendMessage({ type: 'blbSuiteClassifySelection', text: 'Psalms' })
+  );
+  expect(bookOnly.valid).toBe(true);
+  expect(bookOnly.type).toBe('BOOK');
+  expect(await extensionWorker.evaluate(() => KJV_CORPUS_PHRASE_INDEX)).toBeNull();
+
+  const singleWord = await extensionWorker.evaluate(() =>
+    chrome.runtime.sendMessage({ type: 'blbSuiteClassifySelection', text: 'Jesus' })
+  );
+  expect(singleWord.valid).toBe(true);
+  expect(singleWord.type).toBe('KJV_WORD');
+  expect(await extensionWorker.evaluate(() => KJV_CORPUS_PHRASE_INDEX)).toBeNull();
+
+  const phrase = await extensionWorker.evaluate(() =>
+    chrome.runtime.sendMessage({ type: 'blbSuiteClassifySelection', text: 'Jesus wept' })
+  );
+  expect(phrase.valid).toBe(true);
+  expect(phrase.type).toBe('KJV_REFERENCE_RANGE');
+  expect(phrase.directRef.url).toContain('/kjv/jhn/11/35');
+  const loaded = await extensionWorker.evaluate(() => ({
+    loaded: KJV_CORPUS_PHRASE_INDEX !== null,
+    keys: Object.keys(KJV_CORPUS_PHRASE_INDEX || {}).length
+  }));
+  expect(loaded.loaded).toBe(true);
+  expect(loaded.keys).toBeGreaterThan(0);
+});
+
 test('popup loads from extension package', async ({ page, extensionId }) => {
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await expect(page).toHaveTitle('KJV Scripture Tools');
