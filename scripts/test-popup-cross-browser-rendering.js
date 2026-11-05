@@ -272,7 +272,7 @@ async function inspectBrowser(name) {
         await ordinary.target.close().catch(() => {});
       }
 
-      const sensitive = await openActualToolbarPopup(context, extensionId, 'data:text/html,<title>Medical record test</title><p>Private test page</p>');
+      const sensitive = await openPopupDocumentForInspection(context, extensionId, 'data:text/html,<title>Medical record test</title><p>Private test page</p>');
       try {
         // The test URL includes a centrally configured sensitive keyword.
         await sensitive.target.goto('data:text/html,<title>Medical record test</title><p>Private test page</p>', { waitUntil: 'load' });
