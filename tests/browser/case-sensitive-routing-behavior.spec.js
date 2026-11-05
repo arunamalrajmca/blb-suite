@@ -82,18 +82,28 @@ test('MV3 worker routes a real exact-case KJV word to its single matching verse'
     chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
   );
 
-  // Derive the expected destination from the packaged original-case corpus,
-  // then exercise the real omnibox entry point in the running extension worker.
+  // Verify ordinary worker startup omits the original-case corpus, then exercise
+  // the real omnibox entry point before deriving the exact expected destination.
   const runtimeRouting = await extensionWorker.evaluate(() => ({
     generatedWordPresent: KJV_CASE_SENSITIVE_WORDS.has('fathers'),
-    routingSelected: shouldUseCaseSensitiveRouting('Fathers')
+    routingSelected: shouldUseCaseSensitiveRouting('Fathers'),
+    originalCaseLoaded: typeof KJV_CORPUS_ORIGINAL_CASE !== 'undefined'
   }));
   expect(runtimeRouting.generatedWordPresent,
     'the generated set must be loaded in the live MV3 worker').toBe(true);
   expect(runtimeRouting.routingSelected,
     'the live worker must select exact-case routing for a generated word').toBe(true);
+  expect(runtimeRouting.originalCaseLoaded,
+    'the multi-megabyte original-case corpus must stay unloaded during ordinary worker startup').toBe(false);
 
-  const expected = await extensionWorker.evaluate(() => {
+  let expected = null;
+  try {
+    // Exercise the real command first; it must load the corpus only when the
+    // query actually takes the exact-case local-search path.
+    await extensionWorker.evaluate(async () => {
+      await handleOmniboxCommand('cs Fathers', 'newBackgroundTab');
+    });
+    expected = await extensionWorker.evaluate(() => {
     const matches = BLBCaseSensitiveCore.searchCaseSensitiveCorpus(
       'Fathers',
       KJV_CORPUS_ORIGINAL_CASE,
@@ -109,16 +119,16 @@ test('MV3 worker routes a real exact-case KJV word to its single matching verse'
         ? 'https://www.blueletterbible.org/kjv/' + book.urlKey + '/' + entry[1] + '/' + entry[2] + '/'
         : null
     };
-  });
-  expect(expected.count, 'the exact-case fixture term should resolve to one KJV verse').toBe(1);
-  expect(expected.text.split(/[^A-Za-z]+/).includes('Fathers'),
-    'the selected original-case verse must contain the requested capitalization').toBe(true);
-  expect(expected.url).toMatch(/^https:\/\/www\.blueletterbible\.org\/kjv\//);
-
-  try {
-    await extensionWorker.evaluate(async () => {
-      await handleOmniboxCommand('cs Fathers', 'newBackgroundTab');
     });
+    expect(expected.count, 'the exact-case fixture term should resolve to one KJV verse').toBe(1);
+    expect(expected.text.split(/[^A-Za-z]+/).includes('Fathers'),
+      'the selected original-case verse must contain the requested capitalization').toBe(true);
+    expect(expected.url).toMatch(/^https:\/\/www\.blueletterbible\.org\/kjv\//);
+    const loadedAfterSearch = await extensionWorker.evaluate(() =>
+      typeof KJV_CORPUS_ORIGINAL_CASE !== 'undefined'
+    );
+    expect(loadedAfterSearch,
+      'an actual exact-case search must load the original-case corpus before matching').toBe(true);
 
     await expect.poll(async () => extensionWorker.evaluate(({ beforeIds, expectedUrl }) =>
       chrome.tabs.query({}).then(tabs => tabs.some(tab =>
@@ -130,16 +140,18 @@ test('MV3 worker routes a real exact-case KJV word to its single matching verse'
       intervals: [100, 200, 300]
     }).toBe(true);
   } finally {
-    await extensionWorker.evaluate(({ beforeIds, expectedUrl }) =>
-      chrome.tabs.query({}).then(async tabs => {
-        for (const tab of tabs) {
-          if (!beforeIds.includes(tab.id) &&
-              String(tab.url || tab.pendingUrl || '') === expectedUrl &&
-              Number.isInteger(tab.id)) {
-            await chrome.tabs.remove(tab.id).catch(() => {});
+    if (expected?.url) {
+      await extensionWorker.evaluate(({ beforeIds, expectedUrl }) =>
+        chrome.tabs.query({}).then(async tabs => {
+          for (const tab of tabs) {
+            if (!beforeIds.includes(tab.id) &&
+                String(tab.url || tab.pendingUrl || '') === expectedUrl &&
+                Number.isInteger(tab.id)) {
+              await chrome.tabs.remove(tab.id).catch(() => {});
+            }
           }
-        }
-      })
-    , { beforeIds, expectedUrl: expected.url });
+        })
+      , { beforeIds, expectedUrl: expected.url });
+    }
   }
 });

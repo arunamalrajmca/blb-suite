@@ -1,4 +1,4 @@
-importScripts('study-session-normalization.js', 'multiverse-reference-helpers.js', 'study-session-export.js', 'selection-text-helpers.js', 'omnibox-search-helpers.js', 'regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-corpus-original-case.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js');
+importScripts('study-session-normalization.js', 'multiverse-reference-helpers.js', 'study-session-export.js', 'selection-text-helpers.js', 'omnibox-search-helpers.js', 'regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'kjv-case-sensitive-words.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'kjv-corpus-case-verse-index.js', 'books.js', 'book-aliases.js', 'reference-core.js');
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
@@ -1821,6 +1821,40 @@ async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
     await paceCaseSensitiveTab(openBlbDestination(targets[i], false, false));
   }
 }
+let kjvOriginalCaseCorpusLoadPromise = null;
+
+async function ensureKjvOriginalCaseCorpusLoaded() {
+  // The 4.5 MB original-case corpus is needed only by explicit `b cs` searches.
+  // Fetch the packaged classic-script resource as data: MV3 workers cannot
+  // reliably import a script after startup, but can fetch their own resources.
+  // Parse only its JSON array; never evaluate downloaded JavaScript.
+  if (typeof KJV_CORPUS_ORIGINAL_CASE !== 'undefined') return;
+  if (!kjvOriginalCaseCorpusLoadPromise) {
+    kjvOriginalCaseCorpusLoadPromise = (async () => {
+      const response = await fetch(chrome.runtime.getURL('kjv-corpus-original-case.js'));
+      if (!response.ok) {
+        throw new Error('Unable to fetch the packaged original-case KJV corpus: HTTP ' + response.status);
+      }
+      const source = await response.text();
+      const assignment = 'const KJV_CORPUS_ORIGINAL_CASE = ';
+      const start = source.indexOf(assignment);
+      const end = source.indexOf(';\nif (typeof self', start);
+      if (start < 0 || end < 0) {
+        throw new Error('The packaged original-case KJV corpus has an unexpected format');
+      }
+      const corpus = JSON.parse(source.slice(start + assignment.length, end));
+      if (!Array.isArray(corpus) || !corpus.length) {
+        throw new Error('The packaged original-case KJV corpus is empty or invalid');
+      }
+      self.KJV_CORPUS_ORIGINAL_CASE = corpus;
+    })().catch(error => {
+      kjvOriginalCaseCorpusLoadPromise = null;
+      throw error;
+    });
+  }
+  await kjvOriginalCaseCorpusLoadPromise;
+}
+
 async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab') {
   // Capture the tab in which the omnibox command was entered before async
   // search work begins. The shared batch manager uses it for batch one only.
@@ -1869,6 +1903,7 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
     return true;
   }
 
+  await ensureKjvOriginalCaseCorpusLoaded();
   const matches = BLBCaseSensitiveCore.searchCaseSensitiveCorpus(parsed.query, KJV_CORPUS_ORIGINAL_CASE, KJV_CORPUS_CASE_VERSE_INDEX);
   if (!matches.length) {
     // Zero exact-case corpus matches fall back to BLB's native search.
