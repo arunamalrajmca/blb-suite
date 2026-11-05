@@ -418,17 +418,32 @@ test.describe('core user-visible E2E', () => {
     }, books);
 
     const failures = [];
+    const matrixProfile = process.env.BLB_PROFILE_BROWSER_FIXTURES === '1';
+    const recordMatrixPhase = (phase, startedAt, details = {}) => {
+      if (!matrixProfile) return;
+      console.log('BLB_MATRIX_PROFILE ' + JSON.stringify({
+        phase,
+        durationMs: Number(process.hrtime.bigint() - startedAt) / 1e6,
+        ...details
+      }));
+    };
     const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];
     for (const book of books) {
       const expectedPath = '/kjv/' + book.urlKey + '/1/1/';
       for (const separator of ['colon', 'dot']) {
         const selector = '#all-66-book-suffix-' + separator + '-' + book.bookNumber;
         for (const action of actions) {
+          const iterationStartedAt = process.hrtime.bigint();
+          let phaseStartedAt = process.hrtime.bigint();
           await page.bringToFront();
+          recordMatrixPhase('bring-source-page-to-front', phaseStartedAt, { book: book.name, separator, action });
+          phaseStartedAt = process.hrtime.bigint();
           const beforeIds = await extensionWorker.evaluate(() =>
             chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
           );
+          recordMatrixPhase('snapshot-existing-tabs', phaseStartedAt, { book: book.name, separator, action });
           try {
+            phaseStartedAt = process.hrtime.bigint();
             if (action === 'Double-Click') {
               await page.evaluate(() => window.getSelection()?.removeAllRanges());
               await page.locator(selector).dblclick();
@@ -456,8 +471,10 @@ test.describe('core user-visible E2E', () => {
                 }, selectedText);
               }
             }
+            recordMatrixPhase('selection-and-action-trigger', phaseStartedAt, { book: book.name, separator, action });
 
             let opened = null;
+            phaseStartedAt = process.hrtime.bigint();
             await expect.poll(async () => {
               opened = await extensionWorker.evaluate(({ beforeIds, expectedPath }) =>
                 chrome.tabs.query({}).then(tabs => {
@@ -476,9 +493,11 @@ test.describe('core user-visible E2E', () => {
                 }), { beforeIds, expectedPath });
               return opened?.path || '';
             }, { timeout: 1200, message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
+            recordMatrixPhase('destination-poll-and-confirmation', phaseStartedAt, { book: book.name, separator, action, openedTabId: opened?.id || null });
           } catch (error) {
             failures.push({ book: book.name, separator, action, expectedPath, error: String(error.message || error) });
           } finally {
+            phaseStartedAt = process.hrtime.bigint();
             await extensionWorker.evaluate(beforeIds => chrome.tabs.query({}).then(async tabs => {
               for (const tab of tabs) {
                 if (tab.id == null || beforeIds.includes(tab.id)) continue;
@@ -488,6 +507,8 @@ test.describe('core user-visible E2E', () => {
                 } catch (_) {}
               }
             }), beforeIds);
+            recordMatrixPhase('cleanup-new-blb-tabs', phaseStartedAt, { book: book.name, separator, action });
+            recordMatrixPhase('matrix-iteration-total', iterationStartedAt, { book: book.name, separator, action });
           }
         }
       }
