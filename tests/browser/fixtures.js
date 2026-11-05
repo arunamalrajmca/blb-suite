@@ -3,6 +3,16 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
+const profileFixtures = process.env.BLB_PROFILE_BROWSER_FIXTURES === '1';
+function profileFixture(phase, startedAt, details = {}) {
+  if (!profileFixtures) return;
+  console.log('BLB_FIXTURE_PROFILE ' + JSON.stringify({
+    phase,
+    durationMs: Number(process.hrtime.bigint() - startedAt) / 1e6,
+    ...details
+  }));
+}
+
 const sourceExtensionPath = process.env.BLB_EXTENSION_PATH
   ? path.resolve(process.env.BLB_EXTENSION_PATH)
   : path.resolve(__dirname, '../../extension');
