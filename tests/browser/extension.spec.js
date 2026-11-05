@@ -471,7 +471,7 @@ test.describe('core user-visible E2E', () => {
               if (action === 'Show on BLB') {
                 subphaseStartedAt = process.hrtime.bigint();
                 const button = page.locator('#blb-suite-page-selection-button');
-                // Locator.click auto-waits for visibility, stability, and enabled state.
+                // Keep Playwright's visibility/stability/enabled auto-wait inside the click operation.
                 await button.click({ timeout: 1200 });
                 phaseProfile.actionSubphaseMs[action].buttonWaitAndClick += Number(process.hrtime.bigint() - subphaseStartedAt) / 1e6;
               } else if (action === 'Alt+B') {
