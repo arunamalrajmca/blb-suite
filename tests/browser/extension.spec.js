@@ -84,6 +84,41 @@ test('MV3 service worker starts', async ({ context, extensionId }) => {
   expect(context.serviceWorkers().length).toBeGreaterThan(0);
 });
 
+test('KJV phrase candidate index loads only when multi-word classification needs it', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.set({ masterEnabled: true });
+  const initial = await extensionWorker.evaluate(() => ({
+    loaded: KJV_CORPUS_PHRASE_INDEX !== null,
+    keys: KJV_CORPUS_PHRASE_INDEX ? Object.keys(KJV_CORPUS_PHRASE_INDEX).length : 0
+  }));
+  expect(initial).toEqual({ loaded: false, keys: 0 });
+
+  const directReference = await extensionWorker.evaluate(async () => classifySelectionForBlb('John 3:16'));
+  expect(directReference.valid).toBe(true);
+  expect(directReference.type).toBe('REFERENCE');
+  expect(await extensionWorker.evaluate(() => KJV_CORPUS_PHRASE_INDEX)).toBeNull();
+
+  const bookOnly = await extensionWorker.evaluate(async () => classifySelectionForBlb('Psalms'));
+  expect(bookOnly.valid).toBe(true);
+  expect(bookOnly.type).toBe('BOOK');
+  expect(await extensionWorker.evaluate(() => KJV_CORPUS_PHRASE_INDEX)).toBeNull();
+
+  const singleWord = await extensionWorker.evaluate(async () => classifySelectionForBlb('Jesus'));
+  expect(singleWord.valid).toBe(true);
+  expect(singleWord.type).toBe('KJV_WORD');
+  expect(await extensionWorker.evaluate(() => KJV_CORPUS_PHRASE_INDEX)).toBeNull();
+
+  const phrase = await extensionWorker.evaluate(async () => classifySelectionForBlb('For God so loved the world'));
+  expect(phrase.valid).toBe(true);
+  expect(phrase.type).toBe('KJV_REFERENCE_RANGE');
+  expect(phrase.directRef.url).toContain('/kjv/jhn/3/16');
+  const loaded = await extensionWorker.evaluate(() => ({
+    loaded: KJV_CORPUS_PHRASE_INDEX !== null,
+    keys: Object.keys(KJV_CORPUS_PHRASE_INDEX || {}).length
+  }));
+  expect(loaded.loaded).toBe(true);
+  expect(loaded.keys).toBeGreaterThan(0);
+});
+
 test('popup loads from extension package', async ({ page, extensionId }) => {
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await expect(page).toHaveTitle('KJV Scripture Tools');
@@ -2415,9 +2450,9 @@ test.describe('core user-visible E2E', () => {
   });
 
   test('All 66 canonical books resolve correctly through the shared reference resolver', async ({ extensionWorker }) => {
-    const results = await extensionWorker.evaluate(() => BOOKS.map(book => {
+    const results = await extensionWorker.evaluate(async () => Promise.all(BOOKS.map(async book => {
       const text = `${book.name} 1:1`;
-      const decision = classifySelectionForBlb(text);
+      const decision = await classifySelectionForBlb(text);
       const ref = decision.directRef || decision.refs?.[0] || null;
       return {
         book: book.name,
@@ -2426,7 +2461,7 @@ test.describe('core user-visible E2E', () => {
         chapter: ref?.chapter ?? null,
         verse: ref?.from ?? null
       };
-    }));
+    })));
 
     expect(results).toHaveLength(66);
     expect(results.every(item =>
@@ -2440,7 +2475,7 @@ test.describe('core user-visible E2E', () => {
 
 
 test('Standalone book-name and KJV-word collision policy is consistent across all books and aliases', async ({ extensionWorker }) => {
-  const audit = await extensionWorker.evaluate(() => {
+  const audit = await extensionWorker.evaluate(async () => {
     const candidates = new Map();
     const add = (token, source, expectedBook = null) => {
       const key = String(token || '').trim().toLowerCase();
@@ -2457,9 +2492,9 @@ test('Standalone book-name and KJV-word collision policy is consistent across al
       for (const alias of aliases || []) add(alias, 'numbered-suffix:' + family);
     }
 
-    const rows = [...candidates.values()].map(candidate => {
+    const rows = await Promise.all([...candidates.values()].map(async candidate => {
       const book = resolveBibleBook(candidate.token);
-      const decision = classifySelectionForBlb(candidate.token);
+      const decision = await classifySelectionForBlb(candidate.token);
       const isKjvWord = isKjvVocabularySelection(candidate.token);
       const singleMatch = isKjvWord ? findSingleKjvPhraseMatch(candidate.token) : null;
       const expectedBook = candidate.expectedBooks[0] || null;
@@ -2477,7 +2512,7 @@ test('Standalone book-name and KJV-word collision policy is consistent across al
         } : null,
         expectedPolicy: book ? 'BOOK' : (isKjvWord ? 'KJV_WORD' : 'NON_KJV_SINGLE_WORD')
       };
-    });
+    }));
 
     const wordCollisions = rows.filter(row => row.isKjvWord);
     return {
@@ -2485,8 +2520,8 @@ test('Standalone book-name and KJV-word collision policy is consistent across al
       aliases: rows.filter(row => row.sources.includes('configured-alias')),
       suffixes: rows.filter(row => row.sources.some(source => source.startsWith('numbered-suffix:'))),
       wordCollisions,
-      explicit: ['John', '1 John', '1 Cor 13:4', '2 Ti 1:1', '1 Sam 1:1', 'Cor', 'Sam'].map(input => {
-        const decision = classifySelectionForBlb(input);
+      explicit: await Promise.all(['John', '1 John', '1 Cor 13:4', '2 Ti 1:1', '1 Sam 1:1', 'Cor', 'Sam'].map(async input => {
+        const decision = await classifySelectionForBlb(input);
         const direct = resolveDirectBibleReference(input);
         return {
           input,
@@ -2499,7 +2534,7 @@ test('Standalone book-name and KJV-word collision policy is consistent across al
             ? findSingleKjvPhraseMatch(input).slice(0, 3).map(Number)
             : null
         };
-      })
+      }))
     };
   });
 

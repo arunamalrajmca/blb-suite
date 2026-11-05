@@ -1,4 +1,5 @@
-importScripts('study-session-normalization.js', 'multiverse-reference-helpers.js', 'study-session-export.js', 'selection-text-helpers.js', 'omnibox-search-helpers.js', 'regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'kjv-corpus-phrase-index.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'books.js', 'book-aliases.js', 'reference-core.js');
+importScripts('study-session-normalization.js', 'multiverse-reference-helpers.js', 'study-session-export.js', 'selection-text-helpers.js', 'omnibox-search-helpers.js', 'regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'books.js', 'book-aliases.js', 'reference-core.js');
+let KJV_CORPUS_PHRASE_INDEX = null;
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
@@ -1823,8 +1824,9 @@ async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
 }
 let kjvCaseSensitiveWordsLoadPromise = null;
 let kjvOriginalCaseCorpusLoadPromise = null;
+let kjvPhraseIndexLoadPromise = null;
 
-async function fetchPackagedJsonAssignment(filename, assignment, terminator) {
+async function fetchPackagedJsonAssignment(filename, assignment, terminator, allowTrailingObjectComma = false) {
   const response = await fetch(chrome.runtime.getURL(filename));
   if (!response.ok) {
     throw new Error('Unable to fetch packaged KJV search data ' + filename + ': HTTP ' + response.status);
@@ -1837,7 +1839,35 @@ async function fetchPackagedJsonAssignment(filename, assignment, terminator) {
   if (start < 0 || end < 0) {
     throw new Error('Packaged KJV search data has an unexpected format: ' + filename);
   }
-  return JSON.parse(source.slice(start + assignment.length, end));
+  const json = source.slice(start + assignment.length, end);
+  // Generated object indexes may use a JavaScript trailing comma even though
+  // the payload is parsed as JSON. Normalize only the final object-entry comma.
+  return JSON.parse(allowTrailingObjectComma ? json.replace(/,(\s*})$/, '$1') : json);
+}
+
+async function ensureKjvPhraseIndexLoaded() {
+  // The generated phrase candidate index is needed only for multi-word KJV
+  // phrase classification. Keep it out of worker startup and direct-reference
+  // / book-only / single-word selection paths.
+  if (KJV_CORPUS_PHRASE_INDEX && typeof KJV_CORPUS_PHRASE_INDEX === 'object') return;
+  if (!kjvPhraseIndexLoadPromise) {
+    kjvPhraseIndexLoadPromise = (async () => {
+      const index = await fetchPackagedJsonAssignment(
+        'kjv-corpus-phrase-index.js',
+        'const KJV_CORPUS_PHRASE_INDEX = Object.freeze(',
+        ');',
+        true
+      );
+      if (!index || typeof index !== 'object' || Array.isArray(index) || !Object.keys(index).length) {
+        throw new Error('The packaged KJV phrase candidate index is empty or invalid');
+      }
+      KJV_CORPUS_PHRASE_INDEX = Object.freeze(index);
+    })().catch(error => {
+      kjvPhraseIndexLoadPromise = null;
+      throw error;
+    });
+  }
+  await kjvPhraseIndexLoadPromise;
 }
 
 async function ensureKjvCaseSensitiveWordsLoaded() {
@@ -2950,7 +2980,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'blbSuiteValidateSelection') {
     try {
-      const decision = classifySelectionForBlb(String(message.text || '').trim());
+      const decision = await classifySelectionForBlb(String(message.text || '').trim());
       sendResponse({ok:true, valid:decision.valid === true, type:decision.type || ''});
     } catch (error) {
       sendResponse({ok:false, valid:false, error:String(error)});
@@ -2964,7 +2994,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
     try {
-      const decision = classifySelectionForBlb(String(message.text || ''));
+      const decision = await classifySelectionForBlb(String(message.text || ''));
       sendResponse({ok:true, ...decision});
     } catch (error) {
       console.error('KJV Scripture Tools selection classification:', error);
@@ -3953,7 +3983,7 @@ function isGeneratedKjvPhraseCandidate(phraseWords) {
   const wordCount = phraseWords.length;
   if (wordCount < 2 || wordCount > 5) return false;
   const key = `${wordCount}:${hashKjvPhraseWords(phraseWords, 2166136261, 16777619)}:${hashKjvPhraseWords(phraseWords, 2166136261, 2246822519)}`;
-  return Boolean(KJV_CORPUS_PHRASE_INDEX[key]);
+  return Boolean(KJV_CORPUS_PHRASE_INDEX && KJV_CORPUS_PHRASE_INDEX[key]);
 }
 
 // Very short exact KJV fragments can still be too generic for Criteria Search.
@@ -5062,7 +5092,7 @@ function extractResidualProseShortCriteriaQuery(selectionText, excludedVerseText
   return makeQuotedCriteriaOrQuery(terms) || null;
 }
 
-function classifySelectionForBlb(selectionText) {
+async function classifySelectionForBlb(selectionText) {
   const raw = normalizeSelectedScriptureText(selectionText);
   const source = stripLeadingSelectionMarkers(raw);
   if (!source) return {valid:false, type:'EMPTY', text:''};
@@ -5125,6 +5155,7 @@ function classifySelectionForBlb(selectionText) {
   // explicit citations are authoritative, and the remaining selected wording
   // can independently produce Criteria Search terms.
   if (!extractedRefs.length) {
+    if (wordCount >= KJV_PASSAGE_MIN_WORDS) await ensureKjvPhraseIndexLoaded();
     const corpusRange = findKjvVerseRangeForSelection(source);
     if (corpusRange?.url) {
       return {
@@ -5170,6 +5201,7 @@ function classifySelectionForBlb(selectionText) {
   const remainingWordCount = (remainingText.match(/\S+/g) || []).length;
 
   if (remainingWordCount >= KJV_PASSAGE_MIN_WORDS) {
+    await ensureKjvPhraseIndexLoaded();
     // Keep the cited-verse wording excluded all the way through the final
     // Criteria Search extraction. This is a second guard after physical text
     // removal: if punctuation, typography, or a partial citation caused a
@@ -5206,6 +5238,7 @@ function classifySelectionForBlb(selectionText) {
       return {valid:true, type:'KJV_WORD', text:source};
     }
     if (wordCount > 1) {
+      await ensureKjvPhraseIndexLoaded();
       // Multi-word selections must actually occur in the KJV corpus. Merely
       // having every individual word in the KJV vocabulary is not sufficient:
       // ordinary search terms such as "saved how" would otherwise be treated
@@ -5542,7 +5575,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
       // The reference tab is already created. Now run the authoritative
       // classifier and reconcile/open Criteria Search without blocking that
       // first-tab milestone.
-      contextualDecision = classifySelectionForBlb(text);
+      contextualDecision = await classifySelectionForBlb(text);
       const authoritativeQuery = contextualDecision?.kjvPassageQuery || '';
       const criteriaQuery = authoritativeQuery || fastCriteriaQuery;
       if (criteriaQuery) {
@@ -5559,7 +5592,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // Reuse the classification already performed above when a contextual
   // reference was supplied. A multi-reference paragraph must never pay the
   // full corpus-classification cost twice.
-  const decision = contextualDecision || classifySelectionForBlb(text);
+  const decision = contextualDecision || (await classifySelectionForBlb(text));
   if (!decision.valid) return;
   const cleanedText = decision.text;
   if (!cleanedText) return;
