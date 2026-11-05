@@ -326,8 +326,24 @@ function compareBrowsers(results) {
     for (const selector of normalSelectors) {
       const left = a.elements[selector], right = b.elements[selector];
       if (!left || !right) { differences.push(profile.name + ' ' + selector + ': element presence differs'); continue; }
-      for (const property of properties) if (left[property] !== right[property]) {
-        differences.push(profile.name + ' ' + selector + ' ' + property + ': Chrome=' + left[property] + ', Brave=' + right[property]);
+      // Chrome intentionally uses a 1.1 visual scale to match Brave's
+      // roomier appearance. CSS typography declarations remain identical;
+      // rendered element geometry should scale by the same factor.
+      const expectedScale = 1.1;
+      for (const property of properties) {
+        if (property === 'zoom' || property === 'width' || property === 'height') continue;
+        if (left[property] !== right[property]) {
+          differences.push(profile.name + ' ' + selector + ' ' + property + ': Chrome=' + left[property] + ', Brave=' + right[property]);
+        }
+      }
+      if (Math.abs(Number(left.zoom) - expectedScale) > 0.001 || Number(right.zoom) !== 1) {
+        differences.push(profile.name + ' ' + selector + ' zoom: expected Chrome=' + expectedScale + ', Brave=1; Chrome=' + left.zoom + ', Brave=' + right.zoom);
+      }
+      for (const property of ['width', 'height']) {
+        const ratio = Number(right[property]) ? Number(left[property]) / Number(right[property]) : 1;
+        if (Math.abs(ratio - expectedScale) > 0.03) {
+          differences.push(profile.name + ' ' + selector + ' ' + property + ' scale: expected ' + expectedScale + ', got ' + ratio.toFixed(3));
+        }
       }
     }
     const sa = chrome.snapshots.find(x => x.profile === profile.name && x.scenario === 'sensitive');
