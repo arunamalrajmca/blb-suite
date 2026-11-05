@@ -54,7 +54,7 @@ const test = base.extend({
         if (!background.includes(onInstalledStart) || !background.includes(onInstalledEnd)) {
           throw new Error('Unable to instrument the extension onInstalled handler for profiling');
         }
-        const importScriptsMatch = background.match(/^\\uFEFF?\\s*importScripts\\(([^;]+)\\);/);
+        const importScriptsMatch = background.match(/^\uFEFF?\s*importScripts\(([^;]+)\);/);
         if (!importScriptsMatch) {
           throw new Error('Unable to locate the extension importScripts bundle for profiling');
         }
