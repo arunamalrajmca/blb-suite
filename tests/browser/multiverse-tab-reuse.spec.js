@@ -105,10 +105,13 @@ test('independent MultiVerse commands start opening tabs without waiting for ear
 
 test('MultiVerse reuses both 200-verse batches when the same selection is repeated or reordered', async ({ context, extensionWorker }) => {
   const submittedPayloads = [];
+  const postArrivalTimes = [];
+  const testStartedAt = Date.now();
   await context.route('https://www.blueletterbible.org/**', route => {
     if (route.request().method() === 'POST') {
       const body = new URLSearchParams(route.request().postData() || '');
       submittedPayloads.push(body.get('mvText') || '');
+      postArrivalTimes.push(Date.now());
     }
     return route.fulfill({
       status: 200,
@@ -190,6 +193,44 @@ test('MultiVerse opens every batch for requests exceeding 20 tabs', async ({ con
   // Build 4,201 distinct valid KJV verse references from the bundled canon.
   // This requires 22 batches at the production limit of 200 verses per tab.
   const result = await extensionWorker.evaluate(async () => {
+    const profile = { phases: [], batchDurations: [] };
+    const measure = async (name, callback) => {
+      const startedAt = performance.now();
+      try { return await callback(); }
+      finally { profile.phases.push({ phase:name, durationMs:performance.now() - startedAt }); }
+    };
+    const wrap = (name, original) => async (...args) => {
+      const startedAt = performance.now();
+      try { return await original(...args); }
+      finally {
+        const durationMs = performance.now() - startedAt;
+        if (name === 'openBlbMultiVerseRefsSingleBatch') profile.batchDurations.push(durationMs);
+        else profile.phases.push({ phase:name, durationMs });
+      }
+    };
+    const originalExpand = expandMultiVerseRefsToVerses;
+    const originalCompact = compactMultiVerseVerses;
+    const originalCanonical = canonicalMultiVerseSet;
+    const originalSingleBatch = openBlbMultiVerseRefsSingleBatch;
+    const originalDestination = openBlbDestinationByIdentity;
+    expandMultiVerseRefsToVerses = (...args) => {
+      const startedAt = performance.now();
+      try { return originalExpand(...args); }
+      finally { profile.phases.push({ phase:'expandMultiVerseRefsToVerses', durationMs:performance.now() - startedAt }); }
+    };
+    compactMultiVerseVerses = (...args) => {
+      const startedAt = performance.now();
+      try { return originalCompact(...args); }
+      finally { profile.phases.push({ phase:'compactMultiVerseVerses', durationMs:performance.now() - startedAt }); }
+    };
+    canonicalMultiVerseSet = (...args) => {
+      const startedAt = performance.now();
+      try { return originalCanonical(...args); }
+      finally { profile.phases.push({ phase:'canonicalMultiVerseSet', durationMs:performance.now() - startedAt }); }
+    };
+    openBlbMultiVerseRefsSingleBatch = wrap('openBlbMultiVerseRefsSingleBatch', originalSingleBatch);
+    openBlbDestinationByIdentity = wrap('openBlbDestinationByIdentity', originalDestination);
+    try {
     const refs = [];
     for (const book of bookData) {
       for (let chapter = 1; chapter <= book.chapterCount && refs.length < 4201; chapter++) {
@@ -210,9 +251,24 @@ test('MultiVerse opens every batch for requests exceeding 20 tabs', async ({ con
     const expectedVerseKeys = refs.map(ref =>
       String(ref.book).trim().toLowerCase() + '|' + ref.chapter + '|' + ref.from
     );
-    const opened = await openBlbMultiVerseRefs(refs, true);
-    return { requestedVerseCount: refs.length, expectedVerseKeys, opened };
+    const opened = await measure('openBlbMultiVerseRefs', () => openBlbMultiVerseRefs(refs, true));
+    return { requestedVerseCount: refs.length, expectedVerseKeys, opened, profile };
+    } finally {
+      expandMultiVerseRefsToVerses = originalExpand;
+      compactMultiVerseVerses = originalCompact;
+      canonicalMultiVerseSet = originalCanonical;
+      openBlbMultiVerseRefsSingleBatch = originalSingleBatch;
+      openBlbDestinationByIdentity = originalDestination;
+    }
   });
+  console.info('[BLB MULTIVERSE PROFILE]', JSON.stringify({
+    testElapsedMs: Date.now() - testStartedAt,
+    extensionPhases: result.profile,
+    postCount: postArrivalTimes.length,
+    postSpreadMs: postArrivalTimes.length ? Math.max(...postArrivalTimes) - Math.min(...postArrivalTimes) : null,
+    firstPostAfterInvokeMs: postArrivalTimes.length ? Math.min(...postArrivalTimes) - testStartedAt : null,
+    lastPostAfterInvokeMs: postArrivalTimes.length ? Math.max(...postArrivalTimes) - testStartedAt : null
+  }));
 
   const tabIds = result.opened?.tabIds || [];
   try {
