@@ -24,12 +24,12 @@ jobs:
       source_sha: ${{ steps.version.outputs.source_sha }}
     steps:
       - name: Checkout requested release tag
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
           fetch-depth: 0
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Validate release tag and source
@@ -65,7 +65,7 @@ jobs:
     needs: validate
     steps:
       - name: Checkout tagged source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           ref: ${{ needs.validate.outputs.tag }}
       - name: Build reproducible extension package
@@ -89,7 +89,7 @@ jobs:
           $(cat "dist/Blue-Letter-Bible-Suite-$VERSION.zip.sha256")
           EOF
       - name: Upload release package artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: blb-suite-release-${{ needs.validate.outputs.version }}
           path: |

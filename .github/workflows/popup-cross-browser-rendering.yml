@@ -23,10 +23,10 @@ jobs:
     timeout-minutes: 15
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -35,7 +35,7 @@ jobs:
       # suffix only when deliberately refreshing the browser toolchain.
       - name: Restore popup browser and Playwright cache
         id: popup-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v5
         with:
           path: |
             node_modules
@@ -108,7 +108,7 @@ jobs:
       # even when the popup comparison itself fails.
       - name: Save popup browser and Playwright cache
         if: always() && steps.popup-cache.outputs.cache-hit != 'true' && steps.brave-setup.outputs.executable != ''
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v5
         with:
           path: |
             node_modules
@@ -125,7 +125,7 @@ jobs:
 
       - name: Upload browser screenshots and metrics
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: popup-chrome-brave-rendering
           path: |
