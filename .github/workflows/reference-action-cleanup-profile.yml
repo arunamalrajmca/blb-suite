@@ -67,8 +67,8 @@ jobs:
             '[' + (index + 1) + '/' + tests.length + '] ' + item.durationMs + 'ms ' + item.status + ' — ' + item.title
           ));
           const phases = new Map();
-          for (const line of fs.readFileSync(process.env.RUNNER_TEMP + '/reference-profile/profile.log', 'utf8').split(/\\r?\\n/)) {
-            const match = line.match(/BLB_MATRIX_PROFILE (\\{.*\\})/);
+          for (const line of fs.readFileSync(process.env.RUNNER_TEMP + '/reference-profile/profile.log', 'utf8').split(/\r?\n/)) {
+            const match = line.match(/BLB_MATRIX_PROFILE (\{.*\})/);
             if (!match) continue;
             try {
               const entry = JSON.parse(match[1]);
