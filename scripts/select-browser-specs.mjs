@@ -8,6 +8,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
+import { featureSpecs, mappedSpecs, separatelyManagedSpecs, studySessionSpecs } from "./ci-routing-registry.mjs";
 
 const base = process.argv[2];
 const event = process.env.GITHUB_EVENT_NAME || "";
@@ -54,7 +55,7 @@ const ignoredNonRuntime = path =>
   /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/))/.test(path)
   || /^(?:store-assets\/|assets\/store\/|extension\/(?:icons|store-assets)\/)/.test(path)
   || /^extension\/THIRD-PARTY-NOTICES\.txt$/.test(path)
-  || /^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path)
+  || /^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix|ci-routing-registry)\.mjs$/.test(path)
   || path === "scripts/test-ci-routing-selector.js"
   || /^scripts\/test-(?:cross-feature-contracts|extraction-safety-contracts|module-loading-contracts|multiverse-reference-helpers|omnibox-boolean-operators|omnibox-gibberish-filter|omnibox-search-normalization|reference-core-characterization|selection-marker-stripping|selection-text-normalization|single-word-selection-normalization|study-session-export|study-session-normalization)\.js$/i.test(path)
   // Dedicated store verifiers have their own workflows and do not affect runtime browser behavior.
@@ -80,7 +81,7 @@ const focusedOmniboxBackgroundChange = changed.length === 2
   && changed.includes("tests/browser/omnibox-command-routing.spec.js");
 const forceFull = alwaysFull || changed.some(path =>
   !ignoredNonRuntime(path) && (
-    (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js" && path !== "scripts/test-popup-cross-browser-rendering.js" && path !== "scripts/reference-e2e-matrix.json")
+    (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix|ci-routing-registry)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js" && path !== "scripts/test-popup-cross-browser-rendering.js" && path !== "scripts/reference-e2e-matrix.json")
     || path.startsWith("regression-suite/")
     || (path.startsWith("tests/") && !/^tests\/selector\//.test(path) && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path) && path !== "tests/pages/research-derived-smoke.html")
     || ((path === "package.json" || path === "extension/manifest.json") && !sameExceptVersion(path))
@@ -102,133 +103,7 @@ const forceFull = alwaysFull || changed.some(path =>
 
 // Explicit, conservative file-to-feature map. Mapped files only narrow browser
 // coverage when the implementation is genuinely feature-scoped.
-const featureSpecs = [
-  {
-    paths: ["tests/pages/research-derived-smoke.html"],
-    specs: ["tests/browser/research-dom-smoke.spec.js"]
-  },
-  {
-    paths: ["extension/content.js"],
-    specs: [
-      "tests/browser/redirect-toggle-isolation.spec.js",
-      "tests/browser/multiverse-clipboard-reference-pattern.spec.js"
-    ]
-  },
-  {
-    paths: ["extension/background.js"],
-    specs: [
-      "tests/browser/popup-master-toggle-regression.spec.js",
-      "tests/browser/facebook-selection-parser.spec.js",
-      "tests/browser/substack-selection-parser.spec.js",
-      "tests/browser/omnibox-command-routing.spec.js",
-      "tests/browser/pdf-selection-regressions.spec.js"
-    ]
-  },
-  {
-    paths: ["extension/kjv-case-sensitive-words.js"],
-    specs: ["tests/browser/case-sensitive-routing-behavior.spec.js"]
-  },
-  {
-    paths: ["extension/omnibox-search-helpers.js"],
-    specs: ["tests/browser/omnibox-boolean-operators.spec.js"]
-  },
-  {
-    paths: ["extension/selection-text-helpers.js"],
-    specs: ["tests/browser/extension.spec.js", "tests/browser/e2e-core-user-actions.spec.js"]
-  },
-  {
-    paths: ["extension/study-session-export.js"],
-    specs: ["tests/browser/study-session-export.spec.js"]
-  },
-  {
-    paths: ["extension/study-session-normalization.js"],
-    specs: ["tests/browser/study-session-popup-ui-regression.spec.js", "tests/browser/study-backup-restore.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js"]
-  },
-  {
-    paths: ["extension/multiverse-reference-helpers.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/multiverse-contiguous-range-routing.spec.js"]
-  },
-  {
-    paths: ["extension/redirect-bibleref-ranges.js", "extension/redirect-christianity-main-world.js"],
-    specs: ["tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-hostnames.spec.js", "tests/browser/blb-non-kjv-redirect.spec.js"]
-  },
-  {
-    paths: ["extension/source-bible-redirect.js"],
-    specs: ["tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-hostnames.spec.js"]
-  },
-  {
-    paths: ["extension/redirect-scripttagger.js"],
-    specs: ["tests/browser/scripttagger-global-injection.spec.js"]
-  },
-  {
-    paths: ["extension/multiverse-post.html", "extension/multiverse-post.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/multiverse-disjoint-chapter-post.spec.js"]
-  },
-  {
-    paths: ["extension/popup.html", "extension/popup.js"],
-    specs: ["tests/browser/site-feature-defaults.spec.js", "tests/browser/study-session-popup-ui-regression.spec.js", "tests/browser/study-backup-restore.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/redirect-toggle-isolation.spec.js", "tests/browser/popup-master-toggle-regression.spec.js", "tests/browser/pr-422-feature-regressions.spec.js"]
-  },
-  {
-    paths: ["extension/kings-bible-collector.js"],
-    specs: ["tests/browser/kings-bible-collector-behavior.spec.js", "tests/browser/pr-422-feature-regressions.spec.js"]
-  },
-  {
-    paths: ["extension/webster-collector.js"],
-    specs: ["tests/browser/webster-collector-behavior.spec.js"]
-  },
-  {
-    paths: ["extension/source-page-collector.js"],
-    specs: ["tests/browser/source-page-collector-behavior.spec.js"]
-  },
-  {
-    paths: ["extension/multiverse-copy.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js"]
-  },
-  {
-    paths: ["extension/multiverse-tool-view.js"],
-    specs: ["tests/browser/multiverse-tool-view.spec.js"]
-  },
-  {
-    paths: ["extension/study-reference-capture.js"],
-    specs: ["tests/browser/study-reference-capture.spec.js"]
-  },
-  {
-    paths: ["extension/criteria-search-navigation.js"],
-    specs: ["tests/browser/criteria-search-navigation.spec.js"]
-  },
-  {
-    paths: ["extension/blb-auto-hyperlinker.js"],
-    specs: ["tests/browser/blb-auto-hyperlinker.spec.js"]
-  },
-  {
-    paths: ["extension/blb-passive-new-tab-targets.js"],
-    specs: ["tests/browser/blb-passive-new-tab-targets.spec.js"]
-  },
-  {
-    paths: ["extension/blb-draggable-button.js"],
-    specs: ["tests/browser/blb-draggable-button.spec.js"]
-  },
-  {
-    paths: ["extension/blb-parse-popup.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js"]
-  },
-  {
-    paths: ["extension/blb-verse-link-navigation.js"],
-    specs: ["tests/browser/blb-verse-link-navigation.spec.js"]
-  },
-  {
-    paths: ["extension/blb-page-selection-button.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/site-feature-defaults.spec.js", "tests/browser/research-dom-smoke.spec.js", "tests/browser/known-host-extension.spec.js"]
-  },
-  {
-    paths: ["extension/multiverse-handoff.js"],
-    specs: ["tests/browser/multiverse-handoff.spec.js"]
-  },
-  {
-    paths: ["extension/Tutorial.html", "extension/Tutorial.js"],
-    specs: ["tests/browser/pr-422-feature-regressions.spec.js"]
-  }
-];
+
 
 
 let unknownRuntime = false;
@@ -257,60 +132,11 @@ const missingMappedSpecs = [...specs].filter(path => !existingBrowserSpecs.has(p
 // the full suite if any mapped target no longer exists in the checked-out tree.
 const full = forceFull || unknownRuntime || missingMappedSpecs.length > 0;
 const selected = [...specs].filter(path => existingBrowserSpecs.has(path)).sort();
-const mappedSpecs = new Set([
-  "tests/browser/redirect-source-url-patterns.spec.js",
-  "tests/browser/omnibox-boolean-operators.spec.js",
-  "tests/browser/e2e-core-user-actions.spec.js",
-  "tests/browser/kings-bible-collector-behavior.spec.js",
-  "tests/browser/feature-lifecycle-regressions.spec.js",
-  "tests/browser/study-backup-restore.spec.js",
-  "tests/browser/study-reference-capture.spec.js",
-  "tests/browser/study-session-export.spec.js",
-  "tests/browser/extension.spec.js",
-  "tests/browser/known-host-extension.spec.js",
-  "tests/browser/pr-422-feature-regressions.spec.js",
- 
-  "tests/browser/redirect-hostnames.spec.js",
-  "tests/browser/blb-non-kjv-redirect.spec.js",
-  "tests/browser/scripttagger-global-injection.spec.js",
-  "tests/browser/shared-regex-patterns.spec.js",
-  "tests/browser/rediscover-sagacity-button.spec.js",
-  "tests/browser/research-dom-smoke.spec.js",
-  "tests/browser/right-panel-default-expanded.spec.js",
-  "tests/browser/multiverse-tab-reuse.spec.js",
-  "tests/browser/multiverse-contiguous-range-routing.spec.js",
-  "tests/browser/multiverse-disjoint-chapter-post.spec.js",
-  "tests/browser/multiverse-tool-view.spec.js",
-  "tests/browser/multiverse-handoff.spec.js",
-  "tests/browser/blb-passive-new-tab-targets.spec.js",
-  "tests/browser/source-page-collector-behavior.spec.js",
-  "tests/browser/blb-verse-link-navigation.spec.js",
-  "tests/browser/criteria-search-navigation.spec.js",
-  "tests/browser/performance.spec.js",
-  "tests/browser/site-feature-defaults.spec.js",
-  "tests/browser/study-session-popup-ui-regression.spec.js",
-  "tests/browser/webster-collector-behavior.spec.js",
-  "tests/browser/blb-auto-hyperlinker.spec.js",
-  "tests/browser/blb-draggable-button.spec.js",
-  "tests/browser/case-sensitive-routing-behavior.spec.js",
-  "tests/browser/redirect-toggle-isolation.spec.js",
-  "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
-  "tests/browser/popup-master-toggle-regression.spec.js",
-  "tests/browser/facebook-selection-parser.spec.js",
-  "tests/browser/substack-selection-parser.spec.js",
-  "tests/browser/omnibox-command-routing.spec.js",
-  "tests/browser/pdf-selection-regressions.spec.js"
-]);
-const separatelyManagedSpecs = new Set(["tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/performance.spec.js"]);
+
+
 const unmapped = selected.filter(path => !mappedSpecs.has(path) && !separatelyManagedSpecs.has(path));
 const has = (...names) => full || selected.some(path => names.includes(path));
-const studySessionSpecs = new Set([
-  "tests/browser/feature-lifecycle-regressions.spec.js",
-  "tests/browser/study-backup-restore.spec.js",
-  "tests/browser/study-reference-capture.spec.js",
-  "tests/browser/study-session-export.spec.js",
-  "tests/browser/study-session-popup-ui-regression.spec.js"
-]);
+
 
 const values = {
   full_browser_suite: String(full),

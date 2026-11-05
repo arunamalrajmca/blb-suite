@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 const selectorSource = readFileSync(new URL("../../scripts/select-browser-specs.mjs", import.meta.url), "utf8");
+const registrySource = readFileSync(new URL("../../scripts/ci-routing-registry.mjs", import.meta.url), "utf8");
 const classifierSource = readFileSync(new URL("../../scripts/classify-ci-changes.mjs", import.meta.url), "utf8");
 
 function git(cwd, ...args) {
@@ -17,6 +18,7 @@ function scenario(path, before, after) {
   try {
     for (const [file, content] of [
       ["scripts/select-browser-specs.mjs", selectorSource],
+      ["scripts/ci-routing-registry.mjs", registrySource],
       ["scripts/classify-ci-changes.mjs", classifierSource],
       ["package.json", JSON.stringify({ name: "fixture", version: "1.0.0", scripts: { test: "before" } }) + "\n"],
       ["extension/manifest.json", JSON.stringify({ manifest_version: 3, version: "1.0.0", permissions: ["tabs"] }) + "\n"]

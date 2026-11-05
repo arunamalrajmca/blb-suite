@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 const selectorSource = readFileSync(new URL("../../scripts/select-browser-specs.mjs", import.meta.url), "utf8");
+const registrySource = readFileSync(new URL("../../scripts/ci-routing-registry.mjs", import.meta.url), "utf8");
 const classifierSource = readFileSync(new URL("../../scripts/classify-ci-changes.mjs", import.meta.url), "utf8");
 const workflowSource = readFileSync(new URL("../../.github/workflows/browser-tests.yml", import.meta.url), "utf8");
 const zipWorkflowSource = readFileSync(new URL("../../.github/workflows/zip-integrity.yml", import.meta.url), "utf8");
@@ -21,6 +22,7 @@ function runScenario(changedPath) {
   try {
     for (const [path, content] of [
       ["scripts/select-browser-specs.mjs", selectorSource],
+      ["scripts/ci-routing-registry.mjs", registrySource],
       ["scripts/classify-ci-changes.mjs", classifierSource]
     ]) {
       const target = join(root, path);
