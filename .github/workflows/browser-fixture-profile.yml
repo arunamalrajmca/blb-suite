@@ -18,7 +18,7 @@ concurrency:
 
 jobs:
   profile:
-    name: Profile generic alias Double-click matrix
+    name: Profile generic alias Double-click action phases
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -47,7 +47,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: double-click-generic-alias-profile
+          name: double-click-generic-alias-action-phases
           path: ${{ runner.temp }}/browser-profile/profile.log
           if-no-files-found: warn
           retention-days: 14
