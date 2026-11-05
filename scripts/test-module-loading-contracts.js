@@ -84,7 +84,6 @@ if (!importMatch) {
     'kjv-corpus-word-verse-index.js',
     'kjv-corpus-verses.js',
     'kjv-corpus-phrase-index.js',
-    'kjv-corpus-original-case.js',
     'kjv-case-sensitive-words.js',
     'case-sensitive-search-core.js',
     'case-sensitive-routing.js',
@@ -100,10 +99,23 @@ if (!importMatch) {
   } else {
     pass('service-worker import dependency order remains stable');
   }
-  if (background.indexOf('importScripts(') !== background.lastIndexOf('importScripts(')) {
-    fail('service-worker bootstrap has a single top-level importScripts call');
+  const lazyCorpusLoader = background.match(/function ensureKjvOriginalCaseCorpusLoaded\(\) \{([\\s\\S]*?)\\n\}/);
+  if (!lazyCorpusLoader
+      || !lazyCorpusLoader[1].includes("typeof KJV_CORPUS_ORIGINAL_CASE === 'undefined'")
+      || !lazyCorpusLoader[1].includes("importScripts('kjv-corpus-original-case.js')")) {
+    fail('original-case corpus is guarded and loaded only by its explicit lazy loader');
   } else {
-    pass('service-worker bootstrap importScripts call remains singular');
+    pass('original-case corpus has a guarded on-demand loader');
+  }
+  const importCalls = [...background.matchAll(/importScripts\(/g)];
+  if (importCalls.length !== 2
+      || importCalls[0].index !== background.indexOf('importScripts(')
+      || !lazyCorpusLoader
+      || importCalls[1].index < lazyCorpusLoader.index
+      || importCalls[1].index > lazyCorpusLoader.index + lazyCorpusLoader[0].length) {
+    fail('service-worker uses one eager bootstrap and one guarded on-demand import');
+  } else {
+    pass('service-worker eager bootstrap and lazy import locations remain constrained');
   }
 }
 
