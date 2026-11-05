@@ -33,9 +33,13 @@ async function waitForBlbTabPath(extensionWorker, expectedPath, timeout = 10000)
 }
 
 async function activateBlbTabForPath(extensionWorker, expectedPath, debug = {}) {
+  const profileEnabled = process.env.BLB_PROFILE_BROWSER_FIXTURES === '1';
+  const profileStartedAt = process.hrtime.bigint();
   const deadline = Date.now() + 10000;
+  let pollCount = 0;
   let lastTabs = [];
   while (Date.now() < deadline) {
+    pollCount += 1;
     lastTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
       items.map(tab => ({ id: tab.id, url: tab.url || tab.pendingUrl || '', active: !!tab.active }))
     ));
@@ -47,10 +51,24 @@ async function activateBlbTabForPath(extensionWorker, expectedPath, debug = {}) 
         return false;
       }
     });
-    if (match) return;
+    if (match) {
+      if (profileEnabled) console.log('BLB_POLL_PROFILE ' + JSON.stringify({
+        phase: 'activation-poll',
+        durationMs: Number(process.hrtime.bigint() - profileStartedAt) / 1e6,
+        pollCount,
+        expectedPath
+      }));
+      return;
+    }
     await new Promise(resolve => setTimeout(resolve, 100));
   }
 
+  if (profileEnabled) console.log('BLB_POLL_PROFILE ' + JSON.stringify({
+    phase: 'activation-poll-timeout',
+    durationMs: Number(process.hrtime.bigint() - profileStartedAt) / 1e6,
+    pollCount,
+    expectedPath
+  }));
   console.error('Double-click activation failure', {
     fragment: debug.fragment || '',
     selector: debug.selector || '',
@@ -1639,6 +1657,7 @@ test.describe('core user-visible E2E', () => {
     // The extension worker is authoritative for Chrome tab state. Do not
     // require Playwright context.pages() to observe the tab before validating
     // the reference; that representation can lag behind chrome.tabs.query().
+    const destinationPollStartedAt = process.hrtime.bigint();
     await expect.poll(() => extensionWorker.evaluate((path) => chrome.tabs.query({}).then(tabs =>
       tabs.some(tab => {
         try {
@@ -1649,6 +1668,7 @@ test.describe('core user-visible E2E', () => {
         }
       })
     ), expectedPath), { timeout: 10000 }).toBe(true);
+    if (process.env.BLB_PROFILE_BROWSER_FIXTURES === '1') console.log('BLB_POLL_PROFILE ' + JSON.stringify({ phase: 'destination-confirmation-poll', durationMs: Number(process.hrtime.bigint() - destinationPollStartedAt) / 1e6, expectedPath }));
     await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
       const matches = tabs.filter(tab => {
         try {
@@ -1667,6 +1687,8 @@ test.describe('core user-visible E2E', () => {
   }
 
   async function setupDoubleClickReferencePage(page, extensionStorage, html) {
+    const setupStartedAt = process.hrtime.bigint();
+    const reusedDocument = page.url() === 'https://example.com/';
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
 
     // Keep the same document for successive grammar cases. The content script
@@ -1674,8 +1696,8 @@ test.describe('core user-visible E2E', () => {
     // navigating again would add a needless reload and readiness delay.
     if (page.url() !== 'https://example.com/') {
       await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-      // Wait only for the initial content-script injection in this test.
-      await page.waitForTimeout(1000);
+      // The double-click handler itself waits for its settings initialization
+      // and replays the event, so no fixed post-navigation sleep is needed.
     }
 
     await page.evaluate((html) => {
@@ -1692,6 +1714,12 @@ test.describe('core user-visible E2E', () => {
       });
       document.body.appendChild(root);
     }, html);
+    if (process.env.BLB_PROFILE_BROWSER_FIXTURES === '1') console.log('BLB_SETUP_PROFILE ' + JSON.stringify({
+      phase: 'double-click-reference-page-setup',
+      durationMs: Number(process.hrtime.bigint() - setupStartedAt) / 1e6,
+      reusedDocument,
+      htmlLength: html.length
+    }));
   }
 
   // Reference coverage is generated exclusively from BOOKS/BOOK_ALIASES so no
@@ -1928,6 +1956,7 @@ test.describe('core user-visible E2E', () => {
   });
 
   async function assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath) {
+    const profileStartedAt = process.hrtime.bigint();
     const token = (await page.locator(selector).textContent() || '').trim();
     const isContextCandidate = await extensionWorker.evaluate(token => {
       const key = String(token || '').toLowerCase();
@@ -1943,8 +1972,10 @@ test.describe('core user-visible E2E', () => {
     }, token);
     // DOM context is intentionally limited to book names/aliases and standalone
     // numbers 1–176. Do not assert that stopwords or punctuation trigger a scan.
-    if (!isContextCandidate) return;
-    await runDoubleClickReferenceToken(page, context, extensionWorker, selector, token, expectedPath);
+    if (isContextCandidate) {
+      await runDoubleClickReferenceToken(page, context, extensionWorker, selector, token, expectedPath);
+    }
+    if (process.env.BLB_PROFILE_BROWSER_FIXTURES === '1') console.log('BLB_ASSERT_PROFILE ' + JSON.stringify({ phase: 'double-click-reference-assertion', durationMs: Number(process.hrtime.bigint() - profileStartedAt) / 1e6, contextCandidate: isContextCandidate, token }));
   }
 
   test('Double-click numbered-book suffixes resolve every supported numbered-book alias @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {

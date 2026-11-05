@@ -1,0 +1,52 @@
+name: Browser fixture and reference polling profile
+
+on:
+  push:
+    branches: [audit/browser-fixture-phase-profiling]
+    paths:
+      - '.github/workflows/browser-fixture-profile.yml'
+      - 'tests/browser/fixtures.js'
+      - 'tests/browser/extension.spec.js'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: browser-fixture-profile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  profile:
+    name: Profile browser fixture and reference tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      BLB_PROFILE_BROWSER_FIXTURES: '1'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run long reference-coverage tests with phase profiling
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/browser-profile"
+          START_MS="$(node -p 'Date.now()')"
+          npx playwright test tests/browser/extension.spec.js \
+            --grep 'Double-click generic reference grammar|Double-click generic reference syntax — spaced forms|Double-click positional context — standalone numeric book tokens|Double-click generic numbered aliases|Double-click numbered-book suffixes' \
+            --workers=1 --reporter=line 2>&1 | tee "$RUNNER_TEMP/browser-profile/profile.log"
+          END_MS="$(node -p 'Date.now()')"
+          echo "Profile process wall time: $((END_MS - START_MS))ms" | tee -a "$RUNNER_TEMP/browser-profile/profile.log"
+      - name: Upload profile log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: browser-fixture-reference-profile
+          path: ${{ runner.temp }}/browser-profile/profile.log
+          if-no-files-found: warn
+          retention-days: 14
