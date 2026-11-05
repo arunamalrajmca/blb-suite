@@ -3018,6 +3018,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blbSuiteOpenSelectionText' || message.type === 'blbSuiteOpenDoubleClickSelectionText') {
+    if (message.clientProfile && globalThis.__BLB_ACTION_PROFILE__) globalThis.__BLB_ACTION_PROFILE__.push({phase:'content-client',source:message.clientProfile.source,...message.clientProfile});
     const isDoubleClickAction = message.type === 'blbSuiteOpenDoubleClickSelectionText';
     if (!(await isSuiteEnabled())) {
       sendResponse({ok:false});
@@ -5410,6 +5411,7 @@ async function getContextualSelectionReference(tabId, selectionText) {
       type: 'blbSuiteResolveContextualSelection',
       selectionText: String(selectionText || '')
     });
+    if (response?.profile && globalThis.__BLB_ACTION_PROFILE__) globalThis.__BLB_ACTION_PROFILE__.push({phase:'content-context-resolver',...response.profile});
     return response?.reference || null;
   } catch (_) {
     // Chrome/Brave PDF viewers and protected pages may reject content-script
