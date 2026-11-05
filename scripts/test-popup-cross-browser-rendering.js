@@ -336,8 +336,9 @@ function compareBrowsers(results) {
           differences.push(profile.name + ' ' + selector + ' ' + property + ': Chrome=' + left[property] + ', Brave=' + right[property]);
         }
       }
-      if (Math.abs(Number(left.zoom) - expectedScale) > 0.001 || Number(right.zoom) !== 1) {
-        differences.push(profile.name + ' ' + selector + ' zoom: expected Chrome=' + expectedScale + ', Brave=1; Chrome=' + left.zoom + ', Brave=' + right.zoom);
+      const expectedChromeZoom = selector === 'body' ? expectedScale : 1;
+      if (Math.abs(Number(left.zoom) - expectedChromeZoom) > 0.001 || Number(right.zoom) !== 1) {
+        differences.push(profile.name + ' ' + selector + ' zoom: expected Chrome=' + expectedChromeZoom + ', Brave=1; Chrome=' + left.zoom + ', Brave=' + right.zoom);
       }
       for (const property of ['width', 'height']) {
         const ratio = Number(right[property]) ? Number(left[property]) / Number(right[property]) : 1;
