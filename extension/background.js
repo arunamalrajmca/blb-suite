@@ -6371,3 +6371,34 @@ installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,curre
   .then(tabs => syncPdfSelectionContextMenuVisibility(tabs[0]))
   .catch(() => {}));
 refreshStudyAutoStopAlarm().catch(()=>{});
+
+// Temporary profiling instrumentation for the action-handoff audit branch only.
+globalThis.__BLB_ACTION_PROFILE__ = [];
+(() => {
+  const profiledFunctions = [
+    'handleBlbSelectionContextMenuClick',
+    'handleOpenBibleSelectionCommand',
+    'openCurrentSelectionInBlb',
+    'openSharedSelectionAction',
+    'getContextualSelectionReference',
+    'getActiveTabSelection',
+    'shouldShowBlbContextMenu',
+    'openBlbPageSelection',
+    'openSelectedPdfBibleRefs',
+    'openBlbDestination',
+    'clearPageSelectionAfterBlbAction'
+  ];
+  for (const name of profiledFunctions) {
+    const original = globalThis[name];
+    if (typeof original !== 'function') continue;
+    globalThis[name] = async function(...args) {
+      const startedAt = performance.now();
+      try { return await original.apply(this, args); }
+      finally {
+        globalThis.__BLB_ACTION_PROFILE__.push({
+          phase: name, durationMs: performance.now() - startedAt
+        });
+      }
+    };
+  }
+})();
