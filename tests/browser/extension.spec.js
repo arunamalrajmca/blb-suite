@@ -475,7 +475,7 @@ test.describe('core user-visible E2E', () => {
                   return null;
                 }), { beforeIds, expectedPath });
               return opened?.path || '';
-            }, { timeout: 1200, message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
+            }, { timeout: 1200, intervals: [20, 40, 80, 160], message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
           } catch (error) {
             failures.push({ book: book.name, separator, action, expectedPath, error: String(error.message || error) });
           } finally {
