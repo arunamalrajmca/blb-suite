@@ -449,12 +449,15 @@ test.describe('core user-visible E2E', () => {
             activeTabId: tabs.find(tab => tab.windowId === source.windowId && tab.active)?.id ?? null
           })), sourceTab);
           recordMatrixPhase('action-existing-tab-snapshot', phaseStartedAt, { book: book.name, separator, action });
+          const sourceAlreadyActive = tabSnapshot.activeTabId === sourceTab.id;
           recordMatrixPhase('action-source-tab-active-before-bring-to-front', process.hrtime.bigint(), {
-            book: book.name, separator, action, sourceAlreadyActive: tabSnapshot.activeTabId === sourceTab.id
+            book: book.name, separator, action, sourceAlreadyActive
           });
           phaseStartedAt = process.hrtime.bigint();
-          await page.bringToFront();
-          recordMatrixPhase('action-page-bring-to-front', phaseStartedAt, { book: book.name, separator, action });
+          if (!sourceAlreadyActive) await page.bringToFront();
+          recordMatrixPhase('action-page-bring-to-front', phaseStartedAt, {
+            book: book.name, separator, action, broughtToFront: !sourceAlreadyActive
+          });
           const beforeIds = tabSnapshot.beforeIds;
           try {
             const actionStartedAt = process.hrtime.bigint();
