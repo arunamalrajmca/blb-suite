@@ -82,8 +82,8 @@ test('MV3 worker routes a real exact-case KJV word to its single matching verse'
     chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
   );
 
-  // Derive the expected destination from the packaged original-case corpus,
-  // then exercise the real omnibox entry point in the running extension worker.
+  // Verify ordinary worker startup omits the original-case corpus, then exercise
+  // the real omnibox entry point before deriving the exact expected destination.
   const runtimeRouting = await extensionWorker.evaluate(() => ({
     generatedWordPresent: KJV_CASE_SENSITIVE_WORDS.has('fathers'),
     routingSelected: shouldUseCaseSensitiveRouting('Fathers'),
