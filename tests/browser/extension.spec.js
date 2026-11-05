@@ -474,8 +474,12 @@ test.describe('core user-visible E2E', () => {
             recordMatrixPhase('selection-and-action-trigger', phaseStartedAt, { book: book.name, separator, action });
 
             let opened = null;
+            let destinationPollAttempts = 0;
+            let destinationQueryDurationMs = 0;
             phaseStartedAt = process.hrtime.bigint();
             await expect.poll(async () => {
+              destinationPollAttempts += 1;
+              const queryStartedAt = process.hrtime.bigint();
               opened = await extensionWorker.evaluate(({ beforeIds, expectedPath }) =>
                 chrome.tabs.query({}).then(tabs => {
                   for (const tab of tabs) {
@@ -491,9 +495,13 @@ test.describe('core user-visible E2E', () => {
                   }
                   return null;
                 }), { beforeIds, expectedPath });
+              destinationQueryDurationMs += Number(process.hrtime.bigint() - queryStartedAt) / 1e6;
               return opened?.path || '';
             }, { timeout: 1200, message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
-            recordMatrixPhase('destination-poll-and-confirmation', phaseStartedAt, { book: book.name, separator, action, openedTabId: opened?.id || null });
+            recordMatrixPhase('destination-poll-and-confirmation', phaseStartedAt, {
+              book, separator, action, openedTabId: opened?.id || null,
+              destinationPollAttempts, destinationQueryDurationMs
+            });
           } catch (error) {
             failures.push({ book: book.name, separator, action, expectedPath, error: String(error.message || error) });
           } finally {
