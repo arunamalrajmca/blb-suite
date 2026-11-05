@@ -450,6 +450,7 @@ test.describe('core user-visible E2E', () => {
           }
           const beforeIds = tabSnapshot.beforeIds;
           try {
+            phaseStartedAt = process.hrtime.bigint();
             if (action === 'Double-Click') {
               await page.evaluate(() => window.getSelection()?.removeAllRanges());
               await page.locator(selector).dblclick();
