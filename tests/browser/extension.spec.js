@@ -470,6 +470,13 @@ test.describe('core user-visible E2E', () => {
               }
             }
 
+            const internalActionProfile = await extensionWorker.evaluate(() => {
+              const entries = globalThis.__BLB_ACTION_PROFILE__ || [];
+              return entries.splice(0, entries.length);
+            });
+            if (internalActionProfile.length) {
+              console.log('BLB_ACTION_INTERNAL_PROFILE ' + JSON.stringify({book:book.name, separator, action, entries:internalActionProfile}));
+            }
             let opened = null;
             await expect.poll(async () => {
               opened = await extensionWorker.evaluate(({ beforeIds, expectedPath }) =>
