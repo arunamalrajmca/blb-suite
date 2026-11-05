@@ -27,7 +27,6 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: npm
 
       - name: Cache Playwright browsers
         uses: actions/cache@v5
@@ -38,7 +37,7 @@ jobs:
             playwright-${{ runner.os }}-
 
       - name: Install dependencies
-        run: npm ci --prefer-offline --no-audit --no-fund
+        run: npm install --prefer-offline --no-audit --no-fund
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
@@ -103,6 +102,7 @@ jobs:
         if: always()
         shell: bash
         run: |
+          mkdir -p "$RUNNER_TEMP/canonical-matrix"
           node <<'NODE'
           const fs = require('node:fs');
           const path = process.env.RUNNER_TEMP + '/canonical-matrix/samples.jsonl';
