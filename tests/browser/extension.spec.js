@@ -32,6 +32,72 @@ async function waitForBlbTabPath(extensionWorker, expectedPath, timeout = 10000)
   return match;
 }
 
+async function waitForNewBlbTabPathOnEvent(extensionWorker, beforeIds, expectedPath, timeout = 1200) {
+  return extensionWorker.evaluate(({ beforeIds, expectedPath, timeout }) => new Promise((resolve, reject) => {
+    const before = new Set(beforeIds);
+    const startedAt = performance.now();
+    let settled = false;
+    let eventCount = 0;
+    let timer = null;
+
+    const matches = (tab, changedUrl) => {
+      if (!tab || tab.id == null || before.has(tab.id)) return null;
+      for (const value of [changedUrl, tab.pendingUrl, tab.url]) {
+        try {
+          const url = new URL(String(value || ''));
+          if (url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath) {
+            return { id: tab.id, path: url.pathname };
+          }
+        } catch (_) {}
+      }
+      return null;
+    };
+
+    const finish = (error, result, source) => {
+      if (settled) return;
+      settled = true;
+      if (timer !== null) clearTimeout(timer);
+      chrome.tabs.onCreated.removeListener(onCreated);
+      chrome.tabs.onUpdated.removeListener(onUpdated);
+      if (error) reject(error);
+      else resolve({
+        ...result,
+        waitMs: performance.now() - startedAt,
+        eventCount,
+        source
+      });
+    };
+
+    const onCreated = tab => {
+      eventCount += 1;
+      const result = matches(tab);
+      if (result) finish(null, result, 'created');
+    };
+    const onUpdated = (tabId, changeInfo, tab) => {
+      eventCount += 1;
+      const result = matches(tab, changeInfo?.url);
+      if (result) finish(null, result, 'updated');
+    };
+
+    // Subscribe before querying so a destination created during the snapshot
+    // cannot be missed. The snapshot also covers tabs opened before listeners.
+    chrome.tabs.onCreated.addListener(onCreated);
+    chrome.tabs.onUpdated.addListener(onUpdated);
+    timer = setTimeout(() => finish(new Error('Timed out waiting for BLB tab: ' + expectedPath)), timeout);
+
+    chrome.tabs.query({}).then(tabs => {
+      if (settled) return;
+      for (const tab of tabs) {
+        const result = matches(tab);
+        if (result) {
+          finish(null, result, 'snapshot');
+          break;
+        }
+      }
+    }).catch(error => finish(error));
+  }), { beforeIds, expectedPath, timeout });
+}
+
 async function activateBlbTabForPath(extensionWorker, expectedPath, debug = {}) {
   const profileEnabled = process.env.BLB_PROFILE_BROWSER_FIXTURES === '1';
   const profileStartedAt = process.hrtime.bigint();
@@ -494,39 +560,24 @@ test.describe('core user-visible E2E', () => {
 
             let opened = null;
             phaseStartedAt = process.hrtime.bigint();
-            await expect.poll(async () => {
-              const pollResult = await extensionWorker.evaluate(({ beforeIds, expectedPath }) => {
-                const queryStartedAt = performance.now();
-                return chrome.tabs.query({}).then(tabs => {
-                  const queryMs = performance.now() - queryStartedAt;
-                  const scanStartedAt = performance.now();
-                  let result = null;
-                  let scannedTabs = 0;
-                  for (const tab of tabs) {
-                    scannedTabs += 1;
-                    if (tab.id == null || beforeIds.includes(tab.id)) continue;
-                    for (const value of [tab.pendingUrl, tab.url]) {
-                      try {
-                        const url = new URL(String(value || ''));
-                        if (url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath) {
-                          result = { id: tab.id, path: url.pathname };
-                          break;
-                        }
-                      } catch (_) {}
-                    }
-                    if (result) break;
-                  }
-                  return { result, queryMs, scanMs: performance.now() - scanStartedAt, scannedTabs };
-                });
-              }, { beforeIds, expectedPath });
-              phaseProfile.destinationPoll.queries += 1;
-              phaseProfile.destinationPoll.queryMs += pollResult.queryMs;
-              phaseProfile.destinationPoll.scanMs += pollResult.scanMs;
-              phaseProfile.destinationPoll.scannedTabs += pollResult.scannedTabs;
-              opened = pollResult.result;
-              return opened?.path || '';
-            }, { timeout: 1200, intervals: [20, 40, 80, 160], message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
+            const eventResult = await waitForNewBlbTabPathOnEvent(
+              extensionWorker,
+              beforeIds,
+              expectedPath,
+              1200
+            );
+            opened = eventResult;
+            phaseProfile.destinationPoll.queries += eventResult.source === 'snapshot' ? 1 : 0;
             phaseProfile.destinationPollMs += Number(process.hrtime.bigint() - phaseStartedAt) / 1e6;
+            expect(opened.path, action + ' must resolve ' + book.name + ' 1:1 with ' + separator)
+              .toBe(expectedPath);
+            console.log('BLB_DESTINATION_EVENT_PROFILE ' + JSON.stringify({
+              action,
+              expectedPath,
+              waitMs: eventResult.waitMs,
+              eventCount: eventResult.eventCount,
+              source: eventResult.source
+            }));
           } catch (error) {
             phaseProfile.destinationPollMs += Number(process.hrtime.bigint() - phaseStartedAt) / 1e6;
             failures.push({ book: book.name, separator, action, expectedPath, error: String(error.message || error) });
