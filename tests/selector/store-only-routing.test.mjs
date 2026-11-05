@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 const selectorSource = readFileSync(new URL("../../scripts/select-browser-specs.mjs", import.meta.url), "utf8");
+const registrySource = readFileSync(new URL("../../scripts/ci-routing-registry.mjs", import.meta.url), "utf8");
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -20,6 +21,9 @@ function runScenario(changedPath) {
     const selectorPath = join(root, "scripts/select-browser-specs.mjs");
     mkdirSync(dirname(selectorPath), { recursive: true });
     writeFileSync(selectorPath, selectorSource);
+    const registryPath = join(root, "scripts/ci-routing-registry.mjs");
+    mkdirSync(dirname(registryPath), { recursive: true });
+    writeFileSync(registryPath, registrySource);
     git(root, "add", ".");
     git(root, "commit", "-qm", "baseline");
     const target = join(root, changedPath);
