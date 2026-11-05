@@ -525,7 +525,7 @@ test.describe('core user-visible E2E', () => {
               phaseProfile.destinationPoll.scannedTabs += pollResult.scannedTabs;
               opened = pollResult.result;
               return opened?.path || '';
-            }, { timeout: 1200, intervals: [20, 40, 80, 160], message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
+            }, { timeout: 1200, intervals: [5, 10, 20, 40], message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
             phaseProfile.destinationPollMs += Number(process.hrtime.bigint() - phaseStartedAt) / 1e6;
           } catch (error) {
             phaseProfile.destinationPollMs += Number(process.hrtime.bigint() - phaseStartedAt) / 1e6;
@@ -538,20 +538,22 @@ test.describe('core user-visible E2E', () => {
                 const queryMs = performance.now() - queryStartedAt;
                 const scanStartedAt = performance.now();
                 let parsedTabs = 0;
-                const candidateTabIds = [];
+                let removedTabs = 0;
+                let removeMs = 0;
                 for (const tab of tabs) {
                   if (tab.id == null || beforeIds.includes(tab.id)) continue;
                   try {
                     parsedTabs += 1;
                     const url = new URL(String(tab.pendingUrl || tab.url || ''));
-                    if (url.hostname === 'www.blueletterbible.org') candidateTabIds.push(tab.id);
+                    if (url.hostname === 'www.blueletterbible.org') {
+                      const removeStartedAt = performance.now();
+                      await chrome.tabs.remove(tab.id);
+                      removeMs += performance.now() - removeStartedAt;
+                      removedTabs += 1;
+                    }
                   } catch (_) {}
                 }
-                const scanMs = performance.now() - scanStartedAt;
-                const removeStartedAt = performance.now();
-                if (candidateTabIds.length) await chrome.tabs.remove(candidateTabIds);
-                const removeMs = performance.now() - removeStartedAt;
-                return { queryMs, scanMs, parsedTabs, candidateTabs: candidateTabIds.length, removeMs, removedTabs: candidateTabIds.length };
+                return { queryMs, scanMs: performance.now() - scanStartedAt, parsedTabs, removeMs, removedTabs };
               });
             }, beforeIds);
             phaseProfile.cleanup.queries += 1;
