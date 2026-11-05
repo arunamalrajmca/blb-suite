@@ -2003,21 +2003,23 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  async function assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath) {
+  async function assertDoubleClickPath(page, context, extensionWorker, selector, expectedPath, contextCandidates = null) {
     const profileStartedAt = process.hrtime.bigint();
     const token = (await page.locator(selector).textContent() || '').trim();
-    const isContextCandidate = await extensionWorker.evaluate(token => {
-      const key = String(token || '').toLowerCase();
-      const bookNames = new Set([
-        ...(BOOKS || []).map(book => String(book.name || '').toLowerCase()),
-        ...Object.keys(BOOK_ALIASES || {}).map(alias => String(alias).toLowerCase())
-      ]);
-      const number = /^\d+$/.test(key) ? Number(key) : NaN;
-      return bookNames.has(key)
-        || (Number.isInteger(number) && number >= 1 && number <= 176)
-        || Object.values(NUMBERED_BOOK_SUFFIX_ALIASES || {}).flat().some(alias => String(alias).toLowerCase() === key)
-        || /^(?:i|ii|iii)$/i.test(key);
-    }, token);
+    const isContextCandidate = contextCandidates
+      ? contextCandidates.has(token.toLowerCase())
+      : await extensionWorker.evaluate(token => {
+        const key = String(token || '').toLowerCase();
+        const bookNames = new Set([
+          ...(BOOKS || []).map(book => String(book.name || '').toLowerCase()),
+          ...Object.keys(BOOK_ALIASES || {}).map(alias => String(alias).toLowerCase())
+        ]);
+        const number = /^\\d+$/.test(key) ? Number(key) : NaN;
+        return bookNames.has(key)
+          || (Number.isInteger(number) && number >= 1 && number <= 176)
+          || Object.values(NUMBERED_BOOK_SUFFIX_ALIASES || {}).flat().some(alias => String(alias).toLowerCase() === key)
+          || /^(?:i|ii|iii)$/i.test(key);
+      }, token);
     // DOM context is intentionally limited to book names/aliases and standalone
     // numbers 1–176. Do not assert that stopwords or punctuation trigger a scan.
     if (isContextCandidate) {
@@ -2258,9 +2260,18 @@ test.describe('core user-visible E2E', () => {
 
   test('Double-click generic canonical references — all 66 books × book/chapter/verse tokens', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(240000);
-    const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
-      name: book.name, urlKey: book.urlKey, chapters: book.chapterCount
-    })));
+    const profileData = await extensionWorker.evaluate(() => ({
+      books: BOOKS.map(book => ({ name: book.name, urlKey: book.urlKey, chapters: book.chapterCount })),
+      candidates: [
+        ...(BOOKS || []).map(book => String(book.name || '').toLowerCase()),
+        ...Object.keys(BOOK_ALIASES || {}).map(alias => String(alias).toLowerCase()),
+        ...Object.values(NUMBERED_BOOK_SUFFIX_ALIASES || {}).flat().map(alias => String(alias).toLowerCase()),
+        ...Array.from({ length: 176 }, (_, index) => String(index + 1)),
+        'i', 'ii', 'iii'
+      ]
+    }));
+    const books = profileData.books;
+    const contextCandidates = new Set(profileData.candidates);
     expect(books).toHaveLength(66);
 
     for (const book of books) {
