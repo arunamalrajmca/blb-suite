@@ -1,3 +1,7 @@
+// Brave exposes navigator.brave; other Chromium browsers use the roomier popup scale.
+// The popup CSS compensates for zoom so its physical width remains unchanged.
+if (!navigator.brave) document.documentElement.classList.add('chrome-popup-density');
+
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
 let currentSiteOrigin = '';
 let currentSiteUrl = '';
