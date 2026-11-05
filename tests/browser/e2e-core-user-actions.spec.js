@@ -4,16 +4,11 @@ function normalizeBlbKjvPath(pathname) {
   return String(pathname || '').replace(/\/s_\d+\/?$/i, '/');
 }
 
-let activeWaitProfile = null;
-
 async function waitForTab(extensionWorker, predicate, timeout = 10000) {
   let match = null;
   let lastTabs = [];
-  let polls = 0;
-  const started = performance.now();
   try {
     await expect.poll(async () => {
-      polls++;
       lastTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
         items.map(tab => ({
           id: tab.id,
@@ -28,12 +23,6 @@ async function waitForTab(extensionWorker, predicate, timeout = 10000) {
   } catch (error) {
     console.error('[waitForTab] timed out; observed tabs:', JSON.stringify(lastTabs));
     throw error;
-  } finally {
-    if (activeWaitProfile) {
-      activeWaitProfile.waitMs += performance.now() - started;
-      activeWaitProfile.polls += polls;
-      activeWaitProfile.calls++;
-    }
   }
   return match;
 }
@@ -73,9 +62,7 @@ function expandGenesisMultiVerseHandoff(mvText) {
 
 async function removeTabById(extensionWorker, id) {
   if (id == null) return;
-  const started = performance.now();
   await extensionWorker.evaluate((tabId) => chrome.tabs.remove(tabId).catch(() => {}), id);
-  if (activeWaitProfile) activeWaitProfile.cleanupMs += performance.now() - started;
 }
 
 async function dismissBlbCookieOverlay(page) {
@@ -1550,8 +1537,6 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
 });
 test('single-token selection actions share positional resolution across books and separators', async ({ page, extensionStorage, extensionWorker }) => {
   test.setTimeout(180000);
-  const waitProfile = { waitMs:0, cleanupMs:0, polls:0, calls:0 };
-  activeWaitProfile = waitProfile;
   await extensionStorage.set({
     masterEnabled: true,
     pageSelectionButtonSites: { 'example.com': true }
@@ -1696,8 +1681,6 @@ test('single-token selection actions share positional resolution across books an
       }
     }
   }
-  activeWaitProfile = null;
-  console.log('[single-token-action-wait-profile]', JSON.stringify(waitProfile));
 });
 
 test('Show on BLB searches the complete numbered book when only its suffix is selected', async ({ page, extensionStorage, extensionWorker }) => {
