@@ -54,7 +54,7 @@ const test = base.extend({
         if (!background.includes(onInstalledStart) || !background.includes(onInstalledEnd)) {
           throw new Error('Unable to instrument the extension onInstalled handler for profiling');
         }
-        const importScriptsMatch = background.match(/^importScripts\\(([^;]+)\\);/);
+        const importScriptsMatch = background.match(/^importScripts\(([^;]+)\);/);
         if (!importScriptsMatch) {
           throw new Error('Unable to locate the extension importScripts bundle for profiling');
         }
@@ -62,9 +62,9 @@ const test = base.extend({
         if (!importScriptNames.length) {
           throw new Error('Unable to parse extension importScripts entries for profiling');
         }
-        const individuallyTimedImports = `for (const __blbScript of ${JSON.stringify(importScriptNames)}) {\\n  const __blbImportStartedAt = performance.now();\\n  importScripts(__blbScript);\\n  globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'service-worker-importScript', script: __blbScript, durationMs: performance.now() - __blbImportStartedAt });\\n}`;
+        const individuallyTimedImports = `for (const __blbScript of ${JSON.stringify(importScriptNames)}) {\n  const __blbImportStartedAt = performance.now();\n  importScripts(__blbScript);\n  globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'service-worker-importScript', script: __blbScript, durationMs: performance.now() - __blbImportStartedAt });\n}`;
         background = background.replace(importScriptsMatch[0], individuallyTimedImports);
-        background = `globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: performance.now(), phases: [] };\\n` + background;
+        background = `globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: performance.now(), phases: [] };\n` + background;
         background = background.replace(onInstalledStart,
           "chrome.runtime.onInstalled.addListener(async details => {\n  const __blbInstallStartedAt = performance.now();\n  globalThis.__BLB_PROFILE_STARTUP__.installReason = details.reason;\n  globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'service-worker-bootstrap-to-onInstalled', durationMs: __blbInstallStartedAt - globalThis.__BLB_PROFILE_STARTUP__.bootstrapAt });\n  try {");
         background = background.replace(
