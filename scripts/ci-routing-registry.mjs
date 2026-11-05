@@ -3,8 +3,7 @@
  * Keep feature ownership and spec classification here so selector behavior
  * cannot drift across parallel inline inventories.
  */
-export const featureSpecs = const featureSpecs = [
-  {
+export const featureSpecs = [{
     paths: ["tests/pages/research-derived-smoke.html"],
     specs: ["tests/browser/research-dom-smoke.spec.js"]
   },
@@ -128,10 +127,10 @@ export const featureSpecs = const featureSpecs = [
   {
     paths: ["extension/Tutorial.html", "extension/Tutorial.js"],
     specs: ["tests/browser/pr-422-feature-regressions.spec.js"]
-  };
+  }
+];
 
-export const mappedSpecs = new Set(const mappedSpecs = new Set([
-  "tests/browser/redirect-source-url-patterns.spec.js",
+export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.spec.js",
   "tests/browser/omnibox-boolean-operators.spec.js",
   "tests/browser/e2e-core-user-actions.spec.js",
   "tests/browser/kings-bible-collector-behavior.spec.js",
@@ -172,11 +171,12 @@ export const mappedSpecs = new Set(const mappedSpecs = new Set([
   "tests/browser/facebook-selection-parser.spec.js",
   "tests/browser/substack-selection-parser.spec.js",
   "tests/browser/omnibox-command-routing.spec.js",
-  "tests/browser/pdf-selection-regressions.spec.js");
-export const separatelyManagedSpecs = new Set(const separatelyManagedSpecs = new Set(["tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/performance.spec.js"]));
-export const studySessionSpecs = new Set(const studySessionSpecs = new Set([
-  "tests/browser/feature-lifecycle-regressions.spec.js",
+  "tests/browser/pdf-selection-regressions.spec.js"
+]);
+export const separatelyManagedSpecs = new Set(["tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/performance.spec.js"]));
+export const studySessionSpecs = new Set(["tests/browser/feature-lifecycle-regressions.spec.js",
   "tests/browser/study-backup-restore.spec.js",
   "tests/browser/study-reference-capture.spec.js",
   "tests/browser/study-session-export.spec.js",
-  "tests/browser/study-session-popup-ui-regression.spec.js");
+  "tests/browser/study-session-popup-ui-regression.spec.js"
+]);
