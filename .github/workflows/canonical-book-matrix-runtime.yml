@@ -1,0 +1,152 @@
+name: Canonical book matrix runtime measurement
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: canonical-book-matrix-runtime-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    name: Measure 66-book matrix (3 isolated samples)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json', 'package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run isolated matrix measurements
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/canonical-matrix"
+          SAMPLES="$RUNNER_TEMP/canonical-matrix/samples.jsonl"
+          : > "$SAMPLES"
+
+          for sample in 1 2 3; do
+            REPORT="$RUNNER_TEMP/canonical-matrix/playwright-$sample.json"
+            START_MS="$(node -p 'Date.now()')"
+            echo "Starting isolated canonical matrix sample $sample/3"
+            npx playwright test tests/browser/extension.spec.js \
+              --grep "all 66 canonical book suffixes resolve through all four actions with both separators" \
+              --workers=1 --reporter=json > "$REPORT"
+            END_MS="$(node -p 'Date.now()')"
+            WALL_MS="$((END_MS - START_MS))"
+
+            node - "$REPORT" "$sample" "$WALL_MS" "$SAMPLES" <<'NODE'
+          const fs = require('node:fs');
+          const [reportPath, sampleText, wallText, outputPath] = process.argv.slice(2);
+          const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
+          const target = 'all 66 canonical book suffixes resolve through all four actions with both separators';
+          const matches = [];
+          function visit(suites) {
+            for (const suite of suites || []) {
+              for (const spec of suite.specs || []) {
+                if (spec.title === target) {
+                  for (const test of spec.tests || []) {
+                    for (const result of test.results || []) {
+                      matches.push({ status: result.status, duration: result.duration });
+                    }
+                  }
+                }
+              }
+              visit(suite.suites);
+            }
+          }
+          visit(report.suites);
+          if (matches.length !== 1) {
+            throw new Error(`Expected exactly one matrix result, found ${matches.length}`);
+          }
+          if (matches[0].status !== 'passed') {
+            throw new Error(`Matrix result was ${matches[0].status}`);
+          }
+          const record = {
+            sample: Number(sampleText),
+            wallMs: Number(wallText),
+            testMs: matches[0].duration,
+            status: matches[0].status
+          };
+          fs.appendFileSync(outputPath, JSON.stringify(record) + '\n');
+          console.log(`Sample ${record.sample}/3: Playwright test ${(record.testMs / 1000).toFixed(2)}s; process wall time ${(record.wallMs / 1000).toFixed(2)}s`);
+          NODE
+          done
+
+      - name: Summarize measurements
+        if: always()
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs = require('node:fs');
+          const path = process.env.RUNNER_TEMP + '/canonical-matrix/samples.jsonl';
+          const output = process.env.RUNNER_TEMP + '/canonical-matrix/runtime-summary.md';
+          const rows = fs.existsSync(path)
+            ? fs.readFileSync(path, 'utf8').trim().split(/\r?\n/).filter(Boolean).map(line => JSON.parse(line))
+            : [];
+          const median = values => {
+            const sorted = [...values].sort((a, b) => a - b);
+            return sorted.length ? sorted[Math.floor(sorted.length / 2)] : null;
+          };
+          const testMedian = median(rows.map(row => row.testMs));
+          const wallMedian = median(rows.map(row => row.wallMs));
+          const historicalBaselineMs = 75400;
+          const comparison = testMedian == null
+            ? 'Not available: no successful sample was recorded.'
+            : `${((historicalBaselineMs - testMedian) / historicalBaselineMs * 100).toFixed(1)}% faster/slower versus the historical 75.4s reference (positive means faster; runner conditions may differ).`;
+          const lines = [
+            '# Canonical 66-book matrix runtime',
+            '',
+            'The workflow runs the unchanged 528-check matrix three times in isolation with one Playwright worker.',
+            '',
+            '| Sample | Playwright test duration | Process wall time | Status |',
+            '|---:|---:|---:|---|',
+            ...rows.map(row => `| ${row.sample} | ${(row.testMs / 1000).toFixed(2)}s | ${(row.wallMs / 1000).toFixed(2)}s | ${row.status} |`),
+            '',
+            `- Median Playwright test duration: ${testMedian == null ? 'n/a' : (testMedian / 1000).toFixed(2) + 's'}`,
+            `- Median process wall time: ${wallMedian == null ? 'n/a' : (wallMedian / 1000).toFixed(2) + 's'}`,
+            `- Historical comparison: ${comparison}`,
+            '- Historical reference: 75.4s, recorded 2026-11-04; this is not a controlled same-runner A/B comparison.',
+            ''
+          ];
+          fs.writeFileSync(output, lines.join('\n'));
+          console.log(lines.join('\n'));
+          if (rows.length !== 3) {
+            console.error(`Expected 3 successful samples; recorded ${rows.length}.`);
+            process.exitCode = 1;
+          }
+          NODE
+
+      - name: Upload raw measurements and reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: canonical-book-matrix-runtime
+          path: |
+            ${{ runner.temp }}/canonical-matrix/
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 14
