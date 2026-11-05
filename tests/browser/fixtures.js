@@ -46,6 +46,39 @@ const test = base.extend({
     try {
       const copyStartedAt = process.hrtime.bigint();
       fs.cpSync(sourceExtensionPath, extensionPath, { recursive: true });
+      if (profileFixtures) {
+        const backgroundPath = path.join(extensionPath, 'background.js');
+        let background = fs.readFileSync(backgroundPath, 'utf8');
+        const onInstalledStart = 'chrome.runtime.onInstalled.addListener(async details => {';
+        const onInstalledEnd = "  installPdfSelectionContextMenu().catch(() => {});\n});";
+        if (!background.includes(onInstalledStart) || !background.includes(onInstalledEnd)) {
+          throw new Error('Unable to instrument the extension onInstalled handler for profiling');
+        }
+        const importScriptsMatch = background.match(/^\uFEFF?\s*importScripts\(([^;]+)\);/);
+        if (!importScriptsMatch) {
+          throw new Error('Unable to locate the extension importScripts bundle for profiling');
+        }
+        const importScriptNames = [...importScriptsMatch[1].matchAll(/'([^']+)'/g)].map(match => match[1]);
+        if (!importScriptNames.length) {
+          throw new Error('Unable to parse extension importScripts entries for profiling');
+        }
+        const individuallyTimedImports = `for (const __blbScript of ${JSON.stringify(importScriptNames)}) {\n  const __blbImportStartedAt = performance.now();\n  importScripts(__blbScript);\n  globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'service-worker-importScript', script: __blbScript, durationMs: performance.now() - __blbImportStartedAt });\n}`;
+        background = background.replace(importScriptsMatch[0], individuallyTimedImports);
+        background = `globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: performance.now(), phases: [] };\n` + background;
+        background = background.replace(onInstalledStart,
+          "chrome.runtime.onInstalled.addListener(async details => {\n  const __blbInstallStartedAt = performance.now();\n  globalThis.__BLB_PROFILE_STARTUP__.installReason = details.reason;\n  globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'service-worker-bootstrap-to-onInstalled', durationMs: __blbInstallStartedAt - globalThis.__BLB_PROFILE_STARTUP__.bootstrapAt });\n  try {");
+        background = background.replace(
+          '    const data = await chrome.storage.local.get({redirectEnabled:null, masterEnabled:null});',
+          "    const __blbReadStartedAt = performance.now();\n    const data = await chrome.storage.local.get({redirectEnabled:null, masterEnabled:null});\n    globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'onInstalled-storage-read', durationMs: performance.now() - __blbReadStartedAt });"
+        );
+        background = background.replace(
+          '    if (Object.keys(defaults).length) await chrome.storage.local.set(defaults);',
+          "    if (Object.keys(defaults).length) {\n      const __blbWriteStartedAt = performance.now();\n      await chrome.storage.local.set(defaults);\n      globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'onInstalled-storage-default-write', durationMs: performance.now() - __blbWriteStartedAt, defaultKeys: Object.keys(defaults) });\n    }"
+        );
+        background = background.replace(onInstalledEnd,
+          "  installPdfSelectionContextMenu().catch(() => {});\n  } finally {\n    globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'onInstalled-handler-total', durationMs: performance.now() - __blbInstallStartedAt });\n  }\n});");
+        fs.writeFileSync(backgroundPath, background);
+      }
       profileFixture('extension-directory-copy', copyStartedAt);
       const manifestStartedAt = process.hrtime.bigint();
       const manifestPath = path.join(extensionPath, 'manifest.json');
@@ -101,15 +134,46 @@ const test = base.extend({
     // Otherwise a late default write (masterEnabled: true) can race a test that
     // intentionally sets masterEnabled: false and make the result nondeterministic.
     const storageStartedAt = process.hrtime.bigint();
-    await extensionWorker.evaluate(async () => {
+    const readiness = await extensionWorker.evaluate(async () => {
+      const metrics = { attempts: 0, storageReadMs: 0, pollingSleepMs: 0, initialized: false };
       for (let attempt = 0; attempt < 100; attempt++) {
+        const readStartedAt = performance.now();
         const { masterEnabled } = await chrome.storage.local.get({ masterEnabled: null });
-        if (masterEnabled !== null) return;
+        metrics.storageReadMs += performance.now() - readStartedAt;
+        metrics.attempts++;
+        if (masterEnabled !== null) {
+          metrics.initialized = true;
+          break;
+        }
+        const sleepStartedAt = performance.now();
         await new Promise(resolve => setTimeout(resolve, 25));
+        metrics.pollingSleepMs += performance.now() - sleepStartedAt;
       }
-      throw new Error('Extension settings were not initialized before browser tests started');
+      if (!metrics.initialized) {
+        throw new Error('Extension settings were not initialized before browser tests started');
+      }
+      return { ...metrics, startup: globalThis.__BLB_PROFILE_STARTUP__ || null };
     });
-    profileFixture('extension-storage-initialization', storageStartedAt);
+    profileFixture('extension-storage-readiness-polling', storageStartedAt, {
+      attempts: readiness.attempts,
+      storageReadMs: readiness.storageReadMs,
+      pollingSleepMs: readiness.pollingSleepMs
+    });
+    if (readiness.startup) {
+      for (const phase of readiness.startup.phases) {
+        profileFixture(phase.phase, storageStartedAt, {
+          durationMs: phase.durationMs,
+          installReason: readiness.startup.installReason,
+          defaultKeys: phase.defaultKeys,
+          script: phase.script
+        });
+      }
+    }
+    profileFixture('extension-storage-initialization', storageStartedAt, {
+      attempts: readiness.attempts,
+      storageReadMs: readiness.storageReadMs,
+      pollingSleepMs: readiness.pollingSleepMs
+    });
     await use({
       set: async (values) => extensionWorker.evaluate(async (data) => {
         await chrome.storage.local.set(data);
