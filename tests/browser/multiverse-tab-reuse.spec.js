@@ -178,10 +178,13 @@ test('tracked MultiVerse reservations survive an intermediate loading URL', asyn
 test('MultiVerse opens every batch for requests exceeding 20 tabs', async ({ context, extensionWorker }) => {
   test.setTimeout(120000);
   const submittedPayloads = [];
+  const postArrivalTimes = [];
+  const testStartedAt = Date.now();
   await context.route('https://www.blueletterbible.org/**', route => {
     if (route.request().method() === 'POST') {
       const body = new URLSearchParams(route.request().postData() || '');
       submittedPayloads.push(body.get('mvText') || '');
+      postArrivalTimes.push(Date.now());
     }
     return route.fulfill({
       status: 200,
