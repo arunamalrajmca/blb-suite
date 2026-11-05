@@ -525,7 +525,7 @@ test.describe('core user-visible E2E', () => {
               phaseProfile.destinationPoll.scannedTabs += pollResult.scannedTabs;
               opened = pollResult.result;
               return opened?.path || '';
-            }, { timeout: 1200, intervals: [5, 10, 20, 40], message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
+            }, { timeout: 1200, intervals: [20, 40, 80, 160], message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
             phaseProfile.destinationPollMs += Number(process.hrtime.bigint() - phaseStartedAt) / 1e6;
           } catch (error) {
             phaseProfile.destinationPollMs += Number(process.hrtime.bigint() - phaseStartedAt) / 1e6;
