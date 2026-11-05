@@ -429,17 +429,25 @@ test.describe('core user-visible E2E', () => {
     }, books);
 
     const failures = [];
+    const phaseProfile = { snapshotMs: 0, focusMs: 0, triggerMs: 0, destinationPollMs: 0, cleanupMs: 0, checks: 0, focusCount: 0 };
     const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];
     for (const book of books) {
       const expectedPath = '/kjv/' + book.urlKey + '/1/1/';
       for (const separator of ['colon', 'dot']) {
         const selector = '#all-66-book-suffix-' + separator + '-' + book.bookNumber;
         for (const action of actions) {
+          let phaseStartedAt = process.hrtime.bigint();
           const tabSnapshot = await extensionWorker.evaluate(source => chrome.tabs.query({}).then(tabs => ({
             beforeIds: tabs.map(tab => tab.id).filter(id => id != null),
             activeTabId: tabs.find(tab => tab.windowId === source.windowId && tab.active)?.id ?? null
           })), sourceTab);
-          if (tabSnapshot.activeTabId !== sourceTab.id) await page.bringToFront();
+          phaseProfile.snapshotMs += Number(process.hrtime.bigint() - phaseStartedAt) / 1e6;
+          if (tabSnapshot.activeTabId !== sourceTab.id) {
+            phaseStartedAt = process.hrtime.bigint();
+            await page.bringToFront();
+            phaseProfile.focusMs += Number(process.hrtime.bigint() - phaseStartedAt) / 1e6;
+            phaseProfile.focusCount += 1;
+          }
           const beforeIds = tabSnapshot.beforeIds;
           try {
             if (action === 'Double-Click') {
@@ -469,8 +477,10 @@ test.describe('core user-visible E2E', () => {
                 }, selectedText);
               }
             }
+            phaseProfile.triggerMs += Number(process.hrtime.bigint() - phaseStartedAt) / 1e6;
 
             let opened = null;
+            phaseStartedAt = process.hrtime.bigint();
             await expect.poll(async () => {
               opened = await extensionWorker.evaluate(({ beforeIds, expectedPath }) =>
                 chrome.tabs.query({}).then(tabs => {
@@ -489,9 +499,12 @@ test.describe('core user-visible E2E', () => {
                 }), { beforeIds, expectedPath });
               return opened?.path || '';
             }, { timeout: 1200, intervals: [20, 40, 80, 160], message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
+            phaseProfile.destinationPollMs += Number(process.hrtime.bigint() - phaseStartedAt) / 1e6;
           } catch (error) {
+            phaseProfile.destinationPollMs += Number(process.hrtime.bigint() - phaseStartedAt) / 1e6;
             failures.push({ book: book.name, separator, action, expectedPath, error: String(error.message || error) });
           } finally {
+            phaseStartedAt = process.hrtime.bigint();
             await extensionWorker.evaluate(beforeIds => chrome.tabs.query({}).then(async tabs => {
               for (const tab of tabs) {
                 if (tab.id == null || beforeIds.includes(tab.id)) continue;
@@ -501,10 +514,13 @@ test.describe('core user-visible E2E', () => {
                 } catch (_) {}
               }
             }), beforeIds);
+            phaseProfile.cleanupMs += Number(process.hrtime.bigint() - phaseStartedAt) / 1e6;
+            phaseProfile.checks += 1;
           }
         }
       }
     }
+    console.log('BLB_ACTION_MATRIX_PROFILE ' + JSON.stringify(phaseProfile));
     expect(failures, 'all four actions must resolve every canonical book suffix with both separators: ' + JSON.stringify(failures, null, 2)).toEqual([]);
   });
 
