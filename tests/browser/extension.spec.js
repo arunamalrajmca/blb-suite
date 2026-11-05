@@ -429,7 +429,7 @@ test.describe('core user-visible E2E', () => {
     }, books);
 
     const failures = [];
-    const phaseProfile = { snapshotMs: 0, focusMs: 0, triggerMs: 0, actionTriggerMs: { 'Show on BLB': 0, 'Alt+B': 0, 'Right-Click': 0, 'Double-Click': 0 }, actionCounts: { 'Show on BLB': 0, 'Alt+B': 0, 'Right-Click': 0, 'Double-Click': 0 }, actionSubphaseMs: { 'Show on BLB': { selectionSetup: 0, buttonWaitAndClick: 0 }, 'Alt+B': { selectionSetup: 0, handlerDispatch: 0 }, 'Right-Click': { selectionSetup: 0, selectionRead: 0, handlerDispatch: 0 }, 'Double-Click': { gesture: 0 } }, destinationPollMs: 0, cleanupMs: 0, checks: 0, focusCount: 0 };
+    const phaseProfile = { snapshotMs: 0, focusMs: 0, triggerMs: 0, actionTriggerMs: { 'Show on BLB': 0, 'Alt+B': 0, 'Right-Click': 0, 'Double-Click': 0 }, actionCounts: { 'Show on BLB': 0, 'Alt+B': 0, 'Right-Click': 0, 'Double-Click': 0 }, actionSubphaseMs: { 'Show on BLB': { selectionSetup: 0, buttonWaitAndClick: 0 }, 'Alt+B': { selectionSetup: 0, handlerDispatch: 0 }, 'Right-Click': { selectionSetup: 0, selectionRead: 0, handlerDispatch: 0 }, 'Double-Click': { gesture: 0 } }, destinationPollMs: 0, destinationPoll: { queries: 0, queryMs: 0, scanMs: 0, scannedTabs: 0 }, cleanupMs: 0, cleanup: { queries: 0, queryMs: 0, scanMs: 0, parsedTabs: 0, removeMs: 0, removedTabs: 0 }, checks: 0, focusCount: 0 };
     const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];
     for (const book of books) {
       const expectedPath = '/kjv/' + book.urlKey + '/1/1/';
@@ -495,21 +495,35 @@ test.describe('core user-visible E2E', () => {
             let opened = null;
             phaseStartedAt = process.hrtime.bigint();
             await expect.poll(async () => {
-              opened = await extensionWorker.evaluate(({ beforeIds, expectedPath }) =>
-                chrome.tabs.query({}).then(tabs => {
+              const pollResult = await extensionWorker.evaluate(({ beforeIds, expectedPath }) => {
+                const queryStartedAt = performance.now();
+                return chrome.tabs.query({}).then(tabs => {
+                  const queryMs = performance.now() - queryStartedAt;
+                  const scanStartedAt = performance.now();
+                  let result = null;
+                  let scannedTabs = 0;
                   for (const tab of tabs) {
+                    scannedTabs += 1;
                     if (tab.id == null || beforeIds.includes(tab.id)) continue;
                     for (const value of [tab.pendingUrl, tab.url]) {
                       try {
                         const url = new URL(String(value || ''));
                         if (url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath) {
-                          return { id: tab.id, path: url.pathname };
+                          result = { id: tab.id, path: url.pathname };
+                          break;
                         }
                       } catch (_) {}
                     }
+                    if (result) break;
                   }
-                  return null;
-                }), { beforeIds, expectedPath });
+                  return { result, queryMs, scanMs: performance.now() - scanStartedAt, scannedTabs };
+                });
+              }, { beforeIds, expectedPath });
+              phaseProfile.destinationPoll.queries += 1;
+              phaseProfile.destinationPoll.queryMs += pollResult.queryMs;
+              phaseProfile.destinationPoll.scanMs += pollResult.scanMs;
+              phaseProfile.destinationPoll.scannedTabs += pollResult.scannedTabs;
+              opened = pollResult.result;
               return opened?.path || '';
             }, { timeout: 1200, intervals: [20, 40, 80, 160], message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
             phaseProfile.destinationPollMs += Number(process.hrtime.bigint() - phaseStartedAt) / 1e6;
@@ -518,15 +532,36 @@ test.describe('core user-visible E2E', () => {
             failures.push({ book: book.name, separator, action, expectedPath, error: String(error.message || error) });
           } finally {
             phaseStartedAt = process.hrtime.bigint();
-            await extensionWorker.evaluate(beforeIds => chrome.tabs.query({}).then(async tabs => {
-              for (const tab of tabs) {
-                if (tab.id == null || beforeIds.includes(tab.id)) continue;
-                try {
-                  const url = new URL(String(tab.pendingUrl || tab.url || ''));
-                  if (url.hostname === 'www.blueletterbible.org') await chrome.tabs.remove(tab.id);
-                } catch (_) {}
-              }
-            }), beforeIds);
+            const cleanupResult = await extensionWorker.evaluate(beforeIds => {
+              const queryStartedAt = performance.now();
+              return chrome.tabs.query({}).then(async tabs => {
+                const queryMs = performance.now() - queryStartedAt;
+                const scanStartedAt = performance.now();
+                let parsedTabs = 0;
+                let removedTabs = 0;
+                let removeMs = 0;
+                for (const tab of tabs) {
+                  if (tab.id == null || beforeIds.includes(tab.id)) continue;
+                  try {
+                    parsedTabs += 1;
+                    const url = new URL(String(tab.pendingUrl || tab.url || ''));
+                    if (url.hostname === 'www.blueletterbible.org') {
+                      const removeStartedAt = performance.now();
+                      await chrome.tabs.remove(tab.id);
+                      removeMs += performance.now() - removeStartedAt;
+                      removedTabs += 1;
+                    }
+                  } catch (_) {}
+                }
+                return { queryMs, scanMs: performance.now() - scanStartedAt, parsedTabs, removeMs, removedTabs };
+              });
+            }, beforeIds);
+            phaseProfile.cleanup.queries += 1;
+            phaseProfile.cleanup.queryMs += cleanupResult.queryMs;
+            phaseProfile.cleanup.scanMs += cleanupResult.scanMs;
+            phaseProfile.cleanup.parsedTabs += cleanupResult.parsedTabs;
+            phaseProfile.cleanup.removeMs += cleanupResult.removeMs;
+            phaseProfile.cleanup.removedTabs += cleanupResult.removedTabs;
             phaseProfile.cleanupMs += Number(process.hrtime.bigint() - phaseStartedAt) / 1e6;
             phaseProfile.checks += 1;
           }
