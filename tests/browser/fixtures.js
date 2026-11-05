@@ -34,7 +34,9 @@ const test = base.extend({
     const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-suite-test-extension-'));
     const extensionPath = path.join(tempRoot, 'extension');
     try {
+      const copyStartedAt = process.hrtime.bigint();
       fs.cpSync(sourceExtensionPath, extensionPath, { recursive: true });
+      profileFixture('extension-directory-copy', copyStartedAt);
       const manifestPath = path.join(extensionPath, 'manifest.json');
       const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
       manifest.host_permissions = [...new Set([...(manifest.host_permissions || []), ...testHosts])];

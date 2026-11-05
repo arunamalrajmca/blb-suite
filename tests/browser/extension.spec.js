@@ -1639,6 +1639,7 @@ test.describe('core user-visible E2E', () => {
     // The extension worker is authoritative for Chrome tab state. Do not
     // require Playwright context.pages() to observe the tab before validating
     // the reference; that representation can lag behind chrome.tabs.query().
+    const destinationPollStartedAt = process.hrtime.bigint();
     await expect.poll(() => extensionWorker.evaluate((path) => chrome.tabs.query({}).then(tabs =>
       tabs.some(tab => {
         try {
@@ -1649,6 +1650,7 @@ test.describe('core user-visible E2E', () => {
         }
       })
     ), expectedPath), { timeout: 10000 }).toBe(true);
+    if (process.env.BLB_PROFILE_BROWSER_FIXTURES === '1') console.log('BLB_POLL_PROFILE ' + JSON.stringify({ phase: 'destination-confirmation-poll', durationMs: Number(process.hrtime.bigint() - destinationPollStartedAt) / 1e6, expectedPath }));
     await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
       const matches = tabs.filter(tab => {
         try {
@@ -1943,8 +1945,10 @@ test.describe('core user-visible E2E', () => {
     }, token);
     // DOM context is intentionally limited to book names/aliases and standalone
     // numbers 1–176. Do not assert that stopwords or punctuation trigger a scan.
-    if (!isContextCandidate) return;
-    await runDoubleClickReferenceToken(page, context, extensionWorker, selector, token, expectedPath);
+    if (isContextCandidate) {
+      await runDoubleClickReferenceToken(page, context, extensionWorker, selector, token, expectedPath);
+    }
+    if (process.env.BLB_PROFILE_BROWSER_FIXTURES === '1') console.log('BLB_ASSERT_PROFILE ' + JSON.stringify({ phase: 'double-click-reference-assertion', durationMs: Number(process.hrtime.bigint() - profileStartedAt) / 1e6, contextCandidate: isContextCandidate, token }));
   }
 
   test('Double-click numbered-book suffixes resolve every supported numbered-book alias @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
