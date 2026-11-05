@@ -544,9 +544,10 @@ test.describe('core user-visible E2E', () => {
                 removeDurationMs
               };
             }, beforeIds);
-            recordMatrixPhase('cleanup-tab-query', phaseStartedAt, { book: book.name, separator, action, tabCount: cleanup.tabCount });
-            recordMatrixPhase('cleanup-tab-filter', process.hrtime.bigint() - BigInt(Math.round(cleanup.filterDurationMs * 1e6)), { book: book.name, separator, action });
-            recordMatrixPhase('cleanup-tab-removal', process.hrtime.bigint() - BigInt(Math.round(cleanup.removeDurationMs * 1e6)), { book: book.name, separator, action, candidateCount: cleanup.candidateCount, removedCount: cleanup.removedCount });
+            const cleanupEndedAt = process.hrtime.bigint();
+            recordMatrixPhase('cleanup-tab-query', cleanupEndedAt - BigInt(Math.round(cleanup.queryDurationMs * 1e6)), { book: book.name, separator, action, tabCount: cleanup.tabCount });
+            recordMatrixPhase('cleanup-tab-filter', cleanupEndedAt - BigInt(Math.round(cleanup.filterDurationMs * 1e6)), { book: book.name, separator, action });
+            recordMatrixPhase('cleanup-tab-removal', cleanupEndedAt - BigInt(Math.round(cleanup.removeDurationMs * 1e6)), { book: book.name, separator, action, candidateCount: cleanup.candidateCount, removedCount: cleanup.removedCount });
             recordMatrixPhase('cleanup-total', phaseStartedAt, { book: book.name, separator, action, ...cleanup });
             recordMatrixPhase('matrix-iteration-total', iterationStartedAt, { book: book.name, separator, action });
           }
