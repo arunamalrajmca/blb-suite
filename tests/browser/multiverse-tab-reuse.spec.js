@@ -230,15 +230,6 @@ test('MultiVerse opens every batch for requests exceeding 20 tabs', async ({ con
     phases.push({ phase:'openBlbMultiVerseRefs-total', durationMs:performance.now() - openStartedAt });
     return { requestedVerseCount: refs.length, expectedVerseKeys, opened, profile:{phases} };
   });
-  console.info('[BLB MULTIVERSE PROFILE]', JSON.stringify({
-    testElapsedMs: Date.now() - testStartedAt,
-    extensionPhases: result.profile,
-    postCount: postArrivalTimes.length,
-    postSpreadMs: postArrivalTimes.length ? Math.max(...postArrivalTimes) - Math.min(...postArrivalTimes) : null,
-    firstPostAfterInvokeMs: postArrivalTimes.length ? Math.min(...postArrivalTimes) - testStartedAt : null,
-    lastPostAfterInvokeMs: postArrivalTimes.length ? Math.max(...postArrivalTimes) - testStartedAt : null
-  }));
-
   const tabIds = result.opened?.tabIds || [];
   try {
     expect(result.requestedVerseCount).toBe(4201);
@@ -289,6 +280,14 @@ test('MultiVerse opens every batch for requests exceeding 20 tabs', async ({ con
 
     // 4,201 verses must be submitted as 21 full batches plus one final verse.
     await expect.poll(() => submittedPayloads.length, { timeout: 50000 }).toBe(22);
+    console.info('[BLB MULTIVERSE PROFILE]', JSON.stringify({
+      testElapsedMs: Date.now() - testStartedAt,
+      extensionPhases: result.profile,
+      postCount: postArrivalTimes.length,
+      postSpreadMs: postArrivalTimes.length ? Math.max(...postArrivalTimes) - Math.min(...postArrivalTimes) : null,
+      firstPostAfterInvokeMs: postArrivalTimes.length ? Math.min(...postArrivalTimes) - testStartedAt : null,
+      lastPostAfterInvokeMs: postArrivalTimes.length ? Math.max(...postArrivalTimes) - testStartedAt : null
+    }));
     expect(submittedPayloads.map(countSubmittedVerses).sort((a, b) => b - a))
       .toEqual([...Array(21).fill(200), 1]);
 
