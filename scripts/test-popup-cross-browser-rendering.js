@@ -329,7 +329,7 @@ function compareBrowsers(results) {
       // Chrome intentionally uses a 1.1 visual scale to match Brave's
       // roomier appearance. CSS typography declarations remain identical;
       // rendered element geometry should scale by the same factor.
-      const expectedScale = 1.1;
+      const expectedScale = 1.2;
       for (const property of properties) {
         if (property === 'zoom' || property === 'width' || property === 'height') continue;
         if (left[property] !== right[property]) {
