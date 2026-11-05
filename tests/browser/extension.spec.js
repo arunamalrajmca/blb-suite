@@ -435,7 +435,6 @@ test.describe('core user-visible E2E', () => {
                 } catch (_) {}
               }
             }), beforeIds);
-            await page.bringToFront();
           }
         }
       }
