@@ -114,11 +114,11 @@ test('KJV phrase candidate index loads only when multi-word classification needs
   expect(await extensionWorker.evaluate(() => KJV_CORPUS_PHRASE_INDEX)).toBeNull();
 
   const phrase = await extensionWorker.evaluate(() =>
-    chrome.runtime.sendMessage({ type: 'blbSuiteClassifySelection', text: 'Jesus wept' })
+    chrome.runtime.sendMessage({ type: 'blbSuiteClassifySelection', text: 'For God so loved the world' })
   );
   expect(phrase.valid).toBe(true);
   expect(phrase.type).toBe('KJV_REFERENCE_RANGE');
-  expect(phrase.directRef.url).toContain('/kjv/jhn/11/35');
+  expect(phrase.directRef.url).toContain('/kjv/jhn/3/16');
   const loaded = await extensionWorker.evaluate(() => ({
     loaded: KJV_CORPUS_PHRASE_INDEX !== null,
     keys: Object.keys(KJV_CORPUS_PHRASE_INDEX || {}).length
