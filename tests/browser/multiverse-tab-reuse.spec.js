@@ -219,8 +219,14 @@ test('MultiVerse opens every batch for requests exceeding 20 tabs', async ({ con
       String(ref.book).trim().toLowerCase() + '|' + ref.chapter + '|' + ref.from
     );
     phases.push({ phase:'generate-4201-refs-and-expected-keys', durationMs:performance.now() - refsStartedAt });
+    globalThis.__BLB_MULTIVERSE_PROFILE__ = phases;
     const openStartedAt = performance.now();
-    const opened = await openBlbMultiVerseRefs(refs, true);
+    let opened;
+    try {
+      opened = await openBlbMultiVerseRefs(refs, true);
+    } finally {
+      globalThis.__BLB_MULTIVERSE_PROFILE__ = null;
+    }
     phases.push({ phase:'openBlbMultiVerseRefs-total', durationMs:performance.now() - openStartedAt });
     return { requestedVerseCount: refs.length, expectedVerseKeys, opened, profile:{phases} };
   });
