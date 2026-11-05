@@ -1821,13 +1821,38 @@ async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
     await paceCaseSensitiveTab(openBlbDestination(targets[i], false, false));
   }
 }
-function ensureKjvOriginalCaseCorpusLoaded() {
+let kjvOriginalCaseCorpusLoadPromise = null;
+
+async function ensureKjvOriginalCaseCorpusLoaded() {
   // The 4.5 MB original-case corpus is needed only by explicit `b cs` searches.
-  // Keep it out of ordinary worker startup; the compact routing index remains
-  // eagerly available so non-matching queries still fall back immediately.
-  if (typeof KJV_CORPUS_ORIGINAL_CASE === 'undefined') {
-    importScripts('kjv-corpus-original-case.js');
+  // Fetch the packaged classic-script resource as data: MV3 workers cannot
+  // reliably import a script after startup, but can fetch their own resources.
+  // Parse only its JSON array; never evaluate downloaded JavaScript.
+  if (typeof KJV_CORPUS_ORIGINAL_CASE !== 'undefined') return;
+  if (!kjvOriginalCaseCorpusLoadPromise) {
+    kjvOriginalCaseCorpusLoadPromise = (async () => {
+      const response = await fetch(chrome.runtime.getURL('kjv-corpus-original-case.js'));
+      if (!response.ok) {
+        throw new Error('Unable to fetch the packaged original-case KJV corpus: HTTP ' + response.status);
+      }
+      const source = await response.text();
+      const assignment = 'const KJV_CORPUS_ORIGINAL_CASE = ';
+      const start = source.indexOf(assignment);
+      const end = source.indexOf(';\\nif (typeof self', start);
+      if (start < 0 || end < 0) {
+        throw new Error('The packaged original-case KJV corpus has an unexpected format');
+      }
+      const corpus = JSON.parse(source.slice(start + assignment.length, end));
+      if (!Array.isArray(corpus) || !corpus.length) {
+        throw new Error('The packaged original-case KJV corpus is empty or invalid');
+      }
+      self.KJV_CORPUS_ORIGINAL_CASE = corpus;
+    })().catch(error => {
+      kjvOriginalCaseCorpusLoadPromise = null;
+      throw error;
+    });
   }
+  await kjvOriginalCaseCorpusLoadPromise;
 }
 
 async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab') {
@@ -1878,7 +1903,7 @@ async function handleCaseSensitiveBCommand(queryText, disposition = 'currentTab'
     return true;
   }
 
-  ensureKjvOriginalCaseCorpusLoaded();
+  await ensureKjvOriginalCaseCorpusLoaded();
   const matches = BLBCaseSensitiveCore.searchCaseSensitiveCorpus(parsed.query, KJV_CORPUS_ORIGINAL_CASE, KJV_CORPUS_CASE_VERSE_INDEX);
   if (!matches.length) {
     // Zero exact-case corpus matches fall back to BLB's native search.
