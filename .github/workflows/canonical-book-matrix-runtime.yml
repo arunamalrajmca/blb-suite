@@ -1,6 +1,10 @@
 name: Canonical book matrix runtime measurement
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/canonical-book-matrix-runtime.yml'
   workflow_dispatch:
 
 concurrency:
