@@ -1849,7 +1849,7 @@ async function ensureKjvCaseSensitiveWordsLoaded() {
       const words = await fetchPackagedJsonAssignment(
         'kjv-case-sensitive-words.js',
         'const KJV_CASE_SENSITIVE_WORDS = new Set(',
-        ');\\nif (typeof self'
+        ');\nif (typeof self'
       );
       if (!Array.isArray(words) || !words.length) {
         throw new Error('The packaged case-sensitive KJV word set is empty or invalid');
@@ -1875,7 +1875,7 @@ async function ensureKjvOriginalCaseCorpusLoaded() {
         fetchPackagedJsonAssignment(
           'kjv-corpus-original-case.js',
           'const KJV_CORPUS_ORIGINAL_CASE = ',
-          ';\\nif (typeof self'
+          ';\nif (typeof self'
         ),
         fetchPackagedJsonAssignment(
           'kjv-corpus-case-verse-index.js',
