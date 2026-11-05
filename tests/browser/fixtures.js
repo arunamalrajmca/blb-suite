@@ -56,17 +56,17 @@ const test = base.extend({
         }
         background = `globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: performance.now(), phases: [] };\n` + background;
         background = background.replace(onInstalledStart,
-          "chrome.runtime.onInstalled.addListener(async details => {\\n  const __blbInstallStartedAt = performance.now();\\n  globalThis.__BLB_PROFILE_STARTUP__.installReason = details.reason;\\n  globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'service-worker-bootstrap-to-onInstalled', durationMs: __blbInstallStartedAt - globalThis.__BLB_PROFILE_STARTUP__.bootstrapAt });\\n  try {");
+          "chrome.runtime.onInstalled.addListener(async details => {\n  const __blbInstallStartedAt = performance.now();\n  globalThis.__BLB_PROFILE_STARTUP__.installReason = details.reason;\n  globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'service-worker-bootstrap-to-onInstalled', durationMs: __blbInstallStartedAt - globalThis.__BLB_PROFILE_STARTUP__.bootstrapAt });\n  try {");
         background = background.replace(
           '    const data = await chrome.storage.local.get({redirectEnabled:null, masterEnabled:null});',
-          "    const __blbReadStartedAt = performance.now();\\n    const data = await chrome.storage.local.get({redirectEnabled:null, masterEnabled:null});\\n    globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'onInstalled-storage-read', durationMs: performance.now() - __blbReadStartedAt });"
+          "    const __blbReadStartedAt = performance.now();\n    const data = await chrome.storage.local.get({redirectEnabled:null, masterEnabled:null});\n    globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'onInstalled-storage-read', durationMs: performance.now() - __blbReadStartedAt });"
         );
         background = background.replace(
           '    if (Object.keys(defaults).length) await chrome.storage.local.set(defaults);',
-          "    if (Object.keys(defaults).length) {\\n      const __blbWriteStartedAt = performance.now();\\n      await chrome.storage.local.set(defaults);\\n      globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'onInstalled-storage-default-write', durationMs: performance.now() - __blbWriteStartedAt, defaultKeys: Object.keys(defaults) });\\n    }"
+          "    if (Object.keys(defaults).length) {\n      const __blbWriteStartedAt = performance.now();\n      await chrome.storage.local.set(defaults);\n      globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'onInstalled-storage-default-write', durationMs: performance.now() - __blbWriteStartedAt, defaultKeys: Object.keys(defaults) });\n    }"
         );
         background = background.replace(onInstalledEnd,
-          "  installPdfSelectionContextMenu().catch(() => {});\\n  } finally {\\n    globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'onInstalled-handler-total', durationMs: performance.now() - __blbInstallStartedAt });\\n  }\\n});");
+          "  installPdfSelectionContextMenu().catch(() => {});\n  } finally {\n    globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'onInstalled-handler-total', durationMs: performance.now() - __blbInstallStartedAt });\n  }\n});");
         fs.writeFileSync(backgroundPath, background);
       }
       profileFixture('extension-directory-copy', copyStartedAt);
