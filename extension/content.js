@@ -3438,6 +3438,7 @@ function handleDoubleClickBlb(event) {
         // Re-read the native selection on every frame until Chromium commits
         // the current double-click. The physical event coordinates remain the
         // authoritative target while the Selection is settling.
+        const actionProfileStartedAt = performance.now();
         const plainTextSelectionSnapshot=normalizeSelectionText(getDoubleClickSelection(event)).normalize('NFKC');
         let selection=plainTextSelectionSnapshot;
         // On double-click, Chromium may still expose the previous word's
@@ -3830,6 +3831,7 @@ function handleDoubleClickBlb(event) {
               : '';
             safeRuntimeSendMessage({
               type:'blbSuiteOpenDoubleClickSelectionText',
+              clientProfile:{source:'double-click',gestureResolveMs:performance.now()-actionProfileStartedAt},
               text:selection,
               contextualReference:null,
               contextualReferenceResolved:true,
@@ -3860,6 +3862,7 @@ function handleDoubleClickBlb(event) {
           : null;
         const openRequest = safeRuntimeSendMessage({
           type:'blbSuiteOpenDoubleClickSelectionText',
+          clientProfile:{source:'double-click',gestureResolveMs:performance.now()-actionProfileStartedAt},
           text:selection,
           ...(isStandaloneNumericBook ? {standaloneBookNumber:Number(selection)} : {}),
           contextualReference,
