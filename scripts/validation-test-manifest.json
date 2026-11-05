@@ -1,0 +1,72 @@
+[
+  {
+    "script": "test-module-loading-contracts.js",
+    "failure": "module-loading contract checks failed\\n",
+    "success": "module-loading and shared-reference contracts validated"
+  },
+  {
+    "script": "test-ci-routing-selector.js",
+    "failure": "CI routing selector contract checks failed\\n",
+    "success": "CI routing selector decisions validated against synthetic diffs"
+  },
+  {
+    "script": "test-cross-feature-contracts.js",
+    "failure": "cross-feature integration contract checks failed\\n",
+    "success": "cross-feature integration contracts validated"
+  },
+  {
+    "script": "test-omnibox-gibberish-filter.js",
+    "failure": "Omnibox gibberish-filter tests failed\\n",
+    "success": "Omnibox gibberish-filter contracts validated"
+  },
+  {
+    "script": "test-omnibox-boolean-operators.js",
+    "failure": "Omnibox Boolean operator tests failed\\n",
+    "success": "Omnibox Boolean operator contracts validated"
+  },
+  {
+    "script": "test-omnibox-search-normalization.js",
+    "failure": "Omnibox search normalization tests failed\\n",
+    "success": "Omnibox search normalization contracts validated"
+  },
+  {
+    "script": "test-extraction-safety-contracts.js",
+    "failure": "extraction safety contract checks failed\\n",
+    "success": "manifest, dependency order, and module registration safety validated"
+  },
+  {
+    "script": "test-selection-text-normalization.js",
+    "failure": "selection-text normalization tests failed\\n",
+    "success": "selection-text normalization contracts validated"
+  },
+  {
+    "script": "test-selection-marker-stripping.js",
+    "failure": "selection-marker stripping tests failed\\n",
+    "success": "selection-marker stripping contracts validated"
+  },
+  {
+    "script": "test-single-word-selection-normalization.js",
+    "failure": "single-word selection normalization tests failed\\n",
+    "success": "single-word selection normalization contracts validated"
+  },
+  {
+    "script": "test-multiverse-reference-helpers.js",
+    "failure": "MultiVerse reference helper tests failed\\n",
+    "success": "MultiVerse reference helper contracts validated"
+  },
+  {
+    "script": "test-study-session-normalization.js",
+    "failure": "Study Sessions normalization contract tests failed\\n",
+    "success": "Study Sessions normalization contracts validated"
+  },
+  {
+    "script": "test-reference-core-characterization.js",
+    "failure": "shared Bible-reference characterization tests failed\\n",
+    "success": "shared Bible-reference parsing and resolution contracts validated"
+  },
+  {
+    "script": "test-study-session-export.js",
+    "failure": "Study Sessions export contract tests failed\\n",
+    "success": "Study Sessions export contracts validated"
+  }
+]
