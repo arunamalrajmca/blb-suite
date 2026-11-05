@@ -30,7 +30,7 @@ function section(group) { currentGroup = group; }
 function test(name, fn) {
   if (requestedGroup !== 'all' && requestedGroup !== currentGroup) return;
   try { fn(); passed++; console.log(`✓ [${currentGroup}] ${name}`); }
-  catch (error) { failures.push({ name, error: error.message, group: currentGroup }); console.log(`✗ [${currentGroup}] ${name}\\n  ${error.message}`); }
+  catch (error) { failures.push({ name, error: error.message, group: currentGroup }); console.log(`✗ [${currentGroup}] ${name}\n  ${error.message}`); }
 }
 function read(name) { return fs.readFileSync(path.join(ROOT, name), 'utf8'); }
 function loadPure(files) {
@@ -42,7 +42,7 @@ function loadPure(files) {
 const context = { test, section, read, loadPure, fixture, expectedVersion, ROOT, assert, fs, path, vm, bg: read('background.js'), content: read('content.js') };
 
 console.log(`BLB Suite Regression Suite — manifest ${expectedVersion}`);
-console.log(`Package: ${ROOT}\\n`);
+console.log(`Package: ${ROOT}\n`);
 
 registerPackageTests(context);
 registerResolverTests(context);
@@ -54,9 +54,9 @@ registerFeatureIntegrationTests(context);
 registerStudySessionTests(context);
 registerSelectionClassificationTests(context);
 
-console.log(`\\nGROUP: ${requestedGroup}\\nRESULT: ${failures.length ? 'FAIL' : 'PASS'} — ${passed} passed, ${failures.length} failed`);
+console.log(`\nGROUP: ${requestedGroup}\nRESULT: ${failures.length ? 'FAIL' : 'PASS'} — ${passed} passed, ${failures.length} failed`);
 if (failures.length) {
-  console.error('\\nFailures:');
+  console.error('\nFailures:');
   for (const failure of failures) console.error(`- ${failure.name}: ${failure.error}`);
   process.exitCode = 1;
 }
