@@ -429,7 +429,7 @@ test.describe('core user-visible E2E', () => {
     }, books);
 
     const failures = [];
-    const phaseProfile = { snapshotMs: 0, focusMs: 0, triggerMs: 0, destinationPollMs: 0, cleanupMs: 0, checks: 0, focusCount: 0 };
+    const phaseProfile = { snapshotMs: 0, focusMs: 0, triggerMs: 0, actionTriggerMs: { 'Show on BLB': 0, 'Alt+B': 0, 'Right-Click': 0, 'Double-Click': 0 }, actionCounts: { 'Show on BLB': 0, 'Alt+B': 0, 'Right-Click': 0, 'Double-Click': 0 }, destinationPollMs: 0, cleanupMs: 0, checks: 0, focusCount: 0 };
     const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];
     for (const book of books) {
       const expectedPath = '/kjv/' + book.urlKey + '/1/1/';
@@ -478,7 +478,10 @@ test.describe('core user-visible E2E', () => {
                 }, selectedText);
               }
             }
-            phaseProfile.triggerMs += Number(process.hrtime.bigint() - phaseStartedAt) / 1e6;
+            const actionTriggerDurationMs = Number(process.hrtime.bigint() - phaseStartedAt) / 1e6;
+            phaseProfile.triggerMs += actionTriggerDurationMs;
+            phaseProfile.actionTriggerMs[action] += actionTriggerDurationMs;
+            phaseProfile.actionCounts[action] += 1;
 
             let opened = null;
             phaseStartedAt = process.hrtime.bigint();
