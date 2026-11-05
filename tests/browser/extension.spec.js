@@ -2338,6 +2338,7 @@ test.describe('core user-visible E2E', () => {
 
   test('Double-click generic aliases — every shared alias across all books', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(240000);
+    const aliasProfile = { setupMs:0, assertMs:0, setups:0, assertions:0 };
     const data = await extensionWorker.evaluate(() => {
       const byBook = Object.create(null);
       for (const book of BOOKS) byBook[book.name] = { name: book.name, urlKey: book.urlKey };
@@ -2355,18 +2356,25 @@ test.describe('core user-visible E2E', () => {
       const tokens = item.alias.trim().split(/\s+/);
       if (tokens.some(token => token.toLowerCase() === 'sam')) continue;
       const tokenHtml = tokens.map((token, i) => `<span class="alias-token" data-index="${i}">${token}</span>`).join(' ');
+      const setupStarted = performance.now();
       await setupDoubleClickReferencePage(
         page, extensionStorage,
         `<p id="ref">${tokenHtml} <span class="chapter">1</span>:<span class="verse">1</span></p>`
       );
+      aliasProfile.setupMs += performance.now() - setupStarted;
+      aliasProfile.setups++;
       const expectedPath = `/kjv/${item.urlKey}/1/1/`;
 
       // Every token in a multi-token alias must resolve through the same
       // surrounding reference, not be reinterpreted independently.
       for (let i = 0; i < tokens.length; i++) {
+        const assertStarted = performance.now();
         await assertDoubleClickPath(page, context, extensionWorker, `#ref .alias-token[data-index="${i}"]`, expectedPath);
+        aliasProfile.assertMs += performance.now() - assertStarted;
+        aliasProfile.assertions++;
       }
     }
+    process.stdout.write('[double-click-alias-profile] ' + JSON.stringify(aliasProfile) + '\\n');
   });
 
   test('Double-click numbered-book suffixes preserve standalone KJV word destinations without a prefix @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
