@@ -458,30 +458,27 @@ test.describe('core user-visible E2E', () => {
               phaseProfile.actionSubphaseMs[action].gesture += Number(process.hrtime.bigint() - subphaseStartedAt) / 1e6;
             } else {
               let subphaseStartedAt = process.hrtime.bigint();
-              await page.locator(selector).evaluate(element => {
+              const selectedText = await page.locator(selector).evaluate(element => {
                 const range = document.createRange();
                 range.selectNodeContents(element);
                 const selection = window.getSelection();
                 selection.removeAllRanges();
                 selection.addRange(range);
                 element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+                return selection.toString();
               });
               phaseProfile.actionSubphaseMs[action].selectionSetup += Number(process.hrtime.bigint() - subphaseStartedAt) / 1e6;
               if (action === 'Show on BLB') {
                 subphaseStartedAt = process.hrtime.bigint();
                 const button = page.locator('#blb-suite-page-selection-button');
-                await expect(button).toBeVisible({ timeout: 1200 });
-                await button.click();
+                // Locator.click auto-waits for visibility, stability, and enabled state.
+                await button.click({ timeout: 1200 });
                 phaseProfile.actionSubphaseMs[action].buttonWaitAndClick += Number(process.hrtime.bigint() - subphaseStartedAt) / 1e6;
               } else if (action === 'Alt+B') {
                 subphaseStartedAt = process.hrtime.bigint();
                 await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
                 phaseProfile.actionSubphaseMs[action].handlerDispatch += Number(process.hrtime.bigint() - subphaseStartedAt) / 1e6;
               } else {
-                subphaseStartedAt = process.hrtime.bigint();
-                const selectedText = await page.evaluate(() => window.getSelection()?.toString() || '');
-                phaseProfile.actionSubphaseMs[action].selectionRead += Number(process.hrtime.bigint() - subphaseStartedAt) / 1e6;
-                subphaseStartedAt = process.hrtime.bigint();
                 await extensionWorker.evaluate(async text => {
                   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
                   if (!tab?.id) throw new Error('No active source tab for context-menu action');
