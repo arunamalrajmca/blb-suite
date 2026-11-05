@@ -68,6 +68,8 @@ function packageValidationPath(path) {
     || path === "scripts/select-browser-specs.mjs"
     || path === "scripts/select-reference-matrix.mjs"
     || path === "scripts/ci-routing-registry.mjs"
+    || path === "scripts/run-validation-tests.js"
+    || path === "scripts/validation-test-manifest.json"
     || path === "scripts/reference-e2e-matrix.json"
     || path === "scripts/test-ci-routing-selector.js"
     || /^scripts\/test-(?:cross-feature-contracts|extraction-safety-contracts|module-loading-contracts|multiverse-reference-helpers|omnibox-boolean-operators|omnibox-gibberish-filter|omnibox-search-normalization|reference-core-characterization|selection-marker-stripping|selection-text-normalization|single-word-selection-normalization|study-session-export|study-session-normalization)\.js$/i.test(path)
