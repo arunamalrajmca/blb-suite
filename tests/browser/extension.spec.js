@@ -1746,8 +1746,15 @@ test.describe('core user-visible E2E', () => {
     // Use the exact text-range center computed above. Clicking the broader
     // inline element can place Chromium's dblclick coordinates on an adjacent
     // inter-token whitespace gap even when the token itself is visually hit.
+    const gestureStartedAt = process.hrtime.bigint();
     await page.mouse.dblclick(rect.x, rect.y);
-    await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')});
+    const gestureMs = Number(process.hrtime.bigint() - gestureStartedAt) / 1e6;
+    const selectionReadStartedAt = process.hrtime.bigint();
+    const selectedText = await page.evaluate(() => window.getSelection?.().toString() || '');
+    const selectionReadMs = Number(process.hrtime.bigint() - selectionReadStartedAt) / 1e6;
+    const activationStartedAt = process.hrtime.bigint();
+    await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText});
+    const activationMs = Number(process.hrtime.bigint() - activationStartedAt) / 1e6;
     // The extension worker is authoritative for Chrome tab state. Do not
     // require Playwright context.pages() to observe the tab before validating
     // the reference; that representation can lag behind chrome.tabs.query().
@@ -1762,7 +1769,8 @@ test.describe('core user-visible E2E', () => {
         }
       })
     ), expectedPath), { timeout: 10000 }).toBe(true);
-    if (process.env.BLB_PROFILE_BROWSER_FIXTURES === '1') console.log('BLB_POLL_PROFILE ' + JSON.stringify({ phase: 'destination-confirmation-poll', durationMs: Number(process.hrtime.bigint() - destinationPollStartedAt) / 1e6, expectedPath }));
+    const destinationPollMs = Number(process.hrtime.bigint() - destinationPollStartedAt) / 1e6;
+    const cleanupStartedAt = process.hrtime.bigint();
     await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
       const matches = tabs.filter(tab => {
         try {
@@ -1778,6 +1786,11 @@ test.describe('core user-visible E2E', () => {
         }
       }
     }), expectedPath);
+    if (process.env.BLB_PROFILE_BROWSER_FIXTURES === '1') console.log('BLB_ALIAS_ACTION_PHASE_PROFILE ' + JSON.stringify({
+      gestureMs, selectionReadMs, activationMs, destinationPollMs,
+      cleanupMs: Number(process.hrtime.bigint() - cleanupStartedAt) / 1e6,
+      expectedPath
+    }));
   }
 
   async function setupDoubleClickReferencePage(page, extensionStorage, html) {
