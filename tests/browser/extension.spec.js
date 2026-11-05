@@ -117,7 +117,7 @@ async function activateBlbTabForPath(extensionWorker, expectedPath, debug = {}) 
       }));
       return;
     }
-    await new Promise(resolve => setTimeout(resolve, 20));
+    await new Promise(resolve => setTimeout(resolve, 100));
   }
 
   if (profileEnabled) console.log('BLB_POLL_PROFILE ' + JSON.stringify({
