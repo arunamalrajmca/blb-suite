@@ -20,7 +20,7 @@ const viewportProfiles = [
   { name: 'tall', width: 455, height: 669 }
 ];
 const normalSelectors = [
-  'body', '.app-header', '.header-title', '.header-subtitle',
+  'body', '.app-header', '.header-subtitle', '.header-subtitle',
   '.suite-group-label', '.secondary-control > span', '.section-title',
   'input[type="text"]', '.notes-header > span:first-child',
   '.notes-help', 'textarea', '.topic-hint'
@@ -219,14 +219,14 @@ async function inspectBrowser(name) {
           await page.waitForFunction(() =>
             !document.body.classList.contains('popup-loading') &&
             !document.body.classList.contains('sensitive-restricted') &&
-            document.querySelector('.header-title')?.textContent.trim() === 'KJV Scripture Tools',
+            document.querySelector('.header-subtitle')?.textContent.trim() === 'KJV Scripture Tools',
             null, { timeout: 20000 });
         } catch (error) {
           const state = await page.evaluate(async () => ({
             url: location.href,
             title: document.title,
             bodyClasses: document.body?.className || '',
-            headerTitle: document.querySelector('.header-title')?.textContent.trim() || '',
+            headerTitle: document.querySelector('.header-subtitle')?.textContent.trim() || '',
             bodyText: document.body?.innerText?.slice(0, 1200) || '',
             activeTabs: await chrome.tabs.query({ active: true, currentWindow: true })
               .then(tabs => tabs.map(tab => ({ url: tab.url, title: tab.title, id: tab.id })))
@@ -257,7 +257,7 @@ async function inspectBrowser(name) {
             }];
           }));
           return { devicePixelRatio: devicePixelRatio, fontStatus: document.fonts.status,
-            title: document.querySelector('.header-title')?.textContent.trim() || '',
+            title: document.querySelector('.header-subtitle')?.textContent.trim() || '',
             bodyClasses: document.body.className, elements };
         }, normalSelectors);
         const missing = normalSelectors.filter(selector => !normal.elements[selector]);
