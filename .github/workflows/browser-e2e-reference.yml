@@ -564,6 +564,13 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: 22
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json', 'package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
       - name: Install dependencies
         run: npm install --no-package-lock
       - name: Install Chromium for extension browser tests
