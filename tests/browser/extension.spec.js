@@ -2014,7 +2014,7 @@ test.describe('core user-visible E2E', () => {
           ...(BOOKS || []).map(book => String(book.name || '').toLowerCase()),
           ...Object.keys(BOOK_ALIASES || {}).map(alias => String(alias).toLowerCase())
         ]);
-        const number = /^\\d+$/.test(key) ? Number(key) : NaN;
+        const number = /^\d+$/.test(key) ? Number(key) : NaN;
         return bookNames.has(key)
           || (Number.isInteger(number) && number >= 1 && number <= 176)
           || Object.values(NUMBERED_BOOK_SUFFIX_ALIASES || {}).flat().some(alias => String(alias).toLowerCase() === key)
