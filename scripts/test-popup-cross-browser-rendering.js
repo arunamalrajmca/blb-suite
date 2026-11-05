@@ -185,15 +185,14 @@ async function launchBrowser(name) {
   }
 }
 
-async function openActualToolbarPopup(context, extensionId, targetUrl) {
+async function openPopupDocumentForInspection(context, extensionId, targetUrl) {
   const target = await context.newPage();
   await target.goto(targetUrl, { waitUntil: 'load' });
 
-  // Chromium's toolbar popup is browser chrome, not a normal tab. Playwright
-  // therefore cannot reliably discover it through context.pages(), even when
-  // chrome.action.openPopup() succeeds. Load the exact manifest-declared popup
-  // document as an extension page instead: this exercises the same HTML, CSS,
-  // scripts, permissions and active-tab context while keeping it inspectable.
+  // This deliberately opens the manifest-declared popup document as an extension
+  // tab so Playwright can inspect its DOM, computed styles and screenshot.
+  // It does NOT open or measure the browser-toolbar popup; browser chrome is
+  // outside the page screenshot and DOM APIs used by this test.
   const popup = await context.newPage();
   const popupUrl = 'chrome-extension://' + extensionId + '/' + manifest.action.default_popup.replace(/^\/+/, '');
   // Navigate only after restoring the target tab as active. The popup script
@@ -211,7 +210,7 @@ async function inspectBrowser(name) {
   try {
     for (const profile of viewportProfiles) {
       // Use deterministic data URLs: no third-party site, credentials, or network dependency.
-      const ordinary = await openActualToolbarPopup(context, extensionId, 'data:text/html,<title>Ordinary test page</title><p>Ordinary page</p>');
+      const ordinary = await openPopupDocumentForInspection(context, extensionId, 'data:text/html,<title>Ordinary test page</title><p>Ordinary page</p>');
       try {
         const page = ordinary.popup;
         await page.setViewportSize({ width: profile.width, height: profile.height });
@@ -250,19 +249,22 @@ async function inspectBrowser(name) {
               fontFamily: css.fontFamily, fontSize: css.fontSize, fontWeight: css.fontWeight,
               lineHeight: css.lineHeight, letterSpacing: css.letterSpacing,
               textRendering: css.textRendering, webkitTextSizeAdjust: css.webkitTextSizeAdjust,
-              zoom: css.zoom, boxSizing: css.boxSizing, padding: css.padding, margin: css.margin,
+              zoom: css.zoom, effectiveZoom: Number(getComputedStyle(document.body).zoom) || 1,
+              visualFontSize: round(parseFloat(css.fontSize) * (Number(getComputedStyle(document.body).zoom) || 1)),
+              boxSizing: css.boxSizing, padding: css.padding, margin: css.margin,
               width: round(rect.width), height: round(rect.height), measuredTextWidth: round(m.width),
+              visualTextWidth: round(m.width * (Number(getComputedStyle(document.body).zoom) || 1)),
               actualBoundingBoxAscent: round(m.actualBoundingBoxAscent),
               actualBoundingBoxDescent: round(m.actualBoundingBoxDescent)
             }];
           }));
           return { devicePixelRatio: devicePixelRatio, fontStatus: document.fonts.status,
             title: document.querySelector('.header-subtitle')?.textContent.trim() || '',
-            bodyClasses: document.body.className, elements };
+            htmlClasses: document.documentElement.className, bodyClasses: document.body.className, elements };
         }, normalSelectors);
         const missing = normalSelectors.filter(selector => !normal.elements[selector]);
         if (missing.length) throw new Error(name + ' ordinary ' + profile.name + ': missing popup elements: ' + missing.join(', '));
-        const normalShot = 'popup-' + slug(name) + '-' + profile.name + '.png';
+        const normalShot = 'popup-document-' + slug(name) + '-' + profile.name + '.png';
         await page.screenshot({ path: normalShot, fullPage: true });
         snapshots.push({ profile: profile.name, scenario: 'ordinary', ...normal, screenshot: normalShot });
       } finally {
@@ -293,7 +295,7 @@ async function inspectBrowser(name) {
             !state.message.includes('disabled on pages')) {
           throw new Error(name + ' sensitive ' + profile.name + ': privacy notice/hidden-controls assertion failed: ' + JSON.stringify(state));
         }
-        const sensitiveShot = 'popup-' + slug(name) + '-' + profile.name + '-sensitive.png';
+        const sensitiveShot = 'popup-document-' + slug(name) + '-' + profile.name + '-sensitive.png';
         await page.screenshot({ path: sensitiveShot, fullPage: true });
         snapshots.push({ profile: profile.name, scenario: 'sensitive', ...state, screenshot: sensitiveShot });
       } finally {
@@ -315,37 +317,43 @@ async function inspectBrowser(name) {
 
 function compareBrowsers(results) {
   const chrome = results[0], brave = results[1], differences = [];
-  const properties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing',
-    'textRendering', 'webkitTextSizeAdjust', 'zoom', 'boxSizing', 'padding', 'margin',
-    'width', 'height', 'measuredTextWidth', 'actualBoundingBoxAscent', 'actualBoundingBoxDescent'];
+  const sharedProperties = ['fontFamily', 'fontSize', 'fontWeight', 'lineHeight',
+    'letterSpacing', 'textRendering', 'webkitTextSizeAdjust', 'boxSizing'];
   for (const profile of viewportProfiles) {
     const a = chrome.snapshots.find(x => x.profile === profile.name && x.scenario === 'ordinary');
     const b = brave.snapshots.find(x => x.profile === profile.name && x.scenario === 'ordinary');
-    if (!a || !b) { differences.push(profile.name + ': missing ordinary browser snapshot'); continue; }
+    if (!a || !b) { differences.push(profile.name + ': missing ordinary popup-document snapshot'); continue; }
     if (a.devicePixelRatio !== b.devicePixelRatio) differences.push(profile.name + ' devicePixelRatio differs');
+    if (!a.htmlClasses.split(/\\s+/).includes('chrome-popup-density')) {
+      differences.push(profile.name + ': Chrome popup document did not receive chrome-popup-density class');
+    }
+    if (b.htmlClasses.split(/\\s+/).includes('chrome-popup-density')) {
+      differences.push(profile.name + ': Brave popup document unexpectedly received Chrome density class');
+    }
     for (const selector of normalSelectors) {
       const left = a.elements[selector], right = b.elements[selector];
       if (!left || !right) { differences.push(profile.name + ' ' + selector + ': element presence differs'); continue; }
-      // Chrome intentionally uses a 1.1 visual scale to match Brave's
-      // roomier appearance. CSS typography declarations remain identical;
-      // rendered element geometry should scale by the same factor.
-      const expectedScale = 1.2;
-      for (const property of properties) {
-        if (property === 'zoom' || property === 'width' || property === 'height') continue;
+      for (const property of sharedProperties) {
         if (left[property] !== right[property]) {
           differences.push(profile.name + ' ' + selector + ' ' + property + ': Chrome=' + left[property] + ', Brave=' + right[property]);
         }
       }
-      const expectedChromeZoom = selector === 'body' ? expectedScale : 1;
-      if (Math.abs(Number(left.zoom) - expectedChromeZoom) > 0.001 || Number(right.zoom) !== 1) {
-        differences.push(profile.name + ' ' + selector + ' zoom: expected Chrome=' + expectedChromeZoom + ', Brave=1; Chrome=' + left.zoom + ', Brave=' + right.zoom);
+      const visualFontRatio = Number(right.visualFontSize) ? Number(left.visualFontSize) / Number(right.visualFontSize) : 1;
+      if (Math.abs(visualFontRatio - 1.2) > 0.03) {
+        differences.push(profile.name + ' ' + selector + ' visual font scale: expected 1.2, got ' + visualFontRatio.toFixed(3));
       }
-      for (const property of ['width', 'height']) {
-        const ratio = Number(right[property]) ? Number(left[property]) / Number(right[property]) : 1;
-        if (Math.abs(ratio - expectedScale) > 0.03) {
-          differences.push(profile.name + ' ' + selector + ' ' + property + ' scale: expected ' + expectedScale + ', got ' + ratio.toFixed(3));
-        }
+      if (left.effectiveZoom !== 1.2 || right.effectiveZoom !== 1) {
+        differences.push(profile.name + ' ' + selector + ' effective zoom: expected Chrome=1.2 and Brave=1; Chrome=' + left.effectiveZoom + ', Brave=' + right.effectiveZoom);
       }
+    }
+    const chromeBody = a.elements.body, braveBody = b.elements.body;
+    const widthRatio = Number(braveBody.width) ? Number(chromeBody.width) / Number(braveBody.width) : 1;
+    if (Math.abs(widthRatio - 1) > 0.03) {
+      differences.push(profile.name + ' popup document width changed: expected unchanged physical width, got ratio ' + widthRatio.toFixed(3));
+    }
+    const heightRatio = Number(braveBody.height) ? Number(chromeBody.height) / Number(braveBody.height) : 1;
+    if (Math.abs(heightRatio - 1.2) > 0.08) {
+      differences.push(profile.name + ' popup document height/spacing scale: expected about 1.2, got ' + heightRatio.toFixed(3));
     }
     const sa = chrome.snapshots.find(x => x.profile === profile.name && x.scenario === 'sensitive');
     const sb = brave.snapshots.find(x => x.profile === profile.name && x.scenario === 'sensitive');
@@ -364,6 +372,6 @@ function compareBrowsers(results) {
     console.error('Popup rendering/ privacy regression differences:\n' + differences.join('\n'));
     process.exitCode = 1;
   } else {
-    console.log('PASS: actual toolbar popup renders on ordinary pages in Chrome and Brave; sensitive pages show only the privacy notice; ordinary popup metrics match at both viewport profiles.');
+    console.log('PASS: inspectable popup documents render in Chrome and Brave; Chrome density class, 1.2x visual typography/spacing scale, unchanged popup width, and sensitive-page privacy behavior validated. The actual browser-toolbar popup is not opened or measured by this test.');
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });
