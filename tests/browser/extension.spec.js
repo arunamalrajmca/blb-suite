@@ -92,30 +92,22 @@ test('KJV phrase candidate index loads only when multi-word classification needs
   }));
   expect(initial).toEqual({ loaded: false, keys: 0 });
 
-  const directReference = await extensionWorker.evaluate(() =>
-    chrome.runtime.sendMessage({ type: 'blbSuiteClassifySelection', text: 'John 3:16' })
-  );
+  const directReference = await extensionWorker.evaluate(async () => classifySelectionForBlb('John 3:16'));
   expect(directReference.valid).toBe(true);
   expect(directReference.type).toBe('REFERENCE');
   expect(await extensionWorker.evaluate(() => KJV_CORPUS_PHRASE_INDEX)).toBeNull();
 
-  const bookOnly = await extensionWorker.evaluate(() =>
-    chrome.runtime.sendMessage({ type: 'blbSuiteClassifySelection', text: 'Psalms' })
-  );
+  const bookOnly = await extensionWorker.evaluate(async () => classifySelectionForBlb('Psalms'));
   expect(bookOnly.valid).toBe(true);
   expect(bookOnly.type).toBe('BOOK');
   expect(await extensionWorker.evaluate(() => KJV_CORPUS_PHRASE_INDEX)).toBeNull();
 
-  const singleWord = await extensionWorker.evaluate(() =>
-    chrome.runtime.sendMessage({ type: 'blbSuiteClassifySelection', text: 'Jesus' })
-  );
+  const singleWord = await extensionWorker.evaluate(async () => classifySelectionForBlb('Jesus'));
   expect(singleWord.valid).toBe(true);
   expect(singleWord.type).toBe('KJV_WORD');
   expect(await extensionWorker.evaluate(() => KJV_CORPUS_PHRASE_INDEX)).toBeNull();
 
-  const phrase = await extensionWorker.evaluate(() =>
-    chrome.runtime.sendMessage({ type: 'blbSuiteClassifySelection', text: 'For God so loved the world' })
-  );
+  const phrase = await extensionWorker.evaluate(async () => classifySelectionForBlb('For God so loved the world'));
   expect(phrase.valid).toBe(true);
   expect(phrase.type).toBe('KJV_REFERENCE_RANGE');
   expect(phrase.directRef.url).toContain('/kjv/jhn/3/16');
