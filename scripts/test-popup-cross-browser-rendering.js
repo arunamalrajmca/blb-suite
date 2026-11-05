@@ -352,12 +352,12 @@ function compareBrowsers(results) {
         }
       }
       const fontSizeRatio = Number(right.fontSize.replace('px', '')) ? Number(left.fontSize.replace('px', '')) / Number(right.fontSize.replace('px', '')) : 1;
-      if (Math.abs(fontSizeRatio - 1.1) > 0.02) {
-        differences.push(profile.name + ' ' + selector + ' Chrome text-size adjustment: expected 1.1, got ' + fontSizeRatio.toFixed(3));
+      if (Math.abs(fontSizeRatio - 1.32) > 0.02) {
+        differences.push(profile.name + ' ' + selector + ' Chrome text-size adjustment: expected 1.32, got ' + fontSizeRatio.toFixed(3));
       }
       const visualFontRatio = Number(right.visualFontSize) ? Number(left.visualFontSize) / Number(right.visualFontSize) : 1;
-      if (Math.abs(visualFontRatio - 1.1) > 0.02) {
-        differences.push(profile.name + ' ' + selector + ' visual font scale: expected 1.1 from typography only, got ' + visualFontRatio.toFixed(3));
+      if (Math.abs(visualFontRatio - 1.32) > 0.02) {
+        differences.push(profile.name + ' ' + selector + ' visual font scale: expected 1.32 from typography only, got ' + visualFontRatio.toFixed(3));
       }
       if (left.effectiveZoom !== 1 || right.effectiveZoom !== 1) {
         differences.push(profile.name + ' ' + selector + ' effective zoom: expected 1 in both browsers; Chrome=' + left.effectiveZoom + ', Brave=' + right.effectiveZoom);
@@ -396,6 +396,6 @@ function compareBrowsers(results) {
     console.error('Popup rendering/ privacy regression differences:\n' + differences.join('\n'));
     process.exitCode = 1;
   } else {
-    console.log('PASS: inspectable popup documents render in Chrome and Brave; Chrome receives 1.1x typography only, popup/control geometry remains unchanged, and sensitive-page privacy behavior is preserved. The actual browser-toolbar popup is not opened or measured by this test.');
+    console.log('PASS: inspectable popup documents render in Chrome and Brave; Chrome receives 1.32x typography only, popup/control geometry remains unchanged, and sensitive-page privacy behavior is preserved. The actual browser-toolbar popup is not opened or measured by this test.');
   }
 })().catch(error => { console.error(error); process.exitCode = 1; });
