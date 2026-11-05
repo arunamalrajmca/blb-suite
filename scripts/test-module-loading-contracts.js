@@ -99,23 +99,25 @@ if (!importMatch) {
   } else {
     pass('service-worker import dependency order remains stable');
   }
-  const lazyCorpusLoader = background.match(/function ensureKjvOriginalCaseCorpusLoaded\(\) \{([\s\S]*?)\n\}/);
+  const lazyCorpusLoader = background.match(/async function ensureKjvOriginalCaseCorpusLoaded\(\) \{([\s\S]*?)\n\}/);
   if (!lazyCorpusLoader
-      || !lazyCorpusLoader[1].includes("typeof KJV_CORPUS_ORIGINAL_CASE === 'undefined'")
-      || !lazyCorpusLoader[1].includes("importScripts('kjv-corpus-original-case.js')")) {
-    fail('original-case corpus is guarded and loaded only by its explicit lazy loader');
+      || !lazyCorpusLoader[1].includes("typeof KJV_CORPUS_ORIGINAL_CASE !== 'undefined'")
+      || !lazyCorpusLoader[1].includes("fetch(chrome.runtime.getURL('kjv-corpus-original-case.js'))")
+      || !lazyCorpusLoader[1].includes('JSON.parse(')
+      || !lazyCorpusLoader[1].includes('kjvOriginalCaseCorpusLoadPromise')) {
+    fail('original-case corpus is fetched, parsed as data, and shared across concurrent lazy loads');
   } else {
-    pass('original-case corpus has a guarded on-demand loader');
+    pass('original-case corpus has a guarded, promise-deduplicated resource loader');
   }
-  const importCalls = [...background.matchAll(/importScripts\(/g)];
-  if (importCalls.length !== 2
-      || importCalls[0].index !== background.indexOf('importScripts(')
-      || !lazyCorpusLoader
-      || importCalls[1].index < lazyCorpusLoader.index
-      || importCalls[1].index > lazyCorpusLoader.index + lazyCorpusLoader[0].length) {
-    fail('service-worker uses one eager bootstrap and one guarded on-demand import');
+  if (background.includes("importScripts('kjv-corpus-original-case.js')")) {
+    fail('original-case corpus is not dynamically imported after worker startup');
   } else {
-    pass('service-worker eager bootstrap and lazy import locations remain constrained');
+    pass('original-case corpus is not dynamically imported after worker startup');
+  }
+  if (!background.includes('await ensureKjvOriginalCaseCorpusLoaded();')) {
+    fail('case-sensitive search awaits original-case corpus readiness');
+  } else {
+    pass('case-sensitive search awaits original-case corpus readiness');
   }
 }
 
