@@ -39,8 +39,8 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/browser-profile"
           START_MS="$(node -p 'Date.now()')"
-          npx playwright test tests/browser/extension.spec.js tests/browser/multiverse-tab-reuse.spec.js \
-            --grep 'all 66 canonical book suffixes|Same-chapter range resolution covers all 66 books|Double-click generic reference grammar — exhaustive token coverage — (OT|NT)|Double-click generic canonical references|Double-click generic aliases — every shared alias|MultiVerse opens every batch for requests exceeding 20 tabs' \
+          npx playwright test tests/browser/extension.spec.js \
+            --grep 'all 66 canonical book suffixes' \
             --workers=1 --reporter=line,json 2>&1 | tee "$RUNNER_TEMP/browser-profile/profile.log"
           END_MS="$(node -p 'Date.now()')"
           echo "Profile process wall time: $((END_MS - START_MS))ms" | tee -a "$RUNNER_TEMP/browser-profile/profile.log"
@@ -68,7 +68,7 @@ jobs:
           ));
           const phases = new Map();
           for (const line of fs.readFileSync(process.env.RUNNER_TEMP + '/browser-profile/profile.log', 'utf8').split(/\r?\n/)) {
-            const match = line.match(/(?:BLB_SETUP_PROFILE|BLB_POLL_PROFILE|BLB_FIXTURE_PROFILE) (\{.*\})/);
+            const match = line.match(/(?:BLB_SETUP_PROFILE|BLB_POLL_PROFILE|BLB_FIXTURE_PROFILE|BLB_MATRIX_PROFILE) (\{.*\})/);
             if (!match) continue;
             try {
               const entry = JSON.parse(match[1]);
