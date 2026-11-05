@@ -506,7 +506,7 @@ test.describe('core user-visible E2E', () => {
                 }), { beforeIds, expectedPath });
               destinationQueryDurationMs += Number(process.hrtime.bigint() - queryStartedAt) / 1e6;
               return opened?.path || '';
-            }, { timeout: 1200, intervals: [20, 40, 80, 160], message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
+            }, { timeout: 1200, intervals: (process.env.BLB_REFERENCE_POLL_INTERVALS || '20,40,80,160').split(',').map(Number), message: action + ' must resolve ' + book.name + ' 1:1 with ' + separator }).toBe(expectedPath);
             recordMatrixPhase('destination-poll-and-confirmation', phaseStartedAt, {
               book, separator, action, openedTabId: opened?.id || null,
               destinationPollAttempts, destinationQueryDurationMs
