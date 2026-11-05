@@ -418,21 +418,41 @@ test.describe('core user-visible E2E', () => {
     }, books);
 
     const failures = [];
+    const matrixProfile = process.env.BLB_PROFILE_BROWSER_FIXTURES === '1';
+    const recordMatrixPhase = (phase, startedAt, details = {}) => {
+      if (!matrixProfile) return;
+      console.log('BLB_MATRIX_PROFILE ' + JSON.stringify({
+        phase,
+        durationMs: Number(process.hrtime.bigint() - startedAt) / 1e6,
+        ...details
+      }));
+    };
     const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];
     for (const book of books) {
       const expectedPath = '/kjv/' + book.urlKey + '/1/1/';
       for (const separator of ['colon', 'dot']) {
         const selector = '#all-66-book-suffix-' + separator + '-' + book.bookNumber;
         for (const action of actions) {
+          const iterationStartedAt = process.hrtime.bigint();
+          let phaseStartedAt = process.hrtime.bigint();
           await page.bringToFront();
+          recordMatrixPhase('action-page-bring-to-front', phaseStartedAt, { book: book.name, separator, action });
+          phaseStartedAt = process.hrtime.bigint();
           const beforeIds = await extensionWorker.evaluate(() =>
             chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
           );
+          recordMatrixPhase('action-existing-tab-snapshot', phaseStartedAt, { book: book.name, separator, action });
           try {
+            const actionStartedAt = process.hrtime.bigint();
             if (action === 'Double-Click') {
+              phaseStartedAt = process.hrtime.bigint();
               await page.evaluate(() => window.getSelection()?.removeAllRanges());
+              recordMatrixPhase('action-clear-selection', phaseStartedAt, { book: book.name, separator, action });
+              phaseStartedAt = process.hrtime.bigint();
               await page.locator(selector).dblclick();
+              recordMatrixPhase('action-double-click-gesture', phaseStartedAt, { book: book.name, separator, action });
             } else {
+              phaseStartedAt = process.hrtime.bigint();
               await page.locator(selector).evaluate(element => {
                 const range = document.createRange();
                 range.selectNodeContents(element);
@@ -441,21 +461,33 @@ test.describe('core user-visible E2E', () => {
                 selection.addRange(range);
                 element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
               });
+              recordMatrixPhase('action-selection-and-mouseup', phaseStartedAt, { book: book.name, separator, action });
               if (action === 'Show on BLB') {
                 const button = page.locator('#blb-suite-page-selection-button');
+                phaseStartedAt = process.hrtime.bigint();
                 await expect(button).toBeVisible({ timeout: 1200 });
+                recordMatrixPhase('action-show-button-readiness', phaseStartedAt, { book: book.name, separator, action });
+                phaseStartedAt = process.hrtime.bigint();
                 await button.click();
+                recordMatrixPhase('action-show-button-click', phaseStartedAt, { book: book.name, separator, action });
               } else if (action === 'Alt+B') {
+                phaseStartedAt = process.hrtime.bigint();
                 await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+                recordMatrixPhase('action-alt-b-worker-command', phaseStartedAt, { book: book.name, separator, action });
               } else {
+                phaseStartedAt = process.hrtime.bigint();
                 const selectedText = await page.evaluate(() => window.getSelection()?.toString() || '');
+                recordMatrixPhase('action-read-selected-text', phaseStartedAt, { book: book.name, separator, action });
+                phaseStartedAt = process.hrtime.bigint();
                 await extensionWorker.evaluate(async text => {
                   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
                   if (!tab?.id) throw new Error('No active source tab for context-menu action');
                   await handleBlbSelectionContextMenuClick({ menuItemId: 'blb-suite-web-selection', selectionText: text }, tab);
                 }, selectedText);
+                recordMatrixPhase('action-context-menu-worker-handler', phaseStartedAt, { book: book.name, separator, action });
               }
             }
+            recordMatrixPhase('action-trigger-total', actionStartedAt, { book: book.name, separator, action });
 
             let opened = null;
             await expect.poll(async () => {
@@ -479,15 +511,44 @@ test.describe('core user-visible E2E', () => {
           } catch (error) {
             failures.push({ book: book.name, separator, action, expectedPath, error: String(error.message || error) });
           } finally {
-            await extensionWorker.evaluate(beforeIds => chrome.tabs.query({}).then(async tabs => {
+            phaseStartedAt = process.hrtime.bigint();
+            const cleanup = await extensionWorker.evaluate(async beforeIds => {
+              const queryStartedAt = performance.now();
+              const tabs = await chrome.tabs.query({});
+              const queryDurationMs = performance.now() - queryStartedAt;
+              const filterStartedAt = performance.now();
+              const targetIds = [];
               for (const tab of tabs) {
                 if (tab.id == null || beforeIds.includes(tab.id)) continue;
                 try {
                   const url = new URL(String(tab.pendingUrl || tab.url || ''));
-                  if (url.hostname === 'www.blueletterbible.org') await chrome.tabs.remove(tab.id);
+                  if (url.hostname === 'www.blueletterbible.org') targetIds.push(tab.id);
                 } catch (_) {}
               }
-            }), beforeIds);
+              const filterDurationMs = performance.now() - filterStartedAt;
+              const removeStartedAt = performance.now();
+              let removedCount = 0;
+              for (const tabId of targetIds) {
+                try {
+                  await chrome.tabs.remove(tabId);
+                  removedCount += 1;
+                } catch (_) {}
+              }
+              const removeDurationMs = performance.now() - removeStartedAt;
+              return {
+                tabCount: tabs.length,
+                candidateCount: targetIds.length,
+                removedCount,
+                queryDurationMs,
+                filterDurationMs,
+                removeDurationMs
+              };
+            }, beforeIds);
+            recordMatrixPhase('cleanup-tab-query', phaseStartedAt, { book: book.name, separator, action, tabCount: cleanup.tabCount });
+            recordMatrixPhase('cleanup-tab-filter', process.hrtime.bigint() - BigInt(Math.round(cleanup.filterDurationMs * 1e6)), { book: book.name, separator, action });
+            recordMatrixPhase('cleanup-tab-removal', process.hrtime.bigint() - BigInt(Math.round(cleanup.removeDurationMs * 1e6)), { book: book.name, separator, action, candidateCount: cleanup.candidateCount, removedCount: cleanup.removedCount });
+            recordMatrixPhase('cleanup-total', phaseStartedAt, { book: book.name, separator, action, ...cleanup });
+            recordMatrixPhase('matrix-iteration-total', iterationStartedAt, { book: book.name, separator, action });
           }
         }
       }
