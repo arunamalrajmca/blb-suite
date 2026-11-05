@@ -3,7 +3,6 @@ name: Verify Chrome Web Store assets
 on:
   pull_request:
     paths:
-      - '.github/workflows/generate-store-screenshots.yml'
       - 'docs/chrome-web-store-assets/**'
       - 'scripts/verify-store-assets.py'
       - 'scripts/verify-store-branding.py'
