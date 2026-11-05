@@ -2,7 +2,7 @@ name: Browser fixture and reference polling profile
 
 on:
   push:
-    branches: [audit/extension-storage-startup-profiling]
+    branches: [audit/alias-doubleclick-phase-profiling]
     paths:
       - '.github/workflows/browser-fixture-profile.yml'
       - 'tests/browser/fixtures.js'
@@ -38,7 +38,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/browser-profile"
           START_MS="$(node -p 'Date.now()')"
           npx playwright test tests/browser/extension.spec.js \
-            --grep 'Double-click generic reference grammar — exhaustive token coverage — NT' \
+            --grep 'Double-click generic aliases — every shared alias across all books' \
             --workers=1 --repeat-each=3 --reporter=line 2>&1 | tee "$RUNNER_TEMP/browser-profile/profile.log"
           END_MS="$(node -p 'Date.now()')"
           echo "Profile process wall time: $((END_MS - START_MS))ms" | tee -a "$RUNNER_TEMP/browser-profile/profile.log"
