@@ -55,7 +55,7 @@ const ignoredNonRuntime = path =>
   /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/))/.test(path)
   || /^(?:store-assets\/|assets\/store\/|extension\/(?:icons|store-assets)\/)/.test(path)
   || /^extension\/THIRD-PARTY-NOTICES\.txt$/.test(path)
-  || /^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path)
+  || /^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix|ci-routing-registry)\.mjs$/.test(path)
   || path === "scripts/test-ci-routing-selector.js"
   || /^scripts\/test-(?:cross-feature-contracts|extraction-safety-contracts|module-loading-contracts|multiverse-reference-helpers|omnibox-boolean-operators|omnibox-gibberish-filter|omnibox-search-normalization|reference-core-characterization|selection-marker-stripping|selection-text-normalization|single-word-selection-normalization|study-session-export|study-session-normalization)\.js$/i.test(path)
   // Dedicated store verifiers have their own workflows and do not affect runtime browser behavior.
@@ -81,7 +81,7 @@ const focusedOmniboxBackgroundChange = changed.length === 2
   && changed.includes("tests/browser/omnibox-command-routing.spec.js");
 const forceFull = alwaysFull || changed.some(path =>
   !ignoredNonRuntime(path) && (
-    (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js" && path !== "scripts/test-popup-cross-browser-rendering.js" && path !== "scripts/reference-e2e-matrix.json")
+    (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix|ci-routing-registry)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js" && path !== "scripts/test-popup-cross-browser-rendering.js" && path !== "scripts/reference-e2e-matrix.json")
     || path.startsWith("regression-suite/")
     || (path.startsWith("tests/") && !/^tests\/selector\//.test(path) && !/^tests\/browser\/[^/]+\.spec\.js$/.test(path) && path !== "tests/pages/research-derived-smoke.html")
     || ((path === "package.json" || path === "extension/manifest.json") && !sameExceptVersion(path))

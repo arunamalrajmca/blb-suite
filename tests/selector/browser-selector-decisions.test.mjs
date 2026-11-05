@@ -13,6 +13,10 @@ const classifierSource = readFileSync(
   new URL("../../scripts/classify-ci-changes.mjs", import.meta.url),
   "utf8"
 );
+const registrySource = readFileSync(
+  new URL("../../scripts/ci-routing-registry.mjs", import.meta.url),
+  "utf8"
+);
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -31,6 +35,7 @@ function fixture(selector = selectorSource) {
   git(root, "config", "user.name", "Selector test");
   put(root, "scripts/select-browser-specs.mjs", selector);
   put(root, "scripts/classify-ci-changes.mjs", classifierSource);
+  put(root, "scripts/ci-routing-registry.mjs", registrySource);
   put(root, "package.json", JSON.stringify({ name: "fixture", version: "1.0.0", scripts: { test: "before" } }) + "\n");
   put(root, "extension/content.js");
   put(root, "extension/background.js");

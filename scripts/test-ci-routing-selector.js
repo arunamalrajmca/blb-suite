@@ -49,9 +49,9 @@ const assertValue = (result, key, value, scenario) => {
 
 
 function auditRepositoryTestInventory() {
-  const selectorSource = fs.readFileSync(selector, 'utf8');
-  const mappedBlock = selectorSource.match(/const mappedSpecs = new Set\(\[([\s\S]*?)\]\);/);
-  assert.ok(mappedBlock, 'browser selector must expose its complete mappedSpecs inventory');
+  const registrySource = fs.readFileSync(path.join(__dirname, 'ci-routing-registry.mjs'), 'utf8');
+  const mappedBlock = registrySource.match(/export const mappedSpecs = new Set\(\[([\s\S]*?)\]\);/);
+  assert.ok(mappedBlock, 'routing registry must expose its complete mappedSpecs inventory');
   const mappedSpecs = new Set([...mappedBlock[1].matchAll(/["'](tests\/browser\/[^"']+\.spec\.js)["']/g)]
     .map(match => match[1]));
   const browserSpecs = fs.readdirSync(path.join(root, 'tests/browser'))
