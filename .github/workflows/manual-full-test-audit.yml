@@ -62,7 +62,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # validate-build.js already executes the scripts in this manifest.
+          node -e "for (const test of require('./scripts/validation-test-manifest.json')) console.log('scripts/' + test.script)" > "$RUNNER_TEMP/blb-build-validation-tests.txt"
           for test_file in scripts/test-*.js; do
+            if grep -Fxq "$test_file" "$RUNNER_TEMP/blb-build-validation-tests.txt"; then
+              echo "Already executed by build validation: $test_file"
+              continue
+            fi
             echo "Running $test_file"
             node "$test_file"
           done

@@ -66,6 +66,8 @@ const ignoredNonRuntime = path =>
   || path === "scripts/reference-e2e-matrix.json"
   || path === "scripts/package-release.sh"
   || path === "scripts/validate-build.js"
+  || path === "scripts/run-validation-tests.js"
+  || path === "scripts/validation-test-manifest.json"
   || path === "regression-suite/Verify-BLB-Zip.ps1"
   || path === "regression-suite/Run-BLB-Regression.ps1"
   || path === "regression-suite/README.md"
