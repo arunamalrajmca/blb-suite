@@ -48,6 +48,8 @@ function nonRuntimePath(path) {
     || path === "scripts/package-release.sh"
     || path === "regression-suite/Verify-BLB-Zip.ps1"
     || path === "scripts/validate-build.js"
+    || path === "scripts/run-validation-tests.js"
+    || path === "scripts/validation-test-manifest.json"
     || path === "regression-suite/Run-BLB-Regression.ps1"
     || path === "regression-suite/README.md"
     || /^regression-suite\/tests\//.test(path)
