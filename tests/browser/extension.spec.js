@@ -418,6 +418,7 @@ test.describe('core user-visible E2E', () => {
     }, books);
 
     const failures = [];
+    // Keep this phase instrumentation confined to the audit branch; no production assertions change.
     const matrixProfile = process.env.BLB_PROFILE_BROWSER_FIXTURES === '1';
     const recordMatrixPhase = (phase, startedAt, details = {}) => {
       if (!matrixProfile) return;
