@@ -1,0 +1,135 @@
+name: Popup Chrome-Brave Rendering
+
+on:
+  pull_request:
+    paths:
+      - 'extension/popup.html'
+      - 'extension/popup.js'
+      - 'scripts/test-popup-cross-browser-rendering.js'
+      - '.github/workflows/popup-cross-browser-rendering.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: popup-cross-browser-rendering-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare-popup-rendering:
+    name: Compare Chrome and Brave popup rendering
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      # Cache the installed browsers and the exact Playwright dependency.
+      # The versioned key is intentionally stable across runs; bump its vN
+      # suffix only when deliberately refreshing the browser toolchain.
+      - name: Restore popup browser and Playwright cache
+        id: popup-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            node_modules
+            C:\Program Files\BraveSoftware\Brave-Browser
+            C:\Users\runneradmin\AppData\Local\ChromeForTesting
+            C:\Users\runneradmin\AppData\Local\BraveSoftware\Brave-Browser
+            C:\Users\runneradmin\AppData\Local\ms-playwright
+          key: ${{ runner.os }}-popup-toolchain-v4-pw-1.63.0-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-popup-toolchain-v3-pw-1.63.0-
+            ${{ runner.os }}-popup-toolchain-v2-pw-1.63.0-
+
+      - name: Install Brave only when it is not cached
+        id: brave-setup
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $braveCandidates = @(
+            (Join-Path $env:ProgramFiles 'BraveSoftware\Brave-Browser\Application\brave.exe'),
+            (Join-Path $env:LOCALAPPDATA 'BraveSoftware\Brave-Browser\Application\brave.exe')
+          )
+          $bravePath = $braveCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $bravePath) {
+            choco install brave --no-progress -y
+            if ($LASTEXITCODE -ne 0) { throw "Brave installation failed with exit code $LASTEXITCODE." }
+            $bravePath = $braveCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
+          if (-not $bravePath) { throw 'Brave executable was not found after cache restore/install.' }
+          "BLB_BRAVE_EXECUTABLE=$bravePath" >> $env:GITHUB_ENV
+          "executable=$bravePath" >> $env:GITHUB_OUTPUT
+          Write-Host "Using Brave: $bravePath"
+
+      - name: Install Playwright test runner only when it is not cached
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path 'node_modules/@playwright/test/package.json')) {
+            npm install --no-save --package-lock=false @playwright/test@1.63.0
+            if ($LASTEXITCODE -ne 0) { throw "Playwright test runner installation failed with exit code $LASTEXITCODE." }
+          } else {
+            Write-Host 'Using cached @playwright/test 1.63.0.'
+          }
+          $installedVersion = node -p "require('./node_modules/@playwright/test/package.json').version"
+          if ($installedVersion -ne '1.63.0') { throw "Unexpected @playwright/test version: $installedVersion" }
+
+      - name: Install Chrome for Testing only when it is not cached
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $chromeRoot = Join-Path $env:LOCALAPPDATA 'ChromeForTesting'
+          $chromePath = Join-Path $chromeRoot 'chrome-win64\chrome.exe'
+          if (-not (Test-Path $chromePath)) {
+            $release = Invoke-RestMethod -Uri 'https://googlechromelabs.github.io/chrome-for-testing/last-known-good-versions-with-downloads.json'
+            $download = $release.channels.Stable.downloads.chrome | Where-Object { $_.platform -eq 'win64' } | Select-Object -First 1
+            if (-not $download) { throw 'Stable Chrome for Testing win64 download was not found in the official release metadata.' }
+            New-Item -ItemType Directory -Force -Path $chromeRoot | Out-Null
+            $archive = Join-Path $env:TEMP 'chrome-for-testing-win64.zip'
+            Invoke-WebRequest -Uri $download.url -OutFile $archive
+            Expand-Archive -Path $archive -DestinationPath $chromeRoot -Force
+            Remove-Item $archive -Force
+          } else {
+            Write-Host "Using cached Chrome for Testing: $chromePath"
+          }
+          if (-not (Test-Path $chromePath)) { throw "Chrome for Testing executable was not found at $chromePath." }
+          "BLB_CHROME_EXECUTABLE=$chromePath" >> $env:GITHUB_ENV
+          Write-Host "Using Chrome for Testing: $chromePath"
+
+      # Save immediately after provisioning, before the diagnostic can fail.
+      # This makes a successfully installed Brave reusable on the next fresh runner
+      # even when the popup comparison itself fails.
+      - name: Save popup browser and Playwright cache
+        if: always() && steps.popup-cache.outputs.cache-hit != 'true' && steps.brave-setup.outputs.executable != ''
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            node_modules
+            C:\Program Files\BraveSoftware\Brave-Browser
+            C:\Users\runneradmin\AppData\Local\ChromeForTesting
+            C:\Users\runneradmin\AppData\Local\BraveSoftware\Brave-Browser
+            C:\Users\runneradmin\AppData\Local\ms-playwright
+          key: ${{ runner.os }}-popup-toolchain-v4-pw-1.63.0-${{ hashFiles('package.json') }}
+
+      - name: Compare computed popup styles and text metrics
+        env:
+          DEBUG: pw:browser
+        run: node scripts/test-popup-cross-browser-rendering.js
+
+      - name: Upload browser screenshots and metrics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: popup-chrome-brave-rendering
+          path: |
+            popup-*.png
+            popup-rendering-metrics.json
+            popup-startup-diagnostics.json
+          if-no-files-found: ignore
