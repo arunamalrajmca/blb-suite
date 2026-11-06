@@ -117,6 +117,36 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     maxBuffer: 100 * 1024 * 1024
   });
   execFileSync('tar', ['-xf', '-', '-C', baselineRoot], { cwd: repoRoot, input: archive });
+  const importScriptsRoot = path.join(tempRoot, 'candidate-importScripts');
+  fs.cpSync(candidateRoot, importScriptsRoot, { recursive: true });
+  const importScriptsBackgroundPath = path.join(importScriptsRoot, 'background.js');
+  let importScriptsBackground = fs.readFileSync(importScriptsBackgroundPath, 'utf8');
+  const importScriptsLoader = `async function ensureKjvVerseCorpusLoaded() {
+    if (typeof KJV_CORPUS_VERSES === 'undefined') {
+      const startedAt = performance.now();
+      importScripts('kjv-corpus-verses.js');
+      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-importScripts', file: 'kjv-corpus-verses.js', durationMs: performance.now() - startedAt });
+    }
+    if (typeof KJV_CORPUS_WORD_VERSE_INDEX === 'undefined') {
+      const startedAt = performance.now();
+      importScripts('kjv-corpus-word-verse-index.js');
+      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-importScripts', file: 'kjv-corpus-word-verse-index.js', durationMs: performance.now() - startedAt });
+    }
+    if (!Array.isArray(KJV_CORPUS_VERSES) || KJV_CORPUS_VERSES.length !== 31102) {
+      throw new Error('The packaged normalized KJV verse corpus is empty or invalid');
+    }
+    if (!KJV_CORPUS_WORD_VERSE_INDEX || typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'object'
+        || !Object.keys(KJV_CORPUS_WORD_VERSE_INDEX).length) {
+      throw new Error('The packaged KJV word-to-verse index is empty or invalid');
+    }
+  }`;
+  const loaderPattern = /async function ensureKjvVerseCorpusLoaded\\(\\) \\{[\\s\\S]*?\\n\\}/;
+  if (!loaderPattern.test(importScriptsBackground)) {
+    throw new Error('Unable to create dynamic importScripts comparison variant');
+  }
+  importScriptsBackground = importScriptsBackground.replace(loaderPattern, importScriptsLoader);
+  fs.writeFileSync(importScriptsBackgroundPath, importScriptsBackground);
+
   const sequentialRoot = path.join(tempRoot, 'candidate-sequential');
   fs.cpSync(candidateRoot, sequentialRoot, { recursive: true });
   const sequentialBackgroundPath = path.join(sequentialRoot, 'background.js');
@@ -152,7 +182,8 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   const variants = {
     baseline: path.join(baselineRoot, 'extension'),
     candidate: candidateRoot,
-    candidateSequential: sequentialRoot
+    candidateSequential: sequentialRoot,
+    candidateImportScripts: importScriptsRoot
   };
 
   const instrument = extensionDir => {
@@ -315,9 +346,10 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   try {
     for (let repetition = 1; repetition <= 5; repetition++) {
       const orders = [
-        ['baseline', 'candidate', 'candidateSequential'],
-        ['candidate', 'candidateSequential', 'baseline'],
-        ['candidateSequential', 'baseline', 'candidate']
+        ['baseline', 'candidate', 'candidateSequential', 'candidateImportScripts'],
+        ['candidate', 'candidateSequential', 'candidateImportScripts', 'baseline'],
+        ['candidateSequential', 'candidateImportScripts', 'baseline', 'candidate'],
+        ['candidateImportScripts', 'baseline', 'candidate', 'candidateSequential']
       ];
       const order = orders[(repetition - 1) % orders.length];
       for (const variant of order) {
@@ -351,6 +383,7 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     baseline: summarize('baseline'),
     candidateParallel: summarize('candidate'),
     candidateSequential: summarize('candidateSequential'),
+    candidateImportScripts: summarize('candidateImportScripts'),
     rawSamples: samples
   };
   const output = JSON.stringify({ scenario: 'kjv-corpus-lazy-loading-ab', ...summary });
