@@ -140,11 +140,14 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
       throw new Error('The packaged KJV word-to-verse index is empty or invalid');
     }
   }`;
-  const loaderPattern = /async function ensureKjvVerseCorpusLoaded\\(\\) \\{[\\s\\S]*?\\n\\}/;
-  if (!loaderPattern.test(importScriptsBackground)) {
+  const loaderStart = importScriptsBackground.indexOf('async function ensureKjvVerseCorpusLoaded() {');
+  const loaderEnd = importScriptsBackground.indexOf('\\n}', loaderStart);
+  if (loaderStart < 0 || loaderEnd < 0) {
     throw new Error('Unable to create dynamic importScripts comparison variant');
   }
-  importScriptsBackground = importScriptsBackground.replace(loaderPattern, importScriptsLoader);
+  importScriptsBackground = importScriptsBackground.slice(0, loaderStart)
+    + importScriptsLoader
+    + importScriptsBackground.slice(loaderEnd + 2);
   fs.writeFileSync(importScriptsBackgroundPath, importScriptsBackground);
 
   const sequentialRoot = path.join(tempRoot, 'candidate-sequential');
