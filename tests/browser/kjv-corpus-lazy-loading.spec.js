@@ -162,8 +162,8 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
         const startupToFirstEvaluationMs = performance.now() - startup.bootstrapAt;
         const importPhases = startup.phases.filter(phase => phase.phase === 'service-worker-importScript');
         const importScriptsMs = importPhases.reduce((sum, phase) => sum + phase.durationMs, 0);
-        const corpusLoadedAtStartup = Array.isArray(self.KJV_CORPUS_VERSES)
-          && !!self.KJV_CORPUS_WORD_VERSE_INDEX;
+        const corpusLoadedAtStartup = typeof KJV_CORPUS_VERSES !== 'undefined'
+          && typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined';
 
         const referenceStartedAt = performance.now();
         const reference = await classifySelectionForBlb('John 3:16');
@@ -172,8 +172,8 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
         const wordStartedAt = performance.now();
         const word = await classifySelectionForBlb('grace');
         const singleWordMs = performance.now() - wordStartedAt;
-        const corpusStillLoadedAfterFastPaths = Array.isArray(self.KJV_CORPUS_VERSES)
-          && !!self.KJV_CORPUS_WORD_VERSE_INDEX;
+        const corpusStillLoadedAfterFastPaths = typeof KJV_CORPUS_VERSES !== 'undefined'
+          && typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined';
 
         const firstUseStartedAt = performance.now();
         const passage = await classifySelectionForBlb('For God so loved the world');
@@ -194,8 +194,8 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
           })),
           corpusLoadedAtStartup,
           corpusStillLoadedAfterFastPaths,
-          corpusLoadedAfterFirstUse: Array.isArray(self.KJV_CORPUS_VERSES)
-            && !!self.KJV_CORPUS_WORD_VERSE_INDEX,
+          corpusLoadedAfterFirstUse: typeof KJV_CORPUS_VERSES !== 'undefined'
+            && typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined',
           referenceType: reference.type,
           wordType: word.type,
           passageType: passage.type,
