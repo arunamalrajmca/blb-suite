@@ -117,42 +117,24 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     maxBuffer: 100 * 1024 * 1024
   });
   execFileSync('tar', ['-xf', '-', '-C', baselineRoot], { cwd: repoRoot, input: archive });
-  const sequentialRoot = path.join(tempRoot, 'candidate-sequential');
-  fs.cpSync(candidateRoot, sequentialRoot, { recursive: true });
-  const sequentialBackgroundPath = path.join(sequentialRoot, 'background.js');
-  let sequentialBackground = fs.readFileSync(sequentialBackgroundPath, 'utf8');
-  const parallelLoader = `const [verseEntries, wordVerseEntries] = await Promise.all([
-        fetchPackagedJsonAssignment(
-          'kjv-corpus-verses.js',
-          'const KJV_CORPUS_VERSES = ',
-          ';'
-        ),
-        fetchPackagedJsonAssignment(
-          'kjv-corpus-word-verse-index.js',
-          'const KJV_CORPUS_WORD_VERSE_INDEX = Object.fromEntries(',
-          ');'
-        )
-      ]);`;
-  const sequentialLoader = `const verseEntries = await fetchPackagedJsonAssignment(
-        'kjv-corpus-verses.js',
-        'const KJV_CORPUS_VERSES = ',
-        ';'
-      );
-      const wordVerseEntries = await fetchPackagedJsonAssignment(
-        'kjv-corpus-word-verse-index.js',
-        'const KJV_CORPUS_WORD_VERSE_INDEX = Object.fromEntries(',
-        ');'
-      );`;
-  if (!sequentialBackground.includes(parallelLoader)) {
-    throw new Error('Unable to create sequential-read comparison variant');
+  const concurrentRoot = path.join(tempRoot, 'candidate-concurrent-indexes');
+  fs.cpSync(candidateRoot, concurrentRoot, { recursive: true });
+  const concurrentBackgroundPath = path.join(concurrentRoot, 'background.js');
+  let concurrentBackground = fs.readFileSync(concurrentBackgroundPath, 'utf8');
+  const loadPairPattern = /(\\s*)await ensureKjvVerseCorpusLoaded\\(\\);\\n\\1await ensureKjvPhraseIndexLoaded\\(\\);/g;
+  let concurrentLoadReplacements = 0;
+  concurrentBackground = concurrentBackground.replace(loadPairPattern, (_match, indent) => {
+    concurrentLoadReplacements++;
+    return indent + 'await Promise.all([ensureKjvVerseCorpusLoaded(), ensureKjvPhraseIndexLoaded()]);';
+  });
+  if (concurrentLoadReplacements !== 2) {
+    throw new Error('Expected to parallelize both corpus/phrase-index loading paths; found ' + concurrentLoadReplacements);
   }
-  sequentialBackground = sequentialBackground.replace(parallelLoader, sequentialLoader);
-  fs.writeFileSync(sequentialBackgroundPath, sequentialBackground);
-
+  fs.writeFileSync(concurrentBackgroundPath, concurrentBackground);
   const variants = {
     baseline: path.join(baselineRoot, 'extension'),
     candidate: candidateRoot,
-    candidateSequential: sequentialRoot
+    candidateConcurrentIndexes: concurrentRoot
   };
 
   const instrument = extensionDir => {
@@ -220,7 +202,7 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   };
   instrument(variants.baseline);
   instrument(variants.candidate);
-  instrument(variants.candidateSequential);
+  instrument(variants.candidateConcurrentIndexes);
 
   const measureColdRun = async (extensionDir, variant, repetition) => {
     const context = await chromium.launchPersistentContext('', {
@@ -322,9 +304,9 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   try {
     for (let repetition = 1; repetition <= 5; repetition++) {
       const orders = [
-        ['baseline', 'candidate', 'candidateSequential'],
-        ['candidate', 'candidateSequential', 'baseline'],
-        ['candidateSequential', 'baseline', 'candidate']
+        ['baseline', 'candidate', 'candidateConcurrentIndexes'],
+        ['candidate', 'candidateConcurrentIndexes', 'baseline'],
+        ['candidateConcurrentIndexes', 'baseline', 'candidate']
       ];
       const order = orders[(repetition - 1) % orders.length];
       for (const variant of order) {
@@ -358,7 +340,7 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     baselineSha,
     baseline: summarize('baseline'),
     candidateParallel: summarize('candidate'),
-    candidateSequential: summarize('candidateSequential'),
+    candidateConcurrentIndexes: summarize('candidateConcurrentIndexes'),
     rawSamples: samples
   };
   const output = JSON.stringify({ scenario: 'kjv-corpus-lazy-loading-ab', ...summary });
