@@ -6449,6 +6449,46 @@ async function injectRedirectEnabledTabs() {
   }
 }
 
+// Content scripts cannot be unloaded from already-open documents when an
+// extension is reloaded. Reconcile configured tabs on update so stale
+// document contexts are refreshed/reinjected without requiring users to close
+// every tab. ensureContentScriptInTab first asks a resident script to refresh;
+// it only injects the current bundle when that script no longer responds.
+async function injectConfiguredTabsAfterExtensionUpdate() {
+  const data = await chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    redirectEnabled:false
+  });
+  if (data.masterEnabled === false) {
+    return {eligibleTabIds:[], activatedTabIds:[], failedTabIds:[]};
+  }
+
+  const tabs = await chrome.tabs.query({});
+  const eligibleTabs = [];
+  for (const tab of tabs) {
+    if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
+    if (await shouldInjectContentScriptForTab(tab, data)) eligibleTabs.push(tab);
+  }
+
+  const outcomes = await Promise.all(eligibleTabs.map(async tab => ({
+    tabId:tab.id,
+    ok:await ensureContentScriptInTab(tab.id)
+  })));
+  const result = {
+    eligibleTabIds:eligibleTabs.map(tab => tab.id),
+    activatedTabIds:outcomes.filter(item => item.ok).map(item => item.tabId),
+    failedTabIds:outcomes.filter(item => !item.ok).map(item => item.tabId)
+  };
+  console.info('KJV Scripture Tools extension-update tab reconciliation: ' + JSON.stringify({
+    eligibleCount:result.eligibleTabIds.length,
+    activatedCount:result.activatedTabIds.length,
+    failedTabIds:result.failedTabIds
+  }));
+  return result;
+}
+
 chrome.permissions?.onAdded?.addListener(details => {
   injectEnabledTabsForGrantedOrigins(details?.origins || []).catch(() => {});
 });
@@ -6466,6 +6506,11 @@ chrome.runtime.onInstalled.addListener(async details => {
     .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
     .catch(() => {}));
   installPdfSelectionContextMenu().catch(() => {});
+  if (details.reason === 'update') {
+    injectConfiguredTabsAfterExtensionUpdate().catch(error => {
+      console.error('KJV Scripture Tools extension-update tab reconciliation failed:', String(error));
+    });
+  }
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
