@@ -1,4 +1,9 @@
 const { test, expect } = require('./fixtures');
+const { chromium } = require('@playwright/test');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 
 test.describe('On-demand normalized KJV corpus loading', () => {
   test('ordinary startup and reference-only classification do not load corpus data', async ({ extensionWorker }) => {
@@ -84,4 +89,185 @@ test.describe('On-demand normalized KJV corpus loading', () => {
     expect(result.versesLoaded).toBe(true);
     expect(result.indexLoaded).toBe(true);
   });
+});
+
+
+test('interleaved cold-start and first-corpus-use A/B against current main', async () => {
+  // The exhaustive audit supplies BLB_PERF_OUTPUT. Keep ordinary focused
+  // browser runs fast; the labeled audit performs the paired benchmark.
+  test.skip(!process.env.BLB_PERF_OUTPUT, 'requires the exhaustive-audit performance output path');
+  test.setTimeout(180000);
+
+  const repoRoot = path.resolve(__dirname, '../..');
+  const baselineRef = process.env.GITHUB_BASE_REF || 'main';
+  execFileSync('git', ['fetch', '--depth=1', 'origin', baselineRef], { cwd: repoRoot, stdio: 'pipe' });
+  const baselineSha = execFileSync('git', ['rev-parse', 'FETCH_HEAD'], {
+    cwd: repoRoot, encoding: 'utf8'
+  }).trim();
+
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-corpus-ab-'));
+  const baselineRoot = path.join(tempRoot, 'baseline');
+  const candidateRoot = path.join(tempRoot, 'candidate');
+  fs.mkdirSync(baselineRoot, { recursive: true });
+  fs.cpSync(path.join(repoRoot, 'extension'), candidateRoot, { recursive: true });
+  const archive = execFileSync('git', ['archive', baselineSha, 'extension'], { cwd: repoRoot });
+  execFileSync('tar', ['-xf', '-', '-C', baselineRoot], { cwd: repoRoot, input: archive });
+  const variants = {
+    baseline: path.join(baselineRoot, 'extension'),
+    candidate: candidateRoot
+  };
+
+  const instrument = extensionDir => {
+    const backgroundPath = path.join(extensionDir, 'background.js');
+    let source = fs.readFileSync(backgroundPath, 'utf8');
+    const match = source.match(/^\uFEFF?\s*importScripts\(([^;]+)\);/);
+    if (!match) throw new Error('Unable to instrument the service-worker importScripts bootstrap');
+    const scripts = [...match[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(item => item[1]);
+    if (!scripts.length) throw new Error('No service-worker imports were found for A/B timing');
+    const replacement = 'globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: performance.now(), phases: [] };\n'
+      + 'for (const __blbScript of ' + JSON.stringify(scripts) + ') {\n'
+      + '  const __blbImportStartedAt = performance.now();\n'
+      + '  importScripts(__blbScript);\n'
+      + "  globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'service-worker-importScript', script: __blbScript, durationMs: performance.now() - __blbImportStartedAt });\n"
+      + '}';
+    source = source.replace(match[0], replacement);
+    fs.writeFileSync(backgroundPath, source);
+  };
+  instrument(variants.baseline);
+  instrument(variants.candidate);
+
+  const measureColdRun = async (extensionDir, variant, repetition) => {
+    const context = await chromium.launchPersistentContext('', {
+      channel: 'chromium',
+      headless: true,
+      args: [
+        '--headless=new',
+        '--disable-extensions-except=' + extensionDir,
+        '--load-extension=' + extensionDir,
+        '--no-first-run',
+        '--no-default-browser-check'
+      ]
+    });
+    try {
+      let [worker] = context.serviceWorkers();
+      if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 20000 });
+      return await worker.evaluate(async ({ variant, repetition }) => {
+        const startup = globalThis.__BLB_PROFILE_STARTUP__;
+        if (!startup || !Array.isArray(startup.phases)) {
+          throw new Error('Service-worker startup timing instrumentation was not initialized');
+        }
+        const startupToFirstEvaluationMs = performance.now() - startup.bootstrapAt;
+        const importPhases = startup.phases.filter(phase => phase.phase === 'service-worker-importScript');
+        const importScriptsMs = importPhases.reduce((sum, phase) => sum + phase.durationMs, 0);
+        const corpusLoadedAtStartup = Array.isArray(self.KJV_CORPUS_VERSES)
+          && !!self.KJV_CORPUS_WORD_VERSE_INDEX;
+
+        const referenceStartedAt = performance.now();
+        const reference = await classifySelectionForBlb('John 3:16');
+        const referenceOnlyMs = performance.now() - referenceStartedAt;
+
+        const wordStartedAt = performance.now();
+        const word = await classifySelectionForBlb('grace');
+        const singleWordMs = performance.now() - wordStartedAt;
+        const corpusStillLoadedAfterFastPaths = Array.isArray(self.KJV_CORPUS_VERSES)
+          && !!self.KJV_CORPUS_WORD_VERSE_INDEX;
+
+        const firstUseStartedAt = performance.now();
+        const passage = await classifySelectionForBlb('For God so loved the world');
+        const firstCorpusUseMs = performance.now() - firstUseStartedAt;
+
+        const warmStartedAt = performance.now();
+        const warmPassage = await classifySelectionForBlb('For God so loved the world');
+        const warmCorpusUseMs = performance.now() - warmStartedAt;
+
+        return {
+          variant,
+          repetition,
+          startupToFirstEvaluationMs,
+          importScriptsMs,
+          importedScripts: importPhases.map(phase => ({
+            script: phase.script,
+            durationMs: phase.durationMs
+          })),
+          corpusLoadedAtStartup,
+          corpusStillLoadedAfterFastPaths,
+          corpusLoadedAfterFirstUse: Array.isArray(self.KJV_CORPUS_VERSES)
+            && !!self.KJV_CORPUS_WORD_VERSE_INDEX,
+          referenceType: reference.type,
+          wordType: word.type,
+          passageType: passage.type,
+          warmPassageType: warmPassage.type,
+          passageRef: passage.directRef ? {
+            book: passage.directRef.book,
+            chapter: passage.directRef.chapter,
+            from: passage.directRef.from,
+            to: passage.directRef.to
+          } : null,
+          referenceOnlyMs,
+          singleWordMs,
+          firstCorpusUseMs,
+          warmCorpusUseMs
+        };
+      }, { variant, repetition });
+    } finally {
+      await context.close();
+    }
+  };
+
+  const samples = [];
+  try {
+    for (let repetition = 1; repetition <= 5; repetition++) {
+      const order = repetition % 2 === 1
+        ? ['baseline', 'candidate']
+        : ['candidate', 'baseline'];
+      for (const variant of order) {
+        const sample = await measureColdRun(variants[variant], variant, repetition);
+        samples.push(sample);
+        console.log('BLB_CORPUS_AB_SAMPLE ' + JSON.stringify(sample));
+      }
+    }
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+
+  const median = values => {
+    const sorted = [...values].sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
+  };
+  const summarize = variant => {
+    const rows = samples.filter(sample => sample.variant === variant);
+    return {
+      repetitions: rows.length,
+      startupToFirstEvaluationMs: median(rows.map(row => row.startupToFirstEvaluationMs)),
+      importScriptsMs: median(rows.map(row => row.importScriptsMs)),
+      referenceOnlyMs: median(rows.map(row => row.referenceOnlyMs)),
+      singleWordMs: median(rows.map(row => row.singleWordMs)),
+      firstCorpusUseMs: median(rows.map(row => row.firstCorpusUseMs)),
+      warmCorpusUseMs: median(rows.map(row => row.warmCorpusUseMs))
+    };
+  };
+  const summary = {
+    baselineSha,
+    baseline: summarize('baseline'),
+    candidate: summarize('candidate'),
+    rawSamples: samples
+  };
+  const output = JSON.stringify({ scenario: 'kjv-corpus-lazy-loading-ab', ...summary });
+  fs.appendFileSync(process.env.BLB_PERF_OUTPUT, output + '\n');
+  console.log('BLB_CORPUS_AB_SUMMARY ' + output);
+
+  for (const sample of samples) {
+    expect(sample.referenceType).toBe('REFERENCE');
+    expect(sample.wordType).toBe('KJV_WORD');
+    expect(sample.passageType).toBe('KJV_REFERENCE_RANGE');
+    expect(sample.warmPassageType).toBe('KJV_REFERENCE_RANGE');
+    expect(sample.passageRef).toEqual({ book: 'John', chapter: 3, from: 16, to: 16 });
+    if (sample.variant === 'baseline') {
+      expect(sample.corpusLoadedAtStartup).toBe(true);
+    } else {
+      expect(sample.corpusLoadedAtStartup).toBe(false);
+      expect(sample.corpusStillLoadedAfterFastPaths).toBe(false);
+      expect(sample.corpusLoadedAfterFirstUse).toBe(true);
+    }
+  }
 });
