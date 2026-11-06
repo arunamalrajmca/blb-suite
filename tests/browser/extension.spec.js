@@ -2521,6 +2521,7 @@ test.describe('core user-visible E2E', () => {
 
 test('Standalone book-name and KJV-word collision policy is consistent across all books and aliases', async ({ extensionWorker }) => {
   const audit = await extensionWorker.evaluate(async () => {
+    await ensureKjvVerseCorpusLoaded();
     const candidates = new Map();
     const add = (token, source, expectedBook = null) => {
       const key = String(token || '').trim().toLowerCase();
