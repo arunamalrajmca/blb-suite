@@ -1849,13 +1849,32 @@ async function fetchPackagedJsonAssignment(filename, assignment, terminator, all
 }
 
 async function fetchPackagedGzipJson(filename) {
-  const response = await fetch(chrome.runtime.getURL(filename));
   const fallbackAssignments = {
     'kjv-corpus-verses.json.gz': ['kjv-corpus-verses.js', 'const KJV_CORPUS_VERSES = ', ';'],
     'kjv-corpus-word-verse-index.json.gz': ['kjv-corpus-word-verse-index.js', 'const KJV_CORPUS_WORD_VERSE_INDEX = Object.fromEntries(', ');'],
     'kjv-corpus-phrase-index.json.gz': ['kjv-corpus-phrase-index.js', 'const KJV_CORPUS_PHRASE_INDEX = Object.freeze(', ');', true]
   };
   const fallback = fallbackAssignments[filename];
+  let response;
+  try {
+    response = await fetch(chrome.runtime.getURL(filename));
+  } catch (error) {
+    // A packaged extension-resource request can reject (rather than return
+    // HTTP 404) when Chromium cannot serve the generated sidecar. Preserve
+    // the original JavaScript assignment loader as a recovery path.
+    if (fallback) {
+      try {
+        return await fetchPackagedJsonAssignment(...fallback);
+      } catch (fallbackError) {
+        throw new Error(
+          'Unable to fetch compressed packaged KJV data ' + filename
+          + ' (' + String(error) + '); original-data fallback also failed: '
+          + String(fallbackError)
+        );
+      }
+    }
+    throw error;
+  }
   if (response.status === 404 || typeof DecompressionStream !== 'function') {
     if (fallback) return fetchPackagedJsonAssignment(...fallback);
   }
