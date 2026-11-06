@@ -3050,3 +3050,48 @@ test('runtime content-script registrations update using the supported scripts-ar
     mainWorld: [{ js: ['redirect-christianity-main-world.js'], world: 'MAIN' }]
   });
 });
+
+test('extension update reconciliation revisits already-open configured tabs', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionWorker.evaluate(() => {
+    globalThis.__blbSuiteUpdateReconciliationCalls = [];
+    globalThis.__blbSuiteOriginalEnsureContentScriptInTab = ensureContentScriptInTab;
+    globalThis.ensureContentScriptInTab = async tabId => {
+      globalThis.__blbSuiteUpdateReconciliationCalls.push(tabId);
+      return true;
+    };
+  });
+
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{'example.com':true},
+      doubleClickBlbSites:{},
+      redirectEnabled:false
+    });
+    await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+
+    const result = await extensionWorker.evaluate(async () => {
+      const tabs = await chrome.tabs.query({url:'https://example.com/*'});
+      const tabIds = tabs.map(tab => tab.id).filter(Number.isInteger);
+      const reconciliation = await injectConfiguredTabsAfterExtensionUpdate();
+      return {
+        tabIds,
+        reconciliation,
+        calls:globalThis.__blbSuiteUpdateReconciliationCalls.slice()
+      };
+    });
+
+    expect(result.tabIds.length).toBeGreaterThan(0);
+    expect(result.reconciliation.eligibleTabIds).toEqual(expect.arrayContaining(result.tabIds));
+    expect(result.reconciliation.activatedTabIds).toEqual(expect.arrayContaining(result.tabIds));
+    expect(result.calls).toEqual(expect.arrayContaining(result.tabIds));
+  } finally {
+    await extensionWorker.evaluate(() => {
+      if (globalThis.__blbSuiteOriginalEnsureContentScriptInTab) {
+        globalThis.ensureContentScriptInTab = globalThis.__blbSuiteOriginalEnsureContentScriptInTab;
+      }
+      delete globalThis.__blbSuiteOriginalEnsureContentScriptInTab;
+      delete globalThis.__blbSuiteUpdateReconciliationCalls;
+    });
+  }
+});
