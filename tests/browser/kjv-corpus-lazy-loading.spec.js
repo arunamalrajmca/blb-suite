@@ -187,17 +187,27 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
       "  const __blbParsed = JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);\n" +
       "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-parse', file: filename, durationMs: performance.now() - __blbParseStarted });\n" +
       "  return __blbParsed;");
-    const gzipRead = "  const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));";
-    if (source.includes(gzipRead)) {
-      source = source.replace("  const response = await fetch(chrome.runtime.getURL(filename));",
-        "  const __blbGzipFetchStarted = performance.now();\\n  const response = await fetch(chrome.runtime.getURL(filename));");
-      source = source.replace(gzipRead,
+    const gzipStart = source.indexOf('async function fetchPackagedGzipJson(filename) {');
+    const gzipEnd = source.indexOf('\\nasync function ensureKjvVerseCorpusLoaded()', gzipStart);
+    if (gzipStart >= 0 && gzipEnd > gzipStart) {
+      let gzipLoader = source.slice(gzipStart, gzipEnd);
+      gzipLoader = gzipLoader.replace(
+        "  const response = await fetch(chrome.runtime.getURL(filename));",
+        "  const __blbGzipFetchStarted = performance.now();\\n  const response = await fetch(chrome.runtime.getURL(filename));"
+      );
+      gzipLoader = gzipLoader.replace(
+        "  const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));",
         "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-gzip-fetch', file: filename, durationMs: performance.now() - __blbGzipFetchStarted });\\n"
-        + "  const __blbGzipDecodeStarted = performance.now();\\n" + gzipRead);
-      source = source.replace("  return new Response(decompressed).json();",
+        + "  const __blbGzipDecodeStarted = performance.now();\\n"
+        + "  const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));"
+      );
+      gzipLoader = gzipLoader.replace(
+        "  return new Response(decompressed).json();",
         "  const __blbDecoded = await new Response(decompressed).json();\\n"
         + "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-gzip-decompress-json', file: filename, durationMs: performance.now() - __blbGzipDecodeStarted });\\n"
-        + "  return __blbDecoded;");
+        + "  return __blbDecoded;"
+      );
+      source = source.slice(0, gzipStart) + gzipLoader + source.slice(gzipEnd);
     }
     const fromEntries = "      const wordVerseIndex = Object.fromEntries(wordVerseEntries);";
     source = source.replace(fromEntries,
@@ -223,7 +233,6 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
   };
   instrument(variants.baseline);
   instrument(variants.candidate);
-  instrument(variants.candidateGzip);
 
   const measureColdRun = async (extensionDir, variant, repetition) => {
     const context = await chromium.launchPersistentContext('', {
@@ -357,7 +366,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
   const summary = {
     baselineSha,
     baseline: summarize('baseline'),
-    candidateGzip: summarize('candidate'),
+    candidate: summarize('candidate'),
     rawSamples: samples
   };
   const output = JSON.stringify({ scenario: 'kjv-corpus-lazy-loading-ab', ...summary });
