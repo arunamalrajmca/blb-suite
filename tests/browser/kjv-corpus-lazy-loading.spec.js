@@ -108,8 +108,10 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-corpus-ab-'));
   const baselineRoot = path.join(tempRoot, 'baseline');
   const candidateRoot = path.join(tempRoot, 'candidate');
+  const candidateImportScriptsRoot = path.join(tempRoot, 'candidate-importscripts');
   fs.mkdirSync(baselineRoot, { recursive: true });
   fs.cpSync(path.join(repoRoot, 'extension'), candidateRoot, { recursive: true });
+  fs.cpSync(candidateRoot, candidateImportScriptsRoot, { recursive: true });
   const archive = execFileSync('git', ['archive', baselineSha, 'extension'], {
     cwd: repoRoot,
     maxBuffer: 100 * 1024 * 1024
@@ -117,7 +119,52 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   execFileSync('tar', ['-xf', '-', '-C', baselineRoot], { cwd: repoRoot, input: archive });
   const variants = {
     baseline: path.join(baselineRoot, 'extension'),
-    candidate: candidateRoot
+    candidate: candidateRoot,
+    candidateImportScripts: candidateImportScriptsRoot
+  };
+
+  const replaceCandidateLoaderWithImportScripts = extensionDir => {
+    const backgroundPath = path.join(extensionDir, 'background.js');
+    let source = fs.readFileSync(backgroundPath, 'utf8');
+    const start = source.indexOf('async function ensureKjvVerseCorpusLoaded() {');
+    const end = source.indexOf('\n}\n\nasync function ensureKjvPhraseIndexLoaded()', start);
+    if (start < 0 || end < 0) throw new Error('Unable to locate candidate lazy corpus loader for importScripts experiment');
+    const replacement = `async function ensureKjvVerseCorpusLoaded() {
+  if (Array.isArray(self.KJV_CORPUS_VERSES)
+      && self.KJV_CORPUS_WORD_VERSE_INDEX
+      && typeof self.KJV_CORPUS_WORD_VERSE_INDEX === 'object') return;
+  if (!kjvVerseCorpusLoadPromise) {
+    kjvVerseCorpusLoadPromise = (async () => {
+      if (!globalThis.__BLB_VERSES_SCRIPT_LOADED__) {
+        const started = performance.now();
+        importScripts('kjv-corpus-verses.js');
+        globalThis.__BLB_VERSES_SCRIPT_LOADED__ = true;
+        globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'lazy-importScripts', file: 'kjv-corpus-verses.js', durationMs: performance.now() - started });
+      }
+      if (!globalThis.__BLB_WORD_INDEX_SCRIPT_LOADED__) {
+        const started = performance.now();
+        importScripts('kjv-corpus-word-verse-index.js');
+        globalThis.__BLB_WORD_INDEX_SCRIPT_LOADED__ = true;
+        globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'lazy-importScripts', file: 'kjv-corpus-word-verse-index.js', durationMs: performance.now() - started });
+      }
+      if (!Array.isArray(KJV_CORPUS_VERSES) || KJV_CORPUS_VERSES.length !== 31102) {
+        throw new Error('The imported normalized KJV verse corpus is empty or invalid');
+      }
+      if (!KJV_CORPUS_WORD_VERSE_INDEX || typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'object'
+          || !Object.keys(KJV_CORPUS_WORD_VERSE_INDEX).length) {
+        throw new Error('The imported KJV word-to-verse index is empty or invalid');
+      }
+      self.KJV_CORPUS_VERSES = KJV_CORPUS_VERSES;
+      self.KJV_CORPUS_WORD_VERSE_INDEX = KJV_CORPUS_WORD_VERSE_INDEX;
+    })().catch(error => {
+      kjvVerseCorpusLoadPromise = null;
+      throw error;
+    });
+  }
+  await kjvVerseCorpusLoadPromise;
+}`;
+    source = source.slice(0, start) + replacement + source.slice(end + 2);
+    fs.writeFileSync(backgroundPath, source);
   };
 
   const instrument = extensionDir => {
@@ -165,8 +212,10 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
       "\n    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'downstream-corpus-classification', durationMs: performance.now() - __blbRangeStarted });");
     fs.writeFileSync(backgroundPath, source);
   };
+  replaceCandidateLoaderWithImportScripts(variants.candidateImportScripts);
   instrument(variants.baseline);
   instrument(variants.candidate);
+  instrument(variants.candidateImportScripts);
 
   const measureColdRun = async (extensionDir, variant, repetition) => {
     const context = await chromium.launchPersistentContext('', {
@@ -260,9 +309,12 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   const samples = [];
   try {
     for (let repetition = 1; repetition <= 5; repetition++) {
-      const order = repetition % 2 === 1
-        ? ['baseline', 'candidate']
-        : ['candidate', 'baseline'];
+      const orders = [
+        ['baseline', 'candidate', 'candidateImportScripts'],
+        ['candidate', 'candidateImportScripts', 'baseline'],
+        ['candidateImportScripts', 'baseline', 'candidate']
+      ];
+      const order = orders[(repetition - 1) % orders.length];
       for (const variant of order) {
         const sample = await measureColdRun(variants[variant], variant, repetition);
         samples.push(sample);
@@ -293,6 +345,7 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     baselineSha,
     baseline: summarize('baseline'),
     candidate: summarize('candidate'),
+    candidateImportScripts: summarize('candidateImportScripts'),
     rawSamples: samples
   };
   const output = JSON.stringify({ scenario: 'kjv-corpus-lazy-loading-ab', ...summary });
