@@ -1759,8 +1759,22 @@ test.describe('core user-visible E2E', () => {
     const activationStartedAt = process.hrtime.bigint();
     await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText, pollIntervalMs});
     const activationMs = Number(process.hrtime.bigint() - activationStartedAt) / 1e6;
-    // activateBlbTabForPath already returns only after chrome.tabs.query()
-    // confirms this exact destination path; a second identical poll is redundant.
+    // The extension worker is authoritative for Chrome tab state. Do not
+    // require Playwright context.pages() to observe the tab before validating
+    // the reference; that representation can lag behind chrome.tabs.query().
+    const destinationPollStartedAt = process.hrtime.bigint();
+    await expect.poll(() => extensionWorker.evaluate((path) => chrome.tabs.query({}).then(tabs =>
+      tabs.some(tab => {
+        try {
+          const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+          return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+        } catch (_) {
+          return false;
+        }
+      })
+    ), expectedPath), { timeout: 10000 }).toBe(true);
+    const destinationPollMs = Number(process.hrtime.bigint() - destinationPollStartedAt) / 1e6;
+    if (profileEnabled) console.log('BLB_POLL_PROFILE ' + JSON.stringify({ phase: 'destination-confirmation-poll', durationMs: destinationPollMs, expectedPath }));
     const cleanupStartedAt = process.hrtime.bigint();
     await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
       const matches = tabs.filter(tab => {
@@ -1779,7 +1793,7 @@ test.describe('core user-visible E2E', () => {
     }), expectedPath);
     const cleanupMs = Number(process.hrtime.bigint() - cleanupStartedAt) / 1e6;
     if (profileEnabled) console.log('BLB_GRAMMAR_ACTION_PROFILE ' + JSON.stringify({
-      rectMs, gestureMs, selectionReadMs, activationMs, cleanupMs,
+      rectMs, gestureMs, selectionReadMs, activationMs, destinationPollMs, cleanupMs,
       totalMs: Number(process.hrtime.bigint() - actionStartedAt) / 1e6,
       expectedPath
     }));
@@ -1887,11 +1901,9 @@ test.describe('core user-visible E2E', () => {
       durationMs: Number(process.hrtime.bigint() - testStartedAt) / 1e6
     }));
   }
-  test('Double-click generic reference grammar — exhaustive token coverage — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click generic reference grammar — exhaustive token coverage — OT and NT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
     await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'ot');
-  });
-
-  test('Double-click generic reference grammar — exhaustive token coverage — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
     await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'nt');
   });
 
