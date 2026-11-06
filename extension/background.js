@@ -2689,8 +2689,31 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
     }
     return true;
   } catch (error) {
+    const errorDetails = describeScriptInjectionError(error);
+    const patternFileChecks = await inspectPackagedScriptFiles(files);
+    const mainWorldFileChecks = await inspectPackagedScriptFiles(['redirect-christianity-main-world.js']);
+    let registeredScripts = [];
+    try {
+      registeredScripts = await chrome.scripting.getRegisteredContentScripts();
+    } catch (inspectionError) {
+      registeredScripts = [{inspectionError:describeScriptInjectionError(inspectionError)}];
+    }
     console.error('KJV Scripture Tools runtime content-script registration failed:', {
-      tabId:tab?.id ?? null, tabUrl:tab?.url || '', files, error:String(error)
+      tabId:tab?.id ?? null,
+      tabUrl:tab?.url || '',
+      originPattern:pattern,
+      registrationId:id,
+      files,
+      ...errorDetails,
+      packagedFileChecks:patternFileChecks,
+      mainWorldFileChecks,
+      registeredScriptIds:registeredScripts.map(script => ({
+        id:script.id,
+        matches:script.matches,
+        js:script.js,
+        world:script.world,
+        runAt:script.runAt
+      }))
     });
     return false;
   }
