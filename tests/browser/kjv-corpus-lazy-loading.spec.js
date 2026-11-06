@@ -203,7 +203,8 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
 
         const firstUseStartedAt = performance.now();
         const passage = await classifySelectionForBlb('For God so loved the world');
-        const firstCorpusUseMs = performance.now() - firstUseStartedAt;\n        const firstUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
+        const firstCorpusUseMs = performance.now() - firstUseStartedAt;
+        const firstUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
 
         const warmStartedAt = performance.now();
         const warmPassage = await classifySelectionForBlb('For God so loved the world');
