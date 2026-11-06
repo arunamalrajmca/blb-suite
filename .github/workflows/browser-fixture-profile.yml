@@ -2,7 +2,7 @@ name: Browser fixture and reference polling profile
 
 on:
   push:
-    branches: [audit/extension-storage-startup-profiling]
+    branches: [audit/browser-spec-worker-parallel-profile]
     paths:
       - '.github/workflows/browser-fixture-profile.yml'
       - 'tests/browser/fixtures.js'
@@ -17,7 +17,11 @@ concurrency:
 
 jobs:
   profile:
-    name: Profile browser fixture and reference tests
+    name: Profile browser fixture and reference tests (workers=${{ matrix.workers }})
+    strategy:
+      fail-fast: false
+      matrix:
+        workers: [1, 2]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -39,14 +43,14 @@ jobs:
           START_MS="$(node -p 'Date.now()')"
           npx playwright test tests/browser/extension.spec.js \
             --grep 'Double-click generic reference grammar — exhaustive token coverage — NT' \
-            --workers=1 --repeat-each=3 --reporter=line 2>&1 | tee "$RUNNER_TEMP/browser-profile/profile.log"
+            --workers=${{ matrix.workers }} --repeat-each=3 --reporter=line 2>&1 | tee "$RUNNER_TEMP/browser-profile/profile.log"
           END_MS="$(node -p 'Date.now()')"
           echo "Profile process wall time: $((END_MS - START_MS))ms" | tee -a "$RUNNER_TEMP/browser-profile/profile.log"
       - name: Upload profile log
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: browser-fixture-reference-profile
+          name: browser-fixture-workers-${{ matrix.workers }}
           path: ${{ runner.temp }}/browser-profile/profile.log
           if-no-files-found: warn
           retention-days: 14
