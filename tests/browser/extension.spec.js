@@ -1728,6 +1728,9 @@ test.describe('core user-visible E2E', () => {
   });
 
   async function runDoubleClickReferenceToken(page, context, extensionWorker, selector, fragment, expectedPath, pollIntervalMs = 100) {
+    const profileEnabled = process.env.BLB_PROFILE_BROWSER_FIXTURES === '1';
+    const actionStartedAt = process.hrtime.bigint();
+    const rectStartedAt = process.hrtime.bigint();
     const rect = await page.evaluate(({ selector, fragment }) => {
       const el = document.querySelector(selector);
       const text = el.firstChild;
@@ -1738,6 +1741,7 @@ test.describe('core user-visible E2E', () => {
       const box = range.getBoundingClientRect();
       return { x: box.left + box.width / 2, y: box.top + box.height / 2 };
     }, { selector, fragment });
+    const rectMs = Number(process.hrtime.bigint() - rectStartedAt) / 1e6;
 
     // For isolated token elements, double-click the element itself. Computing a
     // range point and then converting it back to locator-relative coordinates can
@@ -1746,8 +1750,15 @@ test.describe('core user-visible E2E', () => {
     // Use the exact text-range center computed above. Clicking the broader
     // inline element can place Chromium's dblclick coordinates on an adjacent
     // inter-token whitespace gap even when the token itself is visually hit.
+    const gestureStartedAt = process.hrtime.bigint();
     await page.mouse.dblclick(rect.x, rect.y);
-    await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText: await page.evaluate(() => window.getSelection?.().toString() || ''), pollIntervalMs});
+    const gestureMs = Number(process.hrtime.bigint() - gestureStartedAt) / 1e6;
+    const selectionReadStartedAt = process.hrtime.bigint();
+    const selectedText = await page.evaluate(() => window.getSelection?.().toString() || '');
+    const selectionReadMs = Number(process.hrtime.bigint() - selectionReadStartedAt) / 1e6;
+    const activationStartedAt = process.hrtime.bigint();
+    await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText, pollIntervalMs});
+    const activationMs = Number(process.hrtime.bigint() - activationStartedAt) / 1e6;
     // The extension worker is authoritative for Chrome tab state. Do not
     // require Playwright context.pages() to observe the tab before validating
     // the reference; that representation can lag behind chrome.tabs.query().
@@ -1762,7 +1773,9 @@ test.describe('core user-visible E2E', () => {
         }
       })
     ), expectedPath), { timeout: 10000 }).toBe(true);
-    if (process.env.BLB_PROFILE_BROWSER_FIXTURES === '1') console.log('BLB_POLL_PROFILE ' + JSON.stringify({ phase: 'destination-confirmation-poll', durationMs: Number(process.hrtime.bigint() - destinationPollStartedAt) / 1e6, expectedPath }));
+    const destinationPollMs = Number(process.hrtime.bigint() - destinationPollStartedAt) / 1e6;
+    if (profileEnabled) console.log('BLB_POLL_PROFILE ' + JSON.stringify({ phase: 'destination-confirmation-poll', durationMs: destinationPollMs, expectedPath }));
+    const cleanupStartedAt = process.hrtime.bigint();
     await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
       const matches = tabs.filter(tab => {
         try {
@@ -1778,6 +1791,12 @@ test.describe('core user-visible E2E', () => {
         }
       }
     }), expectedPath);
+    const cleanupMs = Number(process.hrtime.bigint() - cleanupStartedAt) / 1e6;
+    if (profileEnabled) console.log('BLB_GRAMMAR_ACTION_PROFILE ' + JSON.stringify({
+      rectMs, gestureMs, selectionReadMs, activationMs, destinationPollMs, cleanupMs,
+      totalMs: Number(process.hrtime.bigint() - actionStartedAt) / 1e6,
+      expectedPath, selectedText
+    }));
   }
 
   async function setupDoubleClickReferencePage(page, extensionStorage, html) {
