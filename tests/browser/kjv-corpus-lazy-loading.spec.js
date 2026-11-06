@@ -53,6 +53,23 @@ test.describe('On-demand normalized KJV corpus loading', () => {
     expect(['KJV_PHRASE', 'KJV_REFERENCE_RANGE']).toContain(result.decisionType);
   });
 
+  test('short exact KJV phrases load corpus and phrase-index data together', async ({ extensionWorker }) => {
+    const result = await extensionWorker.evaluate(async () => {
+      const decision = await classifySelectionForBlb('God is love');
+      return {
+        decisionType: decision.type,
+        versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
+        wordIndexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX,
+        phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX
+      };
+    });
+
+    expect(result.decisionType).toBe('KJV_PHRASE');
+    expect(result.versesLoaded).toBe(true);
+    expect(result.wordIndexLoaded).toBe(true);
+    expect(result.phraseIndexLoaded).toBe(true);
+  });
+
   test('concurrent loads are deduplicated and a failed load can be retried', async ({ extensionWorker }) => {
     const result = await extensionWorker.evaluate(async () => {
       const originalFetch = self.fetch;
