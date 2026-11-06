@@ -1856,11 +1856,9 @@ test.describe('core user-visible E2E', () => {
     }
   }
 
-  test('Double-click generic reference grammar — exhaustive token coverage — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click generic reference grammar — exhaustive token coverage — OT and NT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
     await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'ot');
-  });
-
-  test('Double-click generic reference grammar — exhaustive token coverage — NT', async ({ page, context, extensionStorage, extensionWorker }) => {
     await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'nt');
   });
 
