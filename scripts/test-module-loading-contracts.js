@@ -116,7 +116,7 @@ if (!importMatch) {
   }
   const corpusRangeCallIndex = background.indexOf('const corpusRange = findKjvVerseRangeForSelection(source)');
   const residualCriteriaBranchIndex = background.indexOf('if (remainingWordCount >= KJV_PASSAGE_MIN_WORDS) {');
-  const deferredPhraseIndexLoadIndex = background.indexOf('await ensureKjvPhraseIndexLoaded();', residualCriteriaBranchIndex);
+  const deferredPhraseIndexLoadIndex = background.indexOf('ensureKjvPhraseIndexLoaded()', residualCriteriaBranchIndex);
   const phraseIndexLoadsAfterRangeCheck = corpusRangeCallIndex >= 0
     && residualCriteriaBranchIndex > corpusRangeCallIndex
     && deferredPhraseIndexLoadIndex > residualCriteriaBranchIndex;
@@ -171,9 +171,11 @@ if (!importMatch) {
       pass(file + ' is not imported during ordinary worker startup');
     }
   }
+  const phraseIndexAwaitedAtDecisionPoint = background.includes('await ensureKjvPhraseIndexLoaded();')
+    || background.includes('await Promise.all([ensureKjvVerseCorpusLoaded(), ensureKjvPhraseIndexLoaded()]);');
   if (!background.includes('await ensureKjvCaseSensitiveWordsLoaded();')
       || !background.includes('await ensureKjvOriginalCaseCorpusLoaded();')
-      || !background.includes('await ensureKjvPhraseIndexLoaded();')) {
+      || !phraseIndexAwaitedAtDecisionPoint) {
     fail('case-sensitive search and KJV phrase classification await their data at the respective decision points');
   } else {
     pass('case-sensitive search and KJV phrase classification await their data at the respective decision points');
