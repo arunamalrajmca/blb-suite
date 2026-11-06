@@ -110,7 +110,10 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   const candidateRoot = path.join(tempRoot, 'candidate');
   fs.mkdirSync(baselineRoot, { recursive: true });
   fs.cpSync(path.join(repoRoot, 'extension'), candidateRoot, { recursive: true });
-  const archive = execFileSync('git', ['archive', baselineSha, 'extension'], { cwd: repoRoot });
+  const archive = execFileSync('git', ['archive', baselineSha, 'extension'], {
+    cwd: repoRoot,
+    maxBuffer: 100 * 1024 * 1024
+  });
   execFileSync('tar', ['-xf', '-', '-C', baselineRoot], { cwd: repoRoot, input: archive });
   const variants = {
     baseline: path.join(baselineRoot, 'extension'),
