@@ -126,10 +126,14 @@ async function activateBlbTabForPath(extensionWorker, expectedPath, debug = {}) 
     pollCount,
     expectedPath
   }));
+  let selectedText = debug.selectedText || '';
+  if (!selectedText && typeof debug.getSelectedText === 'function') {
+    try { selectedText = await debug.getSelectedText(); } catch (_) {}
+  }
   console.error('Double-click activation failure', {
     fragment: debug.fragment || '',
     selector: debug.selector || '',
-    selectedText: debug.selectedText || '',
+    selectedText,
     expectedPath,
     tabs: lastTabs
   });
@@ -1747,7 +1751,13 @@ test.describe('core user-visible E2E', () => {
     // inline element can place Chromium's dblclick coordinates on an adjacent
     // inter-token whitespace gap even when the token itself is visually hit.
     await page.mouse.dblclick(rect.x, rect.y);
-    const matchedTabIds = await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText: await page.evaluate(() => window.getSelection?.().toString() || ''), pollIntervalMs});
+    const activationDebug = {fragment, selector, pollIntervalMs};
+    if (process.env.BLB_PROFILE_DEFER_SELECTION_READ === '1') {
+      activationDebug.getSelectedText = () => page.evaluate(() => window.getSelection?.().toString() || '');
+    } else {
+      activationDebug.selectedText = await page.evaluate(() => window.getSelection?.().toString() || '');
+    }
+    const matchedTabIds = await activateBlbTabForPath(extensionWorker, expectedPath, activationDebug);
     // The activation poll already verifies the exact destination path. Reuse
     // those matched tab IDs for cleanup instead of querying Chrome again.
     await extensionWorker.evaluate(ids => Promise.all(ids.map(id =>
@@ -1835,6 +1845,26 @@ test.describe('core user-visible E2E', () => {
     test.setTimeout(240000);
     await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'ot');
     await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'nt');
+  });
+
+  test('Double-click generic reference grammar — selection-read paired profile', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
+    const runProfile = async mode => {
+      process.env.BLB_PROFILE_DEFER_SELECTION_READ = mode === 'candidate' ? '1' : '0';
+      const startedAt = process.hrtime.bigint();
+      await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'ot');
+      await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'nt');
+      console.log('BLB_SELECTION_READ_PROFILE ' + JSON.stringify({
+        mode,
+        durationMs: Number(process.hrtime.bigint() - startedAt) / 1e6
+      }));
+    };
+    try {
+      await runProfile('baseline');
+      await runProfile('candidate');
+    } finally {
+      delete process.env.BLB_PROFILE_DEFER_SELECTION_READ;
+    }
   });
 
   async function runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, testament, variant, includeBook = () => true) {
