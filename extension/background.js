@@ -1,4 +1,4 @@
-importScripts('study-session-normalization.js', 'multiverse-reference-helpers.js', 'study-session-export.js', 'selection-text-helpers.js', 'omnibox-search-helpers.js', 'regex-patterns.js', 'kjv-corpus-word-index.js', 'kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'books.js', 'book-aliases.js', 'reference-core.js');
+importScripts('study-session-normalization.js', 'multiverse-reference-helpers.js', 'study-session-export.js', 'selection-text-helpers.js', 'omnibox-search-helpers.js', 'regex-patterns.js', 'kjv-corpus-word-index.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'books.js', 'book-aliases.js', 'reference-core.js');
 let KJV_CORPUS_PHRASE_INDEX = null;
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
@@ -1631,6 +1631,7 @@ async function handleBCommand(text, disposition = 'currentTab') {
       // exact single-result optimization. A quoted phrase with exactly one
       // KJV verse match opens that verse directly; multiple/zero matches keep
       // the established native BLB quoted-search behavior.
+      await ensureKjvVerseCorpusLoaded();
       const singleMatch = findSingleKjvPhraseMatch(phrase);
       if (singleMatch) {
         await openSingleKjvVerse(singleMatch, 'currentTab');
@@ -1703,6 +1704,7 @@ async function handleBCommand(text, disposition = 'currentTab') {
   }
 
   const hasBooleanOperators = hasUnquotedBooleanOperator(t);
+  if (!hasBooleanOperators) await ensureKjvVerseCorpusLoaded();
   const singleKjvMatch = hasBooleanOperators ? null : findSingleKjvPhraseMatch(t);
   if (singleKjvMatch) {
     if (await openSingleKjvVerse(singleKjvMatch)) {
@@ -1825,6 +1827,7 @@ async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
 let kjvCaseSensitiveWordsLoadPromise = null;
 let kjvOriginalCaseCorpusLoadPromise = null;
 let kjvPhraseIndexLoadPromise = null;
+let kjvVerseCorpusLoadPromise = null;
 
 async function fetchPackagedJsonAssignment(filename, assignment, terminator, allowTrailingObjectComma = false) {
   const response = await fetch(chrome.runtime.getURL(filename));
@@ -1843,6 +1846,48 @@ async function fetchPackagedJsonAssignment(filename, assignment, terminator, all
   // Generated object indexes may use a JavaScript trailing comma even though
   // the payload is parsed as JSON. Normalize only the final object-entry comma.
   return JSON.parse(allowTrailingObjectComma ? json.replace(/,(\s*})$/, '$1') : json);
+}
+
+async function ensureKjvVerseCorpusLoaded() {
+  // The normalized verse corpus and word-to-verse candidate index are used
+  // only by local KJV matching. Keep both out of worker startup and fetch them
+  // together so every corpus lookup observes a complete, validated pair.
+  if (Array.isArray(self.KJV_CORPUS_VERSES)
+      && self.KJV_CORPUS_WORD_VERSE_INDEX
+      && typeof self.KJV_CORPUS_WORD_VERSE_INDEX === 'object') return;
+  if (!kjvVerseCorpusLoadPromise) {
+    kjvVerseCorpusLoadPromise = (async () => {
+      const [verseEntries, wordVerseEntries] = await Promise.all([
+        fetchPackagedJsonAssignment(
+          'kjv-corpus-verses.js',
+          'const KJV_CORPUS_VERSES = ',
+          ';'
+        ),
+        fetchPackagedJsonAssignment(
+          'kjv-corpus-word-verse-index.js',
+          'const KJV_CORPUS_WORD_VERSE_INDEX = Object.fromEntries(',
+          ');'
+        )
+      ]);
+      if (!Array.isArray(verseEntries) || verseEntries.length !== 31102) {
+        throw new Error('The packaged normalized KJV verse corpus is empty or invalid');
+      }
+      if (!Array.isArray(wordVerseEntries) || !wordVerseEntries.length) {
+        throw new Error('The packaged KJV word-to-verse index is empty or invalid');
+      }
+      const wordVerseIndex = Object.fromEntries(wordVerseEntries);
+      if (!wordVerseIndex || typeof wordVerseIndex !== 'object'
+          || !Object.keys(wordVerseIndex).length) {
+        throw new Error('The packaged KJV word-to-verse index could not be constructed');
+      }
+      self.KJV_CORPUS_VERSES = verseEntries;
+      self.KJV_CORPUS_WORD_VERSE_INDEX = wordVerseIndex;
+    })().catch(error => {
+      kjvVerseCorpusLoadPromise = null;
+      throw error;
+    });
+  }
+  await kjvVerseCorpusLoadPromise;
 }
 
 async function ensureKjvPhraseIndexLoaded() {
@@ -5155,6 +5200,7 @@ async function classifySelectionForBlb(selectionText) {
   // explicit citations are authoritative, and the remaining selected wording
   // can independently produce Criteria Search terms.
   if (!extractedRefs.length) {
+    await ensureKjvVerseCorpusLoaded();
     if (wordCount >= KJV_PASSAGE_MIN_WORDS) await ensureKjvPhraseIndexLoaded();
     const corpusRange = findKjvVerseRangeForSelection(source);
     if (corpusRange?.url) {
@@ -5184,6 +5230,7 @@ async function classifySelectionForBlb(selectionText) {
   // already represented by those references and must NOT be searched again.
   // Remove only wording that belongs to the extracted references; unrelated
   // paragraph text remains eligible for the normal Criteria retrieval.
+  if (extractedRefs.length) await ensureKjvVerseCorpusLoaded();
   const excludedVerseTexts = extractedRefs.length ? extractedRefs
     .map(ref => getKjvVerseTextForSelectionRef(ref))
     .filter(Boolean) : [];
@@ -5201,6 +5248,7 @@ async function classifySelectionForBlb(selectionText) {
   const remainingWordCount = (remainingText.match(/\S+/g) || []).length;
 
   if (remainingWordCount >= KJV_PASSAGE_MIN_WORDS) {
+    await ensureKjvVerseCorpusLoaded();
     await ensureKjvPhraseIndexLoaded();
     // Keep the cited-verse wording excluded all the way through the final
     // Criteria Search extraction. This is a second guard after physical text
@@ -5238,6 +5286,7 @@ async function classifySelectionForBlb(selectionText) {
       return {valid:true, type:'KJV_WORD', text:source};
     }
     if (wordCount > 1) {
+      await ensureKjvVerseCorpusLoaded();
       await ensureKjvPhraseIndexLoaded();
       // Multi-word selections must actually occur in the KJV corpus. Merely
       // having every individual word in the KJV vocabulary is not sufficient:
@@ -5519,6 +5568,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     // reference tab is opened, since it is optional to the primary action.
     const referenceTab = await referenceOpen;
     await studyCapture;
+    await ensureKjvVerseCorpusLoaded();
 
     const excludedVerseTexts = combinedRefs
       .map(ref => getKjvVerseTextForSelectionRef(ref))
@@ -5555,13 +5605,6 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
     const contextualRefs = [contextualRef];
 
     if (contextualRefs.length < 2) {
-      const excludedVerseTexts = contextualRefs
-        .map(ref => getKjvVerseTextForSelectionRef(ref))
-        .filter(Boolean);
-      let residualText = removeKjvVerseTextFromSelection(text, contextualRefs);
-      residualText = removeQuotedTextFromSelection(residualText);
-      const fastCriteriaQuery = extractResidualProseShortCriteriaQuery(residualText, excludedVerseTexts);
-
       const studyCapture = recordStudyRefs(
         contextualRefs.map(r => parseBlbKjvUrlToStudyRef(r.url)).filter(Boolean)
       );
@@ -5571,6 +5614,13 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
         !!tabBehavior.activateExisting
       );
       await studyCapture;
+      await ensureKjvVerseCorpusLoaded();
+      const excludedVerseTexts = contextualRefs
+        .map(ref => getKjvVerseTextForSelectionRef(ref))
+        .filter(Boolean);
+      let residualText = removeKjvVerseTextFromSelection(text, contextualRefs);
+      residualText = removeQuotedTextFromSelection(residualText);
+      const fastCriteriaQuery = extractResidualProseShortCriteriaQuery(residualText, excludedVerseTexts);
 
       // The reference tab is already created. Now run the authoritative
       // classifier and reconcile/open Criteria Search without blocking that
@@ -5654,6 +5704,7 @@ async function openSelectedPdfBibleRefs(selectionText, tabBehavior = {activeIfNe
   // Keep Criteria Search for words with multiple matches, preserving the
   // established behavior for ambiguous vocabulary.
   if (decision.type === 'KJV_WORD') {
+    await ensureKjvVerseCorpusLoaded();
     const singleMatch = findSingleKjvPhraseMatch(cleanedText);
     if (singleMatch) {
       const book = bookData.find(b => Number(b.bookNumber) === Number(singleMatch[0]));
