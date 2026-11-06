@@ -133,7 +133,33 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
       + '  importScripts(__blbScript);\n'
       + "  globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'service-worker-importScript', script: __blbScript, durationMs: performance.now() - __blbImportStartedAt });\n"
       + '}';
-    source = source.replace(match[0], replacement);
+    source = source.replace(match[0], replacement + "\nglobalThis.__BLB_PROFILE_LOAD__ = { events: [] };");
+    const fetchStart = "  const response = await fetch(chrome.runtime.getURL(filename));";
+    const fetchEnd = "  const source = await response.text();";
+    const parseLine = "  return JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);";
+    if (!source.includes(fetchStart) || !source.includes(fetchEnd) || !source.includes(parseLine)) {
+      throw new Error('Unable to instrument packaged JSON fetch/read/parse phases');
+    }
+    source = source.replace(fetchStart,
+      "  const __blbFetchStarted = performance.now();\\n" + fetchStart);
+    source = source.replace("  if (!response.ok) {",
+      "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-fetch', file: filename, durationMs: performance.now() - __blbFetchStarted });\\n  if (!response.ok) {");
+    source = source.replace(fetchEnd,
+      "  const __blbReadStarted = performance.now();\\n" + fetchEnd +
+      "\\n  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-read', file: filename, durationMs: performance.now() - __blbReadStarted });");
+    source = source.replace(parseLine,
+      "  const __blbParseStarted = performance.now();\\n" +
+      "  const __blbParsed = JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\\\s*})$/, '$1') : json);\\n" +
+      "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-parse', file: filename, durationMs: performance.now() - __blbParseStarted });\\n" +
+      "  return __blbParsed;");
+    const fromEntries = "      const wordVerseIndex = Object.fromEntries(wordVerseEntries);";
+    source = source.replace(fromEntries,
+      "      const __blbIndexBuildStarted = performance.now();\\n" + fromEntries +
+      "\\n      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'word-verse-index-build', durationMs: performance.now() - __blbIndexBuildStarted });");
+    const rangeCall = "    const corpusRange = findKjvVerseRangeForSelection(source);";
+    source = source.replace(rangeCall,
+      "    const __blbRangeStarted = performance.now();\\n" + rangeCall +
+      "\\n    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'downstream-corpus-classification', durationMs: performance.now() - __blbRangeStarted });");
     fs.writeFileSync(backgroundPath, source);
   };
   instrument(variants.baseline);
@@ -177,7 +203,7 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
 
         const firstUseStartedAt = performance.now();
         const passage = await classifySelectionForBlb('For God so loved the world');
-        const firstCorpusUseMs = performance.now() - firstUseStartedAt;
+        const firstCorpusUseMs = performance.now() - firstUseStartedAt;\n        const firstUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
 
         const warmStartedAt = performance.now();
         const warmPassage = await classifySelectionForBlb('For God so loved the world');
