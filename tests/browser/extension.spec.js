@@ -2982,3 +2982,61 @@ test('Double-clicking the Mt abbreviation opens its complete chapter-and-verse r
   ), beforeIds);
   expect(openedPaths).toContain('/kjv/mat/10/32-33/');
 });
+
+test('runtime content-script registrations update using the supported scripts-array API', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const cases = [
+      {
+        url: 'https://www.blueletterbible.org/kjv/jhn/3/16/',
+        first: ['redirect-scripttagger.js'],
+        second: ['redirect-scripttagger.js', 'redirect-bibleref-ranges.js']
+      },
+      {
+        url: 'https://christianity.com/example',
+        first: ['content.js'],
+        second: ['content.js', 'redirect-scripttagger.js']
+      }
+    ];
+    const outcomes = [];
+    for (const item of cases) {
+      const pattern = originPatternForUrl(item.url);
+      const id = runtimeContentScriptIdForPattern(pattern);
+      const mainWorldId = id + '-main-world';
+      try {
+        await chrome.scripting.unregisterContentScripts({ ids: [id, mainWorldId] }).catch(() => {});
+        const firstRegistered = await ensureRuntimeContentScriptRegistered({ url: item.url, id: 1 }, item.first);
+        const afterFirst = await chrome.scripting.getRegisteredContentScripts({ ids: [id] });
+        const secondRegistered = await ensureRuntimeContentScriptRegistered({ url: item.url, id: 1 }, item.second);
+        const afterSecond = await chrome.scripting.getRegisteredContentScripts({ ids: [id] });
+        const mainWorld = item.url.includes('christianity.com')
+          ? await chrome.scripting.getRegisteredContentScripts({ ids: [mainWorldId] })
+          : [];
+        outcomes.push({
+          pattern,
+          firstRegistered,
+          secondRegistered,
+          firstScripts: afterFirst[0]?.js || [],
+          secondScripts: afterSecond[0]?.js || [],
+          mainWorld: mainWorld.map(script => ({ js: script.js, world: script.world }))
+        });
+      } finally {
+        await chrome.scripting.unregisterContentScripts({ ids: [id, mainWorldId] }).catch(() => {});
+      }
+    }
+    return outcomes;
+  });
+
+  expect(result[0]).toMatchObject({
+    firstRegistered: true,
+    secondRegistered: true,
+    firstScripts: ['redirect-scripttagger.js'],
+    secondScripts: ['redirect-scripttagger.js', 'redirect-bibleref-ranges.js']
+  });
+  expect(result[1]).toMatchObject({
+    firstRegistered: true,
+    secondRegistered: true,
+    firstScripts: ['content.js'],
+    secondScripts: ['content.js', 'redirect-scripttagger.js'],
+    mainWorld: [{ js: ['redirect-christianity-main-world.js'], world: 'MAIN' }]
+  });
+});
