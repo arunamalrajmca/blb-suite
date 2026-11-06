@@ -129,6 +129,55 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
   const candidateRoot = path.join(tempRoot, 'candidate');
   fs.mkdirSync(baselineRoot, { recursive: true });
   fs.cpSync(path.join(repoRoot, 'extension'), candidateRoot, { recursive: true });
+
+  // Experimental loader only: use the browser's native classic-script loader
+  // for the verse corpus and word→verse index, while retaining the existing
+  // packaged-JSON phrase-index loader. This isolates response.text()/JSON.parse
+  // overhead from classification and keeps production source untouched.
+  const importScriptsRoot = path.join(tempRoot, 'candidate-importScripts');
+  fs.cpSync(candidateRoot, importScriptsRoot, { recursive: true });
+  const importScriptsBackgroundPath = path.join(importScriptsRoot, 'background.js');
+  let importScriptsBackground = fs.readFileSync(importScriptsBackgroundPath, 'utf8');
+  const loaderStart = importScriptsBackground.indexOf('async function ensureKjvVerseCorpusLoaded() {');
+  const loaderEnd = importScriptsBackground.indexOf('\nasync function ensureKjvPhraseIndexLoaded()', loaderStart);
+  if (loaderStart < 0 || loaderEnd < 0) {
+    throw new Error('Unable to create native importScripts comparison variant');
+  }
+  const nativeLoader = `async function ensureKjvVerseCorpusLoaded() {
+  if (Array.isArray(self.KJV_CORPUS_VERSES)
+      && self.KJV_CORPUS_WORD_VERSE_INDEX
+      && typeof self.KJV_CORPUS_WORD_VERSE_INDEX === 'object') return;
+  if (!kjvVerseCorpusLoadPromise) {
+    kjvVerseCorpusLoadPromise = (async () => {
+      const startedAt = performance.now();
+      importScripts('kjv-corpus-verses.js', 'kjv-corpus-word-verse-index.js');
+      self.KJV_CORPUS_VERSES = KJV_CORPUS_VERSES;
+      self.KJV_CORPUS_WORD_VERSE_INDEX = KJV_CORPUS_WORD_VERSE_INDEX;
+      globalThis.__BLB_PROFILE_LOAD__?.events.push({
+        phase: 'packaged-json-importScripts',
+        file: 'kjv-corpus-verses.js+kjv-corpus-word-verse-index.js',
+        durationMs: performance.now() - startedAt
+      });
+      if (!Array.isArray(self.KJV_CORPUS_VERSES) || self.KJV_CORPUS_VERSES.length !== 31102) {
+        throw new Error('The packaged normalized KJV verse corpus is empty or invalid');
+      }
+      if (!self.KJV_CORPUS_WORD_VERSE_INDEX
+          || typeof self.KJV_CORPUS_WORD_VERSE_INDEX !== 'object'
+          || !Object.keys(self.KJV_CORPUS_WORD_VERSE_INDEX).length) {
+        throw new Error('The packaged KJV word-to-verse index is empty or invalid');
+      }
+    })().catch(error => {
+      kjvVerseCorpusLoadPromise = null;
+      throw error;
+    });
+  }
+  await kjvVerseCorpusLoadPromise;
+}`;
+  importScriptsBackground = importScriptsBackground.slice(0, loaderStart)
+    + nativeLoader
+    + importScriptsBackground.slice(loaderEnd);
+  fs.writeFileSync(importScriptsBackgroundPath, importScriptsBackground);
+
   const archive = execFileSync('git', ['archive', baselineSha, 'extension'], {
     cwd: repoRoot,
     maxBuffer: 100 * 1024 * 1024
@@ -136,7 +185,8 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
   execFileSync('tar', ['-xf', '-', '-C', baselineRoot], { cwd: repoRoot, input: archive });
   const variants = {
     baseline: path.join(baselineRoot, 'extension'),
-    candidate: candidateRoot
+    candidate: candidateRoot,
+    candidateImportScripts: importScriptsRoot
   };
 
   const instrument = extensionDir => {
@@ -204,6 +254,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
   };
   instrument(variants.baseline);
   instrument(variants.candidate);
+  instrument(variants.candidateImportScripts);
 
   const measureColdRun = async (extensionDir, variant, repetition) => {
     const context = await chromium.launchPersistentContext('', {
@@ -304,9 +355,11 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
   const samples = [];
   try {
     for (let repetition = 1; repetition <= 15; repetition++) {
-      const order = repetition % 2 === 1
-        ? ['baseline', 'candidate']
-        : ['candidate', 'baseline'];
+      const order = repetition % 3 === 1
+        ? ['baseline', 'candidate', 'candidateImportScripts']
+        : repetition % 3 === 2
+          ? ['candidate', 'candidateImportScripts', 'baseline']
+          : ['candidateImportScripts', 'baseline', 'candidate'];
       for (const variant of order) {
         const sample = await measureColdRun(variants[variant], variant, repetition);
         samples.push(sample);
@@ -338,6 +391,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     baselineSha,
     baseline: summarize('baseline'),
     candidateParallel: summarize('candidate'),
+    candidateImportScripts: summarize('candidateImportScripts'),
     rawSamples: samples
   };
   const output = JSON.stringify({ scenario: 'kjv-corpus-lazy-loading-ab', ...summary });
