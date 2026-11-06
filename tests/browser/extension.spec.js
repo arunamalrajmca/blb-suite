@@ -1824,7 +1824,7 @@ test.describe('core user-visible E2E', () => {
             `#ref .reference-token[data-index="${i}"]`,
             expectedPath,
             null,
-            20
+            10
           );
         }
       }
