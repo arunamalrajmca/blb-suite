@@ -176,7 +176,7 @@ test('KJV phrase candidate index loads only when Criteria phrase matching needs 
 
   const shortPhrase = await extensionWorker.evaluate(async () => classifySelectionForBlb('God is love'));
   expect(shortPhrase.valid).toBe(true);
-  expect(shortPhrase.type).toBe('KJV_PHRASE');
+  expect(shortPhrase.type).toBe('KJV_PASSAGE');
   const loaded = await extensionWorker.evaluate(() => ({
     loaded: KJV_CORPUS_PHRASE_INDEX !== null,
     keys: Object.keys(KJV_CORPUS_PHRASE_INDEX || {}).length
