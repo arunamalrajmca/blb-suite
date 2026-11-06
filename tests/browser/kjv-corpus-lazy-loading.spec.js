@@ -127,13 +127,16 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     if (!match) throw new Error('Unable to instrument the service-worker importScripts bootstrap');
     const scripts = [...match[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(item => item[1]);
     if (!scripts.length) throw new Error('No service-worker imports were found for A/B timing');
-    const replacement = 'globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: performance.now(), phases: [] };\n'
-      + 'for (const __blbScript of ' + JSON.stringify(scripts) + ') {\n'
-      + '  const __blbImportStartedAt = performance.now();\n'
-      + '  importScripts(__blbScript);\n'
-      + "  globalThis.__BLB_PROFILE_STARTUP__.phases.push({ phase: 'service-worker-importScript', script: __blbScript, durationMs: performance.now() - __blbImportStartedAt });\n"
-      + '}';
-    source = source.replace(match[0], replacement + "\nglobalThis.__BLB_PROFILE_LOAD__ = { events: [] };");
+    const replacement = 'const __blbProfileBootstrapAt = performance.now();\\n'
+      + 'const __blbProfilePhases = [];\\n'
+      + 'for (const __blbScript of ' + JSON.stringify(scripts) + ') {\\n'
+      + '  const __blbImportStartedAt = performance.now();\\n'
+      + '  importScripts(__blbScript);\\n'
+      + "  __blbProfilePhases.push({ phase: 'service-worker-importScript', script: __blbScript, durationMs: performance.now() - __blbImportStartedAt });\\n"
+      + '}\\n'
+      + 'globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: __blbProfileBootstrapAt, phases: __blbProfilePhases };\\n'
+      + 'globalThis.__BLB_PROFILE_LOAD__ = { events: [] };';
+    source = source.replace(match[0], replacement);
     const fetchStart = "  const response = await fetch(chrome.runtime.getURL(filename));";
     const fetchEnd = "  const source = await response.text();";
     const parseLine = "  return JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);";
