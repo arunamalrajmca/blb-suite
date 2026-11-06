@@ -161,6 +161,18 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     source = source.replace(fromEntries,
       "      const __blbIndexBuildStarted = performance.now();\n" + fromEntries +
       "\n      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'word-verse-index-build', durationMs: performance.now() - __blbIndexBuildStarted });");
+    const corpusValidationStart = "      if (!Array.isArray(verseEntries) || verseEntries.length !== 31102) {";
+    source = source.replace(corpusValidationStart,
+      "      const __blbCorpusValidationStarted = performance.now();\n" + corpusValidationStart);
+    const fromEntriesValidation = "      const wordVerseIndex = Object.fromEntries(wordVerseEntries);";
+    source = source.replace(fromEntriesValidation,
+      "      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'corpus-data-validation', durationMs: performance.now() - __blbCorpusValidationStarted });\n" + fromEntriesValidation);
+    const wordIndexValidationStart = "      if (!wordVerseIndex || typeof wordVerseIndex !== 'object'";
+    source = source.replace(wordIndexValidationStart,
+      "      const __blbWordIndexValidationStarted = performance.now();\n" + wordIndexValidationStart);
+    const corpusAssignment = "      self.KJV_CORPUS_VERSES = verseEntries;";
+    source = source.replace(corpusAssignment,
+      "      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'word-index-validation', durationMs: performance.now() - __blbWordIndexValidationStarted });\n" + corpusAssignment);
     const rangeCall = "    const corpusRange = findKjvVerseRangeForSelection(source);";
     source = source.replace(rangeCall,
       "    const __blbRangeStarted = performance.now();\n" + rangeCall +
