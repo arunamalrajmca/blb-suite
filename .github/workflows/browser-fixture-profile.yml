@@ -2,7 +2,7 @@ name: Browser fixture and reference polling profile
 
 on:
   push:
-    branches: [audit/exhaustive-reference-grammar-profile]
+    branches: [audit/exhaustive-reference-grammar-cache-repeat]
     paths:
       - '.github/workflows/browser-fixture-profile.yml'
       - 'tests/browser/fixtures.js'
@@ -46,7 +46,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: exhaustive-reference-grammar-profile
+          name: exhaustive-reference-grammar-cache-repeat
           path: ${{ runner.temp }}/browser-profile/profile.log
           if-no-files-found: warn
           retention-days: 14
