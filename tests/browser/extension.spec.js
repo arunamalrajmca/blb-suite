@@ -3004,6 +3004,16 @@ test('runtime content-script registrations update using the supported scripts-ar
       const mainWorldId = id + '-main-world';
       try {
         await chrome.scripting.unregisterContentScripts({ ids: [id, mainWorldId] }).catch(() => {});
+        if (item.url.includes('christianity.com')) {
+          await chrome.scripting.registerContentScripts([{
+            id:mainWorldId,
+            matches:[pattern],
+            js:['redirect-scripttagger.js'],
+            runAt:'document_start',
+            world:'MAIN',
+            persistAcrossSessions:true
+          }]);
+        }
         const firstRegistered = await ensureRuntimeContentScriptRegistered({ url: item.url, id: 1 }, item.first);
         const afterFirst = await chrome.scripting.getRegisteredContentScripts({ ids: [id] });
         const secondRegistered = await ensureRuntimeContentScriptRegistered({ url: item.url, id: 1 }, item.second);
