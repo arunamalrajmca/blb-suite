@@ -180,6 +180,15 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     try {
       let [worker] = context.serviceWorkers();
       if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 20000 });
+      await worker.evaluate(async () => {
+        const deadline = performance.now() + 10000;
+        while (!globalThis.__BLB_PROFILE_STARTUP__ && performance.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, 10));
+        }
+        if (!globalThis.__BLB_PROFILE_STARTUP__) {
+          throw new Error('Service-worker startup instrumentation was not initialized before measurement');
+        }
+      });
       return await worker.evaluate(async ({ variant, repetition }) => {
         const startup = globalThis.__BLB_PROFILE_STARTUP__;
         if (!startup || !Array.isArray(startup.phases)) {
