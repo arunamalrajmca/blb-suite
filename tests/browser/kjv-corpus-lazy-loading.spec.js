@@ -214,6 +214,7 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   };
   instrument(variants.baseline);
   instrument(variants.candidate);
+  instrument(variants.candidateSequential);
 
   const measureColdRun = async (extensionDir, variant, repetition) => {
     const context = await chromium.launchPersistentContext('', {
