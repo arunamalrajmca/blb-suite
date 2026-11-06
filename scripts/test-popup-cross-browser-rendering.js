@@ -13,7 +13,15 @@ const bravePath = process.env.BLB_BRAVE_EXECUTABLE || [
   path.join(process.env.LOCALAPPDATA || '', 'BraveSoftware', 'Brave-Browser', 'Application', 'brave.exe'),
   '/usr/bin/brave-browser'
 ].find(candidate => candidate && fs.existsSync(candidate));
-if (!bravePath) throw new Error('Brave executable was not found.');
+if (!bravePath) {
+  const message = 'SKIP: popup cross-browser comparison requires Brave; this runner has no Brave executable. ' +
+    'Run this diagnostic on a machine with both Chrome for Testing and Brave installed.';
+  if (process.env.CI && process.env.BLB_REQUIRE_BRAVE !== '1') {
+    console.warn(message);
+    process.exit(0);
+  }
+  throw new Error('Brave executable was not found. ' + message);
+}
 
 const viewportProfiles = [
   { name: 'compact', width: 451, height: 603 },
