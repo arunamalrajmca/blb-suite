@@ -35,7 +35,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
         verseCount: KJV_CORPUS_VERSES?.length,
         indexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX
           && typeof KJV_CORPUS_WORD_VERSE_INDEX === 'object',
-        exactMatch: findSingleKjvPhraseMatch('For God so loved the world')
+        exactMatch: findSingleKjvPhraseMatch('For God so loved the world')?.slice(0, 3)
       };
     });
 
