@@ -1753,11 +1753,17 @@ test.describe('core user-visible E2E', () => {
     const gestureStartedAt = process.hrtime.bigint();
     await page.mouse.dblclick(rect.x, rect.y);
     const gestureMs = Number(process.hrtime.bigint() - gestureStartedAt) / 1e6;
-    const selectionReadStartedAt = process.hrtime.bigint();
-    const selectedText = await page.evaluate(() => window.getSelection?.().toString() || '');
-    const selectionReadMs = Number(process.hrtime.bigint() - selectionReadStartedAt) / 1e6;
+    // Reading the selection requires another browser-protocol round trip. It is
+    // only needed when activation fails, so defer it to the failure path.
+    const selectionReadMs = 0;
     const activationStartedAt = process.hrtime.bigint();
-    await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText, pollIntervalMs});
+    try {
+      await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, pollIntervalMs});
+    } catch (error) {
+      const selectedText = await page.evaluate(() => window.getSelection?.().toString() || '');
+      console.error('Double-click selection at activation failure', {fragment, selector, selectedText, expectedPath});
+      throw error;
+    }
     const activationMs = Number(process.hrtime.bigint() - activationStartedAt) / 1e6;
     // The extension worker is authoritative for Chrome tab state. Do not
     // require Playwright context.pages() to observe the tab before validating
@@ -1785,9 +1791,11 @@ test.describe('core user-visible E2E', () => {
           return false;
         }
       });
-      await Promise.all(matches.filter(tab => tab.id != null).map(tab =>
-        chrome.tabs.remove(tab.id).catch(() => {})
-      ));
+      for (const tab of matches) {
+        if (tab.id != null) {
+          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+        }
+      }
     }), expectedPath);
     const cleanupMs = Number(process.hrtime.bigint() - cleanupStartedAt) / 1e6;
     if (profileEnabled) console.log('BLB_GRAMMAR_ACTION_PROFILE ' + JSON.stringify({
