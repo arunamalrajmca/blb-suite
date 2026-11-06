@@ -117,6 +117,18 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     maxBuffer: 100 * 1024 * 1024
   });
   execFileSync('tar', ['-xf', '-', '-C', baselineRoot], { cwd: repoRoot, input: archive });
+  const arrayBufferRoot = path.join(tempRoot, 'candidate-arrayBuffer');
+  fs.cpSync(candidateRoot, arrayBufferRoot, { recursive: true });
+  const arrayBufferBackgroundPath = path.join(arrayBufferRoot, 'background.js');
+  let arrayBufferBackground = fs.readFileSync(arrayBufferBackgroundPath, 'utf8');
+  const textReadLine = "  const source = await response.text();";
+  const arrayBufferReadLine = "  const source = new TextDecoder().decode(await response.arrayBuffer());";
+  if (!arrayBufferBackground.includes(textReadLine)) {
+    throw new Error('Unable to create arrayBuffer-read comparison variant');
+  }
+  arrayBufferBackground = arrayBufferBackground.replace(textReadLine, arrayBufferReadLine);
+  fs.writeFileSync(arrayBufferBackgroundPath, arrayBufferBackground);
+
   const sequentialRoot = path.join(tempRoot, 'candidate-sequential');
   fs.cpSync(candidateRoot, sequentialRoot, { recursive: true });
   const sequentialBackgroundPath = path.join(sequentialRoot, 'background.js');
@@ -152,7 +164,8 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   const variants = {
     baseline: path.join(baselineRoot, 'extension'),
     candidate: candidateRoot,
-    candidateSequential: sequentialRoot
+    candidateSequential: sequentialRoot,
+    candidateArrayBuffer: arrayBufferRoot
   };
 
   const instrument = extensionDir => {
@@ -173,7 +186,9 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
       + 'globalThis.__BLB_PROFILE_LOAD__ = { events: [] };';
     source = source.replace(match[0], replacement);
     const fetchStart = "  const response = await fetch(chrome.runtime.getURL(filename));";
-    const fetchEnd = "  const source = await response.text();";
+    const fetchEnd = source.includes("  const source = await response.text();")
+      ? "  const source = await response.text();"
+      : "  const source = new TextDecoder().decode(await response.arrayBuffer());";
     const extractStart = "  const start = source.indexOf(assignment);";
     const extractEnd = "  const json = source.slice(start + assignment.length, end);";
     const parseLine = "  return JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);";
@@ -315,9 +330,10 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   try {
     for (let repetition = 1; repetition <= 5; repetition++) {
       const orders = [
-        ['baseline', 'candidate', 'candidateSequential'],
-        ['candidate', 'candidateSequential', 'baseline'],
-        ['candidateSequential', 'baseline', 'candidate']
+        ['baseline', 'candidate', 'candidateSequential', 'candidateArrayBuffer'],
+        ['candidate', 'candidateSequential', 'candidateArrayBuffer', 'baseline'],
+        ['candidateSequential', 'candidateArrayBuffer', 'baseline', 'candidate'],
+        ['candidateArrayBuffer', 'baseline', 'candidate', 'candidateSequential']
       ];
       const order = orders[(repetition - 1) % orders.length];
       for (const variant of order) {
@@ -351,6 +367,7 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     baseline: summarize('baseline'),
     candidateParallel: summarize('candidate'),
     candidateSequential: summarize('candidateSequential'),
+    candidateArrayBuffer: summarize('candidateArrayBuffer'),
     rawSamples: samples
   };
   const output = JSON.stringify({ scenario: 'kjv-corpus-lazy-loading-ab', ...summary });
