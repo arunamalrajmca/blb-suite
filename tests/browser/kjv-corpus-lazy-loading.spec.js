@@ -248,6 +248,7 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
           referenceOnlyMs,
           singleWordMs,
           firstCorpusUseMs,
+          firstUseProfileEvents,
           warmCorpusUseMs
         };
       }, { variant, repetition });
