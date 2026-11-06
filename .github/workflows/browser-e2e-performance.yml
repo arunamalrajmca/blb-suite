@@ -243,9 +243,9 @@ jobs:
           npx playwright test tests/browser/kjv-corpus-lazy-loading.spec.js --grep "interleaved cold-start and first-corpus-use A/B against current main" --workers=1 --reporter=line
           test -s "$BLB_PERF_OUTPUT"
           echo "## KJV corpus lazy-load A/B results" >> "$GITHUB_STEP_SUMMARY"
-          printf '```json\\n' >> "$GITHUB_STEP_SUMMARY"
+          printf '```json\n' >> "$GITHUB_STEP_SUMMARY"
           cat "$BLB_PERF_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
-          printf '\\n```\\n' >> "$GITHUB_STEP_SUMMARY"
+          printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload corpus A/B measurements
         if: always()
