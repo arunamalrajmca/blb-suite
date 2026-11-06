@@ -141,7 +141,7 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     }
   }`;
   const loaderStart = importScriptsBackground.indexOf('async function ensureKjvVerseCorpusLoaded() {');
-  const loaderEnd = importScriptsBackground.indexOf('\\n}', loaderStart);
+  const loaderEnd = importScriptsBackground.indexOf('\n}', loaderStart);
   if (loaderStart < 0 || loaderEnd < 0) {
     throw new Error('Unable to create dynamic importScripts comparison variant');
   }
