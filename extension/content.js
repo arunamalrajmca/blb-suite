@@ -153,7 +153,7 @@ function sendRuntimeMessageWithRetry(message, sendMessage, onError = null) {
       return await sendMessage(message);
     } catch (error) {
       const errorText = String(error?.message || error || '');
-      if (retryableSelectionRequest && attempt < 2 && /\\bNo SW\\b/i.test(errorText)) {
+      if (retryableSelectionRequest && attempt < 2 && /\bNo SW\b/i.test(errorText)) {
         await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
         return send(attempt + 1);
       }
