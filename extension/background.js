@@ -5267,7 +5267,15 @@ async function classifySelectionForBlb(selectionText) {
       if (extractedRefs.length) {
         return {valid:true, type:'REFERENCE_AND_KJV_PASSAGE', text:source, refs:extractedRefs, remainingText, kjvPassageQuery:passageQuery};
       }
-      return {valid:true, type:'KJV_PASSAGE', text:passageQuery, kjvPassageQuery:passageQuery};
+      // Short exact KJV matches are phrases, not passage selections. The
+      // generated candidate index covers 2-5 word phrases; longer selections
+      // retain the established KJV_PASSAGE classification.
+      return {
+        valid:true,
+        type:remainingWordCount <= 5 ? 'KJV_PHRASE' : 'KJV_PASSAGE',
+        text:passageQuery,
+        kjvPassageQuery:passageQuery
+      };
     }
   }
 
