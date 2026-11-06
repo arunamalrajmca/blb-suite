@@ -154,7 +154,7 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   const importScriptsBackgroundPath = path.join(importScriptsRoot, 'background.js');
   let importScriptsBackground = fs.readFileSync(importScriptsBackgroundPath, 'utf8');
   const importLoaderStart = importScriptsBackground.indexOf('async function ensureKjvVerseCorpusLoaded() {');
-  const importLoaderEnd = importScriptsBackground.indexOf('\\n}', importLoaderStart);
+  const importLoaderEnd = importScriptsBackground.indexOf('\n}', importLoaderStart);
   if (importLoaderStart < 0 || importLoaderEnd < 0) {
     throw new Error('Unable to locate the lazy corpus loader for importScripts comparison');
   }
