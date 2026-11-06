@@ -81,7 +81,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
           gzipRequests++;
           throw new TypeError('Failed to fetch');
         }
-        if (/kjv-corpus-(verses|word-verse-index|phrase-index)\\.js(?:$|[?#])/.test(url)) {
+        if (/kjv-corpus-(verses|word-verse-index|phrase-index)\.js(?:$|[?#])/.test(url)) {
           fallbackRequests++;
         }
         return originalFetch(input, ...args);
