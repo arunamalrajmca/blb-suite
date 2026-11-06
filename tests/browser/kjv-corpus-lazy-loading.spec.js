@@ -379,10 +379,9 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     expect(sample.referenceType).toBe('REFERENCE');
     expect(sample.wordType).toBe('KJV_WORD');
     expect(sample.passageType).toBe('KJV_REFERENCE_RANGE');
-    // The baseline predates the short-phrase classification fix and labels
-    // this valid phrase KJV_PASSAGE; the candidate must preserve the corrected
-    // KJV_PHRASE result while both paths exercise phrase-index loading.
-    expect(sample.phraseType).toBe(sample.variant === 'baseline' ? 'KJV_PASSAGE' : 'KJV_PHRASE');
+    // The lazy-loading experiment must preserve the baseline classification
+    // for both variants; only the data-loading timing is allowed to differ.
+    expect(sample.phraseType).toBe('KJV_PASSAGE');
     expect(sample.phraseQuery).toBeTruthy();
     expect(sample.passageRef).toEqual({ book: 'john', chapter: 3, from: 16, to: 16 });
     if (sample.variant === 'baseline') {
