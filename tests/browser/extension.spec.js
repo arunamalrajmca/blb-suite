@@ -3095,3 +3095,49 @@ test('extension update reconciliation revisits already-open configured tabs', as
     });
   }
 });
+
+test('selection messaging retries only deduplicated requests after a transient No SW error', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{}
+  });
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  const [{result}] = await extensionWorker.evaluate(async id => chrome.scripting.executeScript({
+    target:{tabId:id},
+    world:'ISOLATED',
+    func:async () => {
+      let selectionAttempts = 0;
+      const selectionResponse = await sendRuntimeMessageWithRetry(
+        {type:'blbSuiteOpenSelectionText', requestId:'e2e-no-sw-retry', text:'John 3:16'},
+        async () => {
+          selectionAttempts++;
+          if (selectionAttempts === 1) throw new Error('No SW');
+          return {ok:true};
+        }
+      );
+
+      let ordinaryAttempts = 0;
+      await sendRuntimeMessageWithRetry(
+        {type:'blbSuiteSyncSelectionContextMenu'},
+        async () => {
+          ordinaryAttempts++;
+          throw new Error('No SW');
+        }
+      );
+      return {selectionAttempts, selectionResponse, ordinaryAttempts};
+    }
+  }), tabId);
+
+  expect(result).toEqual({
+    selectionAttempts:2,
+    selectionResponse:{ok:true},
+    ordinaryAttempts:1
+  });
+});
