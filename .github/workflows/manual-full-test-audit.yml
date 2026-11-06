@@ -179,6 +179,14 @@ jobs:
             exit 1
           fi
 
+      - name: Upload corpus A/B measurements
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-corpus-ab-full-audit
+          path: ${{ runner.temp }}/blb-performance.jsonl
+          if-no-files-found: warn
+          retention-days: 14
       - name: Restore production manifest before package checks
         if: always()
         run: cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json
