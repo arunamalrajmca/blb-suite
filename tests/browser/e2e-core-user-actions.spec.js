@@ -1500,6 +1500,8 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
   };
 
   // Floating Show on BLB must use only the selected token's second line.
+  // This is deliberately sequential: the first successful click clears its
+  // selection, then a fresh selection must make the same button work again.
   const floatingButton = page.locator('#blb-suite-page-selection-button');
   for (const [selector,label] of [
     ['Luke','floating Luke'],
@@ -1509,6 +1511,7 @@ test('Facebook Luke 22:26 resolves only within its own dir-auto line across sele
     await expect(floatingButton).toBeVisible({timeout:10000});
     await floatingButton.click();
     await expectNewLukeTab(label);
+    await expect(floatingButton, label + ' should clear the completed selection').toBeHidden();
   }
 
   // Exercise the registered Alt+B command handler for the same second-line tokens.
