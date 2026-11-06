@@ -144,7 +144,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
       throw new Error('Unable to extract generated JSON assignment from ' + filename);
     }
     let json = source.slice(start + assignment.length, end).trim();
-    if (allowTrailingObjectComma) json = json.replace(/,(\\s*})$/, '$1');
+    if (allowTrailingObjectComma) json = json.replace(/,(\s*})$/, '$1');
     return JSON.parse(json);
   };
   const gzipResources = [
