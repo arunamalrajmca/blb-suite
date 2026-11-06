@@ -1888,7 +1888,8 @@ test.describe('core user-visible E2E', () => {
             page, context, extensionWorker,
             '#ref .reference-token[data-index="' + i + '"]',
             expectedPath,
-            contextCandidates
+            contextCandidates,
+            20
           );
           tokenCount += 1;
         }
