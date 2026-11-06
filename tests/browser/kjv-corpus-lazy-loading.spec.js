@@ -276,6 +276,14 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
         const warmPassage = await classifySelectionForBlb('For God so loved the world');
         const warmCorpusUseMs = performance.now() - warmStartedAt;
 
+        // Measure the independent phrase-index first-use path after the verse
+        // corpus is warm. "God is love" is an exact short KJV phrase and must
+        // classify as KJV_PHRASE while lazily loading the phrase candidate index.
+        const phraseStartedAt = performance.now();
+        const phrase = await classifySelectionForBlb('God is love');
+        const firstPhraseUseMs = performance.now() - phraseStartedAt;
+        const phraseUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
+
         return {
           variant,
           repetition,
@@ -293,6 +301,8 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
           wordType: word.type,
           passageType: passage.type,
           warmPassageType: warmPassage.type,
+          phraseType: phrase.type,
+          phraseQuery: phrase.kjvPassageQuery || phrase.text,
           passageRef: passage.directRef ? {
             book: passage.directRef.book,
             chapter: passage.directRef.chapter,
@@ -303,7 +313,9 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
           singleWordMs,
           firstCorpusUseMs,
           firstUseProfileEvents,
-          warmCorpusUseMs
+          warmCorpusUseMs,
+          firstPhraseUseMs,
+          phraseUseProfileEvents
         };
       }, { variant, repetition });
     } finally {
@@ -343,7 +355,8 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
       referenceOnlyMs: median(rows.map(row => row.referenceOnlyMs)),
       singleWordMs: median(rows.map(row => row.singleWordMs)),
       firstCorpusUseMs: median(rows.map(row => row.firstCorpusUseMs)),
-      warmCorpusUseMs: median(rows.map(row => row.warmCorpusUseMs))
+      warmCorpusUseMs: median(rows.map(row => row.warmCorpusUseMs)),
+      firstPhraseUseMs: median(rows.map(row => row.firstPhraseUseMs))
     };
   };
   const summary = {
@@ -364,6 +377,8 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     expect(sample.wordType).toBe('KJV_WORD');
     expect(sample.passageType).toBe('KJV_REFERENCE_RANGE');
     expect(sample.warmPassageType).toBe('KJV_REFERENCE_RANGE');
+    expect(sample.phraseType).toBe('KJV_PHRASE');
+    expect(sample.phraseQuery).toBeTruthy();
     expect(sample.passageRef).toEqual({ book: 'john', chapter: 3, from: 16, to: 16 });
     if (sample.variant === 'baseline') {
       expect(sample.corpusLoadedAtStartup).toBe(true);
