@@ -1785,11 +1785,9 @@ test.describe('core user-visible E2E', () => {
           return false;
         }
       });
-      for (const tab of matches) {
-        if (tab.id != null) {
-          try { await chrome.tabs.remove(tab.id); } catch (_) {}
-        }
-      }
+      await Promise.all(matches.filter(tab => tab.id != null).map(tab =>
+        chrome.tabs.remove(tab.id).catch(() => {})
+      ));
     }), expectedPath);
     const cleanupMs = Number(process.hrtime.bigint() - cleanupStartedAt) / 1e6;
     if (profileEnabled) console.log('BLB_GRAMMAR_ACTION_PROFILE ' + JSON.stringify({
