@@ -149,54 +149,10 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   sequentialBackground = sequentialBackground.replace(parallelLoader, sequentialLoader);
   fs.writeFileSync(sequentialBackgroundPath, sequentialBackground);
 
-  const importScriptsRoot = path.join(tempRoot, 'candidate-importScripts');
-  fs.cpSync(candidateRoot, importScriptsRoot, { recursive: true });
-  const importScriptsBackgroundPath = path.join(importScriptsRoot, 'background.js');
-  let importScriptsBackground = fs.readFileSync(importScriptsBackgroundPath, 'utf8');
-  const importLoaderStart = importScriptsBackground.indexOf('async function ensureKjvVerseCorpusLoaded() {');
-  const importLoaderEnd = importScriptsBackground.indexOf('\n}', importLoaderStart);
-  if (importLoaderStart < 0 || importLoaderEnd < 0) {
-    throw new Error('Unable to locate the lazy corpus loader for importScripts comparison');
-  }
-  const importScriptsLoader = `async function ensureKjvVerseCorpusLoaded() {
-    if (Array.isArray(self.KJV_CORPUS_VERSES)
-        && self.KJV_CORPUS_WORD_VERSE_INDEX
-        && typeof self.KJV_CORPUS_WORD_VERSE_INDEX === 'object') return;
-    if (!kjvVerseCorpusLoadPromise) {
-      kjvVerseCorpusLoadPromise = (async () => {
-        if (!Array.isArray(self.KJV_CORPUS_VERSES)) {
-          importScripts('kjv-corpus-verses.js');
-          self.KJV_CORPUS_VERSES = KJV_CORPUS_VERSES;
-        }
-        if (!self.KJV_CORPUS_WORD_VERSE_INDEX) {
-          importScripts('kjv-corpus-word-verse-index.js');
-          self.KJV_CORPUS_WORD_VERSE_INDEX = KJV_CORPUS_WORD_VERSE_INDEX;
-        }
-        if (!Array.isArray(self.KJV_CORPUS_VERSES) || self.KJV_CORPUS_VERSES.length !== 31102) {
-          throw new Error('The packaged normalized KJV verse corpus is empty or invalid');
-        }
-        if (!self.KJV_CORPUS_WORD_VERSE_INDEX
-            || typeof self.KJV_CORPUS_WORD_VERSE_INDEX !== 'object'
-            || !Object.keys(self.KJV_CORPUS_WORD_VERSE_INDEX).length) {
-          throw new Error('The packaged KJV word-to-verse index is empty or invalid');
-        }
-      })().catch(error => {
-        kjvVerseCorpusLoadPromise = null;
-        throw error;
-      });
-    }
-    await kjvVerseCorpusLoadPromise;
-  }`;
-  importScriptsBackground = importScriptsBackground.slice(0, importLoaderStart)
-    + importScriptsLoader
-    + importScriptsBackground.slice(importLoaderEnd + 2);
-  fs.writeFileSync(importScriptsBackgroundPath, importScriptsBackground);
-
   const variants = {
     baseline: path.join(baselineRoot, 'extension'),
     candidate: candidateRoot,
-    candidateSequential: sequentialRoot,
-    candidateImportScripts: importScriptsRoot
+    candidateSequential: sequentialRoot
   };
 
   const instrument = extensionDir => {
@@ -265,7 +221,6 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   instrument(variants.baseline);
   instrument(variants.candidate);
   instrument(variants.candidateSequential);
-  instrument(variants.candidateImportScripts);
 
   const measureColdRun = async (extensionDir, variant, repetition) => {
     const context = await chromium.launchPersistentContext('', {
@@ -367,10 +322,9 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   try {
     for (let repetition = 1; repetition <= 5; repetition++) {
       const orders = [
-        ['baseline', 'candidate', 'candidateSequential', 'candidateImportScripts'],
-        ['candidate', 'candidateSequential', 'candidateImportScripts', 'baseline'],
-        ['candidateSequential', 'candidateImportScripts', 'baseline', 'candidate'],
-        ['candidateImportScripts', 'baseline', 'candidate', 'candidateSequential']
+        ['baseline', 'candidate', 'candidateSequential'],
+        ['candidate', 'candidateSequential', 'baseline'],
+        ['candidateSequential', 'baseline', 'candidate']
       ];
       const order = orders[(repetition - 1) % orders.length];
       for (const variant of order) {
@@ -405,7 +359,6 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     baseline: summarize('baseline'),
     candidateParallel: summarize('candidate'),
     candidateSequential: summarize('candidateSequential'),
-    candidateImportScripts: summarize('candidateImportScripts'),
     rawSamples: samples
   };
   const output = JSON.stringify({ scenario: 'kjv-corpus-lazy-loading-ab', ...summary });
