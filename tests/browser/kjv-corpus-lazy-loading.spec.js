@@ -267,21 +267,17 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
         const corpusStillLoadedAfterFastPaths = typeof KJV_CORPUS_VERSES !== 'undefined'
           && typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined';
 
-        const firstUseStartedAt = performance.now();
-        const passage = await classifySelectionForBlb('For God so loved the world');
-        const firstCorpusUseMs = performance.now() - firstUseStartedAt;
+        // Start with a short exact phrase on a genuinely cold corpus. This
+        // first operation must load both the verse corpus and phrase index.
+        const firstPhraseStartedAt = performance.now();
+        const phrase = await classifySelectionForBlb('God is love');
+        const firstPhraseUseMs = performance.now() - firstPhraseStartedAt;
         const firstUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
 
+        // A longer KJV passage is now a warm corpus/phrase-index operation.
         const warmStartedAt = performance.now();
-        const warmPassage = await classifySelectionForBlb('For God so loved the world');
+        const passage = await classifySelectionForBlb('For God so loved the world');
         const warmCorpusUseMs = performance.now() - warmStartedAt;
-
-        // Measure the independent phrase-index first-use path after the verse
-        // corpus is warm. "God is love" is an exact short KJV phrase and must
-        // classify as KJV_PHRASE while lazily loading the phrase candidate index.
-        const phraseStartedAt = performance.now();
-        const phrase = await classifySelectionForBlb('God is love');
-        const firstPhraseUseMs = performance.now() - phraseStartedAt;
         const phraseUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
 
         return {
@@ -300,7 +296,6 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
           referenceType: reference.type,
           wordType: word.type,
           passageType: passage.type,
-          warmPassageType: warmPassage.type,
           phraseType: phrase.type,
           phraseQuery: phrase.kjvPassageQuery || phrase.text,
           passageRef: passage.directRef ? {
@@ -311,7 +306,7 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
           } : null,
           referenceOnlyMs,
           singleWordMs,
-          firstCorpusUseMs,
+          firstCorpusUseMs: firstPhraseUseMs,
           firstUseProfileEvents,
           warmCorpusUseMs,
           firstPhraseUseMs,
@@ -376,7 +371,6 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     expect(sample.referenceType).toBe('REFERENCE');
     expect(sample.wordType).toBe('KJV_WORD');
     expect(sample.passageType).toBe('KJV_REFERENCE_RANGE');
-    expect(sample.warmPassageType).toBe('KJV_REFERENCE_RANGE');
     // The baseline predates the short-phrase classification fix and labels
     // this valid phrase KJV_PASSAGE; the candidate must preserve the corrected
     // KJV_PHRASE result while both paths exercise phrase-index loading.
