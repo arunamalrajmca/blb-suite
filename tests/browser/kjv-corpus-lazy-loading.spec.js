@@ -95,7 +95,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
 test('interleaved cold-start and first-corpus-use A/B against current main', async () => {
   // The exhaustive audit supplies BLB_PERF_OUTPUT. Keep ordinary focused
   // browser runs fast; the labeled audit performs the paired benchmark.
-  test.skip(!process.env.BLB_PERF_OUTPUT, 'requires the exhaustive-audit performance output path');
+  test.skip(!process.env.CI && !process.env.BLB_PERF_OUTPUT, 'runs in CI or when an explicit performance output path is supplied');
   test.setTimeout(180000);
 
   const repoRoot = path.resolve(__dirname, '../..');
@@ -256,7 +256,9 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     rawSamples: samples
   };
   const output = JSON.stringify({ scenario: 'kjv-corpus-lazy-loading-ab', ...summary });
-  fs.appendFileSync(process.env.BLB_PERF_OUTPUT, output + '\n');
+  const performanceOutputPath = process.env.BLB_PERF_OUTPUT || path.join(repoRoot, 'blb-corpus-ab-results.json');
+  fs.appendFileSync(performanceOutputPath, output + '\n');
+  console.log('BLB_CORPUS_AB_OUTPUT ' + performanceOutputPath);
   console.log('BLB_CORPUS_AB_SUMMARY ' + output);
 
   for (const sample of samples) {
