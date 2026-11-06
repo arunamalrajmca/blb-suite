@@ -265,7 +265,7 @@
         e.stopPropagation();
         pageButtonActionInProgress = true;
       });
-      button.addEventListener('click', e => {
+      button.addEventListener('click', async e => {
         e.preventDefault();
         e.stopPropagation();
         const text = blbPageButtonSelection || getSelectedPageText();
@@ -284,10 +284,10 @@
         const actionCriteriaSearchText = actionContextualReference
           ? ''
           : (getNumberedBookSuffixSearchText?.(text) || blbPageButtonCriteriaSearchText);
-        // Ignore stale content-script contexts if the extension was reloaded.
-        safeRuntimeSendMessage({
+        const requestId = `show-on-blb-${Date.now()}-${++pageButtonRequestSequence}`;
+        const message = {
           type:'blbSuiteOpenSelectionText',
-          requestId:`show-on-blb-${Date.now()}-${++pageButtonRequestSequence}`,
+          requestId,
           text,
           contextualReference: actionContextualReference || null,
           ...(actionCriteriaSearchText ? {criteriaSearchText:actionCriteriaSearchText} : {}),
@@ -301,9 +301,39 @@
           // competing interpretation in the background worker.
           contextualReferenceResolved: isSingleToken || !!actionContextualReference,
           tabBehavior:{activeIfNew:true,activateExisting:true}
-        });
-        clearBlbPageSelectionAfterAction();
-        setTimeout(() => { pageButtonActionInProgress = false; }, 0);
+        };
+        pageButtonActionInProgress = true;
+        try {
+          // Wait for the background result. Clearing the selection before the
+          // destination is opened made a transient worker/injection failure
+          // indistinguishable from a successful action and left no retry path.
+          const response = await safeRuntimeSendMessage(message, error => {
+            console.error('KJV Scripture Tools Show on BLB message failed:', {
+              requestId, selectedText:text, error:String(error)
+            });
+          });
+          if (response?.ok === true) {
+            clearBlbPageSelectionAfterAction();
+          } else {
+            console.error('KJV Scripture Tools Show on BLB action was not completed:', {
+              requestId, selectedText:text, response:response || null
+            });
+            // Keep the selection and control available for a retry, but only
+            // while the same live selection is still present in the document.
+            if (normalizeSelectionText(getSelectedPageText()) === normalizeSelectionText(text)) {
+              setBlbPageButtonVisible(true);
+            }
+          }
+        } catch (error) {
+          console.error('KJV Scripture Tools Show on BLB action failed:', {
+            requestId, selectedText:text, error:String(error)
+          });
+          if (normalizeSelectionText(getSelectedPageText()) === normalizeSelectionText(text)) {
+            setBlbPageButtonVisible(true);
+          }
+        } finally {
+          pageButtonActionInProgress = false;
+        }
       });
     
       mount.appendChild(button);

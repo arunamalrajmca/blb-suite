@@ -2645,7 +2645,10 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
       }
     }
     return true;
-  } catch (_) {
+  } catch (error) {
+    console.error('KJV Scripture Tools runtime content-script registration failed:', {
+      tabId:tab?.id ?? null, tabUrl:tab?.url || '', files, error:String(error)
+    });
     return false;
   }
 }
@@ -2697,7 +2700,10 @@ async function ensureContentScriptInTab(tabId) {
             files:['redirect-christianity-main-world.js'],
             world:'MAIN'
           });
-        } catch (_) {
+        } catch (error) {
+          console.error('KJV Scripture Tools MAIN-world script injection failed:', {
+            tabId, tabUrl:tab.url, files:['redirect-christianity-main-world.js'], error:String(error)
+          });
           return false;
         }
       }
@@ -2711,7 +2717,14 @@ async function ensureContentScriptInTab(tabId) {
           const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
           if (response?.ok === true) {
             if (files.includes('redirect-scripttagger.js')) {
-              await chrome.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
+              try {
+                await chrome.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
+              } catch (error) {
+                console.error('KJV Scripture Tools ScriptTagger injection failed:', {
+                  tabId, tabUrl:tab.url, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES, error:String(error)
+                });
+                return false;
+              }
             }
             return true;
           }
@@ -2720,7 +2733,10 @@ async function ensureContentScriptInTab(tabId) {
 
       try {
         await chrome.scripting.executeScript({target:{tabId}, files});
-      } catch (_) {
+      } catch (error) {
+        console.error('KJV Scripture Tools content-script injection failed:', {
+          tabId, tabUrl:tab.url, files, error:String(error)
+        });
         return false;
       }
 
@@ -2747,7 +2763,10 @@ async function ensureContentScriptInTab(tabId) {
       }
 
       return true;
-    } catch (_) {
+    } catch (error) {
+      console.error('KJV Scripture Tools content-script activation failed:', {
+        tabId, error:String(error)
+      });
       return false;
     }
   })();
@@ -3234,8 +3253,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
       sendResponse(result);
     } catch (error) {
-      console.error('KJV Scripture Tools shared selection action:', error);
-      sendResponse({ok:false});
+      console.error('KJV Scripture Tools shared selection action:', {
+        tabId:sender?.tab?.id ?? null,
+        tabUrl:sender?.tab?.url || '',
+        selectedText:String(message.text || ''),
+        requestId:String(message.requestId || ''),
+        error:String(error),
+        stack:error?.stack || ''
+      });
+      sendResponse({ok:false, reason:'selection-open-failed', error:String(error)});
     }
     return true;
   }
