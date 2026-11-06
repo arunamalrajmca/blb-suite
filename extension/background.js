@@ -2581,6 +2581,49 @@ async function hasHostAccessForTab(tab) {
   catch (_) { return false; }
 }
 
+function describeScriptInjectionError(error) {
+  const properties = {};
+  if (error && (typeof error === 'object' || typeof error === 'function')) {
+    for (const key of Object.getOwnPropertyNames(error)) {
+      try {
+        const value = error[key];
+        properties[key] = value instanceof Error
+          ? {name:value.name, message:value.message, stack:value.stack}
+          : value;
+      } catch (readError) {
+        properties[key] = '[unreadable: ' + String(readError) + ']';
+      }
+    }
+  }
+  let serialized = '';
+  try {
+    serialized = JSON.stringify(error, Object.getOwnPropertyNames(error || {}));
+  } catch (_) {
+    serialized = '';
+  }
+  return {
+    errorType: typeof error,
+    errorName: error?.name || '',
+    errorMessage: error?.message || '',
+    errorStack: error?.stack || '',
+    errorString: String(error),
+    errorProperties: properties,
+    errorJson: serialized
+  };
+}
+
+async function inspectPackagedScriptFiles(files) {
+  return Promise.all(files.map(async file => {
+    const url = chrome.runtime.getURL(file);
+    try {
+      const response = await fetch(url, {cache:'no-store'});
+      return {file, url, ok:response.ok, status:response.status, statusText:response.statusText};
+    } catch (error) {
+      return {file, url, ok:false, ...describeScriptInjectionError(error)};
+    }
+  }));
+}
+
 const contentScriptInjectionLocks = new Map();
 
 function runtimeContentScriptIdForPattern(pattern) {
@@ -2734,8 +2777,14 @@ async function ensureContentScriptInTab(tabId) {
       try {
         await chrome.scripting.executeScript({target:{tabId}, files});
       } catch (error) {
+        const errorDetails = describeScriptInjectionError(error);
+        const packagedFileChecks = await inspectPackagedScriptFiles(files);
         console.error('KJV Scripture Tools content-script injection failed:', {
-          tabId, tabUrl:tab.url, files, error:String(error)
+          tabId,
+          tabUrl:tab.url,
+          files,
+          ...errorDetails,
+          packagedFileChecks
         });
         return false;
       }
