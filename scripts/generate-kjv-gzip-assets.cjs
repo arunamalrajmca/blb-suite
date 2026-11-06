@@ -17,7 +17,7 @@ function extractJsonAssignment(filename, assignment, terminator, allowTrailingOb
     throw new Error('Unexpected generated KJV data format: ' + filename);
   }
   let json = source.slice(start + assignment.length, end).trim();
-  if (allowTrailingObjectComma) json = json.replace(/,(\\s*})$/, '$1');
+  if (allowTrailingObjectComma) json = json.replace(/,(\s*})$/, '$1');
   return JSON.parse(json);
 }
 
