@@ -2,7 +2,7 @@ name: Browser fixture and reference polling profile
 
 on:
   push:
-    branches: [audit/exhaustive-reference-grammar-profile]
+    branches: [audit/exhaustive-reference-grammar-paired-profile]
     paths:
       - '.github/workflows/browser-fixture-profile.yml'
       - 'tests/browser/fixtures.js'
@@ -31,22 +31,29 @@ jobs:
         run: npm install --prefer-offline --no-audit --no-fund
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
-      - name: Run exhaustive OT and NT generic reference grammar tests three times
+      - name: Run paired 100ms baseline and 20ms candidate profiles
         shell: bash
         run: |
-          set -o pipefail
+          set -euo pipefail
           mkdir -p "$RUNNER_TEMP/browser-profile"
+          TEST_GREP='Double-click generic reference grammar — exhaustive token coverage'
+
           START_MS="$(node -p 'Date.now()')"
-          npx playwright test tests/browser/extension.spec.js \
-            --grep 'Double-click generic reference grammar — exhaustive token coverage' \
-            --workers=1 --repeat-each=3 --reporter=line 2>&1 | tee "$RUNNER_TEMP/browser-profile/profile.log"
+          BLB_GRAMMAR_POLL_INTERVAL_MS=100 npx playwright test tests/browser/extension.spec.js \
+            --grep "$TEST_GREP" --workers=1 --repeat-each=5 --reporter=line 2>&1 | tee "$RUNNER_TEMP/browser-profile/baseline-100ms.log"
           END_MS="$(node -p 'Date.now()')"
-          echo "Profile process wall time: $((END_MS - START_MS))ms" | tee -a "$RUNNER_TEMP/browser-profile/profile.log"
+          echo "Baseline 100ms wall time: $((END_MS - START_MS))ms" | tee -a "$RUNNER_TEMP/browser-profile/baseline-100ms.log"
+
+          START_MS="$(node -p 'Date.now()')"
+          BLB_GRAMMAR_POLL_INTERVAL_MS=20 npx playwright test tests/browser/extension.spec.js \
+            --grep "$TEST_GREP" --workers=1 --repeat-each=5 --reporter=line 2>&1 | tee "$RUNNER_TEMP/browser-profile/candidate-20ms.log"
+          END_MS="$(node -p 'Date.now()')"
+          echo "Candidate 20ms wall time: $((END_MS - START_MS))ms" | tee -a "$RUNNER_TEMP/browser-profile/candidate-20ms.log"
       - name: Upload profile log
         if: always()
         uses: actions/upload-artifact@v6
         with:
-          name: exhaustive-reference-grammar-profile
-          path: ${{ runner.temp }}/browser-profile/profile.log
+          name: exhaustive-reference-grammar-paired-profile
+          path: ${{ runner.temp }}/browser-profile/
           if-no-files-found: warn
           retention-days: 14
