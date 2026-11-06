@@ -64,7 +64,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
       };
     });
 
-    expect(result.decisionType).toBe('KJV_PHRASE');
+    expect(result.decisionType).toBe('KJV_PASSAGE');
     expect(result.versesLoaded).toBe(true);
     expect(result.wordIndexLoaded).toBe(true);
     expect(result.phraseIndexLoaded).toBe(true);
