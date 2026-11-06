@@ -117,9 +117,42 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     maxBuffer: 100 * 1024 * 1024
   });
   execFileSync('tar', ['-xf', '-', '-C', baselineRoot], { cwd: repoRoot, input: archive });
+  const sequentialRoot = path.join(tempRoot, 'candidate-sequential');
+  fs.cpSync(candidateRoot, sequentialRoot, { recursive: true });
+  const sequentialBackgroundPath = path.join(sequentialRoot, 'background.js');
+  let sequentialBackground = fs.readFileSync(sequentialBackgroundPath, 'utf8');
+  const parallelLoader = `const [verseEntries, wordVerseEntries] = await Promise.all([
+        fetchPackagedJsonAssignment(
+          'kjv-corpus-verses.js',
+          'const KJV_CORPUS_VERSES = ',
+          ';'
+        ),
+        fetchPackagedJsonAssignment(
+          'kjv-corpus-word-verse-index.js',
+          'const KJV_CORPUS_WORD_VERSE_INDEX = Object.fromEntries(',
+          ');'
+        )
+      ]);`;
+  const sequentialLoader = `const verseEntries = await fetchPackagedJsonAssignment(
+        'kjv-corpus-verses.js',
+        'const KJV_CORPUS_VERSES = ',
+        ';'
+      );
+      const wordVerseEntries = await fetchPackagedJsonAssignment(
+        'kjv-corpus-word-verse-index.js',
+        'const KJV_CORPUS_WORD_VERSE_INDEX = Object.fromEntries(',
+        ');'
+      );`;
+  if (!sequentialBackground.includes(parallelLoader)) {
+    throw new Error('Unable to create sequential-read comparison variant');
+  }
+  sequentialBackground = sequentialBackground.replace(parallelLoader, sequentialLoader);
+  fs.writeFileSync(sequentialBackgroundPath, sequentialBackground);
+
   const variants = {
     baseline: path.join(baselineRoot, 'extension'),
-    candidate: candidateRoot
+    candidate: candidateRoot,
+    candidateSequential: sequentialRoot
   };
 
   const instrument = extensionDir => {
@@ -274,9 +307,12 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   const samples = [];
   try {
     for (let repetition = 1; repetition <= 5; repetition++) {
-      const order = repetition % 2 === 1
-        ? ['baseline', 'candidate']
-        : ['candidate', 'baseline'];
+      const orders = [
+        ['baseline', 'candidate', 'candidateSequential'],
+        ['candidate', 'candidateSequential', 'baseline'],
+        ['candidateSequential', 'baseline', 'candidate']
+      ];
+      const order = orders[(repetition - 1) % orders.length];
       for (const variant of order) {
         const sample = await measureColdRun(variants[variant], variant, repetition);
         samples.push(sample);
@@ -306,7 +342,8 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   const summary = {
     baselineSha,
     baseline: summarize('baseline'),
-    candidate: summarize('candidate'),
+    candidateParallel: summarize('candidate'),
+    candidateSequential: summarize('candidateSequential'),
     rawSamples: samples
   };
   const output = JSON.stringify({ scenario: 'kjv-corpus-lazy-loading-ab', ...summary });
