@@ -1,0 +1,49 @@
+name: Polling-cadence paired profile
+
+on:
+  push:
+    branches: [audit/polling-cadence-paired-profile]
+    paths:
+      - '.github/workflows/polling-cadence-paired-profile.yml'
+      - 'tests/browser/extension.spec.js'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: polling-cadence-paired-profile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  profile:
+    name: Profile paired activation polling cadence
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run paired exhaustive OT and NT polling profiles three times
+        shell: bash
+        run: |
+          set -o pipefail
+          mkdir -p "$RUNNER_TEMP/polling-cadence-profile"
+          START_MS="$(node -p 'Date.now()')"
+          npx playwright test tests/browser/extension.spec.js \
+            --grep 'Double-click generic reference grammar — polling-cadence paired profile' \
+            --workers=1 --repeat-each=3 --reporter=line 2>&1 | tee "$RUNNER_TEMP/polling-cadence-profile/profile.log"
+          END_MS="$(node -p 'Date.now()')"
+          echo "Profile process wall time: $((END_MS - START_MS))ms" | tee -a "$RUNNER_TEMP/polling-cadence-profile/profile.log"
+      - name: Upload profile log
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: polling-cadence-paired-profile
+          path: ${{ runner.temp }}/polling-cadence-profile/profile.log
+          if-no-files-found: warn
+          retention-days: 14
