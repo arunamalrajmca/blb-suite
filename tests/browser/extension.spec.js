@@ -3103,6 +3103,7 @@ test('selection messaging retries only deduplicated requests after a transient N
     doubleClickBlbSites:{}
   });
   await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  await page.waitForTimeout(1000);
 
   const tabId = await extensionWorker.evaluate(async () =>
     (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
