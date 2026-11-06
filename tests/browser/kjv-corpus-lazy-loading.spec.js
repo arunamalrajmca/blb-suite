@@ -95,9 +95,9 @@ test.describe('On-demand normalized KJV corpus loading', () => {
 
 
 test('interleaved cold-start and first-corpus-use A/B against current main', async () => {
-  // The exhaustive audit supplies BLB_PERF_OUTPUT. Keep ordinary focused
-  // browser runs fast; the labeled audit performs the paired benchmark.
-  test.skip(!process.env.CI && !process.env.BLB_PERF_OUTPUT, 'runs in CI or when an explicit performance output path is supplied');
+  // Keep ordinary browser suites fast; only the dedicated performance job
+  // supplies BLB_PERF_OUTPUT and runs the paired benchmark.
+  test.skip(!process.env.BLB_PERF_OUTPUT, 'runs only in the dedicated performance qualification job');
   test.setTimeout(180000);
 
   const repoRoot = path.resolve(__dirname, '../..');
