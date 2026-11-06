@@ -133,6 +133,8 @@ jobs:
           priority_list="$RUNNER_TEMP/blb-playwright-priority-list.txt"
           : > "$priority_list"
           for failed_title in \
+            "Study Sessions confirmed deletion stops and removes only the selected recording, while delete-all clears remaining history" \
+            "selected Study Topic exports a PDF containing its saved reference and note" \
             "shared sensitive-site classifier covers known providers without keyword false positives" \
             "payments URLs suppress selection injection and context-menu eligibility despite saved opt-ins"; do
             grep -F "› $failed_title" "$test_list" >> "$priority_list" || true
