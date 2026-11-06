@@ -5201,7 +5201,6 @@ async function classifySelectionForBlb(selectionText) {
   // can independently produce Criteria Search terms.
   if (!extractedRefs.length) {
     if (normalizeKjvPassageWords(source).length >= 5) await ensureKjvVerseCorpusLoaded();
-    if (wordCount >= KJV_PASSAGE_MIN_WORDS) await ensureKjvPhraseIndexLoaded();
     const corpusRange = findKjvVerseRangeForSelection(source);
     if (corpusRange?.url) {
       return {
