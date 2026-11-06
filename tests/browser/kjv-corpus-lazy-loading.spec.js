@@ -174,6 +174,8 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     source = source.replace(match[0], replacement);
     const fetchStart = "  const response = await fetch(chrome.runtime.getURL(filename));";
     const fetchEnd = "  const source = await response.text();";
+    const extractStart = "  const start = source.indexOf(assignment);";
+    const extractEnd = "  const json = source.slice(start + assignment.length, end);";
     const parseLine = "  return JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);";
     if (!source.includes(fetchStart) || !source.includes(fetchEnd) || !source.includes(parseLine)) {
       throw new Error('Unable to instrument packaged JSON fetch/read/parse phases');
@@ -185,6 +187,10 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     source = source.replace(fetchEnd,
       "  const __blbReadStarted = performance.now();\n" + fetchEnd +
       "\n  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-read', file: filename, durationMs: performance.now() - __blbReadStarted });");
+    source = source.replace(extractStart,
+      "  const __blbExtractStarted = performance.now();\\n" + extractStart);
+    source = source.replace(extractEnd,
+      extractEnd + "\\n  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-extract', file: filename, durationMs: performance.now() - __blbExtractStarted });");
     source = source.replace(parseLine,
       "  const __blbParseStarted = performance.now();\n" +
       "  const __blbParsed = JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);\n" +
