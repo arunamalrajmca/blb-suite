@@ -70,6 +70,46 @@ test.describe('On-demand normalized KJV corpus loading', () => {
     expect(result.phraseIndexLoaded).toBe(true);
   });
 
+  test('rejected compressed-resource fetches fall back to original packaged JavaScript data', async ({ extensionWorker }) => {
+    const result = await extensionWorker.evaluate(async () => {
+      const originalFetch = self.fetch;
+      let gzipRequests = 0;
+      let fallbackRequests = 0;
+      self.fetch = async (input, ...args) => {
+        const url = String(input);
+        if (url.endsWith('.json.gz')) {
+          gzipRequests++;
+          throw new TypeError('Failed to fetch');
+        }
+        if (/kjv-corpus-(verses|word-verse-index|phrase-index)\\.js(?:$|[?#])/.test(url)) {
+          fallbackRequests++;
+        }
+        return originalFetch(input, ...args);
+      };
+      try {
+        await ensureKjvVerseCorpusLoaded();
+        await ensureKjvPhraseIndexLoaded();
+        return {
+          gzipRequests,
+          fallbackRequests,
+          verseCount: KJV_CORPUS_VERSES?.length,
+          wordIndexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX,
+          phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX,
+          exactMatch: findSingleKjvPhraseMatch('For God so loved the world')?.slice(0, 3)
+        };
+      } finally {
+        self.fetch = originalFetch;
+      }
+    });
+
+    expect(result.gzipRequests).toBe(3);
+    expect(result.fallbackRequests).toBe(3);
+    expect(result.verseCount).toBe(31102);
+    expect(result.wordIndexLoaded).toBe(true);
+    expect(result.phraseIndexLoaded).toBe(true);
+    expect(result.exactMatch).toEqual([43, 3, 16]);
+  });
+
   test('concurrent loads are deduplicated and a failed load can be retried', async ({ extensionWorker }) => {
     const result = await extensionWorker.evaluate(async () => {
       const originalFetch = self.fetch;
