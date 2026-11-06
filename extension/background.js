@@ -5200,7 +5200,7 @@ async function classifySelectionForBlb(selectionText) {
   // explicit citations are authoritative, and the remaining selected wording
   // can independently produce Criteria Search terms.
   if (!extractedRefs.length) {
-    await ensureKjvVerseCorpusLoaded();
+    if (normalizeKjvPassageWords(source).length >= 5) await ensureKjvVerseCorpusLoaded();
     if (wordCount >= KJV_PASSAGE_MIN_WORDS) await ensureKjvPhraseIndexLoaded();
     const corpusRange = findKjvVerseRangeForSelection(source);
     if (corpusRange?.url) {
