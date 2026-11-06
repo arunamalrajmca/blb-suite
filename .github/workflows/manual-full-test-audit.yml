@@ -32,8 +32,24 @@ jobs:
         with:
           node-version: 22
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json', 'package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Cache npm download data
+        uses: actions/cache@v5
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node22-npm-${{ hashFiles('package.json', 'package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-npm-
+
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --prefer-offline --no-audit --no-fund
 
       - name: Read manifest version
         id: version
@@ -87,7 +103,7 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       # Deliberately bypass select-browser-specs.mjs, changed-file routing,
       # group routing, and workflow-level spec filters. Collect Playwright's
