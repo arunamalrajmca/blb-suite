@@ -1866,7 +1866,9 @@ test.describe('core user-visible E2E', () => {
           await assertDoubleClickPath(
             page, context, extensionWorker,
             `#ref .reference-token[data-index="${i}"]`,
-            expectedPath
+            expectedPath,
+            null,
+            20
           );
         }
       }
