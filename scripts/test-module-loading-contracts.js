@@ -103,7 +103,9 @@ if (!importMatch) {
       || !lazyVerseCorpusLoader[1].includes("Object.fromEntries(wordVerseEntries)")
       || !lazyVerseCorpusLoader[1].includes("kjvVerseCorpusLoadPromise")
       || !lazyVerseCorpusLoader[1].includes("kjvVerseCorpusLoadPromise = null")
-      || !background.includes("new DecompressionStream('gzip')")) {
+      || !background.includes("new DecompressionStream('gzip')")
+      || !background.includes('response.status === 404')
+      || !background.includes('fallbackAssignments')) {
     fail('normalized verse corpus and word-to-verse index are fetched together as validated data with retryable, promise-deduplicated loading');
   } else {
     pass('normalized verse corpus and word-to-verse index have a guarded, promise-deduplicated data loader');
