@@ -117,24 +117,9 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     maxBuffer: 100 * 1024 * 1024
   });
   execFileSync('tar', ['-xf', '-', '-C', baselineRoot], { cwd: repoRoot, input: archive });
-  const concurrentRoot = path.join(tempRoot, 'candidate-concurrent-indexes');
-  fs.cpSync(candidateRoot, concurrentRoot, { recursive: true });
-  const concurrentBackgroundPath = path.join(concurrentRoot, 'background.js');
-  let concurrentBackground = fs.readFileSync(concurrentBackgroundPath, 'utf8');
-  const loadPairPattern = /(\s*)await ensureKjvVerseCorpusLoaded\(\);\n\1await ensureKjvPhraseIndexLoaded\(\);/g;
-  let concurrentLoadReplacements = 0;
-  concurrentBackground = concurrentBackground.replace(loadPairPattern, (_match, indent) => {
-    concurrentLoadReplacements++;
-    return indent + 'await Promise.all([ensureKjvVerseCorpusLoaded(), ensureKjvPhraseIndexLoaded()]);';
-  });
-  if (concurrentLoadReplacements !== 2) {
-    throw new Error('Expected to parallelize both corpus/phrase-index loading paths; found ' + concurrentLoadReplacements);
-  }
-  fs.writeFileSync(concurrentBackgroundPath, concurrentBackground);
   const variants = {
     baseline: path.join(baselineRoot, 'extension'),
-    candidate: candidateRoot,
-    candidateConcurrentIndexes: concurrentRoot
+    candidate: candidateRoot
   };
 
   const instrument = extensionDir => {
@@ -202,7 +187,6 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
   };
   instrument(variants.baseline);
   instrument(variants.candidate);
-  instrument(variants.candidateConcurrentIndexes);
 
   const measureColdRun = async (extensionDir, variant, repetition) => {
     const context = await chromium.launchPersistentContext('', {
@@ -303,12 +287,9 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
   const samples = [];
   try {
     for (let repetition = 1; repetition <= 15; repetition++) {
-      const orders = [
-        ['baseline', 'candidate', 'candidateConcurrentIndexes'],
-        ['candidate', 'candidateConcurrentIndexes', 'baseline'],
-        ['candidateConcurrentIndexes', 'baseline', 'candidate']
-      ];
-      const order = orders[(repetition - 1) % orders.length];
+      const order = repetition % 2 === 1
+        ? ['baseline', 'candidate']
+        : ['candidate', 'baseline'];
       for (const variant of order) {
         const sample = await measureColdRun(variants[variant], variant, repetition);
         samples.push(sample);
@@ -340,7 +321,6 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     baselineSha,
     baseline: summarize('baseline'),
     candidateParallel: summarize('candidate'),
-    candidateConcurrentIndexes: summarize('candidateConcurrentIndexes'),
     rawSamples: samples
   };
   const output = JSON.stringify({ scenario: 'kjv-corpus-lazy-loading-ab', ...summary });
