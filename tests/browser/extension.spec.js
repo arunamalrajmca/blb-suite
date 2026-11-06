@@ -1901,7 +1901,15 @@ test.describe('core user-visible E2E', () => {
       durationMs: Number(process.hrtime.bigint() - testStartedAt) / 1e6
     }));
   }
-  test('Double-click generic reference grammar — exhaustive token coverage — OT and NT', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click generic reference grammar — exhaustive token coverage — separate-fixture baseline OT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'ot');
+  });
+
+  test('Double-click generic reference grammar — exhaustive token coverage — separate-fixture baseline NT', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'nt');
+  });
+
+  test('Double-click generic reference grammar — exhaustive token coverage — shared-fixture candidate OT and NT', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(240000);
     await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'ot');
     await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'nt');
