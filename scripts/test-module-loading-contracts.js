@@ -96,13 +96,14 @@ if (!importMatch) {
   }
   const lazyVerseCorpusLoader = background.match(/async function ensureKjvVerseCorpusLoaded\(\) \{([\s\S]*?)\n\}/);
   if (!lazyVerseCorpusLoader
-      || !lazyVerseCorpusLoader[1].includes("kjv-corpus-verses.js")
-      || !lazyVerseCorpusLoader[1].includes("kjv-corpus-word-verse-index.js")
-      || !lazyVerseCorpusLoader[1].includes("fetchPackagedJsonAssignment(")
+      || !lazyVerseCorpusLoader[1].includes("kjv-corpus-verses.json.gz")
+      || !lazyVerseCorpusLoader[1].includes("kjv-corpus-word-verse-index.json.gz")
+      || !lazyVerseCorpusLoader[1].includes("fetchPackagedGzipJson(")
       || !lazyVerseCorpusLoader[1].includes("Promise.all([")
       || !lazyVerseCorpusLoader[1].includes("Object.fromEntries(wordVerseEntries)")
       || !lazyVerseCorpusLoader[1].includes("kjvVerseCorpusLoadPromise")
-      || !lazyVerseCorpusLoader[1].includes("kjvVerseCorpusLoadPromise = null")) {
+      || !lazyVerseCorpusLoader[1].includes("kjvVerseCorpusLoadPromise = null")
+      || !background.includes("new DecompressionStream('gzip')")) {
     fail('normalized verse corpus and word-to-verse index are fetched together as validated data with retryable, promise-deduplicated loading');
   } else {
     pass('normalized verse corpus and word-to-verse index have a guarded, promise-deduplicated data loader');
@@ -113,6 +114,11 @@ if (!importMatch) {
     } else {
       pass(file + ' is not imported during ordinary worker startup');
     }
+  }
+  if (!background.includes("fetchPackagedGzipJson('kjv-corpus-phrase-index.json.gz')")) {
+    fail('phrase candidate index is loaded from the generated compressed package asset');
+  } else {
+    pass('phrase candidate index uses the generated compressed package asset');
   }
   const corpusRangeCallIndex = background.indexOf('const corpusRange = findKjvVerseRangeForSelection(source)');
   const residualCriteriaBranchIndex = background.indexOf('if (remainingWordCount >= KJV_PASSAGE_MIN_WORDS) {');

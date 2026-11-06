@@ -4,7 +4,6 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { execFileSync } = require('node:child_process');
-const { gzipSync } = require('node:zlib');
 
 test.describe('On-demand normalized KJV corpus loading', () => {
   test('ordinary startup and reference-only classification do not load corpus data', async ({ extensionWorker }) => {
@@ -131,142 +130,11 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
   fs.mkdirSync(baselineRoot, { recursive: true });
   fs.cpSync(path.join(repoRoot, 'extension'), candidateRoot, { recursive: true });
 
-  // Test-only compressed JSON variant. Build compact sidecars from the
-  // existing generated JS assignments, gzip them, and load them through the
-  // browser's streaming DecompressionStream + Response.json() path.
-  const gzipRoot = path.join(tempRoot, 'candidate-gzip');
-  fs.cpSync(candidateRoot, gzipRoot, { recursive: true });
-  const extractAssignmentJson = (filename, assignment, terminator, allowTrailingObjectComma = false) => {
-    const source = fs.readFileSync(path.join(candidateRoot, filename), 'utf8');
-    const start = source.indexOf(assignment);
-    const end = source.lastIndexOf(terminator);
-    if (start < 0 || end < start + assignment.length) {
-      throw new Error('Unable to extract generated JSON assignment from ' + filename);
-    }
-    let json = source.slice(start + assignment.length, end).trim();
-    if (allowTrailingObjectComma) json = json.replace(/,(\s*})$/, '$1');
-    return JSON.parse(json);
-  };
-  const gzipResources = [
-    {
-      source: 'kjv-corpus-verses.js',
-      assignment: 'const KJV_CORPUS_VERSES = ',
-      terminator: ';',
-      output: 'kjv-corpus-verses.json.gz'
-    },
-    {
-      source: 'kjv-corpus-word-verse-index.js',
-      assignment: 'const KJV_CORPUS_WORD_VERSE_INDEX = Object.fromEntries(',
-      terminator: ');',
-      output: 'kjv-corpus-word-verse-index.json.gz'
-    },
-    {
-      source: 'kjv-corpus-phrase-index.js',
-      assignment: 'const KJV_CORPUS_PHRASE_INDEX = Object.freeze(',
-      terminator: ');',
-      output: 'kjv-corpus-phrase-index.json.gz',
-      allowTrailingObjectComma: true
-    }
-  ];
-  const gzipSizeReport = {};
-  for (const resource of gzipResources) {
-    const value = extractAssignmentJson(
-      resource.source,
-      resource.assignment,
-      resource.terminator,
-      resource.allowTrailingObjectComma
-    );
-    const compressed = gzipSync(Buffer.from(JSON.stringify(value)));
-    fs.writeFileSync(path.join(gzipRoot, resource.output), compressed);
-    gzipSizeReport[resource.output] = {
-      sourceBytes: fs.statSync(path.join(candidateRoot, resource.source)).size,
-      gzipBytes: compressed.length
-    };
-  }
-  console.log('BLB_CORPUS_GZIP_SIZES ' + JSON.stringify(gzipSizeReport));
-
-  const gzipBackgroundPath = path.join(gzipRoot, 'background.js');
-  let gzipBackground = fs.readFileSync(gzipBackgroundPath, 'utf8');
-  const gzipLoaderStart = gzipBackground.indexOf('async function ensureKjvVerseCorpusLoaded() {');
-  const gzipLoaderEnd = gzipBackground.indexOf('\nasync function ensureKjvCaseSensitiveWordsLoaded()', gzipLoaderStart);
-  if (gzipLoaderStart < 0 || gzipLoaderEnd < 0) {
-    throw new Error('Unable to create compressed JSON comparison variant');
-  }
-  const gzipLoader = `async function fetchPackagedGzipJson(filename) {
-  const fetchStartedAt = performance.now();
-  const response = await fetch(chrome.runtime.getURL(filename));
-  globalThis.__BLB_PROFILE_LOAD__?.events.push({
-    phase: 'packaged-gzip-fetch',
-    file: filename,
-    durationMs: performance.now() - fetchStartedAt
-  });
-  if (!response.ok || !response.body) {
-    throw new Error('Unable to fetch compressed packaged KJV data ' + filename + ': HTTP ' + response.status);
-  }
-  if (typeof DecompressionStream !== 'function') {
-    throw new Error('DecompressionStream is unavailable in this service worker');
-  }
-  const decodeStartedAt = performance.now();
-  const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));
-  const value = await new Response(decompressed).json();
-  globalThis.__BLB_PROFILE_LOAD__?.events.push({
-    phase: 'packaged-gzip-decompress-json',
-    file: filename,
-    durationMs: performance.now() - decodeStartedAt
-  });
-  return value;
-}
-
-async function ensureKjvVerseCorpusLoaded() {
-  if (Array.isArray(self.KJV_CORPUS_VERSES)
-      && self.KJV_CORPUS_WORD_VERSE_INDEX
-      && typeof self.KJV_CORPUS_WORD_VERSE_INDEX === 'object') return;
-  if (!kjvVerseCorpusLoadPromise) {
-    kjvVerseCorpusLoadPromise = (async () => {
-      const [verseEntries, wordVerseEntries] = await Promise.all([
-        fetchPackagedGzipJson('kjv-corpus-verses.json.gz'),
-        fetchPackagedGzipJson('kjv-corpus-word-verse-index.json.gz')
-      ]);
-      if (!Array.isArray(verseEntries) || verseEntries.length !== 31102) {
-        throw new Error('The compressed normalized KJV verse corpus is empty or invalid');
-      }
-      if (!Array.isArray(wordVerseEntries) || !wordVerseEntries.length) {
-        throw new Error('The compressed KJV word-to-verse index is empty or invalid');
-      }
-      const wordVerseIndex = Object.fromEntries(wordVerseEntries);
-      if (!wordVerseIndex || typeof wordVerseIndex !== 'object' || !Object.keys(wordVerseIndex).length) {
-        throw new Error('The compressed KJV word-to-verse index could not be constructed');
-      }
-      self.KJV_CORPUS_VERSES = verseEntries;
-      self.KJV_CORPUS_WORD_VERSE_INDEX = wordVerseIndex;
-    })().catch(error => {
-      kjvVerseCorpusLoadPromise = null;
-      throw error;
-    });
-  }
-  await kjvVerseCorpusLoadPromise;
-}
-
-async function ensureKjvPhraseIndexLoaded() {
-  if (KJV_CORPUS_PHRASE_INDEX && typeof KJV_CORPUS_PHRASE_INDEX === 'object') return;
-  if (!kjvPhraseIndexLoadPromise) {
-    kjvPhraseIndexLoadPromise = (async () => {
-      const index = await fetchPackagedGzipJson('kjv-corpus-phrase-index.json.gz');
-      if (!index || typeof index !== 'object' || Array.isArray(index) || !Object.keys(index).length) {
-        throw new Error('The compressed KJV phrase candidate index is empty or invalid');
-      }
-      KJV_CORPUS_PHRASE_INDEX = Object.freeze(index);
-    })().catch(error => {
-      kjvPhraseIndexLoadPromise = null;
-      throw error;
-    });
-  }
-  await kjvPhraseIndexLoadPromise;
-}`;
-  gzipBackground = gzipBackground.slice(0, gzipLoaderStart)
-    + gzipLoader
-    + gzipBackground.slice(gzipLoaderEnd);
-  fs.writeFileSync(gzipBackgroundPath, gzipBackground);
+  // Generate the exact compressed assets used by the production candidate.
+  execFileSync(process.execPath, [
+    path.resolve(repoRoot, 'scripts/generate-kjv-gzip-assets.mjs'),
+    candidateRoot
+  ], { cwd: repoRoot, stdio: 'pipe' });
 
   const archive = execFileSync('git', ['archive', baselineSha, 'extension'], {
     cwd: repoRoot,
@@ -275,8 +143,7 @@ async function ensureKjvPhraseIndexLoaded() {
   execFileSync('tar', ['-xf', '-', '-C', baselineRoot], { cwd: repoRoot, input: archive });
   const variants = {
     baseline: path.join(baselineRoot, 'extension'),
-    candidate: candidateRoot,
-    candidateGzip: gzipRoot
+    candidate: candidateRoot
   };
 
   const instrument = extensionDir => {
@@ -320,6 +187,18 @@ async function ensureKjvPhraseIndexLoaded() {
       "  const __blbParsed = JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);\n" +
       "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-parse', file: filename, durationMs: performance.now() - __blbParseStarted });\n" +
       "  return __blbParsed;");
+    const gzipRead = "  const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));";
+    if (source.includes(gzipRead)) {
+      source = source.replace("  const response = await fetch(chrome.runtime.getURL(filename));",
+        "  const __blbGzipFetchStarted = performance.now();\\n  const response = await fetch(chrome.runtime.getURL(filename));");
+      source = source.replace(gzipRead,
+        "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-gzip-fetch', file: filename, durationMs: performance.now() - __blbGzipFetchStarted });\\n"
+        + "  const __blbGzipDecodeStarted = performance.now();\\n" + gzipRead);
+      source = source.replace("  return new Response(decompressed).json();",
+        "  const __blbDecoded = await new Response(decompressed).json();\\n"
+        + "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-gzip-decompress-json', file: filename, durationMs: performance.now() - __blbGzipDecodeStarted });\\n"
+        + "  return __blbDecoded;");
+    }
     const fromEntries = "      const wordVerseIndex = Object.fromEntries(wordVerseEntries);";
     source = source.replace(fromEntries,
       "      const __blbIndexBuildStarted = performance.now();\n" + fromEntries +
@@ -445,11 +324,9 @@ async function ensureKjvPhraseIndexLoaded() {
   const samples = [];
   try {
     for (let repetition = 1; repetition <= 15; repetition++) {
-      const order = repetition % 3 === 1
-        ? ['baseline', 'candidate', 'candidateGzip']
-        : repetition % 3 === 2
-          ? ['candidate', 'candidateGzip', 'baseline']
-          : ['candidateGzip', 'baseline', 'candidate'];
+      const order = repetition % 2 === 1
+        ? ['baseline', 'candidate']
+        : ['candidate', 'baseline'];
       for (const variant of order) {
         const sample = await measureColdRun(variants[variant], variant, repetition);
         samples.push(sample);
@@ -480,8 +357,7 @@ async function ensureKjvPhraseIndexLoaded() {
   const summary = {
     baselineSha,
     baseline: summarize('baseline'),
-    candidateParallel: summarize('candidate'),
-    candidateGzip: summarize('candidateGzip'),
+    candidateGzip: summarize('candidate'),
     rawSamples: samples
   };
   const output = JSON.stringify({ scenario: 'kjv-corpus-lazy-loading-ab', ...summary });
