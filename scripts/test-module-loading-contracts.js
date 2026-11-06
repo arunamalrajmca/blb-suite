@@ -116,7 +116,7 @@ if (!importMatch) {
   }
   if (!background.includes('await ensureKjvVerseCorpusLoaded();\n      const singleMatch = findSingleKjvPhraseMatch(phrase)')
       || !background.includes('if (!hasBooleanOperators) await ensureKjvVerseCorpusLoaded();\n  const singleKjvMatch =')
-      || !background.includes('if (normalizeKjvPassageWords(source).length >= 5) await ensureKjvVerseCorpusLoaded();\n    if (wordCount >= KJV_PASSAGE_MIN_WORDS) await ensureKjvPhraseIndexLoaded();\n    const corpusRange = findKjvVerseRangeForSelection(source)')
+      || !background.includes('if (normalizeKjvPassageWords(source).length >= 5) await ensureKjvVerseCorpusLoaded();\n    const corpusRange = findKjvVerseRangeForSelection(source)')\n      || !background.includes('if (remainingWordCount >= KJV_PASSAGE_MIN_WORDS) {\n    await ensureKjvVerseCorpusLoaded();\n    await ensureKjvPhraseIndexLoaded();')
       || !background.includes('await ensureKjvVerseCorpusLoaded();\n    const singleMatch = findSingleKjvPhraseMatch(cleanedText)')) {
     fail('omnibox, selection classification, and direct-verse optimizations await the corpus only at their data-dependent decision points');
   } else {
