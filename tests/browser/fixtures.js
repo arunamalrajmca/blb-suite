@@ -2,6 +2,7 @@ const { test: base, expect, chromium } = require('@playwright/test');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { execFileSync } = require('node:child_process');
 
 const profileFixtures = process.env.BLB_PROFILE_BROWSER_FIXTURES === '1';
 function profileFixture(phase, startedAt, details = {}) {
@@ -46,6 +47,12 @@ const test = base.extend({
     try {
       const copyStartedAt = process.hrtime.bigint();
       fs.cpSync(sourceExtensionPath, extensionPath, { recursive: true });
+      // Generate the compressed search sidecars from the authoritative source
+      // datasets before launching the unpacked test extension.
+      execFileSync(process.execPath, [
+        path.resolve(__dirname, '../../scripts/generate-kjv-gzip-assets.mjs'),
+        extensionPath
+      ], { stdio: 'pipe' });
       if (profileFixtures) {
         const backgroundPath = path.join(extensionPath, 'background.js');
         let background = fs.readFileSync(backgroundPath, 'utf8');

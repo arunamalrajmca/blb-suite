@@ -1848,6 +1848,18 @@ async function fetchPackagedJsonAssignment(filename, assignment, terminator, all
   return JSON.parse(allowTrailingObjectComma ? json.replace(/,(\s*})$/, '$1') : json);
 }
 
+async function fetchPackagedGzipJson(filename) {
+  const response = await fetch(chrome.runtime.getURL(filename));
+  if (!response.ok || !response.body) {
+    throw new Error('Unable to fetch compressed packaged KJV data ' + filename + ': HTTP ' + response.status);
+  }
+  if (typeof DecompressionStream !== 'function') {
+    throw new Error('DecompressionStream is unavailable in this service worker');
+  }
+  const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));
+  return new Response(decompressed).json();
+}
+
 async function ensureKjvVerseCorpusLoaded() {
   // The normalized verse corpus and word-to-verse candidate index are used
   // only by local KJV matching. Keep both out of worker startup and fetch them
@@ -1858,27 +1870,19 @@ async function ensureKjvVerseCorpusLoaded() {
   if (!kjvVerseCorpusLoadPromise) {
     kjvVerseCorpusLoadPromise = (async () => {
       const [verseEntries, wordVerseEntries] = await Promise.all([
-        fetchPackagedJsonAssignment(
-          'kjv-corpus-verses.js',
-          'const KJV_CORPUS_VERSES = ',
-          ';'
-        ),
-        fetchPackagedJsonAssignment(
-          'kjv-corpus-word-verse-index.js',
-          'const KJV_CORPUS_WORD_VERSE_INDEX = Object.fromEntries(',
-          ');'
-        )
+        fetchPackagedGzipJson('kjv-corpus-verses.json.gz'),
+        fetchPackagedGzipJson('kjv-corpus-word-verse-index.json.gz')
       ]);
       if (!Array.isArray(verseEntries) || verseEntries.length !== 31102) {
-        throw new Error('The packaged normalized KJV verse corpus is empty or invalid');
+        throw new Error('The compressed normalized KJV verse corpus is empty or invalid');
       }
       if (!Array.isArray(wordVerseEntries) || !wordVerseEntries.length) {
-        throw new Error('The packaged KJV word-to-verse index is empty or invalid');
+        throw new Error('The compressed KJV word-to-verse index is empty or invalid');
       }
       const wordVerseIndex = Object.fromEntries(wordVerseEntries);
       if (!wordVerseIndex || typeof wordVerseIndex !== 'object'
           || !Object.keys(wordVerseIndex).length) {
-        throw new Error('The packaged KJV word-to-verse index could not be constructed');
+        throw new Error('The compressed KJV word-to-verse index could not be constructed');
       }
       self.KJV_CORPUS_VERSES = verseEntries;
       self.KJV_CORPUS_WORD_VERSE_INDEX = wordVerseIndex;
@@ -1897,12 +1901,7 @@ async function ensureKjvPhraseIndexLoaded() {
   if (KJV_CORPUS_PHRASE_INDEX && typeof KJV_CORPUS_PHRASE_INDEX === 'object') return;
   if (!kjvPhraseIndexLoadPromise) {
     kjvPhraseIndexLoadPromise = (async () => {
-      const index = await fetchPackagedJsonAssignment(
-        'kjv-corpus-phrase-index.js',
-        'const KJV_CORPUS_PHRASE_INDEX = Object.freeze(',
-        ');',
-        true
-      );
+      const index = await fetchPackagedGzipJson('kjv-corpus-phrase-index.json.gz');
       if (!index || typeof index !== 'object' || Array.isArray(index) || !Object.keys(index).length) {
         throw new Error('The packaged KJV phrase candidate index is empty or invalid');
       }

@@ -23,6 +23,8 @@ if (manifest.manifest_version !== 3) {
 }
 NODE
 
+node "$ROOT_DIR/scripts/generate-kjv-gzip-assets.mjs" "$EXT_DIR"
+
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-$(git -C "$ROOT_DIR" show -s --format=%ct HEAD)}"
 find "$EXT_DIR" -type f -exec touch -h -d "@$SOURCE_DATE_EPOCH" {} +
 
