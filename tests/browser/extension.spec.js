@@ -1755,10 +1755,12 @@ test.describe('core user-visible E2E', () => {
     )), matchedTabIds);
   }
 
-  async function setupDoubleClickReferencePage(page, extensionStorage, html) {
+  async function setupDoubleClickReferencePage(page, extensionStorage, html, storageAlreadyConfigured = false) {
     const setupStartedAt = process.hrtime.bigint();
     const reusedDocument = page.url() === 'https://example.com/';
-    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    if (!storageAlreadyConfigured) {
+      await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    }
 
     // Keep the same document for successive grammar cases. The content script
     // and its asynchronous settings initialization survive between cases, so
@@ -1804,8 +1806,11 @@ test.describe('core user-visible E2E', () => {
       })), testament);
   }
 
-  async function runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, testament) {
+  async function runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, testament, skipRepeatedStorageWrite = false) {
     test.setTimeout(240000);
+    if (skipRepeatedStorageWrite) {
+      await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+    }
     const books = await getGrammarBooks(extensionWorker, testament);
     for (const book of books) {
       const forms = [...new Set([book.name, book.urlKey])];
@@ -1815,7 +1820,8 @@ test.describe('core user-visible E2E', () => {
         await setupDoubleClickReferencePage(
           page,
           extensionStorage,
-          `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
+          `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`,
+          skipRepeatedStorageWrite
         );
         const expectedPath = `/kjv/${book.urlKey}/1/1/`;
         for (let i = 0; i < tokens.length; i++) {
@@ -1830,6 +1836,28 @@ test.describe('core user-visible E2E', () => {
       }
     }
   }
+
+  test('Double-click generic reference grammar — storage-write paired profile', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
+    const runProfile = async (mode, skipRepeatedStorageWrite, repeat) => {
+      const startedAt = process.hrtime.bigint();
+      await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'ot', skipRepeatedStorageWrite);
+      await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'nt', skipRepeatedStorageWrite);
+      console.log('BLB_STORAGE_WRITE_PROFILE ' + JSON.stringify({
+        mode,
+        repeat,
+        durationMs: Number(process.hrtime.bigint() - startedAt) / 1e6
+      }));
+    };
+    for (let repeat = 1; repeat <= 3; repeat++) {
+      const order = repeat % 2 === 1
+        ? [['baseline', false], ['candidate', true]]
+        : [['candidate', true], ['baseline', false]];
+      for (const [mode, skipRepeatedStorageWrite] of order) {
+        await runProfile(mode, skipRepeatedStorageWrite, repeat);
+      }
+    }
+  });
 
   test('Double-click generic reference grammar — exhaustive token coverage — OT and NT', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(240000);
