@@ -127,14 +127,14 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     if (!match) throw new Error('Unable to instrument the service-worker importScripts bootstrap');
     const scripts = [...match[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(item => item[1]);
     if (!scripts.length) throw new Error('No service-worker imports were found for A/B timing');
-    const replacement = 'const __blbProfileBootstrapAt = performance.now();\\n'
-      + 'const __blbProfilePhases = [];\\n'
-      + 'for (const __blbScript of ' + JSON.stringify(scripts) + ') {\\n'
-      + '  const __blbImportStartedAt = performance.now();\\n'
-      + '  importScripts(__blbScript);\\n'
-      + "  __blbProfilePhases.push({ phase: 'service-worker-importScript', script: __blbScript, durationMs: performance.now() - __blbImportStartedAt });\\n"
-      + '}\\n'
-      + 'globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: __blbProfileBootstrapAt, phases: __blbProfilePhases };\\n'
+    const replacement = 'const __blbProfileBootstrapAt = performance.now();\n'
+      + 'const __blbProfilePhases = [];\n'
+      + 'for (const __blbScript of ' + JSON.stringify(scripts) + ') {\n'
+      + '  const __blbImportStartedAt = performance.now();\n'
+      + '  importScripts(__blbScript);\n'
+      + "  __blbProfilePhases.push({ phase: 'service-worker-importScript', script: __blbScript, durationMs: performance.now() - __blbImportStartedAt });\n"
+      + '}\n'
+      + 'globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: __blbProfileBootstrapAt, phases: __blbProfilePhases };\n'
       + 'globalThis.__BLB_PROFILE_LOAD__ = { events: [] };';
     source = source.replace(match[0], replacement);
     const fetchStart = "  const response = await fetch(chrome.runtime.getURL(filename));";
@@ -144,25 +144,25 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
       throw new Error('Unable to instrument packaged JSON fetch/read/parse phases');
     }
     source = source.replace(fetchStart,
-      "  const __blbFetchStarted = performance.now();\\n" + fetchStart);
+      "  const __blbFetchStarted = performance.now();\n" + fetchStart);
     source = source.replace("  if (!response.ok) {",
-      "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-fetch', file: filename, durationMs: performance.now() - __blbFetchStarted });\\n  if (!response.ok) {");
+      "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-fetch', file: filename, durationMs: performance.now() - __blbFetchStarted });\n  if (!response.ok) {");
     source = source.replace(fetchEnd,
-      "  const __blbReadStarted = performance.now();\\n" + fetchEnd +
-      "\\n  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-read', file: filename, durationMs: performance.now() - __blbReadStarted });");
+      "  const __blbReadStarted = performance.now();\n" + fetchEnd +
+      "\n  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-read', file: filename, durationMs: performance.now() - __blbReadStarted });");
     source = source.replace(parseLine,
-      "  const __blbParseStarted = performance.now();\\n" +
-      "  const __blbParsed = JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);\\n" +
-      "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-parse', file: filename, durationMs: performance.now() - __blbParseStarted });\\n" +
+      "  const __blbParseStarted = performance.now();\n" +
+      "  const __blbParsed = JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);\n" +
+      "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-parse', file: filename, durationMs: performance.now() - __blbParseStarted });\n" +
       "  return __blbParsed;");
     const fromEntries = "      const wordVerseIndex = Object.fromEntries(wordVerseEntries);";
     source = source.replace(fromEntries,
-      "      const __blbIndexBuildStarted = performance.now();\\n" + fromEntries +
-      "\\n      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'word-verse-index-build', durationMs: performance.now() - __blbIndexBuildStarted });");
+      "      const __blbIndexBuildStarted = performance.now();\n" + fromEntries +
+      "\n      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'word-verse-index-build', durationMs: performance.now() - __blbIndexBuildStarted });");
     const rangeCall = "    const corpusRange = findKjvVerseRangeForSelection(source);";
     source = source.replace(rangeCall,
-      "    const __blbRangeStarted = performance.now();\\n" + rangeCall +
-      "\\n    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'downstream-corpus-classification', durationMs: performance.now() - __blbRangeStarted });");
+      "    const __blbRangeStarted = performance.now();\n" + rangeCall +
+      "\n    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'downstream-corpus-classification', durationMs: performance.now() - __blbRangeStarted });");
     fs.writeFileSync(backgroundPath, source);
   };
   instrument(variants.baseline);
