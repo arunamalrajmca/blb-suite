@@ -40,6 +40,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
         verseCount: KJV_CORPUS_VERSES?.length,
         indexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX
           && typeof KJV_CORPUS_WORD_VERSE_INDEX === 'object',
+        phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX,
         exactMatch: findSingleKjvPhraseMatch('For God so loved the world')?.slice(0, 3)
       };
     });
@@ -47,6 +48,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
     expect(result.versesLoaded).toBe(true);
     expect(result.verseCount).toBe(31102);
     expect(result.indexLoaded).toBe(true);
+    expect(result.phraseIndexLoaded).toBe(false);
     expect(result.exactMatch).toEqual([43, 3, 16]);
     expect(['KJV_PHRASE', 'KJV_REFERENCE_RANGE']).toContain(result.decisionType);
   });
