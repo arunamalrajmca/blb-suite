@@ -114,13 +114,21 @@ if (!importMatch) {
       pass(file + ' is not imported during ordinary worker startup');
     }
   }
-  if (!background.includes('await ensureKjvVerseCorpusLoaded();\n      const singleMatch = findSingleKjvPhraseMatch(phrase)')
-      || !background.includes('if (!hasBooleanOperators) await ensureKjvVerseCorpusLoaded();\n  const singleKjvMatch =')
-      || !background.includes('if (normalizeKjvPassageWords(source).length >= 5) await ensureKjvVerseCorpusLoaded();\n    const corpusRange = findKjvVerseRangeForSelection(source)')\n      || !background.includes('if (remainingWordCount >= KJV_PASSAGE_MIN_WORDS) {\n    await ensureKjvVerseCorpusLoaded();\n    await ensureKjvPhraseIndexLoaded();')
-      || !background.includes('await ensureKjvVerseCorpusLoaded();\n    const singleMatch = findSingleKjvPhraseMatch(cleanedText)')) {
-    fail('omnibox, selection classification, and direct-verse optimizations await the corpus only at their data-dependent decision points');
+  const corpusRangeCallIndex = background.indexOf('const corpusRange = findKjvVerseRangeForSelection(source)');
+  const residualCriteriaBranchIndex = background.indexOf('if (remainingWordCount >= KJV_PASSAGE_MIN_WORDS) {');
+  const deferredPhraseIndexLoadIndex = background.indexOf('await ensureKjvPhraseIndexLoaded();', residualCriteriaBranchIndex);
+  const phraseIndexLoadsAfterRangeCheck = corpusRangeCallIndex >= 0
+    && residualCriteriaBranchIndex > corpusRangeCallIndex
+    && deferredPhraseIndexLoadIndex > residualCriteriaBranchIndex;
+  if (!background.includes('await ensureKjvVerseCorpusLoaded();\\n      const singleMatch = findSingleKjvPhraseMatch(phrase)')
+      || !background.includes('if (!hasBooleanOperators) await ensureKjvVerseCorpusLoaded();\\n  const singleKjvMatch =')
+      || !background.includes('if (normalizeKjvPassageWords(source).length >= 5) await ensureKjvVerseCorpusLoaded();')
+      || !background.includes('const corpusRange = findKjvVerseRangeForSelection(source)')
+      || !phraseIndexLoadsAfterRangeCheck
+      || !background.includes('await ensureKjvVerseCorpusLoaded();\\n    const singleMatch = findSingleKjvPhraseMatch(cleanedText)')) {
+    fail('omnibox, selection classification, and direct-verse optimizations await corpus and phrase data only at their data-dependent decision points');
   } else {
-    pass('omnibox, selection classification, and direct-verse optimizations await corpus data at their decision points');
+    pass('omnibox, selection classification, and direct-verse optimizations defer corpus and phrase data until their decision points');
   }
   const lazyPhraseLoader = background.match(/async function ensureKjvPhraseIndexLoaded\(\) \{([\s\S]*?)\n\}/);
   if (!lazyPhraseLoader
