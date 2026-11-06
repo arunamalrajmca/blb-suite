@@ -188,9 +188,9 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
       "  const __blbReadStarted = performance.now();\n" + fetchEnd +
       "\n  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-read', file: filename, durationMs: performance.now() - __blbReadStarted });");
     source = source.replace(extractStart,
-      "  const __blbExtractStarted = performance.now();\\n" + extractStart);
+      "  const __blbExtractStarted = performance.now();\n" + extractStart);
     source = source.replace(extractEnd,
-      extractEnd + "\\n  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-extract', file: filename, durationMs: performance.now() - __blbExtractStarted });");
+      extractEnd + "\n  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-extract', file: filename, durationMs: performance.now() - __blbExtractStarted });");
     source = source.replace(parseLine,
       "  const __blbParseStarted = performance.now();\n" +
       "  const __blbParsed = JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);\n" +
