@@ -1,3 +1,4 @@
+// Test-only worker parallelism profile trigger.
 const { test, expect } = require('./fixtures');
 
 async function removeTabById(extensionWorker, id) {
