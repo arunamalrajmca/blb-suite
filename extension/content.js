@@ -136,25 +136,40 @@ void suiteSettingsReadyPromise.then(enabled => {
 // updated while an old content script is still attached to a page. Keep that
 // stale-page condition silent and fail closed instead of surfacing
 // "Extension context invalidated" to the user.
-function safeRuntimeSendMessage(message, onError = null) {
+function sendRuntimeMessageWithRetry(message, sendMessage, onError = null) {
   const reportError = error => {
     try {
       if (typeof onError === 'function') onError(error);
     } catch (_) {}
   };
-  try {
-    const pending = chrome.runtime.sendMessage(message);
-    if (pending && typeof pending.catch === 'function') {
-      return pending.catch(error => {
-        reportError(error);
-        return undefined;
-      });
+  // Selection-open requests carry a requestId that the background handler
+  // deduplicates. This makes a narrowly-scoped retry safe if Chromium reports
+  // its transient "No SW" dispatch error before the worker can receive it.
+  const retryableSelectionRequest = !!message?.requestId &&
+    (message.type === 'blbSuiteOpenSelectionText' ||
+     message.type === 'blbSuiteOpenDoubleClickSelectionText');
+  const send = async attempt => {
+    try {
+      return await sendMessage(message);
+    } catch (error) {
+      const errorText = String(error?.message || error || '');
+      if (retryableSelectionRequest && attempt < 2 && /\\bNo SW\\b/i.test(errorText)) {
+        await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
+        return send(attempt + 1);
+      }
+      reportError(error);
+      return undefined;
     }
-    return Promise.resolve(pending);
-  } catch (error) {
-    reportError(error);
-    return Promise.resolve(undefined);
-  }
+  };
+  return send(0);
+}
+
+function safeRuntimeSendMessage(message, onError = null) {
+  return sendRuntimeMessageWithRetry(
+    message,
+    payload => chrome.runtime.sendMessage(payload),
+    onError
+  );
 }
 
 // Route Suite-owned BLB new-tab actions through the background single-owner
