@@ -1801,7 +1801,7 @@ test.describe('core user-visible E2E', () => {
     if (profileEnabled) console.log('BLB_GRAMMAR_ACTION_PROFILE ' + JSON.stringify({
       rectMs, gestureMs, selectionReadMs, activationMs, destinationPollMs, cleanupMs,
       totalMs: Number(process.hrtime.bigint() - actionStartedAt) / 1e6,
-      expectedPath, selectedText
+      expectedPath
     }));
   }
 
