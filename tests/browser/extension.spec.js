@@ -126,14 +126,10 @@ async function activateBlbTabForPath(extensionWorker, expectedPath, debug = {}) 
     pollCount,
     expectedPath
   }));
-  let selectedText = debug.selectedText || '';
-  if (!selectedText && typeof debug.getSelectedText === 'function') {
-    try { selectedText = await debug.getSelectedText(); } catch (_) {}
-  }
   console.error('Double-click activation failure', {
     fragment: debug.fragment || '',
     selector: debug.selector || '',
-    selectedText,
+    selectedText: debug.selectedText || '',
     expectedPath,
     tabs: lastTabs
   });
@@ -1751,12 +1747,7 @@ test.describe('core user-visible E2E', () => {
     // inline element can place Chromium's dblclick coordinates on an adjacent
     // inter-token whitespace gap even when the token itself is visually hit.
     await page.mouse.dblclick(rect.x, rect.y);
-    await activateBlbTabForPath(extensionWorker, expectedPath, {
-      fragment,
-      selector,
-      getSelectedText: () => page.evaluate(() => window.getSelection?.().toString() || ''),
-      pollIntervalMs
-    });
+    await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText: await page.evaluate(() => window.getSelection?.().toString() || ''), pollIntervalMs});
     // The extension worker is authoritative for Chrome tab state. Do not
     // require Playwright context.pages() to observe the tab before validating
     // the reference; that representation can lag behind chrome.tabs.query().
