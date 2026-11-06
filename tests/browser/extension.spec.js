@@ -1824,7 +1824,7 @@ test.describe('core user-visible E2E', () => {
             `#ref .reference-token[data-index="${i}"]`,
             expectedPath,
             null,
-            20
+            Number(process.env.BLB_PROFILE_POLL_INTERVAL_MS || 20)
           );
         }
       }
@@ -1835,6 +1835,27 @@ test.describe('core user-visible E2E', () => {
     test.setTimeout(240000);
     await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'ot');
     await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'nt');
+  });
+
+  test('Double-click generic reference grammar — polling-cadence paired profile', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
+    const runProfile = async (mode, intervalMs) => {
+      process.env.BLB_PROFILE_POLL_INTERVAL_MS = String(intervalMs);
+      const startedAt = process.hrtime.bigint();
+      await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'ot');
+      await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'nt');
+      console.log('BLB_POLL_CADENCE_PROFILE ' + JSON.stringify({
+        mode,
+        intervalMs,
+        durationMs: Number(process.hrtime.bigint() - startedAt) / 1e6
+      }));
+    };
+    try {
+      await runProfile('baseline-20ms', 20);
+      await runProfile('candidate-10ms', 10);
+    } finally {
+      delete process.env.BLB_PROFILE_POLL_INTERVAL_MS;
+    }
   });
 
   async function runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, testament, variant, includeBook = () => true) {
