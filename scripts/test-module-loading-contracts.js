@@ -120,12 +120,12 @@ if (!importMatch) {
   const phraseIndexLoadsAfterRangeCheck = corpusRangeCallIndex >= 0
     && residualCriteriaBranchIndex > corpusRangeCallIndex
     && deferredPhraseIndexLoadIndex > residualCriteriaBranchIndex;
-  if (!background.includes('await ensureKjvVerseCorpusLoaded();\\n      const singleMatch = findSingleKjvPhraseMatch(phrase)')
-      || !background.includes('if (!hasBooleanOperators) await ensureKjvVerseCorpusLoaded();\\n  const singleKjvMatch =')
+  if (!background.includes('await ensureKjvVerseCorpusLoaded();\n      const singleMatch = findSingleKjvPhraseMatch(phrase)')
+      || !background.includes('if (!hasBooleanOperators) await ensureKjvVerseCorpusLoaded();\n  const singleKjvMatch =')
       || !background.includes('if (normalizeKjvPassageWords(source).length >= 5) await ensureKjvVerseCorpusLoaded();')
       || !background.includes('const corpusRange = findKjvVerseRangeForSelection(source)')
       || !phraseIndexLoadsAfterRangeCheck
-      || !background.includes('await ensureKjvVerseCorpusLoaded();\\n    const singleMatch = findSingleKjvPhraseMatch(cleanedText)')) {
+      || !background.includes('await ensureKjvVerseCorpusLoaded();\n    const singleMatch = findSingleKjvPhraseMatch(cleanedText)')) {
     fail('omnibox, selection classification, and direct-verse optimizations await corpus and phrase data only at their data-dependent decision points');
   } else {
     pass('omnibox, selection classification, and direct-verse optimizations defer corpus and phrase data until their decision points');
