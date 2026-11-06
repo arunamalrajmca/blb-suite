@@ -1753,34 +1753,14 @@ test.describe('core user-visible E2E', () => {
     const gestureStartedAt = process.hrtime.bigint();
     await page.mouse.dblclick(rect.x, rect.y);
     const gestureMs = Number(process.hrtime.bigint() - gestureStartedAt) / 1e6;
-    // Reading the selection requires another browser-protocol round trip. It is
-    // only needed when activation fails, so defer it to the failure path.
-    const selectionReadMs = 0;
+    const selectionReadStartedAt = process.hrtime.bigint();
+    const selectedText = await page.evaluate(() => window.getSelection?.().toString() || '');
+    const selectionReadMs = Number(process.hrtime.bigint() - selectionReadStartedAt) / 1e6;
     const activationStartedAt = process.hrtime.bigint();
-    try {
-      await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, pollIntervalMs});
-    } catch (error) {
-      const selectedText = await page.evaluate(() => window.getSelection?.().toString() || '');
-      console.error('Double-click selection at activation failure', {fragment, selector, selectedText, expectedPath});
-      throw error;
-    }
+    await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText, pollIntervalMs});
     const activationMs = Number(process.hrtime.bigint() - activationStartedAt) / 1e6;
-    // The extension worker is authoritative for Chrome tab state. Do not
-    // require Playwright context.pages() to observe the tab before validating
-    // the reference; that representation can lag behind chrome.tabs.query().
-    const destinationPollStartedAt = process.hrtime.bigint();
-    await expect.poll(() => extensionWorker.evaluate((path) => chrome.tabs.query({}).then(tabs =>
-      tabs.some(tab => {
-        try {
-          const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
-          return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
-        } catch (_) {
-          return false;
-        }
-      })
-    ), expectedPath), { timeout: 10000 }).toBe(true);
-    const destinationPollMs = Number(process.hrtime.bigint() - destinationPollStartedAt) / 1e6;
-    if (profileEnabled) console.log('BLB_POLL_PROFILE ' + JSON.stringify({ phase: 'destination-confirmation-poll', durationMs: destinationPollMs, expectedPath }));
+    // activateBlbTabForPath already returns only after chrome.tabs.query()
+    // confirms this exact destination path; a second identical poll is redundant.
     const cleanupStartedAt = process.hrtime.bigint();
     await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
       const matches = tabs.filter(tab => {
@@ -1799,7 +1779,7 @@ test.describe('core user-visible E2E', () => {
     }), expectedPath);
     const cleanupMs = Number(process.hrtime.bigint() - cleanupStartedAt) / 1e6;
     if (profileEnabled) console.log('BLB_GRAMMAR_ACTION_PROFILE ' + JSON.stringify({
-      rectMs, gestureMs, selectionReadMs, activationMs, destinationPollMs, cleanupMs,
+      rectMs, gestureMs, selectionReadMs, activationMs, cleanupMs,
       totalMs: Number(process.hrtime.bigint() - actionStartedAt) / 1e6,
       expectedPath
     }));
