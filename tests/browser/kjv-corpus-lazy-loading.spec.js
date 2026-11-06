@@ -94,11 +94,11 @@ test.describe('On-demand normalized KJV corpus loading', () => {
 });
 
 
-test('interleaved cold-start and first-corpus-use A/B against current main', async () => {
+test('interleaved 15-pair cold-start and first-corpus-use A/B against current main', async () => {
   // Keep ordinary browser suites fast; only the dedicated performance job
   // supplies BLB_PERF_OUTPUT and runs the paired benchmark.
   test.skip(!process.env.BLB_PERF_OUTPUT, 'runs only in the dedicated performance qualification job');
-  test.setTimeout(180000);
+  test.setTimeout(300000);
 
   const repoRoot = path.resolve(__dirname, '../..');
   const baselineRef = process.env.GITHUB_BASE_REF || 'main';
@@ -302,7 +302,7 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
 
   const samples = [];
   try {
-    for (let repetition = 1; repetition <= 5; repetition++) {
+    for (let repetition = 1; repetition <= 15; repetition++) {
       const orders = [
         ['baseline', 'candidate', 'candidateConcurrentIndexes'],
         ['candidate', 'candidateConcurrentIndexes', 'baseline'],
