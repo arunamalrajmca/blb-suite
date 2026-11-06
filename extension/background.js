@@ -2651,11 +2651,11 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
         persistAcrossSessions:true
       }]);
     } else if (JSON.stringify(existing[0].js || []) !== JSON.stringify(files)) {
-      await chrome.scripting.updateContentScripts({
-        ids:[id],
+      await chrome.scripting.updateContentScripts([{
+        id,
         js:files,
         runAt:'document_start'
-      });
+      }]);
     }
 
     // Christianity.com can attach native click handlers in the page's MAIN
@@ -2679,12 +2679,12 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
         }]);
       } else if (JSON.stringify(registeredMain[0].js || []) !== JSON.stringify(mainWorldFiles) ||
                  registeredMain[0].world !== 'MAIN') {
-        await chrome.scripting.updateContentScripts({
-          ids:[mainWorldId],
+        await chrome.scripting.updateContentScripts([{
+          id:mainWorldId,
           js:mainWorldFiles,
           runAt:'document_start',
           world:'MAIN'
-        });
+        }]);
       }
     }
     return true;
