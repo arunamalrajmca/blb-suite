@@ -32,8 +32,24 @@ jobs:
         with:
           node-version: 22
 
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json', 'package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Cache npm download data
+        uses: actions/cache@v5
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node22-npm-${{ hashFiles('package.json', 'package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-npm-
+
       - name: Install dependencies
-        run: npm install --no-audit --no-fund
+        run: npm install --prefer-offline --no-audit --no-fund
 
       - name: Read manifest version
         id: version
@@ -87,7 +103,7 @@ jobs:
         run: python -m unittest discover -s tests -p 'test_*.py' -v
 
       - name: Install Playwright Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install chromium
 
       # Deliberately bypass select-browser-specs.mjs, changed-file routing,
       # group routing, and workflow-level spec filters. Collect Playwright's
@@ -133,6 +149,8 @@ jobs:
           priority_list="$RUNNER_TEMP/blb-playwright-priority-list.txt"
           : > "$priority_list"
           for failed_title in \
+            "Study Sessions confirmed deletion stops and removes only the selected recording, while delete-all clears remaining history" \
+            "selected Study Topic exports a PDF containing its saved reference and note" \
             "shared sensitive-site classifier covers known providers without keyword false positives" \
             "payments URLs suppress selection injection and context-menu eligibility despite saved opt-ins"; do
             grep -F "› $failed_title" "$test_list" >> "$priority_list" || true
@@ -179,6 +197,14 @@ jobs:
             exit 1
           fi
 
+      - name: Upload corpus A/B measurements
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-corpus-ab-full-audit
+          path: ${{ runner.temp }}/blb-performance.jsonl
+          if-no-files-found: warn
+          retention-days: 14
       - name: Restore production manifest before package checks
         if: always()
         run: cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json

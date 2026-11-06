@@ -21,7 +21,8 @@ export const featureSpecs = [{
       "tests/browser/facebook-selection-parser.spec.js",
       "tests/browser/substack-selection-parser.spec.js",
       "tests/browser/omnibox-command-routing.spec.js",
-      "tests/browser/pdf-selection-regressions.spec.js"
+      "tests/browser/pdf-selection-regressions.spec.js",
+      "tests/browser/kjv-corpus-lazy-loading.spec.js"
     ]
   },
   {
@@ -165,6 +166,7 @@ export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.
   "tests/browser/blb-auto-hyperlinker.spec.js",
   "tests/browser/blb-draggable-button.spec.js",
   "tests/browser/case-sensitive-routing-behavior.spec.js",
+  "tests/browser/kjv-corpus-lazy-loading.spec.js",
   "tests/browser/redirect-toggle-isolation.spec.js",
   "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
   "tests/browser/popup-master-toggle-regression.spec.js",

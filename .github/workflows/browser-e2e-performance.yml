@@ -31,6 +31,7 @@ on:
       - 'package-lock.json'
       - 'playwright.config.js'
       - 'playwright.config.ts'
+      - '.github/workflows/browser-e2e-performance.yml'
   workflow_dispatch:
 
 concurrency:
@@ -40,7 +41,7 @@ concurrency:
 jobs:
   performance:
     name: Measured performance qualification
-    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') || contains(github.event.pull_request.labels.*.name, 'ci-run-performance') }}
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-all') }}
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -195,6 +196,68 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+
+  corpus-lazy-load-ab:
+    name: KJV corpus lazy-load A/B qualification
+    if: ${{ github.event_name == 'workflow_dispatch' || contains(github.event.pull_request.labels.*.name, 'ci-run-performance') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout PR candidate
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package.json', 'package-lock.json') }}
+          restore-keys: |
+            playwright-${{ runner.os }}-
+
+      - name: Cache npm download data
+        uses: actions/cache@v5
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node22-npm-${{ hashFiles('package.json', 'package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node22-npm-
+
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+
+      - name: Run 15-pair corpus cold-start A/B benchmark
+        env:
+          BLB_PERF_OUTPUT: ${{ runner.temp }}/blb-corpus-ab-results.jsonl
+        run: |
+          : > "$BLB_PERF_OUTPUT"
+          npx playwright test tests/browser/kjv-corpus-lazy-loading.spec.js --grep "interleaved 15-pair cold-start and first-corpus-use A/B against current main" --workers=1 --reporter=line
+          test -s "$BLB_PERF_OUTPUT"
+          echo "## KJV corpus lazy-load A/B results" >> "$GITHUB_STEP_SUMMARY"
+          printf '```json\n' >> "$GITHUB_STEP_SUMMARY"
+          cat "$BLB_PERF_OUTPUT" >> "$GITHUB_STEP_SUMMARY"
+          printf '\n```\n' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Run focused lazy-loading regression tests
+        run: npx playwright test tests/browser/kjv-corpus-lazy-loading.spec.js --grep-invert "interleaved 15-pair cold-start and first-corpus-use A/B against current main" --workers=1 --reporter=line
+
+      - name: Upload corpus A/B measurements
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-kjv-corpus-lazy-load-ab
+          path: ${{ runner.temp }}/blb-corpus-ab-results.jsonl
+          if-no-files-found: warn
+          retention-days: 14
 
   observer-ab:
     name: Interleaved selection handoff with observer on/off

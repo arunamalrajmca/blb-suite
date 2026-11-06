@@ -81,8 +81,6 @@ if (!importMatch) {
     'omnibox-search-helpers.js',
     'regex-patterns.js',
     'kjv-corpus-word-index.js',
-    'kjv-corpus-word-verse-index.js',
-    'kjv-corpus-verses.js',
     'case-sensitive-search-core.js',
     'case-sensitive-routing.js',
     'books.js',
@@ -96,17 +94,73 @@ if (!importMatch) {
   } else {
     pass('service-worker import dependency order remains stable');
   }
+  const lazyVerseCorpusLoader = background.match(/async function ensureKjvVerseCorpusLoaded\(\) \{([\s\S]*?)\n\}/);
+  if (!lazyVerseCorpusLoader
+      || !lazyVerseCorpusLoader[1].includes("kjv-corpus-verses.json.gz")
+      || !lazyVerseCorpusLoader[1].includes("kjv-corpus-word-verse-index.json.gz")
+      || !lazyVerseCorpusLoader[1].includes("fetchPackagedGzipJson(")
+      || !lazyVerseCorpusLoader[1].includes("Promise.all([")
+      || !lazyVerseCorpusLoader[1].includes("Object.fromEntries(wordVerseEntries)")
+      || !lazyVerseCorpusLoader[1].includes("kjvVerseCorpusLoadPromise")
+      || !lazyVerseCorpusLoader[1].includes("kjvVerseCorpusLoadPromise = null")
+      || !background.includes("new DecompressionStream('gzip')")
+      || !background.includes('response.status === 404')
+      || !background.includes('fallbackAssignments')) {
+    fail('normalized verse corpus and word-to-verse index are fetched together as validated data with retryable, promise-deduplicated loading');
+  } else {
+    pass('normalized verse corpus and word-to-verse index have a guarded, promise-deduplicated data loader');
+  }
+  for (const file of ['kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js']) {
+    if (imports.includes(file)) {
+      fail(file + ' is not imported during ordinary worker startup');
+    } else {
+      pass(file + ' is not imported during ordinary worker startup');
+    }
+  }
+  if (!background.includes("fetchPackagedGzipJson('kjv-corpus-phrase-index.json.gz')")) {
+    fail('phrase candidate index is loaded from the generated compressed package asset');
+  } else {
+    pass('phrase candidate index uses the generated compressed package asset');
+  }
+  const corpusRangeCallIndex = background.indexOf('const corpusRange = findKjvVerseRangeForSelection(source)');
+  const residualCriteriaBranchIndex = background.indexOf('if (remainingWordCount >= KJV_PASSAGE_MIN_WORDS) {');
+  const deferredPhraseIndexLoadIndex = background.indexOf('ensureKjvPhraseIndexLoaded()', residualCriteriaBranchIndex);
+  const phraseIndexLoadsAfterRangeCheck = corpusRangeCallIndex >= 0
+    && residualCriteriaBranchIndex > corpusRangeCallIndex
+    && deferredPhraseIndexLoadIndex > residualCriteriaBranchIndex;
+  if (!background.includes('await ensureKjvVerseCorpusLoaded();\n      const singleMatch = findSingleKjvPhraseMatch(phrase)')
+      || !background.includes('if (!hasBooleanOperators) await ensureKjvVerseCorpusLoaded();\n  const singleKjvMatch =')
+      || !background.includes('if (normalizeKjvPassageWords(source).length >= 5) await ensureKjvVerseCorpusLoaded();')
+      || !background.includes('const corpusRange = findKjvVerseRangeForSelection(source)')
+      || !phraseIndexLoadsAfterRangeCheck
+      || !background.includes('await ensureKjvVerseCorpusLoaded();\n    const singleMatch = findSingleKjvPhraseMatch(cleanedText)')) {
+    fail('omnibox, selection classification, and direct-verse optimizations await corpus and phrase data only at their data-dependent decision points');
+  } else {
+    pass('omnibox, selection classification, and direct-verse optimizations defer corpus and phrase data until their decision points');
+  }
   const lazyPhraseLoader = background.match(/async function ensureKjvPhraseIndexLoaded\(\) \{([\s\S]*?)\n\}/);
   if (!lazyPhraseLoader
-      || !lazyPhraseLoader[1].includes('kjv-corpus-phrase-index.js')
-      || !lazyPhraseLoader[1].includes('fetchPackagedJsonAssignment(')
+      || !lazyPhraseLoader[1].includes('kjv-corpus-phrase-index.json.gz')
+      || !lazyPhraseLoader[1].includes('fetchPackagedGzipJson(')
       || !lazyPhraseLoader[1].includes('Object.freeze(index)')
       || !lazyPhraseLoader[1].includes('kjvPhraseIndexLoadPromise')
-      || !lazyPhraseLoader[1].includes("');',\n        true")
-      || !background.includes('allowTrailingObjectComma ? json.replace(')) {
+      || !background.includes("new DecompressionStream('gzip')")) {
     fail('KJV phrase candidate index is fetched as data with a guarded, promise-deduplicated loader');
   } else {
     pass('KJV phrase candidate index has a guarded, promise-deduplicated data loader');
+  }
+  const gzipGenerator = read('scripts/generate-kjv-gzip-assets.cjs');
+  const fixture = read('tests/browser/fixtures.js');
+  const releaseScript = read('scripts/package-release.sh');
+  if (!gzipGenerator.includes('gzipSync(')
+      || !gzipGenerator.includes('kjv-corpus-verses.json.gz')
+      || !gzipGenerator.includes('kjv-corpus-word-verse-index.json.gz')
+      || !gzipGenerator.includes('kjv-corpus-phrase-index.json.gz')
+      || !fixture.includes('generate-kjv-gzip-assets.cjs')
+      || !releaseScript.includes('generate-kjv-gzip-assets.cjs')) {
+    fail('compressed KJV data assets are generated from source data for browser tests and release packages');
+  } else {
+    pass('compressed KJV data assets are generated from source data for browser tests and release packages');
   }
   const lazyWordsLoader = background.match(/async function ensureKjvCaseSensitiveWordsLoaded\(\) \{([\s\S]*?)\n\}/);
   if (!lazyWordsLoader
@@ -137,9 +191,11 @@ if (!importMatch) {
       pass(file + ' is not imported during ordinary worker startup');
     }
   }
+  const phraseIndexAwaitedAtDecisionPoint = background.includes('await ensureKjvPhraseIndexLoaded();')
+    || background.includes('await Promise.all([ensureKjvVerseCorpusLoaded(), ensureKjvPhraseIndexLoaded()]);');
   if (!background.includes('await ensureKjvCaseSensitiveWordsLoaded();')
       || !background.includes('await ensureKjvOriginalCaseCorpusLoaded();')
-      || !background.includes('await ensureKjvPhraseIndexLoaded();')) {
+      || !phraseIndexAwaitedAtDecisionPoint) {
     fail('case-sensitive search and KJV phrase classification await their data at the respective decision points');
   } else {
     pass('case-sensitive search and KJV phrase classification await their data at the respective decision points');

@@ -141,7 +141,7 @@ test('MV3 service worker starts', async ({ context, extensionId }) => {
   expect(context.serviceWorkers().length).toBeGreaterThan(0);
 });
 
-test('KJV phrase candidate index loads only when multi-word classification needs it', async ({ extensionWorker, extensionStorage }) => {
+test('KJV phrase candidate index loads only when Criteria phrase matching needs it', async ({ extensionWorker, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const initial = await extensionWorker.evaluate(() => ({
     loaded: KJV_CORPUS_PHRASE_INDEX !== null,
@@ -168,6 +168,15 @@ test('KJV phrase candidate index loads only when multi-word classification needs
   expect(phrase.valid).toBe(true);
   expect(phrase.type).toBe('KJV_REFERENCE_RANGE');
   expect(phrase.directRef.url).toContain('/kjv/jhn/3/16');
+  const afterDirectRange = await extensionWorker.evaluate(() => ({
+    loaded: KJV_CORPUS_PHRASE_INDEX !== null,
+    keys: Object.keys(KJV_CORPUS_PHRASE_INDEX || {}).length
+  }));
+  expect(afterDirectRange).toEqual({ loaded: false, keys: 0 });
+
+  const shortPhrase = await extensionWorker.evaluate(async () => classifySelectionForBlb('God is love'));
+  expect(shortPhrase.valid).toBe(true);
+  expect(shortPhrase.type).toBe('KJV_PASSAGE');
   const loaded = await extensionWorker.evaluate(() => ({
     loaded: KJV_CORPUS_PHRASE_INDEX !== null,
     keys: Object.keys(KJV_CORPUS_PHRASE_INDEX || {}).length
@@ -2521,6 +2530,7 @@ test.describe('core user-visible E2E', () => {
 
 test('Standalone book-name and KJV-word collision policy is consistent across all books and aliases', async ({ extensionWorker }) => {
   const audit = await extensionWorker.evaluate(async () => {
+    await ensureKjvVerseCorpusLoaded();
     const candidates = new Map();
     const add = (token, source, expectedBook = null) => {
       const key = String(token || '').trim().toLowerCase();

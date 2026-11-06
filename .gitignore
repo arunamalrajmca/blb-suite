@@ -4,3 +4,7 @@ playwright-report/
 *.log
 local-runner/Legacy-Brave-E2E-Runner/BUILD/*.zip
 local-runner/Legacy-Brave-E2E-Runner/REPORTS/*
+
+extension/kjv-corpus-verses.json.gz
+extension/kjv-corpus-word-verse-index.json.gz
+extension/kjv-corpus-phrase-index.json.gz

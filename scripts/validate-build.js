@@ -7,6 +7,15 @@ const ext = path.join(root, 'extension');
 const manifestPath = path.join(ext, 'manifest.json');
 const packagePath = path.join(root, 'package.json');
 
+const gzipGeneratorPath = path.join(root, 'scripts', 'generate-kjv-gzip-assets.cjs');
+if (!fs.existsSync(gzipGeneratorPath)) {
+  fail('KJV compressed-data generator missing');
+} else {
+  const generated = cp.spawnSync(process.execPath, [gzipGeneratorPath, ext], { encoding: 'utf8' });
+  if (generated.status !== 0) fail('KJV compressed-data generation failed\\n' + generated.stderr);
+  else pass('compressed KJV search assets generated and validated');
+}
+
 function fail(msg) { console.error('FAIL:', msg); process.exitCode = 1; }
 function pass(msg) { console.log('PASS:', msg); }
 
