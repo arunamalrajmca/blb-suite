@@ -1,4 +1,4 @@
-name: Browser fixture and reference polling profile
+name: Browser fixture and reference polling profile # repeat worker comparison
 
 on:
   push:
