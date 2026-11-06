@@ -1850,29 +1850,43 @@ test.describe('core user-visible E2E', () => {
 
   async function runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, testament) {
     test.setTimeout(240000);
+    const profileEnabled = process.env.BLB_PROFILE_BROWSER_FIXTURES === '1';
+    const testStartedAt = process.hrtime.bigint();
+    const configuredPollIntervalMs = Number(process.env.BLB_GRAMMAR_POLL_INTERVAL_MS);
+    const pollIntervalMs = Number.isInteger(configuredPollIntervalMs) && configuredPollIntervalMs >= 0
+      ? configuredPollIntervalMs
+      : 100;
     const books = await getGrammarBooks(extensionWorker, testament);
+    let formCount = 0;
+    let tokenCount = 0;
     for (const book of books) {
       const forms = [...new Set([book.name, book.urlKey])];
       for (const form of forms) {
-        const reference = `${form} 1:1`;
+        const reference = form + ' 1:1';
         const tokens = reference.trim().split(/\s+/);
-        await setupDoubleClickReferencePage(
-          page,
-          extensionStorage,
-          `<p id="ref">${tokens.map((token, i) => `<span class="reference-token" data-index="${i}">${token}</span>`).join(' ')}</p>`
-        );
-        const expectedPath = `/kjv/${book.urlKey}/1/1/`;
+        const html = '<p id="ref">' + tokens.map((token, i) =>
+          '<span class="reference-token" data-index="' + i + '">' + token + '</span>'
+        ).join(' ') + '</p>';
+        await setupDoubleClickReferencePage(page, extensionStorage, html);
+        const expectedPath = '/kjv/' + book.urlKey + '/1/1/';
         for (let i = 0; i < tokens.length; i++) {
           await assertDoubleClickPath(
             page, context, extensionWorker,
-            `#ref .reference-token[data-index="${i}"]`,
-            expectedPath
+            '#ref .reference-token[data-index="' + i + '"]',
+            expectedPath,
+            null,
+            pollIntervalMs
           );
+          tokenCount += 1;
         }
+        formCount += 1;
       }
     }
+    if (profileEnabled) console.log('BLB_GRAMMAR_TEST_PROFILE ' + JSON.stringify({
+      testament, bookCount: books.length, formCount, tokenCount, pollIntervalMs,
+      durationMs: Number(process.hrtime.bigint() - testStartedAt) / 1e6
+    }));
   }
-
   test('Double-click generic reference grammar — exhaustive token coverage — OT', async ({ page, context, extensionStorage, extensionWorker }) => {
     await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'ot');
   });
