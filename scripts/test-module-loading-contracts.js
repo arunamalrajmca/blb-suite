@@ -81,8 +81,6 @@ if (!importMatch) {
     'omnibox-search-helpers.js',
     'regex-patterns.js',
     'kjv-corpus-word-index.js',
-    'kjv-corpus-word-verse-index.js',
-    'kjv-corpus-verses.js',
     'case-sensitive-search-core.js',
     'case-sensitive-routing.js',
     'books.js',
@@ -95,6 +93,34 @@ if (!importMatch) {
     fail('service-worker imports retain dependency order: ' + required.join(' -> '));
   } else {
     pass('service-worker import dependency order remains stable');
+  }
+  const lazyVerseCorpusLoader = background.match(/async function ensureKjvVerseCorpusLoaded\\(\\) \\{([\\s\\S]*?)\\n\\}/);
+  if (!lazyVerseCorpusLoader
+      || !lazyVerseCorpusLoader[1].includes("kjv-corpus-verses.js")
+      || !lazyVerseCorpusLoader[1].includes("kjv-corpus-word-verse-index.js")
+      || !lazyVerseCorpusLoader[1].includes("fetchPackagedJsonAssignment(")
+      || !lazyVerseCorpusLoader[1].includes("Promise.all([")
+      || !lazyVerseCorpusLoader[1].includes("Object.fromEntries(wordVerseEntries)")
+      || !lazyVerseCorpusLoader[1].includes("kjvVerseCorpusLoadPromise")
+      || !lazyVerseCorpusLoader[1].includes("kjvVerseCorpusLoadPromise = null")) {
+    fail('normalized verse corpus and word-to-verse index are fetched together as validated data with retryable, promise-deduplicated loading');
+  } else {
+    pass('normalized verse corpus and word-to-verse index have a guarded, promise-deduplicated data loader');
+  }
+  for (const file of ['kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js']) {
+    if (imports.includes(file)) {
+      fail(file + ' is not imported during ordinary worker startup');
+    } else {
+      pass(file + ' is not imported during ordinary worker startup');
+    }
+  }
+  if (!background.includes('await ensureKjvVerseCorpusLoaded();\\n      const singleMatch = findSingleKjvPhraseMatch(phrase)')
+      || !background.includes('await ensureKjvVerseCorpusLoaded();\\n  const singleKjvMatch =')
+      || !background.includes('await ensureKjvVerseCorpusLoaded();\\n    const corpusRange = findKjvVerseRangeForSelection(source)')
+      || !background.includes('await ensureKjvVerseCorpusLoaded();\\n    const singleMatch = findSingleKjvPhraseMatch(cleanedText)')) {
+    fail('omnibox, selection classification, and direct-verse optimizations await the corpus only at their data-dependent decision points');
+  } else {
+    pass('omnibox, selection classification, and direct-verse optimizations await corpus data at their decision points');
   }
   const lazyPhraseLoader = background.match(/async function ensureKjvPhraseIndexLoaded\(\) \{([\s\S]*?)\n\}/);
   if (!lazyPhraseLoader
