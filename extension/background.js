@@ -2698,7 +2698,7 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
     } catch (inspectionError) {
       registeredScripts = [{inspectionError:describeScriptInjectionError(inspectionError)}];
     }
-    console.error('KJV Scripture Tools runtime content-script registration failed:', {
+    console.error('KJV Scripture Tools runtime content-script registration failed: ' + JSON.stringify({
       tabId:tab?.id ?? null,
       tabUrl:tab?.url || '',
       originPattern:pattern,
@@ -2714,7 +2714,7 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
         world:script.world,
         runAt:script.runAt
       }))
-    });
+    }));
     return false;
   }
 }
@@ -2802,13 +2802,13 @@ async function ensureContentScriptInTab(tabId) {
       } catch (error) {
         const errorDetails = describeScriptInjectionError(error);
         const packagedFileChecks = await inspectPackagedScriptFiles(files);
-        console.error('KJV Scripture Tools content-script injection failed:', {
+        console.error('KJV Scripture Tools content-script injection failed: ' + JSON.stringify({
           tabId,
           tabUrl:tab.url,
           files,
           ...errorDetails,
           packagedFileChecks
-        });
+        }));
         return false;
       }
 
