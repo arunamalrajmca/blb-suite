@@ -149,7 +149,7 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
       "\\n  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-read', file: filename, durationMs: performance.now() - __blbReadStarted });");
     source = source.replace(parseLine,
       "  const __blbParseStarted = performance.now();\\n" +
-      "  const __blbParsed = JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\\\s*})$/, '$1') : json);\\n" +
+      "  const __blbParsed = JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);\\n" +
       "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-parse', file: filename, durationMs: performance.now() - __blbParseStarted });\\n" +
       "  return __blbParsed;");
     const fromEntries = "      const wordVerseIndex = Object.fromEntries(wordVerseEntries);";
