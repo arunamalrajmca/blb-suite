@@ -377,7 +377,10 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     expect(sample.wordType).toBe('KJV_WORD');
     expect(sample.passageType).toBe('KJV_REFERENCE_RANGE');
     expect(sample.warmPassageType).toBe('KJV_REFERENCE_RANGE');
-    expect(sample.phraseType).toBe('KJV_PHRASE');
+    // The baseline predates the short-phrase classification fix and labels
+    // this valid phrase KJV_PASSAGE; the candidate must preserve the corrected
+    // KJV_PHRASE result while both paths exercise phrase-index loading.
+    expect(sample.phraseType).toBe(sample.variant === 'baseline' ? 'KJV_PASSAGE' : 'KJV_PHRASE');
     expect(sample.phraseQuery).toBeTruthy();
     expect(sample.passageRef).toEqual({ book: 'john', chapter: 3, from: 16, to: 16 });
     if (sample.variant === 'baseline') {
