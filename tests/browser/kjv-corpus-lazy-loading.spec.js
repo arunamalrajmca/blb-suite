@@ -264,7 +264,7 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
     expect(sample.wordType).toBe('KJV_WORD');
     expect(sample.passageType).toBe('KJV_REFERENCE_RANGE');
     expect(sample.warmPassageType).toBe('KJV_REFERENCE_RANGE');
-    expect(sample.passageRef).toEqual({ book: 'John', chapter: 3, from: 16, to: 16 });
+    expect(sample.passageRef).toEqual({ book: 'john', chapter: 3, from: 16, to: 16 });
     if (sample.variant === 'baseline') {
       expect(sample.corpusLoadedAtStartup).toBe(true);
     } else {
