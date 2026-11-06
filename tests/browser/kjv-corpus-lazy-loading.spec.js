@@ -121,7 +121,7 @@ test('interleaved cold-start and first-corpus-use A/B against current main', asy
   fs.cpSync(candidateRoot, concurrentRoot, { recursive: true });
   const concurrentBackgroundPath = path.join(concurrentRoot, 'background.js');
   let concurrentBackground = fs.readFileSync(concurrentBackgroundPath, 'utf8');
-  const loadPairPattern = /(\\s*)await ensureKjvVerseCorpusLoaded\\(\\);\\n\\1await ensureKjvPhraseIndexLoaded\\(\\);/g;
+  const loadPairPattern = /(\s*)await ensureKjvVerseCorpusLoaded\(\);\n\1await ensureKjvPhraseIndexLoaded\(\);/g;
   let concurrentLoadReplacements = 0;
   concurrentBackground = concurrentBackground.replace(loadPairPattern, (_match, indent) => {
     concurrentLoadReplacements++;
