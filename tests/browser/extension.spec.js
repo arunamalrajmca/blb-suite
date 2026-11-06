@@ -100,7 +100,7 @@ async function activateBlbTabForPath(extensionWorker, expectedPath, debug = {}) 
     lastTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
       items.map(tab => ({ id: tab.id, url: tab.url || tab.pendingUrl || '', active: !!tab.active }))
     ));
-    const match = lastTabs.some(tab => {
+    const matchingTabs = lastTabs.filter(tab => {
       try {
         const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
         return pathname === expectedPath || pathname.startsWith(expectedPath.replace(/\/$/, '') + '/');
@@ -108,14 +108,14 @@ async function activateBlbTabForPath(extensionWorker, expectedPath, debug = {}) 
         return false;
       }
     });
-    if (match) {
+    if (matchingTabs.length) {
       if (profileEnabled) console.log('BLB_POLL_PROFILE ' + JSON.stringify({
         phase: 'activation-poll',
         durationMs: Number(process.hrtime.bigint() - profileStartedAt) / 1e6,
         pollCount,
         expectedPath
       }));
-      return;
+      return matchingTabs.map(tab => tab.id).filter(id => id != null);
     }
     await new Promise(resolve => setTimeout(resolve, Number.isFinite(debug.pollIntervalMs) ? debug.pollIntervalMs : 100));
   }
@@ -1747,37 +1747,44 @@ test.describe('core user-visible E2E', () => {
     // inline element can place Chromium's dblclick coordinates on an adjacent
     // inter-token whitespace gap even when the token itself is visually hit.
     await page.mouse.dblclick(rect.x, rect.y);
-    await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText: await page.evaluate(() => window.getSelection?.().toString() || ''), pollIntervalMs});
-    // The extension worker is authoritative for Chrome tab state. Do not
-    // require Playwright context.pages() to observe the tab before validating
-    // the reference; that representation can lag behind chrome.tabs.query().
-    const destinationPollStartedAt = process.hrtime.bigint();
-    await expect.poll(() => extensionWorker.evaluate((path) => chrome.tabs.query({}).then(tabs =>
-      tabs.some(tab => {
-        try {
-          const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
-          return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
-        } catch (_) {
-          return false;
+    const matchedTabIds = await activateBlbTabForPath(extensionWorker, expectedPath, {fragment, selector, selectedText: await page.evaluate(() => window.getSelection?.().toString() || ''), pollIntervalMs});
+    if (process.env.BLB_PROFILE_SINGLE_TAB_QUERY === '1') {
+      // The activation poll already confirmed this exact destination. Reuse its
+      // tab IDs for cleanup instead of querying Chrome twice more.
+      await extensionWorker.evaluate(ids => Promise.all(ids.map(id =>
+        chrome.tabs.remove(id).catch(() => {})
+      )), matchedTabIds);
+    } else {
+      // Keep the original independent confirmation and fresh cleanup query as
+      // the paired benchmark baseline.
+      const destinationPollStartedAt = process.hrtime.bigint();
+      await expect.poll(() => extensionWorker.evaluate((path) => chrome.tabs.query({}).then(tabs =>
+        tabs.some(tab => {
+          try {
+            const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+          } catch (_) {
+            return false;
+          }
+        })
+      ), expectedPath), { timeout: 10000 }).toBe(true);
+      if (process.env.BLB_PROFILE_BROWSER_FIXTURES === '1') console.log('BLB_POLL_PROFILE ' + JSON.stringify({ phase: 'destination-confirmation-poll', durationMs: Number(process.hrtime.bigint() - destinationPollStartedAt) / 1e6, expectedPath }));
+      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
+        const matches = tabs.filter(tab => {
+          try {
+            const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
+            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
+          } catch (_) {
+            return false;
+          }
+        });
+        for (const tab of matches) {
+          if (tab.id != null) {
+            try { await chrome.tabs.remove(tab.id); } catch (_) {}
+          }
         }
-      })
-    ), expectedPath), { timeout: 10000 }).toBe(true);
-    if (process.env.BLB_PROFILE_BROWSER_FIXTURES === '1') console.log('BLB_POLL_PROFILE ' + JSON.stringify({ phase: 'destination-confirmation-poll', durationMs: Number(process.hrtime.bigint() - destinationPollStartedAt) / 1e6, expectedPath }));
-    await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
-      const matches = tabs.filter(tab => {
-        try {
-          const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
-          return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
-        } catch (_) {
-          return false;
-        }
-      });
-      for (const tab of matches) {
-        if (tab.id != null) {
-          try { await chrome.tabs.remove(tab.id); } catch (_) {}
-        }
-      }
-    }), expectedPath);
+      }), expectedPath);
+    }
   }
 
   async function setupDoubleClickReferencePage(page, extensionStorage, html) {
@@ -1860,6 +1867,26 @@ test.describe('core user-visible E2E', () => {
     test.setTimeout(240000);
     await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'ot');
     await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'nt');
+  });
+
+  test('Double-click generic reference grammar — tab-query paired profile', async ({ page, context, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
+    const runProfile = async mode => {
+      process.env.BLB_PROFILE_SINGLE_TAB_QUERY = mode === 'candidate' ? '1' : '0';
+      const startedAt = process.hrtime.bigint();
+      await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'ot');
+      await runGrammarTokenCoverage(page, context, extensionStorage, extensionWorker, 'nt');
+      console.log('BLB_TAB_QUERY_PROFILE ' + JSON.stringify({
+        mode,
+        durationMs: Number(process.hrtime.bigint() - startedAt) / 1e6
+      }));
+    };
+    try {
+      await runProfile('baseline');
+      await runProfile('candidate');
+    } finally {
+      delete process.env.BLB_PROFILE_SINGLE_TAB_QUERY;
+    }
   });
 
   async function runGrammarSyntaxVariant(page, context, extensionStorage, extensionWorker, testament, variant, includeBook = () => true) {
