@@ -7,7 +7,7 @@ const ext = path.join(root, 'extension');
 const manifestPath = path.join(ext, 'manifest.json');
 const packagePath = path.join(root, 'package.json');
 
-const gzipGeneratorPath = path.join(root, 'scripts', 'generate-kjv-gzip-assets.mjs');
+const gzipGeneratorPath = path.join(root, 'scripts', 'generate-kjv-gzip-assets.cjs');
 if (!fs.existsSync(gzipGeneratorPath)) {
   fail('KJV compressed-data generator missing');
 } else {

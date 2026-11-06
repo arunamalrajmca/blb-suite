@@ -50,7 +50,7 @@ const test = base.extend({
       // Generate the compressed search sidecars from the authoritative source
       // datasets before launching the unpacked test extension.
       execFileSync(process.execPath, [
-        path.resolve(__dirname, '../../scripts/generate-kjv-gzip-assets.mjs'),
+        path.resolve(__dirname, '../../scripts/generate-kjv-gzip-assets.cjs'),
         extensionPath
       ], { stdio: 'pipe' });
       if (profileFixtures) {

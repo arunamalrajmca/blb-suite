@@ -132,7 +132,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
 
   // Generate the exact compressed assets used by the production candidate.
   execFileSync(process.execPath, [
-    path.resolve(repoRoot, 'scripts/generate-kjv-gzip-assets.mjs'),
+    path.resolve(repoRoot, 'scripts/generate-kjv-gzip-assets.cjs'),
     candidateRoot
   ], { cwd: repoRoot, stdio: 'pipe' });
 

@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { gzipSync } = require('node:zlib');
 
+
 const extensionDir = path.resolve(process.argv[2] || path.join(__dirname, '../extension'));
 
 function extractJsonAssignment(filename, assignment, terminator, allowTrailingObjectComma = false) {
