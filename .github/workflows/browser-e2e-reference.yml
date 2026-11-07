@@ -347,7 +347,8 @@ jobs:
                 echo "::error::Playwright could not discover the reload-stress test."
                 exit 1
               fi
-              npx playwright test --config=playwright.config.js --grep "$MATRIX_GREP"
+              command -v xvfb-run
+              xvfb-run -a env BLB_HEADFUL_EXTENSION_TESTS=1 npx playwright test --config=playwright.config.js --grep "$MATRIX_GREP"
             elif [[ "$MATRIX_GREP" == ".*" ]]; then
               list_output="$(npx playwright test "$spec" --list)"
               printf '%s\n' "$list_output"
