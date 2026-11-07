@@ -76,6 +76,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/criteria-search-navigation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/feature-lifecycle-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/extension.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/extension-reload-stress.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/redirect-toggle-isolation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/multiverse-clipboard-reference-pattern.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/popup-master-toggle-regression.spec.js", "import { test } from '@playwright/test';\n");
