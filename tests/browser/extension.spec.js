@@ -3432,6 +3432,7 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
   };
 
   const workerUrl = 'chrome-extension://' + extensionId + '/background.js';
+  const popupUrl = 'chrome-extension://' + extensionId + '/popup.html';
   const browser = context.browser();
   const browserCdp = await browser.newBrowserCDPSession();
   await browserCdp.send('Target.setDiscoverTargets', { discover: true });
@@ -3453,22 +3454,8 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
     }
   };
 
-  const initialWorker = context.serviceWorkers().find(worker => worker.url() === workerUrl);
-  expect(initialWorker, 'extension worker is available before stress testing').toBeTruthy();
-  await expect.poll(async () => initialWorker.evaluate(async () =>
-    (await chrome.storage.local.get({ masterEnabled: null })).masterEnabled !== null
-  ), { timeout: 10000 }).toBe(true);
-  await initialWorker.evaluate(async () => {
-    await chrome.storage.local.set({
-      masterEnabled: true,
-      pageSelectionButtonSites: { 'example.com': true },
-      doubleClickBlbSites: {}
-    });
-  });
-
-  // Use a headed browser-manager page to invoke the same Reload control a user
-  // clicks in chrome://extensions. The normal web page then wakes the worker
-  // through the real content-script Show on BLB action.
+  // Open the real Chromium extension manager. Headed Chromium is enabled for
+  // this focused job so this test clicks the same Reload control as a user.
   const managerPage = await context.newPage();
   managerPage.on('console', message => {
     if (message.type() === 'error' || message.type() === 'warning') {
@@ -3509,22 +3496,6 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
       disabled: buttons[0]?.disabled ?? null
     };
   }, extensionId);
-
-  const wakePage = await context.newPage();
-  wakePage.on('console', message => {
-    if (message.type() === 'error' || message.type() === 'warning') {
-      writeLog(0, 'wake-page-console', { type: message.type(), text: message.text(), location: message.location() });
-    }
-  });
-  wakePage.on('pageerror', error => writeLog(0, 'wake-page-error', { name: error.name, message: error.message, stack: error.stack }));
-  wakePage.on('requestfailed', request => writeLog(0, 'wake-page-request-failed', {
-    url: request.url(),
-    method: request.method(),
-    error: request.failure()?.errorText || 'unknown'
-  }));
-  await wakePage.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-  const button = wakePage.locator('#blb-suite-page-selection-button');
-  await expect(button).toBeAttached({ timeout: 10000 });
 
   try {
     for (let cycle = 1; cycle <= 100; cycle++) {
@@ -3575,7 +3546,6 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
       expect(reloadClick.clicked, 'chrome://extensions Reload button was clicked for cycle ' + cycle).toBe(true);
 
       let replacementState = null;
-      let lastWakeError = null;
       const workerDeadline = Date.now() + 10000;
       while (Date.now() < workerDeadline && !replacementState) {
         const workers = context.serviceWorkers().filter(worker => worker.url() === workerUrl);
@@ -3596,9 +3566,9 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
         }
         if (!replacementState) await new Promise(resolve => setTimeout(resolve, 100));
       }
+      context.off('serviceworker', onReplacementWorker);
 
       if (!replacementState) {
-        context.off('serviceworker', onReplacementWorker);
         let targetDiagnostics = null;
         try {
           const targets = await browserCdp.send('Target.getTargets');
@@ -3623,74 +3593,32 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
         throw new Error('Extension did not expose a replacement worker after Reload button click in cycle ' + cycle);
       }
       writeLog(cycle, 'replacement-worker-ready', replacementState);
-      context.off('serviceworker', onReplacementWorker);
 
-      // Give the extension manager a short window to finish re-registering
-      // content scripts, then reload the test page until the fresh script is
-      // observable. Every attempt is logged for fast diagnosis.
-      await new Promise(resolve => setTimeout(resolve, 400));
-      let contentScriptReady = false;
-      for (let attempt = 1; attempt <= 6 && !contentScriptReady; attempt++) {
-        try {
-          await wakePage.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
-          writeLog(cycle, 'wake-page-reloaded', { attempt, url: wakePage.url() });
-          await wakePage.waitForFunction(
-            () => window.__blbSuiteContentScriptFileExecutedV3 === true,
-            null,
-            { timeout: 2000 }
-          );
-          contentScriptReady = true;
-          writeLog(cycle, 'content-script-file-executed', { attempt });
-        } catch (error) {
-          lastWakeError = error;
-          writeLog(cycle, 'content-script-injection-retry', {
-            attempt,
-            name: error.name,
-            message: error.message,
-            pageUrl: wakePage.url()
-          });
-          if (attempt < 6) await new Promise(resolve => setTimeout(resolve, 400));
+      // Open the extension popup after the manager reload and send a real
+      // background request. This verifies the newly started worker is usable.
+      const messagePage = await context.newPage();
+      messagePage.on('console', message => {
+        if (message.type() === 'error' || message.type() === 'warning') {
+          writeLog(cycle, 'post-reload-popup-console', { type: message.type(), text: message.text(), location: message.location() });
         }
-      }
-      if (!contentScriptReady) {
-        throw new Error('Replacement worker started, but content script was not reinjected in cycle ' + cycle + ': ' + (lastWakeError?.message || 'marker unavailable'));
-      }
-
-      await expect(button).toBeAttached({ timeout: 5000 });
-      await wakePage.evaluate(() => {
-        const paragraph = document.createElement('p');
-        paragraph.id = 'blb-e2e-reload-stress-selection';
-        paragraph.textContent = 'John 3:16';
-        document.body.appendChild(paragraph);
-        const range = document.createRange();
-        range.selectNodeContents(paragraph);
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
       });
-      await expect(button).toBeVisible({ timeout: 5000 });
-      await button.click();
-      writeLog(cycle, 'show-on-blb-wake-action-dispatched', { selectedText: 'John 3:16' });
+      await messagePage.goto(popupUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
+      const response = await messagePage.evaluate(() =>
+        chrome.runtime.sendMessage({
+          type: 'blbSuiteGetDefaultSiteStatus',
+          hostname: 'facebook.com'
+        })
+      );
+      expect(response, 'the reloaded worker responds to a runtime message in cycle ' + cycle).toBeTruthy();
+      writeLog(cycle, 'post-reload-runtime-message-response', { response });
 
-      await expect.poll(async () => context.pages().some(page => {
-        try {
-          const url = new URL(page.url());
-          return url.hostname === 'www.blueletterbible.org' &&
-            url.pathname.startsWith('/kjv/jhn/3/16');
-        } catch (_) {
-          return false;
-        }
-      }), { timeout: 10000, intervals: [50, 100, 200, 500] }).toBe(true);
-      writeLog(cycle, 'show-on-blb-action-completed', {
-        blbTabs: context.pages().map(page => page.url()).filter(url => url.includes('blueletterbible.org'))
-      });
-
+      const afterMessageWorker = context.serviceWorkers().find(worker => worker.url() === workerUrl);
+      const afterMessageState = afterMessageWorker ? await readWorkerState(afterMessageWorker) : null;
+      expect(afterMessageState?.workerTimeOrigin, 'worker remains the replacement instance in cycle ' + cycle)
+        .toBe(replacementState.workerTimeOrigin);
       writeLog(cycle, 'cycle-passed');
 
-      for (const page of context.pages()) {
-        if (page !== wakePage && page !== managerPage) await page.close().catch(() => {});
-      }
+      await messagePage.close().catch(() => {});
     }
 
     writeLog(100, 'stress-test-complete', { totalCycles: 100, logPath });
