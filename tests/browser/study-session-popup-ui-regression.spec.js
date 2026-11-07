@@ -113,6 +113,7 @@ test('Study Sessions popup pauses and restarts the selected recording without cr
 }) => {
   await extensionStorage.clear();
   const page = await context.newPage();
+  await installPopupDiagnostics(page);
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
   await waitForStudyPopupReady(page);
   const topic = 'Popup pause resume ' + Date.now();
