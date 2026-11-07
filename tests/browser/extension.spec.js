@@ -142,14 +142,17 @@ test('MV3 service worker starts', async ({ context, extensionId }) => {
 });
 
 test('MV3 service worker restarts and reloads its packaged imports', async ({ context, extensionId, extensionWorker }) => {
-  const restartedWorkerPromise = context.waitForEvent('serviceworker', { timeout: 15000 });
-  try {
-    await extensionWorker.evaluate(() => self.close());
-  } catch (_) {
-    // Closing the worker can invalidate the evaluation context before it replies.
-  }
-
   const page = await context.newPage();
+  const cdp = await context.newCDPSession(page);
+  const targets = await cdp.send('Target.getTargets');
+  const workerTarget = targets.targetInfos.find(target =>
+    target.type === 'service_worker' &&
+    target.url === `chrome-extension://${extensionId}/background.js`
+  );
+  expect(workerTarget, 'the extension service worker target must be discoverable').toBeTruthy();
+
+  const restartedWorkerPromise = context.waitForEvent('serviceworker', { timeout: 15000 });
+  await cdp.send('Target.closeTarget', { targetId: workerTarget.targetId });
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   const response = await page.evaluate(() =>
     chrome.runtime.sendMessage({type:'blbSuiteGetDefaultSiteStatus', hostname:'facebook.com'})
