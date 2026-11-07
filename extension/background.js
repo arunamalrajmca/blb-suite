@@ -2684,12 +2684,12 @@ async function reconcileRuntimeContentScriptRegistrations() {
   for (const script of registrations) {
     const id = String(script?.id || '');
     if (!id.startsWith('blb-suite-runtime-')) continue;
-    const pattern = (script.matches || []).find(match => /^https?:\\/\\/[^/]+\\/\\*$/.test(match));
+    const pattern = (script.matches || []).find(match => /^https?:\/\/[^/]+\/\*$/.test(match));
     if (pattern) patterns.add(pattern);
   }
 
   await Promise.all([...patterns].map(async pattern => {
-    const tab = {url:pattern.replace(/\\*$/, '')};
+    const tab = {url:pattern.replace(/\*$/, '')};
     const eligible = data.masterEnabled !== false &&
       await hasHostAccessForTab(tab) &&
       await shouldInjectContentScriptForTab(tab, data);
