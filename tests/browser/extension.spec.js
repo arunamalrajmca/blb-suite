@@ -3502,20 +3502,45 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
       } catch (error) {
         writeLog(cycle, 'reload-call-rejected', { name: error.name, message: error.message });
       }
-      // Keep the extension page alive across runtime.reload. The page is
-      // the supported extension-origin source for a message that wakes the
-      // reloaded worker; closing it here can leave the worker dormant.
+      // runtime.reload closes extension pages. Open a fresh extension page
+      // after the reload and use a real runtime message to wake the new worker.
       let replacementState = null;
       let lastWakeError = null;
       let lastWakeAt = 0;
+      let lastNavigationAt = 0;
       let wakeAttempts = 0;
+      let wakePage = extensionPage;
       const deadline = Date.now() + 20000;
       while (Date.now() < deadline && !replacementState) {
-        if (!extensionPage.isClosed() && wakeAttempts < 8 && Date.now() - lastWakeAt >= 500) {
+        if ((!wakePage || wakePage.isClosed()) && Date.now() - lastNavigationAt >= 500) {
+          lastNavigationAt = Date.now();
+          wakePage = await context.newPage();
+          wakePage.on('console', message => {
+            if (message.type() === 'error' || message.type() === 'warning') {
+              writeLog(cycle, 'wake-page-console', { type: message.type(), text: message.text(), location: message.location() });
+            }
+          });
+          wakePage.on('pageerror', error => writeLog(cycle, 'wake-page-error', { name: error.name, message: error.message, stack: error.stack }));
+          wakePage.on('requestfailed', request => writeLog(cycle, 'wake-page-request-failed', {
+            url: request.url(),
+            method: request.method(),
+            error: request.failure()?.errorText || 'unknown'
+          }));
+          try {
+            await wakePage.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: 'domcontentloaded', timeout: 3000 });
+            writeLog(cycle, 'replacement-popup-loaded', { url: wakePage.url() });
+          } catch (error) {
+            lastWakeError = error;
+            writeLog(cycle, 'replacement-popup-navigation-rejected', { name: error.name, message: error.message });
+            await wakePage.close().catch(() => {});
+            wakePage = null;
+          }
+        }
+        if (wakePage && !wakePage.isClosed() && wakeAttempts < 8 && Date.now() - lastWakeAt >= 500) {
           lastWakeAt = Date.now();
           wakeAttempts++;
           try {
-            const response = await extensionPage.evaluate(() =>
+            const response = await wakePage.evaluate(() =>
               chrome.runtime.sendMessage({
                 type: 'blbSuiteGetDefaultSiteStatus',
                 hostname: 'facebook.com'
@@ -3528,8 +3553,10 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
               attempt: wakeAttempts,
               name: error.name,
               message: error.message,
-              pageClosed: extensionPage.isClosed()
+              pageClosed: wakePage.isClosed()
             });
+            await wakePage.close().catch(() => {});
+            wakePage = null;
           }
         }
         const workers = context.serviceWorkers().filter(worker => worker.url() === workerUrl);
