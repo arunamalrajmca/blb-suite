@@ -26,7 +26,7 @@ export function validateReferenceMatrix(entries) {
 
 export function selectReferenceMatrix(entries, { full = false, changedSpecs = "", changedBrowserSpecs = "", reloadStressOnly = false } = {}) {
   validateReferenceMatrix(entries);
-  if (reloadStressOnly) return entries.filter(entry => entry.group === "extension-spec-reference-coverage");
+  if (reloadStressOnly) return entries.filter(entry => entry.group === "extension-spec-reference-coverage").map(entry => ({ ...entry, grep: "MV3 extension survives 100 full runtime reloads with diagnostics" }));
   if (full) return entries;
   const selected = new Set(String(changedSpecs).split(",").filter(Boolean));
   const changedBrowser = new Set(String(changedBrowserSpecs).split(",").filter(Boolean));
