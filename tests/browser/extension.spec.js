@@ -3078,7 +3078,41 @@ test('concurrent tabs serialize runtime script registration for the same origin'
   });
 });
 
-test('extension update reconciliation revisits already-open configured tabs', async ({ page, extensionStorage, extensionWorker }) => {
+test('persisted registration audit detects unavailable package scripts without changing registrations', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const before = await chrome.scripting.getRegisteredContentScripts();
+    const audit = await auditPersistedRuntimeContentScriptRegistrations([
+      {
+        id:'blb-suite-audit-valid',
+        matches:['https://example.com/*'],
+        js:['content.js']
+      },
+      {
+        id:'blb-suite-audit-stale',
+        matches:['https://stale.example/*'],
+        js:['content.js', 'missing-after-update.js']
+      }
+    ]);
+    const after = await chrome.scripting.getRegisteredContentScripts();
+    return {
+      audit,
+      beforeIds:before.map(script => script.id).sort(),
+      afterIds:after.map(script => script.id).sort()
+    };
+  });
+
+  expect(result.audit.registrationCount).toBe(2);
+  expect(result.audit.checkedFileCount).toBe(2);
+  expect(result.audit.invalidRegistrations).toEqual([{
+    id:'blb-suite-audit-stale',
+    matches:['https://stale.example/*'],
+    world:'ISOLATED',
+    missingFiles:['missing-after-update.js']
+  }]);
+  expect(result.beforeIds).toEqual(result.afterIds);
+});
+
+testAnchor
   await extensionWorker.evaluate(() => {
     globalThis.__blbSuiteUpdateReconciliationCalls = [];
     globalThis.__blbSuiteOriginalEnsureContentScriptInTab = ensureContentScriptInTab;

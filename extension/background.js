@@ -2624,6 +2624,49 @@ async function inspectPackagedScriptFiles(files) {
   }));
 }
 
+// Persisted dynamic registrations survive extension restarts. Audit their
+// referenced package resources whenever the worker starts so a stale/missing
+// script path is visible even when Brave fails before an injection handler
+// can report the error. This is diagnostic only: never unregister or rewrite
+// user-origin registrations automatically.
+async function auditPersistedRuntimeContentScriptRegistrations(registrations = null) {
+  let scripts = registrations;
+  if (!Array.isArray(scripts)) {
+    try {
+      scripts = await chrome.scripting.getRegisteredContentScripts();
+    } catch (error) {
+      const details = describeScriptInjectionError(error);
+      console.warn('KJV Scripture Tools persisted content-script audit unavailable: ' + JSON.stringify(details));
+      return {registrationCount:0, checkedFileCount:0, invalidRegistrations:[], inspectionError:details};
+    }
+  }
+
+  const files = [...new Set(scripts.flatMap(script =>
+    Array.isArray(script?.js) ? script.js.filter(file => typeof file === 'string' && file) : []
+  ))];
+  const checks = await inspectPackagedScriptFiles(files);
+  const failedFiles = new Set(checks.filter(check => !check.ok).map(check => check.file));
+  const invalidRegistrations = scripts
+    .filter(script => (script?.js || []).some(file => failedFiles.has(file)))
+    .map(script => ({
+      id:script.id || '',
+      matches:Array.isArray(script.matches) ? script.matches : [],
+      world:script.world || 'ISOLATED',
+      missingFiles:(script.js || []).filter(file => failedFiles.has(file))
+    }));
+
+  const result = {
+    registrationCount:scripts.length,
+    checkedFileCount:files.length,
+    invalidRegistrations,
+    fileChecks:checks.filter(check => !check.ok)
+  };
+  if (invalidRegistrations.length) {
+    console.error('KJV Scripture Tools persisted content-script references unavailable package files: ' + JSON.stringify(result));
+  }
+  return result;
+}
+
 const contentScriptInjectionLocks = new Map();
 // Different tabs on the same origin can request the same persistent script
 // registration concurrently. Serialize by registration ID, not only by tab.
@@ -6624,6 +6667,15 @@ chrome.runtime.onStartup.addListener(() => installPdfSelectionContextMenu().then
   .then(tabs => syncPdfSelectionContextMenuVisibility(tabs[0]))
   .catch(() => {})));
 chrome.runtime.onStartup.addListener(() => refreshStudyAutoStopAlarm().catch(()=>{}));
+chrome.runtime.onStartup.addListener(() => auditPersistedRuntimeContentScriptRegistrations().catch(error => {
+  console.warn('KJV Scripture Tools persisted content-script audit failed: ' + String(error));
+}));
+
+// Also run on every service-worker start, including extension reloads from
+// the extensions page; onStartup alone does not cover manual reloads.
+auditPersistedRuntimeContentScriptRegistrations().catch(error => {
+  console.warn('KJV Scripture Tools persisted content-script audit failed: ' + String(error));
+});
 
 installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
   .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
