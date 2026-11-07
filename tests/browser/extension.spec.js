@@ -3171,3 +3171,58 @@ test('selection messaging retries only deduplicated requests after a transient N
     ordinaryAttempts:1
   });
 });
+
+
+test('reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{}
+  });
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  const button = page.locator('#blb-suite-page-selection-button');
+  await expect(button).toBeAttached({timeout:10000});
+  await page.evaluate(() => {
+    window.__blbSuitePreReloadButton = document.getElementById('blb-suite-page-selection-button');
+  });
+
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  await extensionWorker.evaluate(async id => {
+    // This is the same reinjection path used when the background worker finds
+    // that an already-open tab no longer answers its content-script refresh.
+    await chrome.scripting.executeScript({
+      target:{tabId:id},
+      files:BLB_CONTENT_SCRIPT_FILES
+    });
+  }, tabId);
+
+  await page.waitForFunction(() => {
+    const previous = window.__blbSuitePreReloadButton;
+    const current = document.getElementById('blb-suite-page-selection-button');
+    return !!previous && !previous.isConnected && !!current && current !== previous;
+  }, null, {timeout:10000});
+
+  await page.evaluate(() => {
+    const paragraph = document.createElement('p');
+    paragraph.id = 'blb-e2e-reinjected-show-on-blb';
+    paragraph.textContent = 'John 3:16';
+    document.body.appendChild(paragraph);
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup', {bubbles:true}));
+  });
+  await expect(button).toBeVisible({timeout:10000});
+  await button.click();
+  await activateBlbTabForPath(extensionWorker, '/kjv/jhn/3/16/', {
+    fragment:'John 3:16',
+    selector:'#blb-e2e-reinjected-show-on-blb',
+    selectedText:'John 3:16'
+  });
+});
