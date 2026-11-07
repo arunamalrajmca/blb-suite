@@ -5,10 +5,46 @@ try { window.__blbSuiteContentScriptFileExecutedV3 = true; } catch (_) {}
 // updated while an old content script is still attached to a page. Keep that
 // stale-page condition silent and fail closed instead of surfacing
 // "Extension context invalidated" to the user.
+function describeRuntimeMessageError(error) {
+  const properties = {};
+  if (error && (typeof error === 'object' || typeof error === 'function')) {
+    for (const key of Object.getOwnPropertyNames(error)) {
+      try {
+        const value = error[key];
+        properties[key] = value instanceof Error
+          ? {name:value.name, message:value.message, stack:value.stack}
+          : value;
+      } catch (readError) {
+        properties[key] = '[unreadable: ' + String(readError) + ']';
+      }
+    }
+  }
+  let serialized = '';
+  try {
+    serialized = JSON.stringify(error, Object.getOwnPropertyNames(error || {}));
+  } catch (_) {}
+  return {
+    errorType:typeof error,
+    errorName:error?.name || '',
+    errorMessage:error?.message || '',
+    errorStack:error?.stack || '',
+    errorString:String(error),
+    errorProperties:properties,
+    errorJson:serialized
+  };
+}
+
 function sendRuntimeMessageWithRetry(message, sendMessage, onError = null) {
-  const reportError = error => {
+  const reportError = (error, attempt) => {
     try {
-      if (typeof onError === 'function') onError(error);
+      if (typeof onError === 'function') {
+        onError(JSON.stringify({
+          ...describeRuntimeMessageError(error),
+          messageType:String(message?.type || ''),
+          requestId:String(message?.requestId || ''),
+          attempt
+        }));
+      }
     } catch (_) {}
   };
   // Selection-open requests carry a requestId that the background handler
@@ -26,7 +62,7 @@ function sendRuntimeMessageWithRetry(message, sendMessage, onError = null) {
         await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
         return send(attempt + 1);
       }
-      reportError(error);
+      reportError(error, attempt);
       return undefined;
     }
   };
