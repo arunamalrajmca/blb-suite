@@ -24,8 +24,9 @@ export function validateReferenceMatrix(entries) {
   return entries;
 }
 
-export function selectReferenceMatrix(entries, { full = false, changedSpecs = "", changedBrowserSpecs = "" } = {}) {
+export function selectReferenceMatrix(entries, { full = false, changedSpecs = "", changedBrowserSpecs = "", reloadStressOnly = false } = {}) {
   validateReferenceMatrix(entries);
+  if (reloadStressOnly) return entries.filter(entry => entry.group === "extension-spec-reference-coverage");
   if (full) return entries;
   const selected = new Set(String(changedSpecs).split(",").filter(Boolean));
   const changedBrowser = new Set(String(changedBrowserSpecs).split(",").filter(Boolean));
@@ -47,7 +48,8 @@ function main() {
   const selected = selectReferenceMatrix(entries, {
     full: process.env.FULL_BROWSER_SUITE === "true",
     changedSpecs: process.env.CHANGED_SPECS || "",
-    changedBrowserSpecs: process.env.CHANGED_BROWSER_SPECS || ""
+    changedBrowserSpecs: process.env.CHANGED_BROWSER_SPECS || "",
+    reloadStressOnly: process.env.RELOAD_STRESS_ONLY === "true"
   });
   const values = {
     reference_matrix: JSON.stringify(selected),
