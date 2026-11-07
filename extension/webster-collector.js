@@ -98,6 +98,12 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
         websterRedirectEnabled = data.redirectEnabled !== false;
       }).catch(()=>{});
     
+      chrome.storage.onChanged.addListener((changes, area) => {
+        if (area === "local" && changes.redirectEnabled) {
+          websterRedirectEnabled = changes.redirectEnabled.newValue !== false;
+        }
+      });
+
       document.addEventListener("click",e=>{
         if (!isSuiteEnabledNow() || !websterRedirectEnabled || isModifiedLinkActivation(e)) return;
         const a=e.target.closest?.("a.bible");
@@ -107,12 +113,20 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
         const target=blbUrl(ref.book,ref.chapter,ref.from,ref.to);
         if (!target) return;
         e.preventDefault(); e.stopImmediatePropagation();
+        const fallbackToOriginalLink = () => {
+          const originalUrl = a.href || a.getAttribute?.("href");
+          if (originalUrl) {
+            try { location.assign(originalUrl); } catch (_) {}
+          }
+        };
         chrome.runtime.sendMessage({
           type:'blbSuiteOpenBackgroundUrl',
           url:target,
           activeIfNew:true,
           activateExisting:true
-        }).catch(()=>{});
+        }).then(response => {
+          if (response?.ok !== true) fallbackToOriginalLink();
+        }).catch(fallbackToOriginalLink);
       },true);
     
       // Webster pages can restore/rebuild their body during a normal refresh.
