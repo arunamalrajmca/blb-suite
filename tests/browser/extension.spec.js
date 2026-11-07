@@ -3488,7 +3488,7 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
       .toBe(`chrome-extension://${extensionId}/background.js`);
 
     try {
-      const readiness = await expect.poll(async () => {
+      await expect.poll(async () => {
         try {
           return await worker.evaluate(() => ({
             manifestVersion: chrome.runtime.getManifest().manifest_version,
@@ -3501,7 +3501,11 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
         manifestVersion: 3,
         runtimeId: extensionId
       });
-      writeLog(cycle, 'worker-ready', { readiness });
+      const readiness = await worker.evaluate(() => ({
+        manifestVersion: chrome.runtime.getManifest().manifest_version,
+        runtimeId: chrome.runtime.id
+      }));
+      writeLog(cycle, 'worker-ready', readiness);
     } catch (error) {
       writeLog(cycle, 'worker-readiness-failed', {
         name: error.name,
