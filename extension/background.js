@@ -2244,7 +2244,7 @@ async function shouldAcceptSelectionOpenRequest(tabId, text, requestId = '') {
         typeof saved[SELECTION_OPEN_REQUEST_SESSION_KEY] === 'object'
         ? {...saved[SELECTION_OPEN_REQUEST_SESSION_KEY]} : {};
       const completedAt = Number(completed[normalizedRequestId]) || 0;
-      if (now - completedAt < SELECTION_OPEN_DEDUP_MS) return false;
+      if (now - completedAt < SELECTION_OPEN_DEDUP_RETENTION_MS) return false;
     } catch (_) {
       // Retain the in-memory guard if session storage is unavailable.
     }
