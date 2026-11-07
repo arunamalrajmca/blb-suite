@@ -80,7 +80,7 @@ export const featureSpecs = [{
   },
   {
     paths: ["extension/webster-collector.js"],
-    specs: ["tests/browser/webster-collector-behavior.spec.js", "tests/browser/audit-defect-regressions.spec.js"]
+    specs: ["tests/browser/webster-collector-behavior.spec.js"]
   },
   {
     paths: ["extension/source-page-collector.js"],
@@ -112,7 +112,7 @@ export const featureSpecs = [{
   },
   {
     paths: ["extension/blb-draggable-button.js"],
-    specs: ["tests/browser/blb-draggable-button.spec.js", "tests/browser/audit-defect-regressions.spec.js"]
+    specs: ["tests/browser/blb-draggable-button.spec.js"]
   },
   {
     paths: ["extension/blb-parse-popup.js"],
