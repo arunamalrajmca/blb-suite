@@ -228,8 +228,18 @@
       blbPageButtonSelection = '';
     }
     
-    function addBlbPageSelectionButton() {
-      if (document.getElementById(BLB_PAGE_BUTTON_ID) || isBlbPageButtonExcludedSite()) return;
+    function addBlbPageSelectionButton({replaceExisting = false} = {}) {
+      const existingButton = document.getElementById(BLB_PAGE_BUTTON_ID);
+      if (existingButton) {
+        if (!replaceExisting) return;
+        // An extension reload invalidates the old content-script context but
+        // can leave its DOM button behind. That button still owns the old
+        // click listener, so replace it when the current bundle initializes.
+        existingButton.__blbDragVisibilityObserver?.disconnect();
+        existingButton.remove();
+        document.getElementById(BLB_PAGE_BUTTON_ID + '-reset-position')?.remove();
+      }
+      if (isBlbPageButtonExcludedSite()) return;
       // document.documentElement is available at document_start; do not require
       // document.body, because many sites create it later.
       const mount = document.documentElement || document.body;
@@ -539,7 +549,10 @@
       document.addEventListener('keydown', handleBlbPageSelectionKeyDown, true);
       document.addEventListener('mouseup', handleBlbPageSelectionMouseUp, true);
       document.addEventListener('keyup', handleBlbPageSelectionKeyUp, true);
-      addBlbPageSelectionButton();
+      // Replace a button left behind by an invalidated content-script
+      // context after extension reload/update; its old listener cannot message
+      // the newly active background worker.
+      addBlbPageSelectionButton({replaceExisting:true});
       // Synchronize the native right-click item immediately with the same
       // site-based setting that controls this floating button. This prevents the
       // first right-click after page load from seeing stale visibility from the
