@@ -321,8 +321,8 @@ jobs:
           set -euo pipefail
           TEST_FILES="${{ matrix.files && join(matrix.files, ' ') || matrix.file || 'tests/browser/extension.spec.js' }}"
           MATRIX_GREP="${{ matrix.grep }}"
-          read -r -a specs <<< "$TEST_FILES"
-          total="${#specs[@]}"
+          mapfile -t specs < <(printf '%s\n' "$TEST_FILES" | tr ' ' '\n' | awk 'NF')
+          total="$(printf '%s\n' "${specs[@]}" | awk 'NF { count++ } END { print count + 0 }')"
           if (( total == 0 )); then
             echo "::error::Reference matrix group selected no spec files."
             exit 1
