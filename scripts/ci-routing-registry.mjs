@@ -15,6 +15,10 @@ export const featureSpecs = [{
     ]
   },
   {
+    paths: ["extension/reference-core.js"],
+    specs: ["tests/browser/audit-defect-regressions.spec.js"]
+  },
+  {
     paths: ["extension/background.js"],
     specs: [
       "tests/browser/popup-master-toggle-regression.spec.js",
@@ -22,7 +26,8 @@ export const featureSpecs = [{
       "tests/browser/substack-selection-parser.spec.js",
       "tests/browser/omnibox-command-routing.spec.js",
       "tests/browser/pdf-selection-regressions.spec.js",
-      "tests/browser/kjv-corpus-lazy-loading.spec.js"
+      "tests/browser/kjv-corpus-lazy-loading.spec.js",
+      "tests/browser/audit-defect-regressions.spec.js"
     ]
   },
   {
@@ -132,6 +137,7 @@ export const featureSpecs = [{
 ];
 
 export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.spec.js",
+  "tests/browser/audit-defect-regressions.spec.js",
   "tests/browser/omnibox-boolean-operators.spec.js",
   "tests/browser/e2e-core-user-actions.spec.js",
   "tests/browser/kings-bible-collector-behavior.spec.js",

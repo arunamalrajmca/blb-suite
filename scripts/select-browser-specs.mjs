@@ -162,6 +162,7 @@ const values = {
     "tests/browser/webster-collector-behavior.spec.js",
     "tests/browser/blb-auto-hyperlinker.spec.js",
     "tests/browser/blb-draggable-button.spec.js",
+    "tests/browser/audit-defect-regressions.spec.js",
     "tests/browser/case-sensitive-routing-behavior.spec.js",
     "tests/browser/extension.spec.js",
     "tests/browser/known-host-extension.spec.js",

@@ -424,12 +424,10 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     expect(sample.phraseType).toBe('KJV_PASSAGE');
     expect(sample.phraseQuery).toBeTruthy();
     expect(sample.passageRef).toEqual({ book: 'john', chapter: 3, from: 16, to: 16 });
-    if (sample.variant === 'baseline') {
-      expect(sample.corpusLoadedAtStartup).toBe(true);
-    } else {
-      expect(sample.corpusLoadedAtStartup).toBe(false);
-      expect(sample.corpusStillLoadedAfterFastPaths).toBe(false);
-      expect(sample.corpusLoadedAfterFirstUse).toBe(true);
-    }
+    // The current main baseline already uses lazy loading; both variants
+    // must keep the corpus unloaded through fast paths and load it on first use.
+    expect(sample.corpusLoadedAtStartup).toBe(false);
+    expect(sample.corpusStillLoadedAfterFastPaths).toBe(false);
+    expect(sample.corpusLoadedAfterFirstUse).toBe(true);
   }
 });

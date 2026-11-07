@@ -2657,9 +2657,54 @@ async function unregisterRuntimeContentScriptForPattern(pattern) {
   const id = runtimeContentScriptIdForPattern(pattern);
   try {
     if (chrome.scripting?.unregisterContentScripts) {
-      await chrome.scripting.unregisterContentScripts({ids:[id]});
+      // A site can have both isolated-world and MAIN-world persistent
+      // registrations. They share the same origin pattern and must be
+      // removed together when the site's last feature is disabled.
+      await chrome.scripting.unregisterContentScripts({ids:[id, id + '-main-world']});
     }
   } catch (_) {}
+}
+
+async function reconcileRuntimeContentScriptRegistrations() {
+  const data = await chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    redirectEnabled:false
+  });
+  let registrations = [];
+  try {
+    registrations = await chrome.scripting.getRegisteredContentScripts();
+  } catch (error) {
+    console.warn('KJV Scripture Tools could not inspect runtime registrations during settings reconciliation:', String(error));
+    return;
+  }
+
+  const patterns = new Set();
+  for (const script of registrations) {
+    const id = String(script?.id || '');
+    if (!id.startsWith('blb-suite-runtime-')) continue;
+    const pattern = (script.matches || []).find(match => /^https?:\/\/[^/]+\/\*$/.test(match));
+    if (pattern) patterns.add(pattern);
+  }
+
+  await Promise.all([...patterns].map(async pattern => {
+    const tab = {url:pattern.replace(/\*$/, '')};
+    const eligible = data.masterEnabled !== false &&
+      await hasHostAccessForTab(tab) &&
+      await shouldInjectContentScriptForTab(tab, data);
+    if (!eligible) {
+      await unregisterRuntimeContentScriptForPattern(pattern);
+      return;
+    }
+
+    const files = contentScriptFilesForTab(tab, data);
+    if (!files.length) {
+      await unregisterRuntimeContentScriptForPattern(pattern);
+      return;
+    }
+    await ensureRuntimeContentScriptRegistered(tab, files);
+  }));
 }
 
 async function ensureContentScriptInTab(tabId) {
@@ -6402,6 +6447,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
     injectRedirectEnabledTabs().catch(() => {});
   }
   if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites || changes.doubleClickBlbSites) {
+    reconcileRuntimeContentScriptRegistrations().catch(error => {
+      console.warn('KJV Scripture Tools runtime registration reconciliation failed:', String(error));
+    });
     installRules();
     // Keep the existing web-selection menu item in place. Only its visibility
     // changes with the site preference; removing/recreating it here causes a
@@ -6433,7 +6481,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
       })
       .catch(() => {});
   }
-  if (changes.currentStudySessionId || changes.studyAutoStopMinutes) refreshStudyAutoStopAlarm().catch(()=>{});
+  if (changes.currentStudySessionId || changes.studyAutoStopMinutes || changes.masterEnabled) refreshStudyAutoStopAlarm().catch(()=>{});
 });
 
 chrome.permissions.onAdded.addListener(() => {
