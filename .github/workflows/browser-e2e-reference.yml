@@ -342,6 +342,8 @@ jobs:
               pwd
               node -e "console.log('Playwright package:', require.resolve('@playwright/test')); console.log('Config testDir:', require('./playwright.config.js').testDir)"
               find tests/browser -maxdepth 1 -type f -name '*.spec.js' | head -20
+              echo "Diagnostic: Playwright built-in reporter inventory"
+              npx playwright test --config=playwright.config.js --reporter=list --list || true
               set +e
               list_output="$(npx playwright test --config=playwright.config.js --grep "$MATRIX_GREP" --list 2>&1)"
               list_status=$?
