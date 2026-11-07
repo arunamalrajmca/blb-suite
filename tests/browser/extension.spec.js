@@ -146,11 +146,16 @@ test('MV3 worker restart recovers the real Show on BLB action without duplicate 
 }) => {
   await extensionStorage.set({
     masterEnabled:true,
-    pageSelectionButtonSites:{'example.com':true},
+    pageSelectionButtonSites:{'facebook.com':true},
     doubleClickBlbSites:{}
   });
   const page = await context.newPage();
-  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  await page.route('https://www.facebook.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>Facebook post fixture</title></head><body><main role="article"><p>Facebook reference recovery fixture</p></main></body></html>'
+  }));
+  await page.goto('https://www.facebook.com/', {waitUntil:'domcontentloaded'});
   const button = page.locator('#blb-suite-page-selection-button');
   await expect(button).toBeAttached({timeout:10000});
   await page.evaluate(() => {
