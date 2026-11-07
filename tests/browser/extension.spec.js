@@ -3091,7 +3091,7 @@ test('tab lifecycle errors are classified as benign injection races', async ({ e
   });
 });
 
-testAnchor
+test('persisted runtime content-script registration audit reports missing files without changing registrations', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(async () => {
     const before = await chrome.scripting.getRegisteredContentScripts();
     const audit = await auditPersistedRuntimeContentScriptRegistrations([
@@ -3125,7 +3125,7 @@ testAnchor
   expect(result.beforeIds).toEqual(result.afterIds);
 });
 
-testAnchor
+test('extension update reconciliation reactivates configured existing tabs', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionWorker.evaluate(() => {
     globalThis.__blbSuiteUpdateReconciliationCalls = [];
     globalThis.__blbSuiteOriginalEnsureContentScriptInTab = ensureContentScriptInTab;
