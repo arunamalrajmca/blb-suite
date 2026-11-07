@@ -308,16 +308,16 @@
           // destination is opened made a transient worker/injection failure
           // indistinguishable from a successful action and left no retry path.
           const response = await safeRuntimeSendMessage(message, error => {
-            console.error('KJV Scripture Tools Show on BLB message failed:', {
+            console.error('KJV Scripture Tools Show on BLB message failed: ' + JSON.stringify({
               requestId, selectedText:text, error:String(error)
-            });
+            }));
           });
           if (response?.ok === true) {
             clearBlbPageSelectionAfterAction();
           } else {
-            console.error('KJV Scripture Tools Show on BLB action was not completed:', {
+            console.error('KJV Scripture Tools Show on BLB action was not completed: ' + JSON.stringify({
               requestId, selectedText:text, response:response || null
-            });
+            }));
             // Keep the selection and control available for a retry, but only
             // while the same live selection is still present in the document.
             if (normalizeSelectionText(getSelectedPageText()) === normalizeSelectionText(text)) {
