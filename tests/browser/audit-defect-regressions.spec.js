@@ -43,7 +43,7 @@ function makeWebsterRedirectHarness({ initialEnabled = true, response = { ok: tr
     isSuiteEnabledNow: () => true,
     isModifiedLinkActivation: () => false,
     normalizeSelectionText: value => String(value || '').trim(),
-    parseRef: () => ({ book: 'John', chapter: 3, from: 16, to: null }),
+    parseRef: () => ({ book: 'john', chapter: 3, from: 16, to: null }),
     blbUrl: () => 'https://www.blueletterbible.org/kjv/jhn/3/16/'
   };
   vm.runInNewContext(websterSource.slice(start, end), context);
@@ -159,8 +159,8 @@ test('repeated explicit reference keeps its source occurrence for following shor
   );
 
   expect(refs).toEqual([
-    { book: 'John', chapter: 3, from: 16, to: 16 },
-    { book: 'John', chapter: 3, from: 17, to: 17 }
+    { book: 'john', chapter: 3, from: 16, to: 16 },
+    { book: 'john', chapter: 3, from: 17, to: 17 }
   ]);
 });
 
