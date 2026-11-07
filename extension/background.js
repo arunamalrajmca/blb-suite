@@ -2625,6 +2625,9 @@ async function inspectPackagedScriptFiles(files) {
 }
 
 const contentScriptInjectionLocks = new Map();
+// Different tabs on the same origin can request the same persistent script
+// registration concurrently. Serialize by registration ID, not only by tab.
+const runtimeContentScriptRegistrationLocks = new Map();
 
 function runtimeContentScriptIdForPattern(pattern) {
   const raw = String(pattern || '');
@@ -2636,7 +2639,7 @@ function runtimeContentScriptIdForPattern(pattern) {
   return `blb-suite-runtime-${(hash >>> 0).toString(36)}`;
 }
 
-async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCRIPT_FILES) {
+async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_SCRIPT_FILES) {
   const pattern = originPatternForUrl(tab?.url);
   if (!pattern || !Array.isArray(files) || !files.length || !chrome.scripting?.registerContentScripts) return false;
   const id = runtimeContentScriptIdForPattern(pattern);
@@ -2716,6 +2719,29 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
       }))
     }));
     return false;
+  }
+}
+
+
+async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCRIPT_FILES) {
+  const pattern = originPatternForUrl(tab?.url);
+  if (!pattern) return false;
+  const id = runtimeContentScriptIdForPattern(pattern);
+  const pending = runtimeContentScriptRegistrationLocks.get(id);
+  if (pending) {
+    await pending;
+    // The first registration may have used a different file set. Re-read and
+    // reconcile after it completes rather than assuming its result matches.
+    return registerRuntimeContentScriptForPattern(tab, files);
+  }
+  const operation = registerRuntimeContentScriptForPattern(tab, files);
+  runtimeContentScriptRegistrationLocks.set(id, operation);
+  try {
+    return await operation;
+  } finally {
+    if (runtimeContentScriptRegistrationLocks.get(id) === operation) {
+      runtimeContentScriptRegistrationLocks.delete(id);
+    }
   }
 }
 
