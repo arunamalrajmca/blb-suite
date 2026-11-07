@@ -191,7 +191,7 @@ test('MV3 worker restart recovers the real Show on BLB action without duplicate 
   await expect(button).toBeHidden({timeout:15000});
   const extensionPage = await context.newPage();
   await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`);
-  const matchingTabs = await expect.poll(async () => extensionPage.evaluate(async () => {
+  await expect.poll(async () => extensionPage.evaluate(async () => {
     const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
     return tabs.filter(tab => {
       try { return new URL(tab.url || tab.pendingUrl || '').pathname === '/kjv/jhn/3/16/'; }
