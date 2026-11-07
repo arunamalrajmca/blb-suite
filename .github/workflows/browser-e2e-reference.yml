@@ -339,6 +339,8 @@ jobs:
             if [[ "$MATRIX_GREP" == ".*" ]]; then
               npx playwright test "$spec"
             else
+              echo "Preflight: list tests matching the selected matrix filter."
+              npx playwright test "$spec" --grep "$MATRIX_GREP" --list
               npx playwright test "$spec" --grep "$MATRIX_GREP"
             fi
           done
