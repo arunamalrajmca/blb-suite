@@ -3408,34 +3408,114 @@ test('MV3 service worker repeatedly cold-starts after rapid termination', async 
   await extensionPage.close();
 });
 
-test('MV3 extension survives repeated rapid runtime reloads', async ({ context, extensionId }) => {
-  // Unlike closing only the service-worker target, runtime.reload() unloads
-  // and reloads the entire extension, including its registered scripts.
-  for (let cycle = 1; cycle <= 6; cycle++) {
-    const extensionPage = await context.newPage();
-    await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`);
+test('MV3 extension survives 100 full runtime reloads with diagnostics', async ({ context, extensionId }) => {
+  test.setTimeout(240000);
 
-    const nextWorker = context.waitForEvent('serviceworker', { timeout: 15000 });
-    await extensionPage.evaluate(() => {
-      chrome.runtime.reload();
-      return true;
-    }).catch(() => {
-      // The extension page may be torn down as part of the requested reload.
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const logPath = path.resolve(process.cwd(), 'test-results', 'extension-reload-stress.log');
+  fs.mkdirSync(path.dirname(logPath), { recursive: true });
+  fs.writeFileSync(logPath, '');
+
+  const writeLog = (cycle, event, details = {}) => {
+    const record = {
+      timestamp: new Date().toISOString(),
+      elapsedMs: Math.round(performance.now()),
+      cycle,
+      event,
+      ...details
+    };
+    const line = '[BLB_RELOAD_STRESS] ' + JSON.stringify(record);
+    console.log(line);
+    fs.appendFileSync(logPath, line + '\n');
+  };
+
+  // Record worker lifecycle independently of the per-cycle assertions.
+  context.on('serviceworker', worker => {
+    writeLog(0, 'service-worker-created', { url: worker.url() });
+    worker.on('close', () => writeLog(0, 'service-worker-closed', { url: worker.url() }));
+  });
+
+  for (let cycle = 1; cycle <= 100; cycle++) {
+    writeLog(cycle, 'cycle-start');
+    const extensionPage = await context.newPage();
+
+    extensionPage.on('console', message => {
+      if (message.type() === 'error' || message.type() === 'warning') {
+        writeLog(cycle, 'extension-page-console', {
+          type: message.type(),
+          text: message.text(),
+          location: message.location()
+        });
+      }
+    });
+    extensionPage.on('pageerror', error => {
+      writeLog(cycle, 'extension-page-error', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+    });
+    extensionPage.on('requestfailed', request => {
+      writeLog(cycle, 'extension-page-request-failed', {
+        url: request.url(),
+        method: request.method(),
+        error: request.failure()?.errorText || 'unknown'
+      });
     });
 
+    await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`);
+    writeLog(cycle, 'popup-loaded', { url: extensionPage.url() });
+
+    // Arm the worker-created listener before requesting the full extension
+    // reload. The popup is expected to be destroyed by runtime.reload().
+    const nextWorker = context.waitForEvent('serviceworker', { timeout: 20000 });
+    try {
+      await extensionPage.evaluate(() => chrome.runtime.reload());
+      writeLog(cycle, 'reload-call-returned');
+    } catch (error) {
+      // Context destruction is normal when runtime.reload() unloads the popup;
+      // retain the exact error so an unexpected failure is not hidden.
+      writeLog(cycle, 'reload-call-rejected', {
+        name: error.name,
+        message: error.message
+      });
+    }
+
     const worker = await nextWorker;
+    writeLog(cycle, 'replacement-worker-observed', { url: worker.url() });
     expect(worker.url(), `worker URL after extension reload cycle ${cycle}`)
       .toBe(`chrome-extension://${extensionId}/background.js`);
 
-    await expect.poll(async () => {
-      try {
-        return await worker.evaluate(() => chrome.runtime.getManifest().manifest_version);
-      } catch (_) {
-        return null;
-      }
-    }, { timeout: 10000, intervals: [25, 50, 100, 200] }).toBe(3);
+    try {
+      const readiness = await expect.poll(async () => {
+        try {
+          return await worker.evaluate(() => ({
+            manifestVersion: chrome.runtime.getManifest().manifest_version,
+            runtimeId: chrome.runtime.id
+          }));
+        } catch (_) {
+          return null;
+        }
+      }, { timeout: 15000, intervals: [25, 50, 100, 200, 500] }).toMatchObject({
+        manifestVersion: 3,
+        runtimeId: extensionId
+      });
+      writeLog(cycle, 'worker-ready', { readiness });
+    } catch (error) {
+      writeLog(cycle, 'worker-readiness-failed', {
+        name: error.name,
+        message: error.message,
+        workerUrl: worker.url()
+      });
+      throw error;
+    }
 
-    // Close stale extension UI and allow the next cycle to open a fresh page.
-    await extensionPage.close().catch(() => {});
+    writeLog(cycle, 'cycle-passed');
+    await extensionPage.close().catch(error => {
+      writeLog(cycle, 'popup-close-rejected', { message: error.message });
+    });
   }
+
+  writeLog(100, 'stress-test-complete', { totalCycles: 100, logPath });
 });
