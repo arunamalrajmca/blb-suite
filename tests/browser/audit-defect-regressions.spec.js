@@ -105,6 +105,7 @@ test('disabling a site removes both persistent isolated- and MAIN-world registra
       };
     } finally {
       await chrome.scripting.unregisterContentScripts({ ids: [id, mainWorldId] }).catch(() => {});
+      await chrome.storage.local.set({ masterEnabled: true });
     }
   });
 
@@ -118,28 +119,30 @@ test('disabling a site removes both persistent isolated- and MAIN-world registra
 
 test('Study Sessions auto-stop alarm is restored when the master switch is turned back on', async ({ extensionWorker, extensionStorage }) => {
   await extensionStorage.clear();
-  await extensionStorage.set({
-    masterEnabled: true,
-    studyAutoStopMinutes: 5,
-    currentStudySessionId: 'audit-auto-stop-session'
-  });
-
   const alarmExists = () => extensionWorker.evaluate(async () =>
     (await chrome.alarms.getAll()).some(alarm => alarm.name === STUDY_AUTOSTOP_ALARM)
   );
-  await expect.poll(alarmExists, { timeout: 5000 }).toBe(true);
+  try {
+    await extensionStorage.set({
+      masterEnabled: true,
+      studyAutoStopMinutes: 5,
+      currentStudySessionId: 'audit-auto-stop-session'
+    });
+    await expect.poll(alarmExists, { timeout: 5000 }).toBe(true);
 
-  await extensionStorage.set({ masterEnabled: false });
-  await extensionWorker.evaluate(() => checkStudyAutoStop());
-  await expect.poll(alarmExists, { timeout: 5000 }).toBe(false);
+    await extensionStorage.set({ masterEnabled: false });
+    await extensionWorker.evaluate(() => checkStudyAutoStop());
+    await expect.poll(alarmExists, { timeout: 5000 }).toBe(false);
 
-  await extensionStorage.set({ masterEnabled: true });
-  await expect.poll(alarmExists, { timeout: 1500 }).toBe(true);
-
-  await extensionWorker.evaluate(async () => {
-    await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM);
-    await chrome.storage.local.remove('currentStudySessionId');
-  });
+    await extensionStorage.set({ masterEnabled: true });
+    await expect.poll(alarmExists, { timeout: 1500 }).toBe(true);
+  } finally {
+    await extensionWorker.evaluate(async () => {
+      await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM);
+      await chrome.storage.local.set({ masterEnabled: true });
+      await chrome.storage.local.remove(['currentStudySessionId', 'studyAutoStopMinutes']);
+    });
+  }
 });
 
 test('repeated explicit reference keeps its source occurrence for following shorthand verses', async ({ extensionWorker }) => {
