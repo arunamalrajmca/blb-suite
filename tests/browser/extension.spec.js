@@ -3407,3 +3407,35 @@ test('MV3 service worker repeatedly cold-starts after rapid termination', async 
 
   await extensionPage.close();
 });
+
+test('MV3 extension survives repeated rapid runtime reloads', async ({ context, extensionId }) => {
+  // Unlike closing only the service-worker target, runtime.reload() unloads
+  // and reloads the entire extension, including its registered scripts.
+  for (let cycle = 1; cycle <= 6; cycle++) {
+    const extensionPage = await context.newPage();
+    await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`);
+
+    const nextWorker = context.waitForEvent('serviceworker', { timeout: 15000 });
+    await extensionPage.evaluate(() => {
+      chrome.runtime.reload();
+      return true;
+    }).catch(() => {
+      // The extension page may be torn down as part of the requested reload.
+    });
+
+    const worker = await nextWorker;
+    expect(worker.url(), `worker URL after extension reload cycle ${cycle}`)
+      .toBe(`chrome-extension://${extensionId}/background.js`);
+
+    await expect.poll(async () => {
+      try {
+        return await worker.evaluate(() => chrome.runtime.getManifest().manifest_version);
+      } catch (_) {
+        return null;
+      }
+    }, { timeout: 10000, intervals: [25, 50, 100, 200] }).toBe(3);
+
+    // Close stale extension UI and allow the next cycle to open a fresh page.
+    await extensionPage.close().catch(() => {});
+  }
+});
