@@ -338,11 +338,18 @@ jobs:
             # Playwright's positional path filter is unreliable for this
             # matrix invocation. Its unique title safely selects it globally.
             if [[ "$MATRIX_GREP" == "MV3 extension survives 100 full runtime reloads with diagnostics" ]]; then
-              list_output="$(npx playwright test --grep "$MATRIX_GREP" --list)"
+              set +e
+              list_output="$(npx playwright test --grep "$MATRIX_GREP" --list 2>&1)"
+              list_status=$?
+              set -e
               printf '%s\n' "$list_output"
+              if (( list_status != 0 )); then
+                echo "Diagnostic: unfiltered Playwright test inventory"
+                npx playwright test --list || true
+              fi
               listed="$(printf '%s\n' "$list_output" | sed -nE 's/^Total: ([0-9]+) tests?.*/\1/p' | tail -n 1)"
-              if [[ ! "$listed" =~ ^[1-9][0-9]*$ ]]; then
-                echo "::error::Playwright discovered zero reload-stress tests."
+              if (( list_status != 0 )) || [[ ! "$listed" =~ ^[1-9][0-9]*$ ]]; then
+                echo "::error::Playwright could not discover the reload-stress test."
                 exit 1
               fi
               npx playwright test --grep "$MATRIX_GREP"
