@@ -71,7 +71,7 @@ try {
   const background = read(path.join('extension', worker));
   const importList = background.match(/const BLB_BACKGROUND_STARTUP_IMPORTS = \[([\s\S]*?)\];/);
   assert.ok(importList, 'service worker must declare its startup dependency list');
-  const importedFiles = [...importList[1].matchAll(/['"]([^'"]+\\.js)['"]/g)].map(value => value[1]);
+  const importedFiles = [...importList[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(value => value[1]);
   assert.ok(importedFiles.length > 0, 'service-worker startup import list must contain JavaScript paths');
   assert.ok(background.includes('importScripts(scriptFile)'), 'service-worker dependencies must be imported individually');
   assert.ok(background.includes('background startup import failed'), 'service-worker import errors must identify the failing filename');
