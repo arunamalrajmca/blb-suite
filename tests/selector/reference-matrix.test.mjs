@@ -10,8 +10,9 @@ const matrix = JSON.parse(readFileSync(
 test("extension.spec.js reference checks share one matrix runner without dropping grep coverage", () => {
   const grouped = matrix.filter(entry => entry.group === "extension-spec-reference-coverage");
   assert.equal(grouped.length, 1);
-  assert.equal(grouped[0].file, undefined, "group must continue to target the default extension.spec.js");
+  assert.equal(grouped[0].file, "tests/browser/extension.spec.js", "group must explicitly target extension.spec.js so changed-spec selection executes it");
   assert.doesNotThrow(() => new RegExp(grouped[0].grep));
+  assert.ok(grouped[0].grep.includes("MV3 service worker repeatedly cold-starts after rapid termination"), "group must retain the worker-startup regression");
 
   for (const pattern of [
     "Double-click resolves any part",
