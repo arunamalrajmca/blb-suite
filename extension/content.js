@@ -1,6 +1,47 @@
 // Top-level execution marker lets the browser E2E distinguish file execution
 // from failures inside the async initializer below.
 try { window.__blbSuiteContentScriptFileExecutedV3 = true; } catch (_) {}
+// Runtime messaging can throw synchronously when an extension is reloaded or
+// updated while an old content script is still attached to a page. Keep that
+// stale-page condition silent and fail closed instead of surfacing
+// "Extension context invalidated" to the user.
+function sendRuntimeMessageWithRetry(message, sendMessage, onError = null) {
+  const reportError = error => {
+    try {
+      if (typeof onError === 'function') onError(error);
+    } catch (_) {}
+  };
+  // Selection-open requests carry a requestId that the background handler
+  // deduplicates. This makes a narrowly-scoped retry safe if Chromium reports
+  // its transient "No SW" dispatch error before the worker can receive it.
+  const retryableSelectionRequest = !!message?.requestId &&
+    (message.type === 'blbSuiteOpenSelectionText' ||
+     message.type === 'blbSuiteOpenDoubleClickSelectionText');
+  const send = async attempt => {
+    try {
+      return await sendMessage(message);
+    } catch (error) {
+      const errorText = String(error?.message || error || '');
+      if (retryableSelectionRequest && attempt < 2 && /\bNo SW\b/i.test(errorText)) {
+        await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
+        return send(attempt + 1);
+      }
+      reportError(error);
+      return undefined;
+    }
+  };
+  return send(0);
+}
+
+function safeRuntimeSendMessage(message, onError = null) {
+  return sendRuntimeMessageWithRetry(
+    message,
+    payload => chrome.runtime.sendMessage(payload),
+    onError
+  );
+}
+
+
 (async function () {
 // Lightweight test/diagnostic marker: content-script injection is distinct from
 // whether the user's per-site double-click preference enables the listener.
@@ -131,46 +172,6 @@ function ensureBlbDefaultRightPanelExpanded() {
 void suiteSettingsReadyPromise.then(enabled => {
   if (enabled) ensureBlbDefaultRightPanelExpanded();
 }).catch(() => {});
-
-// Runtime messaging can throw synchronously when an extension is reloaded or
-// updated while an old content script is still attached to a page. Keep that
-// stale-page condition silent and fail closed instead of surfacing
-// "Extension context invalidated" to the user.
-function sendRuntimeMessageWithRetry(message, sendMessage, onError = null) {
-  const reportError = error => {
-    try {
-      if (typeof onError === 'function') onError(error);
-    } catch (_) {}
-  };
-  // Selection-open requests carry a requestId that the background handler
-  // deduplicates. This makes a narrowly-scoped retry safe if Chromium reports
-  // its transient "No SW" dispatch error before the worker can receive it.
-  const retryableSelectionRequest = !!message?.requestId &&
-    (message.type === 'blbSuiteOpenSelectionText' ||
-     message.type === 'blbSuiteOpenDoubleClickSelectionText');
-  const send = async attempt => {
-    try {
-      return await sendMessage(message);
-    } catch (error) {
-      const errorText = String(error?.message || error || '');
-      if (retryableSelectionRequest && attempt < 2 && /\bNo SW\b/i.test(errorText)) {
-        await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
-        return send(attempt + 1);
-      }
-      reportError(error);
-      return undefined;
-    }
-  };
-  return send(0);
-}
-
-function safeRuntimeSendMessage(message, onError = null) {
-  return sendRuntimeMessageWithRetry(
-    message,
-    payload => chrome.runtime.sendMessage(payload),
-    onError
-  );
-}
 
 // Route Suite-owned BLB new-tab actions through the background single-owner
 // destination manager. This prevents native/window.open tab creation from
