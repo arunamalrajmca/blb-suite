@@ -73,8 +73,15 @@ function makeWebsterRedirectHarness({ initialEnabled = true, response = { ok: tr
   };
 }
 
-test('disabling a site removes both persistent isolated- and MAIN-world registrations', async ({ extensionWorker }) => {
+test('disabling the last site feature removes both persistent isolated- and MAIN-world registrations', async ({ extensionWorker, extensionStorage }) => {
   test.fail('test-first: this regression is expected to expose the unfixed defect');
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    masterEnabled: true,
+    redirectEnabled: false,
+    pageSelectionButtonSites: { 'christianity.com': true },
+    doubleClickBlbSites: {}
+  });
   const result = await extensionWorker.evaluate(async () => {
     const url = 'https://www.christianity.com/example-article';
     const pattern = originPatternForUrl(url);
@@ -85,7 +92,12 @@ test('disabling a site removes both persistent isolated- and MAIN-world registra
     try {
       const registered = await ensureRuntimeContentScriptRegistered({ url, id: 77 }, ['content.js']);
       const before = await chrome.scripting.getRegisteredContentScripts({ ids: [id, mainWorldId] });
-      await chrome.storage.local.set({ masterEnabled: false });
+      await chrome.storage.local.set({
+        masterEnabled: true,
+        redirectEnabled: false,
+        pageSelectionButtonSites: { 'christianity.com': false },
+        doubleClickBlbSites: {}
+      });
 
       const afterIds = await new Promise(resolve => {
         const deadline = Date.now() + 1500;
@@ -106,7 +118,12 @@ test('disabling a site removes both persistent isolated- and MAIN-world registra
       };
     } finally {
       await chrome.scripting.unregisterContentScripts({ ids: [id, mainWorldId] }).catch(() => {});
-      await chrome.storage.local.set({ masterEnabled: true });
+      await chrome.storage.local.set({
+        masterEnabled: true,
+        redirectEnabled: false,
+        pageSelectionButtonSites: {},
+        doubleClickBlbSites: {}
+      });
     }
   });
 
