@@ -334,14 +334,29 @@ jobs:
               exit 1
             fi
             printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-            # Invoke Playwright once per exact file; never combine positional
-            # filters, which Playwright treats as intersecting expressions.
+            # Playwright resolves positional file filters relative to testDir.
+            # Matrix paths are repository-relative, so strip tests/browser/.
+            playwright_spec="${spec#tests/browser/}"
+            echo "Playwright file filter: $playwright_spec"
             if [[ "$MATRIX_GREP" == ".*" ]]; then
-              npx playwright test "$spec"
+              list_output="$(npx playwright test "$playwright_spec" --list 2>&1)"
+              printf '%s\n' "$list_output"
+              listed="$(printf '%s\n' "$list_output" | sed -nE 's/^Total: ([0-9]+) tests?.*/\1/p' | tail -n 1)"
+              if [[ ! "$listed" =~ ^[1-9][0-9]*$ ]]; then
+                echo "::error::Playwright discovered zero tests for $spec."
+                exit 1
+              fi
+              npx playwright test "$playwright_spec"
             else
               echo "Preflight: list tests matching the selected matrix filter."
-              npx playwright test "$spec" --grep "$MATRIX_GREP" --list
-              npx playwright test "$spec" --grep "$MATRIX_GREP"
+              list_output="$(npx playwright test "$playwright_spec" --grep "$MATRIX_GREP" --list 2>&1)"
+              printf '%s\n' "$list_output"
+              listed="$(printf '%s\n' "$list_output" | sed -nE 's/^Total: ([0-9]+) tests?.*/\1/p' | tail -n 1)"
+              if [[ ! "$listed" =~ ^[1-9][0-9]*$ ]]; then
+                echo "::error::Playwright discovered zero tests for $spec with grep: $MATRIX_GREP"
+                exit 1
+              fi
+              npx playwright test "$playwright_spec" --grep "$MATRIX_GREP"
             fi
           done
       - name: Upload Playwright diagnostics — ${{ matrix.group }}
