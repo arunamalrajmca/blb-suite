@@ -3485,10 +3485,10 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
     await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`);
     writeLog(cycle, 'popup-loaded', { url: extensionPage.url() });
 
-    // A worker restart is not guaranteed to produce a Playwright
-    // BrowserContext "serviceworker" event. Poll the live worker registry and
-    // require a new execution-context timeOrigin instead of waiting on that
-    // event as the sole signal.
+    // runtime.reload() unloads the extension's existing pages as well as its
+    // worker. A worker may remain dormant until a fresh extension page sends
+    // a message, so close the stale popup and explicitly wake the reloaded
+    // extension before checking the new worker execution context.
     try {
       await extensionPage.evaluate(() => chrome.runtime.reload());
       writeLog(cycle, 'reload-call-returned');
@@ -3498,10 +3498,59 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
         message: error.message
       });
     }
+    await extensionPage.close().catch(error => {
+      writeLog(cycle, 'stale-popup-close-rejected', { message: error.message });
+    });
+
+    const probePage = await context.newPage();
+    probePage.on('console', message => {
+      if (message.type() === 'error' || message.type() === 'warning') {
+        writeLog(cycle, 'probe-page-console', {
+          type: message.type(),
+          text: message.text(),
+          location: message.location()
+        });
+      }
+    });
+    probePage.on('pageerror', error => {
+      writeLog(cycle, 'probe-page-error', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
+    });
+    probePage.on('requestfailed', request => {
+      writeLog(cycle, 'probe-page-request-failed', {
+        url: request.url(),
+        method: request.method(),
+        error: request.failure()?.errorText || 'unknown'
+      });
+    });
 
     let replacementState = null;
-    try {
-      await expect.poll(async () => {
+    let lastProbeLogAt = 0;
+    const probeDeadline = Date.now() + 20000;
+    let lastProbeError = null;
+    while (Date.now() < probeDeadline && !replacementState) {
+      try {
+        await probePage.goto(`chrome-extension://${extensionId}/popup.html`, {
+          waitUntil: 'domcontentloaded',
+          timeout: 3000
+        });
+        const pageState = await probePage.evaluate(async () => {
+          const response = await chrome.runtime.sendMessage({
+            type: 'blbSuiteGetDefaultSiteStatus',
+            hostname: 'facebook.com'
+          });
+          return {
+            runtimeId: chrome.runtime.id,
+            manifestVersion: chrome.runtime.getManifest().manifest_version,
+            pageTimeOrigin: performance.timeOrigin,
+            responseReceived: response !== undefined && response !== null
+          };
+        });
+        writeLog(cycle, 'reloaded-extension-page-responsive', pageState);
+
         const currentWorkers = context.serviceWorkers().filter(worker => worker.url() === workerUrl);
         for (const worker of currentWorkers) {
           const state = await readWorkerState(worker);
@@ -3512,32 +3561,64 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
             state.workerTimeOrigin !== previousWorkerState.workerTimeOrigin
           ) {
             replacementState = state;
-            return state;
+            break;
           }
         }
-        return null;
-      }, {
-        timeout: 20000,
-        intervals: [25, 50, 100, 200, 500]
-      }).toMatchObject({
-        runtimeId: extensionId,
-        manifestVersion: 3
-      });
-      writeLog(cycle, 'replacement-worker-ready', replacementState);
-    } catch (error) {
-      const visibleWorkers = await Promise.all(
-        context.serviceWorkers()
-          .filter(worker => worker.url() === workerUrl)
-          .map(readWorkerState)
-      );
+        if (!replacementState) {
+          lastProbeError = new Error('Extension page responded but Playwright has not exposed the replacement service worker');
+        }
+      } catch (error) {
+        lastProbeError = error;
+        if (Date.now() - lastProbeLogAt >= 500) {
+          writeLog(cycle, 'replacement-worker-probe-retry', {
+            name: error.name,
+            message: error.message,
+            pageUrl: probePage.url()
+          });
+          lastProbeLogAt = Date.now();
+        }
+      }
+
+      if (!replacementState) await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    if (!replacementState) {
+      let targetDiagnostics = null;
+      try {
+        const cdp = await context.newCDPSession(probePage);
+        const targets = await cdp.send('Target.getTargets');
+        targetDiagnostics = targets.targetInfos
+          .filter(target => target.url.includes(extensionId) || target.type === 'service_worker')
+          .map(target => ({
+            type: target.type,
+            url: target.url,
+            targetId: target.targetId,
+            attached: target.attached
+          }));
+        await cdp.detach();
+      } catch (error) {
+        targetDiagnostics = { error: error.message };
+      }
       writeLog(cycle, 'replacement-worker-timeout', {
         previousWorkerState,
-        visibleWorkers,
-        name: error.name,
-        message: error.message
+        visibleWorkers: await Promise.all(
+          context.serviceWorkers()
+            .filter(worker => worker.url() === workerUrl)
+            .map(readWorkerState)
+        ),
+        targetDiagnostics,
+        lastProbeError: lastProbeError ? {
+          name: lastProbeError.name,
+          message: lastProbeError.message
+        } : null
       });
-      throw error;
+      throw new Error(`Extension did not expose a replacement worker after reload cycle ${cycle}: ${lastProbeError?.message || 'worker unavailable'}`);
     }
+
+    writeLog(cycle, 'replacement-worker-ready', replacementState);
+    await probePage.close().catch(error => {
+      writeLog(cycle, 'probe-popup-close-rejected', { message: error.message });
+    });
 
     writeLog(cycle, 'cycle-passed');
     await extensionPage.close().catch(error => {
