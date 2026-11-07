@@ -186,19 +186,26 @@ test('MV3 worker restart recovers the real Show on BLB action without duplicate 
   await button.click();
 
   // Do not depend on Playwright emitting a serviceworker event for a target
-  // restarted through CDP. Verify the user-visible result first: the action
-  // must create exactly one destination tab after the worker was terminated.
+  // restarted through CDP. Wait for the actual action to finish before
+  // inspecting the destination tabs.
+  await expect(button).toBeHidden({timeout:15000});
   const extensionPage = await context.newPage();
   await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`);
-  const matchingTabs = await extensionPage.evaluate(async () => {
+  const matchingTabs = await expect.poll(async () => extensionPage.evaluate(async () => {
     const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
     return tabs.filter(tab => {
       try { return new URL(tab.url || tab.pendingUrl || '').pathname === '/kjv/jhn/3/16/'; }
       catch (_) { return false; }
     }).map(tab => ({id:tab.id, url:tab.url || tab.pendingUrl || ''}));
+  }), {timeout:15000}).toHaveLength(1);
+  const matchingTab = await extensionPage.evaluate(async () => {
+    const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
+    return tabs.find(tab => {
+      try { return new URL(tab.url || tab.pendingUrl || '').pathname === '/kjv/jhn/3/16/'; }
+      catch (_) { return false; }
+    });
   });
-  expect(matchingTabs).toHaveLength(1);
-  expect(new URL(matchingTabs[0].url).pathname).toBe('/kjv/jhn/3/16/');
+  expect(new URL(matchingTab.url || matchingTab.pendingUrl).pathname).toBe('/kjv/jhn/3/16/');
 
   // A response from the extension worker confirms that the restarted
   // background script has loaded and is dispatching messages again.
