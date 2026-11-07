@@ -3576,13 +3576,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   return true;
   })().catch(error => {
     const details = describeScriptInjectionError(error);
-    console.error('KJV Scripture Tools async message handler failed:', {
+    console.error('KJV Scripture Tools async message handler failed: ' + JSON.stringify({
       messageType:String(message?.type || ''),
       requestId:String(message?.requestId || ''),
       senderTabId:sender?.tab?.id ?? null,
       senderUrl:sender?.tab?.url || '',
       ...details
-    });
+    }));
     try {
       sendResponse({
         ok:false,
