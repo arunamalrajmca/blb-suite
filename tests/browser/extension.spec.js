@@ -3432,7 +3432,6 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
   };
 
   const workerUrl = 'chrome-extension://' + extensionId + '/background.js';
-  const popupUrl = 'chrome-extension://' + extensionId + '/popup.html';
   const browser = context.browser();
   const browserCdp = await browser.newBrowserCDPSession();
   await browserCdp.send('Target.setDiscoverTargets', { discover: true });
@@ -3456,6 +3455,9 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
 
   const initialWorker = context.serviceWorkers().find(worker => worker.url() === workerUrl);
   expect(initialWorker, 'extension worker is available before stress testing').toBeTruthy();
+  await expect.poll(async () => initialWorker.evaluate(async () =>
+    (await chrome.storage.local.get({ masterEnabled: null })).masterEnabled !== null
+  ), { timeout: 10000 }).toBe(true);
   await initialWorker.evaluate(async () => {
     await chrome.storage.local.set({
       masterEnabled: true,
@@ -3464,9 +3466,50 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
     });
   });
 
-  // A normal web page is the wake source after each full extension reload.
-  // Its content script invokes the real Show on BLB message path, unlike an
-  // unsupported ServiceWorker CDP command or a chrome-extension URL retry.
+  // Use a headed browser-manager page to invoke the same Reload control a user
+  // clicks in chrome://extensions. The normal web page then wakes the worker
+  // through the real content-script Show on BLB action.
+  const managerPage = await context.newPage();
+  managerPage.on('console', message => {
+    if (message.type() === 'error' || message.type() === 'warning') {
+      writeLog(0, 'extensions-manager-console', { type: message.type(), text: message.text(), location: message.location() });
+    }
+  });
+  await managerPage.goto('chrome://extensions/');
+  await managerPage.waitForFunction(() => !!document.querySelector('extensions-manager')?.shadowRoot, null, { timeout: 15000 });
+
+  const findExtensionReloadButton = async () => managerPage.evaluate(id => {
+    const deepFindAll = (root, selector, found = []) => {
+      if (!root || typeof root.querySelectorAll !== 'function') return found;
+      found.push(...root.querySelectorAll(selector));
+      for (const element of root.querySelectorAll('*')) {
+        if (element.shadowRoot) deepFindAll(element.shadowRoot, selector, found);
+      }
+      return found;
+    };
+    const developerModeToggle = deepFindAll(document, '#devMode')[0];
+    if (developerModeToggle && !developerModeToggle.checked) developerModeToggle.click();
+    const items = deepFindAll(document, 'extensions-item');
+    const item = items.find(element =>
+      element.data?.id === id ||
+      element.getAttribute('id') === id
+    );
+    if (!item) {
+      return {
+        found: false,
+        developerMode: developerModeToggle?.checked ?? null,
+        visibleExtensionIds: items.map(element => element.data?.id || element.getAttribute('id') || '')
+      };
+    }
+    const buttons = deepFindAll(item.shadowRoot || item, '#dev-reload-button');
+    return {
+      found: true,
+      developerMode: developerModeToggle?.checked ?? null,
+      reloadButton: !!buttons[0],
+      disabled: buttons[0]?.disabled ?? null
+    };
+  }, extensionId);
+
   const wakePage = await context.newPage();
   wakePage.on('console', message => {
     if (message.type() === 'error' || message.type() === 'warning') {
@@ -3492,29 +3535,12 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
       expect(previousWorkerState.unavailable, 'previous worker is readable before cycle ' + cycle).not.toBe(true);
       writeLog(cycle, 'previous-worker-state', previousWorkerState);
 
-      const extensionPage = await context.newPage();
-      extensionPage.on('console', message => {
-        if (message.type() === 'error' || message.type() === 'warning') {
-          writeLog(cycle, 'extension-page-console', {
-            type: message.type(),
-            text: message.text(),
-            location: message.location()
-          });
-        }
+      const reloadInfo = await expect.poll(findExtensionReloadButton, { timeout: 10000 }).toMatchObject({
+        found: true,
+        reloadButton: true,
+        disabled: false
       });
-      extensionPage.on('pageerror', error => {
-        writeLog(cycle, 'extension-page-error', { name: error.name, message: error.message, stack: error.stack });
-      });
-      extensionPage.on('requestfailed', request => {
-        writeLog(cycle, 'extension-page-request-failed', {
-          url: request.url(),
-          method: request.method(),
-          error: request.failure()?.errorText || 'unknown'
-        });
-      });
-
-      await extensionPage.goto(popupUrl);
-      writeLog(cycle, 'popup-loaded', { url: extensionPage.url() });
+      writeLog(cycle, 'extensions-reload-control-ready', reloadInfo);
 
       let observedReplacementWorker = null;
       const onReplacementWorker = worker => {
@@ -3525,13 +3551,27 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
       };
       context.on('serviceworker', onReplacementWorker);
 
-      try {
-        await extensionPage.evaluate(() => chrome.runtime.reload());
-        writeLog(cycle, 'reload-call-returned');
-      } catch (error) {
-        // runtime.reload normally closes the invoking extension page.
-        writeLog(cycle, 'reload-call-rejected', { name: error.name, message: error.message });
-      }
+      const reloadClick = await managerPage.evaluate(id => {
+        const deepFindAll = (root, selector, found = []) => {
+          if (!root || typeof root.querySelectorAll !== 'function') return found;
+          found.push(...root.querySelectorAll(selector));
+          for (const element of root.querySelectorAll('*')) {
+            if (element.shadowRoot) deepFindAll(element.shadowRoot, selector, found);
+          }
+          return found;
+        };
+        const item = deepFindAll(document, 'extensions-item').find(element =>
+          element.data?.id === id || element.getAttribute('id') === id
+        );
+        const reloadButton = item && deepFindAll(item.shadowRoot || item, '#dev-reload-button')[0];
+        if (!reloadButton || reloadButton.disabled) {
+          return { clicked: false, itemFound: !!item, buttonFound: !!reloadButton, disabled: reloadButton?.disabled ?? null };
+        }
+        reloadButton.click();
+        return { clicked: true, extensionId: id };
+      }, extensionId);
+      writeLog(cycle, 'extensions-manager-reload-click', reloadClick);
+      expect(reloadClick.clicked, 'chrome://extensions Reload button was clicked for cycle ' + cycle).toBe(true);
 
       let replacementState = null;
       let lastWakeError = null;
@@ -3542,6 +3582,8 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
           try {
             await wakePage.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
             writeLog(cycle, 'wake-page-reloaded', { url: wakePage.url() });
+            await wakePage.waitForFunction(() => window.__blbSuiteContentScriptFileExecutedV3 === true, null, { timeout: 10000 });
+            writeLog(cycle, 'content-script-file-executed');
             await expect(button).toBeAttached({ timeout: 10000 });
             await wakePage.evaluate(() => {
               const paragraph = document.createElement('p');
@@ -3620,10 +3662,8 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
       writeLog(cycle, 'replacement-worker-ready', replacementState);
       writeLog(cycle, 'cycle-passed');
 
-      // Close only tabs opened by Show on BLB; keep the wake page for the next
-      // cycle so the next reload can reinject a fresh content-script instance.
       for (const page of context.pages()) {
-        if (page !== wakePage) await page.close().catch(() => {});
+        if (page !== wakePage && page !== managerPage) await page.close().catch(() => {});
       }
     }
 
