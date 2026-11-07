@@ -60,6 +60,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/webster-collector-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/blb-auto-hyperlinker.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/blb-draggable-button.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/audit-defect-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/study-reference-capture.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/study-session-export.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/case-sensitive-routing-behavior.spec.js", "import { test } from '@playwright/test';\n");
