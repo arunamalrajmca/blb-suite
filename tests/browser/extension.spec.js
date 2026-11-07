@@ -141,6 +141,37 @@ test('MV3 service worker starts', async ({ context, extensionId }) => {
   expect(context.serviceWorkers().length).toBeGreaterThan(0);
 });
 
+test('MV3 service worker restarts and reloads its packaged imports', async ({ context, extensionId, extensionWorker }) => {
+  const restartedWorkerPromise = context.waitForEvent('serviceworker', { timeout: 15000 });
+  try {
+    await extensionWorker.evaluate(() => self.close());
+  } catch (_) {
+    // Closing the worker can invalidate the evaluation context before it replies.
+  }
+
+  const page = await context.newPage();
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  const response = await page.evaluate(() =>
+    chrome.runtime.sendMessage({type:'blbSuiteGetDefaultSiteStatus', hostname:'facebook.com'})
+  );
+  expect(response).toBeTruthy();
+
+  const restartedWorker = await restartedWorkerPromise;
+  const startupState = await restartedWorker.evaluate(() => ({
+    booksLoaded:Array.isArray(BOOKS) && BOOKS.length === 66,
+    referenceResolverLoaded:typeof resolveBibleReference === 'function',
+    selectionHelpersLoaded:typeof classifySelectionForBlb === 'function',
+    sessionStorageAvailable:!!chrome.storage.session
+  }));
+  expect(startupState).toEqual({
+    booksLoaded:true,
+    referenceResolverLoaded:true,
+    selectionHelpersLoaded:true,
+    sessionStorageAvailable:true
+  });
+  await page.close();
+});
+
 test('KJV phrase candidate index loads only when Criteria phrase matching needs it', async ({ extensionWorker, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const initial = await extensionWorker.evaluate(() => ({
