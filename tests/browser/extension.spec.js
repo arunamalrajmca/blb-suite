@@ -3502,17 +3502,36 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
       } catch (error) {
         writeLog(cycle, 'reload-call-rejected', { name: error.name, message: error.message });
       }
-      await extensionPage.close().catch(error => {
-        writeLog(cycle, 'stale-popup-close-rejected', { message: error.message });
-      });
-
-      // Observe the real worker restart through Playwright's service-worker
-      // lifecycle event. Avoid unsupported browser-target ServiceWorker CDP
-      // commands and avoid extension-page navigation during the reload window.
+      // Keep the extension page alive across runtime.reload. The page is
+      // the supported extension-origin source for a message that wakes the
+      // reloaded worker; closing it here can leave the worker dormant.
       let replacementState = null;
       let lastWakeError = null;
+      let lastWakeAt = 0;
+      let wakeAttempts = 0;
       const deadline = Date.now() + 20000;
       while (Date.now() < deadline && !replacementState) {
+        if (!extensionPage.isClosed() && wakeAttempts < 8 && Date.now() - lastWakeAt >= 500) {
+          lastWakeAt = Date.now();
+          wakeAttempts++;
+          try {
+            const response = await extensionPage.evaluate(() =>
+              chrome.runtime.sendMessage({
+                type: 'blbSuiteGetDefaultSiteStatus',
+                hostname: 'facebook.com'
+              })
+            );
+            writeLog(cycle, 'worker-wake-message-response', { attempt: wakeAttempts, response });
+          } catch (error) {
+            lastWakeError = error;
+            writeLog(cycle, 'worker-wake-message-rejected', {
+              attempt: wakeAttempts,
+              name: error.name,
+              message: error.message,
+              pageClosed: extensionPage.isClosed()
+            });
+          }
+        }
         const workers = context.serviceWorkers().filter(worker => worker.url() === workerUrl);
         const candidates = observedReplacementWorker
           ? [...new Set([...workers, observedReplacementWorker])]
