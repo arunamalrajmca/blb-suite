@@ -71,6 +71,15 @@ test('source Bible redirect module loads before content and preserves explicit d
   }
 });
 
+test('service-worker importScripts dependencies exist in the packaged extension source', () => {
+  const background = read('background.js');
+  const match = background.match(/^\\uFEFF?\\s*importScripts\\(([^;]+)\\);/);
+  assert(match, 'background.js must declare its startup importScripts bundle');
+  const imports = [...match[1].matchAll(/'([^']+)'/g)].map(item => item[1]);
+  assert(imports.length > 0, 'service-worker importScripts bundle must not be empty');
+  for (const file of imports) assert(fs.existsSync(path.join(ROOT, file)), `missing service-worker import: ${file}`);
+});
+
 test('manifest-referenced files exist', () => {
   const m = JSON.parse(read('manifest.json'));
   const refs = [m.background?.service_worker, m.options_page, ...(m.content_scripts||[]).flatMap(x=>x.js||[]), ...Object.values(m.icons||{}), m.action?.default_popup].filter(Boolean);
