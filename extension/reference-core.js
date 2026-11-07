@@ -185,21 +185,34 @@ function resolveBibleReferenceText(text, options = {}) {
   if (!source) return [];
   const refs = [];
   const seen = new Set();
-  const add = (book, chapter, from = null, to = null, originalText = '') => {
+  const refsByKey = new Map();
+  const explicitPositions = [];
+  const add = (book, chapter, from = null, to = null, originalText = '', sourceStart = -1, sourceEnd = -1) => {
     if (!book || !Number.isInteger(chapter)) return;
     const resolved = resolveBibleReference(book.name, chapter, from, to);
     if (!resolved) return;
     const key = `${resolved.book.urlKey}|${resolved.chapter}|${resolved.from}|${resolved.to}`;
-    if (seen.has(key)) return;
-    seen.add(key);
-    refs.push({
-      book: resolved.book.name,
-      chapter: resolved.chapter,
-      from: resolved.from,
-      to: resolved.to,
-      text: String(originalText || '').trim(),
-      url: resolved.url
-    });
+    let ref = refsByKey.get(key);
+    if (!ref) {
+      seen.add(key);
+      ref = {
+        book: resolved.book.name,
+        chapter: resolved.chapter,
+        from: resolved.from,
+        to: resolved.to,
+        text: String(originalText || '').trim(),
+        url: resolved.url
+      };
+      refsByKey.set(key, ref);
+      refs.push(ref);
+    }
+    // Keep every explicit occurrence for shorthand-context lookup, even when
+    // the resolved destination itself is already present in the deduplicated
+    // output list.
+    if (Number.isInteger(sourceStart) && sourceStart >= 0 &&
+        Number.isInteger(sourceEnd) && sourceEnd >= sourceStart) {
+      explicitPositions.push({ ref, start:sourceStart, end:sourceEnd });
+    }
   };
 
   let m;
@@ -207,7 +220,7 @@ function resolveBibleReferenceText(text, options = {}) {
   while ((m = colonRangeRe.exec(source))) {
     if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
     const match = resolveBibleBookCapture(m);
-    if (match) add(match.book, Number(m[2]), Number(m[3]), Number(m[4]), match.text);
+    if (match) add(match.book, Number(m[2]), Number(m[3]), Number(m[4]), match.text, m.index, m.index + m[0].length);
   }
 
   const colonRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)\s*[:.]\s*(-?\d+)(?:[a-z])?(?!\s*[-–—]\s*-?\d)(?![A-Za-z0-9])/gi;
@@ -220,7 +233,7 @@ function resolveBibleReferenceText(text, options = {}) {
     // reference unless the chapter is 1. This prevents numbered prose after a
     // verse from being clamped to an unrelated verse in Philemon or Jude.
     if (match.book.chapterCount === 1 && chapter !== 1) continue;
-    add(match.book, chapter, Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), match.text);
+    add(match.book, chapter, Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), match.text, m.index, m.index + m[0].length);
   }
 
   const chapterOnlyRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)(?!\s*[:.]\s*-?\d)(?!\s+-?\d)(?=$|[\s,.;:!?\)\]\}])/gi;
@@ -228,7 +241,7 @@ function resolveBibleReferenceText(text, options = {}) {
     if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
     const match = resolveBibleBookCapture(m);
     if (!match || match.book.chapterCount === 1) continue;
-    add(match.book, Number(m[2]), null, null, match.text);
+    add(match.book, Number(m[2]), null, null, match.text, m.index, m.index + m[0].length);
   }
 
   const oneChapterRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s*(-?\d+)(?:\s*[-–—]\s*(-?\d+))?(?!\s*[:.]\s*-?\d)(?!\s+-?\d(?!\s*\.\s+[A-Z]))(?![A-Za-z0-9])/gi;
@@ -236,7 +249,7 @@ function resolveBibleReferenceText(text, options = {}) {
     if (isShadowedNumberedOrRomanBookMatch(source, m.index)) continue;
     const match = resolveBibleBookCapture(m);
     if (!match || match.book.chapterCount !== 1) continue;
-    add(match.book, 1, Number(m[2]), m[3] ? Number(m[3]) : Number(m[2]), match.text);
+    add(match.book, 1, Number(m[2]), m[3] ? Number(m[3]) : Number(m[2]), match.text, m.index, m.index + m[0].length);
   }
 
   const spacedRe = /(?<![A-Za-z0-9])(?!and\b|or\b)((?:[1-3][\s._-]*|i{1,3}[\s._-]*)?[A-Za-z][A-Za-z0-9.'-]{0,24}(?:\s+[A-Za-z][A-Za-z0-9.'-]{0,24}){0,3})\s+(-?\d+)\s+(-?\d+)(?:\s*[-–—]\s*(-?\d+))?(?![A-Za-z0-9])/gi;
@@ -256,10 +269,7 @@ function resolveBibleReferenceText(text, options = {}) {
   // each token sequentially is important: a comma verse (",21") may establish
   // the nearest context for a following semicolon chapter:verse ("; 21:24").
   // Separate passes lose that chain of context and silently drop later verses.
-  const shorthandPositions = refs.map(ref => {
-    const start = source.indexOf(ref.text);
-    return { ref, start, end: start + ref.text.length };
-  }).filter(item => item.start >= 0);
+  const shorthandPositions = explicitPositions;
 
   const findPriorReference = index => shorthandPositions
     .filter(item => item.end <= index)
@@ -316,7 +326,11 @@ function resolveBibleReferenceText(text, options = {}) {
     }
   }
 
-  const referencePosition = new Map(shorthandPositions.map(item => [item.ref, item.start]));
+  const referencePosition = new Map();
+  for (const item of shorthandPositions) {
+    const previous = referencePosition.get(item.ref);
+    if (previous === undefined || item.start < previous) referencePosition.set(item.ref, item.start);
+  }
   refs.sort((a, b) => (referencePosition.get(a) ?? Number.MAX_SAFE_INTEGER) - (referencePosition.get(b) ?? Number.MAX_SAFE_INTEGER));
   return refs;
 }
