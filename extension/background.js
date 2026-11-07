@@ -2581,6 +2581,11 @@ async function hasHostAccessForTab(tab) {
   catch (_) { return false; }
 }
 
+function isTabUnavailableError(error) {
+  const message = String(error?.message || error || '');
+  return /no tab with id|tab .*not found|cannot access contents of the page/i.test(message);
+}
+
 function describeScriptInjectionError(error) {
   const properties = {};
   if (error && (typeof error === 'object' || typeof error === 'function')) {
@@ -2836,6 +2841,7 @@ async function ensureContentScriptInTab(tabId) {
             world:'MAIN'
           });
         } catch (error) {
+          if (isTabUnavailableError(error)) return false;
           console.error('KJV Scripture Tools MAIN-world script injection failed:', {
             tabId, tabUrl:tab.url, files:['redirect-christianity-main-world.js'], error:String(error)
           });
@@ -2855,6 +2861,7 @@ async function ensureContentScriptInTab(tabId) {
               try {
                 await chrome.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
               } catch (error) {
+                if (isTabUnavailableError(error)) return false;
                 console.error('KJV Scripture Tools ScriptTagger injection failed:', {
                   tabId, tabUrl:tab.url, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES, error:String(error)
                 });
@@ -2869,6 +2876,9 @@ async function ensureContentScriptInTab(tabId) {
       try {
         await chrome.scripting.executeScript({target:{tabId}, files});
       } catch (error) {
+        // Tabs can close or navigate away between tabs.get() and executeScript().
+        // This is a normal lifecycle race, not a broken extension resource.
+        if (isTabUnavailableError(error)) return false;
         const errorDetails = describeScriptInjectionError(error);
         const packagedFileChecks = await inspectPackagedScriptFiles(files);
         console.error('KJV Scripture Tools content-script injection failed: ' + JSON.stringify({
@@ -2905,6 +2915,7 @@ async function ensureContentScriptInTab(tabId) {
 
       return true;
     } catch (error) {
+      if (isTabUnavailableError(error)) return false;
       console.error('KJV Scripture Tools content-script activation failed:', {
         tabId, error:String(error)
       });

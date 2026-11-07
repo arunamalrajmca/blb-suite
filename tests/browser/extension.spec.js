@@ -3078,7 +3078,20 @@ test('concurrent tabs serialize runtime script registration for the same origin'
   });
 });
 
-test('persisted registration audit detects unavailable package scripts without changing registrations', async ({ extensionWorker }) => {
+test('tab lifecycle errors are classified as benign injection races', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => ({
+    closedTab:isTabUnavailableError(new Error('No tab with id: 1145301837')),
+    missingTab:isTabUnavailableError(new Error('Tab 42 not found')),
+    realInjectionFailure:isTabUnavailableError(new Error('Could not load file: content.js'))
+  }));
+  expect(result).toEqual({
+    closedTab:true,
+    missingTab:true,
+    realInjectionFailure:false
+  });
+});
+
+testAnchor
   const result = await extensionWorker.evaluate(async () => {
     const before = await chrome.scripting.getRegisteredContentScripts();
     const audit = await auditPersistedRuntimeContentScriptRegistrations([
