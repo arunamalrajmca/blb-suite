@@ -2727,14 +2727,14 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
   const pattern = originPatternForUrl(tab?.url);
   if (!pattern) return false;
   const id = runtimeContentScriptIdForPattern(pattern);
-  const pending = runtimeContentScriptRegistrationLocks.get(id);
-  if (pending) {
-    await pending;
-    // The first registration may have used a different file set. Re-read and
-    // reconcile after it completes rather than assuming its result matches.
-    return registerRuntimeContentScriptForPattern(tab, files);
-  }
-  const operation = registerRuntimeContentScriptForPattern(tab, files);
+
+  // Chain every request for this registration ID. Waiting callers must also
+  // take their turn through the queue; simply awaiting the current promise
+  // and then registering directly would let multiple waiters race together.
+  const previous = runtimeContentScriptRegistrationLocks.get(id) || Promise.resolve();
+  const operation = previous
+    .catch(() => {})
+    .then(() => registerRuntimeContentScriptForPattern(tab, files));
   runtimeContentScriptRegistrationLocks.set(id, operation);
   try {
     return await operation;
