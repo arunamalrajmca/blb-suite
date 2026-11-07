@@ -3576,44 +3576,8 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
 
       let replacementState = null;
       let lastWakeError = null;
-      const deadline = Date.now() + 20000;
-      let wakeAttempted = false;
-      while (Date.now() < deadline && !replacementState) {
-        if (!wakeAttempted) {
-          try {
-            await wakePage.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
-            writeLog(cycle, 'wake-page-reloaded', { url: wakePage.url() });
-            await wakePage.waitForFunction(() => window.__blbSuiteContentScriptFileExecutedV3 === true, null, { timeout: 10000 });
-            writeLog(cycle, 'content-script-file-executed');
-            await expect(button).toBeAttached({ timeout: 10000 });
-            await wakePage.evaluate(() => {
-              const paragraph = document.createElement('p');
-              paragraph.id = 'blb-e2e-reload-stress-selection';
-              paragraph.textContent = 'John 3:16';
-              document.body.appendChild(paragraph);
-              const range = document.createRange();
-              range.selectNodeContents(paragraph);
-              const selection = window.getSelection();
-              selection.removeAllRanges();
-              selection.addRange(range);
-              document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
-            });
-            await expect(button).toBeVisible({ timeout: 10000 });
-            await button.click();
-            writeLog(cycle, 'show-on-blb-wake-action-dispatched', { selectedText: 'John 3:16' });
-            wakeAttempted = true;
-          } catch (error) {
-            lastWakeError = error;
-            writeLog(cycle, 'show-on-blb-wake-action-rejected', {
-              name: error.name,
-              message: error.message,
-              pageUrl: wakePage.url(),
-              pageClosed: wakePage.isClosed()
-            });
-            break;
-          }
-        }
-
+      const workerDeadline = Date.now() + 10000;
+      while (Date.now() < workerDeadline && !replacementState) {
         const workers = context.serviceWorkers().filter(worker => worker.url() === workerUrl);
         const candidates = observedReplacementWorker
           ? [...new Set([...workers, observedReplacementWorker])]
@@ -3632,9 +3596,9 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
         }
         if (!replacementState) await new Promise(resolve => setTimeout(resolve, 100));
       }
-      context.off('serviceworker', onReplacementWorker);
 
       if (!replacementState) {
+        context.off('serviceworker', onReplacementWorker);
         let targetDiagnostics = null;
         try {
           const targets = await browserCdp.send('Target.getTargets');
@@ -3654,13 +3618,74 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
           visibleWorkers: await Promise.all(
             context.serviceWorkers().filter(worker => worker.url() === workerUrl).map(readWorkerState)
           ),
-          targetDiagnostics,
-          lastWakeError: lastWakeError ? { name: lastWakeError.name, message: lastWakeError.message } : null
+          targetDiagnostics
         });
-        throw new Error('Extension did not expose a replacement worker after reload cycle ' + cycle + ': ' + (lastWakeError?.message || 'worker unavailable'));
+        throw new Error('Extension did not expose a replacement worker after Reload button click in cycle ' + cycle);
+      }
+      writeLog(cycle, 'replacement-worker-ready', replacementState);
+      context.off('serviceworker', onReplacementWorker);
+
+      // Give the extension manager a short window to finish re-registering
+      // content scripts, then reload the test page until the fresh script is
+      // observable. Every attempt is logged for fast diagnosis.
+      await new Promise(resolve => setTimeout(resolve, 400));
+      let contentScriptReady = false;
+      for (let attempt = 1; attempt <= 6 && !contentScriptReady; attempt++) {
+        try {
+          await wakePage.reload({ waitUntil: 'domcontentloaded', timeout: 10000 });
+          writeLog(cycle, 'wake-page-reloaded', { attempt, url: wakePage.url() });
+          await wakePage.waitForFunction(
+            () => window.__blbSuiteContentScriptFileExecutedV3 === true,
+            null,
+            { timeout: 2000 }
+          );
+          contentScriptReady = true;
+          writeLog(cycle, 'content-script-file-executed', { attempt });
+        } catch (error) {
+          lastWakeError = error;
+          writeLog(cycle, 'content-script-injection-retry', {
+            attempt,
+            name: error.name,
+            message: error.message,
+            pageUrl: wakePage.url()
+          });
+          if (attempt < 6) await new Promise(resolve => setTimeout(resolve, 400));
+        }
+      }
+      if (!contentScriptReady) {
+        throw new Error('Replacement worker started, but content script was not reinjected in cycle ' + cycle + ': ' + (lastWakeError?.message || 'marker unavailable'));
       }
 
-      writeLog(cycle, 'replacement-worker-ready', replacementState);
+      await expect(button).toBeAttached({ timeout: 5000 });
+      await wakePage.evaluate(() => {
+        const paragraph = document.createElement('p');
+        paragraph.id = 'blb-e2e-reload-stress-selection';
+        paragraph.textContent = 'John 3:16';
+        document.body.appendChild(paragraph);
+        const range = document.createRange();
+        range.selectNodeContents(paragraph);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      });
+      await expect(button).toBeVisible({ timeout: 5000 });
+      await button.click();
+      writeLog(cycle, 'show-on-blb-wake-action-dispatched', { selectedText: 'John 3:16' });
+
+      await expect.poll(async () => context.pages().some(page => {
+        try {
+          const url = new URL(page.url());
+          return url.hostname === 'www.blueletterbible.org' &&
+            url.pathname.startsWith('/kjv/jhn/3/16');
+        } catch (_) {
+          return false;
+        }
+      }), { timeout: 10000, intervals: [50, 100, 200, 500] }).toBe(true);
+      writeLog(cycle, 'show-on-blb-action-completed', {
+        blbTabs: context.pages().map(page => page.url()).filter(url => url.includes('blueletterbible.org'))
+      });
+
       writeLog(cycle, 'cycle-passed');
 
       for (const page of context.pages()) {
