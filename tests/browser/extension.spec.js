@@ -3431,8 +3431,8 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
     fs.appendFileSync(logPath, line + '\n');
   };
 
-  const workerUrl = \`chrome-extension://\${extensionId}/background.js\`;
-  const scopeURL = \`chrome-extension://\${extensionId}/\`;
+  const workerUrl = `chrome-extension://${extensionId}/background.js`;
+  const scopeURL = `chrome-extension://${extensionId}/`;
   const browser = context.browser();
   const browserCdp = await browser.newBrowserCDPSession();
   await browserCdp.send('Target.setDiscoverTargets', { discover: true });
@@ -3459,9 +3459,9 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
     for (let cycle = 1; cycle <= 100; cycle++) {
       writeLog(cycle, 'cycle-start');
       const beforeWorkers = context.serviceWorkers().filter(worker => worker.url() === workerUrl);
-      expect(beforeWorkers.length, \`an active service worker exists before cycle \${cycle}\`).toBeGreaterThan(0);
+      expect(beforeWorkers.length, `an active service worker exists before cycle ${cycle}`).toBeGreaterThan(0);
       const previousWorkerState = await readWorkerState(beforeWorkers[0]);
-      expect(previousWorkerState.unavailable, \`previous worker is readable before cycle \${cycle}\`).not.toBe(true);
+      expect(previousWorkerState.unavailable, `previous worker is readable before cycle ${cycle}`).not.toBe(true);
       writeLog(cycle, 'previous-worker-state', previousWorkerState);
 
       const extensionPage = await context.newPage();
@@ -3485,7 +3485,7 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
         });
       });
 
-      await extensionPage.goto(\`chrome-extension://\${extensionId}/popup.html\`);
+      await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`);
       writeLog(cycle, 'popup-loaded', { url: extensionPage.url() });
 
       try {
@@ -3558,7 +3558,7 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
           targetDiagnostics,
           lastWakeError: lastWakeError ? { name: lastWakeError.name, message: lastWakeError.message } : null
         });
-        throw new Error(\`Extension did not expose a replacement worker after reload cycle \${cycle}: \${lastWakeError?.message || 'worker unavailable'}\`);
+        throw new Error(`Extension did not expose a replacement worker after reload cycle ${cycle}: ${lastWakeError?.message || 'worker unavailable'}`);
       }
 
       writeLog(cycle, 'replacement-worker-ready', replacementState);
