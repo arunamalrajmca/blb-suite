@@ -40,3 +40,12 @@ test("unselected matrix entries are omitted before runner allocation", () => {
   assert.deepEqual(selectReferenceMatrix(entries, { changedSpecs: "tests/browser/redirect-hostnames.spec.js" }).map(x => x.group), ["redirect-source-smoke-batch"]);
   assert.deepEqual(selectReferenceMatrix(entries, { changedSpecs: "" }), []);
 });
+
+test("extension browser spec changes select its explicit worker-startup regression group", () => {
+  const selected = selectReferenceMatrix(entries, {
+    changedBrowserSpecs: "tests/browser/extension.spec.js"
+  });
+  assert.deepEqual(selected.map(entry => entry.group), ["extension-spec-reference-coverage"]);
+  assert.equal(selected[0].file, "tests/browser/extension.spec.js");
+  assert.match(selected[0].grep, /MV3 service worker repeatedly cold-starts after rapid termination/);
+});
