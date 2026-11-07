@@ -29,12 +29,13 @@ export function selectReferenceMatrix(entries, { full = false, changedSpecs = ""
   if (full) return entries;
   const selected = new Set(String(changedSpecs).split(",").filter(Boolean));
   const changedBrowser = new Set(String(changedBrowserSpecs).split(",").filter(Boolean));
+  const changed = new Set([...selected, ...changedBrowser]);
   return entries.filter(entry => {
     const specs = entry.files || [entry.file || "tests/browser/extension.spec.js"];
     // A batched entry is selected when any included spec changes. Generic
     // extension.spec entries remain excluded when that spec itself was edited
     // alongside runtime, matching the prior step-level predicate.
-    return specs.some(spec => selected.has(spec)) &&
+    return specs.some(spec => changed.has(spec)) &&
       (Boolean(entry.file || entry.files) || !changedBrowser.has("tests/browser/extension.spec.js"));
   });
 }
