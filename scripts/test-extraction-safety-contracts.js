@@ -69,13 +69,12 @@ try {
   assert.ok(worker, 'manifest service worker entry must exist');
   assert.ok(fs.existsSync(path.join(extension, worker)), 'manifest service worker file must exist: ' + worker);
   const background = read(path.join('extension', worker));
-  const imports = [...background.matchAll(/importScripts\(([^)]*)\)/g)];
-  assert.ok(imports.length > 0, 'service worker must explicitly import its shared dependencies');
-  const importedFiles = imports.flatMap(match => {
-    const values = match[1].matchAll(/['"]([^'"]+\.js)['"]/g);
-    return [...values].map(value => value[1]);
-  });
-  assert.ok(importedFiles.length > 0, 'service worker importScripts must contain JavaScript paths');
+  const importList = background.match(/const BLB_BACKGROUND_STARTUP_IMPORTS = \[([\s\S]*?)\];/);
+  assert.ok(importList, 'service worker must declare its startup dependency list');
+  const importedFiles = [...importList[1].matchAll(/['"]([^'"]+\\.js)['"]/g)].map(value => value[1]);
+  assert.ok(importedFiles.length > 0, 'service-worker startup import list must contain JavaScript paths');
+  assert.ok(background.includes('importScripts(scriptFile)'), 'service-worker dependencies must be imported individually');
+  assert.ok(background.includes('background startup import failed'), 'service-worker import errors must identify the failing filename');
   for (const file of importedFiles) {
     assert.ok(fs.existsSync(path.join(extension, file)), 'service-worker dependency must exist: ' + file);
   }
