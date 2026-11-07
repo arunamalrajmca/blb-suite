@@ -3366,3 +3366,44 @@ test('reinjecting the current content bundle replaces a stale Show on BLB contro
     selectedText:'John 3:16'
   });
 });
+
+
+test('MV3 service worker repeatedly cold-starts after rapid termination', async ({ context, extensionId }) => {
+  const extensionPage = await context.newPage();
+  await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`);
+  const cdp = await context.newCDPSession(extensionPage);
+
+  // Repeatedly terminate the worker and immediately wake it through a real
+  // extension message. This stresses startup/importScripts across consecutive
+  // cold starts; it is a worker-restart proxy, not a full chrome://extensions
+  // reload (which unloads the extension itself).
+  for (let cycle = 1; cycle <= 6; cycle++) {
+    const targets = await cdp.send('Target.getTargets');
+    const workerTarget = targets.targetInfos.find(target =>
+      target.type === 'service_worker' &&
+      target.url === `chrome-extension://${extensionId}/background.js`
+    );
+    expect(workerTarget, `service worker must be running before restart cycle ${cycle}`).toBeTruthy();
+
+    await cdp.send('Target.closeTarget', { targetId: workerTarget.targetId });
+
+    await expect.poll(async () => {
+      try {
+        const response = await extensionPage.evaluate(() =>
+          chrome.runtime.sendMessage({
+            type: 'blbSuiteGetDefaultSiteStatus',
+            hostname: 'facebook.com'
+          })
+        );
+        return !!response;
+      } catch (_) {
+        return false;
+      }
+    }, {
+      timeout: 10000,
+      intervals: [25, 50, 100, 200]
+    }).toBe(true);
+  }
+
+  await extensionPage.close();
+});
