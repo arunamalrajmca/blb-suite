@@ -73,9 +73,10 @@ test('source Bible redirect module loads before content and preserves explicit d
 
 test('service-worker importScripts dependencies exist in the packaged extension source', () => {
   const background = read('background.js');
-  const match = background.match(/const BLB_BACKGROUND_STARTUP_IMPORTS = \\[([\\s\\S]*?)\\];/);
-  assert(match, 'background.js must declare its startup import bundle');
-  const imports = [...match[1].matchAll(/'([^']+)'/g)].map(item => item[1]);
+  const start = background.indexOf('const BLB_BACKGROUND_STARTUP_IMPORTS = [');
+  const end = background.indexOf('\\n];', start);
+  assert(start >= 0 && end > start, 'background.js must declare its startup import bundle');
+  const imports = [...background.slice(start, end).matchAll(/'([^']+)'/g)].map(item => item[1]);
   assert(imports.length > 0, 'service-worker startup import bundle must not be empty');
   for (const file of imports) assert(fs.existsSync(path.join(ROOT, file)), 'missing service-worker import: ' + file);
   assert(background.includes('background startup import failed'), 'startup import failures must report the exact file');
