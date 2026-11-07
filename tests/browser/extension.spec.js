@@ -3409,7 +3409,7 @@ test('MV3 service worker repeatedly cold-starts after rapid termination', async 
 });
 
 test('MV3 extension survives 100 full runtime reloads with diagnostics', async ({ context, extensionId }) => {
-  test.setTimeout(240000);
+  test.setTimeout(300000);
 
   const fs = require('node:fs');
   const path = require('node:path');
@@ -3417,10 +3417,11 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   fs.writeFileSync(logPath, '');
 
+  const startedAt = Date.now();
   const writeLog = (cycle, event, details = {}) => {
     const record = {
       timestamp: new Date().toISOString(),
-      elapsedMs: Math.round(performance.now()),
+      elapsedMs: Date.now() - startedAt,
       cycle,
       event,
       ...details
@@ -3430,16 +3431,33 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
     fs.appendFileSync(logPath, line + '\n');
   };
 
-  // Record worker lifecycle independently of the per-cycle assertions.
+  const workerUrl = `chrome-extension://${extensionId}/background.js`;
   context.on('serviceworker', worker => {
     writeLog(0, 'service-worker-created', { url: worker.url() });
     worker.on('close', () => writeLog(0, 'service-worker-closed', { url: worker.url() }));
   });
 
+  const readWorkerState = async worker => {
+    try {
+      return await worker.evaluate(() => ({
+        runtimeId: chrome.runtime.id,
+        manifestVersion: chrome.runtime.getManifest().manifest_version,
+        workerTimeOrigin: performance.timeOrigin
+      }));
+    } catch (error) {
+      return { unavailable: true, error: error.message };
+    }
+  };
+
   for (let cycle = 1; cycle <= 100; cycle++) {
     writeLog(cycle, 'cycle-start');
-    const extensionPage = await context.newPage();
+    const beforeWorkers = context.serviceWorkers().filter(worker => worker.url() === workerUrl);
+    expect(beforeWorkers.length, `an active service worker exists before cycle ${cycle}`).toBeGreaterThan(0);
+    const previousWorkerState = await readWorkerState(beforeWorkers[0]);
+    expect(previousWorkerState.unavailable, `previous worker is readable before cycle ${cycle}`).not.toBe(true);
+    writeLog(cycle, 'previous-worker-state', previousWorkerState);
 
+    const extensionPage = await context.newPage();
     extensionPage.on('console', message => {
       if (message.type() === 'error' || message.type() === 'warning') {
         writeLog(cycle, 'extension-page-console', {
@@ -3467,50 +3485,56 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
     await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`);
     writeLog(cycle, 'popup-loaded', { url: extensionPage.url() });
 
-    // Arm the worker-created listener before requesting the full extension
-    // reload. The popup is expected to be destroyed by runtime.reload().
-    const nextWorker = context.waitForEvent('serviceworker', { timeout: 20000 });
+    // A worker restart is not guaranteed to produce a Playwright
+    // BrowserContext "serviceworker" event. Poll the live worker registry and
+    // require a new execution-context timeOrigin instead of waiting on that
+    // event as the sole signal.
     try {
       await extensionPage.evaluate(() => chrome.runtime.reload());
       writeLog(cycle, 'reload-call-returned');
     } catch (error) {
-      // Context destruction is normal when runtime.reload() unloads the popup;
-      // retain the exact error so an unexpected failure is not hidden.
       writeLog(cycle, 'reload-call-rejected', {
         name: error.name,
         message: error.message
       });
     }
 
-    const worker = await nextWorker;
-    writeLog(cycle, 'replacement-worker-observed', { url: worker.url() });
-    expect(worker.url(), `worker URL after extension reload cycle ${cycle}`)
-      .toBe(`chrome-extension://${extensionId}/background.js`);
-
+    let replacementState = null;
     try {
       await expect.poll(async () => {
-        try {
-          return await worker.evaluate(() => ({
-            manifestVersion: chrome.runtime.getManifest().manifest_version,
-            runtimeId: chrome.runtime.id
-          }));
-        } catch (_) {
-          return null;
+        const currentWorkers = context.serviceWorkers().filter(worker => worker.url() === workerUrl);
+        for (const worker of currentWorkers) {
+          const state = await readWorkerState(worker);
+          if (
+            !state.unavailable &&
+            state.runtimeId === extensionId &&
+            state.manifestVersion === 3 &&
+            state.workerTimeOrigin !== previousWorkerState.workerTimeOrigin
+          ) {
+            replacementState = state;
+            return state;
+          }
         }
-      }, { timeout: 15000, intervals: [25, 50, 100, 200, 500] }).toMatchObject({
-        manifestVersion: 3,
-        runtimeId: extensionId
+        return null;
+      }, {
+        timeout: 20000,
+        intervals: [25, 50, 100, 200, 500]
+      }).toMatchObject({
+        runtimeId: extensionId,
+        manifestVersion: 3
       });
-      const readiness = await worker.evaluate(() => ({
-        manifestVersion: chrome.runtime.getManifest().manifest_version,
-        runtimeId: chrome.runtime.id
-      }));
-      writeLog(cycle, 'worker-ready', readiness);
+      writeLog(cycle, 'replacement-worker-ready', replacementState);
     } catch (error) {
-      writeLog(cycle, 'worker-readiness-failed', {
+      const visibleWorkers = await Promise.all(
+        context.serviceWorkers()
+          .filter(worker => worker.url() === workerUrl)
+          .map(readWorkerState)
+      );
+      writeLog(cycle, 'replacement-worker-timeout', {
+        previousWorkerState,
+        visibleWorkers,
         name: error.name,
-        message: error.message,
-        workerUrl: worker.url()
+        message: error.message
       });
       throw error;
     }
