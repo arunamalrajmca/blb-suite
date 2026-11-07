@@ -27,7 +27,7 @@ export function validateReferenceMatrix(entries) {
 export function selectReferenceMatrix(entries, { full = false, changedSpecs = "", changedBrowserSpecs = "", reloadStressOnly = false } = {}) {
   validateReferenceMatrix(entries);
   // The temporary PR label keeps the complete matrix definition intact while selecting only the reload stress case.
-  if (reloadStressOnly) return entries.filter(entry => entry.group === "extension-spec-reference-coverage").map(entry => ({ ...entry, grep: "MV3" }));
+  if (reloadStressOnly) return entries.filter(entry => entry.group === "extension-spec-reference-coverage").map(entry => ({ ...entry, grep: "MV3 extension survives 100 full runtime reloads with diagnostics" }));
   if (full) return entries;
   const selected = new Set(String(changedSpecs).split(",").filter(Boolean));
   const changedBrowser = new Set(String(changedBrowserSpecs).split(",").filter(Boolean));
