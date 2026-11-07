@@ -1,4 +1,34 @@
-importScripts('study-session-normalization.js', 'multiverse-reference-helpers.js', 'study-session-export.js', 'selection-text-helpers.js', 'omnibox-search-helpers.js', 'regex-patterns.js', 'kjv-corpus-word-index.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'books.js', 'book-aliases.js', 'reference-core.js');
+const BLB_BACKGROUND_STARTUP_IMPORTS = [
+  'study-session-normalization.js',
+  'multiverse-reference-helpers.js',
+  'study-session-export.js',
+  'selection-text-helpers.js',
+  'omnibox-search-helpers.js',
+  'regex-patterns.js',
+  'kjv-corpus-word-index.js',
+  'case-sensitive-search-core.js',
+  'case-sensitive-routing.js',
+  'books.js',
+  'book-aliases.js',
+  'reference-core.js'
+];
+
+// Import startup dependencies individually so a transient/missing resource is
+// identified by filename instead of Chromium's generic "fetching the script"
+// service-worker startup error.
+for (const scriptFile of BLB_BACKGROUND_STARTUP_IMPORTS) {
+  try {
+    importScripts(scriptFile);
+  } catch (error) {
+    console.error('KJV Scripture Tools background startup import failed: ' + JSON.stringify({
+      file:scriptFile,
+      errorName:error?.name || '',
+      errorMessage:error?.message || String(error),
+      errorStack:error?.stack || ''
+    }));
+    throw error;
+  }
+}
 let KJV_CORPUS_PHRASE_INDEX = null;
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
