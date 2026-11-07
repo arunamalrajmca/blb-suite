@@ -338,14 +338,18 @@ jobs:
             # Playwright's positional path filter is unreliable for this
             # matrix invocation. Its unique title safely selects it globally.
             if [[ "$MATRIX_GREP" == "MV3 extension survives 100 full runtime reloads with diagnostics" ]]; then
+              echo "Diagnostic: runner context and test inventory"
+              pwd
+              node -e "console.log('Playwright package:', require.resolve('@playwright/test')); console.log('Config testDir:', require('./playwright.config.js').testDir)"
+              find tests/browser -maxdepth 1 -type f -name '*.spec.js' | head -20
               set +e
-              list_output="$(npx playwright test --grep "$MATRIX_GREP" --list 2>&1)"
+              list_output="$(npx playwright test --config=playwright.config.js --grep "$MATRIX_GREP" --list 2>&1)"
               list_status=$?
               set -e
               printf '%s\n' "$list_output"
               if (( list_status != 0 )); then
                 echo "Diagnostic: unfiltered Playwright test inventory"
-                npx playwright test --list || true
+                npx playwright test --config=playwright.config.js --list || true
               fi
               listed="$(printf '%s\n' "$list_output" | sed -nE 's/^Total: ([0-9]+) tests?.*/\1/p' | tail -n 1)"
               if (( list_status != 0 )) || [[ ! "$listed" =~ ^[1-9][0-9]*$ ]]; then
