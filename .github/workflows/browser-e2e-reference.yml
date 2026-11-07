@@ -462,6 +462,7 @@ jobs:
           REFERENCE_MATRIX_RESULT: ${{ needs.browser-e2e.result }}
           FEATURES_RESULT: ${{ needs.browser-e2e-features.result }}
           GROUPS_RESULT: ${{ needs.grouped-browser-e2e.result }}
+          RELOAD_STRESS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'reload-stress-only') }}
         shell: bash
         run: |
           set -euo pipefail
@@ -474,7 +475,7 @@ jobs:
             reasons+=("change detection: $CHANGE_RESULT")
           fi
 
-          if [[ "$GROUPS_RESULT" != "success" && "$GROUPS_RESULT" != "not_required" && ! ( "$EVENT_NAME" == "pull_request" && "${{ contains(github.event.pull_request.labels.*.name, 'reload-stress-only') }}" == "true" ) ]]; then
+          if [[ "$GROUPS_RESULT" != "success" && "$GROUPS_RESULT" != "not_required" && "$RELOAD_STRESS_ONLY" != "true" ]]; then
             failed=1
             reasons+=("Group A/B browser E2E was required but was $GROUPS_RESULT")
           fi
