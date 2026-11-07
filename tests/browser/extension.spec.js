@@ -141,8 +141,32 @@ test('MV3 service worker starts', async ({ context, extensionId }) => {
   expect(context.serviceWorkers().length).toBeGreaterThan(0);
 });
 
-test('MV3 service worker restarts and reloads its packaged imports', async ({ context, extensionId, extensionWorker }) => {
+test('MV3 worker restart recovers the real Show on BLB action without duplicate tabs', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{}
+  });
   const page = await context.newPage();
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  const button = page.locator('#blb-suite-page-selection-button');
+  await expect(button).toBeAttached({timeout:10000});
+  await page.evaluate(() => {
+    const paragraph = document.createElement('p');
+    paragraph.id = 'blb-e2e-no-sw-show-on-blb';
+    paragraph.textContent = 'John 3:16';
+    document.body.appendChild(paragraph);
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup', {bubbles:true}));
+  });
+  await expect(button).toBeVisible({timeout:10000});
+
   const cdp = await context.newCDPSession(page);
   const targets = await cdp.send('Target.getTargets');
   const workerTarget = targets.targetInfos.find(target =>
@@ -151,14 +175,11 @@ test('MV3 service worker restarts and reloads its packaged imports', async ({ co
   );
   expect(workerTarget, 'the extension service worker target must be discoverable').toBeTruthy();
 
-  const restartedWorkerPromise = context.waitForEvent('serviceworker', { timeout: 15000 });
-  await cdp.send('Target.closeTarget', { targetId: workerTarget.targetId });
-  await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  const response = await page.evaluate(() =>
-    chrome.runtime.sendMessage({type:'blbSuiteGetDefaultSiteStatus', hostname:'facebook.com'})
-  );
-  expect(response).toBeTruthy();
-
+  // Close the live worker, then invoke the actual Show on BLB control. This
+  // exercises its request-ID-backed retry and the background dedupe boundary.
+  const restartedWorkerPromise = context.waitForEvent('serviceworker', {timeout:15000});
+  await cdp.send('Target.closeTarget', {targetId:workerTarget.targetId});
+  await button.click();
   const restartedWorker = await restartedWorkerPromise;
   const startupState = await restartedWorker.evaluate(() => ({
     booksLoaded:Array.isArray(BOOKS) && BOOKS.length === 66,
@@ -172,6 +193,16 @@ test('MV3 service worker restarts and reloads its packaged imports', async ({ co
     selectionHelpersLoaded:true,
     sessionStorageAvailable:true
   });
+
+  const blb = await waitForBlbTabPath(restartedWorker, '/kjv/jhn/3/16/');
+  expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
+  const matchingTabs = await restartedWorker.evaluate(() => chrome.tabs.query({
+    url:'https://www.blueletterbible.org/*'
+  }).then(tabs => tabs.filter(tab => {
+    try { return new URL(tab.url || tab.pendingUrl || '').pathname === '/kjv/jhn/3/16/'; }
+    catch (_) { return false; }
+  }).length));
+  expect(matchingTabs).toBe(1);
   await page.close();
 });
 
