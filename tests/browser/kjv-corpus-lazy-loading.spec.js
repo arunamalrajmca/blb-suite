@@ -424,9 +424,10 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     expect(sample.phraseType).toBe('KJV_PASSAGE');
     expect(sample.phraseQuery).toBeTruthy();
     expect(sample.passageRef).toEqual({ book: 'john', chapter: 3, from: 16, to: 16 });
-    if (sample.variant === 'baseline') {
-      expect(sample.corpusLoadedAtStartup).toBe(true);
-    } else {
+    if (sample.variant === 'candidate') {
+      // The baseline is the current main branch, which may itself already
+      // include lazy corpus loading. Keep the candidate's production contract
+      // explicit without assuming that main is still the pre-lazy baseline.
       expect(sample.corpusLoadedAtStartup).toBe(false);
       expect(sample.corpusStillLoadedAfterFastPaths).toBe(false);
       expect(sample.corpusLoadedAfterFirstUse).toBe(true);
