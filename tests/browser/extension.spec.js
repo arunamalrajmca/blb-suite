@@ -3201,7 +3201,7 @@ test('extension update reconciliation reactivates configured existing tabs', asy
   }
 });
 
-test('selection messaging retries only deduplicated requests after a transient No SW error', async ({ page, extensionStorage, extensionWorker }) => {
+test('selection messaging retries transient No SW errors and persists completed request IDs', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({
     masterEnabled:true,
     pageSelectionButtonSites:{'example.com':true},
@@ -3224,7 +3224,7 @@ test('selection messaging retries only deduplicated requests after a transient N
         {type:'blbSuiteOpenSelectionText', requestId:'e2e-no-sw-retry', text:'John 3:16'},
         async () => {
           selectionAttempts++;
-          if (selectionAttempts === 1) throw new Error('No SW');
+          if (selectionAttempts <= 3) throw new Error('No SW');
           return {ok:true};
         }
       );
@@ -3244,10 +3244,25 @@ test('selection messaging retries only deduplicated requests after a transient N
   const {result} = injectedResults[0];
 
   expect(result).toEqual({
-    selectionAttempts:2,
+    selectionAttempts:4,
     selectionResponse:{ok:true},
     ordinaryAttempts:1
   });
+});
+
+test('completed selection request IDs survive service-worker global-state loss', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    recentSelectionOpenRequests.clear();
+    await chrome.storage.session.set({
+      [SELECTION_OPEN_REQUEST_SESSION_KEY]: {
+        'completed-before-worker-restart':Date.now()
+      }
+    });
+    const duplicate = await shouldAcceptSelectionOpenRequest(7, 'John 3:16', 'completed-before-worker-restart');
+    const fresh = await shouldAcceptSelectionOpenRequest(7, 'John 3:16', 'new-selection-request');
+    return {duplicate, fresh};
+  });
+  expect(result).toEqual({duplicate:false, fresh:true});
 });
 
 
