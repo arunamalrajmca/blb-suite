@@ -183,6 +183,7 @@ jobs:
           FULL_BROWSER_SUITE: ${{ steps.browser-select.outputs.full_browser_suite }}
           CHANGED_SPECS: ${{ steps.browser-select.outputs.changed_specs }}
           CHANGED_BROWSER_SPECS: ${{ steps.browser-select.outputs.changed_browser_specs }}
+          RELOAD_STRESS_ONLY: ${{ contains(github.event.pull_request.labels.*.name, 'reload-stress-only') }}
         run: node scripts/select-reference-matrix.mjs
       - name: Select changed focused browser specs for test-only edits
         id: focused
