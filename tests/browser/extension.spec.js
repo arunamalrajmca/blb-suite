@@ -2982,3 +2982,294 @@ test('Double-clicking the Mt abbreviation opens its complete chapter-and-verse r
   ), beforeIds);
   expect(openedPaths).toContain('/kjv/mat/10/32-33/');
 });
+
+test('runtime content-script registrations update using the supported scripts-array API', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const cases = [
+      {
+        url: 'https://www.blueletterbible.org/kjv/jhn/3/16/',
+        first: ['redirect-scripttagger.js'],
+        second: ['redirect-scripttagger.js', 'redirect-bibleref-ranges.js']
+      },
+      {
+        url: 'https://christianity.com/example',
+        first: ['content.js'],
+        second: ['content.js', 'redirect-scripttagger.js']
+      }
+    ];
+    const outcomes = [];
+    for (const item of cases) {
+      const pattern = originPatternForUrl(item.url);
+      const id = runtimeContentScriptIdForPattern(pattern);
+      const mainWorldId = id + '-main-world';
+      try {
+        await chrome.scripting.unregisterContentScripts({ ids: [id, mainWorldId] }).catch(() => {});
+        if (item.url.includes('christianity.com')) {
+          await chrome.scripting.registerContentScripts([{
+            id:mainWorldId,
+            matches:[pattern],
+            js:['redirect-scripttagger.js'],
+            runAt:'document_start',
+            world:'MAIN',
+            persistAcrossSessions:true
+          }]);
+        }
+        const firstRegistered = await ensureRuntimeContentScriptRegistered({ url: item.url, id: 1 }, item.first);
+        const afterFirst = await chrome.scripting.getRegisteredContentScripts({ ids: [id] });
+        const secondRegistered = await ensureRuntimeContentScriptRegistered({ url: item.url, id: 1 }, item.second);
+        const afterSecond = await chrome.scripting.getRegisteredContentScripts({ ids: [id] });
+        const mainWorld = item.url.includes('christianity.com')
+          ? await chrome.scripting.getRegisteredContentScripts({ ids: [mainWorldId] })
+          : [];
+        outcomes.push({
+          pattern,
+          firstRegistered,
+          secondRegistered,
+          firstScripts: afterFirst[0]?.js || [],
+          secondScripts: afterSecond[0]?.js || [],
+          mainWorld: mainWorld.map(script => ({ js: script.js, world: script.world }))
+        });
+      } finally {
+        await chrome.scripting.unregisterContentScripts({ ids: [id, mainWorldId] }).catch(() => {});
+      }
+    }
+    return outcomes;
+  });
+
+  expect(result[0]).toMatchObject({
+    firstRegistered: true,
+    secondRegistered: true,
+    firstScripts: ['redirect-scripttagger.js'],
+    secondScripts: ['redirect-scripttagger.js', 'redirect-bibleref-ranges.js']
+  });
+  expect(result[1]).toMatchObject({
+    firstRegistered: true,
+    secondRegistered: true,
+    firstScripts: ['content.js'],
+    secondScripts: ['content.js', 'redirect-scripttagger.js'],
+    mainWorld: [{ js: ['redirect-christianity-main-world.js'], world: 'MAIN' }]
+  });
+});
+
+
+test('concurrent tabs serialize runtime script registration for the same origin', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const url = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+    const pattern = originPatternForUrl(url);
+    const id = runtimeContentScriptIdForPattern(pattern);
+    const files = ['redirect-scripttagger.js'];
+    await chrome.scripting.unregisterContentScripts({ ids:[id] }).catch(() => {});
+    try {
+      const [first, second] = await Promise.all([
+        ensureRuntimeContentScriptRegistered({ url, id:101 }, files),
+        ensureRuntimeContentScriptRegistered({ url, id:102 }, files)
+      ]);
+      const registered = await chrome.scripting.getRegisteredContentScripts({ ids:[id] });
+      return { first, second, scripts:registered[0]?.js || [] };
+    } finally {
+      await chrome.scripting.unregisterContentScripts({ ids:[id] }).catch(() => {});
+    }
+  });
+
+  expect(result).toEqual({
+    first:true,
+    second:true,
+    scripts:['redirect-scripttagger.js']
+  });
+});
+
+test('tab lifecycle errors are classified as benign injection races', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(() => ({
+    closedTab:isTabUnavailableError(new Error('No tab with id: 1145301837')),
+    missingTab:isTabUnavailableError(new Error('Tab 42 not found')),
+    realInjectionFailure:isTabUnavailableError(new Error('Could not load file: content.js'))
+  }));
+  expect(result).toEqual({
+    closedTab:true,
+    missingTab:true,
+    realInjectionFailure:false
+  });
+});
+
+test('persisted runtime content-script registration audit reports missing files without changing registrations', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const before = await chrome.scripting.getRegisteredContentScripts();
+    const audit = await auditPersistedRuntimeContentScriptRegistrations([
+      {
+        id:'blb-suite-audit-valid',
+        matches:['https://example.com/*'],
+        js:['content.js']
+      },
+      {
+        id:'blb-suite-audit-stale',
+        matches:['https://stale.example/*'],
+        js:['content.js', 'missing-after-update.js']
+      }
+    ]);
+    const after = await chrome.scripting.getRegisteredContentScripts();
+    return {
+      audit,
+      beforeIds:before.map(script => script.id).sort(),
+      afterIds:after.map(script => script.id).sort()
+    };
+  });
+
+  expect(result.audit.registrationCount).toBe(2);
+  expect(result.audit.checkedFileCount).toBe(2);
+  expect(result.audit.invalidRegistrations).toEqual([{
+    id:'blb-suite-audit-stale',
+    matches:['https://stale.example/*'],
+    world:'ISOLATED',
+    missingFiles:['missing-after-update.js']
+  }]);
+  expect(result.beforeIds).toEqual(result.afterIds);
+});
+
+test('extension update reconciliation reactivates configured existing tabs', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionWorker.evaluate(() => {
+    globalThis.__blbSuiteUpdateReconciliationCalls = [];
+    globalThis.__blbSuiteOriginalEnsureContentScriptInTab = ensureContentScriptInTab;
+    globalThis.ensureContentScriptInTab = async tabId => {
+      globalThis.__blbSuiteUpdateReconciliationCalls.push(tabId);
+      return true;
+    };
+  });
+
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{'example.com':true},
+      doubleClickBlbSites:{},
+      redirectEnabled:false
+    });
+    await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+
+    const result = await extensionWorker.evaluate(async () => {
+      const tabs = await chrome.tabs.query({url:'https://example.com/*'});
+      const tabIds = tabs.map(tab => tab.id).filter(Number.isInteger);
+      const reconciliation = await injectConfiguredTabsAfterExtensionUpdate();
+      return {
+        tabIds,
+        reconciliation,
+        calls:globalThis.__blbSuiteUpdateReconciliationCalls.slice()
+      };
+    });
+
+    expect(result.tabIds.length).toBeGreaterThan(0);
+    expect(result.reconciliation.eligibleTabIds).toEqual(expect.arrayContaining(result.tabIds));
+    expect(result.reconciliation.activatedTabIds).toEqual(expect.arrayContaining(result.tabIds));
+    expect(result.calls).toEqual(expect.arrayContaining(result.tabIds));
+  } finally {
+    await extensionWorker.evaluate(() => {
+      if (globalThis.__blbSuiteOriginalEnsureContentScriptInTab) {
+        globalThis.ensureContentScriptInTab = globalThis.__blbSuiteOriginalEnsureContentScriptInTab;
+      }
+      delete globalThis.__blbSuiteOriginalEnsureContentScriptInTab;
+      delete globalThis.__blbSuiteUpdateReconciliationCalls;
+    });
+  }
+});
+
+test('selection messaging retries only deduplicated requests after a transient No SW error', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{}
+  });
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  await page.waitForTimeout(1000);
+
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  const injectedResults = await extensionWorker.evaluate(async id => chrome.scripting.executeScript({
+    target:{tabId:id},
+    world:'ISOLATED',
+    func:async () => {
+      let selectionAttempts = 0;
+      const selectionResponse = await sendRuntimeMessageWithRetry(
+        {type:'blbSuiteOpenSelectionText', requestId:'e2e-no-sw-retry', text:'John 3:16'},
+        async () => {
+          selectionAttempts++;
+          if (selectionAttempts === 1) throw new Error('No SW');
+          return {ok:true};
+        }
+      );
+
+      let ordinaryAttempts = 0;
+      await sendRuntimeMessageWithRetry(
+        {type:'blbSuiteSyncSelectionContextMenu'},
+        async () => {
+          ordinaryAttempts++;
+          throw new Error('No SW');
+        }
+      );
+      return {selectionAttempts, selectionResponse, ordinaryAttempts};
+    }
+  }), tabId);
+  expect(injectedResults).toHaveLength(1);
+  const {result} = injectedResults[0];
+
+  expect(result).toEqual({
+    selectionAttempts:2,
+    selectionResponse:{ok:true},
+    ordinaryAttempts:1
+  });
+});
+
+
+test('reinjecting the current content bundle replaces a stale Show on BLB control and restores messaging', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{}
+  });
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  const button = page.locator('#blb-suite-page-selection-button');
+  await expect(button).toBeAttached({timeout:10000});
+  await page.evaluate(() => {
+    window.__blbSuitePreReloadButton = document.getElementById('blb-suite-page-selection-button');
+  });
+
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  await extensionWorker.evaluate(async id => {
+    // This is the same reinjection path used when the background worker finds
+    // that an already-open tab no longer answers its content-script refresh.
+    await chrome.scripting.executeScript({
+      target:{tabId:id},
+      files:BLB_CONTENT_SCRIPT_FILES
+    });
+  }, tabId);
+
+  await page.waitForFunction(() => {
+    const previous = window.__blbSuitePreReloadButton;
+    const current = document.getElementById('blb-suite-page-selection-button');
+    return !!previous && !previous.isConnected && !!current && current !== previous;
+  }, null, {timeout:10000});
+
+  await page.evaluate(() => {
+    const paragraph = document.createElement('p');
+    paragraph.id = 'blb-e2e-reinjected-show-on-blb';
+    paragraph.textContent = 'John 3:16';
+    document.body.appendChild(paragraph);
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup', {bubbles:true}));
+  });
+  await expect(button).toBeVisible({timeout:10000});
+  await button.click();
+  await activateBlbTabForPath(extensionWorker, '/kjv/jhn/3/16/', {
+    fragment:'John 3:16',
+    selector:'#blb-e2e-reinjected-show-on-blb',
+    selectedText:'John 3:16'
+  });
+});
