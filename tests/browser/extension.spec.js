@@ -3110,7 +3110,7 @@ test('selection messaging retries only deduplicated requests after a transient N
   );
   expect(Number.isInteger(tabId)).toBe(true);
 
-  const [{result}] = await extensionWorker.evaluate(async id => chrome.scripting.executeScript({
+  const injectedResults = await extensionWorker.evaluate(async id => chrome.scripting.executeScript({
     target:{tabId:id},
     world:'ISOLATED',
     func:async () => {
@@ -3135,6 +3135,8 @@ test('selection messaging retries only deduplicated requests after a transient N
       return {selectionAttempts, selectionResponse, ordinaryAttempts};
     }
   }), tabId);
+  expect(injectedResults).toHaveLength(1);
+  const {result} = injectedResults[0];
 
   expect(result).toEqual({
     selectionAttempts:2,
