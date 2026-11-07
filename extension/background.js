@@ -2581,7 +2581,101 @@ async function hasHostAccessForTab(tab) {
   catch (_) { return false; }
 }
 
+function isTabUnavailableError(error) {
+  const message = String(error?.message || error || '');
+  return /no tab with id|tab .*not found|cannot access contents of the page/i.test(message);
+}
+
+function describeScriptInjectionError(error) {
+  const properties = {};
+  if (error && (typeof error === 'object' || typeof error === 'function')) {
+    for (const key of Object.getOwnPropertyNames(error)) {
+      try {
+        const value = error[key];
+        properties[key] = value instanceof Error
+          ? {name:value.name, message:value.message, stack:value.stack}
+          : value;
+      } catch (readError) {
+        properties[key] = '[unreadable: ' + String(readError) + ']';
+      }
+    }
+  }
+  let serialized = '';
+  try {
+    serialized = JSON.stringify(error, Object.getOwnPropertyNames(error || {}));
+  } catch (_) {
+    serialized = '';
+  }
+  return {
+    errorType: typeof error,
+    errorName: error?.name || '',
+    errorMessage: error?.message || '',
+    errorStack: error?.stack || '',
+    errorString: String(error),
+    errorProperties: properties,
+    errorJson: serialized
+  };
+}
+
+async function inspectPackagedScriptFiles(files) {
+  return Promise.all(files.map(async file => {
+    const url = chrome.runtime.getURL(file);
+    try {
+      const response = await fetch(url, {cache:'no-store'});
+      return {file, url, ok:response.ok, status:response.status, statusText:response.statusText};
+    } catch (error) {
+      return {file, url, ok:false, ...describeScriptInjectionError(error)};
+    }
+  }));
+}
+
+// Persisted dynamic registrations survive extension restarts. Audit their
+// referenced package resources whenever the worker starts so a stale/missing
+// script path is visible even when Brave fails before an injection handler
+// can report the error. This is diagnostic only: never unregister or rewrite
+// user-origin registrations automatically.
+async function auditPersistedRuntimeContentScriptRegistrations(registrations = null) {
+  let scripts = registrations;
+  if (!Array.isArray(scripts)) {
+    try {
+      scripts = await chrome.scripting.getRegisteredContentScripts();
+    } catch (error) {
+      const details = describeScriptInjectionError(error);
+      console.warn('KJV Scripture Tools persisted content-script audit unavailable: ' + JSON.stringify(details));
+      return {registrationCount:0, checkedFileCount:0, invalidRegistrations:[], inspectionError:details};
+    }
+  }
+
+  const files = [...new Set(scripts.flatMap(script =>
+    Array.isArray(script?.js) ? script.js.filter(file => typeof file === 'string' && file) : []
+  ))];
+  const checks = await inspectPackagedScriptFiles(files);
+  const failedFiles = new Set(checks.filter(check => !check.ok).map(check => check.file));
+  const invalidRegistrations = scripts
+    .filter(script => (script?.js || []).some(file => failedFiles.has(file)))
+    .map(script => ({
+      id:script.id || '',
+      matches:Array.isArray(script.matches) ? script.matches : [],
+      world:script.world || 'ISOLATED',
+      missingFiles:(script.js || []).filter(file => failedFiles.has(file))
+    }));
+
+  const result = {
+    registrationCount:scripts.length,
+    checkedFileCount:files.length,
+    invalidRegistrations,
+    fileChecks:checks.filter(check => !check.ok)
+  };
+  if (invalidRegistrations.length) {
+    console.error('KJV Scripture Tools persisted content-script references unavailable package files: ' + JSON.stringify(result));
+  }
+  return result;
+}
+
 const contentScriptInjectionLocks = new Map();
+// Different tabs on the same origin can request the same persistent script
+// registration concurrently. Serialize by registration ID, not only by tab.
+const runtimeContentScriptRegistrationLocks = new Map();
 
 function runtimeContentScriptIdForPattern(pattern) {
   const raw = String(pattern || '');
@@ -2593,7 +2687,7 @@ function runtimeContentScriptIdForPattern(pattern) {
   return `blb-suite-runtime-${(hash >>> 0).toString(36)}`;
 }
 
-async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCRIPT_FILES) {
+async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_SCRIPT_FILES) {
   const pattern = originPatternForUrl(tab?.url);
   if (!pattern || !Array.isArray(files) || !files.length || !chrome.scripting?.registerContentScripts) return false;
   const id = runtimeContentScriptIdForPattern(pattern);
@@ -2608,11 +2702,11 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
         persistAcrossSessions:true
       }]);
     } else if (JSON.stringify(existing[0].js || []) !== JSON.stringify(files)) {
-      await chrome.scripting.updateContentScripts({
-        ids:[id],
+      await chrome.scripting.updateContentScripts([{
+        id,
         js:files,
         runAt:'document_start'
-      });
+      }]);
     }
 
     // Christianity.com can attach native click handlers in the page's MAIN
@@ -2636,20 +2730,66 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
         }]);
       } else if (JSON.stringify(registeredMain[0].js || []) !== JSON.stringify(mainWorldFiles) ||
                  registeredMain[0].world !== 'MAIN') {
-        await chrome.scripting.updateContentScripts({
-          ids:[mainWorldId],
+        await chrome.scripting.updateContentScripts([{
+          id:mainWorldId,
           js:mainWorldFiles,
           runAt:'document_start',
           world:'MAIN'
-        });
+        }]);
       }
     }
     return true;
   } catch (error) {
-    console.error('KJV Scripture Tools runtime content-script registration failed:', {
-      tabId:tab?.id ?? null, tabUrl:tab?.url || '', files, error:String(error)
-    });
+    const errorDetails = describeScriptInjectionError(error);
+    const patternFileChecks = await inspectPackagedScriptFiles(files);
+    const mainWorldFileChecks = await inspectPackagedScriptFiles(['redirect-christianity-main-world.js']);
+    let registeredScripts = [];
+    try {
+      registeredScripts = await chrome.scripting.getRegisteredContentScripts();
+    } catch (inspectionError) {
+      registeredScripts = [{inspectionError:describeScriptInjectionError(inspectionError)}];
+    }
+    console.error('KJV Scripture Tools runtime content-script registration failed: ' + JSON.stringify({
+      tabId:tab?.id ?? null,
+      tabUrl:tab?.url || '',
+      originPattern:pattern,
+      registrationId:id,
+      files,
+      ...errorDetails,
+      packagedFileChecks:patternFileChecks,
+      mainWorldFileChecks,
+      registeredScriptIds:registeredScripts.map(script => ({
+        id:script.id,
+        matches:script.matches,
+        js:script.js,
+        world:script.world,
+        runAt:script.runAt
+      }))
+    }));
     return false;
+  }
+}
+
+
+async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCRIPT_FILES) {
+  const pattern = originPatternForUrl(tab?.url);
+  if (!pattern) return false;
+  const id = runtimeContentScriptIdForPattern(pattern);
+
+  // Chain every request for this registration ID. Waiting callers must also
+  // take their turn through the queue; simply awaiting the current promise
+  // and then registering directly would let multiple waiters race together.
+  const previous = runtimeContentScriptRegistrationLocks.get(id) || Promise.resolve();
+  const operation = previous
+    .catch(() => {})
+    .then(() => registerRuntimeContentScriptForPattern(tab, files));
+  runtimeContentScriptRegistrationLocks.set(id, operation);
+  try {
+    return await operation;
+  } finally {
+    if (runtimeContentScriptRegistrationLocks.get(id) === operation) {
+      runtimeContentScriptRegistrationLocks.delete(id);
+    }
   }
 }
 
@@ -2746,6 +2886,7 @@ async function ensureContentScriptInTab(tabId) {
             world:'MAIN'
           });
         } catch (error) {
+          if (isTabUnavailableError(error)) return false;
           console.error('KJV Scripture Tools MAIN-world script injection failed:', {
             tabId, tabUrl:tab.url, files:['redirect-christianity-main-world.js'], error:String(error)
           });
@@ -2765,6 +2906,7 @@ async function ensureContentScriptInTab(tabId) {
               try {
                 await chrome.scripting.executeScript({target:{tabId}, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES});
               } catch (error) {
+                if (isTabUnavailableError(error)) return false;
                 console.error('KJV Scripture Tools ScriptTagger injection failed:', {
                   tabId, tabUrl:tab.url, files:SCRIPT_TAGGER_CONTENT_SCRIPT_FILES, error:String(error)
                 });
@@ -2779,9 +2921,18 @@ async function ensureContentScriptInTab(tabId) {
       try {
         await chrome.scripting.executeScript({target:{tabId}, files});
       } catch (error) {
-        console.error('KJV Scripture Tools content-script injection failed:', {
-          tabId, tabUrl:tab.url, files, error:String(error)
-        });
+        // Tabs can close or navigate away between tabs.get() and executeScript().
+        // This is a normal lifecycle race, not a broken extension resource.
+        if (isTabUnavailableError(error)) return false;
+        const errorDetails = describeScriptInjectionError(error);
+        const packagedFileChecks = await inspectPackagedScriptFiles(files);
+        console.error('KJV Scripture Tools content-script injection failed: ' + JSON.stringify({
+          tabId,
+          tabUrl:tab.url,
+          files,
+          ...errorDetails,
+          packagedFileChecks
+        }));
         return false;
       }
 
@@ -2809,6 +2960,7 @@ async function ensureContentScriptInTab(tabId) {
 
       return true;
     } catch (error) {
+      if (isTabUnavailableError(error)) return false;
       console.error('KJV Scripture Tools content-script activation failed:', {
         tabId, error:String(error)
       });
@@ -3521,7 +3673,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ok:false});
   });
   return true;
-  })();
+  })().catch(error => {
+    const details = describeScriptInjectionError(error);
+    console.error('KJV Scripture Tools async message handler failed: ' + JSON.stringify({
+      messageType:String(message?.type || ''),
+      requestId:String(message?.requestId || ''),
+      senderTabId:sender?.tab?.id ?? null,
+      senderUrl:sender?.tab?.url || '',
+      ...details
+    }));
+    try {
+      sendResponse({
+        ok:false,
+        reason:'message-handler-failed',
+        error:details.errorMessage || details.errorString,
+        diagnostic:details
+      });
+    } catch (_) {}
+  });
   return true;
 });
 
@@ -6422,6 +6591,46 @@ async function injectRedirectEnabledTabs() {
   }
 }
 
+// Content scripts cannot be unloaded from already-open documents when an
+// extension is reloaded. Reconcile configured tabs on update so stale
+// document contexts are refreshed/reinjected without requiring users to close
+// every tab. ensureContentScriptInTab first asks a resident script to refresh;
+// it only injects the current bundle when that script no longer responds.
+async function injectConfiguredTabsAfterExtensionUpdate() {
+  const data = await chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    redirectEnabled:false
+  });
+  if (data.masterEnabled === false) {
+    return {eligibleTabIds:[], activatedTabIds:[], failedTabIds:[]};
+  }
+
+  const tabs = await chrome.tabs.query({});
+  const eligibleTabs = [];
+  for (const tab of tabs) {
+    if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
+    if (await shouldInjectContentScriptForTab(tab, data)) eligibleTabs.push(tab);
+  }
+
+  const outcomes = await Promise.all(eligibleTabs.map(async tab => ({
+    tabId:tab.id,
+    ok:await ensureContentScriptInTab(tab.id)
+  })));
+  const result = {
+    eligibleTabIds:eligibleTabs.map(tab => tab.id),
+    activatedTabIds:outcomes.filter(item => item.ok).map(item => item.tabId),
+    failedTabIds:outcomes.filter(item => !item.ok).map(item => item.tabId)
+  };
+  console.info('KJV Scripture Tools extension-update tab reconciliation: ' + JSON.stringify({
+    eligibleCount:result.eligibleTabIds.length,
+    activatedCount:result.activatedTabIds.length,
+    failedTabIds:result.failedTabIds
+  }));
+  return result;
+}
+
 chrome.permissions?.onAdded?.addListener(details => {
   injectEnabledTabsForGrantedOrigins(details?.origins || []).catch(() => {});
 });
@@ -6439,6 +6648,11 @@ chrome.runtime.onInstalled.addListener(async details => {
     .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
     .catch(() => {}));
   installPdfSelectionContextMenu().catch(() => {});
+  if (details.reason === 'update') {
+    injectConfiguredTabsAfterExtensionUpdate().catch(error => {
+      console.error('KJV Scripture Tools extension-update tab reconciliation failed:', String(error));
+    });
+  }
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -6512,6 +6726,15 @@ chrome.runtime.onStartup.addListener(() => installPdfSelectionContextMenu().then
   .then(tabs => syncPdfSelectionContextMenuVisibility(tabs[0]))
   .catch(() => {})));
 chrome.runtime.onStartup.addListener(() => refreshStudyAutoStopAlarm().catch(()=>{}));
+chrome.runtime.onStartup.addListener(() => auditPersistedRuntimeContentScriptRegistrations().catch(error => {
+  console.warn('KJV Scripture Tools persisted content-script audit failed: ' + String(error));
+}));
+
+// Also run on every service-worker start, including extension reloads from
+// the extensions page; onStartup alone does not cover manual reloads.
+auditPersistedRuntimeContentScriptRegistrations().catch(error => {
+  console.warn('KJV Scripture Tools persisted content-script audit failed: ' + String(error));
+});
 
 installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
   .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
