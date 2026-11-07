@@ -3254,7 +3254,11 @@ test('completed selection request IDs survive service-worker global-state loss',
   const result = await extensionWorker.evaluate(async () => {
     recentSelectionOpenRequests.clear();
     await rememberCompletedSelectionOpenRequest('completed-before-worker-restart');
+    const saved = await chrome.storage.session.get(SELECTION_OPEN_REQUEST_SESSION_KEY);
+    saved[SELECTION_OPEN_REQUEST_SESSION_KEY]['completed-before-worker-restart'] = Date.now() - 2000;
+    await chrome.storage.session.set(saved);
     // Simulate a fresh worker: session storage survives while ordinary globals do not.
+    // The same request remains protected beyond the shorter in-worker gesture window.
     recentSelectionOpenRequests.clear();
     const duplicate = await shouldAcceptSelectionOpenRequest(7, 'John 3:16', 'completed-before-worker-restart');
     const fresh = await shouldAcceptSelectionOpenRequest(7, 'John 3:16', 'new-selection-request');
