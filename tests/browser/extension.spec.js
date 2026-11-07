@@ -3436,7 +3436,6 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
   const browser = context.browser();
   const browserCdp = await browser.newBrowserCDPSession();
   await browserCdp.send('Target.setDiscoverTargets', { discover: true });
-  await browserCdp.send('ServiceWorker.enable');
 
   context.on('serviceworker', worker => {
     writeLog(0, 'service-worker-created', { url: worker.url() });
@@ -3488,6 +3487,15 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
       await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`);
       writeLog(cycle, 'popup-loaded', { url: extensionPage.url() });
 
+      let observedReplacementWorker = null;
+      const onReplacementWorker = worker => {
+        if (worker.url() === workerUrl) {
+          observedReplacementWorker = worker;
+          writeLog(cycle, 'replacement-worker-event', { url: worker.url() });
+        }
+      };
+      context.on('serviceworker', onReplacementWorker);
+
       try {
         await extensionPage.evaluate(() => chrome.runtime.reload());
         writeLog(cycle, 'reload-call-returned');
@@ -3498,28 +3506,18 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
         writeLog(cycle, 'stale-popup-close-rejected', { message: error.message });
       });
 
-      // Wake the reloaded extension through the browser-level DevTools
-      // ServiceWorker domain. Do not navigate to chrome-extension:// here:
-      // Chromium can block that navigation during extension reload, which
-      // tests the harness rather than whether the extension worker restarted.
+      // Observe the real worker restart through Playwright's service-worker
+      // lifecycle event. Avoid unsupported browser-target ServiceWorker CDP
+      // commands and avoid extension-page navigation during the reload window.
       let replacementState = null;
       let lastWakeError = null;
       const deadline = Date.now() + 20000;
-      let lastDiagnosticAt = 0;
       while (Date.now() < deadline && !replacementState) {
-        try {
-          await browserCdp.send('ServiceWorker.startWorker', { scopeURL });
-          writeLog(cycle, 'service-worker-start-requested');
-        } catch (error) {
-          lastWakeError = error;
-          if (Date.now() - lastDiagnosticAt >= 500) {
-            writeLog(cycle, 'service-worker-start-retry', { name: error.name, message: error.message });
-            lastDiagnosticAt = Date.now();
-          }
-        }
-
         const workers = context.serviceWorkers().filter(worker => worker.url() === workerUrl);
-        for (const worker of workers) {
+        const candidates = observedReplacementWorker
+          ? [...new Set([...workers, observedReplacementWorker])]
+          : workers;
+        for (const worker of candidates) {
           const state = await readWorkerState(worker);
           if (
             !state.unavailable &&
@@ -3532,8 +3530,9 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
           }
         }
 
-        if (!replacementState) await new Promise(resolve => setTimeout(resolve, 200));
+        if (!replacementState) await new Promise(resolve => setTimeout(resolve, 100));
       }
+      context.off('serviceworker', onReplacementWorker);
 
       if (!replacementState) {
         let targetDiagnostics = null;
