@@ -107,9 +107,9 @@ const test = base.extend({
     const launchStartedAt = process.hrtime.bigint();
     const context = await chromium.launchPersistentContext('', {
       channel: 'chromium',
-      headless: true,
+      headless: process.env.BLB_HEADFUL_EXTENSION_TESTS !== '1',
       args: [
-        '--headless=new',
+        ...(process.env.BLB_HEADFUL_EXTENSION_TESTS === '1' ? [] : ['--headless=new']),
         `--disable-extensions-except=${extensionPath}`,
         `--load-extension=${extensionPath}`,
         '--no-first-run',
