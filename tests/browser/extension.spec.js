@@ -3253,11 +3253,9 @@ test('selection messaging retries transient No SW errors and persists completed 
 test('completed selection request IDs survive service-worker global-state loss', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(async () => {
     recentSelectionOpenRequests.clear();
-    await chrome.storage.session.set({
-      [SELECTION_OPEN_REQUEST_SESSION_KEY]: {
-        'completed-before-worker-restart':Date.now()
-      }
-    });
+    await rememberCompletedSelectionOpenRequest('completed-before-worker-restart');
+    // Simulate a fresh worker: session storage survives while ordinary globals do not.
+    recentSelectionOpenRequests.clear();
     const duplicate = await shouldAcceptSelectionOpenRequest(7, 'John 3:16', 'completed-before-worker-restart');
     const fresh = await shouldAcceptSelectionOpenRequest(7, 'John 3:16', 'new-selection-request');
     return {duplicate, fresh};
