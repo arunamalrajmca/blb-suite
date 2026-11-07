@@ -350,7 +350,7 @@ jobs:
               command -v xvfb-run
               xvfb-run -a env BLB_HEADFUL_EXTENSION_TESTS=1 npx playwright test --config=playwright.config.js --grep "$MATRIX_GREP"
             elif [[ "$MATRIX_GREP" == ".*" ]]; then
-              list_output="$(npx playwright test "$spec" --list)"
+              list_output="$(npx playwright test "$spec" --reporter=list --list)"
               printf '%s\n' "$list_output"
               listed="$(printf '%s\n' "$list_output" | sed -nE 's/^Total: ([0-9]+) tests?.*/\1/p' | tail -n 1)"
               if [[ ! "$listed" =~ ^[1-9][0-9]*$ ]]; then
@@ -360,7 +360,7 @@ jobs:
               npx playwright test "$spec"
             else
               echo "Preflight: list tests matching the selected matrix filter."
-              list_output="$(npx playwright test "$spec" --grep "$MATRIX_GREP" --list)"
+              list_output="$(npx playwright test "$spec" --reporter=list --grep "$MATRIX_GREP" --list)"
               printf '%s\n' "$list_output"
               listed="$(printf '%s\n' "$list_output" | sed -nE 's/^Total: ([0-9]+) tests?.*/\1/p' | tail -n 1)"
               if [[ ! "$listed" =~ ^[1-9][0-9]*$ ]]; then
