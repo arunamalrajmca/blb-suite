@@ -1,4 +1,34 @@
-importScripts('study-session-normalization.js', 'multiverse-reference-helpers.js', 'study-session-export.js', 'selection-text-helpers.js', 'omnibox-search-helpers.js', 'regex-patterns.js', 'kjv-corpus-word-index.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'books.js', 'book-aliases.js', 'reference-core.js');
+const BLB_BACKGROUND_STARTUP_IMPORTS = [
+  'study-session-normalization.js',
+  'multiverse-reference-helpers.js',
+  'study-session-export.js',
+  'selection-text-helpers.js',
+  'omnibox-search-helpers.js',
+  'regex-patterns.js',
+  'kjv-corpus-word-index.js',
+  'case-sensitive-search-core.js',
+  'case-sensitive-routing.js',
+  'books.js',
+  'book-aliases.js',
+  'reference-core.js'
+];
+
+// Import startup dependencies individually so a transient/missing resource is
+// identified by filename instead of Chromium's generic "fetching the script"
+// service-worker startup error.
+for (const scriptFile of BLB_BACKGROUND_STARTUP_IMPORTS) {
+  try {
+    importScripts(scriptFile);
+  } catch (error) {
+    console.error('KJV Scripture Tools background startup import failed: ' + JSON.stringify({
+      file:scriptFile,
+      errorName:error?.name || '',
+      errorMessage:error?.message || String(error),
+      errorStack:error?.stack || ''
+    }));
+    throw error;
+  }
+}
 let KJV_CORPUS_PHRASE_INDEX = null;
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
@@ -2218,9 +2248,10 @@ const recentSelectionOpenRequests = new Map();
 const SELECTION_OPEN_DEDUP_MS = 1200;
 const SELECTION_OPEN_DEDUP_RETENTION_MS = 5000;
 const SELECTION_OPEN_DEDUP_MAX_ENTRIES = 256;
+const SELECTION_OPEN_REQUEST_SESSION_KEY = 'blbSuiteCompletedSelectionOpenRequests';
 let lastSelectionOpenDedupPruneAt = 0;
 
-function shouldAcceptSelectionOpenRequest(tabId, text, requestId = '') {
+async function shouldAcceptSelectionOpenRequest(tabId, text, requestId = '') {
   const normalizedRequestId = String(requestId || '').trim();
   const key = normalizedRequestId
     ? `request|${normalizedRequestId}`
@@ -2228,18 +2259,32 @@ function shouldAcceptSelectionOpenRequest(tabId, text, requestId = '') {
   const now = Date.now();
   const previous = recentSelectionOpenRequests.get(key) || 0;
   if (now - previous < SELECTION_OPEN_DEDUP_MS) return false;
+
+  // Reserve synchronously before awaiting storage so concurrent deliveries
+  // in this worker cannot both enter the opening pipeline.
   recentSelectionOpenRequests.set(key, now);
 
-  // Keep the hot path constant-time. Pruning the whole map on every selection
-  // added avoidable work to every Show on BLB request; prune periodically and
-  // enforce a hard bound for bursts of unique selections.
+  // The service worker's globals disappear when it is suspended. Remember
+  // completed IDs in session storage so a retried delivery after a restart
+  // cannot repeat an action that already finished.
+  if (normalizedRequestId && chrome.storage?.session) {
+    try {
+      const saved = await chrome.storage.session.get(SELECTION_OPEN_REQUEST_SESSION_KEY);
+      const completed = saved?.[SELECTION_OPEN_REQUEST_SESSION_KEY] &&
+        typeof saved[SELECTION_OPEN_REQUEST_SESSION_KEY] === 'object'
+        ? {...saved[SELECTION_OPEN_REQUEST_SESSION_KEY]} : {};
+      const completedAt = Number(completed[normalizedRequestId]) || 0;
+      if (now - completedAt < SELECTION_OPEN_DEDUP_RETENTION_MS) return false;
+    } catch (_) {
+      // Retain the in-memory guard if session storage is unavailable.
+    }
+  }
+
   if (now - lastSelectionOpenDedupPruneAt >= SELECTION_OPEN_DEDUP_RETENTION_MS
       || recentSelectionOpenRequests.size > SELECTION_OPEN_DEDUP_MAX_ENTRIES) {
     lastSelectionOpenDedupPruneAt = now;
     for (const [entryKey, timestamp] of recentSelectionOpenRequests) {
-      if (now - timestamp > SELECTION_OPEN_DEDUP_RETENTION_MS) {
-        recentSelectionOpenRequests.delete(entryKey);
-      }
+      if (now - timestamp > SELECTION_OPEN_DEDUP_RETENTION_MS) recentSelectionOpenRequests.delete(entryKey);
     }
     while (recentSelectionOpenRequests.size > SELECTION_OPEN_DEDUP_MAX_ENTRIES) {
       const oldestKey = recentSelectionOpenRequests.keys().next().value;
@@ -2250,6 +2295,29 @@ function shouldAcceptSelectionOpenRequest(tabId, text, requestId = '') {
   return true;
 }
 
+async function rememberCompletedSelectionOpenRequest(requestId) {
+  const id = String(requestId || '').trim();
+  if (!id || !chrome.storage?.session) return;
+  try {
+    const saved = await chrome.storage.session.get(SELECTION_OPEN_REQUEST_SESSION_KEY);
+    const completed = saved?.[SELECTION_OPEN_REQUEST_SESSION_KEY] &&
+      typeof saved[SELECTION_OPEN_REQUEST_SESSION_KEY] === 'object'
+      ? {...saved[SELECTION_OPEN_REQUEST_SESSION_KEY]} : {};
+    const now = Date.now();
+    for (const [entryId, timestamp] of Object.entries(completed)) {
+      if (now - Number(timestamp || 0) > SELECTION_OPEN_DEDUP_RETENTION_MS) delete completed[entryId];
+    }
+    completed[id] = now;
+    const entries = Object.entries(completed);
+    while (entries.length > SELECTION_OPEN_DEDUP_MAX_ENTRIES) {
+      const [oldestId] = entries.shift();
+      delete completed[oldestId];
+    }
+    await chrome.storage.session.set({[SELECTION_OPEN_REQUEST_SESSION_KEY]:completed});
+  } catch (_) {
+    // The current worker's in-memory dedupe remains active if persistence fails.
+  }
+}
 function enqueueBlbTabCreation(operation) {
   const run = blbTabCreationQueue.then(operation, operation);
   blbTabCreationQueue = run.catch(() => {});
@@ -3316,10 +3384,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Deduplicate at the message boundary. This is intentionally generic: it
     // protects Show on BLB, Double-Click BLB, and any other future caller from
     // duplicate delivery before the request reaches tab management.
-    if (!shouldAcceptSelectionOpenRequest(sender?.tab?.id, text, message.requestId)) {
+    if (!(await shouldAcceptSelectionOpenRequest(sender?.tab?.id, text, message.requestId))) {
       sendResponse({ok:true, deduplicated:true});
       return true;
     }
+    const completeSelectionOpen = async response => {
+      await rememberCompletedSelectionOpenRequest(message.requestId);
+      sendResponse(response);
+    };
     // Double-Click has its own decision path: its content-script gesture
     // resolver uses the physical click position and passes an explicit
     // contextualReference when it has one. Do not run the Show on BLB / Alt+B
@@ -3329,7 +3401,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       try {
         if (normalizeSiteHostname(hostnameFromTabUrl(sender?.tab?.url)) === BLB_HOSTNAME) {
           const result = await openBlbPageSelection(text, message.tabBehavior || {activeIfNew:true, activateExisting:true});
-          sendResponse({...result, sourceSite:BLB_HOSTNAME, actionSource:'double-click'});
+          await completeSelectionOpen({...result, sourceSite:BLB_HOSTNAME, actionSource:'double-click'});
           return true;
         }
         const behavior = message.tabBehavior && typeof message.tabBehavior === 'object' ? {
@@ -3351,7 +3423,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               standaloneBook.name, 1, 1, 1
             );
             if (!standaloneBookReference?.url) {
-              sendResponse({ok:false, reason:'standalone-book-reference-unavailable'});
+              await completeSelectionOpen({ok:false, reason:'standalone-book-reference-unavailable'});
               return true;
             }
             await openBlbDestination(
@@ -3359,7 +3431,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               !!behavior.activeIfNew,
               !!behavior.activateExisting
             );
-            sendResponse({ok:true,bookOnly:true,standaloneNumericBook:true,actionSource:'double-click'});
+            await completeSelectionOpen({ok:true,bookOnly:true,standaloneNumericBook:true,actionSource:'double-click'});
             return true;
           }
         }
@@ -3369,7 +3441,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         // so every content-script caller is protected, even if its classifier
         // accidentally supplies criteriaSearchText.
         if (criteriaSearchText && /^[\\d\\s:.,;\\-–—]+$/.test(criteriaSearchText)) {
-          sendResponse({ok:false, reason:'numeric-only-criteria-search'});
+          await completeSelectionOpen({ok:false, reason:'numeric-only-criteria-search'});
           return true;
         }
         if (criteriaSearchText) {
@@ -3378,32 +3450,32 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             !!behavior.activeIfNew,
             !!behavior.activateExisting
           );
-          sendResponse({ok:true,criteriaSearch:true,actionSource:'double-click'});
+          await completeSelectionOpen({ok:true,criteriaSearch:true,actionSource:'double-click'});
           return true;
         }
         if (Array.isArray(message.contextualReference?.refs) && message.contextualReference.refs.length > 1) {
           const result = await openBlbMultiVerseRefs(message.contextualReference.refs, !!behavior.activeIfNew || !!behavior.activateExisting);
-          sendResponse({...result, contextual:true, multiVerse:true, actionSource:'double-click'});
+          await completeSelectionOpen({...result, contextual:true, multiVerse:true, actionSource:'double-click'});
           return true;
         }
         const doubleClickSelectedRefs = extractBibleRefsFromSelectedTextUncached(normalizeSelectedScriptureText(text));
         if (message.contextualReference?.url && doubleClickSelectedRefs.length < 2) {
           await openSelectedPdfBibleRefs(text, behavior, message.contextualReference);
-          sendResponse({ok:true, contextual:true, actionSource:'double-click'});
+          await completeSelectionOpen({ok:true, contextual:true, actionSource:'double-click'});
           return true;
         }
         const doubleClickBookOnly = getSelectedBookOnlyReference(normalizeSelectedScriptureText(text));
         if (doubleClickBookOnly?.url && !message.contextualReference?.url) {
           await recordStudyRefs([parseBlbKjvUrlToStudyRef(doubleClickBookOnly.url)].filter(Boolean));
           await openBlbDestination(doubleClickBookOnly.url, !!behavior.activeIfNew, !!behavior.activateExisting);
-          sendResponse({ok:true, bookOnly:true, actionSource:'double-click'});
+          await completeSelectionOpen({ok:true, bookOnly:true, actionSource:'double-click'});
           return true;
         }
         await openSelectedPdfBibleRefs(text, behavior, null);
-        sendResponse({ok:true, actionSource:'double-click'});
+        await completeSelectionOpen({ok:true, actionSource:'double-click'});
       } catch (error) {
         console.error('KJV Scripture Tools Double-Click selection:', error);
-        sendResponse({ok:false});
+        await completeSelectionOpen({ok:false});
       }
       return true;
     }
@@ -3428,7 +3500,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (!contextualReference && criteriaSearchText) {
         const criteriaBook = resolveBibleBook(criteriaSearchText);
         if (!criteriaBook) {
-          sendResponse({ok:false, reason:'invalid-numbered-book-search'});
+          await completeSelectionOpen({ok:false, reason:'invalid-numbered-book-search'});
           return true;
         }
         await openBlbDestination(
@@ -3436,7 +3508,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           !!behavior.activeIfNew,
           !!behavior.activateExisting
         );
-        sendResponse({ok:true,criteriaSearch:true,actionSource:'show-on-blb'});
+        await completeSelectionOpen({ok:true,criteriaSearch:true,actionSource:'show-on-blb'});
         return true;
       }
       const result = await openSharedSelectionAction({
@@ -3448,7 +3520,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         contextualReferenceResolved: message.contextualReferenceResolved === true || !!contextualReference,
         directUrl:message.directUrl || ''
       });
-      sendResponse(result);
+      await completeSelectionOpen(result);
     } catch (error) {
       console.error('KJV Scripture Tools shared selection action:', {
         tabId:sender?.tab?.id ?? null,
@@ -3458,7 +3530,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         error:String(error),
         stack:error?.stack || ''
       });
-      sendResponse({ok:false, reason:'selection-open-failed', error:String(error)});
+      await completeSelectionOpen({ok:false, reason:'selection-open-failed', error:String(error)});
     }
     return true;
   }

@@ -1,12 +1,54 @@
 const { test, expect } = require('./fixtures');
 
+async function installPopupDiagnostics(page) {
+  await page.addInitScript(() => {
+    window.__blbPopupStartupDiagnostics = [];
+    window.addEventListener('error', event => {
+      window.__blbPopupStartupDiagnostics.push({
+        type: 'error',
+        message: event.message || '',
+        source: event.filename || '',
+        line: event.lineno || 0
+      });
+    });
+    window.addEventListener('unhandledrejection', event => {
+      window.__blbPopupStartupDiagnostics.push({
+        type: 'unhandledrejection',
+        message: String(event.reason?.stack || event.reason || '')
+      });
+    });
+  });
+  page.on('console', message => {
+    if (message.type() === 'error') {
+      void page.evaluate(value => {
+        window.__blbPopupStartupDiagnostics?.push({ type: 'console.error', message: value });
+      }, message.text()).catch(() => {});
+    }
+  });
+}
+
 async function waitForStudyPopupReady(page) {
-  await page.waitForFunction(
-    () => !document.body.classList.contains('popup-loading') &&
-      !document.body.classList.contains('sensitive-restricted'),
-    null,
-    { timeout: 10000 }
-  );
+  try {
+    await page.waitForFunction(
+      () => !document.body.classList.contains('popup-loading') &&
+        !document.body.classList.contains('sensitive-restricted'),
+      null,
+      { timeout: 10000 }
+    );
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => ({
+      readyState: document.readyState,
+      bodyClass: document.body.className,
+      scripts: [...document.scripts].map(script => ({
+        src: script.src,
+        readyState: script.readyState || '',
+        type: script.type || ''
+      })),
+      popupDiagnostics: window.__blbPopupStartupDiagnostics || [],
+      runtimeAvailable: Boolean(chrome?.runtime?.id)
+    })).catch(e => ({ inspectionError: String(e) }));
+    throw new Error(error.message + '\\nPopup startup diagnostics: ' + JSON.stringify(diagnostics));
+  }
   await expect(page.locator('#studyTopic')).toBeVisible();
   await expect(page.locator('#studyTopic')).toBeEnabled();
 }
@@ -20,6 +62,7 @@ test('Study Sessions popup starts recording, saves a note, and stops without los
   await extensionStorage.clear();
 
   const page = await context.newPage();
+  await installPopupDiagnostics(page);
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
   await waitForStudyPopupReady(page);
 
@@ -70,6 +113,7 @@ test('Study Sessions popup pauses and restarts the selected recording without cr
 }) => {
   await extensionStorage.clear();
   const page = await context.newPage();
+  await installPopupDiagnostics(page);
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
   await waitForStudyPopupReady(page);
   const topic = 'Popup pause resume ' + Date.now();

@@ -58,8 +58,11 @@ function sendRuntimeMessageWithRetry(message, sendMessage, onError = null) {
       return await sendMessage(message);
     } catch (error) {
       const errorText = String(error?.message || error || '');
-      if (retryableSelectionRequest && attempt < 2 && /\bNo SW\b/i.test(errorText)) {
-        await new Promise(resolve => setTimeout(resolve, 100 * (attempt + 1)));
+      // A cold or just-restarted MV3 worker can take longer than one short
+      // dispatch window to become available. Retry only request-ID-backed
+      // selection actions; completed IDs are persisted by the worker.
+      if (retryableSelectionRequest && attempt < 4 && /\bNo SW\b/i.test(errorText)) {
+        await new Promise(resolve => setTimeout(resolve, Math.min(150 * (2 ** attempt), 900)));
         return send(attempt + 1);
       }
       reportError(error, attempt);

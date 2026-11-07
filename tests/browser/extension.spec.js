@@ -141,6 +141,82 @@ test('MV3 service worker starts', async ({ context, extensionId }) => {
   expect(context.serviceWorkers().length).toBeGreaterThan(0);
 });
 
+test('MV3 worker restart recovers the real Show on BLB action without duplicate tabs', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'facebook.com':true},
+    doubleClickBlbSites:{}
+  });
+  const page = await context.newPage();
+  await page.route('https://www.facebook.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>Facebook post fixture</title></head><body><main role="article"><p>Facebook reference recovery fixture</p></main></body></html>'
+  }));
+  await page.goto('https://www.facebook.com/', {waitUntil:'domcontentloaded'});
+  const button = page.locator('#blb-suite-page-selection-button');
+  await expect(button).toBeAttached({timeout:10000});
+  await page.evaluate(() => {
+    const paragraph = document.createElement('p');
+    paragraph.id = 'blb-e2e-no-sw-show-on-blb';
+    paragraph.textContent = 'John 3:16';
+    document.body.appendChild(paragraph);
+    const range = document.createRange();
+    range.selectNodeContents(paragraph);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup', {bubbles:true}));
+  });
+  await expect(button).toBeVisible({timeout:10000});
+
+  const cdp = await context.newCDPSession(page);
+  const targets = await cdp.send('Target.getTargets');
+  const workerTarget = targets.targetInfos.find(target =>
+    target.type === 'service_worker' &&
+    target.url === `chrome-extension://${extensionId}/background.js`
+  );
+  expect(workerTarget, 'the extension service worker target must be discoverable').toBeTruthy();
+
+  // Close the live worker, then invoke the actual Show on BLB control. This
+  // exercises its request-ID-backed retry and the background dedupe boundary.
+  await cdp.send('Target.closeTarget', {targetId:workerTarget.targetId});
+  await button.click();
+
+  // Do not depend on Playwright emitting a serviceworker event for a target
+  // restarted through CDP. Wait for the actual action to finish before
+  // inspecting the destination tabs.
+  await expect(button).toBeHidden({timeout:15000});
+  const extensionPage = await context.newPage();
+  await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(async () => extensionPage.evaluate(async () => {
+    const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
+    return tabs.filter(tab => {
+      try { return new URL(tab.url || tab.pendingUrl || '').pathname === '/kjv/jhn/3/16/'; }
+      catch (_) { return false; }
+    }).map(tab => ({id:tab.id, url:tab.url || tab.pendingUrl || ''}));
+  }), {timeout:15000}).toHaveLength(1);
+  const matchingTab = await extensionPage.evaluate(async () => {
+    const tabs = await chrome.tabs.query({url:'https://www.blueletterbible.org/*'});
+    return tabs.find(tab => {
+      try { return new URL(tab.url || tab.pendingUrl || '').pathname === '/kjv/jhn/3/16/'; }
+      catch (_) { return false; }
+    });
+  });
+  expect(new URL(matchingTab.url || matchingTab.pendingUrl).pathname).toBe('/kjv/jhn/3/16/');
+
+  // A response from the extension worker confirms that the restarted
+  // background script has loaded and is dispatching messages again.
+  const workerResponse = await extensionPage.evaluate(() =>
+    chrome.runtime.sendMessage({type:'blbSuiteGetDefaultSiteStatus', hostname:'facebook.com'})
+  );
+  expect(workerResponse).toBeTruthy();
+  await extensionPage.close();
+  await page.close();
+});
+
 test('KJV phrase candidate index loads only when Criteria phrase matching needs it', async ({ extensionWorker, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const initial = await extensionWorker.evaluate(() => ({
@@ -3170,7 +3246,7 @@ test('extension update reconciliation reactivates configured existing tabs', asy
   }
 });
 
-test('selection messaging retries only deduplicated requests after a transient No SW error', async ({ page, extensionStorage, extensionWorker }) => {
+test('selection messaging retries transient No SW errors and persists completed request IDs', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionStorage.set({
     masterEnabled:true,
     pageSelectionButtonSites:{'example.com':true},
@@ -3193,7 +3269,7 @@ test('selection messaging retries only deduplicated requests after a transient N
         {type:'blbSuiteOpenSelectionText', requestId:'e2e-no-sw-retry', text:'John 3:16'},
         async () => {
           selectionAttempts++;
-          if (selectionAttempts === 1) throw new Error('No SW');
+          if (selectionAttempts <= 3) throw new Error('No SW');
           return {ok:true};
         }
       );
@@ -3213,10 +3289,27 @@ test('selection messaging retries only deduplicated requests after a transient N
   const {result} = injectedResults[0];
 
   expect(result).toEqual({
-    selectionAttempts:2,
+    selectionAttempts:4,
     selectionResponse:{ok:true},
     ordinaryAttempts:1
   });
+});
+
+test('completed selection request IDs survive service-worker global-state loss', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    recentSelectionOpenRequests.clear();
+    await rememberCompletedSelectionOpenRequest('completed-before-worker-restart');
+    const saved = await chrome.storage.session.get(SELECTION_OPEN_REQUEST_SESSION_KEY);
+    saved[SELECTION_OPEN_REQUEST_SESSION_KEY]['completed-before-worker-restart'] = Date.now() - 2000;
+    await chrome.storage.session.set(saved);
+    // Simulate a fresh worker: session storage survives while ordinary globals do not.
+    // The same request remains protected beyond the shorter in-worker gesture window.
+    recentSelectionOpenRequests.clear();
+    const duplicate = await shouldAcceptSelectionOpenRequest(7, 'John 3:16', 'completed-before-worker-restart');
+    const fresh = await shouldAcceptSelectionOpenRequest(7, 'John 3:16', 'new-selection-request');
+    return {duplicate, fresh};
+  });
+  expect(result).toEqual({duplicate:false, fresh:true});
 });
 
 
@@ -3272,4 +3365,45 @@ test('reinjecting the current content bundle replaces a stale Show on BLB contro
     selector:'#blb-e2e-reinjected-show-on-blb',
     selectedText:'John 3:16'
   });
+});
+
+
+test('MV3 service worker repeatedly cold-starts after rapid termination', async ({ context, extensionId }) => {
+  const extensionPage = await context.newPage();
+  await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`);
+  const cdp = await context.newCDPSession(extensionPage);
+
+  // Repeatedly terminate the worker and immediately wake it through a real
+  // extension message. This stresses startup/importScripts across consecutive
+  // cold starts; it is a worker-restart proxy, not a full chrome://extensions
+  // reload (which unloads the extension itself).
+  for (let cycle = 1; cycle <= 6; cycle++) {
+    const targets = await cdp.send('Target.getTargets');
+    const workerTarget = targets.targetInfos.find(target =>
+      target.type === 'service_worker' &&
+      target.url === `chrome-extension://${extensionId}/background.js`
+    );
+    expect(workerTarget, `service worker must be running before restart cycle ${cycle}`).toBeTruthy();
+
+    await cdp.send('Target.closeTarget', { targetId: workerTarget.targetId });
+
+    await expect.poll(async () => {
+      try {
+        const response = await extensionPage.evaluate(() =>
+          chrome.runtime.sendMessage({
+            type: 'blbSuiteGetDefaultSiteStatus',
+            hostname: 'facebook.com'
+          })
+        );
+        return !!response;
+      } catch (_) {
+        return false;
+      }
+    }, {
+      timeout: 10000,
+      intervals: [25, 50, 100, 200]
+    }).toBe(true);
+  }
+
+  await extensionPage.close();
 });
