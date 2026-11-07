@@ -3051,6 +3051,33 @@ test('runtime content-script registrations update using the supported scripts-ar
   });
 });
 
+
+test('concurrent tabs serialize runtime script registration for the same origin', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const url = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+    const pattern = originPatternForUrl(url);
+    const id = runtimeContentScriptIdForPattern(pattern);
+    const files = ['redirect-scripttagger.js'];
+    await chrome.scripting.unregisterContentScripts({ ids:[id] }).catch(() => {});
+    try {
+      const [first, second] = await Promise.all([
+        ensureRuntimeContentScriptRegistered({ url, id:101 }, files),
+        ensureRuntimeContentScriptRegistered({ url, id:102 }, files)
+      ]);
+      const registered = await chrome.scripting.getRegisteredContentScripts({ ids:[id] });
+      return { first, second, scripts:registered[0]?.js || [] };
+    } finally {
+      await chrome.scripting.unregisterContentScripts({ ids:[id] }).catch(() => {});
+    }
+  });
+
+  expect(result).toEqual({
+    first:true,
+    second:true,
+    scripts:['redirect-scripttagger.js']
+  });
+});
+
 test('extension update reconciliation revisits already-open configured tabs', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionWorker.evaluate(() => {
     globalThis.__blbSuiteUpdateReconciliationCalls = [];
