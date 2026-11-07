@@ -77,7 +77,7 @@ test('service-worker importScripts dependencies exist in the packaged extension 
   assert(match, 'background.js must declare its startup importScripts bundle');
   const imports = [...match[1].matchAll(/'([^']+)'/g)].map(item => item[1]);
   assert(imports.length > 0, 'service-worker importScripts bundle must not be empty');
-  for (const file of imports) assert(fs.existsSync(path.join(ROOT, file)), \`missing service-worker import: \${file}\`);
+  for (const file of imports) assert(fs.existsSync(path.join(ROOT, file)), 'missing service-worker import: ' + file);
 });
 
 test('manifest-referenced files exist', () => {
