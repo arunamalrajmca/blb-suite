@@ -262,7 +262,7 @@ function resolveBibleReferenceText(text, options = {}) {
     // guard as the other passes; otherwise "Philemon 25\n3. The Ancient..."
     // can still be interpreted as Philemon 25:3 after the earlier guard skips it.
     if (match.book.chapterCount === 1 && chapter !== 1) continue;
-    add(match.book, chapter, Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), match.text);
+    add(match.book, chapter, Number(m[3]), m[4] ? Number(m[4]) : Number(m[3]), match.text, m.index, m.index + m[0].length);
   }
 
   // Expand abbreviated entries in reference lists in source order. Processing
