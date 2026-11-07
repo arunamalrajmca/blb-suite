@@ -3409,6 +3409,7 @@ test('MV3 service worker repeatedly cold-starts after rapid termination', async 
 });
 
 test('MV3 extension survives 100 full runtime reloads with diagnostics', async ({ context, extensionId }) => {
+  test.skip(process.env.BLB_HEADFUL_EXTENSION_TESTS !== '1', 'Requires headed Chromium to exercise chrome://extensions Reload UI');
   test.setTimeout(300000);
 
   const fs = require('node:fs');
