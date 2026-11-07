@@ -3574,7 +3574,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ok:false});
   });
   return true;
-  })();
+  })().catch(error => {
+    const details = describeScriptInjectionError(error);
+    console.error('KJV Scripture Tools async message handler failed:', {
+      messageType:String(message?.type || ''),
+      requestId:String(message?.requestId || ''),
+      senderTabId:sender?.tab?.id ?? null,
+      senderUrl:sender?.tab?.url || '',
+      ...details
+    });
+    try {
+      sendResponse({
+        ok:false,
+        reason:'message-handler-failed',
+        error:details.errorMessage || details.errorString,
+        diagnostic:details
+      });
+    } catch (_) {}
+  });
   return true;
 });
 
