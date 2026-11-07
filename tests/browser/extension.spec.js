@@ -3535,11 +3535,12 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
       expect(previousWorkerState.unavailable, 'previous worker is readable before cycle ' + cycle).not.toBe(true);
       writeLog(cycle, 'previous-worker-state', previousWorkerState);
 
-      const reloadInfo = await expect.poll(findExtensionReloadButton, { timeout: 10000 }).toMatchObject({
+      await expect.poll(findExtensionReloadButton, { timeout: 10000 }).toMatchObject({
         found: true,
         reloadButton: true,
         disabled: false
       });
+      const reloadInfo = await findExtensionReloadButton();
       writeLog(cycle, 'extensions-reload-control-ready', reloadInfo);
 
       let observedReplacementWorker = null;
