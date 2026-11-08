@@ -161,3 +161,70 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  windows-brave-startup-and-reload:
+    name: Windows Brave fresh install and 100 full reloads
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Install Brave stable
+        shell: pwsh
+        run: |
+          choco install brave -y --no-progress
+          $brave = Join-Path $env:ProgramFiles 'BraveSoftware\Brave-Browser\Application\brave.exe'
+          if (!(Test-Path $brave)) { throw "Brave executable not found at $brave" }
+          & $brave --version
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install --prefer-offline --no-audit --no-fund
+
+      - name: Install Playwright Chromium runtime
+        run: npx playwright install chromium
+
+      - name: Run Windows Brave startup and 100-reload diagnostics
+        shell: pwsh
+        env:
+          BLB_BROWSER_EXECUTABLE_PATH: C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe
+          BLB_HEADFUL_EXTENSION_TESTS: '0'
+          BLB_TEST_FULL_EXTENSION_RELOADS: '1'
+          BLB_STARTUP_DIAGNOSTICS_LOG_PATH: ${{ github.workspace }}\test-results\windows-brave-startup-reload.log
+        run: |
+          New-Item -ItemType Directory -Force test-results | Out-Null
+          npx playwright test tests/browser/startup-diagnostics.spec.js --max-failures=1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Verify Windows Brave diagnostics and reload cycles
+        if: always()
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:GITHUB_WORKSPACE 'test-results\windows-brave-startup-reload.log'
+          if (!(Test-Path $log)) { throw 'Windows Brave diagnostic log was not created' }
+          $records = Get-Content $log | ForEach-Object { try { $_ | ConvertFrom-Json } catch { $null } } | Where-Object { $_ }
+          foreach ($event in @('browser-version','fresh-install-worker-ready','first-runtime-message-response','diagnostics-finished')) {
+            if (!($records | Where-Object event -eq $event)) { throw "Missing diagnostic event: $event" }
+          }
+          $passed = @($records | Where-Object event -eq 'worker-reload-cycle-passed').Count
+          if ($passed -ne 10) { throw "Expected 10 worker reload cycles, got $passed" }
+          $fullReloads = @($records | Where-Object event -eq 'extension-reload-cycle-passed').Count
+          if ($fullReloads -ne 100) { throw "Expected 100 full extension reloads, got $fullReloads" }
+          $scriptFailures = @($records | Where-Object { $_.event -eq 'diagnostics-finished' } | Select-Object -Last 1).scriptFailureCount
+          if ($scriptFailures -ne 0) { throw "Detected $scriptFailures extension script/network failures" }
+
+      - name: Upload Windows Brave startup diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-windows-brave-startup-reload-diagnostics
+          path: ${{ github.workspace }}\test-results\windows-brave-startup-reload.log
+          if-no-files-found: error
+          retention-days: 14
