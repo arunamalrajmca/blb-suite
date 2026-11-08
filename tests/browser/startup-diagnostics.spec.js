@@ -185,11 +185,17 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       runtimeId: chrome.runtime.id,
       manifestVersion: chrome.runtime.getManifest().manifest_version,
       manifestName: chrome.runtime.getManifest().name,
-      workerTimeOrigin: performance.timeOrigin
+      workerTimeOrigin: performance.timeOrigin,
+      omniboxApiAvailable: Boolean(chrome.omnibox),
+      omniboxInputEventAvailable: Boolean(chrome.omnibox?.onInputEntered),
+      omniboxListenerRegistered: Boolean(chrome.omnibox?.onInputEntered?.hasListeners?.())
     }));
     writeLog('fresh-install-worker-ready', workerState);
     expect(workerState.runtimeId).toBe(extensionId);
     expect(workerState.manifestVersion).toBe(3);
+    expect(workerState.omniboxApiAvailable, 'manifest omnibox permission must expose chrome.omnibox').toBe(true);
+    expect(workerState.omniboxInputEventAvailable, 'omnibox onInputEntered event must be available').toBe(true);
+    expect(workerState.omniboxListenerRegistered, 'handleOmniboxCommand listener must register during worker startup').toBe(true);
 
     // Keep real extension-match tabs open during the reload stress loop.
     // The page bodies are deterministic fixtures served on the real origins,
