@@ -137,7 +137,7 @@ jobs:
           test "$full_reloads" -eq 100
           selection_messages="$(grep -c '"event":"active-tab-selection-runtime-message"' "$log" || true)"
           test "$selection_messages" -eq 200
-          facebook_messages="$(grep -c '"event":"active-tab-selection-runtime-message".*"sourceHost":"www.facebook.com".*"result":{"ok":true' "$log" || true)"
+          facebook_messages="$(grep -c '"event":"active-tab-selection-runtime-message".*"sourceHost":"www.facebook.com".*"result":{.*"ok":true' "$log" || true)"
           test "$facebook_messages" -eq 100
           blb_messages="$(grep -c '"event":"active-tab-selection-runtime-message".*"sourceHost":"www.blueletterbible.org".*"result":{"ok":true' "$log" || true)"
           test "$blb_messages" -eq 100
