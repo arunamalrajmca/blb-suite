@@ -1,0 +1,70 @@
+name: Extension Fresh-Install Startup Diagnostics
+run-name: Fresh-install startup diagnostics — PR ${{ github.event.pull_request.number || github.ref_name }}
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+    types: [ synchronize ]
+    paths:
+      - 'tests/browser/startup-diagnostics.spec.js'
+      - 'tests/browser/fixtures.js'
+      - 'extension/**'
+      - '.github/workflows/extension-startup-diagnostics.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extension-startup-diagnostics-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fresh-install-startup:
+    name: Fresh install and first worker startup
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout PR head
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 1
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --prefer-offline --no-audit --no-fund
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run only the fresh-install startup diagnostic
+        env:
+          BLB_STARTUP_DIAGNOSTICS_LOG_PATH: ${{ github.workspace }}/test-results/extension-startup-diagnostics.log
+        run: |
+          mkdir -p test-results
+          npx playwright test tests/browser/startup-diagnostics.spec.js --max-failures=1
+
+      - name: Verify diagnostics were written
+        if: always()
+        shell: bash
+        run: |
+          log="$GITHUB_WORKSPACE/test-results/extension-startup-diagnostics.log"
+          test -s "$log"
+          grep -q '"event":"fresh-install-worker-ready"' "$log"
+          grep -q '"event":"first-runtime-message-response"' "$log"
+          grep -q '"event":"diagnostics-finished"' "$log"
+
+      - name: Upload fresh-install startup diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-fresh-install-startup-diagnostics
+          path: ${{ github.workspace }}/test-results/extension-startup-diagnostics.log
+          if-no-files-found: error
+          retention-days: 14
