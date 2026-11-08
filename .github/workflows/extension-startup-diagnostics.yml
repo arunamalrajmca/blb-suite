@@ -61,6 +61,7 @@ jobs:
         run: |
           log="$GITHUB_WORKSPACE/test-results/extension-startup-diagnostics.log"
           test -s "$log"
+          grep -q '"event":"browser-version"' "$log"
           grep -q '"event":"fresh-install-worker-ready"' "$log"
           grep -q '"event":"first-runtime-message-response"' "$log"
           grep -q '"event":"diagnostics-finished"' "$log"
@@ -125,6 +126,7 @@ jobs:
         run: |
           log="$GITHUB_WORKSPACE/test-results/brave-startup-reload.log"
           test -s "$log"
+          grep -q '"event":"browser-version"' "$log"
           grep -q '"event":"fresh-install-worker-ready"' "$log"
           grep -q '"event":"first-runtime-message-response"' "$log"
           grep -q '"event":"diagnostics-finished"' "$log"
