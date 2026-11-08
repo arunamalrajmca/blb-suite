@@ -249,7 +249,12 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
     writeLog('chrome-extensions-manager-card', extensionCard);
     const cardErrors = extensionCard.errorFields || {};
     const reportedErrors = Object.entries(cardErrors)
-      .filter(([key, value]) => /error/i.test(key) && value && (!Array.isArray(value) || value.length > 0));
+      .filter(([key, value]) => {
+        if (!/error/i.test(key) || !value) return false;
+        if (Array.isArray(value)) return value.length > 0;
+        if (typeof value === 'object') return Object.values(value).some(Boolean);
+        return Boolean(value);
+      });
     expect(extensionCard.found, 'the newly installed extension must appear on chrome://extensions').toBe(true);
     expect(reportedErrors, 'Chrome must not report extension load/runtime errors on the manager card').toEqual([]);
     await manager.close();
