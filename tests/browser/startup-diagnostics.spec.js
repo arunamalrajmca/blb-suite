@@ -2,6 +2,7 @@ const { test, expect } = require('./fixtures');
 const { chromium } = require('@playwright/test');
 const fs = require('node:fs');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 
 test('fresh unpacked install starts cleanly and serves its first popup request', async ({ extensionPath }, testInfo) => {
   test.setTimeout(90000);
@@ -24,6 +25,12 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
     fs.appendFileSync(logPath, JSON.stringify(record) + '\n');
     console.log('[BLB_STARTUP_DIAGNOSTICS] ' + JSON.stringify(record));
   };
+  const browserExecutable = process.env.BLB_BROWSER_EXECUTABLE_PATH;
+  const browserVersion = browserExecutable
+    ? execFileSync(browserExecutable, ['--version'], { encoding: 'utf8' }).trim()
+    : 'Playwright-managed Chromium';
+  writeLog('browser-version', { browserExecutable: browserExecutable || null, browserVersion });
+
   const inspectError = (source, message, details = {}) => {
     const text = String(message || '');
     writeLog('browser-error-observed', { source, message: text, ...details });
