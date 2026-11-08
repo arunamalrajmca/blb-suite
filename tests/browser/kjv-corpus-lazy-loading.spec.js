@@ -110,6 +110,51 @@ test.describe('On-demand normalized KJV corpus loading', () => {
     expect(result.exactMatch).toEqual([43, 3, 16]);
   });
 
+  test('HTTP and corrupt compressed-sidecar failures fall back to original packaged data', async ({ extensionWorker }) => {
+    const result = await extensionWorker.evaluate(async () => {
+      const originalFetch = self.fetch;
+      const gzipFailures = [];
+      const fallbackFiles = [];
+      self.fetch = async (input, ...args) => {
+        const url = String(input);
+        if (url.endsWith('kjv-corpus-verses.json.gz')) {
+          gzipFailures.push('http-503');
+          return new Response('', { status:503 });
+        }
+        if (url.endsWith('kjv-corpus-word-verse-index.json.gz')) {
+          gzipFailures.push('invalid-gzip');
+          return new Response('not a gzip stream', { status:200 });
+        }
+        if (/kjv-corpus-(verses|word-verse-index)\.js(?:$|[?#])/.test(url)) {
+          fallbackFiles.push(url.split('/').pop());
+        }
+        return originalFetch(input, ...args);
+      };
+      try {
+        const [verses, wordVerseEntries] = await Promise.all([
+          fetchPackagedGzipJson('kjv-corpus-verses.json.gz'),
+          fetchPackagedGzipJson('kjv-corpus-word-verse-index.json.gz')
+        ]);
+        return {
+          gzipFailures,
+          fallbackFiles,
+          verseCount:verses.length,
+          wordEntryCount:wordVerseEntries.length
+        };
+      } finally {
+        self.fetch = originalFetch;
+      }
+    });
+
+    expect(result.gzipFailures).toEqual(['http-503', 'invalid-gzip']);
+    expect(result.fallbackFiles).toEqual(expect.arrayContaining([
+      'kjv-corpus-verses.js',
+      'kjv-corpus-word-verse-index.js'
+    ]));
+    expect(result.verseCount).toBe(31102);
+    expect(result.wordEntryCount).toBeGreaterThan(0);
+  });
+
   test('concurrent loads are deduplicated and a failed load can be retried', async ({ extensionWorker }) => {
     const result = await extensionWorker.evaluate(async () => {
       const originalFetch = self.fetch;
