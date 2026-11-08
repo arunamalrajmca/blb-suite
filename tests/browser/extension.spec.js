@@ -3191,12 +3191,17 @@ test('tab activation fails when its persistent content-script registration fails
     const pendingActivation = contentScriptInjectionLocks.get(tab.id);
     if (pendingActivation) await pendingActivation.catch(() => {});
     const pattern = originPatternForUrl(tab.url);
-    const registrationId = runtimeContentScriptIdForPattern(pattern);
-    await chrome.scripting.unregisterContentScripts({ids:[registrationId, registrationId + '-main-world']})
-      .catch(() => {});
-    const remaining = await chrome.scripting.getRegisteredContentScripts({ids:[registrationId]});
+    const registered = await chrome.scripting.getRegisteredContentScripts();
+    const matchingIds = registered
+      .filter(entry => entry.matches?.includes(pattern) && entry.id.startsWith('blb-suite-runtime-'))
+      .map(entry => entry.id);
+    if (matchingIds.length) {
+      await chrome.scripting.unregisterContentScripts({ids:matchingIds});
+    }
+    const remaining = (await chrome.scripting.getRegisteredContentScripts())
+      .filter(entry => entry.matches?.includes(pattern) && entry.id.startsWith('blb-suite-runtime-'));
     if (remaining.length) {
-      throw new Error('Could not remove the existing example.com registration before simulating failure');
+      throw new Error('Could not remove existing example.com registrations: ' + remaining.map(entry => entry.id).join(', '));
     }
     const originalRegister = chrome.scripting.registerContentScripts;
     const failingRegister = async () => {
