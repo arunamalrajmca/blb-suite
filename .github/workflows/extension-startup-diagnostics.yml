@@ -116,6 +116,7 @@ jobs:
         env:
           BLB_BROWSER_EXECUTABLE_PATH: /usr/bin/brave-browser
           BLB_HEADFUL_EXTENSION_TESTS: '1'
+          BLB_TEST_FULL_EXTENSION_RELOADS: '1'
           BLB_STARTUP_DIAGNOSTICS_LOG_PATH: ${{ github.workspace }}/test-results/brave-startup-reload.log
         run: |
           xvfb-run -a npx playwright test tests/browser/startup-diagnostics.spec.js --max-failures=1
