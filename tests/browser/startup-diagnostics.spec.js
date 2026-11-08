@@ -81,6 +81,46 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
     });
 
     browserCdp = await context.browser().newBrowserCDPSession();
+    const workerRequestUrls = new Map();
+    let workerCdpSessionId = null;
+    let cdpMessageId = 0;
+    browserCdp.on('Target.receivedMessageFromTarget', event => {
+      if (event.sessionId !== workerCdpSessionId) return;
+      let message;
+      try { message = JSON.parse(event.message); } catch (_) { return; }
+      if (message.method === 'Runtime.consoleAPICalled') {
+        const args = (message.params.args || []).map(item => item.value ?? item.description ?? '').join(' ');
+        const type = message.params.type || 'log';
+        writeLog('service-worker-console', { type, text: args });
+        if (type === 'error') inspectError('service-worker-console', args);
+      } else if (message.method === 'Runtime.exceptionThrown') {
+        const details = message.params.exceptionDetails || {};
+        const description = details.exception?.description || details.text || 'unknown worker exception';
+        inspectError('service-worker-exception', description, { lineNumber: details.lineNumber, url: details.url });
+      } else if (message.method === 'Log.entryAdded') {
+        const entry = message.params.entry || {};
+        writeLog('service-worker-log-entry', {
+          level: entry.level,
+          text: entry.text,
+          url: entry.url,
+          source: entry.source
+        });
+        if (entry.level === 'error') inspectError('service-worker-log', entry.text, { url: entry.url, source: entry.source });
+      } else if (message.method === 'Network.requestWillBeSent') {
+        workerRequestUrls.set(message.params.requestId, message.params.request?.url || '');
+      } else if (message.method === 'Network.loadingFailed') {
+        const url = workerRequestUrls.get(message.params.requestId) || '';
+        writeLog('service-worker-request-failed', {
+          url,
+          errorText: message.params.errorText,
+          canceled: message.params.canceled,
+          type: message.params.type
+        });
+        if (url.startsWith('chrome-extension://') && !message.params.canceled) {
+          scriptFailures.push({ source: 'service-worker-network', url, errorText: message.params.errorText });
+        }
+      }
+    });
     browserCdp.on('Target.targetCrashed', event => {
       writeLog('browser-target-crashed', event);
       scriptFailures.push({ source: 'target-crash', ...event });
@@ -104,6 +144,32 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
     const workerUrl = worker.url();
     const extensionId = workerUrl.split('/')[2];
     writeLog('service-worker-observed', { workerUrl, extensionId });
+
+    const workerTargets = await browserCdp.send('Target.getTargets');
+    const workerTarget = workerTargets.targetInfos.find(item =>
+      item.type === 'service_worker' && item.url === workerUrl
+    );
+    if (workerTarget) {
+      const attached = await browserCdp.send('Target.attachToTarget', {
+        targetId: workerTarget.targetId,
+        flatten: false
+      });
+      workerCdpSessionId = attached.sessionId;
+      for (const method of ['Runtime.enable', 'Log.enable', 'Network.enable']) {
+        const id = ++cdpMessageId;
+        await browserCdp.send('Target.sendMessageToTarget', {
+          sessionId: workerCdpSessionId,
+          message: JSON.stringify({ id, method, params: {} })
+        });
+      }
+      writeLog('service-worker-cdp-instrumented', {
+        targetId: workerTarget.targetId,
+        sessionId: workerCdpSessionId,
+        domains: ['Runtime', 'Log', 'Network']
+      });
+    } else {
+      writeLog('service-worker-cdp-attach-unavailable', { workerUrl });
+    }
 
     const workerState = await worker.evaluate(() => ({
       runtimeId: chrome.runtime.id,
