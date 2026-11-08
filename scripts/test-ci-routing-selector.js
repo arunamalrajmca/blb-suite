@@ -162,6 +162,7 @@ try {
     'tests/browser/study-backup-restore.spec.js',
     'tests/browser/feature-lifecycle-regressions.spec.js',
     'tests/browser/extension.spec.js',
+    'tests/browser/startup-diagnostics.spec.js',
     'tests/browser/shared-regex-patterns.spec.js',
     'tests/browser/rediscover-sagacity-button.spec.js',
     'tests/browser/research-dom-smoke.spec.js',
