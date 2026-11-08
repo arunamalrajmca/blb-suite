@@ -3160,13 +3160,15 @@ test('overlapping startup and install events share one persisted-registration au
 });
 
 test('tab activation fails when its persistent content-script registration fails', async ({ page, extensionStorage, extensionWorker }) => {
+  // Load the tab before enabling the feature so the normal onUpdated path
+  // cannot race this test's deliberately failed registration.
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
   await extensionStorage.set({
     masterEnabled:true,
     pageSelectionButtonSites:{'example.com':true},
     doubleClickBlbSites:{},
     redirectEnabled:false
   });
-  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
 
   const activated = await extensionWorker.evaluate(async () => {
     const tabs = await chrome.tabs.query({url:'https://example.com/*'});
