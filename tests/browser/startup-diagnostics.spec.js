@@ -204,17 +204,43 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       contentType: 'text/html',
       body: '<!doctype html><html><head><title>BLB stress fixture</title></head><body><main id="blb-stress-fixture">BLB tab kept open during extension reload stress</main></body></html>'
     }));
-    const facebookTab = await context.newPage();
-    await facebookTab.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
-    const blbTab = await context.newPage();
-    await blbTab.goto('https://www.blueletterbible.org/', { waitUntil: 'domcontentloaded' });
-    await blbTab.waitForFunction(() => window.__blbSuiteContentScriptLoadedV2 === true, null, { timeout: 15000 });
-    writeLog('combined-stress-tabs-ready', {
-      facebookUrl: facebookTab.url(),
-      facebookContentScriptLoaded: await facebookTab.evaluate(() => window.__blbSuiteContentScriptLoadedV2 === true),
-      blbUrl: blbTab.url(),
-      blbContentScriptLoaded: true
-    });
+    let facebookTab = null;
+    let blbTab = null;
+    if (process.env.BLB_TEST_FULL_EXTENSION_RELOADS === '1') {
+      await worker.evaluate(async () => {
+        await chrome.storage.local.set({
+          masterEnabled: true,
+          pageSelectionButtonSites: { 'blueletterbible.org': true }
+        });
+      });
+      facebookTab = await context.newPage();
+      await facebookTab.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+      blbTab = await context.newPage();
+      await blbTab.goto('https://www.blueletterbible.org/', { waitUntil: 'domcontentloaded' });
+      const injectionPage = await context.newPage();
+      await injectionPage.goto(`chrome-extension://${extensionId}/popup.html`, {
+        waitUntil: 'domcontentloaded',
+        timeout: 15000
+      });
+      const blbTabId = await worker.evaluate(async () => {
+        const tabs = await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' });
+        return tabs.find(tab => new URL(tab.url).pathname === '/')?.id ?? null;
+      });
+      expect(blbTabId, 'BLB stress tab must be registered with Chrome').not.toBeNull();
+      const ensureResponse = await injectionPage.evaluate(tabId =>
+        chrome.runtime.sendMessage({ type: 'blbSuiteEnsureContentScript', tabId }),
+      blbTabId);
+      writeLog('combined-stress-content-script-ensure', { tabId: blbTabId, response: ensureResponse });
+      expect(ensureResponse?.ok, 'BLB content script must be activated before combined stress').toBe(true);
+      await blbTab.waitForFunction(() => window.__blbSuiteContentScriptLoadedV2 === true, null, { timeout: 15000 });
+      await injectionPage.close();
+      writeLog('combined-stress-tabs-ready', {
+        facebookUrl: facebookTab.url(),
+        facebookContentScriptLoaded: await facebookTab.evaluate(() => window.__blbSuiteContentScriptLoadedV2 === true),
+        blbUrl: blbTab.url(),
+        blbContentScriptLoaded: true
+      });
+    }
 
     const sendActiveTabSelectionRequest = async cycle => {
       const liveWorker = context.serviceWorkers().find(item => item.url() === workerUrl);
