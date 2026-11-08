@@ -5,10 +5,6 @@
  */
 export const featureSpecs = [
   {
-    paths: ["extension/background.js"],
-    specs: ["tests/browser/startup-diagnostics.spec.js"]
-  },
-  {
     paths: ["tests/pages/research-derived-smoke.html"],
     specs: ["tests/browser/research-dom-smoke.spec.js"]
   },
@@ -26,6 +22,7 @@ export const featureSpecs = [
   {
     paths: ["extension/background.js"],
     specs: [
+      "tests/browser/startup-diagnostics.spec.js",
       "tests/browser/popup-master-toggle-regression.spec.js",
       "tests/browser/facebook-selection-parser.spec.js",
       "tests/browser/substack-selection-parser.spec.js",
