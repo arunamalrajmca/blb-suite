@@ -3129,7 +3129,7 @@ test('persisted registration audit runs only on install/update and browser start
   const fs = require('node:fs');
   const path = require('node:path');
   const source = fs.readFileSync(path.resolve(__dirname, '../../extension/background.js'), 'utf8');
-  const auditInvocations = source.match(/schedulePersistedRuntimeContentScriptAudit\(\)/g) || [];
+  const auditInvocations = source.match(/=> schedulePersistedRuntimeContentScriptAudit\(\)/g) || [];
 
   expect(auditInvocations).toHaveLength(2);
   expect(source).not.toMatch(/^auditPersistedRuntimeContentScriptRegistrations\(\)\.catch/m);
