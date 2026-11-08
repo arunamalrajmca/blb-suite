@@ -635,7 +635,7 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
         expect(reloadResponse, 'runtime message after full extension reload, cycle ' + cycle).toBeTruthy();
 
         // Exercise an actual selection-open message from the still-open
-        // Facebook-origin tab while the BLB tab remains open.
+        // BLB-origin tab while a Facebook tab remains open beside it.
         await expect.poll(() => blbTab.evaluate(() =>
           window.__blbSuiteContentScriptLoadedV2 === true
         ), { timeout: 5000 }).toBe(true);
