@@ -411,8 +411,20 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
           { itemFound: true, reloadFound: false, buttons: buttons.map(({ element, ...data }) => data) };
       }, extensionId)).toMatchObject({ itemFound: true, reloadFound: true });
   
+      // Release the debugger attachment: an attached worker debugger can
+      // interfere with the browser's normal extension-reload lifecycle.
+      if (workerCdpSessionId) {
+        await browserCdp.send('Target.detachFromTarget', { sessionId: workerCdpSessionId }).catch(() => {});
+        workerCdpSessionId = null;
+      }
+
       for (let cycle = 1; cycle <= 25; cycle++) {
-        const workerStarted = context.waitForEvent('serviceworker', { timeout: 15000 });
+        const beforeReload = await browserCdp.send('Target.getTargets');
+        const workerBeforeReload = beforeReload.targetInfos.find(item =>
+          item.type === 'service_worker' && item.url === workerUrl
+        );
+        expect(workerBeforeReload, 'Brave worker must be running before full reload cycle ' + cycle).toBeTruthy();
+
         const clicked = await manager.evaluate(id => {
           const all = [];
           const visit = root => {
@@ -449,14 +461,15 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
         }, extensionId);
         writeLog('extension-reload-cycle-clicked', { cycle, ...clicked });
         expect(clicked.clicked, 'Brave Reload button must be clickable, cycle ' + cycle).toBe(true);
-        const restartedWorker = await workerStarted;
-        const restartedState = await restartedWorker.evaluate(() => ({
-          runtimeId: chrome.runtime.id,
-          manifestVersion: chrome.runtime.getManifest().manifest_version,
-          workerTimeOrigin: performance.timeOrigin
-        }));
-        expect(restartedState.runtimeId).toBe(extensionId);
-        expect(restartedState.manifestVersion).toBe(3);
+
+        await expect.poll(async () => {
+          const state = await browserCdp.send('Target.getTargets');
+          return !state.targetInfos.some(item =>
+            item.type === 'service_worker' && item.url === workerUrl
+          );
+        }, { timeout: 10000, intervals: [25, 50, 100] }).toBe(true);
+        writeLog('extension-reload-worker-stopped', { cycle });
+
         const reloadPopup = await context.newPage();
         await reloadPopup.goto(`chrome-extension://${extensionId}/popup.html`, {
           waitUntil: 'domcontentloaded',
@@ -467,9 +480,20 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
           hostname: 'facebook.com'
         }));
         expect(reloadResponse, 'runtime message after full extension reload, cycle ' + cycle).toBeTruthy();
+
+        await expect.poll(async () => {
+          const state = await browserCdp.send('Target.getTargets');
+          return state.targetInfos.some(item =>
+            item.type === 'service_worker' && item.url === workerUrl
+          );
+        }, { timeout: 10000, intervals: [25, 50, 100] }).toBe(true);
+        const afterReload = await browserCdp.send('Target.getTargets');
+        const replacementTarget = afterReload.targetInfos.find(item =>
+          item.type === 'service_worker' && item.url === workerUrl
+        );
         writeLog('extension-reload-cycle-passed', {
           cycle,
-          workerTimeOrigin: restartedState.workerTimeOrigin,
+          targetId: replacementTarget.targetId,
           responsePresent: !!reloadResponse
         });
         await reloadPopup.close();
