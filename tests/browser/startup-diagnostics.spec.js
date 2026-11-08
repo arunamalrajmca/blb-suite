@@ -362,8 +362,11 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
         if (typeof value === 'object') return Object.values(value).some(hasReportedValue);
         return Boolean(value);
       };
+      // errorCollection only reports whether Chrome's diagnostic
+      // collection is active/enabled; it is not an extension error entry.
       const errors = Object.entries(snapshot.errorFields || {})
-        .filter(([key, value]) => /error/i.test(key) && hasReportedValue(value));
+        .filter(([key, value]) => key !== 'errorCollection' &&
+          /error/i.test(key) && hasReportedValue(value));
       expect(snapshot.found, 'Brave extensions manager must retain the extension card after reload cycle ' + cycle)
         .toBe(true);
       expect(errors, 'Brave extensions manager must report no extension errors after reload cycle ' + cycle)
