@@ -116,11 +116,14 @@ jobs:
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
           BLB_PERF_OUTPUT: ${{ runner.temp }}/blb-performance.jsonl
+          BLB_RELOAD_STRESS_LOG_PATH: ${{ github.workspace }}/test-results/extension-reload-stress.log
           NO_COLOR: '1'
           FORCE_COLOR: '0'
         shell: bash
         run: |
           : > "$BLB_PERF_OUTPUT"
+          mkdir -p test-results
+          printf '%s\n' '[BLB_RELOAD_STRESS] stress test not reached yet' > test-results/extension-reload-stress.log
           list_output="$RUNNER_TEMP/blb-playwright-list.txt"
           test_list="$RUNNER_TEMP/blb-playwright-test-list.txt"
           if ! npx playwright test --list --reporter=list > "$list_output" 2>&1; then
@@ -152,7 +155,8 @@ jobs:
             "Study Sessions confirmed deletion stops and removes only the selected recording, while delete-all clears remaining history" \
             "selected Study Topic exports a PDF containing its saved reference and note" \
             "shared sensitive-site classifier covers known providers without keyword false positives" \
-            "payments URLs suppress selection injection and context-menu eligibility despite saved opt-ins"; do
+            "payments URLs suppress selection injection and context-menu eligibility despite saved opt-ins" \
+            "Double-click generic reference syntax — spaced forms — NT"; do
             grep -F "› $failed_title" "$test_list" >> "$priority_list" || true
           done
           cat "$test_list" >> "$priority_list"
@@ -184,14 +188,6 @@ jobs:
               npx playwright test --test-list "$current_test" --max-failures=1 > "$current_log" 2>&1 || command_status=$?
             fi
             cat "$current_log"
-            if [[ "$test_id" == *"MV3 extension survives 100 full runtime reloads"* ]]; then
-              mkdir -p test-results
-              {
-                echo "[BLB_RELOAD_STRESS] audit_test=$test_id"
-                echo "[BLB_RELOAD_STRESS] command_status=$command_status"
-                cat "$current_log"
-              } > test-results/extension-reload-stress.log
-            fi
             summary=$(grep 'Test summary:' "$current_log" | tail -n 1 || true)
             if [[ "$command_status" -eq 0 && "$summary" == *"1/1 completed"* && "$summary" == *"1 passed, 0 failed, 0 skipped"* ]]; then
               passed=$((passed + 1))
