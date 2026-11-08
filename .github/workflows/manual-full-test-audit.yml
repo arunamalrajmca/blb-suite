@@ -172,7 +172,17 @@ jobs:
             printf '[%s/%s] %s\n' "$executed" "$total" "$test_id"
             printf '%s\n' "$test_id" > "$current_test"
             command_status=0
-            npx playwright test --test-list "$current_test" --max-failures=1 > "$current_log" 2>&1 || command_status=$?
+            if [[ "$test_id" == *"MV3 extension survives 100 full runtime reloads"* ]]; then
+              echo "Running the actual chrome://extensions Reload stress test in headed Chromium under Xvfb."
+              if ! command -v xvfb-run >/dev/null 2>&1; then
+                echo "xvfb-run is required for the headed extension reload test."
+                command_status=127
+              else
+                xvfb-run -a env BLB_HEADFUL_EXTENSION_TESTS=1 npx playwright test --test-list "$current_test" --max-failures=1 > "$current_log" 2>&1 || command_status=$?
+              fi
+            else
+              npx playwright test --test-list "$current_test" --max-failures=1 > "$current_log" 2>&1 || command_status=$?
+            fi
             cat "$current_log"
             summary=$(grep 'Test summary:' "$current_log" | tail -n 1 || true)
             if [[ "$command_status" -eq 0 && "$summary" == *"1/1 completed"* && "$summary" == *"1 passed, 0 failed, 0 skipped"* ]]; then
