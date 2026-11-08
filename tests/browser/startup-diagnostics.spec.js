@@ -223,17 +223,35 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
         hostname: 'facebook.com'
       }));
       expect(wakeResponse, 'worker must answer after cold start, cycle ' + cycle).toBeTruthy();
-      const replacement = await expect.poll(async () => {
+      await expect.poll(async () => {
         const state = await browserCdp.send('Target.getTargets');
-        return state.targetInfos.find(item =>
+        return state.targetInfos.some(item =>
           item.type === 'service_worker' && item.url === workerUrl
-        )?.targetId || null;
-      }, { timeout: 10000 }).not.toBeNull();
+        );
+      }, { timeout: 10000 }).toBe(true);
+      const replacementState = await browserCdp.send('Target.getTargets');
+      const replacementTarget = replacementState.targetInfos.find(item =>
+        item.type === 'service_worker' && item.url === workerUrl
+      );
+      const replacementSession = await browserCdp.send('Target.attachToTarget', {
+        targetId: replacementTarget.targetId,
+        flatten: false
+      });
+      workerCdpSessionId = replacementSession.sessionId;
+      for (const method of ['Runtime.enable', 'Log.enable', 'Network.enable']) {
+        const id = ++cdpMessageId;
+        await browserCdp.send('Target.sendMessageToTarget', {
+          sessionId: workerCdpSessionId,
+          message: JSON.stringify({ id, method, params: {} })
+        });
+      }
       writeLog('worker-reload-cycle-passed', {
         cycle,
         wakeDurationMs: Date.now() - wakeStartedAt,
         responsePresent: !!wakeResponse,
-        replacementObserved: true
+        replacementObserved: true,
+        targetId: replacementTarget.targetId,
+        cdpInstrumented: true
       });
     }
 
