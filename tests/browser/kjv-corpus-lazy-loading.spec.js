@@ -291,8 +291,10 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     const fetchEnd = "  const source = await response.text();";
     const extractStart = "  const start = source.indexOf(assignment);";
     const extractEnd = "  const json = source.slice(start + assignment.length, end);";
-    const parseLine = "  return JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\\\s*})$/, '$1') : json);";
-    if (!source.includes(fetchStart) || !source.includes(fetchEnd) || !source.includes(parseLine)) {
+    const parseLine = source.split('\\n').find(line =>
+      line.trim().startsWith('return JSON.parse(allowTrailingObjectComma ? json.replace(')
+    );
+    if (!source.includes(fetchStart) || !source.includes(fetchEnd) || !parseLine) {
       throw new Error('Unable to instrument packaged JSON fetch/read/parse phases');
     }
     source = source.replace(fetchStart,
