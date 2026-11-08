@@ -589,6 +589,56 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       null,
       { timeout: 15000 }
     );
+
+    // The Errors button opens Chromium's dedicated per-extension error view.
+    // Capture that view as well as the card model: some browser-level script
+    // fetch failures are rendered there without useful page-console output.
+    const captureExtensionErrorsView = async label => {
+      const errorsPage = await context.newPage();
+      try {
+        const url = `chrome://extensions/?errors=${extensionId}`;
+        await errorsPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
+        await errorsPage.waitForTimeout(400);
+        const snapshot = await errorsPage.evaluate(() => {
+          const texts = [];
+          const elements = [];
+          const visit = root => {
+            if (!root || typeof root.querySelectorAll !== 'function') return;
+            const bodyText = String(root.innerText || '').trim();
+            if (bodyText) texts.push(bodyText);
+            for (const element of root.querySelectorAll('*')) {
+              const tag = element.tagName?.toLowerCase() || '';
+              if (/error|warning/i.test(tag + ' ' + (element.id || '') + ' ' +
+                  (typeof element.className === 'string' ? element.className : ''))) {
+                elements.push({
+                  tag,
+                  id: element.id || '',
+                  className: typeof element.className === 'string' ? element.className : '',
+                  text: String(element.innerText || element.textContent || '').trim().slice(0, 1200)
+                });
+              }
+              if (element.shadowRoot) visit(element.shadowRoot);
+            }
+          };
+          visit(document);
+          return {
+            title: document.title,
+            url: location.href,
+            readyState: document.readyState,
+            bodyText: String(document.body?.innerText || '').trim().slice(0, 12000),
+            shadowTexts: [...new Set(texts)].slice(0, 20),
+            errorElements: elements.slice(0, 80)
+          };
+        });
+        writeLog('chrome-extensions-dedicated-errors-view', { label, ...snapshot });
+      } catch (error) {
+        writeLog('chrome-extensions-dedicated-errors-view-unavailable', {
+          label, message: error.message, stack: error.stack || ''
+        });
+      } finally {
+        await errorsPage.close().catch(() => {});
+      }
+    };
     const extensionCard = await manager.evaluate(id => {
       const findAllDeep = (root, selector, found = []) => {
         if (!root || typeof root.querySelectorAll !== 'function') return found;
@@ -636,6 +686,7 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       });
     expect(extensionCard.found, 'the newly installed extension must appear on chrome://extensions').toBe(true);
     expect(reportedErrors, 'Chrome must not report extension load/runtime errors on the manager card').toEqual([]);
+    await captureExtensionErrorsView('fresh-install');
 
     // Inspect Chromium's real per-extension Site access controls. The next
     // stress-test revision will use this UI to grant only Facebook's origin,
@@ -725,6 +776,9 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       const errors = Object.entries(snapshot.errorFields || {})
         .filter(([key, value]) => key !== 'errorCollection' &&
           /error/i.test(key) && hasReportedValue(value));
+      if (errors.length || (snapshot.visibleErrorNodes || []).length) {
+        await captureExtensionErrorsView('reload-cycle-' + cycle);
+      }
       expect(snapshot.found, 'Brave extensions manager must retain the extension card after reload cycle ' + cycle)
         .toBe(true);
       expect(errors, 'Brave extensions manager must report no extension errors after reload cycle ' + cycle)
