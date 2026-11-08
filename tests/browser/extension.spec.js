@@ -3129,11 +3129,34 @@ test('persisted registration audit runs only on install/update and browser start
   const fs = require('node:fs');
   const path = require('node:path');
   const source = fs.readFileSync(path.resolve(__dirname, '../../extension/background.js'), 'utf8');
-  const auditInvocations = source.match(/auditPersistedRuntimeContentScriptRegistrations\(\)\.catch/g) || [];
+  const auditInvocations = source.match(/schedulePersistedRuntimeContentScriptAudit\(\)/g) || [];
 
   expect(auditInvocations).toHaveLength(2);
-  expect(source).toMatch(/chrome\.runtime\.onStartup\.addListener\(\(\) => auditPersistedRuntimeContentScriptRegistrations\(\)/);
-  expect(source).toMatch(/chrome\.runtime\.onInstalled\.addListener\(\(\) => auditPersistedRuntimeContentScriptRegistrations\(\)/);
+  expect(source).not.toMatch(/^auditPersistedRuntimeContentScriptRegistrations\(\)\.catch/m);
+  expect(source).toMatch(/chrome\.runtime\.onStartup\.addListener\(\(\) => schedulePersistedRuntimeContentScriptAudit\(\)/);
+  expect(source).toMatch(/chrome\.runtime\.onInstalled\.addListener\(\(\) => schedulePersistedRuntimeContentScriptAudit\(\)/);
+});
+
+test('overlapping startup and install events share one persisted-registration audit', async ({ extensionWorker }) => {
+  const count = await extensionWorker.evaluate(async () => {
+    const original = auditPersistedRuntimeContentScriptRegistrations;
+    let calls = 0;
+    auditPersistedRuntimeContentScriptRegistrations = async () => {
+      calls++;
+      return { registrationCount:0 };
+    };
+    try {
+      await Promise.all([
+        schedulePersistedRuntimeContentScriptAudit(),
+        schedulePersistedRuntimeContentScriptAudit()
+      ]);
+      return calls;
+    } finally {
+      auditPersistedRuntimeContentScriptRegistrations = original;
+    }
+  });
+
+  expect(count).toBe(1);
 });
 
 test('tab activation fails when its persistent content-script registration fails', async ({ page, extensionStorage, extensionWorker }) => {
