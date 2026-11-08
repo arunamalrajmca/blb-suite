@@ -425,42 +425,18 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
         );
         expect(workerBeforeReload, 'Brave worker must be running before full reload cycle ' + cycle).toBeTruthy();
 
-        const clicked = await manager.evaluate(id => {
-          const all = [];
-          const visit = root => {
-            if (!root || !root.querySelectorAll) return;
-            for (const element of root.querySelectorAll('*')) {
-              all.push(element);
-              if (element.shadowRoot) visit(element.shadowRoot);
-            }
-          };
-          visit(document);
-          const item = all.find(element =>
-            element.tagName?.toLowerCase() === 'extensions-item' &&
-            (element.data?.id === id || element.getAttribute('id') === id)
-          );
-          if (!item) return { clicked: false, reason: 'extension-card-missing' };
-          const controls = [];
-          const visitItem = root => {
-            if (!root || !root.querySelectorAll) return;
-            for (const element of root.querySelectorAll('*')) {
-              if (['button', 'cr-button', 'cr-icon-button'].includes(element.tagName?.toLowerCase())) {
-                controls.push(element);
-              }
-              if (element.shadowRoot) visitItem(element.shadowRoot);
-            }
-          };
-          visitItem(item.shadowRoot || item);
-          const reload = controls.find(element => /reload/i.test([
-            element.id, element.title, element.getAttribute('aria-label'),
-            element.innerText, element.textContent
-          ].join(' ')));
-          if (!reload) return { clicked: false, reason: 'reload-control-missing' };
-          reload.click();
-          return { clicked: true, id: reload.id || '', title: reload.title || '' };
-        }, extensionId);
-        writeLog('extension-reload-cycle-clicked', { cycle, ...clicked });
-        expect(clicked.clicked, 'Brave Reload button must be clickable, cycle ' + cycle).toBe(true);
+        const reloadButton = manager.locator('extensions-item')
+          .filter({ hasText: 'KJV Scripture Tools' })
+          .locator('#dev-reload-button');
+        await expect(reloadButton, 'Brave must expose the real Reload control, cycle ' + cycle)
+          .toBeVisible();
+        await reloadButton.click();
+        writeLog('extension-reload-cycle-clicked', {
+          cycle,
+          clicked: true,
+          method: 'Playwright trusted pointer click',
+          selector: 'extensions-item #dev-reload-button'
+        });
 
         await expect.poll(async () => {
           const state = await browserCdp.send('Target.getTargets');
