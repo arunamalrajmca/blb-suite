@@ -3167,6 +3167,55 @@ test('tab lifecycle errors are classified as benign injection races', async ({ e
   });
 });
 
+test('content-script activation fails when persistent registration fails', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{},
+    redirectEnabled:false
+  });
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({url:'https://example.com/*'}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  await extensionWorker.evaluate(() => {
+    globalThis.__blbSuiteOriginalEnsureRuntimeRegistration = ensureRuntimeContentScriptRegistered;
+    ensureRuntimeContentScriptRegistered = async () => false;
+  });
+  try {
+    const activated = await extensionWorker.evaluate(id => ensureContentScriptInTab(id), tabId);
+    expect(activated).toBe(false);
+  } finally {
+    await extensionWorker.evaluate(() => {
+      if (globalThis.__blbSuiteOriginalEnsureRuntimeRegistration) {
+        ensureRuntimeContentScriptRegistered = globalThis.__blbSuiteOriginalEnsureRuntimeRegistration;
+      }
+      delete globalThis.__blbSuiteOriginalEnsureRuntimeRegistration;
+    });
+  }
+});
+
+test('failed selection actions are not persisted as completed request IDs', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    await chrome.storage.session.remove(SELECTION_OPEN_REQUEST_SESSION_KEY);
+    await completeSelectionOpenRequest('failed-selection-request', {
+      ok:false,
+      reason:'selection-open-failed'
+    });
+    const afterFailure = await chrome.storage.session.get(SELECTION_OPEN_REQUEST_SESSION_KEY);
+    await completeSelectionOpenRequest('successful-selection-request', {ok:true});
+    const afterSuccess = await chrome.storage.session.get(SELECTION_OPEN_REQUEST_SESSION_KEY);
+    return {
+      afterFailure:afterFailure[SELECTION_OPEN_REQUEST_SESSION_KEY] || {},
+      afterSuccess:afterSuccess[SELECTION_OPEN_REQUEST_SESSION_KEY] || {}
+    };
+  });
+  expect(result.afterFailure['failed-selection-request']).toBeUndefined();
+  expect(Number.isFinite(result.afterSuccess['successful-selection-request'])).toBe(true);
+});
+
 test('persisted runtime content-script registration audit reports missing files without changing registrations', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(async () => {
     const before = await chrome.scripting.getRegisteredContentScripts();
