@@ -261,7 +261,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
       // The candidate now declares its ordered imports and imports each file
       // separately so startup failures can be attributed to a filename.
       const arrayMatch = source.match(/^\uFEFF?\s*const BLB_BACKGROUND_STARTUP_IMPORTS\s*=\s*(\[[\s\S]*?\]);/);
-      const loopMatch = source.match(/for\s*\(const scriptFile of BLB_BACKGROUND_STARTUP_IMPORTS\)\s*\{\s*try\s*\{\s*importScripts\(scriptFile\);\s*\}\s*catch\s*\(error\)\s*\{[\s\S]*?\n  \}/);
+      const loopMatch = source.match(/for\s*\(const scriptFile of BLB_BACKGROUND_STARTUP_IMPORTS\)\s*\{\s*try\s*\{\s*importScripts\(scriptFile\);\s*\}\s*catch\s*\(error\)\s*\{[\s\S]*?\n  \}\n\}/);
       if (!arrayMatch || !loopMatch) {
         throw new Error('Unable to instrument either legacy or per-file service-worker import bootstrap');
       }
@@ -279,7 +279,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
         '    const __blbImportStartedAt = performance.now();\n'
         + importCall + '\n'
         + "    __blbProfilePhases.push({ phase: 'service-worker-importScript', script: scriptFile, durationMs: performance.now() - __blbImportStartedAt });");
-      const updatedLoopMatch = source.match(/for\s*\(const scriptFile of BLB_BACKGROUND_STARTUP_IMPORTS\)\s*\{\s*try\s*\{[\s\S]*?\n  \}/);
+      const updatedLoopMatch = source.match(/for\s*\(const scriptFile of BLB_BACKGROUND_STARTUP_IMPORTS\)\s*\{\s*try\s*\{[\s\S]*?\n  \}\n\}/);
       if (!updatedLoopMatch) throw new Error('Unable to locate instrumented per-file import loop');
       source = source.replace(updatedLoopMatch[0],
         updatedLoopMatch[0] + '\n'
