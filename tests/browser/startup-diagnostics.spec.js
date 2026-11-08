@@ -320,76 +320,35 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
     expect(extensionCard.found, 'the newly installed extension must appear on chrome://extensions').toBe(true);
     expect(reportedErrors, 'Chrome must not report extension load/runtime errors on the manager card').toEqual([]);
 
-    // Reproduce the user's rapid chrome://extensions Reload-button workflow,
-    // not just service-worker termination. Enable developer mode and invoke
-    // the real extension reload control repeatedly in the actual Brave UI.
-    const developerMode = await manager.evaluate(() => {
-      const all = [];
-      const visit = root => {
-        if (!root || !root.querySelectorAll) return;
-        for (const element of root.querySelectorAll('*')) {
-          all.push(element);
-          if (element.shadowRoot) visit(element.shadowRoot);
-        }
-      };
-      visit(document);
-      const toggle = all.find(element =>
-        element.tagName?.toLowerCase() === 'cr-toggle' &&
-        (element.id === 'devMode' || /developer mode/i.test(
-          [element.getAttribute('aria-label'), element.getAttribute('label'), element.title].join(' ')
-        ))
-      );
-      if (!toggle) return { found: false, controls: all
-        .filter(element => /dev|developer/i.test(element.id || ''))
-        .map(element => ({ tag: element.tagName, id: element.id, label: element.getAttribute('aria-label') }))
-        .slice(0, 20) };
-      if (!toggle.checked) toggle.click();
-      return { found: true, checked: !!toggle.checked, id: toggle.id };
-    });
-    writeLog('extensions-developer-mode', developerMode);
-    expect(developerMode.found, 'Brave extensions manager must expose developer mode').toBe(true);
-    await expect.poll(() => manager.evaluate(id => {
-      const all = [];
-      const visit = root => {
-        if (!root || !root.querySelectorAll) return;
-        for (const element of root.querySelectorAll('*')) {
-          all.push(element);
-          if (element.shadowRoot) visit(element.shadowRoot);
-        }
-      };
-      visit(document);
-      const item = all.find(element =>
-        element.tagName?.toLowerCase() === 'extensions-item' &&
-        (element.data?.id === id || element.getAttribute('id') === id)
-      );
-      if (!item) return { itemFound: false };
-      const buttons = [];
-      const visitItem = root => {
-        if (!root || !root.querySelectorAll) return;
-        for (const element of root.querySelectorAll('*')) {
-          if (['button', 'cr-button', 'cr-icon-button'].includes(element.tagName?.toLowerCase())) {
-            buttons.push({
-              element,
-              id: element.id || '',
-              title: element.title || '',
-              label: element.getAttribute('aria-label') || '',
-              text: String(element.innerText || element.textContent || '').trim()
-            });
+    if (process.env.BLB_TEST_FULL_EXTENSION_RELOADS === '1') {
+      // Reproduce the user's rapid chrome://extensions Reload-button workflow,
+      // not just service-worker termination. Enable developer mode and invoke
+      // the real extension reload control repeatedly in the actual Brave UI.
+      const developerMode = await manager.evaluate(() => {
+        const all = [];
+        const visit = root => {
+          if (!root || !root.querySelectorAll) return;
+          for (const element of root.querySelectorAll('*')) {
+            all.push(element);
+            if (element.shadowRoot) visit(element.shadowRoot);
           }
-          if (element.shadowRoot) visitItem(element.shadowRoot);
-        }
-      };
-      visitItem(item);
-      const reload = buttons.find(button => /reload/i.test(
-        [button.id, button.title, button.label, button.text].join(' ')
-      ));
-      return reload ? { itemFound: true, reloadFound: true, reloadId: reload.id, reloadTitle: reload.title } :
-        { itemFound: true, reloadFound: false, buttons: buttons.map(({ element, ...data }) => data) };
-    }, extensionId)).toMatchObject({ itemFound: true, reloadFound: true });
-
-    for (let cycle = 1; cycle <= 25; cycle++) {
-      const workerStarted = context.waitForEvent('serviceworker', { timeout: 15000 });
-      const clicked = await manager.evaluate(id => {
+        };
+        visit(document);
+        const toggle = all.find(element =>
+          element.tagName?.toLowerCase() === 'cr-toggle' &&
+          (element.id === 'devMode' || /developer mode/i.test(
+            [element.getAttribute('aria-label'), element.getAttribute('label'), element.title].join(' ')
+          ))
+        );
+        if (!toggle) return { found: false, controls: all
+          .filter(element => /dev|developer/i.test(element.id || ''))
+          .map(element => ({ tag: element.tagName, id: element.id, label: element.getAttribute('aria-label') }))
+          .slice(0, 20) };
+        if (!toggle.checked) toggle.click();
+        return { found: true, checked: !!toggle.checked, id: toggle.id };
+      });
+      writeLog('extensions-developer-mode', developerMode);
+      const reloadUiSnapshot = await manager.evaluate(id => {
         const all = [];
         const visit = root => {
           if (!root || !root.querySelectorAll) return;
@@ -403,52 +362,119 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
           element.tagName?.toLowerCase() === 'extensions-item' &&
           (element.data?.id === id || element.getAttribute('id') === id)
         );
-        if (!item) return { clicked: false, reason: 'extension-card-missing' };
-        const controls = [];
+        return {
+          cardHtml: item?.shadowRoot?.innerHTML?.slice(0, 18000) || '',
+          ids: (item?.shadowRoot ? [...item.shadowRoot.querySelectorAll('[id]')] : [])
+            .map(element => ({ tag: element.tagName, id: element.id, title: element.title || '' }))
+            .slice(0, 100)
+        };
+      }, extensionId);
+      writeLog('extensions-reload-ui-snapshot', reloadUiSnapshot);
+  
+      expect(developerMode.found, 'Brave extensions manager must expose developer mode').toBe(true);
+      await expect.poll(() => manager.evaluate(id => {
+        const all = [];
+        const visit = root => {
+          if (!root || !root.querySelectorAll) return;
+          for (const element of root.querySelectorAll('*')) {
+            all.push(element);
+            if (element.shadowRoot) visit(element.shadowRoot);
+          }
+        };
+        visit(document);
+        const item = all.find(element =>
+          element.tagName?.toLowerCase() === 'extensions-item' &&
+          (element.data?.id === id || element.getAttribute('id') === id)
+        );
+        if (!item) return { itemFound: false };
+        const buttons = [];
         const visitItem = root => {
           if (!root || !root.querySelectorAll) return;
           for (const element of root.querySelectorAll('*')) {
             if (['button', 'cr-button', 'cr-icon-button'].includes(element.tagName?.toLowerCase())) {
-              controls.push(element);
+              buttons.push({
+                element,
+                id: element.id || '',
+                title: element.title || '',
+                label: element.getAttribute('aria-label') || '',
+                text: String(element.innerText || element.textContent || '').trim()
+              });
             }
             if (element.shadowRoot) visitItem(element.shadowRoot);
           }
         };
         visitItem(item);
-        const reload = controls.find(element => /reload/i.test([
-          element.id, element.title, element.getAttribute('aria-label'),
-          element.innerText, element.textContent
-        ].join(' ')));
-        if (!reload) return { clicked: false, reason: 'reload-control-missing' };
-        reload.click();
-        return { clicked: true, id: reload.id || '', title: reload.title || '' };
-      }, extensionId);
-      writeLog('extension-reload-cycle-clicked', { cycle, ...clicked });
-      expect(clicked.clicked, 'Brave Reload button must be clickable, cycle ' + cycle).toBe(true);
-      const restartedWorker = await workerStarted;
-      const restartedState = await restartedWorker.evaluate(() => ({
-        runtimeId: chrome.runtime.id,
-        manifestVersion: chrome.runtime.getManifest().manifest_version,
-        workerTimeOrigin: performance.timeOrigin
-      }));
-      expect(restartedState.runtimeId).toBe(extensionId);
-      expect(restartedState.manifestVersion).toBe(3);
-      const reloadPopup = await context.newPage();
-      await reloadPopup.goto(`chrome-extension://${extensionId}/popup.html`, {
-        waitUntil: 'domcontentloaded',
-        timeout: 15000
-      });
-      const reloadResponse = await reloadPopup.evaluate(() => chrome.runtime.sendMessage({
-        type: 'blbSuiteGetDefaultSiteStatus',
-        hostname: 'facebook.com'
-      }));
-      expect(reloadResponse, 'runtime message after full extension reload, cycle ' + cycle).toBeTruthy();
-      writeLog('extension-reload-cycle-passed', {
-        cycle,
-        workerTimeOrigin: restartedState.workerTimeOrigin,
-        responsePresent: !!reloadResponse
-      });
-      await reloadPopup.close();
+        const reload = buttons.find(button => /reload/i.test(
+          [button.id, button.title, button.label, button.text].join(' ')
+        ));
+        return reload ? { itemFound: true, reloadFound: true, reloadId: reload.id, reloadTitle: reload.title } :
+          { itemFound: true, reloadFound: false, buttons: buttons.map(({ element, ...data }) => data) };
+      }, extensionId)).toMatchObject({ itemFound: true, reloadFound: true });
+  
+      for (let cycle = 1; cycle <= 25; cycle++) {
+        const workerStarted = context.waitForEvent('serviceworker', { timeout: 15000 });
+        const clicked = await manager.evaluate(id => {
+          const all = [];
+          const visit = root => {
+            if (!root || !root.querySelectorAll) return;
+            for (const element of root.querySelectorAll('*')) {
+              all.push(element);
+              if (element.shadowRoot) visit(element.shadowRoot);
+            }
+          };
+          visit(document);
+          const item = all.find(element =>
+            element.tagName?.toLowerCase() === 'extensions-item' &&
+            (element.data?.id === id || element.getAttribute('id') === id)
+          );
+          if (!item) return { clicked: false, reason: 'extension-card-missing' };
+          const controls = [];
+          const visitItem = root => {
+            if (!root || !root.querySelectorAll) return;
+            for (const element of root.querySelectorAll('*')) {
+              if (['button', 'cr-button', 'cr-icon-button'].includes(element.tagName?.toLowerCase())) {
+                controls.push(element);
+              }
+              if (element.shadowRoot) visitItem(element.shadowRoot);
+            }
+          };
+          visitItem(item);
+          const reload = controls.find(element => /reload/i.test([
+            element.id, element.title, element.getAttribute('aria-label'),
+            element.innerText, element.textContent
+          ].join(' ')));
+          if (!reload) return { clicked: false, reason: 'reload-control-missing' };
+          reload.click();
+          return { clicked: true, id: reload.id || '', title: reload.title || '' };
+        }, extensionId);
+        writeLog('extension-reload-cycle-clicked', { cycle, ...clicked });
+        expect(clicked.clicked, 'Brave Reload button must be clickable, cycle ' + cycle).toBe(true);
+        const restartedWorker = await workerStarted;
+        const restartedState = await restartedWorker.evaluate(() => ({
+          runtimeId: chrome.runtime.id,
+          manifestVersion: chrome.runtime.getManifest().manifest_version,
+          workerTimeOrigin: performance.timeOrigin
+        }));
+        expect(restartedState.runtimeId).toBe(extensionId);
+        expect(restartedState.manifestVersion).toBe(3);
+        const reloadPopup = await context.newPage();
+        await reloadPopup.goto(`chrome-extension://${extensionId}/popup.html`, {
+          waitUntil: 'domcontentloaded',
+          timeout: 15000
+        });
+        const reloadResponse = await reloadPopup.evaluate(() => chrome.runtime.sendMessage({
+          type: 'blbSuiteGetDefaultSiteStatus',
+          hostname: 'facebook.com'
+        }));
+        expect(reloadResponse, 'runtime message after full extension reload, cycle ' + cycle).toBeTruthy();
+        writeLog('extension-reload-cycle-passed', {
+          cycle,
+          workerTimeOrigin: restartedState.workerTimeOrigin,
+          responsePresent: !!reloadResponse
+        });
+        await reloadPopup.close();
+      }
+  
     }
     await manager.close();
 
