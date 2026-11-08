@@ -114,7 +114,7 @@ jobs:
 
       - name: Run fresh-install and repeated worker cold-start diagnostics in Brave
         env:
-          BLB_BROWSER_EXECUTABLE_PATH: ${{ env.BLB_BRAVE_EXECUTABLE }}
+          BLB_BROWSER_EXECUTABLE_PATH: /usr/bin/brave-browser
           BLB_HEADFUL_EXTENSION_TESTS: '1'
           BLB_TEST_FULL_EXTENSION_RELOADS: '1'
           BLB_STARTUP_DIAGNOSTICS_LOG_PATH: ${{ github.workspace }}/test-results/brave-startup-reload.log
@@ -200,11 +200,11 @@ jobs:
       - name: Run Windows Brave startup and 100-reload diagnostics
         shell: pwsh
         env:
-          BLB_BROWSER_EXECUTABLE_PATH: C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe
           BLB_HEADFUL_EXTENSION_TESTS: '0'
           BLB_TEST_FULL_EXTENSION_RELOADS: '1'
           BLB_STARTUP_DIAGNOSTICS_LOG_PATH: ${{ github.workspace }}\test-results\windows-brave-startup-reload.log
         run: |
+          $env:BLB_BROWSER_EXECUTABLE_PATH = $env:BLB_BRAVE_EXECUTABLE
           New-Item -ItemType Directory -Force test-results | Out-Null
           npx playwright test tests/browser/startup-diagnostics.spec.js --max-failures=1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
