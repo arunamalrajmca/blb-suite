@@ -3187,14 +3187,26 @@ test('tab activation fails when its persistent content-script registration fails
     const tabs = await chrome.tabs.query({url:'https://example.com/*'});
     const tab = tabs[0];
     if (!tab?.id) throw new Error('Expected the example.com test tab to exist');
+    // Let any settings-change activation started by the fixture settle first.
+    const pendingActivation = contentScriptInjectionLocks.get(tab.id);
+    if (pendingActivation) await pendingActivation.catch(() => {});
     const pattern = originPatternForUrl(tab.url);
     const registrationId = runtimeContentScriptIdForPattern(pattern);
     await chrome.scripting.unregisterContentScripts({ids:[registrationId, registrationId + '-main-world']})
       .catch(() => {});
+    const remaining = await chrome.scripting.getRegisteredContentScripts({ids:[registrationId]});
+    if (remaining.length) {
+      throw new Error('Could not remove the existing example.com registration before simulating failure');
+    }
     const originalRegister = chrome.scripting.registerContentScripts;
-    chrome.scripting.registerContentScripts = async () => {
+    const failingRegister = async () => {
       throw new Error('Simulated persistent registration failure');
     };
+    chrome.scripting.registerContentScripts = failingRegister;
+    if (chrome.scripting.registerContentScripts !== failingRegister) {
+      chrome.scripting.registerContentScripts = originalRegister;
+      throw new Error('Unable to instrument registerContentScripts for activation-failure test');
+    }
     try {
       return await ensureContentScriptInTab(tab.id);
     } finally {
