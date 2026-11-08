@@ -2651,7 +2651,11 @@ async function hasHostAccessForTab(tab) {
 
 function isTabUnavailableError(error) {
   const message = String(error?.message || error || '');
-  return /no tab with id|tab .*not found|cannot access contents of the page/i.test(message);
+  // During rapid navigation or extension reload, Chrome can detach the
+  // document's main frame between tabs.get() and scripting.executeScript().
+  // This is the same benign lifecycle race as a tab disappearing, not a
+  // packaged-script load failure; do not record it as an extension runtime error.
+  return /no tab with id|tab .*not found|cannot access contents of the page|frame with id \\d+ was removed/i.test(message);
 }
 
 function describeScriptInjectionError(error) {
