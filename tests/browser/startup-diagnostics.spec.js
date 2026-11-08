@@ -429,18 +429,32 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
           selector: 'extensions-item #dev-reload-button'
         });
 
+        // A full extension reload may restart the MV3 worker so quickly that
+        // its stopped interval is not observable. Require a replacement target
+        // ID instead; this proves the real extension reload completed.
         await expect.poll(async () => {
           const state = await browserCdp.send('Target.getTargets');
-          return !state.targetInfos.some(item =>
+          const current = state.targetInfos.find(item =>
             item.type === 'service_worker' && item.url === workerUrl
           );
-        }, { timeout: 10000, intervals: [25, 50, 100] }).toBe(true);
-        writeLog('extension-reload-worker-stopped', { cycle });
+          return current && current.targetId !== workerBeforeReload.targetId
+            ? current.targetId
+            : null;
+        }, { timeout: 15000, intervals: [25, 50, 100, 200] }).not.toBeNull();
+        const reloadedWorkerState = await browserCdp.send('Target.getTargets');
+        const reloadedWorkerTarget = reloadedWorkerState.targetInfos.find(item =>
+          item.type === 'service_worker' && item.url === workerUrl
+        );
+        writeLog('extension-reload-worker-restarted', {
+          cycle,
+          previousTargetId: workerBeforeReload.targetId,
+          targetId: reloadedWorkerTarget.targetId,
+          targetChanged: true
+        });
 
-        // A freshly reloaded MV3 worker is normally dormant until an event.
-        // Brave can briefly reject extension-page navigation while its reload
-        // completes, so retry only that transient navigation failure.
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Retry only transient extension-page navigation failures during
+        // Brave's extension reload transition.
+        await new Promise(resolve => setTimeout(resolve, 250));
         const reloadPopup = await context.newPage();
         let popupLoaded = false;
         let lastNavigationError = null;
