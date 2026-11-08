@@ -3,7 +3,7 @@
  * Keep feature ownership and spec classification here so selector behavior
  * cannot drift across parallel inline inventories.
  */
-export const featureSpecs = [{
+export const featureSpecs = [
   {
     paths: ["extension/background.js"],
     specs: ["tests/browser/startup-diagnostics.spec.js"]
