@@ -2155,7 +2155,19 @@ async function handleOmniboxCommand(text, disposition) {
   // Existing `b ...` path is deliberately untouched.
   return handleBCommand(text, disposition || 'currentTab');
 }
-chrome.omnibox.onInputEntered.addListener(handleOmniboxCommand);
+// The omnibox API is permissioned in manifest.json. Still guard registration so a
+// temporarily incomplete extension API surface (for example during rapid reload)
+// cannot abort evaluation of the entire MV3 service worker.
+if (chrome.omnibox && chrome.omnibox.onInputEntered &&
+    typeof chrome.omnibox.onInputEntered.addListener === 'function') {
+  chrome.omnibox.onInputEntered.addListener(handleOmniboxCommand);
+} else {
+  console.error('[KJV Scripture Tools] Omnibox API unavailable during service-worker startup; listener was not registered.', {
+    hasChrome: typeof chrome !== 'undefined',
+    hasOmnibox: Boolean(chrome && chrome.omnibox),
+    hasInputEntered: Boolean(chrome && chrome.omnibox && chrome.omnibox.onInputEntered)
+  });
+}
 
 // Canonicalize BLB destination URLs before checking open tabs. BLB may normalize
 // trailing slashes, hashes, or query presentation after navigation, so comparing
