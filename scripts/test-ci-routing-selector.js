@@ -161,6 +161,7 @@ try {
     'tests/browser/study-session-popup-ui-regression.spec.js',
     'tests/browser/study-backup-restore.spec.js',
     'tests/browser/feature-lifecycle-regressions.spec.js',
+    'tests/browser/startup-diagnostics.spec.js',
     'tests/browser/extension.spec.js',
     'tests/browser/shared-regex-patterns.spec.js',
     'tests/browser/rediscover-sagacity-button.spec.js',
