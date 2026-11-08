@@ -136,12 +136,21 @@ jobs:
           full_reloads="$(grep -c '"event":"extension-reload-cycle-passed"' "$log" || true)"
           test "$full_reloads" -eq 100
           selection_messages="$(grep -c '"event":"active-tab-selection-runtime-message"' "$log" || true)"
-          test "$selection_messages" -eq 100
-          recovery_checks="$(grep -c '"event":"blb-content-script-recovery-after-reload"' "$log" || true)"
+          test "$selection_messages" -eq 200
+          facebook_messages="$(grep -c '"event":"active-tab-selection-runtime-message".*"sourceHost":"www.facebook.com".*"result":{"ok":true' "$log" || true)"
+          test "$facebook_messages" -eq 100
+          blb_messages="$(grep -c '"event":"active-tab-selection-runtime-message".*"sourceHost":"www.blueletterbible.org".*"result":{"ok":true' "$log" || true)"
+          test "$blb_messages" -eq 100
+          recovery_checks="$(grep -c '"event":"facebook-and-blb-content-script-recovery-after-reload"' "$log" || true)"
           test "$recovery_checks" -eq 100
+          destination_checks="$(grep -c '"event":"selection-request-destination-state".*"destinationCount":1' "$log" || true)"
+          test "$destination_checks" -eq 200
           grep -q '"event":"combined-stress-tabs-ready"' "$log"
-          grep -q '"response":{"ok":true}' "$log"
-          grep -q '"activeTabSelectionMessageOk":true' "$log"
+          grep -q '"event":"facebook-optional-host-permission-granted".*"granted":true.*"contains":true' "$log"
+          grep -q '"facebookResponse":{"ok":true}' "$log"
+          grep -q '"blbResponse":{"ok":true}' "$log"
+          grep -q '"facebookSelectionMessageOk":true' "$log"
+          grep -q '"blbSelectionMessageOk":true' "$log"
 
       - name: Upload Brave startup and reload diagnostics
         if: always()
