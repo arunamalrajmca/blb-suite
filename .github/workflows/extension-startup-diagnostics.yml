@@ -137,7 +137,10 @@ jobs:
           test "$full_reloads" -eq 100
           selection_messages="$(grep -c '"event":"active-tab-selection-runtime-message"' "$log" || true)"
           test "$selection_messages" -eq 100
+          recovery_checks="$(grep -c '"event":"blb-content-script-recovery-after-reload"' "$log" || true)"
+          test "$recovery_checks" -eq 100
           grep -q '"event":"combined-stress-tabs-ready"' "$log"
+          grep -q '"response":{"ok":true}' "$log"
           grep -q '"activeTabSelectionMessageOk":true' "$log"
 
       - name: Upload Brave startup and reload diagnostics
