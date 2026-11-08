@@ -2673,6 +2673,20 @@ async function auditPersistedRuntimeContentScriptRegistrations(registrations = n
   return result;
 }
 
+let persistedRuntimeContentScriptAuditPromise = null;
+function schedulePersistedRuntimeContentScriptAudit() {
+  if (persistedRuntimeContentScriptAuditPromise) return persistedRuntimeContentScriptAuditPromise;
+  const operation = auditPersistedRuntimeContentScriptRegistrations().catch(error => {
+    console.warn('KJV Scripture Tools persisted content-script audit failed: ' + String(error));
+  }).finally(() => {
+    if (persistedRuntimeContentScriptAuditPromise === operation) {
+      persistedRuntimeContentScriptAuditPromise = null;
+    }
+  });
+  persistedRuntimeContentScriptAuditPromise = operation;
+  return operation;
+}
+
 const contentScriptInjectionLocks = new Map();
 // Different tabs on the same origin can request the same persistent script
 // registration concurrently. Serialize by registration ID, not only by tab.
@@ -6736,12 +6750,8 @@ chrome.runtime.onStartup.addListener(() => installPdfSelectionContextMenu().then
   .then(tabs => syncPdfSelectionContextMenuVisibility(tabs[0]))
   .catch(() => {})));
 chrome.runtime.onStartup.addListener(() => refreshStudyAutoStopAlarm().catch(()=>{}));
-chrome.runtime.onStartup.addListener(() => auditPersistedRuntimeContentScriptRegistrations().catch(error => {
-  console.warn('KJV Scripture Tools persisted content-script audit failed: ' + String(error));
-}));
-chrome.runtime.onInstalled.addListener(() => auditPersistedRuntimeContentScriptRegistrations().catch(error => {
-  console.warn('KJV Scripture Tools persisted content-script audit failed after install/update: ' + String(error));
-}));
+chrome.runtime.onStartup.addListener(() => schedulePersistedRuntimeContentScriptAudit());
+chrome.runtime.onInstalled.addListener(() => schedulePersistedRuntimeContentScriptAudit());
 
 installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
   .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
