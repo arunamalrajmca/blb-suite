@@ -351,7 +351,7 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
           const tabs = await chrome.tabs.query({});
           const destinations = tabs.filter(tab => {
             try {
-              const url = new URL(tab.url || '');
+              const url = new URL(tab.pendingUrl || tab.url || '');
               return url.hostname.toLowerCase().endsWith('blueletterbible.org') &&
                 (url.pathname.startsWith('/kjv/jhn/3/16') ||
                  (url.pathname.includes('/search/') && /John(?:%20|\+)3(?::|%3A)16/i.test(url.search)));
@@ -363,8 +363,8 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
           return {
             destinationCount: destinations.length,
             destinationIds: destinations.map(tab => tab.id),
-            destinationUrls: destinations.map(tab => tab.url),
-            allTabUrls: tabs.map(tab => tab.url || '').slice(0, 20),
+            destinationUrls: destinations.map(tab => tab.pendingUrl || tab.url),
+            allTabUrls: tabs.map(tab => ({url:tab.url || '', pendingUrl:tab.pendingUrl || ''})).slice(0, 30),
             facebookOpen: sources.includes('www.facebook.com'),
             blbOpen: sources.includes('www.blueletterbible.org')
           };
