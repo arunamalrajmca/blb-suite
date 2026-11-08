@@ -5,7 +5,7 @@ const path = require('node:path');
 const { execFileSync } = require('node:child_process');
 
 test('fresh unpacked install starts cleanly and serves its first popup request', async ({ extensionPath }, testInfo) => {
-  test.setTimeout(90000);
+  test.setTimeout(240000);
   const logPath = process.env.BLB_STARTUP_DIAGNOSTICS_LOG_PATH ||
     path.resolve(process.cwd(), 'test-results', 'extension-startup-diagnostics.log');
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
@@ -320,6 +320,56 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
     expect(extensionCard.found, 'the newly installed extension must appear on chrome://extensions').toBe(true);
     expect(reportedErrors, 'Chrome must not report extension load/runtime errors on the manager card').toEqual([]);
 
+    // Re-read the live extensions-manager model after every full reload. A
+    // successful popup/runtime response alone must not mask a manager error
+    // that Brave records asynchronously during extension startup.
+    const inspectManagerCard = async cycle => {
+      const snapshot = await manager.evaluate(id => {
+        const findAllDeep = (root, selector, found = []) => {
+          if (!root || typeof root.querySelectorAll !== 'function') return found;
+          found.push(...root.querySelectorAll(selector));
+          for (const element of root.querySelectorAll('*')) {
+            if (element.shadowRoot) findAllDeep(element.shadowRoot, selector, found);
+          }
+          return found;
+        };
+        const item = findAllDeep(document, 'extensions-item').find(candidate =>
+          candidate.data?.id === id || candidate.getAttribute('id') === id
+        );
+        if (!item) return { found: false, errorFields: {}, visibleErrorNodes: [] };
+        const data = item.data || {};
+        const errorFields = Object.fromEntries(Object.entries(data)
+          .filter(([key]) => /error|warning/i.test(key))
+          .map(([key, value]) => [key, value]));
+        const visibleErrorNodes = findAllDeep(item.shadowRoot || item, '*')
+          .filter(element => /error|warning/i.test(
+            String(element.id || '') + ' ' +
+            String(typeof element.className === 'string' ? element.className : '')
+          ))
+          .map(element => ({
+            id: element.id || '',
+            className: typeof element.className === 'string' ? element.className : '',
+            text: String(element.innerText || '').trim().slice(0, 300)
+          }))
+          .filter(entry => entry.text || entry.id || entry.className)
+          .slice(0, 30);
+        return { found: true, errorFields, visibleErrorNodes };
+      }, extensionId);
+      writeLog('chrome-extensions-manager-cycle-check', { cycle, ...snapshot });
+      const hasReportedValue = value => {
+        if (!value) return false;
+        if (Array.isArray(value)) return value.length > 0;
+        if (typeof value === 'object') return Object.values(value).some(hasReportedValue);
+        return Boolean(value);
+      };
+      const errors = Object.entries(snapshot.errorFields || {})
+        .filter(([key, value]) => /error/i.test(key) && hasReportedValue(value));
+      expect(snapshot.found, 'Brave extensions manager must retain the extension card after reload cycle ' + cycle)
+        .toBe(true);
+      expect(errors, 'Brave extensions manager must report no extension errors after reload cycle ' + cycle)
+        .toEqual([]);
+    };
+
     if (process.env.BLB_TEST_FULL_EXTENSION_RELOADS === '1') {
       // Reproduce the user's rapid chrome://extensions Reload-button workflow,
       // not just service-worker termination. Enable developer mode and invoke
@@ -409,7 +459,7 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
         workerCdpSessionId = null;
       }
 
-      for (let cycle = 1; cycle <= 25; cycle++) {
+      for (let cycle = 1; cycle <= 100; cycle++) {
         const beforeReload = await browserCdp.send('Target.getTargets');
         const workerBeforeReload = beforeReload.targetInfos.find(item =>
           item.type === 'service_worker' && item.url === workerUrl
@@ -502,6 +552,7 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
           targetId: replacementTarget.targetId,
           responsePresent: !!reloadResponse
         });
+        await inspectManagerCard(cycle);
         await reloadPopup.close();
       }
   
