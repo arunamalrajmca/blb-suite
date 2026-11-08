@@ -135,10 +135,10 @@ jobs:
           test "$passed" -eq 10
           full_reloads="$(grep -c '"event":"extension-reload-cycle-passed"' "$log" || true)"
           test "$full_reloads" -eq 100
-          selection_messages="$(grep -c '"event":"facebook-selection-runtime-message"' "$log" || true)"
+          selection_messages="$(grep -c '"event":"active-tab-selection-runtime-message"' "$log" || true)"
           test "$selection_messages" -eq 100
           grep -q '"event":"combined-stress-tabs-ready"' "$log"
-          grep -q '"facebookSelectionMessageOk":true' "$log"
+          grep -q '"activeTabSelectionMessageOk":true' "$log"
 
       - name: Upload Brave startup and reload diagnostics
         if: always()
