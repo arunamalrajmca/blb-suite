@@ -260,7 +260,7 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
           try {
             const url = new URL(tab.url || '');
             return url.hostname.toLowerCase() === 'www.blueletterbible.org' &&
-              /^\\/kjv\\/jhn\\/3\\/16(?:\\/|$)/i.test(url.pathname);
+              url.pathname.startsWith('/kjv/jhn/3/16');
           } catch (_) { return false; }
         });
         await Promise.all(destinations.map(tab => chrome.tabs.remove(tab.id)));
@@ -268,18 +268,19 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       const sourceTabs = await liveWorker.evaluate(async () => {
         const tabs = await chrome.tabs.query({});
         return {
-          facebookOpen: tabs.some(tab => /^https:\\/\\/www\\.facebook\\.com\\//i.test(tab.url || '')),
-          blbOpen: tabs.some(tab => {
-            try { const url = new URL(tab.url || ''); return url.hostname === 'www.blueletterbible.org' && url.pathname === '/'; }
+          facebookOpen: tabs.some(tab => {
+            try { return new URL(tab.url || '').hostname === 'www.facebook.com'; }
             catch (_) { return false; }
+          }),
+          blbOpen: tabs.some(tab => {
+            try {
+              const url = new URL(tab.url || '');
+              return url.hostname === 'www.blueletterbible.org' && url.pathname === '/';
+            } catch (_) { return false; }
           })
         };
       });
       expect(sourceTabs.facebookOpen, 'Facebook tab must remain open, cycle ' + cycle).toBe(true);
-      expect(sourceTabs.blbOpen, 'BLB source tab must remain open, cycle ' + cycle).toBe(true);
-      return result;
-    };      });
-      expect(sourceTabs.facebookOpen, 'Facebook source tab must remain open, cycle ' + cycle).toBe(true);
       expect(sourceTabs.blbOpen, 'BLB source tab must remain open, cycle ' + cycle).toBe(true);
       return result;
     };
