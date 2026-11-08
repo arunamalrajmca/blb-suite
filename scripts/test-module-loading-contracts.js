@@ -68,11 +68,12 @@ if (!contentEntry) {
 }
 
 const background = read('extension/background.js');
-const importMatch = background.match(/^\s*importScripts\(([^;]+)\);/);
+const importMatch = background.match(/const BLB_BACKGROUND_STARTUP_IMPORTS = \[([\s\S]*?)\];/);
 if (!importMatch) {
-  fail('background service worker begins with its classic importScripts bootstrap');
+  fail('background service worker declares its classic importScripts bootstrap');
 } else {
   const imports = [...importMatch[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(match => match[1]);
+  if (!background.includes('importScripts(scriptFile)')) fail('background imports each declared startup dependency individually');
   const required = [
     'study-session-normalization.js',
     'multiverse-reference-helpers.js',
