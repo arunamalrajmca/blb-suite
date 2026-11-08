@@ -3139,12 +3139,25 @@ test('persisted registration audit runs only on install/update and browser start
 
 test('overlapping startup and install events share one persisted-registration audit', async ({ extensionWorker }) => {
   const count = await extensionWorker.evaluate(async () => {
+    // The browser's initial onStartup event may already have started an audit
+    // before this test can instrument the Chrome API. Let that audit settle so
+    // the two calls below are the only work measured by this assertion.
+    if (persistedRuntimeContentScriptAuditPromise) {
+      await persistedRuntimeContentScriptAuditPromise;
+    }
+
     const originalGetRegistered = chrome.scripting.getRegisteredContentScripts;
     let calls = 0;
-    chrome.scripting.getRegisteredContentScripts = async (...args) => {
+    const wrappedGetRegistered = async (...args) => {
       calls++;
       return originalGetRegistered.apply(chrome.scripting, args);
     };
+    chrome.scripting.getRegisteredContentScripts = wrappedGetRegistered;
+    if (chrome.scripting.getRegisteredContentScripts !== wrappedGetRegistered) {
+      chrome.scripting.getRegisteredContentScripts = originalGetRegistered;
+      throw new Error('Unable to instrument getRegisteredContentScripts for audit deduplication test');
+    }
+
     try {
       await Promise.all([
         schedulePersistedRuntimeContentScriptAudit(),
