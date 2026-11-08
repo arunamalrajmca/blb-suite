@@ -238,6 +238,7 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
     const manifestPageCdp = await context.newCDPSession(manifestPage);
     const manifestRequestUrls = new Map();
     const manifestLoadedScripts = new Set();
+    const manifestDebuggerScripts = new Set();
     const manifestScriptFailures = [];
     manifestPageCdp.on('Network.requestWillBeSent', event => {
       manifestRequestUrls.set(event.requestId, event.request.url);
@@ -277,6 +278,22 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       }
     });
     await manifestPageCdp.send('Network.enable');
+    // Network events do not consistently expose isolated-world content
+    // scripts. Debugger.scriptParsed reports scripts parsed in every world,
+    // including extension content-script worlds.
+    manifestPageCdp.on('Debugger.scriptParsed', event => {
+      const url = event.url || '';
+      if (!url.startsWith(`chrome-extension://${extensionId}/`)) return;
+      const file = url.split('/').pop().split('?')[0];
+      manifestDebuggerScripts.add(file);
+      writeLog('manifest-page-extension-script-parsed', {
+        scriptId: event.scriptId,
+        url,
+        executionContextId: event.executionContextId,
+        hash: event.hash
+      });
+    });
+    await manifestPageCdp.send('Debugger.enable');
     await manifestPage.goto('https://www.blueletterbible.org/', {
       waitUntil: 'domcontentloaded',
       timeout: 20000
@@ -292,12 +309,14 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
     writeLog('manifest-content-script-page-state', {
       ...manifestPageState,
       loadedScripts: [...manifestLoadedScripts],
+      debuggerParsedScripts: [...manifestDebuggerScripts],
       failedScripts: manifestScriptFailures
     });
     expect(manifestScriptFailures,
       'manifest-driven content scripts must not fail while loading on a matching BLB page').toEqual([]);
     const observedManifestScripts = new Set([
       ...manifestLoadedScripts,
+      ...manifestDebuggerScripts,
       ...manifestPageState.resourceScripts
     ]);
     const unobservedManifestScripts = manifestScriptAudit.scripts
