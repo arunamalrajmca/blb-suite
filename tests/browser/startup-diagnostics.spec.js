@@ -403,7 +403,7 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
             if (element.shadowRoot) visitItem(element.shadowRoot);
           }
         };
-        visitItem(item);
+        visitItem(item.shadowRoot || item);
         const reload = buttons.find(button => /reload/i.test(
           [button.id, button.title, button.label, button.text].join(' ')
         ));
@@ -438,7 +438,7 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
               if (element.shadowRoot) visitItem(element.shadowRoot);
             }
           };
-          visitItem(item);
+          visitItem(item.shadowRoot || item);
           const reload = controls.find(element => /reload/i.test([
             element.id, element.title, element.getAttribute('aria-label'),
             element.innerText, element.textContent
