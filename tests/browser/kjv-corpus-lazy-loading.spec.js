@@ -291,7 +291,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     const fetchEnd = "  const source = await response.text();";
     const extractStart = "  const start = source.indexOf(assignment);";
     const extractEnd = "  const json = source.slice(start + assignment.length, end);";
-    const parseLine = source.split('\\n').find(line =>
+    const parseLine = source.split('\n').find(line =>
       line.trim().startsWith('return JSON.parse(allowTrailingObjectComma ? json.replace(')
     );
     if (!source.includes(fetchStart) || !source.includes(fetchEnd) || !parseLine) {
