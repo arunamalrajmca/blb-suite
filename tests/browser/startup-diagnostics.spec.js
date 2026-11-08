@@ -324,29 +324,20 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       // Reproduce the user's rapid chrome://extensions Reload-button workflow,
       // not just service-worker termination. Enable developer mode and invoke
       // the real extension reload control repeatedly in the actual Brave UI.
-      const developerMode = await manager.evaluate(() => {
-        const all = [];
-        const visit = root => {
-          if (!root || !root.querySelectorAll) return;
-          for (const element of root.querySelectorAll('*')) {
-            all.push(element);
-            if (element.shadowRoot) visit(element.shadowRoot);
-          }
-        };
-        visit(document);
-        const toggle = all.find(element =>
-          element.tagName?.toLowerCase() === 'cr-toggle' &&
-          (element.id === 'devMode' || /developer mode/i.test(
-            [element.getAttribute('aria-label'), element.getAttribute('label'), element.title].join(' ')
-          ))
-        );
-        if (!toggle) return { found: false, controls: all
-          .filter(element => /dev|developer/i.test(element.id || ''))
-          .map(element => ({ tag: element.tagName, id: element.id, label: element.getAttribute('aria-label') }))
-          .slice(0, 20) };
-        if (!toggle.checked) toggle.click();
-        return { found: true, checked: !!toggle.checked, id: toggle.id };
-      });
+      const devModeToggle = manager.locator('extensions-toolbar').locator('#devMode');
+      await expect(devModeToggle, 'Brave extensions manager must expose developer mode')
+        .toBeVisible();
+      const developerModeBefore = await devModeToggle.evaluate(element => !!element.checked);
+      if (!developerModeBefore) await devModeToggle.click();
+      await expect.poll(() => devModeToggle.evaluate(element => !!element.checked), {
+        timeout: 5000
+      }).toBe(true);
+      const developerMode = {
+        found: true,
+        checked: true,
+        wasAlreadyEnabled: developerModeBefore,
+        method: 'Playwright trusted pointer click'
+      };
       writeLog('extensions-developer-mode', developerMode);
       const reloadUiSnapshot = await manager.evaluate(id => {
         const all = [];
