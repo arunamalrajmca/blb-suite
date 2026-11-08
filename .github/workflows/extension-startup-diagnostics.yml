@@ -78,7 +78,7 @@ jobs:
   brave-startup-and-reload:
     name: Brave fresh install and 10 worker cold starts
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - name: Checkout PR head
         uses: actions/checkout@v5
@@ -135,6 +135,10 @@ jobs:
           test "$passed" -eq 10
           full_reloads="$(grep -c '"event":"extension-reload-cycle-passed"' "$log" || true)"
           test "$full_reloads" -eq 100
+          selection_messages="$(grep -c '"event":"facebook-selection-runtime-message"' "$log" || true)"
+          test "$selection_messages" -eq 100
+          grep -q '"event":"combined-stress-tabs-ready"' "$log"
+          grep -q '"facebookSelectionMessageOk":true' "$log"
 
       - name: Upload Brave startup and reload diagnostics
         if: always()
