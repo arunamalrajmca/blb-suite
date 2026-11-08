@@ -1874,7 +1874,7 @@ async function fetchPackagedGzipJson(filename) {
       throw new Error('Unable to fetch compressed packaged KJV data ' + filename + ': HTTP ' + response.status);
     }
     if (typeof DecompressionStream !== 'function') {
-      return await loadOriginalData(new Error('DecompressionStream is unavailable'));
+      return loadOriginalData(new Error('DecompressionStream is unavailable'));
     }
     const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));
     return await new Response(decompressed).json();
