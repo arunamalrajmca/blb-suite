@@ -215,6 +215,15 @@ jobs:
           path: ${{ runner.temp }}/blb-performance.jsonl
           if-no-files-found: warn
           retention-days: 14
+      - name: Upload browser reload stress diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-extension-reload-stress-diagnostics
+          path: test-results/extension-reload-stress.log
+          if-no-files-found: warn
+          retention-days: 14
+
       - name: Restore production manifest before package checks
         if: always()
         run: cp "$RUNNER_TEMP/blb-manifest-original.json" extension/manifest.json
