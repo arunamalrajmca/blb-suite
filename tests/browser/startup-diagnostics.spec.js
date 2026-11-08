@@ -200,6 +200,64 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
     });
     expect(response).toBeTruthy();
 
+    // Chromium exposes extension load/runtime errors on the real extensions
+    // manager card. Inspect its backing data as well as worker/page events so
+    // generic "fetching the script" failures cannot hide behind a live popup.
+    const manager = await context.newPage();
+    await manager.goto('chrome://extensions/', { waitUntil: 'domcontentloaded', timeout: 15000 });
+    await manager.waitForFunction(() =>
+      !!document.querySelector('extensions-manager')?.shadowRoot,
+      null,
+      { timeout: 15000 }
+    );
+    const extensionCard = await manager.evaluate(id => {
+      const findDeep = (root, selector) => {
+        if (!root || typeof root.querySelectorAll !== 'function') return null;
+        const direct = root.querySelector(selector);
+        if (direct) return direct;
+        for (const element of root.querySelectorAll('*')) {
+          if (element.shadowRoot) {
+            const nested = findDeep(element.shadowRoot, selector);
+            if (nested) return nested;
+          }
+        }
+        return null;
+      };
+      const item = findDeep(document, 'extensions-item[data-id="' + id + '"]') ||
+        [...(document.querySelector('extensions-manager')?.shadowRoot?.querySelectorAll('extensions-item') || [])]
+          .find(candidate => candidate.data?.id === id);
+      if (!item) {
+        return { found: false, visibleItems: [...(document.querySelector('extensions-manager')?.shadowRoot?.querySelectorAll('extensions-item') || [])]
+          .map(candidate => ({ id: candidate.data?.id || candidate.getAttribute('id') || '' })) };
+      }
+      const data = item.data || {};
+      const errorFields = Object.fromEntries(Object.entries(data)
+        .filter(([key]) => /error|warning/i.test(key))
+        .map(([key, value]) => [key, value]));
+      const visibleErrorNodes = [...(item.shadowRoot?.querySelectorAll('*') || [])]
+        .filter(element => /error|warning/i.test(String(element.id || '') + ' ' + String(element.className || '')))
+        .map(element => ({
+          id: element.id || '',
+          className: typeof element.className === 'string' ? element.className : '',
+          text: String(element.innerText || '').trim().slice(0, 300)
+        }))
+        .filter(item => item.text || item.id || item.className)
+        .slice(0, 30);
+      return {
+        found: true,
+        dataKeys: Object.keys(data),
+        errorFields,
+        visibleErrorNodes
+      };
+    }, extensionId);
+    writeLog('chrome-extensions-manager-card', extensionCard);
+    const cardErrors = extensionCard.errorFields || {};
+    const reportedErrors = Object.entries(cardErrors)
+      .filter(([key, value]) => /error/i.test(key) && value && (!Array.isArray(value) || value.length > 0));
+    expect(extensionCard.found, 'the newly installed extension must appear on chrome://extensions').toBe(true);
+    expect(reportedErrors, 'Chrome must not report extension load/runtime errors on the manager card').toEqual([]);
+    await manager.close();
+
     await popup.waitForTimeout(300);
     writeLog('fresh-install-startup-summary', {
       serviceWorkers: context.serviceWorkers().map(item => item.url()),
