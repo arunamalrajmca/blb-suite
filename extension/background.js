@@ -2330,6 +2330,13 @@ async function rememberCompletedSelectionOpenRequest(requestId) {
     // The current worker's in-memory dedupe remains active if persistence fails.
   }
 }
+
+// Only successful actions are durable completions. Persisting a failed
+// attempt would make a later delivery look successful after worker restart.
+async function completeSelectionOpenRequest(requestId, response) {
+  if (response?.ok === true) await rememberCompletedSelectionOpenRequest(requestId);
+  return response;
+}
 function enqueueBlbTabCreation(operation) {
   const run = blbTabCreationQueue.then(operation, operation);
   blbTabCreationQueue = run.catch(() => {});
@@ -2956,7 +2963,13 @@ async function ensureContentScriptInTab(tabId) {
       const files = contentScriptFilesForTab(tab, settings);
       if (!files.length) return false;
 
-      await ensureRuntimeContentScriptRegistered(tab, files);
+      const persistentlyRegistered = await ensureRuntimeContentScriptRegistered(tab, files);
+      if (!persistentlyRegistered) {
+        console.error('KJV Scripture Tools persistent content-script registration failed:', {
+          tabId, tabUrl:tab.url, files
+        });
+        return false;
+      }
 
       // A newly enabled site may already be open, so install the MAIN-world
       // guard in that current document too. The registration above covers
@@ -3405,7 +3418,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
     const completeSelectionOpen = async response => {
-      await rememberCompletedSelectionOpenRequest(message.requestId);
+      await completeSelectionOpenRequest(message.requestId, response);
       sendResponse(response);
     };
     // Double-Click has its own decision path: its content-script gesture
