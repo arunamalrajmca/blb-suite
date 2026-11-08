@@ -508,7 +508,7 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
     }
     await manager.close();
 
-    await popup.waitForTimeout(300);
+    await new Promise(resolve => setTimeout(resolve, 300));
     writeLog('fresh-install-startup-summary', {
       serviceWorkers: context.serviceWorkers().map(item => item.url()),
       pageCount: context.pages().length,
