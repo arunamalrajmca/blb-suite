@@ -3372,6 +3372,10 @@ test('MV3 service worker repeatedly cold-starts after rapid termination', async 
   const extensionPage = await context.newPage();
   await extensionPage.goto(`chrome-extension://${extensionId}/popup.html`);
   const cdp = await context.newCDPSession(extensionPage);
+  const workerLifecycle = [];
+  context.on('serviceworker', worker => {
+    workerLifecycle.push({ event: 'serviceworker', url: worker.url(), at: Date.now() });
+  });
 
   // Repeatedly terminate the worker and immediately wake it through a real
   // extension message. This stresses startup/importScripts across consecutive
@@ -3383,26 +3387,40 @@ test('MV3 service worker repeatedly cold-starts after rapid termination', async 
       target.type === 'service_worker' &&
       target.url === `chrome-extension://${extensionId}/background.js`
     );
-    expect(workerTarget, `service worker must be running before restart cycle ${cycle}`).toBeTruthy();
+    expect(workerTarget, `service worker must be running before restart cycle ${cycle}; targets=${JSON.stringify(targets.targetInfos.filter(target => target.type === 'service_worker'))}`).toBeTruthy();
 
     await cdp.send('Target.closeTarget', { targetId: workerTarget.targetId });
 
-    await expect.poll(async () => {
+    const deadline = Date.now() + 10000;
+    let response = null;
+    let lastError = null;
+    let attempts = 0;
+    while (Date.now() < deadline && !response) {
+      attempts++;
       try {
-        const response = await extensionPage.evaluate(() =>
+        response = await extensionPage.evaluate(() =>
           chrome.runtime.sendMessage({
             type: 'blbSuiteGetDefaultSiteStatus',
             hostname: 'facebook.com'
           })
         );
-        return !!response;
-      } catch (_) {
-        return false;
+      } catch (error) {
+        lastError = String(error && (error.stack || error.message) || error);
       }
-    }, {
-      timeout: 10000,
-      intervals: [25, 50, 100, 200]
-    }).toBe(true);
+      if (!response) await new Promise(resolve => setTimeout(resolve, Math.min(200, 25 * attempts)));
+    }
+
+    const afterTargets = await cdp.send('Target.getTargets');
+    const workerTargets = afterTargets.targetInfos.filter(target =>
+      target.type === 'service_worker' &&
+      target.url === `chrome-extension://${extensionId}/background.js`
+    );
+    console.log('[MV3 cold-start diagnostic]', JSON.stringify({
+      cycle, attempts, responseReceived: !!response, lastError,
+      workerTargets: workerTargets.map(({ targetId, attached }) => ({ targetId, attached })),
+      workerLifecycle: workerLifecycle.slice(-8)
+    }));
+    expect(response, `service worker did not answer after restart cycle ${cycle}; attempts=${attempts}; lastError=${lastError}; workerTargets=${JSON.stringify(workerTargets)}; lifecycle=${JSON.stringify(workerLifecycle)}`).toBeTruthy();
   }
 
   await extensionPage.close();
