@@ -134,7 +134,7 @@ jobs:
           passed="$(grep -c '"event":"worker-reload-cycle-passed"' "$log" || true)"
           test "$passed" -eq 10
           full_reloads="$(grep -c '"event":"extension-reload-cycle-passed"' "$log" || true)"
-          test "$full_reloads" -eq 25
+          test "$full_reloads" -eq 100
 
       - name: Upload Brave startup and reload diagnostics
         if: always()
