@@ -330,8 +330,9 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       });
       expect(result?.ok, 'Active ' + sourceHost + ' selection-open runtime message must succeed after reload cycle ' + cycle)
         .toBe(true);
-      expect(result?.referenceNavigation, 'Selection request must resolve the reference rather than silently fail, cycle ' + cycle)
-        .toBe(true);
+      // Non-BLB origins use the shared selection path, whose success
+      // response is intentionally {ok:true}; verify the actual destination
+      // tab below instead of depending on a BLB-only response field.
       // Exactly one destination should be created for this request ID. Remove
       // only that destination; preserve both source tabs throughout the run.
       const destinationState = await liveWorker.evaluate(async () => {
