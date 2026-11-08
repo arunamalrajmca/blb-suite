@@ -3414,7 +3414,7 @@ test('MV3 extension survives 100 full runtime reloads with diagnostics', async (
 
   const fs = require('node:fs');
   const path = require('node:path');
-  const logPath = path.resolve(process.cwd(), 'test-results', 'extension-reload-stress.log');
+  const logPath = process.env.BLB_RELOAD_STRESS_LOG_PATH || path.resolve(process.cwd(), 'test-results', 'extension-reload-stress.log');
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   fs.writeFileSync(logPath, '');
 
