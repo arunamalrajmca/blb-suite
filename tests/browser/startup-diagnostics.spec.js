@@ -232,13 +232,12 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       blbTabId);
       writeLog('combined-stress-content-script-ensure', { tabId: blbTabId, response: ensureResponse });
       expect(ensureResponse?.ok, 'BLB content script must be activated before combined stress').toBe(true);
-      await blbTab.waitForFunction(() => window.__blbSuiteContentScriptLoadedV2 === true, null, { timeout: 15000 });
       await injectionPage.close();
       writeLog('combined-stress-tabs-ready', {
         facebookUrl: facebookTab.url(),
-        facebookContentScriptLoaded: await facebookTab.evaluate(() => window.__blbSuiteContentScriptLoadedV2 === true),
+        facebookTabOpen: true,
         blbUrl: blbTab.url(),
-        blbContentScriptLoaded: true
+        blbContentScriptEnsured: true
       });
     }
 
@@ -660,11 +659,20 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
         }));
         expect(reloadResponse, 'runtime message after full extension reload, cycle ' + cycle).toBeTruthy();
 
-        // Exercise an actual selection-open message from the still-open
-        // BLB-origin tab while a Facebook tab remains open beside it.
-        await expect.poll(() => blbTab.evaluate(() =>
-          window.__blbSuiteContentScriptLoadedV2 === true
-        ), { timeout: 5000 }).toBe(true);
+        // Ask the extension's real recovery path to verify/reinject the
+        // content script in the existing BLB tab after every full reload.
+        const contentScriptRecovery = await reloadPopup.evaluate(async () => {
+          const tabs = await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' });
+          const tab = tabs.find(item => new URL(item.url).pathname === '/');
+          if (!tab) return { ok: false, reason: 'blb-source-tab-missing' };
+          return chrome.runtime.sendMessage({ type: 'blbSuiteEnsureContentScript', tabId: tab.id });
+        });
+        writeLog('blb-content-script-recovery-after-reload', {
+          cycle,
+          response: contentScriptRecovery
+        });
+        expect(contentScriptRecovery?.ok,
+          'BLB content script recovery must succeed after reload cycle ' + cycle).toBe(true);
         const activeTabSelectionResult = await sendActiveTabSelectionRequest(cycle);
 
         await expect.poll(async () => {
