@@ -590,53 +590,95 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       { timeout: 15000 }
     );
 
-    // The Errors button opens Chromium's dedicated per-extension error view.
-    // Capture that view as well as the card model: some browser-level script
-    // fetch failures are rendered there without useful page-console output.
+    // Chromium's Errors UI is opened from the extension card; it is not a
+    // stable standalone query-string route. Click the real card control when
+    // one exists, then capture the rendered overlay from the manager page.
     const captureExtensionErrorsView = async label => {
-      const errorsPage = await context.newPage();
-      try {
-        const url = `chrome://extensions/?errors=${extensionId}`;
-        await errorsPage.goto(url, { waitUntil: 'domcontentloaded', timeout: 15000 });
-        await errorsPage.waitForTimeout(400);
-        const snapshot = await errorsPage.evaluate(() => {
-          const texts = [];
-          const elements = [];
-          const visit = root => {
-            if (!root || typeof root.querySelectorAll !== 'function') return;
-            const bodyText = String(root.innerText || '').trim();
-            if (bodyText) texts.push(bodyText);
-            for (const element of root.querySelectorAll('*')) {
-              const tag = element.tagName?.toLowerCase() || '';
-              if (/error|warning/i.test(tag + ' ' + (element.id || '') + ' ' +
-                  (typeof element.className === 'string' ? element.className : ''))) {
-                elements.push({
-                  tag,
-                  id: element.id || '',
-                  className: typeof element.className === 'string' ? element.className : '',
-                  text: String(element.innerText || element.textContent || '').trim().slice(0, 1200)
-                });
-              }
-              if (element.shadowRoot) visit(element.shadowRoot);
+      const opened = await manager.evaluate(id => {
+        const visit = (root, callback) => {
+          if (!root || typeof root.querySelectorAll !== 'function') return;
+          for (const element of root.querySelectorAll('*')) {
+            callback(element);
+            if (element.shadowRoot) visit(element.shadowRoot, callback);
+          }
+        };
+        let item = null;
+        visit(document, element => {
+          if (element.tagName?.toLowerCase() === 'extensions-item' &&
+              (element.data?.id === id || element.getAttribute('id') === id)) {
+            item = element;
+          }
+        });
+        if (!item) return { itemFound: false, errorButtonFound: false, controls: [] };
+        const controls = [];
+        visit(item.shadowRoot || item, element => {
+          if (!['button', 'cr-button', 'cr-icon-button'].includes(element.tagName?.toLowerCase())) return;
+          const details = {
+            tag: element.tagName.toLowerCase(),
+            id: element.id || '',
+            title: element.title || '',
+            ariaLabel: element.getAttribute('aria-label') || '',
+            text: String(element.innerText || element.textContent || '').trim()
+          };
+          controls.push(details);
+        });
+        const buttons = [];
+        visit(item.shadowRoot || item, element => {
+          if (!['button', 'cr-button', 'cr-icon-button'].includes(element.tagName?.toLowerCase())) return;
+          const label = [element.id, element.title, element.getAttribute('aria-label'),
+            element.innerText, element.textContent].join(' ');
+          if (/error/i.test(label) && !element.disabled) buttons.push(element);
+        });
+        if (buttons[0]) buttons[0].click();
+        return {
+          itemFound: true,
+          errorButtonFound: buttons.length > 0,
+          clicked: buttons.length > 0,
+          controls
+        };
+      }, extensionId);
+      await manager.waitForTimeout(400);
+      const snapshot = await manager.evaluate(() => {
+        const texts = [];
+        const elements = [];
+        const visit = root => {
+          if (!root || typeof root.querySelectorAll !== 'function') return;
+          const bodyText = String(root.innerText || '').trim();
+          if (bodyText) texts.push(bodyText);
+          for (const element of root.querySelectorAll('*')) {
+            const tag = element.tagName?.toLowerCase() || '';
+            if (/error|warning/i.test(tag + ' ' + (element.id || '') + ' ' +
+                (typeof element.className === 'string' ? element.className : ''))) {
+              elements.push({
+                tag,
+                id: element.id || '',
+                className: typeof element.className === 'string' ? element.className : '',
+                text: String(element.innerText || element.textContent || '').trim().slice(0, 1200)
+              });
             }
-          };
-          visit(document);
-          return {
-            title: document.title,
-            url: location.href,
-            readyState: document.readyState,
-            bodyText: String(document.body?.innerText || '').trim().slice(0, 12000),
-            shadowTexts: [...new Set(texts)].slice(0, 20),
-            errorElements: elements.slice(0, 80)
-          };
-        });
-        writeLog('chrome-extensions-dedicated-errors-view', { label, ...snapshot });
-      } catch (error) {
-        writeLog('chrome-extensions-dedicated-errors-view-unavailable', {
-          label, message: error.message, stack: error.stack || ''
-        });
-      } finally {
-        await errorsPage.close().catch(() => {});
+            if (element.shadowRoot) visit(element.shadowRoot);
+          }
+        };
+        visit(document);
+        return {
+          title: document.title,
+          url: location.href,
+          readyState: document.readyState,
+          bodyText: String(document.body?.innerText || '').trim().slice(0, 12000),
+          shadowTexts: [...new Set(texts)].slice(0, 30),
+          errorElements: elements.slice(0, 100)
+        };
+      });
+      writeLog('chrome-extensions-dedicated-errors-view', {
+        label,
+        opened,
+        ...snapshot,
+        captureMethod: 'click extension card Errors control'
+      });
+      if (opened.errorButtonFound) {
+        expect(snapshot.shadowTexts.join('\\n') + '\\n' + snapshot.bodyText,
+          'opening the extension Errors control must render the error view')
+          .not.toBe('');
       }
     };
     const extensionCard = await manager.evaluate(id => {
