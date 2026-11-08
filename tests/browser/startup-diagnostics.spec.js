@@ -38,13 +38,16 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
     writeLog('fresh-profile-install-start', {
       extensionPath,
       profile: 'new temporary persistent profile',
-      headless: true
+      headless: process.env.BLB_HEADFUL_EXTENSION_TESTS !== '1',
+      browserExecutable: process.env.BLB_BROWSER_EXECUTABLE_PATH || 'playwright-chromium'
     });
     context = await chromium.launchPersistentContext('', {
-      channel: 'chromium',
-      headless: true,
+      ...(process.env.BLB_BROWSER_EXECUTABLE_PATH
+        ? { executablePath: process.env.BLB_BROWSER_EXECUTABLE_PATH }
+        : { channel: 'chromium' }),
+      headless: process.env.BLB_HEADFUL_EXTENSION_TESTS !== '1',
       args: [
-        '--headless=new',
+        ...(process.env.BLB_HEADFUL_EXTENSION_TESTS === '1' ? [] : ['--headless=new']),
         `--disable-extensions-except=${extensionPath}`,
         `--load-extension=${extensionPath}`,
         '--no-first-run',
@@ -199,6 +202,40 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       responseKeys: response && typeof response === 'object' ? Object.keys(response) : []
     });
     expect(response).toBeTruthy();
+
+    // Repeatedly terminate the actual extension worker and wake it through a
+    // real extension runtime message. This exercises Brave's MV3 cold-start
+    // path without substituting a Chromium executable.
+    for (let cycle = 1; cycle <= 10; cycle++) {
+      const targets = await browserCdp.send('Target.getTargets');
+      const liveWorker = targets.targetInfos.find(item =>
+        item.type === 'service_worker' && item.url === workerUrl
+      );
+      if (liveWorker) {
+        writeLog('worker-reload-cycle-close', { cycle, targetId: liveWorker.targetId });
+        await browserCdp.send('Target.closeTarget', { targetId: liveWorker.targetId });
+      } else {
+        writeLog('worker-reload-cycle-already-stopped', { cycle });
+      }
+      const wakeStartedAt = Date.now();
+      const wakeResponse = await popup.evaluate(() => chrome.runtime.sendMessage({
+        type: 'blbSuiteGetDefaultSiteStatus',
+        hostname: 'facebook.com'
+      }));
+      expect(wakeResponse, 'worker must answer after cold start, cycle ' + cycle).toBeTruthy();
+      const replacement = await expect.poll(async () => {
+        const state = await browserCdp.send('Target.getTargets');
+        return state.targetInfos.find(item =>
+          item.type === 'service_worker' && item.url === workerUrl
+        )?.targetId || null;
+      }, { timeout: 10000 }).not.toBeNull();
+      writeLog('worker-reload-cycle-passed', {
+        cycle,
+        wakeDurationMs: Date.now() - wakeStartedAt,
+        responsePresent: !!wakeResponse,
+        replacementObserved: true
+      });
+    }
 
     // Chromium exposes extension load/runtime errors on the real extensions
     // manager card. Inspect its backing data as well as worker/page events so
