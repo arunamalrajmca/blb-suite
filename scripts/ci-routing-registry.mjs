@@ -8,6 +8,7 @@ export const featureSpecs = [
     paths: ["extension/background.js"],
     specs: ["tests/browser/startup-diagnostics.spec.js"]
   },
+  {
     paths: ["tests/pages/research-derived-smoke.html"],
     specs: ["tests/browser/research-dom-smoke.spec.js"]
   },
