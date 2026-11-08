@@ -1865,13 +1865,14 @@ async function fetchPackagedJsonAssignment(filename, assignment, terminator, all
   }
   const source = await response.text();
   const start = source.indexOf(assignment);
-  const end = terminator
-    ? source.indexOf(terminator, start)
-    : source.lastIndexOf(';');
-  if (start < 0 || end < 0) {
+  // Match the build-time generator: terminator text can legitimately occur
+  // inside a quoted phrase in the generated JavaScript payload, so the final
+  // terminator is the assignment boundary.
+  const end = source.lastIndexOf(terminator || ';');
+  if (start < 0 || end < start + assignment.length) {
     throw new Error('Packaged KJV search data has an unexpected format: ' + filename);
   }
-  const json = source.slice(start + assignment.length, end);
+  const json = source.slice(start + assignment.length, end).trim();
   // Generated object indexes may use a JavaScript trailing comma even though
   // the payload is parsed as JSON. Normalize only the final object-entry comma.
   return JSON.parse(allowTrailingObjectComma ? json.replace(/,(\s*})$/, '$1') : json);
