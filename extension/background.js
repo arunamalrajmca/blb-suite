@@ -1855,34 +1855,35 @@ async function fetchPackagedGzipJson(filename) {
     'kjv-corpus-phrase-index.json.gz': ['kjv-corpus-phrase-index.js', 'const KJV_CORPUS_PHRASE_INDEX = Object.freeze(', ');', true]
   };
   const fallback = fallbackAssignments[filename];
-  let response;
-  try {
-    response = await fetch(chrome.runtime.getURL(filename));
-  } catch (error) {
-    // A packaged extension-resource request can reject (rather than return
-    // HTTP 404) when Chromium cannot serve the generated sidecar. Preserve
-    // the original JavaScript assignment loader as a recovery path.
-    if (fallback) {
-      try {
-        return await fetchPackagedJsonAssignment(...fallback);
-      } catch (fallbackError) {
-        throw new Error(
-          'Unable to fetch compressed packaged KJV data ' + filename
-          + ' (' + String(error) + '); original-data fallback also failed: '
-          + String(fallbackError)
-        );
-      }
+  const loadOriginalData = async cause => {
+    if (!fallback) throw cause;
+    try {
+      return await fetchPackagedJsonAssignment(...fallback);
+    } catch (fallbackError) {
+      throw new Error(
+        'Unable to load compressed packaged KJV data ' + filename
+        + ' (' + String(cause) + '); original-data fallback also failed: '
+        + String(fallbackError)
+      );
     }
-    throw error;
+  };
+
+  try {
+    const response = await fetch(chrome.runtime.getURL(filename));
+    if (!response.ok || !response.body) {
+      throw new Error('Unable to fetch compressed packaged KJV data ' + filename + ': HTTP ' + response.status);
+    }
+    if (typeof DecompressionStream !== 'function') {
+      return await loadOriginalData(new Error('DecompressionStream is unavailable'));
+    }
+    const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));
+    return await new Response(decompressed).json();
+  } catch (error) {
+    // Recover from every compressed-sidecar failure, not only a rejected fetch:
+    // HTTP errors, missing bodies, unavailable decompression, corrupt gzip,
+    // and invalid JSON can all prevent the generated asset from loading.
+    return loadOriginalData(error);
   }
-  if (response.status === 404 || typeof DecompressionStream !== 'function') {
-    if (fallback) return fetchPackagedJsonAssignment(...fallback);
-  }
-  if (!response.ok || !response.body) {
-    throw new Error('Unable to fetch compressed packaged KJV data ' + filename + ': HTTP ' + response.status);
-  }
-  const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));
-  return new Response(decompressed).json();
 }
 
 async function ensureKjvVerseCorpusLoaded() {
@@ -2872,7 +2873,16 @@ async function ensureContentScriptInTab(tabId) {
       const files = contentScriptFilesForTab(tab, settings);
       if (!files.length) return false;
 
-      await ensureRuntimeContentScriptRegistered(tab, files);
+      const registrationReady = await ensureRuntimeContentScriptRegistered(tab, files);
+      if (!registrationReady) {
+        // Current-document injection alone would leave future navigations
+        // without the configured feature. Do not report this tab as activated
+        // when its persistent registration could not be established.
+        console.warn('KJV Scripture Tools skipped tab activation because persistent content-script registration failed:', {
+          tabId, tabUrl:tab.url, files
+        });
+        return false;
+      }
 
       // A newly enabled site may already be open, so install the MAIN-world
       // guard in that current document too. The registration above covers
@@ -6729,12 +6739,9 @@ chrome.runtime.onStartup.addListener(() => refreshStudyAutoStopAlarm().catch(()=
 chrome.runtime.onStartup.addListener(() => auditPersistedRuntimeContentScriptRegistrations().catch(error => {
   console.warn('KJV Scripture Tools persisted content-script audit failed: ' + String(error));
 }));
-
-// Also run on every service-worker start, including extension reloads from
-// the extensions page; onStartup alone does not cover manual reloads.
-auditPersistedRuntimeContentScriptRegistrations().catch(error => {
-  console.warn('KJV Scripture Tools persisted content-script audit failed: ' + String(error));
-});
+chrome.runtime.onInstalled.addListener(() => auditPersistedRuntimeContentScriptRegistrations().catch(error => {
+  console.warn('KJV Scripture Tools persisted content-script audit failed after install/update: ' + String(error));
+}));
 
 installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
   .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
