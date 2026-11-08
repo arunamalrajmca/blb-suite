@@ -31,14 +31,18 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
           fetch-depth: 1
 
+      - name: Initialize diagnostics artifact path
+        run: |
+          mkdir -p test-results
+          : > test-results/extension-startup-diagnostics.log
+
       - name: Setup Node
         uses: actions/setup-node@v5
         with:
           node-version: 22
-          cache: npm
 
       - name: Install dependencies
-        run: npm ci --prefer-offline --no-audit --no-fund
+        run: npm install --prefer-offline --no-audit --no-fund
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
