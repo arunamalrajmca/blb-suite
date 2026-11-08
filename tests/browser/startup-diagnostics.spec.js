@@ -210,6 +210,108 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       contentType: 'text/html',
       body: '<!doctype html><html><head><title>BLB stress fixture</title></head><body><main id="blb-stress-fixture">BLB tab kept open during extension reload stress</main></body></html>'
     }));
+    // Exercise the manifest-driven content-script loader independently of
+    // the service worker. Attach to the page target before navigation so
+    // document_start extension-script requests and failures are observable.
+    const manifestScriptAudit = await worker.evaluate(async () => {
+      const manifest = chrome.runtime.getManifest();
+      const scripts = (manifest.content_scripts || [])
+        .filter(entry => (entry.matches || []).includes('https://www.blueletterbible.org/*'))
+        .flatMap(entry => entry.js || []);
+      const checks = await Promise.all(scripts.map(async file => {
+        const url = chrome.runtime.getURL(file);
+        try {
+          const response = await fetch(url, { cache: 'no-store' });
+          return { file, url, ok: response.ok, status: response.status };
+        } catch (error) {
+          return { file, url, ok: false, error: String(error) };
+        }
+      }));
+      return { scripts, checks };
+    });
+    writeLog('manifest-content-script-package-audit', manifestScriptAudit);
+    expect(manifestScriptAudit.scripts.length, 'BLB manifest content-script bundle must be declared').toBeGreaterThan(0);
+    expect(manifestScriptAudit.checks.filter(item => !item.ok),
+      'every manifest-declared BLB content script must be fetchable from the installed package').toEqual([]);
+
+    const manifestPage = await context.newPage();
+    const manifestPageCdp = await context.newCDPSession(manifestPage);
+    const manifestRequestUrls = new Map();
+    const manifestLoadedScripts = new Set();
+    const manifestScriptFailures = [];
+    manifestPageCdp.on('Network.requestWillBeSent', event => {
+      manifestRequestUrls.set(event.requestId, event.request.url);
+      if (event.request.url.startsWith('chrome-extension://')) {
+        writeLog('manifest-page-extension-script-request', {
+          requestId: event.requestId,
+          url: event.request.url,
+          type: event.type,
+          initiator: event.initiator?.type || ''
+        });
+      }
+    });
+    manifestPageCdp.on('Network.responseReceived', event => {
+      const url = event.response.url || '';
+      if (url.startsWith('chrome-extension://') && event.type === 'Script') {
+        manifestLoadedScripts.add(url.split('/').pop());
+        writeLog('manifest-page-extension-script-response', {
+          requestId: event.requestId,
+          url,
+          status: event.response.status,
+          mimeType: event.response.mimeType
+        });
+      }
+    });
+    manifestPageCdp.on('Network.loadingFailed', event => {
+      const url = manifestRequestUrls.get(event.requestId) || '';
+      if (url.startsWith('chrome-extension://')) {
+        const failure = {
+          requestId: event.requestId,
+          url,
+          errorText: event.errorText,
+          canceled: event.canceled,
+          type: event.type
+        };
+        manifestScriptFailures.push(failure);
+        writeLog('manifest-page-extension-script-load-failed', failure);
+      }
+    });
+    await manifestPageCdp.send('Network.enable');
+    await manifestPage.goto('https://www.blueletterbible.org/', {
+      waitUntil: 'domcontentloaded',
+      timeout: 20000
+    });
+    await manifestPage.waitForLoadState('load', { timeout: 10000 }).catch(() => {});
+    const manifestPageState = await manifestPage.evaluate(() => ({
+      url: location.href,
+      readyState: document.readyState,
+      resourceScripts: performance.getEntriesByType('resource')
+        .filter(entry => entry.name.startsWith('chrome-extension://'))
+        .map(entry => entry.name.split('/').pop())
+    }));
+    writeLog('manifest-content-script-page-state', {
+      ...manifestPageState,
+      loadedScripts: [...manifestLoadedScripts],
+      failedScripts: manifestScriptFailures
+    });
+    expect(manifestScriptFailures,
+      'manifest-driven content scripts must not fail while loading on a matching BLB page').toEqual([]);
+    const observedManifestScripts = new Set([
+      ...manifestLoadedScripts,
+      ...manifestPageState.resourceScripts
+    ]);
+    const unobservedManifestScripts = manifestScriptAudit.scripts
+      .filter(file => !observedManifestScripts.has(file));
+    writeLog('manifest-content-script-observation-summary', {
+      expectedCount: manifestScriptAudit.scripts.length,
+      observedCount: observedManifestScripts.size,
+      unobservedScripts: unobservedManifestScripts
+    });
+    expect(unobservedManifestScripts,
+      'every manifest-declared BLB script must be observed loading in the matching page target').toEqual([]);
+    await manifestPageCdp.detach().catch(() => {});
+    await manifestPage.close();
+
     let facebookTab = null;
     let blbTab = null;
     if (process.env.BLB_TEST_FULL_EXTENSION_RELOADS === '1') {
