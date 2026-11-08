@@ -470,31 +470,36 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
         }, { timeout: 10000, intervals: [25, 50, 100] }).toBe(true);
         writeLog('extension-reload-worker-stopped', { cycle });
 
-        // Brave may keep extension pages unavailable for a short interval
-        // after the toolbar Reload action. Wait for the new MV3 worker target
-        // before navigating to chrome-extension://, rather than racing reload.
-        await expect.poll(async () => {
-          const state = await browserCdp.send('Target.getTargets');
-          return state.targetInfos.some(item =>
-            item.type === 'service_worker' && item.url === workerUrl
-          );
-        }, { timeout: 15000, intervals: [25, 50, 100, 200] }).toBe(true);
-        const workerAfterReload = await browserCdp.send('Target.getTargets');
-        const reloadedWorkerTarget = workerAfterReload.targetInfos.find(item =>
-          item.type === 'service_worker' && item.url === workerUrl
-        );
-        writeLog('extension-reload-worker-restarted', {
-          cycle,
-          targetId: reloadedWorkerTarget.targetId,
-          previousTargetId: workerBeforeReload.targetId,
-          targetChanged: reloadedWorkerTarget.targetId !== workerBeforeReload.targetId
-        });
-
+        // A freshly reloaded MV3 worker is normally dormant until an event.
+        // Brave can briefly reject extension-page navigation while its reload
+        // completes, so retry only that transient navigation failure.
+        await new Promise(resolve => setTimeout(resolve, 500));
         const reloadPopup = await context.newPage();
-        await reloadPopup.goto(`chrome-extension://${extensionId}/popup.html`, {
-          waitUntil: 'domcontentloaded',
-          timeout: 15000
-        });
+        let popupLoaded = false;
+        let lastNavigationError = null;
+        for (let navigationAttempt = 1; navigationAttempt <= 12; navigationAttempt++) {
+          try {
+            await reloadPopup.goto(`chrome-extension://${extensionId}/popup.html`, {
+              waitUntil: 'domcontentloaded',
+              timeout: 5000
+            });
+            popupLoaded = true;
+            writeLog('extension-reload-popup-loaded', { cycle, navigationAttempt });
+            break;
+          } catch (error) {
+            lastNavigationError = error;
+            writeLog('extension-reload-popup-navigation-retry', {
+              cycle,
+              navigationAttempt,
+              message: error.message
+            });
+            if (!/ERR_BLOCKED_BY_CLIENT|ERR_FAILED|net::ERR_ABORTED/i.test(error.message)) throw error;
+            await new Promise(resolve => setTimeout(resolve, 250));
+          }
+        }
+        expect(popupLoaded, 'Brave popup must become available after extension reload, cycle ' + cycle)
+          .toBe(true);
+        if (!popupLoaded && lastNavigationError) throw lastNavigationError;
         const reloadResponse = await reloadPopup.evaluate(() => chrome.runtime.sendMessage({
           type: 'blbSuiteGetDefaultSiteStatus',
           hostname: 'facebook.com'
