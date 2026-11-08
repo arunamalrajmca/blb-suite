@@ -159,14 +159,20 @@ test.describe('On-demand normalized KJV corpus loading', () => {
     const result = await extensionWorker.evaluate(async () => {
       const originalFetch = self.fetch;
       let requests = 0;
-      let injectedFailure = false;
-      self.fetch = async (...args) => {
+      let gzipFailureInjected = false;
+      let fallbackFailureInjected = false;
+      self.fetch = async (input, ...args) => {
         requests++;
-        if (!injectedFailure) {
-          injectedFailure = true;
-          return { ok: false, status: 503 };
+        const url = String(input);
+        if (!gzipFailureInjected && url.endsWith('kjv-corpus-verses.json.gz')) {
+          gzipFailureInjected = true;
+          return new Response('', { status:503 });
         }
-        return originalFetch(...args);
+        if (!fallbackFailureInjected && url.endsWith('kjv-corpus-verses.js')) {
+          fallbackFailureInjected = true;
+          return new Response('', { status:503 });
+        }
+        return originalFetch(input, ...args);
       };
       let firstAttemptFailed = false;
       try {
@@ -189,7 +195,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
     });
 
     expect(result.firstAttemptFailed).toBe(true);
-    expect(result.requests).toBe(4);
+    expect(result.requests).toBe(5);
     expect(result.versesLoaded).toBe(true);
     expect(result.indexLoaded).toBe(true);
   });
