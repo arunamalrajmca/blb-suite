@@ -1,4 +1,5 @@
 name: Extension Fresh-Install Startup Diagnostics
+# Dedicated workflow: never runs the full browser suite.
 run-name: Fresh-install startup diagnostics — PR ${{ github.event.pull_request.number || github.ref_name }}
 
 on:
