@@ -210,7 +210,10 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       await worker.evaluate(async () => {
         await chrome.storage.local.set({
           masterEnabled: true,
-          pageSelectionButtonSites: { 'blueletterbible.org': true }
+          pageSelectionButtonSites: {
+            'blueletterbible.org': true,
+            'facebook.com': true
+          }
         });
       });
       facebookTab = await context.newPage();
@@ -222,16 +225,63 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
         waitUntil: 'domcontentloaded',
         timeout: 15000
       });
-      const blbTabId = await worker.evaluate(async () => {
-        const tabs = await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' });
-        return tabs.find(tab => new URL(tab.url).pathname === '/')?.id ?? null;
+      // Grant the optional Facebook origin through the extension API from a
+      // trusted click in the real extension page. This uses the same browser
+      // permission mechanism as an end user's approval; it does not bypass
+      // host permissions or add Facebook to required host_permissions.
+      await injectionPage.evaluate(() => {
+        const button = document.createElement('button');
+        button.id = 'blb-test-grant-facebook-origin';
+        button.textContent = 'Grant Facebook test origin';
+        button.addEventListener('click', async () => {
+          try {
+            const granted = await chrome.permissions.request({
+              origins: ['https://www.facebook.com/*']
+            });
+            window.__blbFacebookPermissionResult = {
+              granted,
+              contains: await chrome.permissions.contains({
+                origins: ['https://www.facebook.com/*']
+              })
+            };
+          } catch (error) {
+            window.__blbFacebookPermissionResult = { granted: false, error: String(error) };
+          }
+        });
+        document.body.appendChild(button);
       });
-      expect(blbTabId, 'BLB stress tab must be registered with Chrome').not.toBeNull();
-      const ensureResponse = await injectionPage.evaluate(tabId =>
+      await injectionPage.locator('#blb-test-grant-facebook-origin').click();
+      await expect.poll(() => injectionPage.evaluate(() => window.__blbFacebookPermissionResult || null))
+        .toMatchObject({ granted: true, contains: true });
+      const facebookPermission = await injectionPage.evaluate(() => window.__blbFacebookPermissionResult);
+      writeLog('facebook-optional-host-permission-granted', facebookPermission);
+      const sourceTabIds = await worker.evaluate(async () => {
+        const tabs = await chrome.tabs.query({});
+        const find = hostname => tabs.find(tab => {
+          try { return new URL(tab.url || '').hostname === hostname; }
+          catch (_) { return false; }
+        })?.id ?? null;
+        return {
+          facebook: find('www.facebook.com'),
+          blb: find('www.blueletterbible.org')
+        };
+      });
+      expect(sourceTabIds.facebook, 'Facebook stress tab must be registered with Chrome').not.toBeNull();
+      expect(sourceTabIds.blb, 'BLB stress tab must be registered with Chrome').not.toBeNull();
+      const facebookEnsureResponse = await injectionPage.evaluate(tabId =>
         chrome.runtime.sendMessage({ type: 'blbSuiteEnsureContentScript', tabId }),
-      blbTabId);
-      writeLog('combined-stress-content-script-ensure', { tabId: blbTabId, response: ensureResponse });
-      expect(ensureResponse?.ok, 'BLB content script must be activated before combined stress').toBe(true);
+      sourceTabIds.facebook);
+      const blbEnsureResponse = await injectionPage.evaluate(tabId =>
+        chrome.runtime.sendMessage({ type: 'blbSuiteEnsureContentScript', tabId }),
+      sourceTabIds.blb);
+      writeLog('combined-stress-content-script-ensure', {
+        facebookTabId: sourceTabIds.facebook,
+        facebookResponse: facebookEnsureResponse,
+        blbTabId: sourceTabIds.blb,
+        blbResponse: blbEnsureResponse
+      });
+      expect(facebookEnsureResponse?.ok, 'Facebook content script must be activated after optional host permission').toBe(true);
+      expect(blbEnsureResponse?.ok, 'BLB content script must be activated before combined stress').toBe(true);
       await injectionPage.close();
       writeLog('combined-stress-tabs-ready', {
         facebookUrl: facebookTab.url(),
@@ -241,15 +291,18 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       });
     }
 
-    const sendActiveTabSelectionRequest = async cycle => {
+    const sendActiveTabSelectionRequest = async (cycle, sourceHost = 'www.blueletterbible.org') => {
       const liveWorker = context.serviceWorkers().find(item => item.url() === workerUrl);
       expect(liveWorker, 'Brave worker must be available for active-tab selection request, cycle ' + cycle).toBeTruthy();
-      const tabId = await liveWorker.evaluate(async () => {
-        const tabs = await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' });
-        return tabs.find(tab => new URL(tab.url).pathname === '/')?.id ?? null;
-      });
-      expect(tabId, 'BLB source tab must remain open during reload cycle ' + cycle).not.toBeNull();
-      const requestId = 'brave-reload-active-tab-selection-' + cycle;
+      const tabId = await liveWorker.evaluate(async hostname => {
+        const tabs = await chrome.tabs.query({});
+        return tabs.find(tab => {
+          try { return new URL(tab.url || '').hostname === hostname; }
+          catch (_) { return false; }
+        })?.id ?? null;
+      }, sourceHost);
+      expect(tabId, sourceHost + ' source tab must remain open during reload cycle ' + cycle).not.toBeNull();
+      const requestId = 'brave-reload-' + sourceHost.replace(/[^a-z0-9]+/gi, '-') + '-selection-' + cycle;
       const result = await liveWorker.evaluate(async ({ tabId, requestId }) => {
         try {
           const executions = await chrome.scripting.executeScript({
@@ -270,16 +323,18 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       }, { tabId, requestId });
       writeLog('active-tab-selection-runtime-message', {
         cycle,
-        sourceHost: 'www.blueletterbible.org',
+        sourceHost,
         tabId,
         requestId,
         result
       });
-      expect(result?.ok, 'Active BLB selection-open runtime message must succeed after reload cycle ' + cycle)
+      expect(result?.ok, 'Active ' + sourceHost + ' selection-open runtime message must succeed after reload cycle ' + cycle)
         .toBe(true);
-      // Remove only the destination created by this stress request; preserve
-      // the Facebook and BLB source tabs throughout the entire run.
-      await liveWorker.evaluate(async () => {
+      expect(result?.referenceNavigation, 'Selection request must resolve the reference rather than silently fail, cycle ' + cycle)
+        .toBe(true);
+      // Exactly one destination should be created for this request ID. Remove
+      // only that destination; preserve both source tabs throughout the run.
+      const destinationState = await liveWorker.evaluate(async () => {
         const tabs = await chrome.tabs.query({});
         const destinations = tabs.filter(tab => {
           try {
@@ -288,25 +343,23 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
               url.pathname.startsWith('/kjv/jhn/3/16');
           } catch (_) { return false; }
         });
-        await Promise.all(destinations.map(tab => chrome.tabs.remove(tab.id)));
-      });
-      const sourceTabs = await liveWorker.evaluate(async () => {
-        const tabs = await chrome.tabs.query({});
+        const sources = tabs.map(tab => {
+          try { return new URL(tab.url || '').hostname; } catch (_) { return ''; }
+        });
         return {
-          facebookOpen: tabs.some(tab => {
-            try { return new URL(tab.url || '').hostname === 'www.facebook.com'; }
-            catch (_) { return false; }
-          }),
-          blbOpen: tabs.some(tab => {
-            try {
-              const url = new URL(tab.url || '');
-              return url.hostname === 'www.blueletterbible.org' && url.pathname === '/';
-            } catch (_) { return false; }
-          })
+          destinationCount: destinations.length,
+          destinationIds: destinations.map(tab => tab.id),
+          facebookOpen: sources.includes('www.facebook.com'),
+          blbOpen: sources.includes('www.blueletterbible.org')
         };
       });
-      expect(sourceTabs.facebookOpen, 'Facebook tab must remain open, cycle ' + cycle).toBe(true);
-      expect(sourceTabs.blbOpen, 'BLB source tab must remain open, cycle ' + cycle).toBe(true);
+      writeLog('selection-request-destination-state', { cycle, sourceHost, ...destinationState });
+      expect(destinationState.destinationCount, 'Exactly one John 3:16 destination must be opened for ' + sourceHost + ', cycle ' + cycle)
+        .toBe(1);
+      expect(destinationState.facebookOpen, 'Facebook tab must remain open, cycle ' + cycle).toBe(true);
+      expect(destinationState.blbOpen, 'BLB source tab must remain open, cycle ' + cycle).toBe(true);
+      await liveWorker.evaluate(async ids => Promise.all(ids.map(id => chrome.tabs.remove(id))),
+        destinationState.destinationIds);
       return result;
     };
 
@@ -703,18 +756,43 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
         // Ask the extension's real recovery path to verify/reinject the
         // content script in the existing BLB tab after every full reload.
         const contentScriptRecovery = await reloadPopup.evaluate(async () => {
-          const tabs = await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' });
-          const tab = tabs.find(item => new URL(item.url).pathname === '/');
-          if (!tab) return { ok: false, reason: 'blb-source-tab-missing' };
-          return chrome.runtime.sendMessage({ type: 'blbSuiteEnsureContentScript', tabId: tab.id });
+          const tabs = await chrome.tabs.query({});
+          const facebookTab = tabs.find(item => {
+            try { return new URL(item.url).hostname === 'www.facebook.com'; }
+            catch (_) { return false; }
+          });
+          const blbTab = tabs.find(item => {
+            try {
+              const url = new URL(item.url);
+              return url.hostname === 'www.blueletterbible.org' && url.pathname === '/';
+            } catch (_) { return false; }
+          });
+          if (!facebookTab || !blbTab) return {
+            ok: false,
+            reason: 'source-tab-missing',
+            facebookTabFound: !!facebookTab,
+            blbTabFound: !!blbTab
+          };
+          const facebook = await chrome.runtime.sendMessage({
+            type: 'blbSuiteEnsureContentScript',
+            tabId: facebookTab.id
+          });
+          const blb = await chrome.runtime.sendMessage({
+            type: 'blbSuiteEnsureContentScript',
+            tabId: blbTab.id
+          });
+          return { ok: facebook?.ok === true && blb?.ok === true, facebook, blb };
         });
-        writeLog('blb-content-script-recovery-after-reload', {
+        writeLog('facebook-and-blb-content-script-recovery-after-reload', {
           cycle,
           response: contentScriptRecovery
         });
-        expect(contentScriptRecovery?.ok,
+        expect(contentScriptRecovery?.facebook?.ok,
+          'Facebook content script recovery must succeed after reload cycle ' + cycle).toBe(true);
+        expect(contentScriptRecovery?.blb?.ok,
           'BLB content script recovery must succeed after reload cycle ' + cycle).toBe(true);
-        const activeTabSelectionResult = await sendActiveTabSelectionRequest(cycle);
+        const facebookSelectionResult = await sendActiveTabSelectionRequest(cycle, 'www.facebook.com');
+        const blbSelectionResult = await sendActiveTabSelectionRequest(cycle, 'www.blueletterbible.org');
 
         await expect.poll(async () => {
           const state = await browserCdp.send('Target.getTargets');
@@ -730,7 +808,8 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
           cycle,
           targetId: replacementTarget.targetId,
           responsePresent: !!reloadResponse,
-          activeTabSelectionMessageOk: activeTabSelectionResult?.ok === true,
+          facebookSelectionMessageOk: facebookSelectionResult?.ok === true,
+          blbSelectionMessageOk: blbSelectionResult?.ok === true,
           facebookTabOpen: true,
           blbTabOpen: true
         });
