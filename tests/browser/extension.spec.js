@@ -3125,6 +3125,40 @@ test('persisted runtime content-script registration audit reports missing files 
   expect(result.beforeIds).toEqual(result.afterIds);
 });
 
+test('persisted registration audit runs only on install/update and browser startup events', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const source = fs.readFileSync(path.resolve(__dirname, '../../extension/background.js'), 'utf8');
+  const auditInvocations = source.match(/auditPersistedRuntimeContentScriptRegistrations\(\)\.catch/g) || [];
+
+  expect(auditInvocations).toHaveLength(2);
+  expect(source).toMatch(/chrome\.runtime\.onStartup\.addListener\(\(\) => auditPersistedRuntimeContentScriptRegistrations\(\)/);
+  expect(source).toMatch(/chrome\.runtime\.onInstalled\.addListener\(\(\) => auditPersistedRuntimeContentScriptRegistrations\(\)/);
+});
+
+test('tab activation fails when its persistent content-script registration fails', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{},
+    redirectEnabled:false
+  });
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+
+  const activated = await extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({url:'https://example.com/*'});
+    const original = ensureRuntimeContentScriptRegistered;
+    globalThis.ensureRuntimeContentScriptRegistered = async () => false;
+    try {
+      return await ensureContentScriptInTab(tabs[0]?.id);
+    } finally {
+      globalThis.ensureRuntimeContentScriptRegistered = original;
+    }
+  });
+
+  expect(activated).toBe(false);
+});
+
 test('extension update reconciliation reactivates configured existing tabs', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionWorker.evaluate(() => {
     globalThis.__blbSuiteUpdateReconciliationCalls = [];
