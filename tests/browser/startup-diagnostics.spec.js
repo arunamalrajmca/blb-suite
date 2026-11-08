@@ -439,6 +439,47 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
     expect(extensionCard.found, 'the newly installed extension must appear on chrome://extensions').toBe(true);
     expect(reportedErrors, 'Chrome must not report extension load/runtime errors on the manager card').toEqual([]);
 
+    // Inspect Chromium's real per-extension Site access controls. The next
+    // stress-test revision will use this UI to grant only Facebook's origin,
+    // rather than bypassing optional host permissions in the test harness.
+    const permissionPage = await context.newPage();
+    await permissionPage.goto(`chrome://extensions/?id=${extensionId}`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 15000
+    });
+    await permissionPage.waitForTimeout(500);
+    const siteAccessControls = await permissionPage.evaluate(() => {
+      const found = [];
+      const visit = root => {
+        if (!root || typeof root.querySelectorAll !== 'function') return;
+        for (const element of root.querySelectorAll('button, select, input, [role="combobox"], [role="button"]')) {
+          found.push({
+            tag: element.tagName.toLowerCase(),
+            id: element.id || '',
+            role: element.getAttribute('role') || '',
+            ariaLabel: element.getAttribute('aria-label') || '',
+            text: String(element.innerText || element.textContent || '').trim().slice(0, 180),
+            value: element.value || '',
+            options: element.tagName === 'SELECT'
+              ? [...element.options].map(option => ({value:option.value, text:option.textContent.trim()}))
+              : []
+          });
+        }
+        for (const element of root.querySelectorAll('*')) {
+          if (element.shadowRoot) visit(element.shadowRoot);
+        }
+      };
+      visit(document);
+      return {
+        title: document.title,
+        url: location.href,
+        detailViewPresent: !!document.querySelector('extensions-detail-view'),
+        controls: found
+      };
+    });
+    writeLog('extension-site-access-controls', siteAccessControls);
+    await permissionPage.close();
+
     // Re-read the live extensions-manager model after every full reload. A
     // successful popup/runtime response alone must not mask a manager error
     // that Brave records asynchronously during extension startup.
