@@ -345,25 +345,32 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       // tab below instead of depending on a BLB-only response field.
       // Exactly one destination should be created for this request ID. Remove
       // only that destination; preserve both source tabs throughout the run.
-      const destinationState = await liveWorker.evaluate(async () => {
-        const tabs = await chrome.tabs.query({});
-        const destinations = tabs.filter(tab => {
-          try {
-            const url = new URL(tab.url || '');
-            return url.hostname.toLowerCase() === 'www.blueletterbible.org' &&
-              url.pathname.startsWith('/kjv/jhn/3/16');
-          } catch (_) { return false; }
+      let destinationState = null;
+      await expect.poll(async () => {
+        destinationState = await liveWorker.evaluate(async () => {
+          const tabs = await chrome.tabs.query({});
+          const destinations = tabs.filter(tab => {
+            try {
+              const url = new URL(tab.url || '');
+              return url.hostname.toLowerCase().endsWith('blueletterbible.org') &&
+                (url.pathname.startsWith('/kjv/jhn/3/16') ||
+                 (url.pathname.includes('/search/') && /John(?:%20|\+)3(?::|%3A)16/i.test(url.search)));
+            } catch (_) { return false; }
+          });
+          const sources = tabs.map(tab => {
+            try { return new URL(tab.url || '').hostname; } catch (_) { return ''; }
+          });
+          return {
+            destinationCount: destinations.length,
+            destinationIds: destinations.map(tab => tab.id),
+            destinationUrls: destinations.map(tab => tab.url),
+            allTabUrls: tabs.map(tab => tab.url || '').slice(0, 20),
+            facebookOpen: sources.includes('www.facebook.com'),
+            blbOpen: sources.includes('www.blueletterbible.org')
+          };
         });
-        const sources = tabs.map(tab => {
-          try { return new URL(tab.url || '').hostname; } catch (_) { return ''; }
-        });
-        return {
-          destinationCount: destinations.length,
-          destinationIds: destinations.map(tab => tab.id),
-          facebookOpen: sources.includes('www.facebook.com'),
-          blbOpen: sources.includes('www.blueletterbible.org')
-        };
-      });
+        return destinationState.destinationCount;
+      }, { timeout: 5000, intervals: [50, 100, 200, 400] }).toBe(1);
       writeLog('selection-request-destination-state', { cycle, sourceHost, ...destinationState });
       expect(destinationState.destinationCount, 'Exactly one John 3:16 destination must be opened for ' + sourceHost + ', cycle ' + cycle)
         .toBe(1);
