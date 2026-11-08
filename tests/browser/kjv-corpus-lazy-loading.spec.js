@@ -189,9 +189,14 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
   const instrument = extensionDir => {
     const backgroundPath = path.join(extensionDir, 'background.js');
     let source = fs.readFileSync(backgroundPath, 'utf8');
-    const match = source.match(/^\uFEFF?\s*importScripts\(([^;]+)\);/);
-    if (!match) throw new Error('Unable to instrument the service-worker importScripts bootstrap');
-    const scripts = [...match[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(item => item[1]);
+    // main still uses one importScripts(...) statement; the candidate now
+    // stores dependencies in BLB_BACKGROUND_STARTUP_IMPORTS and loops them.
+    // Normalize both shapes into the same measured import sequence.
+    const legacyMatch = source.match(/^\uFEFF?\s*importScripts\(([^;]+)\);/);
+    const arrayMatch = source.match(/const BLB_BACKGROUND_STARTUP_IMPORTS\s*=\s*\[([\s\S]*?)\];/);
+    const bootstrapMatch = arrayMatch || legacyMatch;
+    if (!bootstrapMatch) throw new Error('Unable to instrument the service-worker importScripts bootstrap');
+    const scripts = [...bootstrapMatch[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(item => item[1]);
     if (!scripts.length) throw new Error('No service-worker imports were found for A/B timing');
     const replacement = 'const __blbProfileBootstrapAt = performance.now();\n'
       + 'const __blbProfilePhases = [];\n'
@@ -202,7 +207,14 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
       + '}\n'
       + 'globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: __blbProfileBootstrapAt, phases: __blbProfilePhases };\n'
       + 'globalThis.__BLB_PROFILE_LOAD__ = { events: [] };';
-    source = source.replace(match[0], replacement);
+    if (arrayMatch) {
+      const loopStart = source.indexOf('for (const scriptFile of BLB_BACKGROUND_STARTUP_IMPORTS) {');
+      const loopEnd = source.indexOf('\nlet KJV_CORPUS_PHRASE_INDEX = null;', loopStart);
+      if (loopStart < 0 || loopEnd < 0) throw new Error('Unable to locate candidate startup import loop');
+      source = source.slice(0, arrayMatch.index) + replacement + source.slice(loopEnd);
+    } else {
+      source = source.replace(legacyMatch[0], replacement);
+    }
     const fetchStart = "  const response = await fetch(chrome.runtime.getURL(filename));";
     const fetchEnd = "  const source = await response.text();";
     const extractStart = "  const start = source.indexOf(assignment);";
