@@ -240,25 +240,58 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
   const instrument = extensionDir => {
     const backgroundPath = path.join(extensionDir, 'background.js');
     let source = fs.readFileSync(backgroundPath, 'utf8');
-    const match = source.match(/^\uFEFF?\s*importScripts\(([^;]+)\);/);
-    if (!match) throw new Error('Unable to instrument the service-worker importScripts bootstrap');
-    const scripts = [...match[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(item => item[1]);
-    if (!scripts.length) throw new Error('No service-worker imports were found for A/B timing');
-    const replacement = 'const __blbProfileBootstrapAt = performance.now();\n'
-      + 'const __blbProfilePhases = [];\n'
-      + 'for (const __blbScript of ' + JSON.stringify(scripts) + ') {\n'
-      + '  const __blbImportStartedAt = performance.now();\n'
-      + '  importScripts(__blbScript);\n'
-      + "  __blbProfilePhases.push({ phase: 'service-worker-importScript', script: __blbScript, durationMs: performance.now() - __blbImportStartedAt });\n"
-      + '}\n'
-      + 'globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: __blbProfileBootstrapAt, phases: __blbProfilePhases };\n'
-      + 'globalThis.__BLB_PROFILE_LOAD__ = { events: [] };';
-    source = source.replace(match[0], replacement);
+    let scripts = [];
+    const legacyMatch = source.match(/^\uFEFF?\s*importScripts\(([^;]+)\);/);
+
+    if (legacyMatch) {
+      // The current-main baseline uses one importScripts(...) statement.
+      scripts = [...legacyMatch[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(item => item[1]);
+      if (!scripts.length) throw new Error('No service-worker imports were found for A/B timing');
+      const replacement = 'const __blbProfileBootstrapAt = performance.now();\n'
+        + 'const __blbProfilePhases = [];\n'
+        + 'for (const __blbScript of ' + JSON.stringify(scripts) + ') {\n'
+        + '  const __blbImportStartedAt = performance.now();\n'
+        + '  importScripts(__blbScript);\n'
+        + "  __blbProfilePhases.push({ phase: 'service-worker-importScript', script: __blbScript, durationMs: performance.now() - __blbImportStartedAt });\n"
+        + '}\n'
+        + 'globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: __blbProfileBootstrapAt, phases: __blbProfilePhases };\n'
+        + 'globalThis.__BLB_PROFILE_LOAD__ = { events: [] };';
+      source = source.replace(legacyMatch[0], replacement);
+    } else {
+      // The candidate now declares its ordered imports and imports each file
+      // separately so startup failures can be attributed to a filename.
+      const arrayMatch = source.match(/^\uFEFF?\s*const BLB_BACKGROUND_STARTUP_IMPORTS\s*=\s*(\[[\s\S]*?\]);/);
+      const loopMatch = source.match(/for\s*\(const scriptFile of BLB_BACKGROUND_STARTUP_IMPORTS\)\s*\{\s*try\s*\{\s*importScripts\(scriptFile\);\s*\}\s*catch\s*\(error\)\s*\{[\s\S]*?\n  \}/);
+      if (!arrayMatch || !loopMatch) {
+        throw new Error('Unable to instrument either legacy or per-file service-worker import bootstrap');
+      }
+      scripts = [...arrayMatch[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(item => item[1]);
+      if (!scripts.length) throw new Error('No service-worker imports were found for A/B timing');
+      const importCall = '    importScripts(scriptFile);';
+      if (!loopMatch[0].includes(importCall)) {
+        throw new Error('Per-file service-worker import loop did not contain its expected import call');
+      }
+      source = source.replace(arrayMatch[0],
+        'const __blbProfileBootstrapAt = performance.now();\n'
+        + 'const __blbProfilePhases = [];\n'
+        + arrayMatch[0]);
+      source = source.replace(importCall,
+        '    const __blbImportStartedAt = performance.now();\n'
+        + importCall + '\n'
+        + "    __blbProfilePhases.push({ phase: 'service-worker-importScript', script: scriptFile, durationMs: performance.now() - __blbImportStartedAt });");
+      const updatedLoopMatch = source.match(/for\s*\(const scriptFile of BLB_BACKGROUND_STARTUP_IMPORTS\)\s*\{\s*try\s*\{[\s\S]*?\n  \}/);
+      if (!updatedLoopMatch) throw new Error('Unable to locate instrumented per-file import loop');
+      source = source.replace(updatedLoopMatch[0],
+        updatedLoopMatch[0] + '\n'
+        + 'globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: __blbProfileBootstrapAt, phases: __blbProfilePhases };\n'
+        + 'globalThis.__BLB_PROFILE_LOAD__ = { events: [] };');
+    }
+
     const fetchStart = "  const response = await fetch(chrome.runtime.getURL(filename));";
     const fetchEnd = "  const source = await response.text();";
     const extractStart = "  const start = source.indexOf(assignment);";
     const extractEnd = "  const json = source.slice(start + assignment.length, end);";
-    const parseLine = "  return JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);";
+    const parseLine = "  return JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\\\s*})$/, '$1') : json);";
     if (!source.includes(fetchStart) || !source.includes(fetchEnd) || !source.includes(parseLine)) {
       throw new Error('Unable to instrument packaged JSON fetch/read/parse phases');
     }
@@ -275,7 +308,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
       extractEnd + "\n  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-extract', file: filename, durationMs: performance.now() - __blbExtractStarted });");
     source = source.replace(parseLine,
       "  const __blbParseStarted = performance.now();\n" +
-      "  const __blbParsed = JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);\n" +
+      "  const __blbParsed = JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\\\s*})$/, '$1') : json);\n" +
       "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-parse', file: filename, durationMs: performance.now() - __blbParseStarted });\n" +
       "  return __blbParsed;");
     const gzipStart = source.indexOf('async function fetchPackagedGzipJson(filename) {');
