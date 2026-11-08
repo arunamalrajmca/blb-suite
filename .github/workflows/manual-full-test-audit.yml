@@ -122,8 +122,9 @@ jobs:
         shell: bash
         run: |
           : > "$BLB_PERF_OUTPUT"
-          mkdir -p test-results
-          printf '%s\n' '[BLB_RELOAD_STRESS] stress test not reached yet' > test-results/extension-reload-stress.log
+          stress_log="$GITHUB_WORKSPACE/test-results/extension-reload-stress.log"
+          mkdir -p "$(dirname "$stress_log")"
+          printf '%s\n' '[BLB_RELOAD_STRESS] stress test not reached yet' > "$stress_log"
           list_output="$RUNNER_TEMP/blb-playwright-list.txt"
           test_list="$RUNNER_TEMP/blb-playwright-test-list.txt"
           if ! npx playwright test --list --reporter=list > "$list_output" 2>&1; then
@@ -211,6 +212,23 @@ jobs:
             exit 1
           fi
 
+          # Run the headed 100-reload stress test explicitly, outside the
+          # generic per-test list, so test-list parsing cannot silently omit it.
+          echo "Running dedicated 100-cycle chrome://extensions Reload stress test."
+          if ! command -v xvfb-run >/dev/null 2>&1; then
+            echo "xvfb-run is required for the headed extension reload test."
+            exit 1
+          fi
+          stress_status=0
+          xvfb-run -a env BLB_HEADFUL_EXTENSION_TESTS=1 BLB_RELOAD_STRESS_LOG_PATH="$stress_log" npx playwright test tests/browser/extension.spec.js --grep "MV3 extension survives 100 full runtime reloads" --max-failures=1 > "$RUNNER_TEMP/blb-reload-stress-run.log" 2>&1 || stress_status=$?
+          cat "$RUNNER_TEMP/blb-reload-stress-run.log"
+          cycle_passes=$(grep -c '"event":"cycle-passed"' "$stress_log" || true)
+          if [[ "$stress_status" -ne 0 || "$cycle_passes" -ne 100 ]] || ! grep -q '"event":"stress-test-complete"' "$stress_log"; then
+            echo "100-reload stress test incomplete: status=$stress_status cycle_passes=$cycle_passes"
+            exit 1
+          fi
+          echo "100-reload stress test PASS — all 100 cycle diagnostics recorded."
+
       - name: Upload corpus A/B measurements
         if: always()
         uses: actions/upload-artifact@v6
@@ -224,7 +242,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: blb-extension-reload-stress-diagnostics
-          path: test-results/extension-reload-stress.log
+          path: ${{ github.workspace }}/test-results/extension-reload-stress.log
           if-no-files-found: warn
           retention-days: 14
 
