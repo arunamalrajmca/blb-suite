@@ -310,7 +310,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
       extractEnd + "\n  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-extract', file: filename, durationMs: performance.now() - __blbExtractStarted });");
     source = source.replace(parseLine,
       "  const __blbParseStarted = performance.now();\n" +
-      "  const __blbParsed = JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\\\s*})$/, '$1') : json);\n" +
+      "  const __blbParsed = JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);\n" +
       "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-parse', file: filename, durationMs: performance.now() - __blbParseStarted });\n" +
       "  return __blbParsed;");
     const gzipStart = source.indexOf('async function fetchPackagedGzipJson(filename) {');
