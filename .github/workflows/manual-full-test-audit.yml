@@ -184,6 +184,14 @@ jobs:
               npx playwright test --test-list "$current_test" --max-failures=1 > "$current_log" 2>&1 || command_status=$?
             fi
             cat "$current_log"
+            if [[ "$test_id" == *"MV3 extension survives 100 full runtime reloads"* ]]; then
+              mkdir -p test-results
+              {
+                echo "[BLB_RELOAD_STRESS] audit_test=$test_id"
+                echo "[BLB_RELOAD_STRESS] command_status=$command_status"
+                cat "$current_log"
+              } > test-results/extension-reload-stress.log
+            fi
             summary=$(grep 'Test summary:' "$current_log" | tail -n 1 || true)
             if [[ "$command_status" -eq 0 && "$summary" == *"1/1 completed"* && "$summary" == *"1 passed, 0 failed, 0 skipped"* ]]; then
               passed=$((passed + 1))
