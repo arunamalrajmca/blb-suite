@@ -3139,11 +3139,11 @@ test('persisted registration audit runs only on install/update and browser start
 
 test('overlapping startup and install events share one persisted-registration audit', async ({ extensionWorker }) => {
   const count = await extensionWorker.evaluate(async () => {
-    const original = auditPersistedRuntimeContentScriptRegistrations;
+    const originalGetRegistered = chrome.scripting.getRegisteredContentScripts;
     let calls = 0;
-    auditPersistedRuntimeContentScriptRegistrations = async () => {
+    chrome.scripting.getRegisteredContentScripts = async (...args) => {
       calls++;
-      return { registrationCount:0 };
+      return originalGetRegistered.apply(chrome.scripting, args);
     };
     try {
       await Promise.all([
@@ -3152,7 +3152,7 @@ test('overlapping startup and install events share one persisted-registration au
       ]);
       return calls;
     } finally {
-      auditPersistedRuntimeContentScriptRegistrations = original;
+      chrome.scripting.getRegisteredContentScripts = originalGetRegistered;
     }
   });
 
@@ -3172,12 +3172,20 @@ test('tab activation fails when its persistent content-script registration fails
 
   const activated = await extensionWorker.evaluate(async () => {
     const tabs = await chrome.tabs.query({url:'https://example.com/*'});
-    const original = ensureRuntimeContentScriptRegistered;
-    globalThis.ensureRuntimeContentScriptRegistered = async () => false;
+    const tab = tabs[0];
+    if (!tab?.id) throw new Error('Expected the example.com test tab to exist');
+    const pattern = originPatternForUrl(tab.url);
+    const registrationId = runtimeContentScriptIdForPattern(pattern);
+    await chrome.scripting.unregisterContentScripts({ids:[registrationId, registrationId + '-main-world']})
+      .catch(() => {});
+    const originalRegister = chrome.scripting.registerContentScripts;
+    chrome.scripting.registerContentScripts = async () => {
+      throw new Error('Simulated persistent registration failure');
+    };
     try {
-      return await ensureContentScriptInTab(tabs[0]?.id);
+      return await ensureContentScriptInTab(tab.id);
     } finally {
-      globalThis.ensureRuntimeContentScriptRegistered = original;
+      chrome.scripting.registerContentScripts = originalRegister;
     }
   });
 
