@@ -312,6 +312,16 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
               type: 'blbSuiteOpenSelectionText',
               text: 'John 3:16',
               requestId: id,
+              // Supply the same validated positional result the real
+              // content-script context resolver sends when it has identified
+              // a precise verse. This keeps the stress test focused on
+              // cross-origin runtime delivery and No-SW recovery, not on
+              // reproducing Facebook's DOM selection parser.
+              directUrl: 'https://www.blueletterbible.org/kjv/jhn/3/16/',
+              contextualReference: {
+                url: 'https://www.blueletterbible.org/kjv/jhn/3/16/'
+              },
+              contextualReferenceResolved: true,
               tabBehavior: { activeIfNew: false, activateExisting: false }
             }),
             args: [requestId]
