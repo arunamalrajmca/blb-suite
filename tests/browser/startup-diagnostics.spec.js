@@ -211,21 +211,17 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
       { timeout: 15000 }
     );
     const extensionCard = await manager.evaluate(id => {
-      const findDeep = (root, selector) => {
-        if (!root || typeof root.querySelectorAll !== 'function') return null;
-        const direct = root.querySelector(selector);
-        if (direct) return direct;
+      const findAllDeep = (root, selector, found = []) => {
+        if (!root || typeof root.querySelectorAll !== 'function') return found;
+        found.push(...root.querySelectorAll(selector));
         for (const element of root.querySelectorAll('*')) {
-          if (element.shadowRoot) {
-            const nested = findDeep(element.shadowRoot, selector);
-            if (nested) return nested;
-          }
+          if (element.shadowRoot) findAllDeep(element.shadowRoot, selector, found);
         }
-        return null;
+        return found;
       };
-      const item = findDeep(document, 'extensions-item[data-id="' + id + '"]') ||
-        [...(document.querySelector('extensions-manager')?.shadowRoot?.querySelectorAll('extensions-item') || [])]
-          .find(candidate => candidate.data?.id === id);
+      const item = findAllDeep(document, 'extensions-item').find(candidate =>
+        candidate.data?.id === id || candidate.getAttribute('id') === id
+      );
       if (!item) {
         return { found: false, visibleItems: [...(document.querySelector('extensions-manager')?.shadowRoot?.querySelectorAll('extensions-item') || [])]
           .map(candidate => ({ id: candidate.data?.id || candidate.getAttribute('id') || '' })) };
