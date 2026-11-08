@@ -470,6 +470,26 @@ test('fresh unpacked install starts cleanly and serves its first popup request',
         }, { timeout: 10000, intervals: [25, 50, 100] }).toBe(true);
         writeLog('extension-reload-worker-stopped', { cycle });
 
+        // Brave may keep extension pages unavailable for a short interval
+        // after the toolbar Reload action. Wait for the new MV3 worker target
+        // before navigating to chrome-extension://, rather than racing reload.
+        await expect.poll(async () => {
+          const state = await browserCdp.send('Target.getTargets');
+          return state.targetInfos.some(item =>
+            item.type === 'service_worker' && item.url === workerUrl
+          );
+        }, { timeout: 15000, intervals: [25, 50, 100, 200] }).toBe(true);
+        const workerAfterReload = await browserCdp.send('Target.getTargets');
+        const reloadedWorkerTarget = workerAfterReload.targetInfos.find(item =>
+          item.type === 'service_worker' && item.url === workerUrl
+        );
+        writeLog('extension-reload-worker-restarted', {
+          cycle,
+          targetId: reloadedWorkerTarget.targetId,
+          previousTargetId: workerBeforeReload.targetId,
+          targetChanged: reloadedWorkerTarget.targetId !== workerBeforeReload.targetId
+        });
+
         const reloadPopup = await context.newPage();
         await reloadPopup.goto(`chrome-extension://${extensionId}/popup.html`, {
           waitUntil: 'domcontentloaded',
