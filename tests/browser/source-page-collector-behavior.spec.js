@@ -6,7 +6,8 @@ test('source-page collector parses, canonicalizes, and deduplicates linked Bible
   await extensionStorage.clear();
   await extensionStorage.set({
     masterEnabled: true,
-    pageSelectionButtonSites: { 'gotquestions.org': true },
+    pageSelectionButtonSites: {},
+    doubleClickBlbSites: {},
     doubleClickBlbSites: {}
   });
 
