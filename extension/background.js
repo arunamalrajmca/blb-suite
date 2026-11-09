@@ -1545,8 +1545,13 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
           const label = normalizeCode(option.textContent);
           return value === code || label === code || label.endsWith(code);
         });
+        // BLB may expose different option sets in each pane. The primary
+        // selector must offer KJV, while the parallel selector only needs to
+        // offer the explicitly requested translation. Requiring both options
+        // in every selector can hide the right pane and make us toggle Parallel
+        // closed even though it is already open.
         const getVersionSelects = () => Array.from(document.querySelectorAll('select')).filter(select =>
-          optionFor(select, 'kjv') && optionFor(select, versionCode)
+          optionFor(select, 'kjv') || optionFor(select, versionCode)
         );
         const waitFor = async predicate => {
           for (let attempt = 0; attempt < 80; attempt++) {
@@ -1915,7 +1920,15 @@ async function handleBCommand(text, disposition = 'currentTab') {
         // An explicit translation suffix means comparison, not replacement:
         // keep KJV in the primary (left) pane and select the requested
         // translation in BLB's native Parallel (right) pane.
-        await openBlbParallelVersion(resolved.url, requestedVersion, disposition);
+        const parallelResult = await openBlbParallelVersion(resolved.url, requestedVersion, disposition);
+        if (!parallelResult?.ok) {
+          console.warn('[KJV Scripture Tools] Explicit omnibox parallel translation was not applied: ' + JSON.stringify({
+            reference: resolved.text || `${resolved.book.name} ${resolved.chapter}${resolved.from != null ? ':' + resolved.from + (resolved.to != null && resolved.to !== resolved.from ? '-' + resolved.to : '') : ''}`,
+            requestedVersion,
+            reason: parallelResult?.reason || 'unknown',
+            result: parallelResult || null
+          }));
+        }
       }
       return;
     }
