@@ -92,7 +92,7 @@ test.describe('remaining omnibox command routing', () => {
     expect(result.navigations).toEqual(['https://www.blueletterbible.org/kjv/rom/2/2/']);
   });
 
-  test('parallel-version setup targets the opened BLB tab and the native parallel toggle', async ({ extensionWorker }) => {
+  test('parallel-version setup overrides a delayed BLB favorite translation', async ({ page, extensionWorker }) => {
     const result = await extensionWorker.evaluate(async () => {
       const originalQuery = chrome.tabs.query;
       const originalUpdate = chrome.tabs.update;
@@ -137,6 +137,37 @@ test.describe('remaining omnibox command routing', () => {
     expect(result.captured.functionSource).toContain('BLB applies the account/session\'s Favorite Parallel Translation asynchronously');
     expect(result.captured.functionSource).toContain('const enforcementDeadline = Date.now() + 3000');
     expect(result.captured.functionSource).toContain('while (Date.now() < enforcementDeadline)');
+
+    await page.setContent(`
+      <div id="bodyCol1A">
+        <select id="left-version">
+          <option value="KJV" selected>King James Version</option>
+          <option value="NIV">New International Version</option>
+          <option value="NKJV">New King James Version</option>
+        </select>
+      </div>
+      <div id="bodyCol1B">
+        <select id="right-version">
+          <option value="KJV">King James Version</option>
+          <option value="NIV">New International Version</option>
+          <option value="NKJV" selected>New King James Version</option>
+        </select>
+      </div>
+      <button id="pCol-toggleIcon">Parallel</button>
+    `);
+    const applied = await page.evaluate(async functionSource => {
+      const configure = (0, eval)(`(${functionSource})`);
+      const right = document.getElementById('right-version');
+      // Simulate BLB restoring the user's Favorite Parallel Translation after
+      // the initial explicit NIV selection has already been made.
+      setTimeout(() => {
+        right.value = 'NKJV';
+        right.dispatchEvent(new Event('change', {bubbles:true}));
+      }, 1600);
+      return configure('niv');
+    }, result.captured.functionSource);
+    expect(applied).toMatchObject({ok:true,leftVersion:'KJV',rightVersion:'NIV'});
+    await expect(page.locator('#right-version')).toHaveValue('NIV');
   });
 
   test('cs command is gated by the master switch and forwards the disposition', async ({ extensionWorker }) => {
