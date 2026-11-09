@@ -3062,11 +3062,17 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
 async function unregisterRuntimeContentScriptForPattern(pattern) {
   const id = runtimeContentScriptIdForPattern(pattern);
   try {
-    if (chrome.scripting?.unregisterContentScripts) {
-      // A site can have both isolated-world and MAIN-world persistent
-      // registrations. They share the same origin pattern and must be
-      // removed together when the site's last feature is disabled.
-      await chrome.scripting.unregisterContentScripts({ids:[id, id + '-main-world']});
+    if (chrome.scripting?.getRegisteredContentScripts && chrome.scripting?.unregisterContentScripts) {
+      // A site can have an isolated-world registration, an optional MAIN-world
+      // registration, or both. Chrome rejects an unregister request containing
+      // an ID that is not registered, so remove only the IDs that actually exist.
+      const registered = await chrome.scripting.getRegisteredContentScripts({
+        ids:[id, id + '-main-world']
+      });
+      const registeredIds = registered.map(script => script.id).filter(Boolean);
+      if (registeredIds.length) {
+        await chrome.scripting.unregisterContentScripts({ids:registeredIds});
+      }
     }
   } catch (_) {}
 }
