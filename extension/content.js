@@ -1266,7 +1266,7 @@ function resolveBibleReferenceFromContextWindowCore(text, selectionStart, select
   // A verse cue such as "v.25" may be selected as either the cue or its
   // numeric token. Associate that number only with the nearest preceding
   // explicit reference in this same context window.
-  const cueNumber = /\b(?:v\.?|verses?)\s*(\d{1,3})\b/gi;
+  const cueNumber = /\b(?:v\.?|vs\.?|verses?)\s*(\d{1,3})\b/gi;
   let cueMatch;
   while ((cueMatch = cueNumber.exec(source))) {
     const numberStart = cueMatch.index + cueMatch[0].lastIndexOf(cueMatch[1]);
@@ -2148,7 +2148,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         ? domText(numericContextBlock)
         : '';
       const numericContextHasBook = hasExplicitBookLabel(numericContextText);
-      const numericContextHasVerseCue = /\b(?:v\.?|verses?)\s*\d{1,3}\b/i.test(numericContextText);
+      const numericContextHasVerseCue = /\b(?:v\.?|vs\.?|verses?)\s*\d{1,3}\b/i.test(numericContextText);
       if (!numericContextHasBook && !numericContextHasVerseCue) {
         // A standalone numeric token from 1–66 is also a supported book
         // selector. Resolve it only after exact positional citation matching
@@ -2195,7 +2195,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
     // with the same positional resolver used for numeric and comma-list tokens.
     // For verse cues, retain the containing post/article so the preceding
     // chapter reference may be in an earlier paragraph of that same post.
-    const verseCueSelection = /^(?:v\.?|verses?)$/i.test(
+    const verseCueSelection = /^(?:v\.?|vs\.?|verses?)$/i.test(
       normalizeDoubleClickToken(selected)
     );
     const exactTargetCandidates = [];
@@ -3509,12 +3509,12 @@ function handleDoubleClickBlb(event) {
           : (event.target?.parentElement || null);
         const caretTarget = getDoubleClickTargetElement(event);
         const cueTarget = [eventTarget, caretTarget].find(candidate =>
-          /^(?:v\.?|verse|verses)$/i.test(
+          /^(?:v\.?|vs\.?|verse|verses)$/i.test(
             normalizeSelectionText(candidate?.textContent || '').normalize('NFKC')
           )
         );
         const physicalToken = normalizeSelectionText(cueTarget?.textContent || '').normalize('NFKC');
-        if (cueTarget && /^(?:v\.?|verse|verses)$/i.test(physicalToken)) selection = physicalToken;
+        if (cueTarget && /^(?:v\.?|vs\.?|verse|verses)$/i.test(physicalToken)) selection = physicalToken;
 
         // A stale native Selection can also survive when the user double-clicks
         // a book name (for example, Acts in "Genesis—Acts 7"). Prefer the exact
@@ -3608,7 +3608,7 @@ function handleDoubleClickBlb(event) {
         // even when "verse" is absent from the generated KJV word index.
         // Declare this outside the fast-rejection block because target selection
         // and the DOM-context resolver also need the same cue classification.
-        const isVerseContextWord = /^(?:v\.?|verse|verses)$/i.test(selection);
+        const isVerseContextWord = /^(?:v\.?|vs\.?|verse|verses)$/i.test(selection);
         // Numbered-book suffixes must reach the adjacent-prefix resolver
         // even when an abbreviation is not a KJV word (for example, "Th" or
         // "Cor"). Full suffixes such as "Timothy" are KJV words and retain
@@ -3671,7 +3671,7 @@ function handleDoubleClickBlb(event) {
         // physical event target where needed. The generic caret-target helper
         // can return a nearby/stale element on pages with inline citation spans.
         const cueElement = [physicalTarget, getDoubleClickTargetElement(event)].find(candidate =>
-          /^(?:v\.?|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
+          /^(?:v\.?|vs\.?|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
         );
         const possibleNumberedBookSuffix=isNumberedBookSuffixCandidate;
         const possibleCanonicalBookSuffix=isCanonicalBookSuffixCandidate;
