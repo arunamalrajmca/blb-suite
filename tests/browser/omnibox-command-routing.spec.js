@@ -65,8 +65,10 @@ test.describe('remaining omnibox command routing', () => {
     const result = await extensionWorker.evaluate(async () => {
       const originalParallel = openBlbParallelVersion;
       const originalRecordStudyEntry = recordStudyEntry;
+      const originalUpdate = chrome.tabs.update;
       const calls = [];
       try {
+        chrome.tabs.update = async details => { calls.push({ordinaryUrl:details.url}); return {}; };
         openBlbParallelVersion = async (url, version, disposition) => {
           calls.push({url, version, disposition});
           return {ok:true};
@@ -78,6 +80,7 @@ test.describe('remaining omnibox command routing', () => {
       } finally {
         openBlbParallelVersion = originalParallel;
         recordStudyEntry = originalRecordStudyEntry;
+        chrome.tabs.update = originalUpdate;
       }
     });
     expect(result).toEqual([{
