@@ -38,7 +38,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
         decisionType: decision.type,
         versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
         verseCount: KJV_CORPUS_VERSES?.length,
-        indexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX
+        indexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX)
           && typeof KJV_CORPUS_WORD_VERSE_INDEX === 'object',
         phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX,
         exactMatch: findSingleKjvPhraseMatch('For God so loved the world')?.slice(0, 3)
@@ -53,21 +53,133 @@ test.describe('On-demand normalized KJV corpus loading', () => {
     expect(['KJV_PHRASE', 'KJV_REFERENCE_RANGE']).toContain(result.decisionType);
   });
 
-  test('short exact KJV phrases load corpus and phrase-index data together', async ({ extensionWorker }) => {
+  test('short exact whitelist phrases verify against verse text without loading the large indexes', async ({ extensionWorker }) => {
     const result = await extensionWorker.evaluate(async () => {
       const decision = await classifySelectionForBlb('God is love');
       return {
         decisionType: decision.type,
+        query: decision.kjvPassageQuery,
         versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
-        wordIndexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX,
+        wordIndexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX),
+        phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX,
+        exactMatch: !!findExactKjvPhraseInLoadedCorpus(['god', 'is', 'love'])
+      };
+    });
+
+    expect(result.decisionType).toBe('KJV_PASSAGE');
+    expect(result.query).toBe('"god is love"');
+    expect(result.versesLoaded).toBe(true);
+    expect(result.wordIndexLoaded).toBe(false);
+    expect(result.phraseIndexLoaded).toBe(false);
+    expect(result.exactMatch).toBe(true);
+  });
+
+  test('non-whitelist short phrases retain indexed corpus verification', async ({ extensionWorker }) => {
+    const result = await extensionWorker.evaluate(async () => {
+      const decision = await classifySelectionForBlb('For God so loved');
+      return {
+        decisionType: decision.type,
+        query: decision.kjvPassageQuery,
+        versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
+        wordIndexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX),
         phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX
       };
     });
 
     expect(result.decisionType).toBe('KJV_PASSAGE');
+    expect(result.query).toBeTruthy();
     expect(result.versesLoaded).toBe(true);
     expect(result.wordIndexLoaded).toBe(true);
     expect(result.phraseIndexLoaded).toBe(true);
+  });
+
+  test('lazy corpus state is safely reinitialized in a fresh service-worker process', async ({ extensionPath }) => {
+    const launchExtensionContext = () => chromium.launchPersistentContext('', {
+      channel: 'chromium',
+      headless: true,
+      args: [
+        '--headless=new',
+        '--disable-extensions-except=' + extensionPath,
+        '--load-extension=' + extensionPath,
+        '--no-first-run',
+        '--no-default-browser-check'
+      ]
+    });
+    const waitForWorker = async context => {
+      let [worker] = context.serviceWorkers();
+      if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 20000 });
+      return worker;
+    };
+
+    const firstContext = await launchExtensionContext();
+    try {
+      const firstWorker = await waitForWorker(firstContext);
+      const beforeRestart = await firstWorker.evaluate(async () => {
+        const decision = await classifySelectionForBlb('God is love');
+        return {
+          type: decision.type,
+          query: decision.kjvPassageQuery,
+          versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
+          wordIndexLoaded: typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined'
+            && !!KJV_CORPUS_WORD_VERSE_INDEX,
+          phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX
+        };
+      });
+      expect(beforeRestart).toEqual({
+        type: 'KJV_PASSAGE',
+        query: '"god is love"',
+        versesLoaded: true,
+        wordIndexLoaded: false,
+        phraseIndexLoaded: false
+      });
+    } finally {
+      await firstContext.close();
+    }
+
+    // A new persistent browser context creates a new extension service-worker
+    // process with fresh module globals, matching the state boundary after a
+    // browser-managed service-worker termination/restart.
+    const restartedContext = await launchExtensionContext();
+    try {
+      const restartedWorker = await waitForWorker(restartedContext);
+      const afterRestart = await restartedWorker.evaluate(async () => {
+        const initial = {
+          versesLoaded: typeof KJV_CORPUS_VERSES !== 'undefined',
+          wordIndexLoaded: typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined'
+        };
+        const reference = await classifySelectionForBlb('John 3:16');
+        const word = await classifySelectionForBlb('grace');
+        const afterFastPaths = {
+          versesLoaded: typeof KJV_CORPUS_VERSES !== 'undefined',
+          wordIndexLoaded: typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined'
+        };
+        const phrase = await classifySelectionForBlb('God is love');
+        return {
+          initial,
+          referenceType: reference.type,
+          wordType: word.type,
+          afterFastPaths,
+          phraseType: phrase.type,
+          phraseQuery: phrase.kjvPassageQuery,
+          versesLoadedAfterPhrase: Array.isArray(KJV_CORPUS_VERSES),
+          wordIndexLoadedAfterPhrase: typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined'
+            && !!KJV_CORPUS_WORD_VERSE_INDEX,
+          phraseIndexLoadedAfterPhrase: !!KJV_CORPUS_PHRASE_INDEX
+        };
+      });
+
+      expect(afterRestart.initial).toEqual({ versesLoaded:false, wordIndexLoaded:false });
+      expect(afterRestart.referenceType).toBe('REFERENCE');
+      expect(afterRestart.wordType).toBe('KJV_WORD');
+      expect(afterRestart.afterFastPaths).toEqual({ versesLoaded:false, wordIndexLoaded:false });
+      expect(afterRestart.phraseType).toBe('KJV_PASSAGE');
+      expect(afterRestart.phraseQuery).toBe('"god is love"');
+      expect(afterRestart.versesLoadedAfterPhrase).toBe(true);
+      expect(afterRestart.wordIndexLoadedAfterPhrase).toBe(false);
+      expect(afterRestart.phraseIndexLoadedAfterPhrase).toBe(false);
+    } finally {
+      await restartedContext.close();
+    }
   });
 
   test('rejected compressed-resource fetches fall back to original packaged JavaScript data', async ({ extensionWorker }) => {
@@ -93,7 +205,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
           gzipRequests,
           fallbackRequests,
           verseCount: KJV_CORPUS_VERSES?.length,
-          wordIndexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX,
+          wordIndexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX),
           phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX,
           exactMatch: findSingleKjvPhraseMatch('For God so loved the world')?.slice(0, 3)
         };
@@ -190,12 +302,14 @@ test.describe('On-demand normalized KJV corpus loading', () => {
         firstAttemptFailed,
         requests,
         versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
-        indexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX
+        indexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX)
       };
     });
 
     expect(result.firstAttemptFailed).toBe(true);
-    expect(result.requests).toBe(5);
+    // The word index succeeds during the first parallel attempt and is retained;
+    // only the failed verse asset is retried.
+    expect(result.requests).toBe(4);
     expect(result.versesLoaded).toBe(true);
     expect(result.indexLoaded).toBe(true);
   });
@@ -232,6 +346,14 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     maxBuffer: 100 * 1024 * 1024
   });
   execFileSync('tar', ['-xf', '-', '-C', baselineRoot], { cwd: repoRoot, input: archive });
+
+  // Build the same ignored gzip sidecars for the current-main baseline; without
+  // them the baseline silently falls back to the slower uncompressed JS assets.
+  execFileSync(process.execPath, [
+    path.resolve(repoRoot, 'scripts/generate-kjv-gzip-assets.cjs'),
+    path.join(baselineRoot, 'extension')
+  ], { cwd: repoRoot, stdio: 'pipe' });
+
   const variants = {
     baseline: path.join(baselineRoot, 'extension'),
     candidate: candidateRoot
@@ -314,25 +436,29 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
       "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-parse', file: filename, durationMs: performance.now() - __blbParseStarted });\n" +
       "  return __blbParsed;");
     const gzipStart = source.indexOf('async function fetchPackagedGzipJson(filename) {');
-    const gzipEnd = source.indexOf('\\nasync function ensureKjvVerseCorpusLoaded()', gzipStart);
+    const gzipEnd = source.indexOf('\nasync function ensureKjvVerseCorpusLoaded()', gzipStart);
     if (gzipStart >= 0 && gzipEnd > gzipStart) {
       let gzipLoader = source.slice(gzipStart, gzipEnd);
-      gzipLoader = gzipLoader.replace(
-        "  const response = await fetch(chrome.runtime.getURL(filename));",
-        "  const __blbGzipFetchStarted = performance.now();\\n  const response = await fetch(chrome.runtime.getURL(filename));"
-      );
-      gzipLoader = gzipLoader.replace(
-        "  const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));",
-        "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-gzip-fetch', file: filename, durationMs: performance.now() - __blbGzipFetchStarted });\\n"
-        + "  const __blbGzipDecodeStarted = performance.now();\\n"
-        + "  const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));"
-      );
-      gzipLoader = gzipLoader.replace(
-        "  return new Response(decompressed).json();",
-        "  const __blbDecoded = await new Response(decompressed).json();\\n"
-        + "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-gzip-decompress-json', file: filename, durationMs: performance.now() - __blbGzipDecodeStarted });\\n"
-        + "  return __blbDecoded;"
-      );
+      const gzipFetchCall = 'const response = await fetch(chrome.runtime.getURL(filename));';
+      const gzipDecodeCall = "const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));";
+      const gzipJsonReturn = 'return await new Response(decompressed).json();';
+      if (!gzipLoader.includes(gzipFetchCall)
+          || !gzipLoader.includes(gzipDecodeCall)
+          || !gzipLoader.includes(gzipJsonReturn)) {
+        throw new Error('Unable to instrument gzip fetch/decompress/parse phases');
+      }
+      gzipLoader = gzipLoader.replace(gzipFetchCall,
+        'const __blbGzipFetchStarted = performance.now();\n    ' + gzipFetchCall
+        + "\n    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-gzip-fetch', file: filename, durationMs: performance.now() - __blbGzipFetchStarted });");
+      gzipLoader = gzipLoader.replace(gzipDecodeCall,
+        'const __blbGzipDecodeStarted = performance.now();\n    ' + gzipDecodeCall);
+      gzipLoader = gzipLoader.replace(gzipJsonReturn,
+        'const __blbDecompressedText = await new Response(decompressed).text();\n'
+        + "    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-gzip-decompress-read', file: filename, durationMs: performance.now() - __blbGzipDecodeStarted });\n"
+        + '    const __blbJsonParseStarted = performance.now();\n'
+        + '    const __blbDecoded = JSON.parse(__blbDecompressedText);\n'
+        + "    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-gzip-json-parse', file: filename, durationMs: performance.now() - __blbJsonParseStarted });\n"
+        + '    return __blbDecoded;');
       source = source.slice(0, gzipStart) + gzipLoader + source.slice(gzipEnd);
     }
     const fromEntries = "      const wordVerseIndex = Object.fromEntries(wordVerseEntries);";
@@ -342,19 +468,34 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     const corpusValidationStart = "      if (!Array.isArray(verseEntries) || verseEntries.length !== 31102) {";
     source = source.replace(corpusValidationStart,
       "      const __blbCorpusValidationStarted = performance.now();\n" + corpusValidationStart);
-    const fromEntriesValidation = "      const wordVerseIndex = Object.fromEntries(wordVerseEntries);";
-    source = source.replace(fromEntriesValidation,
-      "      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'corpus-data-validation', durationMs: performance.now() - __blbCorpusValidationStarted });\n" + fromEntriesValidation);
     const wordIndexValidationStart = "      if (!wordVerseIndex || typeof wordVerseIndex !== 'object'";
     source = source.replace(wordIndexValidationStart,
       "      const __blbWordIndexValidationStarted = performance.now();\n" + wordIndexValidationStart);
-    const corpusAssignment = "      self.KJV_CORPUS_VERSES = verseEntries;";
-    source = source.replace(corpusAssignment,
-      "      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'word-index-validation', durationMs: performance.now() - __blbWordIndexValidationStarted });\n" + corpusAssignment);
+    const verseAssignment = "      self.KJV_CORPUS_VERSES = verseEntries;";
+    source = source.replace(verseAssignment,
+      "      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'corpus-data-validation', durationMs: performance.now() - __blbCorpusValidationStarted });\n" + verseAssignment);
+    const wordIndexAssignment = "      self.KJV_CORPUS_WORD_VERSE_INDEX = wordVerseIndex;";
+    source = source.replace(wordIndexAssignment,
+      "      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'word-index-validation', durationMs: performance.now() - __blbWordIndexValidationStarted });\n" + wordIndexAssignment);
     const rangeCall = "    const corpusRange = findKjvVerseRangeForSelection(source);";
     source = source.replace(rangeCall,
       "    const __blbRangeStarted = performance.now();\n" + rangeCall +
       "\n    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'downstream-corpus-classification', durationMs: performance.now() - __blbRangeStarted });");
+    const shortPhraseCall = "if (findExactKjvPhraseInLoadedCorpus(shortPhraseWords)) {";
+    if (source.includes(shortPhraseCall)) {
+      source = source.replace(shortPhraseCall,
+        "const __blbShortPhraseStarted = performance.now();\n"
+        + "const __blbShortPhraseMatch = findExactKjvPhraseInLoadedCorpus(shortPhraseWords);\n"
+        + "globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'short-whitelist-exact-verification', durationMs: performance.now() - __blbShortPhraseStarted });\n"
+        + "if (__blbShortPhraseMatch) {");
+    }
+    const criteriaExtractionCall = "passageQuery = extractKjvPassageSearchQuery(remainingText, excludedVerseTexts);";
+    if (source.includes(criteriaExtractionCall)) {
+      source = source.replace(criteriaExtractionCall,
+        "const __blbCriteriaExtractionStarted = performance.now();\n"
+        + criteriaExtractionCall + "\n"
+        + "globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'criteria-passage-extraction', durationMs: performance.now() - __blbCriteriaExtractionStarted });");
+    }
     fs.writeFileSync(backgroundPath, source);
   };
   instrument(variants.baseline);
@@ -405,18 +546,35 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
         const corpusStillLoadedAfterFastPaths = typeof KJV_CORPUS_VERSES !== 'undefined'
           && typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined';
 
-        // Start with a short exact phrase on a genuinely cold corpus. This
-        // first operation must load both the verse corpus and phrase index.
+        // First try the common exact whitelist phrase. The candidate should
+        // need only normalized verse text; the current-main baseline also loads
+        // its word and phrase indexes for this same classification.
         const firstPhraseStartedAt = performance.now();
         const phrase = await classifySelectionForBlb('God is love');
         const firstPhraseUseMs = performance.now() - firstPhraseStartedAt;
         const firstUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
+        const afterFirstPhrase = {
+          versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
+          wordIndexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX),
+          phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX
+        };
 
-        // A longer KJV passage is now a warm corpus/phrase-index operation.
-        const warmStartedAt = performance.now();
+        // A longer exact passage needs the indexed word→verse resolver. This
+        // measures the deferred index load separately from the short-phrase path.
+        const deferredStartedAt = performance.now();
         const passage = await classifySelectionForBlb('For God so loved the world');
+        const deferredWordIndexUseMs = performance.now() - deferredStartedAt;
+        const deferredUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
+        const afterDeferredUse = {
+          versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
+          wordIndexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX),
+          phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX
+        };
+
+        const warmStartedAt = performance.now();
+        const warmPassage = await classifySelectionForBlb('For God so loved the world');
         const warmCorpusUseMs = performance.now() - warmStartedAt;
-        const phraseUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
+        const warmUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
 
         return {
           variant,
@@ -429,11 +587,12 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
           })),
           corpusLoadedAtStartup,
           corpusStillLoadedAfterFastPaths,
-          corpusLoadedAfterFirstUse: typeof KJV_CORPUS_VERSES !== 'undefined'
-            && typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined',
+          afterFirstPhrase,
+          afterDeferredUse,
           referenceType: reference.type,
           wordType: word.type,
           passageType: passage.type,
+          warmPassageType: warmPassage.type,
           phraseType: phrase.type,
           phraseQuery: phrase.kjvPassageQuery || phrase.text,
           passageRef: passage.directRef ? {
@@ -446,9 +605,11 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
           singleWordMs,
           firstCorpusUseMs: firstPhraseUseMs,
           firstUseProfileEvents,
-          warmCorpusUseMs,
           firstPhraseUseMs,
-          phraseUseProfileEvents
+          deferredWordIndexUseMs,
+          deferredUseProfileEvents,
+          warmCorpusUseMs,
+          warmUseProfileEvents
         };
       }, { variant, repetition });
     } finally {
@@ -457,6 +618,8 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
   };
 
   const samples = [];
+  const performanceOutputPath = process.env.BLB_PERF_OUTPUT || path.join(repoRoot, 'blb-corpus-ab-results.jsonl');
+  fs.writeFileSync(performanceOutputPath, '');
   try {
     for (let repetition = 1; repetition <= 15; repetition++) {
       const order = repetition % 2 === 1
@@ -465,6 +628,13 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
       for (const variant of order) {
         const sample = await measureColdRun(variants[variant], variant, repetition);
         samples.push(sample);
+        // Persist every raw observation immediately so later failures do not
+        // leave the downloadable workflow artifact empty.
+        fs.appendFileSync(performanceOutputPath, JSON.stringify({
+          scenario:'kjv-short-whitelist-first-use-ab',
+          baselineSha,
+          sample
+        }) + '\\n');
         console.log('BLB_CORPUS_AB_SAMPLE ' + JSON.stringify(sample));
       }
     }
@@ -485,19 +655,67 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
       referenceOnlyMs: median(rows.map(row => row.referenceOnlyMs)),
       singleWordMs: median(rows.map(row => row.singleWordMs)),
       firstCorpusUseMs: median(rows.map(row => row.firstCorpusUseMs)),
+      firstPhraseUseMs: median(rows.map(row => row.firstPhraseUseMs)),
+      deferredWordIndexUseMs: median(rows.map(row => row.deferredWordIndexUseMs)),
       warmCorpusUseMs: median(rows.map(row => row.warmCorpusUseMs)),
-      firstPhraseUseMs: median(rows.map(row => row.firstPhraseUseMs))
+      startupPlusFirstPhraseMs: median(rows.map(row => row.startupToFirstEvaluationMs + row.firstPhraseUseMs)),
+      firstPhrasePlusDeferredMs: median(rows.map(row => row.firstPhraseUseMs + row.deferredWordIndexUseMs)),
+      startupPlusFirstPhrasePlusDeferredMs: median(rows.map(row => row.startupToFirstEvaluationMs + row.firstPhraseUseMs + row.deferredWordIndexUseMs))
     };
   };
+  const metricValue = (sample, key) => {
+    if (key === 'startupPlusFirstPhraseMs') return sample.startupToFirstEvaluationMs + sample.firstPhraseUseMs;
+    if (key === 'firstPhrasePlusDeferredMs') return sample.firstPhraseUseMs + sample.deferredWordIndexUseMs;
+    if (key === 'startupPlusFirstPhrasePlusDeferredMs') return sample.startupToFirstEvaluationMs + sample.firstPhraseUseMs + sample.deferredWordIndexUseMs;
+    return sample[key];
+  };
+  const metricKeys = [
+    'startupToFirstEvaluationMs',
+    'importScriptsMs',
+    'firstPhraseUseMs',
+    'deferredWordIndexUseMs',
+    'warmCorpusUseMs',
+    'referenceOnlyMs',
+    'singleWordMs',
+    'startupPlusFirstPhraseMs',
+    'firstPhrasePlusDeferredMs',
+    'startupPlusFirstPhrasePlusDeferredMs'
+  ];
+  const pairedChanges = Object.fromEntries(metricKeys.map(key => {
+    const pairs = [];
+    for (let repetition = 1; repetition <= 15; repetition++) {
+      const baseline = samples.find(row => row.variant === 'baseline' && row.repetition === repetition);
+      const candidate = samples.find(row => row.variant === 'candidate' && row.repetition === repetition);
+      if (!baseline || !candidate) continue;
+      const before = metricValue(baseline, key);
+      const after = metricValue(candidate, key);
+      pairs.push({
+        repetition,
+        baselineMs:before,
+        candidateMs:after,
+        deltaMs:after-before,
+        percentChange:before ? (after-before)/before*100 : null
+      });
+    }
+    const deltas = pairs.map(pair => pair.deltaMs);
+    const percentages = pairs.map(pair => pair.percentChange).filter(Number.isFinite);
+    return [key, {
+      pairs:pairs.length,
+      medianDeltaMs:median(deltas),
+      medianPercentChange:median(percentages),
+      improvedPairs:pairs.filter(pair => pair.deltaMs < 0).length,
+      paired:pairs
+    }];
+  }));
   const summary = {
     baselineSha,
     baseline: summarize('baseline'),
     candidate: summarize('candidate'),
+    pairedChanges,
     rawSamples: samples
   };
-  const output = JSON.stringify({ scenario: 'kjv-corpus-lazy-loading-ab', ...summary });
-  const performanceOutputPath = process.env.BLB_PERF_OUTPUT || path.join(repoRoot, 'blb-corpus-ab-results.json');
-  fs.appendFileSync(performanceOutputPath, output + '\n');
+  const output = JSON.stringify({ scenario: 'kjv-short-whitelist-first-use-ab', ...summary });
+  fs.appendFileSync(performanceOutputPath, output + '\\n');
   console.log('BLB_CORPUS_AB_OUTPUT ' + performanceOutputPath);
   console.log('BLB_CORPUS_AB_SUMMARY ' + output);
 
@@ -508,12 +726,24 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     // The lazy-loading experiment must preserve the baseline classification
     // for both variants; only the data-loading timing is allowed to differ.
     expect(sample.phraseType).toBe('KJV_PASSAGE');
-    expect(sample.phraseQuery).toBeTruthy();
+    expect(sample.phraseQuery).toBe('"god is love"');
     expect(sample.passageRef).toEqual({ book: 'john', chapter: 3, from: 16, to: 16 });
-    // The current main baseline already uses lazy loading; both variants
-    // must keep the corpus unloaded through fast paths and load it on first use.
+    // Both variants preserve lazy startup. The candidate short-phrase path
+    // loads only verse text; the word index remains deferred until indexed
+    // reference/range resolution is requested.
     expect(sample.corpusLoadedAtStartup).toBe(false);
     expect(sample.corpusStillLoadedAfterFastPaths).toBe(false);
-    expect(sample.corpusLoadedAfterFirstUse).toBe(true);
+    expect(sample.afterFirstPhrase.versesLoaded).toBe(true);
+    expect(sample.afterDeferredUse.versesLoaded).toBe(true);
+    expect(sample.afterDeferredUse.wordIndexLoaded).toBe(true);
+    if (sample.variant === 'baseline') {
+      expect(sample.afterFirstPhrase.wordIndexLoaded).toBe(true);
+      expect(sample.afterFirstPhrase.phraseIndexLoaded).toBe(true);
+    } else {
+      expect(sample.afterFirstPhrase.wordIndexLoaded).toBe(false);
+      expect(sample.afterFirstPhrase.phraseIndexLoaded).toBe(false);
+      expect(sample.afterDeferredUse.phraseIndexLoaded).toBe(false);
+    }
+    expect(sample.warmPassageType).toBe('KJV_REFERENCE_RANGE');
   }
 });

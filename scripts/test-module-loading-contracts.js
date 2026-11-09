@@ -95,23 +95,44 @@ if (!importMatch) {
   } else {
     pass('service-worker import dependency order remains stable');
   }
-  const lazyVerseCorpusLoader = background.match(/async function ensureKjvVerseCorpusLoaded\(\) \{([\s\S]*?)\n\}/);
-  if (!lazyVerseCorpusLoader
-      || !lazyVerseCorpusLoader[1].includes("kjv-corpus-verses.json.gz")
-      || !lazyVerseCorpusLoader[1].includes("kjv-corpus-word-verse-index.json.gz")
-      || !lazyVerseCorpusLoader[1].includes("fetchPackagedGzipJson(")
-      || !lazyVerseCorpusLoader[1].includes("Promise.all([")
-      || !lazyVerseCorpusLoader[1].includes("Object.fromEntries(wordVerseEntries)")
-      || !lazyVerseCorpusLoader[1].includes("kjvVerseCorpusLoadPromise")
-      || !lazyVerseCorpusLoader[1].includes("kjvVerseCorpusLoadPromise = null")
+  const lazyVerseEntriesLoader = background.match(/async function ensureKjvVerseEntriesLoaded\(\) \{([\s\S]*?)\n\}/);
+  const lazyWordVerseIndexLoader = background.match(/async function ensureKjvWordVerseIndexLoaded\(\) \{([\s\S]*?)\n\}/);
+  const combinedVerseCorpusLoader = background.match(/async function ensureKjvVerseCorpusLoaded\(\) \{([\s\S]*?)\n\}/);
+  if (!lazyVerseEntriesLoader
+      || !lazyVerseEntriesLoader[1].includes("kjv-corpus-verses.json.gz")
+      || !lazyVerseEntriesLoader[1].includes("fetchPackagedGzipJson(")
+      || !lazyVerseEntriesLoader[1].includes("verseEntries.length !== 31102")
+      || !lazyVerseEntriesLoader[1].includes("kjvVerseEntriesLoadPromise")
+      || !lazyVerseEntriesLoader[1].includes("kjvVerseEntriesLoadPromise = null")
+      || !lazyWordVerseIndexLoader
+      || !lazyWordVerseIndexLoader[1].includes("kjv-corpus-word-verse-index.json.gz")
+      || !lazyWordVerseIndexLoader[1].includes("fetchPackagedGzipJson(")
+      || !lazyWordVerseIndexLoader[1].includes("Object.fromEntries(wordVerseEntries)")
+      || !lazyWordVerseIndexLoader[1].includes("kjvWordVerseIndexLoadPromise")
+      || !lazyWordVerseIndexLoader[1].includes("kjvWordVerseIndexLoadPromise = null")
+      || !combinedVerseCorpusLoader
+      || !combinedVerseCorpusLoader[1].includes("Promise.all([")
+      || !combinedVerseCorpusLoader[1].includes("ensureKjvVerseEntriesLoaded()")
+      || !combinedVerseCorpusLoader[1].includes("ensureKjvWordVerseIndexLoaded()")
       || !background.includes("new DecompressionStream('gzip')")
       || !background.includes('if (!response.ok || !response.body)')
       || !background.includes('DecompressionStream is unavailable')
       || !background.includes('return loadOriginalData(error);')
       || !background.includes('fallbackAssignments')) {
-    fail('normalized verse corpus and word-to-verse index are fetched together as validated data with retryable, promise-deduplicated loading');
+    fail('normalized verse corpus and word-to-verse index have separate validated, retryable, promise-deduplicated loaders plus a combined indexed-path loader');
   } else {
-    pass('normalized verse corpus and word-to-verse index have a guarded, promise-deduplicated data loader');
+    pass('normalized verse corpus and word-to-verse index have separate guarded loaders and a combined indexed-path loader');
+  }
+  const shortWhitelistFastPath = background.indexOf('const shortPhraseWords = normalizeKjvPassageWords(remainingText);');
+  const indexedCriteriaPath = background.indexOf('if (remainingWordCount >= KJV_PASSAGE_MIN_WORDS) {', shortWhitelistFastPath);
+  if (shortWhitelistFastPath < 0
+      || indexedCriteriaPath <= shortWhitelistFastPath
+      || !background.includes('KJV_PASSAGE_SHORT_WHITELIST.has(shortPhrase)')
+      || !background.includes('await ensureKjvVerseEntriesLoaded();')
+      || !background.includes('findExactKjvPhraseInLoadedCorpus(shortPhraseWords)')) {
+    fail('exact short whitelist phrases use verse-only loading with authoritative contiguous-text verification');
+  } else {
+    pass('exact short whitelist phrases use verse-only loading with authoritative contiguous-text verification');
   }
   for (const file of ['kjv-corpus-word-verse-index.js', 'kjv-corpus-verses.js']) {
     if (imports.includes(file)) {
