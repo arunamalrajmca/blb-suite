@@ -292,20 +292,22 @@ test.describe('core user-visible E2E', () => {
         }
         article.appendChild(p);
       };
-      add('Chapter reference: 1 Kings 18.');
+      add('Chapter reference: Matthew 26.');
       add('verse', 'matrix-verse-42'); article.lastChild.appendChild(document.createTextNode(' 42.'));
       add('verses', 'matrix-verses-44'); article.lastChild.appendChild(document.createTextNode(' 44.'));
       add('v', 'matrix-v-46'); article.lastChild.appendChild(document.createTextNode(' 46.'));
-      add('The next chapter is 1 Kings 19.');
+      add('Vs', 'matrix-vs-48'); article.lastChild.appendChild(document.createTextNode(' 48.'));
+      add('The next chapter is Matthew 27.');
       add('verse', 'matrix-verse-18'); article.lastChild.appendChild(document.createTextNode(' 18.'));
       document.body.appendChild(article);
     });
 
     const cases = [
-      ['#matrix-verse-42', 'verse', '/kjv/1ki/18/42/'],
-      ['#matrix-verses-44', 'verses', '/kjv/1ki/18/44/'],
-      ['#matrix-v-46', 'v', '/kjv/1ki/18/46/'],
-      ['#matrix-verse-18', 'verse', '/kjv/1ki/19/18/']
+      ['#matrix-verse-42', 'verse', '/kjv/mat/26/42/'],
+      ['#matrix-verses-44', 'verses', '/kjv/mat/26/44/'],
+      ['#matrix-v-46', 'v', '/kjv/mat/26/46/'],
+      ['#matrix-vs-48', 'Vs', '/kjv/mat/26/48/'],
+      ['#matrix-verse-18', 'verse', '/kjv/mat/27/18/']
     ];
     const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];
 
@@ -2985,64 +2987,47 @@ test('Double-clicking the Mt abbreviation opens its complete chapter-and-verse r
 
 test('runtime content-script registrations update using the supported scripts-array API', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(async () => {
-    const cases = [
-      {
-        url: 'https://www.blueletterbible.org/kjv/jhn/3/16/',
-        first: ['redirect-scripttagger.js'],
-        second: ['redirect-scripttagger.js', 'redirect-bibleref-ranges.js']
-      },
-      {
-        url: 'https://christianity.com/example',
-        first: ['content.js'],
-        second: ['content.js', 'redirect-scripttagger.js']
-      }
-    ];
-    const outcomes = [];
-    for (const item of cases) {
-      const pattern = originPatternForUrl(item.url);
-      const id = runtimeContentScriptIdForPattern(pattern);
-      const mainWorldId = id + '-main-world';
-      try {
-        await chrome.scripting.unregisterContentScripts({ ids: [id, mainWorldId] }).catch(() => {});
-        if (item.url.includes('christianity.com')) {
-          await chrome.scripting.registerContentScripts([{
-            id:mainWorldId,
-            matches:[pattern],
-            js:['redirect-scripttagger.js'],
-            runAt:'document_start',
-            world:'MAIN',
-            persistAcrossSessions:true
-          }]);
-        }
-        const firstRegistered = await ensureRuntimeContentScriptRegistered({ url: item.url, id: 1 }, item.first);
-        const afterFirst = await chrome.scripting.getRegisteredContentScripts({ ids: [id] });
-        const secondRegistered = await ensureRuntimeContentScriptRegistered({ url: item.url, id: 1 }, item.second);
-        const afterSecond = await chrome.scripting.getRegisteredContentScripts({ ids: [id] });
-        const mainWorld = item.url.includes('christianity.com')
-          ? await chrome.scripting.getRegisteredContentScripts({ ids: [mainWorldId] })
-          : [];
-        outcomes.push({
-          pattern,
-          firstRegistered,
-          secondRegistered,
-          firstScripts: afterFirst[0]?.js || [],
-          secondScripts: afterSecond[0]?.js || [],
-          mainWorld: mainWorld.map(script => ({ js: script.js, world: script.world }))
-        });
-      } finally {
-        await chrome.scripting.unregisterContentScripts({ ids: [id, mainWorldId] }).catch(() => {});
-      }
+    // Christianity.com is a registered source-page collector, so its runtime
+    // registration is eligible for settings reconciliation throughout this
+    // test. Keep the test focused on the scripts-array update API rather than
+    // manually registering a disabled BLB origin that reconciliation may
+    // correctly remove.
+    const item = {
+      url: 'https://christianity.com/example',
+      first: ['content.js'],
+      second: ['content.js', 'redirect-scripttagger.js']
+    };
+    const pattern = originPatternForUrl(item.url);
+    const id = runtimeContentScriptIdForPattern(pattern);
+    const mainWorldId = id + '-main-world';
+    try {
+      await chrome.scripting.unregisterContentScripts({ ids: [id, mainWorldId] }).catch(() => {});
+      await chrome.scripting.registerContentScripts([{
+        id:mainWorldId,
+        matches:[pattern],
+        js:['redirect-scripttagger.js'],
+        runAt:'document_start',
+        world:'MAIN',
+        persistAcrossSessions:true
+      }]);
+      const firstRegistered = await ensureRuntimeContentScriptRegistered({ url: item.url, id: 1 }, item.first);
+      const afterFirst = await chrome.scripting.getRegisteredContentScripts({ ids: [id] });
+      const secondRegistered = await ensureRuntimeContentScriptRegistered({ url: item.url, id: 1 }, item.second);
+      const afterSecond = await chrome.scripting.getRegisteredContentScripts({ ids: [id] });
+      const mainWorld = await chrome.scripting.getRegisteredContentScripts({ ids: [mainWorldId] });
+      return {
+        firstRegistered,
+        secondRegistered,
+        firstScripts: afterFirst[0]?.js || [],
+        secondScripts: afterSecond[0]?.js || [],
+        mainWorld: mainWorld.map(script => ({ js: script.js, world: script.world }))
+      };
+    } finally {
+      await chrome.scripting.unregisterContentScripts({ ids: [id, mainWorldId] }).catch(() => {});
     }
-    return outcomes;
   });
 
-  expect(result[0]).toMatchObject({
-    firstRegistered: true,
-    secondRegistered: true,
-    firstScripts: ['redirect-scripttagger.js'],
-    secondScripts: ['redirect-scripttagger.js', 'redirect-bibleref-ranges.js']
-  });
-  expect(result[1]).toMatchObject({
+  expect(result).toMatchObject({
     firstRegistered: true,
     secondRegistered: true,
     firstScripts: ['content.js'],
@@ -3050,7 +3035,6 @@ test('runtime content-script registrations update using the supported scripts-ar
     mainWorld: [{ js: ['source-page-collector-sites.js','redirect-christianity-main-world.js'], world: 'MAIN' }]
   });
 });
-
 
 test('concurrent tabs serialize runtime script registration for the same origin', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(async () => {

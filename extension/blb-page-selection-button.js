@@ -406,7 +406,7 @@
         // with their adjacent DOM context (for example, "II Th 2:1" with only
         // "Th" selected). Resolve that narrow positional case before applying
         // the single-word fast reject; ordinary unknown words remain rejected.
-        const isVerseCue = /^(?:verse|verses|v)$/i.test(text);
+        const isVerseCue = /^(?:verse|verses|v|vs)$/i.test(text);
         if (!isKjvWord && !isBookName && !isVerseCue &&
             !blbPageButtonContextualReference && !blbPageButtonCriteriaSearchText) {
           // A numbered-book suffix is only actionable when the exact live
@@ -442,7 +442,7 @@
             lastSelectionContextualText = text;
           }
         }
-        if (!blbPageButtonContextualReference && /^(?:v|verse|verses)$/i.test(normalizeDoubleClickToken(text))) {
+        if (!blbPageButtonContextualReference && /^(?:v|vs|verse|verses)$/i.test(normalizeDoubleClickToken(text))) {
           // Resolve verse-cue context while the native selection still exists.
           // The button click clears that selection immediately after dispatching
           // its background message, so deferring this lookup until the message
@@ -619,7 +619,7 @@
           // word. Reuse the same narrowly scoped article/post resolver that
           // Double-Click uses to associate that cue with its following verse
           // number and nearest preceding explicit book/chapter reference.
-          if (!cached && /^(?:v|verse|verses)$/i.test(normalizeDoubleClickToken(selected))) {
+          if (!cached && /^(?:v|vs|verse|verses)$/i.test(normalizeDoubleClickToken(selected))) {
             const selection = window.getSelection?.();
             if (selection?.rangeCount && !selection.isCollapsed) {
               let target = selection.getRangeAt(0).commonAncestorContainer;
