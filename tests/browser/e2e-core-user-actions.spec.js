@@ -364,11 +364,27 @@ test.describe('core user-action E2E coverage', () => {
         if (events.length > 100) events.shift();
       };
       globalThis.__blbE2ESelectionHandoffEvents = events;
+      try {
+        const parsed = extractBibleRefsFromSelectedTextUncached('Philippians 2:12 and John 3:16 - free gift');
+        record('parser-result', {refs:parsed.map(ref => ({
+          book:ref.book, chapter:ref.chapter, from:ref.from, to:ref.to, text:ref.text
+        }))});
+      } catch (error) {
+        record('parser-error', {error:String(error), stack:error?.stack || ''});
+      }
       chrome.runtime.onMessage.addListener((message, sender) => {
         if (message?.type === 'blbSuiteOpenSelectionText') {
+          const context = message.contextualReference;
           record('selection-message', {
             requestId:message.requestId || '',
             text:String(message.text || ''),
+            contextualReference:context ? {
+              url:context.url || '',
+              refs:Array.isArray(context.refs) ? context.refs.map(ref => ({
+                book:ref.book, chapter:ref.chapter, from:ref.from, to:ref.to, url:ref.url
+              })) : []
+            } : null,
+            criteriaSearchText:String(message.criteriaSearchText || ''),
             senderTabId:sender?.tab?.id ?? null,
             senderUrl:sender?.tab?.url || ''
           });
