@@ -2736,6 +2736,7 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'books.js',
   'book-aliases.js',
   'reference-core.js',
+  'source-page-collector-sites.js',
   'kings-bible-collector.js',
   'webster-collector.js',
   'source-page-collector.js',
