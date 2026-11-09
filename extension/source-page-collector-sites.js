@@ -1,4 +1,4 @@
-/* Shared registry for source-page reference collection buttons and optional click guards. */
+/* Shared registry for page-wide Bible-reference collection buttons and optional click guards. */
 globalThis.BLBSourcePageCollectorSites = Object.freeze({
   "christianity.com": { id:"christianity", mainWorldClickGuard:true },
   "gotquestions.org": { id:"gotquestions", mainWorldClickGuard:true },
@@ -13,5 +13,7 @@ globalThis.BLBSourcePageCollectorSites = Object.freeze({
   "openbible.info": { id:"openbible", mainWorldClickGuard:true },
   "crossway.org": { id:"crossway", mainWorldClickGuard:true },
   "sarata.com": { id:"sarata", mainWorldClickGuard:true },
-  "sermonindex.net": { id:"sermonindex" }
+  "sermonindex.net": { id:"sermonindex" },
+  "thekingsbible.com": { collectorModule:"kings-bible" },
+  "webstersdictionary1828.com": { collectorModule:"webster" }
 });
