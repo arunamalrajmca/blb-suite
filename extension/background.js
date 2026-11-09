@@ -6842,12 +6842,13 @@ chrome.commands.onCommand.addListener(async command => {
 async function injectEnabledTabsForGrantedOrigins(origins) {
   const granted = Array.isArray(origins) ? origins.map(String) : [];
   if (!granted.length) return;
-  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false});
+  const data = await chrome.storage.local.get({masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{},redirectEnabled:false});
+  if (data.masterEnabled === false) return;
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
   const tabs = await chrome.tabs.query({});
   for (const tab of tabs) {
-    if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
+    if (!tab?.id || !isHttpPageUrl(tab.url) || isSensitiveSiteUrl(tab.url)) continue;
     const pattern = originPatternForUrl(tab.url);
     if (!pattern) continue;
     const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
@@ -6998,7 +6999,7 @@ chrome.permissions.onAdded.addListener(() => {
       const hasSourcePageCollector = Object.prototype.hasOwnProperty.call(
         globalThis.BLBSourcePageCollectorSites || {}, key
       );
-      if (key && (hasSourcePageCollector || data.pageSelectionButtonSites?.[key] === true || data.doubleClickBlbSites?.[key] === true)) {
+      if (key && !isSensitiveSiteUrl(tab.url) && (hasSourcePageCollector || data.pageSelectionButtonSites?.[key] === true || data.doubleClickBlbSites?.[key] === true)) {
         await ensureContentScriptInTab(tab.id);
       }
     }
