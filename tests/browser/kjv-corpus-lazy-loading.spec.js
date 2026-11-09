@@ -93,65 +93,93 @@ test.describe('On-demand normalized KJV corpus loading', () => {
     expect(result.phraseIndexLoaded).toBe(true);
   });
 
-  test('lazy corpus state is safely reinitialized after a service-worker restart', async ({ context, extensionWorker }) => {
-    const beforeRestart = await extensionWorker.evaluate(async () => {
-      const decision = await classifySelectionForBlb('God is love');
-      return {
-        type: decision.type,
-        query: decision.kjvPassageQuery,
-        versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
-        wordIndexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX),
-        phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX
-      };
+  test('lazy corpus state is safely reinitialized in a fresh service-worker process', async ({ extensionPath }) => {
+    const launchExtensionContext = () => chromium.launchPersistentContext('', {
+      channel: 'chromium',
+      headless: true,
+      args: [
+        '--headless=new',
+        '--disable-extensions-except=' + extensionPath,
+        '--load-extension=' + extensionPath,
+        '--no-first-run',
+        '--no-default-browser-check'
+      ]
     });
-    expect(beforeRestart).toEqual({
-      type: 'KJV_PASSAGE',
-      query: '"god is love"',
-      versesLoaded: true,
-      wordIndexLoaded: false,
-      phraseIndexLoaded: false
-    });
+    const waitForWorker = async context => {
+      let [worker] = context.serviceWorkers();
+      if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 20000 });
+      return worker;
+    };
 
-    const restartedWorkerPromise = context.waitForEvent('serviceworker', { timeout: 20000 });
-    await extensionWorker.evaluate(() => {
-      setTimeout(() => chrome.runtime.reload(), 0);
-      return true;
-    });
-    const restartedWorker = await restartedWorkerPromise;
-    const afterRestart = await restartedWorker.evaluate(async () => {
-      const initial = {
-        versesLoaded: typeof KJV_CORPUS_VERSES !== 'undefined',
-        wordIndexLoaded: typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined'
-      };
-      const reference = await classifySelectionForBlb('John 3:16');
-      const word = await classifySelectionForBlb('grace');
-      const afterFastPaths = {
-        versesLoaded: typeof KJV_CORPUS_VERSES !== 'undefined',
-        wordIndexLoaded: typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined'
-      };
-      const phrase = await classifySelectionForBlb('God is love');
-      return {
-        initial,
-        referenceType: reference.type,
-        wordType: word.type,
-        afterFastPaths,
-        phraseType: phrase.type,
-        phraseQuery: phrase.kjvPassageQuery,
-        versesLoadedAfterPhrase: Array.isArray(KJV_CORPUS_VERSES),
-        wordIndexLoadedAfterPhrase: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX),
-        phraseIndexLoadedAfterPhrase: !!KJV_CORPUS_PHRASE_INDEX
-      };
-    });
+    const firstContext = await launchExtensionContext();
+    try {
+      const firstWorker = await waitForWorker(firstContext);
+      const beforeRestart = await firstWorker.evaluate(async () => {
+        const decision = await classifySelectionForBlb('God is love');
+        return {
+          type: decision.type,
+          query: decision.kjvPassageQuery,
+          versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
+          wordIndexLoaded: typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined'
+            && !!KJV_CORPUS_WORD_VERSE_INDEX,
+          phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX
+        };
+      });
+      expect(beforeRestart).toEqual({
+        type: 'KJV_PASSAGE',
+        query: '"god is love"',
+        versesLoaded: true,
+        wordIndexLoaded: false,
+        phraseIndexLoaded: false
+      });
+    } finally {
+      await firstContext.close();
+    }
 
-    expect(afterRestart.initial).toEqual({ versesLoaded:false, wordIndexLoaded:false });
-    expect(afterRestart.referenceType).toBe('REFERENCE');
-    expect(afterRestart.wordType).toBe('KJV_WORD');
-    expect(afterRestart.afterFastPaths).toEqual({ versesLoaded:false, wordIndexLoaded:false });
-    expect(afterRestart.phraseType).toBe('KJV_PASSAGE');
-    expect(afterRestart.phraseQuery).toBe('"god is love"');
-    expect(afterRestart.versesLoadedAfterPhrase).toBe(true);
-    expect(afterRestart.wordIndexLoadedAfterPhrase).toBe(false);
-    expect(afterRestart.phraseIndexLoadedAfterPhrase).toBe(false);
+    // A new persistent browser context creates a new extension service-worker
+    // process with fresh module globals, matching the state boundary after a
+    // browser-managed service-worker termination/restart.
+    const restartedContext = await launchExtensionContext();
+    try {
+      const restartedWorker = await waitForWorker(restartedContext);
+      const afterRestart = await restartedWorker.evaluate(async () => {
+        const initial = {
+          versesLoaded: typeof KJV_CORPUS_VERSES !== 'undefined',
+          wordIndexLoaded: typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined'
+        };
+        const reference = await classifySelectionForBlb('John 3:16');
+        const word = await classifySelectionForBlb('grace');
+        const afterFastPaths = {
+          versesLoaded: typeof KJV_CORPUS_VERSES !== 'undefined',
+          wordIndexLoaded: typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined'
+        };
+        const phrase = await classifySelectionForBlb('God is love');
+        return {
+          initial,
+          referenceType: reference.type,
+          wordType: word.type,
+          afterFastPaths,
+          phraseType: phrase.type,
+          phraseQuery: phrase.kjvPassageQuery,
+          versesLoadedAfterPhrase: Array.isArray(KJV_CORPUS_VERSES),
+          wordIndexLoadedAfterPhrase: typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined'
+            && !!KJV_CORPUS_WORD_VERSE_INDEX,
+          phraseIndexLoadedAfterPhrase: !!KJV_CORPUS_PHRASE_INDEX
+        };
+      });
+
+      expect(afterRestart.initial).toEqual({ versesLoaded:false, wordIndexLoaded:false });
+      expect(afterRestart.referenceType).toBe('REFERENCE');
+      expect(afterRestart.wordType).toBe('KJV_WORD');
+      expect(afterRestart.afterFastPaths).toEqual({ versesLoaded:false, wordIndexLoaded:false });
+      expect(afterRestart.phraseType).toBe('KJV_PASSAGE');
+      expect(afterRestart.phraseQuery).toBe('"god is love"');
+      expect(afterRestart.versesLoadedAfterPhrase).toBe(true);
+      expect(afterRestart.wordIndexLoadedAfterPhrase).toBe(false);
+      expect(afterRestart.phraseIndexLoadedAfterPhrase).toBe(false);
+    } finally {
+      await restartedContext.close();
+    }
   });
 
   test('rejected compressed-resource fetches fall back to original packaged JavaScript data', async ({ extensionWorker }) => {
