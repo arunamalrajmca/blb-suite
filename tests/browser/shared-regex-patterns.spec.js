@@ -27,7 +27,7 @@ test('shared regex catalog exposes stable BLB constants and independent regex in
 
 test('reference parser accepts source citation markers vs. and v-number forms', async ({ extensionWorker }) => {
   const refs = await extensionWorker.evaluate(() => resolveBibleReferenceText(
-    '1 Samuel 15 vs. 10; John 3 v16; Romans 8:v1-2'
+    '1 Samuel 15 vs. 10; John 3 v16; Romans 8:v(1)-2'
   ).map(ref => [ref.book, ref.chapter, ref.from, ref.to]));
   expect(refs).toEqual([
     ['1 samuel', 15, 10, 10],
