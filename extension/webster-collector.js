@@ -5,7 +5,10 @@
 globalThis.BLBWebsterCollectorModule = Object.freeze({
   initialize({ normalizeSelectionText, parseRef, blbUrl, isSuiteEnabled, isSuiteEnabledNow, isModifiedLinkActivation, makeBlbMultiVerseButtonDraggable }) {
     // ---------- Webster's 1828 ----------
-    if (location.hostname==="webstersdictionary1828.com") {
+    const websterCollectorConfig = globalThis.BLBSourcePageCollectorSites?.[
+      location.hostname?.toLowerCase().replace(/^www\./, "")
+    ];
+    if (websterCollectorConfig?.collectorModule === "webster") {
       async function captureWebsterWord() {
         try {
           if (!(await isSuiteEnabled())) return;
