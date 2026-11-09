@@ -10,7 +10,8 @@ const BLB_BACKGROUND_STARTUP_IMPORTS = [
   "case-sensitive-routing.js",
   "books.js",
   "book-aliases.js",
-  "reference-core.js"
+  "reference-core.js",
+  "source-page-collector-sites.js"
 ];
 
 // Import dependencies individually so a failed resource is identified by filename
@@ -2793,10 +2794,12 @@ function contentScriptFilesForTab(tab, data) {
     ? data.doubleClickBlbSites : {};
   const sensitiveSite = isSensitiveSiteUrl(tab?.url || hostname);
   const blbSite = key === BLB_HOSTNAME;
-  // SermonIndex's page-wide reference collection button is independent
-  // of the per-site Show on BLB / Double-Click preferences.
-  const sermonIndexCollector = key === 'sermonindex.net';
-  const explicitSiteFeature = !sensitiveSite && (sermonIndexCollector ||
+  // Source-page collection buttons are a distinct feature from per-site
+  // selection actions. Their supported hosts come from the shared registry.
+  const hasSourcePageCollector = Object.prototype.hasOwnProperty.call(
+    globalThis.BLBSourcePageCollectorSites || {}, key
+  );
+  const explicitSiteFeature = !sensitiveSite && (hasSourcePageCollector ||
     (blbSite ? pageSites[key] === true : (pageSites[key] === true || doubleSites[key] === true)));
   const redirectEnabled = data.redirectEnabled === true;
   const needsFullBundle = explicitSiteFeature || (redirectEnabled && isRedirectHostname(hostname));
@@ -6696,10 +6699,10 @@ async function shouldInjectContentScriptForTab(tab, data) {
   const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
-  // SermonIndex's reference-collection button is independent of the site's
-  // Show on BLB and Double-Click preferences.
-  const sermonIndexCollector = key === 'sermonindex.net';
-  const explicitEnabled = !isSensitiveSiteUrl(tab.url) && (sermonIndexCollector ||
+  const hasSourcePageCollector = Object.prototype.hasOwnProperty.call(
+    globalThis.BLBSourcePageCollectorSites || {}, key
+  );
+  const explicitEnabled = !isSensitiveSiteUrl(tab.url) && (hasSourcePageCollector ||
     (key === BLB_HOSTNAME ? pageSites[key] === true : (pageSites[key] === true || doubleSites[key] === true)));
 
   // Global Redirect External Bible Links is intentionally available on any
