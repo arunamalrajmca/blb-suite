@@ -132,6 +132,9 @@ test.describe('remaining omnibox command routing', () => {
     expect(result.captured.functionSource).toContain('let panes = paneSelects()');
     expect(result.captured.functionSource).toContain('const rightChange = setVersion(panes.right, versionCode)');
     expect(result.captured.functionSource).toContain('waitForStable');
+    expect(result.captured.functionSource).toContain('waitForDomQuiet');
+    expect(result.captured.functionSource).toContain('await waitForDomQuiet();');
+    expect(result.captured.functionSource).toContain('BLB applies the account/session\'s Favorite Parallel Translation asynchronously');
   });
 
   test('cs command is gated by the master switch and forwards the disposition', async ({ extensionWorker }) => {
