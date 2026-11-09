@@ -73,7 +73,7 @@ function makeWebsterRedirectHarness({ initialEnabled = true, response = { ok: tr
   };
 }
 
-test('disabling the last site feature removes both persistent isolated- and MAIN-world registrations', async ({ extensionWorker, extensionStorage }) => {
+test('disabling the last ordinary site feature removes its persistent isolated-world registration', async ({ extensionWorker, extensionStorage }) => {
   await extensionStorage.clear();
   await extensionStorage.set({
     masterEnabled: true,
@@ -127,10 +127,7 @@ test('disabling the last site feature removes both persistent isolated- and MAIN
   });
 
   expect(result.registered).toBe(true);
-  expect(result.before.map(item => item.id)).toEqual(expect.arrayContaining([
-    expect.stringMatching(/^blb-suite-runtime-/),
-    expect.stringMatching(/^blb-suite-runtime-.*-main-world$/)
-  ]));
+  expect(result.before.map(item => item.id)).toEqual([expect.stringMatching(/^blb-suite-runtime-/)]);
   expect(result.afterIds, 'feature opt-out must remove both persistent registrations').toEqual([]);
 });
 
