@@ -129,7 +129,7 @@ test.describe('remaining omnibox command routing', () => {
     expect(result.captured.functionSource).toContain('bodyCol1A');
     expect(result.captured.functionSource).toContain('bodyCol1B');
     expect(result.captured.functionSource).toContain('normalizeCode(select.value) === normalizeCode(option.value)');
-    expect(result.captured.functionSource).toContain('const panes = paneSelects()');
+    expect(result.captured.functionSource).toContain('let panes = paneSelects()');
     expect(result.captured.functionSource).toContain('const rightChange = setVersion(panes.right, versionCode)');
     expect(result.captured.functionSource).toContain('waitForStable');
   });
