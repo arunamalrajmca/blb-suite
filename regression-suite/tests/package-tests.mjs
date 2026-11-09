@@ -89,6 +89,8 @@ test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse coll
   assert(/"thetreasuryofscriptureknowledge\.com"\s*:\s*\{\s*id:\s*"treasury"/.test(registry));
   assert(/"thekingsbible\.com"\s*:\s*\{\s*collectorModule:\s*"kings-bible"/.test(registry));
   assert(/"webstersdictionary1828\.com"\s*:\s*\{\s*collectorModule:\s*"webster"/.test(registry));
+  assert(read('kings-bible-collector.js').includes('kingsBibleCollectorConfig?.collectorModule === "kings-bible"'));
+  assert(read('webster-collector.js').includes('websterCollectorConfig?.collectorModule === "webster"'));
   assert(collector.includes('BLBSourcePageCollectorSites?.[host]?.id'), 'collector must use the shared site registry metadata');
   assert(collector.includes('if (sourceSite && !isSourceHomepage)'));
   assert(collector.includes('document.querySelectorAll("a[href]")'));
