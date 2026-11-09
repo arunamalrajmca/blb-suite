@@ -489,7 +489,7 @@ test('SermonIndex topic pages show the BLB references button and collect linked 
   await extensionStorage.clear();
   await extensionStorage.set({
     masterEnabled:true,
-    pageSelectionButtonSites:{'sermonindex.net':true},
+    pageSelectionButtonSites:{},
     doubleClickBlbSites:{}
   });
 
