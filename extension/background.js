@@ -4589,32 +4589,44 @@ const KJV_PASSAGE_WEAK_SHORT = new Set([
   'out of the','into the land','in the land','upon the earth','of the word'
 ]);
 
-function isMeaningfulShortKjvPassage(text, wordCount) {
+function isMeaningfulShortKjvPassage(text, wordCount, phraseIndexContext = null) {
   const normalized = String(text || '').toLowerCase().trim();
   if (!normalized) return false;
   // Explicitly listed noisy fragments remain excluded even when a fragment
   // happens to contain four words. Longer genuine KJV runs are still accepted
   // because their full text will not equal one of these exact noise entries.
   if (KJV_PASSAGE_WEAK_SHORT.has(normalized)) return false;
-  if (isGeneratedKjvPhraseCandidate(normalized.split(/\s+/).filter(Boolean))) return true;
+  const words = normalized.split(/\s+/).filter(Boolean);
+  // The generated index is optional on the short path. If its membership is
+  // the deciding factor, let the async caller load it and retry rather than
+  // silently changing the established Criteria Search classification.
+  if (KJV_CORPUS_PHRASE_INDEX
+      && isGeneratedKjvPhraseCandidate(words)) return true;
   if (wordCount >= 4) return true;
   if (KJV_PASSAGE_SHORT_WHITELIST.has(normalized)) return true;
-  const words = normalized.split(/\s+/).filter(Boolean);
   const stopCount = words.filter(w => KJV_PASSAGE_STOPWORDS.has(w)).length;
   if (wordCount === 2) {
-    if (KJV_PASSAGE_SHORT_WHITELIST.has(normalized)) return true;
-    // Keep short KJV expressions on the same generated-index gate used by
-    // the long-selection scanner. This prevents ordinary unique fragments
-    // from becoming search terms merely because they occur once in the corpus.
-    return isGeneratedKjvPhraseCandidate(words);
+    if (!KJV_CORPUS_PHRASE_INDEX && phraseIndexContext) {
+      phraseIndexContext.needsPhraseIndex = true;
+    }
+    return KJV_CORPUS_PHRASE_INDEX && isGeneratedKjvPhraseCandidate(words);
   }
-  if (stopCount > 1) return false;
+  if (stopCount > 1) {
+    if (!KJV_CORPUS_PHRASE_INDEX && phraseIndexContext) {
+      phraseIndexContext.needsPhraseIndex = true;
+    }
+    return false;
+  }
   const contentWords = words.filter(w => !KJV_PASSAGE_STOPWORDS.has(w));
-  return contentWords.some(w => !KJV_PASSAGE_GENERIC_WORDS.has(w));
+  const meaningful = contentWords.some(w => !KJV_PASSAGE_GENERIC_WORDS.has(w));
+  if (!meaningful && !KJV_CORPUS_PHRASE_INDEX && phraseIndexContext) {
+    phraseIndexContext.needsPhraseIndex = true;
+  }
+  return meaningful;
 }
 
 
-function isKjvScannerCandidate(text, wordCount) {
+function isKjvScannerCandidate(text, wordCount, phraseIndexContext = null) {
   const normalized = String(text || '').toLowerCase().trim();
   if (!normalized) return false;
   const words = normalized.split(/\s+/).filter(Boolean);
@@ -4625,6 +4637,9 @@ function isKjvScannerCandidate(text, wordCount) {
     // phrase index. The index deliberately keeps useful short expressions
     // while excluding one-off verb/object coincidences such as "thanked god"
     // and generic article+noun references such as "the preacher".
+    if (!KJV_CORPUS_PHRASE_INDEX && phraseIndexContext) {
+      phraseIndexContext.needsPhraseIndex = true;
+    }
     return words.length === 2 && isGeneratedKjvPhraseCandidate(words);
   }
   if (wordCount < 3) return false;
@@ -4778,7 +4793,7 @@ function getKjvRangeCandidateVerseIndexes(words, seedLength) {
   }
   return [...candidates];
 }
-function findKjvVerseRangeForSelection(selectionText) {
+function findKjvVerseRangeForSelection(selectionText, phraseIndexContext = null) {
   const words = normalizeKjvPassageWords(selectionText);
   // A range resolver needs enough text to distinguish Scripture from ordinary
   // prose. Short exact phrases continue through the normal KJV search path.
@@ -4811,7 +4826,7 @@ function findKjvVerseRangeForSelection(selectionText) {
     // Use the existing exact contiguous matcher, but only against verses whose
     // seed words are all present according to the existing corpus postings.
     const match = longestCommonKjvPassage(words, first.words, seedPositions);
-    if (!match || match.length < seedLength || !isMeaningfulShortKjvPassage(match.text, match.length)) continue;
+    if (!match || match.length < seedLength || !isMeaningfulShortKjvPassage(match.text, match.length, phraseIndexContext)) continue;
 
     // The match may begin/end inside a verse. Extend it across adjacent corpus
     // verses only when the selected words continue exactly from the verse boundary.
@@ -5105,16 +5120,22 @@ function extractKjvPassageSearchQuery(selectionText, excludedVerseTexts = [], op
     });
   };
   const allowResidualProseTerms = Boolean(options?.allowResidualProseTerms);
-  if (!excluded.length && !allowResidualProseTerms && kjvPassageQueryCache.has(cacheKey)) return kjvPassageQueryCache.get(cacheKey);
+  const phraseIndexContext = options?.phraseIndexContext || null;
+  const cacheResult = value => {
+    if (!phraseIndexContext?.needsPhraseIndex) kjvPassageQueryCache.set(cacheKey, value);
+    return value;
+  };
+  const bypassCache = Boolean(options?.skipCache || (phraseIndexContext && !KJV_CORPUS_PHRASE_INDEX));
+  if (!excluded.length && !allowResidualProseTerms && !bypassCache && kjvPassageQueryCache.has(cacheKey)) return kjvPassageQueryCache.get(cacheKey);
 
   const words = normalizeKjvPassageWords(cacheKey);
   if (words.length < KJV_PASSAGE_MIN_WORDS) {
-    kjvPassageQueryCache.set(cacheKey, null);
+    cacheResult(null);
     return null;
   }
 
   if (!Array.isArray(KJV_CORPUS_VERSES)) {
-    kjvPassageQueryCache.set(cacheKey, null);
+    cacheResult(null);
     return null;
   }
 
@@ -5202,7 +5223,7 @@ function extractKjvPassageSearchQuery(selectionText, excludedVerseTexts = [], op
           }
           if (qi === quoteWords.length && gaps <= 1) {
             const text = quoteWords.join(' ');
-            if (!isMeaningfulShortKjvPassage(text, quoteWords.length)) continue;
+            if (!isMeaningfulShortKjvPassage(text, quoteWords.length, phraseIndexContext)) continue;
             if (!best || quoteWords.length > best.length) {
               best = {length:quoteWords.length, text, selectionStart:quoted.start, selectionEnd:quoted.start + quoteWords.length, verseId:`${entry[0]}:${entry[1]}:${entry[2]}`};
             }
@@ -5234,7 +5255,7 @@ function extractKjvPassageSearchQuery(selectionText, excludedVerseTexts = [], op
       const residualShortCandidate = allowResidualProseTerms && match && match.length === 2
         && isResidualProseShortKjvPhraseCandidate(normalizeKjvPassageWords(matchText));
       if (match && match.length >= seedLength
-          && (isMeaningfulShortKjvPassage(matchText, match.length) || residualShortCandidate)
+          && (isMeaningfulShortKjvPassage(matchText, match.length, phraseIndexContext) || residualShortCandidate)
           && !isExcludedVerseWording(matchText)) {
         matches.push({length:match.length, text:matchText, selectionStart:match.selectionStart, selectionEnd:match.selectionEnd, verseId:`${entry[0]}:${entry[1]}:${entry[2]}`});
       }
@@ -5340,9 +5361,13 @@ function extractKjvPassageSearchQuery(selectionText, excludedVerseTexts = [], op
     // become search terms merely because they happen to occur in the corpus.
     const isShortExpressionCandidate = phraseWords => {
       const phrase = phraseWords.join(' ');
-      return KJV_PASSAGE_SHORT_WHITELIST.has(phrase)
-        || isGeneratedKjvPhraseCandidate(phraseWords)
-        || (allowResidualProseTerms && isResidualProseShortKjvPhraseCandidate(phraseWords));
+      if (KJV_PASSAGE_SHORT_WHITELIST.has(phrase)) return true;
+      if (allowResidualProseTerms && isResidualProseShortKjvPhraseCandidate(phraseWords)) return true;
+      if (!KJV_CORPUS_PHRASE_INDEX && phraseIndexContext
+          && phraseWords.length >= 2 && phraseWords.length <= 5) {
+        phraseIndexContext.needsPhraseIndex = true;
+      }
+      return isGeneratedKjvPhraseCandidate(phraseWords);
     };
 
     const findAnyVerseForPhrase = phraseWords => {
@@ -5389,7 +5414,7 @@ function extractKjvPassageSearchQuery(selectionText, excludedVerseTexts = [], op
         const phrase = phraseWords.join(' ');
         if (isExcludedVerseWording(phrase)) continue;
         if (allowResidualProseTerms && residualPhraseDefinitelyAbsent(phraseWords)) continue;
-        const standardCandidate = isKjvScannerCandidate(phrase, length);
+        const standardCandidate = isKjvScannerCandidate(phrase, length, phraseIndexContext);
         const shortExpressionCandidate = isShortExpressionCandidate(phraseWords);
         if (!standardCandidate && !shortExpressionCandidate) continue;
 
@@ -5416,11 +5441,11 @@ function extractKjvPassageSearchQuery(selectionText, excludedVerseTexts = [], op
         const phraseWords = words.slice(cursor, cursor + 2);
         const phrase = phraseWords.join(' ');
         const shortExpressionCandidate = isShortExpressionCandidate(phraseWords);
-        if (!isExcludedVerseWording(phrase) && (isKjvScannerCandidate(phrase, 2) || shortExpressionCandidate)) {
+        if (!isExcludedVerseWording(phrase) && (isKjvScannerCandidate(phrase, 2, phraseIndexContext) || shortExpressionCandidate)) {
           const result = shortExpressionCandidate
             ? findAnyVerseForPhrase(phraseWords)
             : findUniqueVerseForPhrase(phraseWords);
-          if ((result.unique || result.found) && (isKjvScannerCandidate(phrase, 2) || shortExpressionCandidate)) {
+          if ((result.unique || result.found) && (isKjvScannerCandidate(phrase, 2, phraseIndexContext) || shortExpressionCandidate)) {
             accepted = {
               length:2,
               text:phrase,
@@ -5471,7 +5496,7 @@ function extractKjvPassageSearchQuery(selectionText, excludedVerseTexts = [], op
   }
 
   if (!matches.length) {
-    kjvPassageQueryCache.set(cacheKey, null);
+    cacheResult(null);
     return null;
   }
 
@@ -5499,7 +5524,7 @@ function extractKjvPassageSearchQuery(selectionText, excludedVerseTexts = [], op
   }
 
   const query = makeQuotedCriteriaOrQuery(selectedTerms);
-  kjvPassageQueryCache.set(cacheKey, query || null);
+  cacheResult(query || null);
   if (kjvPassageQueryCache.size > KJV_PASSAGE_CACHE_LIMIT) {
     const oldest = kjvPassageQueryCache.keys().next().value;
     kjvPassageQueryCache.delete(oldest);
@@ -5659,6 +5684,22 @@ function extractResidualProseShortCriteriaQuery(selectionText, excludedVerseText
   return makeQuotedCriteriaOrQuery(terms) || null;
 }
 
+async function extractKjvPassageSearchQueryWithLazyPhraseIndex(selectionText, excludedVerseTexts = [], options = {}) {
+  const phraseIndexContext = {};
+  let query = extractKjvPassageSearchQuery(selectionText, excludedVerseTexts, {
+    ...options,
+    phraseIndexContext
+  });
+  if (phraseIndexContext.needsPhraseIndex && !KJV_CORPUS_PHRASE_INDEX) {
+    await ensureKjvPhraseIndexLoaded();
+    query = extractKjvPassageSearchQuery(selectionText, excludedVerseTexts, {
+      ...options,
+      skipCache:true
+    });
+  }
+  return query;
+}
+
 async function classifySelectionForBlb(selectionText) {
   const raw = normalizeSelectedScriptureText(selectionText);
   const source = stripLeadingSelectionMarkers(raw);
@@ -5723,7 +5764,12 @@ async function classifySelectionForBlb(selectionText) {
   // can independently produce Criteria Search terms.
   if (!extractedRefs.length) {
     if (normalizeKjvPassageWords(source).length >= 5) await ensureKjvVerseCorpusLoaded();
-    const corpusRange = findKjvVerseRangeForSelection(source);
+    const rangePhraseIndexContext = {};
+    let corpusRange = findKjvVerseRangeForSelection(source, rangePhraseIndexContext);
+    if (rangePhraseIndexContext.needsPhraseIndex && !KJV_CORPUS_PHRASE_INDEX) {
+      await ensureKjvPhraseIndexLoaded();
+      corpusRange = findKjvVerseRangeForSelection(source);
+    }
     if (corpusRange?.url) {
       return {
         valid:true,
@@ -5784,9 +5830,9 @@ async function classifySelectionForBlb(selectionText) {
       // Use the complete residual-prose Criteria scanner. Its candidate checks
       // are corpus-index-gated, preserving established behavior while avoiding
       // expensive exact verification for phrases absent from the KJV corpus.
-      passageQuery = extractKjvPassageSearchQuery(remainingText, excludedVerseTexts, {allowResidualProseTerms:true});
+      passageQuery = await extractKjvPassageSearchQueryWithLazyPhraseIndex(remainingText, excludedVerseTexts, {allowResidualProseTerms:true});
     } else {
-      passageQuery = extractKjvPassageSearchQuery(remainingText, excludedVerseTexts);
+      passageQuery = await extractKjvPassageSearchQueryWithLazyPhraseIndex(remainingText, excludedVerseTexts);
     }
     if (passageQuery) {
       if (extractedRefs.length) {
