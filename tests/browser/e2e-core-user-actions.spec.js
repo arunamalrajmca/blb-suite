@@ -346,11 +346,82 @@ test.describe('core user-action E2E coverage', () => {
       );
     });
 
+    // Capture the real background hand-off and tab lifecycle. This test
+    // exists on main already; when it times out, the failure must tell us
+    // whether the selection message arrived and whether Chrome accepted the
+    // destination-tab request, rather than reporting only a generic timeout.
+    await extensionWorker.evaluate(() => {
+      const events = [];
+      const record = (type, details = {}) => {
+        events.push({at:Date.now(), type, ...details});
+        if (events.length > 100) events.shift();
+      };
+      globalThis.__blbE2ESelectionHandoffEvents = events;
+      chrome.runtime.onMessage.addListener((message, sender) => {
+        if (message?.type === 'blbSuiteOpenSelectionText') {
+          record('selection-message', {
+            requestId:message.requestId || '',
+            text:String(message.text || ''),
+            senderTabId:sender?.tab?.id ?? null,
+            senderUrl:sender?.tab?.url || ''
+          });
+        }
+      });
+      chrome.tabs.onCreated.addListener(tab => record('tab-created', {
+        tabId:tab.id, url:tab.url || '', pendingUrl:tab.pendingUrl || ''
+      }));
+      chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+        if (changeInfo.url || changeInfo.status === 'loading' || changeInfo.status === 'complete') {
+          record('tab-updated', {
+            tabId, url:tab?.url || '', pendingUrl:tab?.pendingUrl || '',
+            status:changeInfo.status || '', changedUrl:changeInfo.url || ''
+          });
+        }
+      });
+      const originalCreate = chrome.tabs.create.bind(chrome.tabs);
+      chrome.tabs.create = async properties => {
+        record('tabs-create-request', {url:properties?.url || '', active:properties?.active});
+        try {
+          const tab = await originalCreate(properties);
+          record('tabs-create-result', {tabId:tab?.id ?? null, url:tab?.url || '', pendingUrl:tab?.pendingUrl || ''});
+          return tab;
+        } catch (error) {
+          record('tabs-create-error', {error:String(error), stack:error?.stack || ''});
+          throw error;
+        }
+      };
+      const originalUpdate = chrome.tabs.update.bind(chrome.tabs);
+      chrome.tabs.update = async (tabId, properties) => {
+        record('tabs-update-request', {tabId, url:properties?.url || ''});
+        try {
+          const tab = await originalUpdate(tabId, properties);
+          record('tabs-update-result', {tabId:tab?.id ?? tabId, url:tab?.url || '', pendingUrl:tab?.pendingUrl || ''});
+          return tab;
+        } catch (error) {
+          record('tabs-update-error', {tabId, error:String(error), stack:error?.stack || ''});
+          throw error;
+        }
+      };
+      const originalError = console.error.bind(console);
+      console.error = (...args) => {
+        const message = args.map(value => {
+          try { return typeof value === 'string' ? value : JSON.stringify(value); }
+          catch (_) { return String(value); }
+        }).join(' ');
+        if (/KJV Scripture Tools|BLB MV timing|MultiVerse/i.test(message)) {
+          record('background-error', {message:message.slice(0,3000)});
+        }
+        originalError(...args);
+      };
+    });
+
     const button = page.locator('#blb-suite-page-selection-button');
     await expect(button).toBeVisible({ timeout: 10000 });
     await button.click();
 
-    const multiVerse = await waitForTab(extensionWorker, tab => {
+    let multiVerse;
+    try {
+      multiVerse = await waitForTab(extensionWorker, tab => {
       try {
         // MultiVerse may briefly expose its extension POST helper as url
         // while Chrome reports the BLB destination in pendingUrl.
@@ -360,7 +431,13 @@ test.describe('core user-action E2E coverage', () => {
       } catch (_) {
         return false;
       }
-    });
+      });
+    } catch (error) {
+      const diagnostics = await extensionWorker.evaluate(() =>
+        globalThis.__blbE2ESelectionHandoffEvents || []
+      ).catch(() => []);
+      throw new Error(String(error) + '\nSelection hand-off diagnostics: ' + JSON.stringify(diagnostics));
+    }
 
     const criteria = await waitForTab(extensionWorker, tab => {
       try {
