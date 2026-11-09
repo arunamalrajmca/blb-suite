@@ -857,6 +857,7 @@ async function loadKingsBibleMultiVerse(page, sourceUrl, pages) {
   await page.addScriptTag({ content: read("extension/books.js") });
   await page.addScriptTag({ content: read("extension/book-aliases.js") });
   await page.addScriptTag({ content: read("extension/reference-core.js") });
+  await page.addScriptTag({ content: read("extension/source-page-collector-sites.js") });
   await page.addScriptTag({ content: productionRedirectHelpers });
   await page.addScriptTag({ content: 'function normalizeSelectionText(s) { return String(s || "").replace(/\\s+/g, " ").trim(); }' });
   await page.addScriptTag({ content: 'window.__localStorageValues = {}; window.__multiVerseRequests = []; window.isSuiteEnabled = async () => true; window.chrome = { storage: { local: { get: async defaults => Object.assign({}, defaults || {}, window.__localStorageValues), set: async values => Object.assign(window.__localStorageValues, values), remove: async key => { for (const k of (Array.isArray(key) ? key : [key])) delete window.__localStorageValues[k]; } }, onChanged: { addListener: () => {} } }, runtime: { sendMessage: async message => { window.__multiVerseRequests.push(message); return { ok: true }; } } };' });
