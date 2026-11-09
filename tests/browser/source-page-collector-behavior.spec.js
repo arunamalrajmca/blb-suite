@@ -82,7 +82,7 @@ test('DailyVerses shows its BLB references button only on non-homepage pages', a
   await extensionStorage.clear();
   await extensionStorage.set({
     masterEnabled: true,
-    pageSelectionButtonSites: { 'dailyverses.net': true },
+    pageSelectionButtonSites: {},
     doubleClickBlbSites: {}
   });
 
@@ -176,7 +176,7 @@ test('ChurchofJesusChrist shows its BLB references button on scripture-study pag
   await extensionStorage.clear();
   await extensionStorage.set({
     masterEnabled: true,
-    pageSelectionButtonSites: { 'churchofjesuschrist.org': true },
+    pageSelectionButtonSites: {},
     doubleClickBlbSites: {}
   });
 
@@ -293,7 +293,7 @@ test('Mercy House shows its BLB references button on article pages and collects 
   await extensionStorage.clear();
   await extensionStorage.set({
     masterEnabled: true,
-    pageSelectionButtonSites: { 'mercyhouseministry.com': true },
+    pageSelectionButtonSites: {},
     doubleClickBlbSites: {}
   });
 
@@ -368,11 +368,7 @@ test('OpenBible, Crossway and Sarata show BLB collection buttons on content page
   await extensionStorage.clear();
   await extensionStorage.set({
     masterEnabled: true,
-    pageSelectionButtonSites: {
-      'openbible.info': true,
-      'crossway.org': true,
-      'sarata.com': true
-    },
+    pageSelectionButtonSites: {},
     doubleClickBlbSites: {}
   });
 
