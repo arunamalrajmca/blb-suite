@@ -5769,7 +5769,11 @@ async function classifySelectionForBlb(selectionText) {
   const remainingWordCount = (remainingText.match(/\S+/g) || []).length;
 
   if (remainingWordCount >= KJV_PASSAGE_MIN_WORDS) {
-    await Promise.all([ensureKjvVerseCorpusLoaded(), ensureKjvPhraseIndexLoaded()]);
+    // Short selections (up to 8 words) use exact word→verse postings only.
+    // The generated phrase candidate index is consulted by the long-selection
+    // scanner, so defer its download until the selection actually needs it.
+    await ensureKjvVerseCorpusLoaded();
+    if (remainingWordCount > 8) await ensureKjvPhraseIndexLoaded();
     // Keep the cited-verse wording excluded all the way through the final
     // Criteria Search extraction. This is a second guard after physical text
     // removal: if punctuation, typography, or a partial citation caused a
@@ -5809,7 +5813,8 @@ async function classifySelectionForBlb(selectionText) {
       return {valid:true, type:'KJV_WORD', text:source};
     }
     if (wordCount > 1) {
-      await Promise.all([ensureKjvVerseCorpusLoaded(), ensureKjvPhraseIndexLoaded()]);
+      await ensureKjvVerseCorpusLoaded();
+      if (wordCount > 8) await ensureKjvPhraseIndexLoaded();
       // Multi-word selections must actually occur in the KJV corpus. Merely
       // having every individual word in the KJV vocabulary is not sufficient:
       // ordinary search terms such as "saved how" would otherwise be treated
