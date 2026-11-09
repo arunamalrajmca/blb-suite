@@ -299,6 +299,7 @@ test.describe('real-browser source URL redirect regressions', () => {
       window.addEventListener('click', event => event.preventDefault(), true);
     });
     await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+    await page.addScriptTag({ content: read('extension/source-page-collector-sites.js') });
     await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
     await page.evaluate(() => {
       window.__openedBlbCount = 0;
