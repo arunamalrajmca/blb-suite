@@ -378,30 +378,34 @@ test.describe('core user-action E2E coverage', () => {
           });
         }
       });
-      const originalCreate = chrome.tabs.create.bind(chrome.tabs);
-      chrome.tabs.create = async properties => {
-        record('tabs-create-request', {url:properties?.url || '', active:properties?.active});
-        try {
-          const tab = await originalCreate(properties);
-          record('tabs-create-result', {tabId:tab?.id ?? null, url:tab?.url || '', pendingUrl:tab?.pendingUrl || ''});
-          return tab;
-        } catch (error) {
-          record('tabs-create-error', {error:String(error), stack:error?.stack || ''});
-          throw error;
-        }
-      };
-      const originalUpdate = chrome.tabs.update.bind(chrome.tabs);
-      chrome.tabs.update = async (tabId, properties) => {
-        record('tabs-update-request', {tabId, url:properties?.url || ''});
-        try {
-          const tab = await originalUpdate(tabId, properties);
-          record('tabs-update-result', {tabId:tab?.id ?? tabId, url:tab?.url || '', pendingUrl:tab?.pendingUrl || ''});
-          return tab;
-        } catch (error) {
-          record('tabs-update-error', {tabId, error:String(error), stack:error?.stack || ''});
-          throw error;
-        }
-      };
+      try {
+        const originalCreate = chrome.tabs.create.bind(chrome.tabs);
+        chrome.tabs.create = async properties => {
+          record('tabs-create-request', {url:properties?.url || '', active:properties?.active});
+          try {
+            const tab = await originalCreate(properties);
+            record('tabs-create-result', {tabId:tab?.id ?? null, url:tab?.url || '', pendingUrl:tab?.pendingUrl || ''});
+            return tab;
+          } catch (error) {
+            record('tabs-create-error', {error:String(error), stack:error?.stack || ''});
+            throw error;
+          }
+        };
+      } catch (error) { record('instrumentation-error', {api:'tabs.create', error:String(error)}); }
+      try {
+        const originalUpdate = chrome.tabs.update.bind(chrome.tabs);
+        chrome.tabs.update = async (tabId, properties) => {
+          record('tabs-update-request', {tabId, url:properties?.url || ''});
+          try {
+            const tab = await originalUpdate(tabId, properties);
+            record('tabs-update-result', {tabId:tab?.id ?? tabId, url:tab?.url || '', pendingUrl:tab?.pendingUrl || ''});
+            return tab;
+          } catch (error) {
+            record('tabs-update-error', {tabId, error:String(error), stack:error?.stack || ''});
+            throw error;
+          }
+        };
+      } catch (error) { record('instrumentation-error', {api:'tabs.update', error:String(error)}); }
       const originalError = console.error.bind(console);
       console.error = (...args) => {
         const message = args.map(value => {
