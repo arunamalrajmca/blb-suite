@@ -202,29 +202,41 @@ test.describe('On-demand normalized KJV corpus loading', () => {
 });
 
 
-test('lazy corpus is reloaded correctly after a service-worker restart', async ({ context, extensionId, extensionWorker }) => {
-  const initiallyLoaded = await extensionWorker.evaluate(async () => {
-    await Promise.all([ensureKjvVerseCorpusLoaded(), ensureKjvPhraseIndexLoaded()]);
-    return {
-      verses: Array.isArray(KJV_CORPUS_VERSES),
-      wordIndex: !!KJV_CORPUS_WORD_VERSE_INDEX,
-      phraseIndex: !!KJV_CORPUS_PHRASE_INDEX
-    };
+test('lazy corpus is reloaded correctly after a service-worker restart', async ({ extensionPath }) => {
+  const profileDir = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-corpus-restart-profile-'));
+  const launch = () => chromium.launchPersistentContext(profileDir, {
+    channel: 'chromium',
+    headless: true,
+    args: [
+      '--headless=new',
+      '--disable-extensions-except=' + extensionPath,
+      '--load-extension=' + extensionPath,
+      '--no-first-run',
+      '--no-default-browser-check'
+    ]
   });
-  expect(initiallyLoaded).toEqual({ verses: true, wordIndex: true, phraseIndex: true });
-
-  const closeSupported = await extensionWorker.evaluate(() => {
-    if (typeof self.close !== 'function') return false;
-    self.close();
-    return true;
-  });
-  expect(closeSupported).toBe(true);
-
-  const restartedWorkerPromise = context.waitForEvent('serviceworker', { timeout: 20000 });
-  const page = await context.newPage();
+  let context;
   try {
-    await page.goto('chrome-extension://' + extensionId + '/popup.html', { waitUntil: 'domcontentloaded' });
-    const restartedWorker = await restartedWorkerPromise;
+    context = await launch();
+    let worker = context.serviceWorkers()[0];
+    if (!worker) worker = await context.waitForEvent('serviceworker', { timeout: 20000 });
+    const extensionId = worker.url().split('/')[2];
+    const initiallyLoaded = await worker.evaluate(async () => {
+      await Promise.all([ensureKjvVerseCorpusLoaded(), ensureKjvPhraseIndexLoaded()]);
+      return {
+        verses: Array.isArray(KJV_CORPUS_VERSES),
+        wordIndex: !!KJV_CORPUS_WORD_VERSE_INDEX,
+        phraseIndex: !!KJV_CORPUS_PHRASE_INDEX
+      };
+    });
+    expect(initiallyLoaded).toEqual({ verses: true, wordIndex: true, phraseIndex: true });
+
+    await context.close();
+    context = await launch();
+    let restartedWorker = context.serviceWorkers()[0];
+    if (!restartedWorker) restartedWorker = await context.waitForEvent('serviceworker', { timeout: 20000 });
+    expect(restartedWorker.url().split('/')[2]).toBe(extensionId);
+
     const state = await restartedWorker.evaluate(async () => {
       const initial = {
         verses: typeof KJV_CORPUS_VERSES !== 'undefined',
@@ -258,7 +270,8 @@ test('lazy corpus is reloaded correctly after a service-worker restart', async (
     expect(state.phraseType).toBe('KJV_PASSAGE');
     expect(state.afterPhrase).toEqual({ verses: true, wordIndex: true, phraseIndex: true });
   } finally {
-    await page.close();
+    if (context) await context.close();
+    fs.rmSync(profileDir, { recursive: true, force: true });
   }
 });
 
@@ -287,6 +300,11 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against the pre-la
     path.resolve(repoRoot, 'scripts/generate-kjv-gzip-assets.cjs'),
     candidateRoot
   ], { cwd: repoRoot, stdio: 'pipe' });
+  const candidateAssets = [
+    'kjv-corpus-verses.json.gz',
+    'kjv-corpus-word-verse-index.json.gz',
+    'kjv-corpus-phrase-index.json.gz'
+  ].map(file => ({ file, bytes: fs.statSync(path.join(candidateRoot, file)).size }));
 
   const archive = execFileSync('git', ['archive', baselineSha, 'extension'], {
     cwd: repoRoot,
@@ -646,11 +664,6 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against the pre-la
     combinedStartupToFirstUsePercentChange: median(pairedChanges.map(pair => pair.percentChange.combinedStartupToFirstUse)),
     warmCorpusUseDeltaMs: median(pairedChanges.map(pair => pair.deltaMs.warmCorpusUse))
   };
-  const candidateAssets = [
-    'kjv-corpus-verses.json.gz',
-    'kjv-corpus-word-verse-index.json.gz',
-    'kjv-corpus-phrase-index.json.gz'
-  ].map(file => ({ file, bytes: fs.statSync(path.join(candidateRoot, file)).size }));
   const candidateSha = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim();
   const summary = {
     baselineSha,
