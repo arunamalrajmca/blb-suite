@@ -2639,13 +2639,13 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // context scan restricted to an exact standalone cue token.
       const normalizedElementToken = normalizeDoubleClickToken(clickedElementToken);
       const normalizedSelectedToken = normalizeDoubleClickToken(clickedWordText || clickedElementToken || selected);
-      const clickToken = /^(?:v|verse|verses)$/i.test(normalizedElementToken)
+      const clickToken = /^(?:v|vs|verse|verses)$/i.test(normalizedElementToken)
         ? normalizedElementToken
         : normalizedSelectedToken;
       // Only an explicit verse cue may trigger post-level context scanning.
       // Numeric clicks stay on the normal resolver path to avoid expensive
       // book/chapter searches for ordinary numbers.
-      const verseWordClick = /^(?:v|verse|verses)$/i.test(clickToken);
+      const verseWordClick = /^(?:v|vs|verse|verses)$/i.test(clickToken);
       const tokenElementIsExact = !!(initialNode && messageRoot.contains(initialNode) &&
         normalizedElementToken === clickToken);
       if (verseWordClick) {
@@ -3462,7 +3462,7 @@ function getDoubleClickSelection(event) {
 window.__blbSuiteResolveVerseCueContext = function(selectionText) {
   try {
     const selected = normalizeSelectionText(selectionText).normalize('NFKC');
-    if (!/^(?:v|verse|verses)$/i.test(normalizeDoubleClickToken(selected))) return null;
+    if (!/^(?:v|vs|verse|verses)$/i.test(normalizeDoubleClickToken(selected))) return null;
     const selection = window.getSelection?.();
     if (!selection?.rangeCount || selection.isCollapsed) return null;
     let target = selection.getRangeAt(0).commonAncestorContainer;
