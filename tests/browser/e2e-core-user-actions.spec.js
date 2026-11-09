@@ -323,6 +323,13 @@ test.describe('core user-action E2E coverage', () => {
   });
 
   test('selection containing a reference and authored prose opens MultiVerse and Criteria Search', async ({ page, extensionStorage, extensionWorker }) => {
+    const dashNormalization = await extensionWorker.evaluate(() => ({
+      prose:BLBSelectionTextHelpers.normalizeSelectedScriptureText('John 3:16 — free gift'),
+      range:BLBSelectionTextHelpers.normalizeSelectedScriptureText('John 3:16—18')
+    }));
+    expect(dashNormalization.prose).toBe('John 3:16 — free gift');
+    expect(dashNormalization.range).toBe('John 3:16-18');
+
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
