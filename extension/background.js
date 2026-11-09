@@ -1571,6 +1571,9 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
           return {ok:false, reason:'parallel-version-selectors-not-found', selectorCount:selects?.length || 0};
         }
 
+        // Do not race BLB's asynchronous Favorite Parallel Translation restore.
+        await waitForDomQuiet();
+
         const paneSelects = () => {
           const leftPane = document.getElementById('bodyCol1A');
           const rightPane = document.getElementById('bodyCol1B');
@@ -1580,6 +1583,28 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
             left: (leftPane && current.find(select => leftPane.contains(select))) || byPosition[0] || null,
             right: (rightPane && current.find(select => rightPane.contains(select))) || byPosition[byPosition.length - 1] || null
           };
+        };
+        // BLB applies the account/session's Favorite Parallel Translation asynchronously.
+        // Wait for its initial parallel-pane rendering to go quiet before overriding
+        // that preference with the version explicitly requested by the omnibox.
+        const waitForDomQuiet = async (quietMs = 1000, timeoutMs = 10000) => {
+          if (!document.body || typeof MutationObserver !== 'function') {
+            await new Promise(resolve => setTimeout(resolve, quietMs));
+            return false;
+          }
+          let lastMutation = Date.now();
+          const observer = new MutationObserver(() => { lastMutation = Date.now(); });
+          observer.observe(document.body, {subtree:true, childList:true, attributes:true, characterData:true});
+          const started = Date.now();
+          try {
+            while (Date.now() - started < timeoutMs) {
+              if (Date.now() - lastMutation >= quietMs) return true;
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            return false;
+          } finally {
+            observer.disconnect();
+          }
         };
         const waitForStable = async predicate => {
           let stableValue = null;
@@ -1638,19 +1663,40 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
         if (!panes.right || panes.left === panes.right) {
           return {ok:false, reason:'right-pane-selector-lost-after-left-selection'};
         }
-        const rightChange = setVersion(panes.right, versionCode);
+        let rightChange = setVersion(panes.right, versionCode);
         if (!rightChange.ok) {
           return {ok:false, reason:'requested-version-option-not-found-in-right-pane'};
         }
 
-        const rightReady = rightChange.changed
-          ? await waitForStable(() => {
-              const current = paneSelects();
-              const option = current.right && optionFor(current.right, versionCode);
-              return current.right && option &&
-                normalizeCode(current.right.value) === normalizeCode(option.value) ? current : null;
-            })
-          : paneSelects();
+        // BLB may finish applying its saved favorite after the first change.
+        // Wait for the pane update to settle, reacquire the live controls, and
+        // reassert both sides if the saved preference won the race.
+        await waitForDomQuiet();
+        panes = paneSelects();
+        if (!panes.left || !panes.right || panes.left === panes.right) {
+          return {ok:false, reason:'parallel-pane-selectors-lost-after-version-selection'};
+        }
+        const leftNow = optionFor(panes.left, 'kjv');
+        const rightNow = optionFor(panes.right, versionCode);
+        if (!leftNow || !rightNow) {
+          return {ok:false, reason:'parallel-requested-version-option-disappeared'};
+        }
+        if (normalizeCode(panes.left.value) !== normalizeCode(leftNow.value)) {
+          setVersion(panes.left, 'kjv');
+        }
+        if (normalizeCode(panes.right.value) !== normalizeCode(rightNow.value)) {
+          rightChange = setVersion(panes.right, versionCode);
+        }
+        await waitForDomQuiet();
+
+        const rightReady = await waitForStable(() => {
+          const current = paneSelects();
+          const leftOption = current.left && optionFor(current.left, 'kjv');
+          const rightOption = current.right && optionFor(current.right, versionCode);
+          return current.left && current.right && leftOption && rightOption &&
+            normalizeCode(current.left.value) === normalizeCode(leftOption.value) &&
+            normalizeCode(current.right.value) === normalizeCode(rightOption.value) ? current : null;
+        });
         if (!rightReady || !rightReady.left || !rightReady.right ||
             normalizeCode(rightReady.left.value) !== normalizeCode(optionFor(rightReady.left, 'kjv')?.value) ||
             normalizeCode(rightReady.right.value) !== normalizeCode(optionFor(rightReady.right, versionCode)?.value)) {
