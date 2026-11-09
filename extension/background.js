@@ -6857,7 +6857,12 @@ async function injectEnabledTabsForGrantedOrigins(origins) {
       origin === '*://*/*'
     );
     const redirectEnabled = data.redirectEnabled === true && await hasHostAccessForTab(tab);
-    const siteFeatureEnabled = grantCoversTab && (pageSites[key] === true || doubleSites[key] === true);
+    const hasSourcePageCollector = Object.prototype.hasOwnProperty.call(
+      globalThis.BLBSourcePageCollectorSites || {}, key
+    );
+    const siteFeatureEnabled = grantCoversTab && (
+      hasSourcePageCollector || pageSites[key] === true || doubleSites[key] === true
+    );
     if (redirectEnabled || siteFeatureEnabled) await ensureContentScriptInTab(tab.id);
   }
 }
@@ -6989,7 +6994,10 @@ chrome.permissions.onAdded.addListener(() => {
     for (const tab of tabs) {
       if (!tab?.id) continue;
       const key = pageSelectionSettingKeyFromTab(tab);
-      if (key && (data.pageSelectionButtonSites?.[key] === true || data.doubleClickBlbSites?.[key] === true)) {
+      const hasSourcePageCollector = Object.prototype.hasOwnProperty.call(
+        globalThis.BLBSourcePageCollectorSites || {}, key
+      );
+      if (key && (hasSourcePageCollector || data.pageSelectionButtonSites?.[key] === true || data.doubleClickBlbSites?.[key] === true)) {
         await ensureContentScriptInTab(tab.id);
       }
     }
