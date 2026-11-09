@@ -292,22 +292,22 @@ test.describe('core user-visible E2E', () => {
         }
         article.appendChild(p);
       };
-      add('Chapter reference: 1 Kings 18.');
+      add('Chapter reference: Matthew 26.');
       add('verse', 'matrix-verse-42'); article.lastChild.appendChild(document.createTextNode(' 42.'));
       add('verses', 'matrix-verses-44'); article.lastChild.appendChild(document.createTextNode(' 44.'));
       add('v', 'matrix-v-46'); article.lastChild.appendChild(document.createTextNode(' 46.'));
       add('Vs', 'matrix-vs-48'); article.lastChild.appendChild(document.createTextNode(' 48.'));
-      add('The next chapter is 1 Kings 19.');
+      add('The next chapter is Matthew 27.');
       add('verse', 'matrix-verse-18'); article.lastChild.appendChild(document.createTextNode(' 18.'));
       document.body.appendChild(article);
     });
 
     const cases = [
-      ['#matrix-verse-42', 'verse', '/kjv/1ki/18/42/'],
-      ['#matrix-verses-44', 'verses', '/kjv/1ki/18/44/'],
-      ['#matrix-v-46', 'v', '/kjv/1ki/18/46/'],
-      ['#matrix-vs-48', 'Vs', '/kjv/1ki/18/48/'],
-      ['#matrix-verse-18', 'verse', '/kjv/1ki/19/18/']
+      ['#matrix-verse-42', 'verse', '/kjv/mat/26/42/'],
+      ['#matrix-verses-44', 'verses', '/kjv/mat/26/44/'],
+      ['#matrix-v-46', 'v', '/kjv/mat/26/46/'],
+      ['#matrix-vs-48', 'Vs', '/kjv/mat/26/48/'],
+      ['#matrix-verse-18', 'verse', '/kjv/mat/27/18/']
     ];
     const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];
 
