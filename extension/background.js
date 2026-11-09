@@ -2797,10 +2797,10 @@ function contentScriptFilesForTab(tab, data) {
   const blbSite = key === BLB_HOSTNAME;
   // Source-page collection buttons are a distinct feature from per-site
   // selection actions. Their supported hosts come from the shared registry.
-  const hasSourcePageCollector = Object.prototype.hasOwnProperty.call(
+  const hasPageCollectorButton = Object.prototype.hasOwnProperty.call(
     globalThis.BLBSourcePageCollectorSites || {}, key
   );
-  const explicitSiteFeature = !sensitiveSite && (hasSourcePageCollector ||
+  const explicitSiteFeature = !sensitiveSite && (hasPageCollectorButton ||
     (blbSite ? pageSites[key] === true : (pageSites[key] === true || doubleSites[key] === true)));
   const redirectEnabled = data.redirectEnabled === true;
   const needsFullBundle = explicitSiteFeature || (redirectEnabled && isRedirectHostname(hostname));
@@ -6702,10 +6702,10 @@ async function shouldInjectContentScriptForTab(tab, data) {
   const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
-  const hasSourcePageCollector = Object.prototype.hasOwnProperty.call(
+  const hasPageCollectorButton = Object.prototype.hasOwnProperty.call(
     globalThis.BLBSourcePageCollectorSites || {}, key
   );
-  const explicitEnabled = !isSensitiveSiteUrl(tab.url) && (hasSourcePageCollector ||
+  const explicitEnabled = !isSensitiveSiteUrl(tab.url) && (hasPageCollectorButton ||
     (key === BLB_HOSTNAME ? pageSites[key] === true : (pageSites[key] === true || doubleSites[key] === true)));
 
   // Global Redirect External Bible Links is intentionally available on any
@@ -6861,11 +6861,11 @@ async function injectEnabledTabsForGrantedOrigins(origins) {
       origin === '*://*/*'
     );
     const redirectEnabled = data.redirectEnabled === true && await hasHostAccessForTab(tab);
-    const hasSourcePageCollector = Object.prototype.hasOwnProperty.call(
+    const hasPageCollectorButton = Object.prototype.hasOwnProperty.call(
       globalThis.BLBSourcePageCollectorSites || {}, key
     );
     const siteFeatureEnabled = grantCoversTab && (
-      hasSourcePageCollector || pageSites[key] === true || doubleSites[key] === true
+      hasPageCollectorButton || pageSites[key] === true || doubleSites[key] === true
     );
     if (redirectEnabled || siteFeatureEnabled) await ensureContentScriptInTab(tab.id);
   }
@@ -6998,10 +6998,10 @@ chrome.permissions.onAdded.addListener(() => {
     for (const tab of tabs) {
       if (!tab?.id) continue;
       const key = pageSelectionSettingKeyFromTab(tab);
-      const hasSourcePageCollector = Object.prototype.hasOwnProperty.call(
+      const hasPageCollectorButton = Object.prototype.hasOwnProperty.call(
         globalThis.BLBSourcePageCollectorSites || {}, key
       );
-      if (key && !isSensitiveSiteUrl(tab.url) && (hasSourcePageCollector || data.pageSelectionButtonSites?.[key] === true || data.doubleClickBlbSites?.[key] === true)) {
+      if (key && !isSensitiveSiteUrl(tab.url) && (hasPageCollectorButton || data.pageSelectionButtonSites?.[key] === true || data.doubleClickBlbSites?.[key] === true)) {
         await ensureContentScriptInTab(tab.id);
       }
     }
