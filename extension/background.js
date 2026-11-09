@@ -1571,30 +1571,76 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
           return {ok:false, reason:'parallel-version-selectors-not-found', selectorCount:selects?.length || 0};
         }
 
-        const leftPane = document.getElementById('bodyCol1A');
-        const rightPane = document.getElementById('bodyCol1B');
-        const byPosition = [...selects].sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
-        const leftSelect = (leftPane && selects.find(select => leftPane.contains(select))) || byPosition[0];
-        const rightSelect = (rightPane && selects.find(select => rightPane.contains(select))) || byPosition[byPosition.length - 1];
-        if (!leftSelect || !rightSelect || leftSelect === rightSelect) {
-          return {ok:false, reason:'parallel-pane-version-selectors-not-distinct'};
-        }
-
+        const paneSelects = () => {
+          const leftPane = document.getElementById('bodyCol1A');
+          const rightPane = document.getElementById('bodyCol1B');
+          const current = getVersionSelects();
+          const byPosition = [...current].sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+          return {
+            left: (leftPane && current.find(select => leftPane.contains(select))) || byPosition[0] || null,
+            right: (rightPane && current.find(select => rightPane.contains(select))) || byPosition[byPosition.length - 1] || null
+          };
+        };
         const setVersion = (select, code) => {
           const option = optionFor(select, code);
           if (!option) return false;
+          // Do not dispatch a change for a pane that is already correct. BLB
+          // may rebuild its parallel controls after a change, detaching the
+          // other pane's select element.
+          if (normalizeCode(select.value) === normalizeCode(option.value)) return true;
           select.value = option.value;
           select.dispatchEvent(new Event('input', {bubbles:true}));
           select.dispatchEvent(new Event('change', {bubbles:true}));
           return true;
         };
-        const leftSet = setVersion(leftSelect, 'kjv');
-        const rightSet = setVersion(rightSelect, versionCode);
+
+        let panes = paneSelects();
+        if (!panes.left || !panes.right || panes.left === panes.right) {
+          return {ok:false, reason:'parallel-pane-version-selectors-not-distinct'};
+        }
+
+        // KJV is normally already selected on the left. Only change it when
+        // needed, then reacquire both controls because BLB can rerender them.
+        if (!setVersion(panes.left, 'kjv')) {
+          return {ok:false, reason:'kjv-option-not-found-in-left-pane'};
+        }
+        if (normalizeCode(panes.left.value) !== normalizeCode(optionFor(panes.left, 'kjv')?.value)) {
+          const leftReady = await waitFor(() => {
+            const current = paneSelects();
+            return current.left && normalizeCode(current.left.value) === normalizeCode(optionFor(current.left, 'kjv')?.value)
+              ? current : null;
+          });
+          if (!leftReady) return {ok:false, reason:'left-pane-kjv-selection-did-not-stick'};
+        }
+
+        panes = paneSelects();
+        if (!panes.right || panes.left === panes.right) {
+          return {ok:false, reason:'right-pane-selector-lost-after-left-selection'};
+        }
+        if (!setVersion(panes.right, versionCode)) {
+          return {ok:false, reason:'requested-version-option-not-found-in-right-pane'};
+        }
+
+        const rightReady = await waitFor(() => {
+          const current = paneSelects();
+          const option = current.right && optionFor(current.right, versionCode);
+          return current.right && option &&
+            normalizeCode(current.right.value) === normalizeCode(option.value)
+            ? current : null;
+        });
+        if (!rightReady) {
+          const current = paneSelects();
+          return {
+            ok:false,
+            reason:'requested-version-selection-did-not-stick',
+            leftVersion:current.left?.value || '',
+            rightVersion:current.right?.value || ''
+          };
+        }
         return {
-          ok:leftSet && rightSet,
-          reason:leftSet && rightSet ? '' : 'requested-version-option-not-found',
-          leftVersion:leftSelect.value,
-          rightVersion:rightSelect.value
+          ok:true,
+          leftVersion:rightReady.left.value,
+          rightVersion:rightReady.right.value
         };
       }
     });
