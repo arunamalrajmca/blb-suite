@@ -22,7 +22,6 @@ export const featureSpecs = [
   {
     paths: ["extension/background.js"],
     specs: [
-      "tests/browser/startup-diagnostics.spec.js",
       "tests/browser/popup-master-toggle-regression.spec.js",
       "tests/browser/facebook-selection-parser.spec.js",
       "tests/browser/substack-selection-parser.spec.js",
@@ -138,7 +137,7 @@ export const featureSpecs = [
   }
 ];
 
-export const mappedSpecs = new Set(["tests/browser/startup-diagnostics.spec.js", "tests/browser/redirect-source-url-patterns.spec.js",
+export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.spec.js",
   "tests/browser/audit-defect-regressions.spec.js",
   "tests/browser/omnibox-boolean-operators.spec.js",
   "tests/browser/e2e-core-user-actions.spec.js",
