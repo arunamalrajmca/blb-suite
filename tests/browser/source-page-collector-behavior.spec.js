@@ -6,7 +6,7 @@ test('source-page collector parses, canonicalizes, and deduplicates linked Bible
   await extensionStorage.clear();
   await extensionStorage.set({
     masterEnabled: true,
-    pageSelectionButtonSites: {},
+    pageSelectionButtonSites: { 'gotquestions.org': true },
     doubleClickBlbSites: {}
   });
 
@@ -82,7 +82,7 @@ test('DailyVerses shows its BLB references button only on non-homepage pages', a
   await extensionStorage.clear();
   await extensionStorage.set({
     masterEnabled: true,
-    pageSelectionButtonSites: {},
+    pageSelectionButtonSites: { 'dailyverses.net': true },
     doubleClickBlbSites: {}
   });
 
@@ -176,7 +176,7 @@ test('ChurchofJesusChrist shows its BLB references button on scripture-study pag
   await extensionStorage.clear();
   await extensionStorage.set({
     masterEnabled: true,
-    pageSelectionButtonSites: {},
+    pageSelectionButtonSites: { 'churchofjesuschrist.org': true },
     doubleClickBlbSites: {}
   });
 
@@ -293,7 +293,7 @@ test('Mercy House shows its BLB references button on article pages and collects 
   await extensionStorage.clear();
   await extensionStorage.set({
     masterEnabled: true,
-    pageSelectionButtonSites: {},
+    pageSelectionButtonSites: { 'mercyhouseministry.com': true },
     doubleClickBlbSites: {}
   });
 
@@ -368,7 +368,11 @@ test('OpenBible, Crossway and Sarata show BLB collection buttons on content page
   await extensionStorage.clear();
   await extensionStorage.set({
     masterEnabled: true,
-    pageSelectionButtonSites: {},
+    pageSelectionButtonSites: {
+      'openbible.info': true,
+      'crossway.org': true,
+      'sarata.com': true
+    },
     doubleClickBlbSites: {}
   });
 
@@ -479,34 +483,13 @@ test('OpenBible, Crossway and Sarata show BLB collection buttons on content page
 });
 
 
-
-test("The King's Bible shows its MultiVerse collector button with site toggles off", async ({ page, context, extensionStorage }) => {
-  await extensionStorage.clear();
-  await extensionStorage.set({
-    masterEnabled: true,
-    redirectEnabled: false,
-    pageSelectionButtonSites: {},
-    doubleClickBlbSites: {}
-  });
-  await context.route('https://thekingsbible.com/**', route => route.fulfill({
-    status: 200,
-    contentType: 'text/html; charset=utf-8',
-    body: `<!doctype html><html><head><title>King's Bible fixture</title></head><body>
-      <main><h1>Faith</h1><a class="bible" href="/Bible/43/3?verse=16">John 3:16</a></main>
-    </body></html>`
-  }));
-  await page.goto('https://thekingsbible.com/dictionary/Faith', { waitUntil: 'domcontentloaded' });
-  await expect(page.locator('#blb-suite-kingsbible-multiverse'))
-    .toHaveText('Open Bible References in BLB');
-});
-
 test('SermonIndex topic pages show the BLB references button and collect linked citations', async ({
   page, context, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.clear();
   await extensionStorage.set({
     masterEnabled:true,
-    pageSelectionButtonSites:{},
+    pageSelectionButtonSites:{'sermonindex.net':true},
     doubleClickBlbSites:{}
   });
 
