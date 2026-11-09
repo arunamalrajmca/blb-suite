@@ -2033,3 +2033,34 @@ test('Facebook book clicks use only permitted immediate context', async ({ page,
   );
   expect(biblePaths).not.toContain('/kjv/2sa/21/14/');
 });
+
+test('Double-Click on Vs. resolves the following verse in the same article citation', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    doubleClickBlbSites: { 'supplyofgrace.com': true, 'www.supplyofgrace.com': true }
+  });
+  await page.route('https://www.supplyofgrace.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Rejoicing alway test</title></head><body></body></html>'
+  }));
+  await page.goto('https://www.supplyofgrace.com/p/rejoicing-alway', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(500);
+  await page.evaluate(() => {
+    const article = document.createElement('article');
+    article.innerHTML =
+      '<p id="sog-citation">1 Thessalonians 5:16 <span id="sog-vs">Vs.</span> 17</p>';
+    article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(article);
+  });
+
+  await page.locator('#sog-vs').dblclick();
+  const destination = await waitForTab(extensionWorker, tab => {
+    try {
+      const url = new URL(tab.pendingUrl || tab.url);
+      return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/1th/5/17/';
+    } catch (_) { return false; }
+  });
+  expect(new URL(destination.pendingUrl || destination.url).pathname).toBe('/kjv/1th/5/17/');
+  await removeTabById(extensionWorker, destination.id);
+});
