@@ -2975,15 +2975,15 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
       }]);
     }
 
-    // Christianity.com can attach native click handlers in the page's MAIN
-    // world. Register a tiny early guard separately; it delegates passage
-    // validation/opening to content.js and cancels native navigation only
-    // when the isolated-world resolver claims the link.
+    // Some source-page collectors need an early MAIN-world click guard.
+    // Keep that capability in the shared site registry rather than a second
+    // host allowlist in the injection code.
     let hostname = '';
     try { hostname = new URL(tab.url).hostname.toLowerCase().replace(/^www\./, ''); } catch (_) {}
-    if (['christianity.com','gotquestions.org','crosswalk.com','enduringword.com','churchofjesuschrist.org','mercyhouseministry.com','openbible.info','crossway.org','sarata.com'].includes(hostname) && files.includes('content.js')) {
+    const collectorConfig = globalThis.BLBSourcePageCollectorSites?.[hostname];
+    if (collectorConfig?.mainWorldClickGuard === true && files.includes('content.js')) {
       const mainWorldId = `${id}-main-world`;
-      const mainWorldFiles = ['redirect-christianity-main-world.js'];
+      const mainWorldFiles = ['source-page-collector-sites.js','redirect-christianity-main-world.js'];
       const registeredMain = await chrome.scripting.getRegisteredContentScripts({ids:[mainWorldId]});
       if (!registeredMain.length) {
         await chrome.scripting.registerContentScripts([{
@@ -3008,7 +3008,7 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
   } catch (error) {
     const errorDetails = describeScriptInjectionError(error);
     const patternFileChecks = await inspectPackagedScriptFiles(files);
-    const mainWorldFileChecks = await inspectPackagedScriptFiles(['redirect-christianity-main-world.js']);
+    const mainWorldFileChecks = await inspectPackagedScriptFiles(['source-page-collector-sites.js','redirect-christianity-main-world.js']);
     let registeredScripts = [];
     try {
       registeredScripts = await chrome.scripting.getRegisteredContentScripts();
@@ -3152,18 +3152,20 @@ async function ensureContentScriptInTab(tabId) {
       // A newly enabled site may already be open, so install the MAIN-world
       // guard in that current document too. The registration above covers
       // future navigations; the script's own marker makes this idempotent.
-      if (['christianity.com','gotquestions.org','crosswalk.com','enduringword.com','churchofjesuschrist.org','mercyhouseministry.com','openbible.info','crossway.org','sarata.com'].includes(normalizeSiteHostname(hostnameFromTabUrl(tab.url))) &&
-          files.includes('content.js')) {
+      const collectorConfig = globalThis.BLBSourcePageCollectorSites?.[
+        normalizeSiteHostname(hostnameFromTabUrl(tab.url))
+      ];
+      if (collectorConfig?.mainWorldClickGuard === true && files.includes('content.js')) {
         try {
           await chrome.scripting.executeScript({
             target:{tabId},
-            files:['redirect-christianity-main-world.js'],
+            files:['source-page-collector-sites.js','redirect-christianity-main-world.js'],
             world:'MAIN'
           });
         } catch (error) {
           if (isTabUnavailableError(error)) return false;
           console.error('KJV Scripture Tools MAIN-world script injection failed:', {
-            tabId, tabUrl:tab.url, files:['redirect-christianity-main-world.js'], error:String(error)
+            tabId, tabUrl:tab.url, files:['source-page-collector-sites.js','redirect-christianity-main-world.js'], error:String(error)
           });
           return false;
         }
