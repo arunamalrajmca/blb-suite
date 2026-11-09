@@ -1669,23 +1669,25 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
         }
 
         // BLB may finish applying its saved favorite after the first change.
-        // Wait for the pane update to settle, reacquire the live controls, and
-        // reassert both sides if the saved preference won the race.
-        await waitForDomQuiet();
-        panes = paneSelects();
-        if (!panes.left || !panes.right || panes.left === panes.right) {
-          return {ok:false, reason:'parallel-pane-selectors-lost-after-version-selection'};
-        }
-        const leftNow = optionFor(panes.left, 'kjv');
-        const rightNow = optionFor(panes.right, versionCode);
-        if (!leftNow || !rightNow) {
-          return {ok:false, reason:'parallel-requested-version-option-disappeared'};
-        }
-        if (normalizeCode(panes.left.value) !== normalizeCode(leftNow.value)) {
-          setVersion(panes.left, 'kjv');
-        }
-        if (normalizeCode(panes.right.value) !== normalizeCode(rightNow.value)) {
-          rightChange = setVersion(panes.right, versionCode);
+        // Keep enforcing the explicit request while that asynchronous preference
+        // restoration settles; reacquire selectors because BLB can rebuild panes.
+        const enforcementDeadline = Date.now() + 3000;
+        while (Date.now() < enforcementDeadline) {
+          panes = paneSelects();
+          if (panes.left && panes.right && panes.left !== panes.right) {
+            const leftOption = optionFor(panes.left, 'kjv');
+            const rightOption = optionFor(panes.right, versionCode);
+            if (!leftOption || !rightOption) {
+              return {ok:false, reason:'parallel-requested-version-option-disappeared'};
+            }
+            if (normalizeCode(panes.left.value) !== normalizeCode(leftOption.value)) {
+              setVersion(panes.left, 'kjv');
+            }
+            if (normalizeCode(panes.right.value) !== normalizeCode(rightOption.value)) {
+              rightChange = setVersion(panes.right, versionCode);
+            }
+          }
+          await new Promise(resolve => setTimeout(resolve, 200));
         }
         await waitForDomQuiet();
 
