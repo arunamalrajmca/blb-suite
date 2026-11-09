@@ -61,6 +61,70 @@ test.describe('remaining omnibox command routing', () => {
     ]);
   });
 
+  test('explicit omnibox versions request KJV-left parallel comparison instead of replacing KJV', async ({ extensionWorker }) => {
+    const result = await extensionWorker.evaluate(async () => {
+      const originalParallel = openBlbParallelVersion;
+      const originalRecordStudyEntry = recordStudyEntry;
+      const calls = [];
+      try {
+        openBlbParallelVersion = async (url, version, disposition) => {
+          calls.push({url, version, disposition});
+          return {ok:true};
+        };
+        recordStudyEntry = async () => {};
+        await handleBCommand('Rom2 2 NIV', 'newBackgroundTab');
+        await handleBCommand('Romans 2:2', 'currentTab');
+        return calls;
+      } finally {
+        openBlbParallelVersion = originalParallel;
+        recordStudyEntry = originalRecordStudyEntry;
+      }
+    });
+    expect(result).toEqual([{
+      url:'https://www.blueletterbible.org/kjv/rom/2/2/',
+      version:'niv',
+      disposition:'newBackgroundTab'
+    }]);
+  });
+
+  test('parallel-version setup targets the opened BLB tab and the native parallel toggle', async ({ extensionWorker }) => {
+    const result = await extensionWorker.evaluate(async () => {
+      const originalQuery = chrome.tabs.query;
+      const originalUpdate = chrome.tabs.update;
+      const originalWait = waitForTabTerminalLoad;
+      const originalExecute = chrome.scripting.executeScript;
+      let captured = null;
+      try {
+        chrome.tabs.query = async () => [{id:4321}];
+        chrome.tabs.update = async () => ({id:4321});
+        waitForTabTerminalLoad = async () => {};
+        chrome.scripting.executeScript = async options => {
+          captured = {
+            target:options.target,
+            args:options.args,
+            functionSource:String(options.func)
+          };
+          return [{result:{ok:true,leftVersion:'KJV',rightVersion:'NIV'}}];
+        };
+        const configured = await openBlbParallelVersion(
+          'https://www.blueletterbible.org/kjv/rom/2/2/', 'niv', 'currentTab'
+        );
+        return {configured,captured};
+      } finally {
+        chrome.tabs.query = originalQuery;
+        chrome.tabs.update = originalUpdate;
+        waitForTabTerminalLoad = originalWait;
+        chrome.scripting.executeScript = originalExecute;
+      }
+    });
+    expect(result.configured).toMatchObject({ok:true,leftVersion:'KJV',rightVersion:'NIV'});
+    expect(result.captured.target).toEqual({tabId:4321});
+    expect(result.captured.args).toEqual(['niv']);
+    expect(result.captured.functionSource).toContain('#pCol-toggleIcon');
+    expect(result.captured.functionSource).toContain('bodyCol1A');
+    expect(result.captured.functionSource).toContain('bodyCol1B');
+  });
+
   test('cs command is gated by the master switch and forwards the disposition', async ({ extensionWorker }) => {
     const result = await extensionWorker.evaluate(async () => {
       const originalIsSuiteEnabled = isSuiteEnabled;
