@@ -93,7 +93,7 @@ test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse coll
   assert(collector.includes('if (sourceSite === "sagacity")'), 'Sagacity links must prefer the linked BLB citation over malformed/nested captions');
   assert(collector.includes('targetUrl.searchParams.get("Criteria")'), 'Sagacity links must recover the full citation from BLB Criteria');
   assert(collector.includes('targetHost === "blueletterbible.org"'), 'Criteria extraction must be restricted to BLB links');
-  assert(collector.includes('/^\\/search\\/preSearch\.cfm$/i.test(targetUrl.pathname)'), 'Criteria extraction must be limited to the BLB preSearch endpoint');
+  assert(collector.includes('/^\\/search\\/preSearch\\.cfm$/i.test(targetUrl.pathname)'), 'Criteria extraction must be limited to the BLB preSearch endpoint');
   assert(collector.includes('String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")'), 'plus signs in BLB Criteria must decode to spaces');
   const background = read('background.js');
   assert(background.includes("'source-page-collector-sites.js'"), 'background must import the shared collector registry');
