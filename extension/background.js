@@ -3817,7 +3817,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
               '(?<![A-Za-z0-9])' +
               escapePattern(clean).replace(/\s+/g, '\\s+') +
               bookBoundary +
-              '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?(?!\\d)',
+              '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?(?!\\d)(?!\\s*-)',
               'gi'
             )
           });
@@ -4081,7 +4081,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // Pass 1b: ordinary single-verse references. Ranges and comma lists have
   // already been handled above, so this expression cannot swallow their
   // endpoints and reduce them to only the first verse.
-  const colonRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)(?!\d)(?!\s*-\s*\d)(?!\s*,\s*\d+(?:\s*$|\s*[,;]))/gi;
+  const colonRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)(?!\d)(?!\s*-)(?!\s*,\s*\d+(?:\s*$|\s*[,;]))/gi;
   while ((m = colonRe.exec(source))) {
     if (isShadowedBookMatch(m.index)) continue;
     const rawBook = m[1].trim();
