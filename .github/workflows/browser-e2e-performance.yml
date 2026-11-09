@@ -235,13 +235,19 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium
 
+      - name: Fetch current main baseline
+        id: corpus-baseline
+        run: |
+          git fetch origin main --no-tags --depth=1
+          echo "sha=$(git rev-parse origin/main)" >> "$GITHUB_OUTPUT"
+
       - name: Run 15-pair corpus cold-start A/B benchmark
         env:
           BLB_PERF_OUTPUT: ${{ runner.temp }}/blb-corpus-ab-results.jsonl
-          BLB_CORPUS_BASELINE_SHA: 81887b46c9c6918f53b8155741dc535aa8192bf0
+          BLB_CORPUS_BASELINE_SHA: ${{ steps.corpus-baseline.outputs.sha }}
         run: |
           : > "$BLB_PERF_OUTPUT"
-          npx playwright test tests/browser/kjv-corpus-lazy-loading.spec.js --grep "interleaved 15-pair cold-start and first-corpus-use A/B against the pre-lazy baseline" --workers=1 --reporter=line
+          npx playwright test tests/browser/kjv-corpus-lazy-loading.spec.js --grep "interleaved 15-pair cold-start and first-corpus-use A/B against current main" --workers=1 --reporter=line
           test -s "$BLB_PERF_OUTPUT"
           echo "## KJV corpus lazy-load A/B results" >> "$GITHUB_STEP_SUMMARY"
           printf '```json\n' >> "$GITHUB_STEP_SUMMARY"
