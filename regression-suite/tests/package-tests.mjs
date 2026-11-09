@@ -83,9 +83,11 @@ test('no optional host-permission regression', () => {
 
 test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse collector', () => {
   const collector = read('source-page-collector.js');
-  assert(collector.includes('"rediscover.bible":"rediscover"'));
-  assert(collector.includes('"sagacityweb.com":"sagacity"'));
-  assert(collector.includes('"thetreasuryofscriptureknowledge.com":"treasury"'));
+  const registry = read('source-page-collector-sites.js');
+  assert(registry.includes('"rediscover.bible":"rediscover"'));
+  assert(registry.includes('"sagacityweb.com":"sagacity"'));
+  assert(registry.includes('"thetreasuryofscriptureknowledge.com":"treasury"'));
+  assert(collector.includes('BLBSourcePageCollectorSites?.[host]'), 'collector must use the shared site registry');
   assert(collector.includes('if (sourceSite && !isSourceHomepage)'));
   assert(collector.includes('document.querySelectorAll("a[href]")'));
   assert(collector.includes('if (sourceSite === "sagacity")'), 'Sagacity links must prefer the linked BLB citation over malformed/nested captions');
@@ -94,7 +96,8 @@ test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse coll
   assert(collector.includes('/^\\/search\\/preSearch\\.cfm$/i.test(targetUrl.pathname)'), 'Criteria extraction must be limited to the BLB preSearch endpoint');
   assert(collector.includes('String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")'), 'plus signs in BLB Criteria must decode to spaces');
   const background = read('background.js');
-  assert(background.includes("'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com'"));
+  assert(background.includes("'source-page-collector-sites.js'"), 'background must import the shared collector registry');
+  assert(background.includes('BLBSourcePageCollectorSites || {}'), 'runtime injection must consult the shared collector registry');
 });
 
 test('Rediscover, Sagacity, and TSK use optional access and dynamic injection only', () => {
