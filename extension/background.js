@@ -1739,6 +1739,9 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
       }
     });
     const result = executions?.[0]?.result || {ok:false, reason:'parallel-setup-returned-no-result'};
+    if (result.diagnostics) {
+      console.info('[KJV Scripture Tools] Explicit Parallel translation diagnostics: ' + JSON.stringify(result.diagnostics));
+    }
     if (!result.ok) {
       console.warn('[KJV Scripture Tools] Unable to configure BLB Parallel Bible view: ' + JSON.stringify(result));
     }
