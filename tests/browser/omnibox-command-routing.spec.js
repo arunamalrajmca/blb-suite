@@ -165,6 +165,19 @@ test.describe('remaining omnibox command routing', () => {
       return configure('niv');
     }, result.captured.functionSource);
     expect(applied).toMatchObject({ok:true,leftVersion:'KJV',rightVersion:'NIV'});
+    expect(applied.diagnostics).toMatchObject({
+      url:'about:blank',
+      leftPane:{id:'bodyCol1A'},
+      rightPane:{id:'bodyCol1B'}
+    });
+    expect(applied.diagnostics.candidateSelects).toHaveLength(2);
+    expect(applied.diagnostics.rightPane.selects[0]).toMatchObject({
+      id:'right-version',
+      value:'NIV',
+      selectedText:'New International Version',
+      paneId:'bodyCol1B',
+      visible:true
+    });
     await expect(page.locator('#right-version')).toHaveValue('NIV');
   });
 
