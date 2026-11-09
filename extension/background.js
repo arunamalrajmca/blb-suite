@@ -3853,7 +3853,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     // ("John 3:16 — free gift"), not an incomplete verse range. Normalize
     // dash characters only when they introduce a numeric range endpoint;
     // preserving prose punctuation lets the reference regex retain the verse.
-    .replace(/[\u2010\u2011\u2012\u2013\u2014](?=\s*\d)/g, '-');
+    .replace(/[\u2010-\u2015\u2212](?=\s*\d)/g, '-');
 
   const addRef = (book, chapter, from, to, originalText) => {
     if (!book || !Number.isInteger(chapter) || !Number.isInteger(from) || !Number.isInteger(to)) return;
