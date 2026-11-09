@@ -279,7 +279,9 @@ test.describe('On-demand normalized KJV corpus loading', () => {
     });
 
     expect(result.firstAttemptFailed).toBe(true);
-    expect(result.requests).toBe(5);
+    // The word index succeeds during the first parallel attempt and is retained;
+    // only the failed verse asset is retried.
+    expect(result.requests).toBe(4);
     expect(result.versesLoaded).toBe(true);
     expect(result.indexLoaded).toBe(true);
   });
