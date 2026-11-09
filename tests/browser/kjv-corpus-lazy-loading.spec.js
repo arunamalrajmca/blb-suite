@@ -307,14 +307,14 @@ test('lazy corpus is reloaded correctly after a service-worker restart', async (
 });
 
 
-test('interleaved 15-pair cold-start and first-corpus-use A/B against the pre-lazy baseline', async () => {
+test('interleaved 15-pair cold-start and first-corpus-use A/B against current main', async () => {
   // Keep ordinary browser suites fast; only the dedicated performance job
   // supplies BLB_PERF_OUTPUT and runs the paired benchmark.
   test.skip(!process.env.BLB_PERF_OUTPUT, 'runs only in the dedicated performance qualification job');
   test.setTimeout(300000);
 
   const repoRoot = path.resolve(__dirname, '../..');
-  const baselineRef = process.env.BLB_CORPUS_BASELINE_SHA || '81887b46c9c6918f53b8155741dc535aa8192bf0';
+  const baselineRef = process.env.BLB_CORPUS_BASELINE_SHA || 'main';
   execFileSync('git', ['fetch', '--depth=1', 'origin', baselineRef], { cwd: repoRoot, stdio: 'pipe' });
   const baselineSha = execFileSync('git', ['rev-parse', 'FETCH_HEAD'], {
     cwd: repoRoot, encoding: 'utf8'
@@ -342,6 +342,16 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against the pre-la
     maxBuffer: 100 * 1024 * 1024
   });
   execFileSync('tar', ['-xf', '-', '-C', baselineRoot], { cwd: repoRoot, input: archive });
+  const baselineExtension = path.join(baselineRoot, 'extension');
+  execFileSync(process.execPath, [
+    path.resolve(repoRoot, 'scripts/generate-kjv-gzip-assets.cjs'),
+    baselineExtension
+  ], { cwd: repoRoot, stdio: 'pipe' });
+  const baselineAssets = [
+    'kjv-corpus-verses.json.gz',
+    'kjv-corpus-word-verse-index.json.gz',
+    'kjv-corpus-phrase-index.json.gz'
+  ].map(file => ({ file, bytes: fs.statSync(path.join(baselineExtension, file)).size }));
   const variants = {
     baseline: path.join(baselineRoot, 'extension'),
     candidate: candidateRoot
@@ -543,18 +553,29 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against the pre-la
         const corpusStillLoadedAfterFastPaths = typeof KJV_CORPUS_VERSES !== 'undefined'
           && typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined';
 
-        // Start with a short exact phrase on a genuinely cold corpus. This
-        // first operation must load both the verse corpus and phrase index.
-        const firstPhraseStartedAt = performance.now();
+        // This whitelisted short phrase needs the verse corpus and word index,
+        // but not the generated phrase index. It isolates the first corpus use.
+        const firstCorpusStartedAt = performance.now();
         const phrase = await classifySelectionForBlb('God is love');
-        const firstPhraseUseMs = performance.now() - firstPhraseStartedAt;
+        const firstCorpusUseMs = performance.now() - firstCorpusStartedAt;
         const firstUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
+        const phraseIndexLoadedAfterFirstCorpusUse = !!KJV_CORPUS_PHRASE_INDEX;
+
+        // This generated two-word phrase genuinely depends on phrase-index
+        // membership. Measure its cold on-demand load separately.
+        const firstPhraseIndexStartedAt = performance.now();
+        const indexedPhrase = await classifySelectionForBlb('good conscience');
+        const firstPhraseIndexUseMs = performance.now() - firstPhraseIndexStartedAt;
+        const allPhraseIndexEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
+        const phraseIndexUseProfileEvents = allPhraseIndexEvents.slice(firstUseProfileEvents.length);
+        const phraseIndexLoadedAfterFirstPhraseIndexUse = !!KJV_CORPUS_PHRASE_INDEX;
 
         // A longer KJV passage is now a warm corpus/phrase-index operation.
         const warmStartedAt = performance.now();
         const passage = await classifySelectionForBlb('For God so loved the world');
         const warmCorpusUseMs = performance.now() - warmStartedAt;
-        const phraseUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
+        const warmUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])]
+          .slice(allPhraseIndexEvents.length);
 
         return {
           variant,
@@ -569,12 +590,15 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against the pre-la
           corpusStillLoadedAfterFastPaths,
           corpusLoadedAfterFirstUse: typeof KJV_CORPUS_VERSES !== 'undefined'
             && typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined',
-          phraseIndexLoadedAfterFirstUse: !!KJV_CORPUS_PHRASE_INDEX,
+          phraseIndexLoadedAfterFirstCorpusUse,
+          phraseIndexLoadedAfterFirstPhraseIndexUse,
           referenceType: reference.type,
           wordType: word.type,
           passageType: passage.type,
           phraseType: phrase.type,
           phraseQuery: phrase.kjvPassageQuery || phrase.text,
+          indexedPhraseType: indexedPhrase.type,
+          indexedPhraseQuery: indexedPhrase.kjvPassageQuery || indexedPhrase.text,
           passageRef: passage.directRef ? {
             book: passage.directRef.book,
             chapter: passage.directRef.chapter,
@@ -583,11 +607,12 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against the pre-la
           } : null,
           referenceOnlyMs,
           singleWordMs,
-          firstCorpusUseMs: firstPhraseUseMs,
+          firstCorpusUseMs,
           firstUseProfileEvents,
+          firstPhraseIndexUseMs,
+          phraseIndexUseProfileEvents,
           warmCorpusUseMs,
-          firstPhraseUseMs,
-          phraseUseProfileEvents
+          warmUseProfileEvents
         };
       }, { variant, repetition });
     } finally {
@@ -615,10 +640,10 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against the pre-la
     const sorted = [...values].sort((a, b) => a - b);
     return sorted[Math.floor(sorted.length / 2)];
   };
-  const profileMedian = (rows, phase, filePart = '') => {
-    const values = rows.flatMap(row => row.firstUseProfileEvents
+  const profileMedian = (rows, phase, filePart = '', eventKeys = ['firstUseProfileEvents']) => {
+    const values = rows.flatMap(row => eventKeys.flatMap(key => (row[key] || [])
       .filter(event => event.phase === phase && (!filePart || String(event.file || '').includes(filePart)))
-      .map(event => event.durationMs));
+      .map(event => event.durationMs)));
     return values.length ? median(values) : null;
   };
   const summarize = variant => {
@@ -631,7 +656,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against the pre-la
       singleWordMs: median(rows.map(row => row.singleWordMs)),
       firstCorpusUseMs: median(rows.map(row => row.firstCorpusUseMs)),
       warmCorpusUseMs: median(rows.map(row => row.warmCorpusUseMs)),
-      firstPhraseUseMs: median(rows.map(row => row.firstPhraseUseMs)),
+      firstPhraseIndexUseMs: median(rows.map(row => row.firstPhraseIndexUseMs)),
       profile: {
         verses: {
           fetchMs: profileMedian(rows, 'packaged-gzip-fetch', 'kjv-corpus-verses'),
@@ -644,10 +669,10 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against the pre-la
           jsonParseMs: profileMedian(rows, 'packaged-gzip-json-parse', 'kjv-corpus-word-verse-index')
         },
         phraseIndex: {
-          fetchMs: profileMedian(rows, 'packaged-gzip-fetch', 'kjv-corpus-phrase-index'),
-          decompressReadMs: profileMedian(rows, 'packaged-gzip-decompress-read', 'kjv-corpus-phrase-index'),
-          jsonParseMs: profileMedian(rows, 'packaged-gzip-json-parse', 'kjv-corpus-phrase-index'),
-          validationAndFreezeMs: profileMedian(rows, 'phrase-index-validation-freeze')
+          fetchMs: profileMedian(rows, 'packaged-gzip-fetch', 'kjv-corpus-phrase-index', ['firstUseProfileEvents', 'phraseIndexUseProfileEvents']),
+          decompressReadMs: profileMedian(rows, 'packaged-gzip-decompress-read', 'kjv-corpus-phrase-index', ['firstUseProfileEvents', 'phraseIndexUseProfileEvents']),
+          jsonParseMs: profileMedian(rows, 'packaged-gzip-json-parse', 'kjv-corpus-phrase-index', ['firstUseProfileEvents', 'phraseIndexUseProfileEvents']),
+          validationAndFreezeMs: profileMedian(rows, 'phrase-index-validation-freeze', '', ['firstUseProfileEvents', 'phraseIndexUseProfileEvents'])
         },
         corpusValidationMs: profileMedian(rows, 'corpus-data-validation'),
         wordVerseIndexBuildMs: profileMedian(rows, 'word-verse-index-build'),
@@ -673,6 +698,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against the pre-la
       deltaMs: {
         startup: candidate.startupToFirstEvaluationMs - baseline.startupToFirstEvaluationMs,
         firstCorpusUse: candidate.firstCorpusUseMs - baseline.firstCorpusUseMs,
+        firstPhraseIndexUse: candidate.firstPhraseIndexUseMs - baseline.firstPhraseIndexUseMs,
         combinedStartupToFirstUse: candidateCombinedMs - baselineCombinedMs,
         warmCorpusUse: candidate.warmCorpusUseMs - baseline.warmCorpusUseMs,
         referenceOnly: candidate.referenceOnlyMs - baseline.referenceOnlyMs,
@@ -681,6 +707,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against the pre-la
       percentChange: {
         startup: percentChange(baseline.startupToFirstEvaluationMs, candidate.startupToFirstEvaluationMs),
         firstCorpusUse: percentChange(baseline.firstCorpusUseMs, candidate.firstCorpusUseMs),
+        firstPhraseIndexUse: percentChange(baseline.firstPhraseIndexUseMs, candidate.firstPhraseIndexUseMs),
         combinedStartupToFirstUse: percentChange(baselineCombinedMs, candidateCombinedMs),
         warmCorpusUse: percentChange(baseline.warmCorpusUseMs, candidate.warmCorpusUseMs)
       }
@@ -691,6 +718,8 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against the pre-la
     startupPercentChange: median(pairedChanges.map(pair => pair.percentChange.startup)),
     firstCorpusUseDeltaMs: median(pairedChanges.map(pair => pair.deltaMs.firstCorpusUse)),
     firstCorpusUsePercentChange: median(pairedChanges.map(pair => pair.percentChange.firstCorpusUse)),
+    firstPhraseIndexUseDeltaMs: median(pairedChanges.map(pair => pair.deltaMs.firstPhraseIndexUse)),
+    firstPhraseIndexUsePercentChange: median(pairedChanges.map(pair => pair.percentChange.firstPhraseIndexUse)),
     combinedStartupToFirstUseDeltaMs: median(pairedChanges.map(pair => pair.deltaMs.combinedStartupToFirstUse)),
     combinedStartupToFirstUsePercentChange: median(pairedChanges.map(pair => pair.percentChange.combinedStartupToFirstUse)),
     warmCorpusUseDeltaMs: median(pairedChanges.map(pair => pair.deltaMs.warmCorpusUse))
@@ -699,6 +728,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against the pre-la
   const summary = {
     baselineSha,
     candidateSha,
+    baselineAssets,
     candidateAssets,
     baseline: summarize('baseline'),
     candidate: summarize('candidate'),
@@ -720,23 +750,31 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against the pre-la
     // for both variants; only the data-loading timing is allowed to differ.
     expect(sample.phraseType).toBe('KJV_PASSAGE');
     expect(sample.phraseQuery).toBeTruthy();
+    expect(sample.indexedPhraseType).toBe('KJV_PASSAGE');
+    expect(sample.indexedPhraseQuery).toContain('good conscience');
     expect(sample.passageRef).toEqual({ book: 'john', chapter: 3, from: 16, to: 16 });
     const isLazyCandidate = sample.variant === 'candidate';
-    // The fixed pre-lazy baseline eagerly imports both large corpus resources;
-    // the candidate must keep them out of startup and reference/single-word paths.
-    expect(sample.corpusLoadedAtStartup).toBe(!isLazyCandidate);
-    expect(sample.corpusStillLoadedAfterFastPaths).toBe(!isLazyCandidate);
+    // Both current main and the candidate keep the large corpus out of startup
+    // and direct-reference/single-word fast paths. The candidate additionally
+    // defers the generated phrase index until a selection needs its membership.
+    expect(sample.corpusLoadedAtStartup).toBe(false);
+    expect(sample.corpusStillLoadedAfterFastPaths).toBe(false);
     expect(sample.corpusLoadedAfterFirstUse).toBe(true);
-    expect(sample.phraseIndexLoadedAfterFirstUse).toBe(true);
+    expect(sample.phraseIndexLoadedAfterFirstCorpusUse).toBe(!isLazyCandidate);
+    expect(sample.phraseIndexLoadedAfterFirstPhraseIndexUse).toBe(true);
     if (isLazyCandidate) {
-      const gzipFiles = new Set(sample.firstUseProfileEvents
+      const firstCorpusGzipFiles = new Set(sample.firstUseProfileEvents
         .filter(event => event.phase === 'packaged-gzip-fetch')
         .map(event => event.file));
-      expect([...gzipFiles]).toEqual(expect.arrayContaining([
+      expect([...firstCorpusGzipFiles]).toEqual(expect.arrayContaining([
         'kjv-corpus-verses.json.gz',
-        'kjv-corpus-word-verse-index.json.gz',
-        'kjv-corpus-phrase-index.json.gz'
+        'kjv-corpus-word-verse-index.json.gz'
       ]));
+      expect(firstCorpusGzipFiles.has('kjv-corpus-phrase-index.json.gz')).toBe(false);
+      const phraseIndexGzipFiles = new Set(sample.phraseIndexUseProfileEvents
+        .filter(event => event.phase === 'packaged-gzip-fetch')
+        .map(event => event.file));
+      expect(phraseIndexGzipFiles.has('kjv-corpus-phrase-index.json.gz')).toBe(true);
       expect(sample.firstUseProfileEvents.some(event => event.phase === 'packaged-gzip-decompress-read')).toBe(true);
       expect(sample.firstUseProfileEvents.some(event => event.phase === 'packaged-gzip-json-parse')).toBe(true);
       expect(sample.firstUseProfileEvents.some(event => event.phase === 'packaged-json-read')).toBe(false);
