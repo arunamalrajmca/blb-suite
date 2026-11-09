@@ -4609,20 +4609,11 @@ function isMeaningfulShortKjvPassage(text, wordCount, phraseIndexContext = null)
     if (!KJV_CORPUS_PHRASE_INDEX && phraseIndexContext) {
       phraseIndexContext.needsPhraseIndex = true;
     }
-    return KJV_CORPUS_PHRASE_INDEX && isGeneratedKjvPhraseCandidate(words);
+    return Boolean(KJV_CORPUS_PHRASE_INDEX && isGeneratedKjvPhraseCandidate(words));
   }
-  if (stopCount > 1) {
-    if (!KJV_CORPUS_PHRASE_INDEX && phraseIndexContext) {
-      phraseIndexContext.needsPhraseIndex = true;
-    }
-    return false;
-  }
+  if (stopCount > 1) return false;
   const contentWords = words.filter(w => !KJV_PASSAGE_STOPWORDS.has(w));
-  const meaningful = contentWords.some(w => !KJV_PASSAGE_GENERIC_WORDS.has(w));
-  if (!meaningful && !KJV_CORPUS_PHRASE_INDEX && phraseIndexContext) {
-    phraseIndexContext.needsPhraseIndex = true;
-  }
-  return meaningful;
+  return contentWords.some(w => !KJV_PASSAGE_GENERIC_WORDS.has(w));
 }
 
 
