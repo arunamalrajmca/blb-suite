@@ -481,6 +481,21 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     source = source.replace(rangeCall,
       "    const __blbRangeStarted = performance.now();\n" + rangeCall +
       "\n    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'downstream-corpus-classification', durationMs: performance.now() - __blbRangeStarted });");
+    const shortPhraseCall = "if (findExactKjvPhraseInLoadedCorpus(shortPhraseWords)) {";
+    if (source.includes(shortPhraseCall)) {
+      source = source.replace(shortPhraseCall,
+        "const __blbShortPhraseStarted = performance.now();\n"
+        + "const __blbShortPhraseMatch = findExactKjvPhraseInLoadedCorpus(shortPhraseWords);\n"
+        + "globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'short-whitelist-exact-verification', durationMs: performance.now() - __blbShortPhraseStarted });\n"
+        + "if (__blbShortPhraseMatch) {");
+    }
+    const criteriaExtractionCall = "passageQuery = extractKjvPassageSearchQuery(remainingText, excludedVerseTexts);";
+    if (source.includes(criteriaExtractionCall)) {
+      source = source.replace(criteriaExtractionCall,
+        "const __blbCriteriaExtractionStarted = performance.now();\n"
+        + criteriaExtractionCall + "\n"
+        + "globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'criteria-passage-extraction', durationMs: performance.now() - __blbCriteriaExtractionStarted });");
+    }
     fs.writeFileSync(backgroundPath, source);
   };
   instrument(variants.baseline);
