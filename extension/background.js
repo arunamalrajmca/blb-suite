@@ -2793,7 +2793,11 @@ function contentScriptFilesForTab(tab, data) {
     ? data.doubleClickBlbSites : {};
   const sensitiveSite = isSensitiveSiteUrl(tab?.url || hostname);
   const blbSite = key === BLB_HOSTNAME;
-  const explicitSiteFeature = !sensitiveSite && (blbSite ? pageSites[key] === true : (pageSites[key] === true || doubleSites[key] === true));
+  // SermonIndex's page-wide reference collection button is independent
+  // of the per-site Show on BLB / Double-Click preferences.
+  const sermonIndexCollector = key === 'sermonindex.net';
+  const explicitSiteFeature = !sensitiveSite && (sermonIndexCollector ||
+    (blbSite ? pageSites[key] === true : (pageSites[key] === true || doubleSites[key] === true)));
   const redirectEnabled = data.redirectEnabled === true;
   const needsFullBundle = explicitSiteFeature || (redirectEnabled && isRedirectHostname(hostname));
   if (needsFullBundle && redirectEnabled) {
@@ -6692,7 +6696,11 @@ async function shouldInjectContentScriptForTab(tab, data) {
   const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
-  const explicitEnabled = !isSensitiveSiteUrl(tab.url) && (key === BLB_HOSTNAME ? pageSites[key] === true : (pageSites[key] === true || doubleSites[key] === true));
+  // SermonIndex's reference-collection button is independent of the site's
+  // Show on BLB and Double-Click preferences.
+  const sermonIndexCollector = key === 'sermonindex.net';
+  const explicitEnabled = !isSensitiveSiteUrl(tab.url) && (sermonIndexCollector ||
+    (key === BLB_HOSTNAME ? pageSites[key] === true : (pageSites[key] === true || doubleSites[key] === true)));
 
   // Global Redirect External Bible Links is intentionally available on any
   // HTTP(S) host for which the user granted host access. Do not limit runtime
