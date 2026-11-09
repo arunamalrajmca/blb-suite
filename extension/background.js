@@ -1689,10 +1689,52 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
             rightVersion:current.right?.value || ''
           };
         }
+        const describeSelect = select => {
+          if (!select) return null;
+          const rect = select.getBoundingClientRect();
+          return {
+            id:select.id || '',
+            name:select.name || '',
+            className:typeof select.className === 'string' ? select.className : '',
+            value:select.value || '',
+            selectedText:select.selectedOptions?.[0]?.textContent?.trim() || '',
+            optionValues:Array.from(select.options || []).map(option => ({
+              value:option.value,
+              text:option.textContent.trim()
+            })),
+            paneId:select.closest('#bodyCol1A, #bodyCol1B')?.id || '',
+            visible:!!(rect.width && rect.height && getComputedStyle(select).visibility !== 'hidden'),
+            rect:{left:Math.round(rect.left),top:Math.round(rect.top),width:Math.round(rect.width),height:Math.round(rect.height)},
+            outerHTML:select.outerHTML.slice(0,1200)
+          };
+        };
+        const describePane = id => {
+          const pane = document.getElementById(id);
+          if (!pane) return null;
+          return {
+            id,
+            className:typeof pane.className === 'string' ? pane.className : '',
+            text:(pane.innerText || '').trim().slice(0,350),
+            selects:Array.from(pane.querySelectorAll('select')).map(describeSelect)
+          };
+        };
+        const diagnostics = {
+          url:location.href,
+          title:document.title,
+          parallelToggle:{
+            exists:!!document.querySelector('#pCol-toggleIcon'),
+            ariaExpanded:document.querySelector('#pCol-toggleIcon')?.getAttribute('aria-expanded') || '',
+            className:document.querySelector('#pCol-toggleIcon')?.className || ''
+          },
+          candidateSelects:Array.from(document.querySelectorAll('select')).map(describeSelect),
+          leftPane:describePane('bodyCol1A'),
+          rightPane:describePane('bodyCol1B')
+        };
         return {
           ok:true,
           leftVersion:rightReady.left.value,
-          rightVersion:rightReady.right.value
+          rightVersion:rightReady.right.value,
+          diagnostics
         };
       }
     });
