@@ -5,6 +5,7 @@ const vm = require('node:vm');
 
 const background = fs.readFileSync(path.resolve(__dirname, '../../extension/background.js'), 'utf8');
 const sharedRegexPatterns = fs.readFileSync(path.resolve(__dirname, '../../extension/regex-patterns.js'), 'utf8');
+const sourcePageCollectorSites = fs.readFileSync(path.resolve(__dirname, '../../extension/source-page-collector-sites.js'), 'utf8');
 const scriptTaggerScript = fs.readFileSync(path.resolve(__dirname, '../../extension/redirect-scripttagger.js'), 'utf8');
 
 function runBlbUrlNormalizer() {
@@ -144,8 +145,23 @@ test('global redirect uses the minimal handlers on ordinary sites and the full b
   };
   context.globalThis = context;
   vm.runInNewContext(sharedRegexPatterns, context);
+  vm.runInNewContext(sourcePageCollectorSites, context);
   context.isSensitiveSiteUrl = value => context.BLBShared.isSensitiveSiteUrl(value);
   vm.runInNewContext(background.slice(start, end), context);
+
+  const collectorHosts = Object.keys(context.BLBSourcePageCollectorSites);
+  expect(collectorHosts.length).toBeGreaterThan(0);
+  for (const host of collectorHosts) {
+    const files = Array.from(context.contentScriptFilesForTab(
+      {url:`https://${host}/article`},
+      {redirectEnabled:false,pageSelectionButtonSites:{},doubleClickBlbSites:{}}
+    ));
+    expect(files, `${host} must receive the shared collector bundle without per-site toggles`)
+      .toContain('source-page-collector.js');
+  }
+  expect(context.BLBSourcePageCollectorSites['sermonindex.net'].mainWorldClickGuard).not.toBe(true);
+  expect(context.BLBSourcePageCollectorSites['gotquestions.org'].mainWorldClickGuard).toBe(true);
+
   // Rediscover and Sagacity use the existing full content bundle because it
   // contains the current-page MultiVerse collector. They still use dynamic,
   // optional host access rather than manifest-wide site permissions.
