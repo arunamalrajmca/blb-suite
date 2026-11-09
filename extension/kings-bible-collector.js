@@ -16,8 +16,10 @@ globalThis.BLBKingsBibleCollector = Object.freeze({
 // ---------- The King's Bible Dictionary/Concordance MultiVerse ----------
 const kingsBibleEntryPath = location.pathname.replace(/\/{2,}/g, "/");
 const kingsBibleEntryMatch = kingsBibleEntryPath.match(/^\/(dictionary|concordance)\/[^/]+(?:\/\d+)?\/?$/i);
-if (location.hostname?.toLowerCase().replace(/^www\./, "") === "thekingsbible.com" &&
-    kingsBibleEntryMatch) {
+const kingsBibleCollectorConfig = globalThis.BLBSourcePageCollectorSites?.[
+  location.hostname?.toLowerCase().replace(/^www\./, "")
+];
+if (kingsBibleCollectorConfig?.collectorModule === "kings-bible" && kingsBibleEntryMatch) {
   const kingsBibleEntryType = kingsBibleEntryMatch[1].toLowerCase();
   function collectKingsBibleReferences(sourceDocument = document, sourceUrl = location.href) {
     const refs = [];

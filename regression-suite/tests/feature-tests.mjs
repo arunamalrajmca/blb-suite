@@ -63,7 +63,8 @@ export function registerFeatureIntegrationTests(context) {
 section('features');
 test('Webster 1828 path remains wired', () => {
   const content = read('content.js'), webster = read('webster-collector.js'), bg = read('background.js');
-  assert(webster.includes('webstersdictionary1828.com'), 'Webster host missing');
+  assert(read('source-page-collector-sites.js').includes('"webstersdictionary1828.com"'), 'Webster host missing from the shared collector registry');
+  assert(webster.includes('websterCollectorConfig?.collectorModule === "webster"'), 'Webster collector must use shared registry metadata');
   assert(webster.includes('collectWebsterBibleRefs'), 'Webster collector missing');
   assert(webster.includes('blbSuiteOpenBackgroundUrl'), 'Webster opener missing');
   assert(content.includes('BLBWebsterCollectorModule') && content.includes('BLBWebsterCollector'), 'Webster module initialization and master-setting refresh hook missing');
@@ -82,16 +83,18 @@ test('MultiVerse native-copy enhancement remains wired', () => {
 });
 test('Source-page Bible-reference collector remains wired', () => {
   const content = read('content.js'), collector = read('source-page-collector.js');
+  const registry = read('source-page-collector-sites.js');
   const manifest = JSON.parse(read('manifest.json')), bg = read('background.js');
-  for (const host of ['christianity.com', 'gotquestions.org', 'crosswalk.com', 'enduringword.com', 'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com']) {
-    assert(collector.includes(host), `source-page collector host missing: ${host}`);
+  for (const host of ['christianity.com', 'gotquestions.org', 'crosswalk.com', 'enduringword.com', 'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com', 'dailyverses.net', 'churchofjesuschrist.org', 'mercyhouseministry.com', 'openbible.info', 'crossway.org', 'sarata.com', 'sermonindex.net', 'thekingsbible.com', 'webstersdictionary1828.com']) {
+    assert(registry.includes(host), `source-page collector registry missing host: ${host}`);
   }
+  assert(collector.includes('BLBSourcePageCollectorSites?.[host]'), 'source-page collector does not use the shared host registry');
   assert(content.includes('BLBSourcePageCollectorModule?.initialize'), 'content script does not initialize the source-page collector');
   assert(collector.includes('collectSourcePageBibleReferences'), 'source-page reference collector missing');
   assert(collector.includes('blbSuiteOpenWebsterMultiVerse'), 'source-page MultiVerse opener missing');
   const entry = (manifest.content_scripts || []).find(item => (item.js || []).includes('content.js'));
-  assert(entry && entry.js.indexOf('source-page-collector.js') < entry.js.indexOf('content.js'), 'manifest must load source-page collector before content.js');
-  assert(bg.includes("'source-page-collector.js'"), 'runtime injection list must include source-page collector');
+  assert(entry && entry.js.indexOf('source-page-collector-sites.js') < entry.js.indexOf('source-page-collector.js') && entry.js.indexOf('source-page-collector.js') < entry.js.indexOf('content.js'), 'manifest must load the shared site registry and collector before content.js');
+  assert(bg.includes("'source-page-collector-sites.js'") && bg.includes("'source-page-collector.js'"), 'runtime injection list must load the shared registry before the source-page collector');
 });
 
 }

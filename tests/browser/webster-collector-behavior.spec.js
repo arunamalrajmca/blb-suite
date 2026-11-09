@@ -108,7 +108,9 @@ test.describe('Webster collector behavior', () => {
   test('renders the collector button and opens collected references in MultiVerse', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({
       masterEnabled: true,
-      redirectEnabled: false
+      redirectEnabled: false,
+      pageSelectionButtonSites: {},
+      doubleClickBlbSites: {}
     });
     await page.route('https://webstersdictionary1828.com/**', route => route.fulfill({
       status: 200,
@@ -142,7 +144,9 @@ test.describe('Webster collector behavior', () => {
   test('recreates the collector button after the page replaces its body', async ({ page, extensionStorage }) => {
     await extensionStorage.set({
       masterEnabled: true,
-      redirectEnabled: false
+      redirectEnabled: false,
+      pageSelectionButtonSites: {},
+      doubleClickBlbSites: {}
     });
     await page.route('https://webstersdictionary1828.com/**', route => route.fulfill({
       status: 200,

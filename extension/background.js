@@ -10,7 +10,8 @@ const BLB_BACKGROUND_STARTUP_IMPORTS = [
   "case-sensitive-routing.js",
   "books.js",
   "book-aliases.js",
-  "reference-core.js"
+  "reference-core.js",
+  "source-page-collector-sites.js"
 ];
 
 // Import dependencies individually so a failed resource is identified by filename
@@ -1545,8 +1546,13 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
           const label = normalizeCode(option.textContent);
           return value === code || label === code || label.endsWith(code);
         });
+        // BLB may expose different option sets in each pane. The primary
+        // selector must offer KJV, while the parallel selector only needs to
+        // offer the explicitly requested translation. Requiring both options
+        // in every selector can hide the right pane and make us toggle Parallel
+        // closed even though it is already open.
         const getVersionSelects = () => Array.from(document.querySelectorAll('select')).filter(select =>
-          optionFor(select, 'kjv') && optionFor(select, versionCode)
+          optionFor(select, 'kjv') || optionFor(select, versionCode)
         );
         const waitFor = async predicate => {
           for (let attempt = 0; attempt < 80; attempt++) {
@@ -1915,7 +1921,15 @@ async function handleBCommand(text, disposition = 'currentTab') {
         // An explicit translation suffix means comparison, not replacement:
         // keep KJV in the primary (left) pane and select the requested
         // translation in BLB's native Parallel (right) pane.
-        await openBlbParallelVersion(resolved.url, requestedVersion, disposition);
+        const parallelResult = await openBlbParallelVersion(resolved.url, requestedVersion, disposition);
+        if (!parallelResult?.ok) {
+          console.warn('[KJV Scripture Tools] Explicit omnibox parallel translation was not applied: ' + JSON.stringify({
+            reference: resolved.text || `${resolved.book.name} ${resolved.chapter}${resolved.from != null ? ':' + resolved.from + (resolved.to != null && resolved.to !== resolved.from ? '-' + resolved.to : '') : ''}`,
+            requestedVersion,
+            reason: parallelResult?.reason || 'unknown',
+            result: parallelResult || null
+          }));
+        }
       }
       return;
     }
@@ -2722,6 +2736,7 @@ const BLB_CONTENT_SCRIPT_FILES = [
   'books.js',
   'book-aliases.js',
   'reference-core.js',
+  'source-page-collector-sites.js',
   'kings-bible-collector.js',
   'webster-collector.js',
   'source-page-collector.js',
@@ -2780,7 +2795,13 @@ function contentScriptFilesForTab(tab, data) {
     ? data.doubleClickBlbSites : {};
   const sensitiveSite = isSensitiveSiteUrl(tab?.url || hostname);
   const blbSite = key === BLB_HOSTNAME;
-  const explicitSiteFeature = !sensitiveSite && (blbSite ? pageSites[key] === true : (pageSites[key] === true || doubleSites[key] === true));
+  // Source-page collection buttons are a distinct feature from per-site
+  // selection actions. Their supported hosts come from the shared registry.
+  const hasPageCollectorButton = Object.prototype.hasOwnProperty.call(
+    globalThis.BLBSourcePageCollectorSites || {}, key
+  );
+  const explicitSiteFeature = !sensitiveSite && (hasPageCollectorButton ||
+    (blbSite ? pageSites[key] === true : (pageSites[key] === true || doubleSites[key] === true)));
   const redirectEnabled = data.redirectEnabled === true;
   const needsFullBundle = explicitSiteFeature || (redirectEnabled && isRedirectHostname(hostname));
   if (needsFullBundle && redirectEnabled) {
@@ -2954,15 +2975,15 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
       }]);
     }
 
-    // Christianity.com can attach native click handlers in the page's MAIN
-    // world. Register a tiny early guard separately; it delegates passage
-    // validation/opening to content.js and cancels native navigation only
-    // when the isolated-world resolver claims the link.
+    // Some source-page collectors need an early MAIN-world click guard.
+    // Keep that capability in the shared site registry rather than a second
+    // host allowlist in the injection code.
     let hostname = '';
     try { hostname = new URL(tab.url).hostname.toLowerCase().replace(/^www\./, ''); } catch (_) {}
-    if (['christianity.com','gotquestions.org','crosswalk.com','enduringword.com','churchofjesuschrist.org','mercyhouseministry.com','openbible.info','crossway.org','sarata.com'].includes(hostname) && files.includes('content.js')) {
+    const collectorConfig = globalThis.BLBSourcePageCollectorSites?.[hostname];
+    if (collectorConfig?.mainWorldClickGuard === true && files.includes('content.js')) {
       const mainWorldId = `${id}-main-world`;
-      const mainWorldFiles = ['redirect-christianity-main-world.js'];
+      const mainWorldFiles = ['source-page-collector-sites.js','redirect-christianity-main-world.js'];
       const registeredMain = await chrome.scripting.getRegisteredContentScripts({ids:[mainWorldId]});
       if (!registeredMain.length) {
         await chrome.scripting.registerContentScripts([{
@@ -2987,7 +3008,7 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
   } catch (error) {
     const errorDetails = describeScriptInjectionError(error);
     const patternFileChecks = await inspectPackagedScriptFiles(files);
-    const mainWorldFileChecks = await inspectPackagedScriptFiles(['redirect-christianity-main-world.js']);
+    const mainWorldFileChecks = await inspectPackagedScriptFiles(['source-page-collector-sites.js','redirect-christianity-main-world.js']);
     let registeredScripts = [];
     try {
       registeredScripts = await chrome.scripting.getRegisteredContentScripts();
@@ -3041,11 +3062,17 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
 async function unregisterRuntimeContentScriptForPattern(pattern) {
   const id = runtimeContentScriptIdForPattern(pattern);
   try {
-    if (chrome.scripting?.unregisterContentScripts) {
-      // A site can have both isolated-world and MAIN-world persistent
-      // registrations. They share the same origin pattern and must be
-      // removed together when the site's last feature is disabled.
-      await chrome.scripting.unregisterContentScripts({ids:[id, id + '-main-world']});
+    if (chrome.scripting?.getRegisteredContentScripts && chrome.scripting?.unregisterContentScripts) {
+      // A site can have an isolated-world registration, an optional MAIN-world
+      // registration, or both. Chrome rejects an unregister request containing
+      // an ID that is not registered, so remove only the IDs that actually exist.
+      const registered = await chrome.scripting.getRegisteredContentScripts({
+        ids:[id, id + '-main-world']
+      });
+      const registeredIds = registered.map(script => script.id).filter(Boolean);
+      if (registeredIds.length) {
+        await chrome.scripting.unregisterContentScripts({ids:registeredIds});
+      }
     }
   } catch (_) {}
 }
@@ -3131,18 +3158,20 @@ async function ensureContentScriptInTab(tabId) {
       // A newly enabled site may already be open, so install the MAIN-world
       // guard in that current document too. The registration above covers
       // future navigations; the script's own marker makes this idempotent.
-      if (['christianity.com','gotquestions.org','crosswalk.com','enduringword.com','churchofjesuschrist.org','mercyhouseministry.com','openbible.info','crossway.org','sarata.com'].includes(normalizeSiteHostname(hostnameFromTabUrl(tab.url))) &&
-          files.includes('content.js')) {
+      const collectorConfig = globalThis.BLBSourcePageCollectorSites?.[
+        normalizeSiteHostname(hostnameFromTabUrl(tab.url))
+      ];
+      if (collectorConfig?.mainWorldClickGuard === true && files.includes('content.js')) {
         try {
           await chrome.scripting.executeScript({
             target:{tabId},
-            files:['redirect-christianity-main-world.js'],
+            files:['source-page-collector-sites.js','redirect-christianity-main-world.js'],
             world:'MAIN'
           });
         } catch (error) {
           if (isTabUnavailableError(error)) return false;
           console.error('KJV Scripture Tools MAIN-world script injection failed:', {
-            tabId, tabUrl:tab.url, files:['redirect-christianity-main-world.js'], error:String(error)
+            tabId, tabUrl:tab.url, files:['source-page-collector-sites.js','redirect-christianity-main-world.js'], error:String(error)
           });
           return false;
         }
@@ -6679,7 +6708,11 @@ async function shouldInjectContentScriptForTab(tab, data) {
   const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
-  const explicitEnabled = !isSensitiveSiteUrl(tab.url) && (key === BLB_HOSTNAME ? pageSites[key] === true : (pageSites[key] === true || doubleSites[key] === true));
+  const hasPageCollectorButton = Object.prototype.hasOwnProperty.call(
+    globalThis.BLBSourcePageCollectorSites || {}, key
+  );
+  const explicitEnabled = !isSensitiveSiteUrl(tab.url) && (hasPageCollectorButton ||
+    (key === BLB_HOSTNAME ? pageSites[key] === true : (pageSites[key] === true || doubleSites[key] === true)));
 
   // Global Redirect External Bible Links is intentionally available on any
   // HTTP(S) host for which the user granted host access. Do not limit runtime
@@ -6817,12 +6850,13 @@ chrome.commands.onCommand.addListener(async command => {
 async function injectEnabledTabsForGrantedOrigins(origins) {
   const granted = Array.isArray(origins) ? origins.map(String) : [];
   if (!granted.length) return;
-  const data = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false});
+  const data = await chrome.storage.local.get({masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{},redirectEnabled:false});
+  if (data.masterEnabled === false) return;
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
   const tabs = await chrome.tabs.query({});
   for (const tab of tabs) {
-    if (!tab?.id || !isHttpPageUrl(tab.url)) continue;
+    if (!tab?.id || !isHttpPageUrl(tab.url) || isSensitiveSiteUrl(tab.url)) continue;
     const pattern = originPatternForUrl(tab.url);
     if (!pattern) continue;
     const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
@@ -6833,7 +6867,12 @@ async function injectEnabledTabsForGrantedOrigins(origins) {
       origin === '*://*/*'
     );
     const redirectEnabled = data.redirectEnabled === true && await hasHostAccessForTab(tab);
-    const siteFeatureEnabled = grantCoversTab && (pageSites[key] === true || doubleSites[key] === true);
+    const hasPageCollectorButton = Object.prototype.hasOwnProperty.call(
+      globalThis.BLBSourcePageCollectorSites || {}, key
+    );
+    const siteFeatureEnabled = grantCoversTab && (
+      hasPageCollectorButton || pageSites[key] === true || doubleSites[key] === true
+    );
     if (redirectEnabled || siteFeatureEnabled) await ensureContentScriptInTab(tab.id);
   }
 }
@@ -6965,7 +7004,10 @@ chrome.permissions.onAdded.addListener(() => {
     for (const tab of tabs) {
       if (!tab?.id) continue;
       const key = pageSelectionSettingKeyFromTab(tab);
-      if (key && (data.pageSelectionButtonSites?.[key] === true || data.doubleClickBlbSites?.[key] === true)) {
+      const hasPageCollectorButton = Object.prototype.hasOwnProperty.call(
+        globalThis.BLBSourcePageCollectorSites || {}, key
+      );
+      if (key && !isSensitiveSiteUrl(tab.url) && (hasPageCollectorButton || data.pageSelectionButtonSites?.[key] === true || data.doubleClickBlbSites?.[key] === true)) {
         await ensureContentScriptInTab(tab.id);
       }
     }

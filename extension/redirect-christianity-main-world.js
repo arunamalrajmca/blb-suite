@@ -19,8 +19,7 @@
     let url;
     try { url = new URL(anchor.href, location.href); } catch (_) { return; }
     const host = location.hostname.toLowerCase().replace(/^www\./, "");
-    if (!["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com",
-          "churchofjesuschrist.org", "mercyhouseministry.com", "openbible.info", "crossway.org", "sarata.com"].includes(host)) return;
+    if (globalThis.BLBSourcePageCollectorSites?.[host]?.mainWorldClickGuard !== true) return;
     const label = String(anchor.innerText || anchor.textContent || "").replace(/\s+/g, " ").trim();
     const targetHost = url.hostname.toLowerCase().replace(/^www\./, "");
     const isChristianityPassage = host === "christianity.com" &&

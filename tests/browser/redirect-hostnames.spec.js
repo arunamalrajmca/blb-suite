@@ -68,6 +68,7 @@ test('bare and www source hostnames normalize to the same native redirect key', 
 
 test('MAIN-world guard registration normalizes www hosts and is limited to article source sites', () => {
   const background = fs.readFileSync(path.join(root, 'extension/background.js'), 'utf8');
+  const registry = fs.readFileSync(path.join(root, 'extension/source-page-collector-sites.js'), 'utf8');
   const registrationStart = background.indexOf('let hostname = \'\';');
   const registrationEnd = background.indexOf('const mainWorldId', registrationStart);
   expect(registrationStart).toBeGreaterThanOrEqual(0);
@@ -75,10 +76,13 @@ test('MAIN-world guard registration normalizes www hosts and is limited to artic
   const registration = background.slice(registrationStart, registrationEnd);
   expect(registration).toContain("new URL(tab.url).hostname.toLowerCase().replace(/^www\\./, '')");
   expect(registration).not.toContain("replace(/^www\\\\./, '')");
+  expect(registration).toContain('collectorConfig?.mainWorldClickGuard === true');
+  expect(registration).not.toContain('christianity.com');
   for (const host of ['christianity.com', 'gotquestions.org', 'crosswalk.com', 'enduringword.com', 'churchofjesuschrist.org', 'mercyhouseministry.com', 'openbible.info', 'crossway.org', 'sarata.com']) {
-    expect(registration).toContain(host);
+    const entry = registry.split('\n').find(line => line.includes(`"${host}"`));
+    expect(entry, `${host} must be configured in the shared registry`).toContain('mainWorldClickGuard:true');
   }
   // ESV.org is redirect-only; it does not need the source-page click guard.
-  expect(registration).not.toContain("'esv.org'");
+  expect(registry).not.toContain('"esv.org"');
 });
 

@@ -3047,7 +3047,7 @@ test('runtime content-script registrations update using the supported scripts-ar
     secondRegistered: true,
     firstScripts: ['content.js'],
     secondScripts: ['content.js', 'redirect-scripttagger.js'],
-    mainWorld: [{ js: ['redirect-christianity-main-world.js'], world: 'MAIN' }]
+    mainWorld: [{ js: ['source-page-collector-sites.js','redirect-christianity-main-world.js'], world: 'MAIN' }]
   });
 });
 

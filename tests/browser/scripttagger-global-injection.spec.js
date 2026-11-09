@@ -5,6 +5,7 @@ const vm = require('node:vm');
 
 const background = fs.readFileSync(path.resolve(__dirname, '../../extension/background.js'), 'utf8');
 const sharedRegexPatterns = fs.readFileSync(path.resolve(__dirname, '../../extension/regex-patterns.js'), 'utf8');
+const sourcePageCollectorSites = fs.readFileSync(path.resolve(__dirname, '../../extension/source-page-collector-sites.js'), 'utf8');
 const scriptTaggerScript = fs.readFileSync(path.resolve(__dirname, '../../extension/redirect-scripttagger.js'), 'utf8');
 
 function runBlbUrlNormalizer() {
@@ -144,8 +145,23 @@ test('global redirect uses the minimal handlers on ordinary sites and the full b
   };
   context.globalThis = context;
   vm.runInNewContext(sharedRegexPatterns, context);
+  vm.runInNewContext(sourcePageCollectorSites, context);
   context.isSensitiveSiteUrl = value => context.BLBShared.isSensitiveSiteUrl(value);
   vm.runInNewContext(background.slice(start, end), context);
+
+  const collectorHosts = Object.keys(context.BLBSourcePageCollectorSites);
+  expect(collectorHosts.length).toBeGreaterThan(0);
+  for (const host of collectorHosts) {
+    const files = Array.from(context.contentScriptFilesForTab(
+      {url:`https://${host}/article`},
+      {redirectEnabled:false,pageSelectionButtonSites:{},doubleClickBlbSites:{}}
+    ));
+    expect(files, `${host} must receive the shared collector bundle without per-site toggles`)
+      .toContain('source-page-collector.js');
+  }
+  expect(context.BLBSourcePageCollectorSites['sermonindex.net'].mainWorldClickGuard).not.toBe(true);
+  expect(context.BLBSourcePageCollectorSites['gotquestions.org'].mainWorldClickGuard).toBe(true);
+
   // Rediscover and Sagacity use the existing full content bundle because it
   // contains the current-page MultiVerse collector. They still use dynamic,
   // optional host access rather than manifest-wide site permissions.
@@ -153,20 +169,20 @@ test('global redirect uses the minimal handlers on ordinary sites and the full b
     {url:'https://sagacityweb.com/article'},
     {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}
   ))).toEqual([
-    'regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','source-bible-redirect.js','multiverse-copy.js','study-reference-capture.js','criteria-search-navigation.js','blb-auto-hyperlinker.js','blb-passive-new-tab-targets.js', 'blb-draggable-button.js','blb-parse-popup.js','blb-verse-link-navigation.js','blb-page-selection-button.js','multiverse-handoff.js','multiverse-tool-view.js','content.js','redirect-scripttagger.js','redirect-bibleref-ranges.js'
+    'regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','source-page-collector-sites.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','source-bible-redirect.js','multiverse-copy.js','study-reference-capture.js','criteria-search-navigation.js','blb-auto-hyperlinker.js','blb-passive-new-tab-targets.js', 'blb-draggable-button.js','blb-parse-popup.js','blb-verse-link-navigation.js','blb-page-selection-button.js','multiverse-handoff.js','multiverse-tool-view.js','content.js','redirect-scripttagger.js','redirect-bibleref-ranges.js'
   ]);
 
   expect(Array.from(context.contentScriptFilesForTab(
     {url:'https://www.biblegateway.com/passage/?search=John+3%3A16'},
     {redirectEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}}
   ))).toEqual([
-    'regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','source-bible-redirect.js','multiverse-copy.js','study-reference-capture.js','criteria-search-navigation.js','blb-auto-hyperlinker.js','blb-passive-new-tab-targets.js', 'blb-draggable-button.js','blb-parse-popup.js','blb-verse-link-navigation.js','blb-page-selection-button.js','multiverse-handoff.js','multiverse-tool-view.js','content.js','redirect-scripttagger.js','redirect-bibleref-ranges.js'
+    'regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','source-page-collector-sites.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','source-bible-redirect.js','multiverse-copy.js','study-reference-capture.js','criteria-search-navigation.js','blb-auto-hyperlinker.js','blb-passive-new-tab-targets.js', 'blb-draggable-button.js','blb-parse-popup.js','blb-verse-link-navigation.js','blb-page-selection-button.js','multiverse-handoff.js','multiverse-tool-view.js','content.js','redirect-scripttagger.js','redirect-bibleref-ranges.js'
   ]);
 
   expect(Array.from(context.contentScriptFilesForTab(
     {url:'https://sagacityweb.com/article'},
     {redirectEnabled:false,pageSelectionButtonSites:{'sagacityweb.com':true},doubleClickBlbSites:{}}
-  ))).toEqual(['regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','source-bible-redirect.js','multiverse-copy.js','study-reference-capture.js','criteria-search-navigation.js','blb-auto-hyperlinker.js','blb-passive-new-tab-targets.js', 'blb-draggable-button.js','blb-parse-popup.js','blb-verse-link-navigation.js','blb-page-selection-button.js','multiverse-handoff.js','multiverse-tool-view.js','content.js']);
+  ))).toEqual(['regex-patterns.js','kjv-corpus-word-index.js','books.js','book-aliases.js','reference-core.js','source-page-collector-sites.js','kings-bible-collector.js','webster-collector.js','source-page-collector.js','source-bible-redirect.js','multiverse-copy.js','study-reference-capture.js','criteria-search-navigation.js','blb-auto-hyperlinker.js','blb-passive-new-tab-targets.js', 'blb-draggable-button.js','blb-parse-popup.js','blb-verse-link-navigation.js','blb-page-selection-button.js','multiverse-handoff.js','multiverse-tool-view.js','content.js']);
 });
 
 async function runMinimalScriptTaggerClick(settings, eventOverrides = {}) {

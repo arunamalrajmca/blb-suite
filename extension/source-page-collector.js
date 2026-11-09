@@ -4,22 +4,7 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
     // ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------
     {
       const host = location.hostname.toLowerCase().replace(/^www\./, "");
-      const sourceSite = ({
-        "christianity.com":"christianity",
-        "gotquestions.org":"gotquestions",
-        "crosswalk.com":"crosswalk",
-        "enduringword.com":"enduringword",
-        "rediscover.bible":"rediscover",
-        "sagacityweb.com":"sagacity",
-        "thetreasuryofscriptureknowledge.com":"treasury",
-        "dailyverses.net":"dailyverses",
-        "churchofjesuschrist.org":"churchofjesuschrist",
-        "mercyhouseministry.com":"mercyhouse",
-        "openbible.info":"openbible",
-        "crossway.org":"crossway",
-        "sarata.com":"sarata",
-        "sermonindex.net":"sermonindex"
-      })[host] || "";
+      const sourceSite = globalThis.BLBSourcePageCollectorSites?.[host]?.id || "";
       // These sites' homepages are general landing pages, not article/reference
       // pages. Keep the page-wide collection button limited to nested pages.
       const isSourceHomepage = location.pathname === "/" || location.pathname === "";
