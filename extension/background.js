@@ -5865,7 +5865,7 @@ async function classifySelectionForBlb(selectionText) {
       // having every individual word in the KJV vocabulary is not sufficient:
       // ordinary search terms such as "saved how" would otherwise be treated
       // as Scripture wording and sent to BLB Criteria Search.
-      const corpusPhrase = extractKjvPassageSearchQuery(source);
+      const corpusPhrase = await extractKjvPassageSearchQueryWithLazyPhraseIndex(source);
       if (corpusPhrase) {
         return {valid:true, type:'KJV_PHRASE', text:corpusPhrase, kjvPassageQuery:corpusPhrase};
       }
