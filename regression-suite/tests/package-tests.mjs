@@ -84,16 +84,16 @@ test('no optional host-permission regression', () => {
 test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse collector', () => {
   const collector = read('source-page-collector.js');
   const registry = read('source-page-collector-sites.js');
-  assert(/"rediscover\\.bible"\\s*:\\s*\\{\\s*id:\\s*"rediscover"/.test(registry));
-  assert(/"sagacityweb\\.com"\\s*:\\s*\\{\\s*id:\\s*"sagacity"/.test(registry));
-  assert(/"thetreasuryofscriptureknowledge\\.com"\\s*:\\s*\\{\\s*id:\\s*"treasury"/.test(registry));
+  assert(/"rediscover\.bible"\s*:\s*\{\s*id:\s*"rediscover"/.test(registry));
+  assert(/"sagacityweb\.com"\s*:\s*\{\s*id:\s*"sagacity"/.test(registry));
+  assert(/"thetreasuryofscriptureknowledge\.com"\s*:\s*\{\s*id:\s*"treasury"/.test(registry));
   assert(collector.includes('BLBSourcePageCollectorSites?.[host]?.id'), 'collector must use the shared site registry metadata');
   assert(collector.includes('if (sourceSite && !isSourceHomepage)'));
   assert(collector.includes('document.querySelectorAll("a[href]")'));
   assert(collector.includes('if (sourceSite === "sagacity")'), 'Sagacity links must prefer the linked BLB citation over malformed/nested captions');
   assert(collector.includes('targetUrl.searchParams.get("Criteria")'), 'Sagacity links must recover the full citation from BLB Criteria');
   assert(collector.includes('targetHost === "blueletterbible.org"'), 'Criteria extraction must be restricted to BLB links');
-  assert(collector.includes('/^\\/search\\/preSearch\\.cfm$/i.test(targetUrl.pathname)'), 'Criteria extraction must be limited to the BLB preSearch endpoint');
+  assert(collector.includes('/^\\/search\\/preSearch\.cfm$/i.test(targetUrl.pathname)'), 'Criteria extraction must be limited to the BLB preSearch endpoint');
   assert(collector.includes('String(targetUrl.searchParams.get("Criteria") || "").replace(/\\+/g, " ")'), 'plus signs in BLB Criteria must decode to spaces');
   const background = read('background.js');
   assert(background.includes("'source-page-collector-sites.js'"), 'background must import the shared collector registry');
