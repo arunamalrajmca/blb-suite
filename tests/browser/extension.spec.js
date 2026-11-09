@@ -2987,7 +2987,25 @@ test('Double-clicking the Mt abbreviation opens its complete chapter-and-verse r
 
 test('runtime content-script registrations update using the supported scripts-array API', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(async () => {
-    const cases = [
+    // This test exercises the registration API directly, so keep the BLB
+    // origin eligible while startup/settings reconciliation is active. Without
+    // an enabled site preference, reconciliation is allowed to unregister the
+    // deliberately-created test registration between the update and readback.
+    const originalSettings = await chrome.storage.local.get({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      redirectEnabled:false
+    });
+    await chrome.storage.local.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{
+        ...(originalSettings.pageSelectionButtonSites || {}),
+        'blueletterbible.org':true
+      }
+    });
+    try {
+      const cases = [
       {
         url: 'https://www.blueletterbible.org/kjv/jhn/3/16/',
         first: ['redirect-scripttagger.js'],
@@ -3035,7 +3053,13 @@ test('runtime content-script registrations update using the supported scripts-ar
         await chrome.scripting.unregisterContentScripts({ ids: [id, mainWorldId] }).catch(() => {});
       }
     }
-    return outcomes;
+      return outcomes;
+    } finally {
+      await chrome.storage.local.set({
+        masterEnabled:originalSettings.masterEnabled,
+        pageSelectionButtonSites:originalSettings.pageSelectionButtonSites || {}
+      });
+    }
   });
 
   expect(result[0]).toMatchObject({
