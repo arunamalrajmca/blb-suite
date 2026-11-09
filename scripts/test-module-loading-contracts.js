@@ -68,11 +68,12 @@ if (!contentEntry) {
 }
 
 const background = read('extension/background.js');
-const importMatch = background.match(/^\s*importScripts\(([^;]+)\);/);
+const importMatch = background.match(/const BLB_BACKGROUND_STARTUP_IMPORTS = \[([\s\S]*?)\];/);
 if (!importMatch) {
-  fail('background service worker begins with its classic importScripts bootstrap');
+  fail('background service worker declares its classic importScripts bootstrap');
 } else {
   const imports = [...importMatch[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(match => match[1]);
+  if (!background.includes('importScripts(scriptFile)')) fail('background imports each declared startup dependency individually');
   const required = [
     'study-session-normalization.js',
     'multiverse-reference-helpers.js',
@@ -104,7 +105,9 @@ if (!importMatch) {
       || !lazyVerseCorpusLoader[1].includes("kjvVerseCorpusLoadPromise")
       || !lazyVerseCorpusLoader[1].includes("kjvVerseCorpusLoadPromise = null")
       || !background.includes("new DecompressionStream('gzip')")
-      || !background.includes('response.status === 404')
+      || !background.includes('if (!response.ok || !response.body)')
+      || !background.includes('DecompressionStream is unavailable')
+      || !background.includes('return loadOriginalData(error);')
       || !background.includes('fallbackAssignments')) {
     fail('normalized verse corpus and word-to-verse index are fetched together as validated data with retryable, promise-deduplicated loading');
   } else {

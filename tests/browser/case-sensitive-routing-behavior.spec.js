@@ -74,7 +74,7 @@ test.describe('KJV case-sensitive word-set and routing behavior', () => {
     expect(loaderIndex).toBeGreaterThan(-1);
     expect(useIndex).toBeGreaterThan(loaderIndex);
     expect(routeIndex).toBeGreaterThan(useIndex);
-    expect(backgroundSource.includes("'case-sensitive-routing.js'")).toBe(true);
+    expect(/BLB_BACKGROUND_STARTUP_IMPORTS[\s\S]*?["']case-sensitive-routing\.js["']/.test(backgroundSource)).toBe(true);
   });
 });
 

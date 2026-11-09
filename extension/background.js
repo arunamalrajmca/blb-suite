@@ -1,4 +1,33 @@
-importScripts('study-session-normalization.js', 'multiverse-reference-helpers.js', 'study-session-export.js', 'selection-text-helpers.js', 'omnibox-search-helpers.js', 'regex-patterns.js', 'kjv-corpus-word-index.js', 'case-sensitive-search-core.js', 'case-sensitive-routing.js', 'books.js', 'book-aliases.js', 'reference-core.js');
+const BLB_BACKGROUND_STARTUP_IMPORTS = [
+  "study-session-normalization.js",
+  "multiverse-reference-helpers.js",
+  "study-session-export.js",
+  "selection-text-helpers.js",
+  "omnibox-search-helpers.js",
+  "regex-patterns.js",
+  "kjv-corpus-word-index.js",
+  "case-sensitive-search-core.js",
+  "case-sensitive-routing.js",
+  "books.js",
+  "book-aliases.js",
+  "reference-core.js"
+];
+
+// Import dependencies individually so a failed resource is identified by filename
+// instead of Chromium's generic service-worker script-fetch startup error.
+for (const scriptFile of BLB_BACKGROUND_STARTUP_IMPORTS) {
+  try {
+    importScripts(scriptFile);
+  } catch (error) {
+    console.error('KJV Scripture Tools background startup import failed: ' + JSON.stringify({
+      file:scriptFile,
+      errorName:error?.name || '',
+      errorMessage:error?.message || String(error),
+      errorStack:error?.stack || ''
+    }));
+    throw error;
+  }
+}
 let KJV_CORPUS_PHRASE_INDEX = null;
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
@@ -1836,13 +1865,14 @@ async function fetchPackagedJsonAssignment(filename, assignment, terminator, all
   }
   const source = await response.text();
   const start = source.indexOf(assignment);
-  const end = terminator
-    ? source.indexOf(terminator, start)
-    : source.lastIndexOf(';');
-  if (start < 0 || end < 0) {
+  // Match the build-time generator: terminator text can legitimately occur
+  // inside a quoted phrase in the generated JavaScript payload, so the final
+  // terminator is the assignment boundary.
+  const end = source.lastIndexOf(terminator || ';');
+  if (start < 0 || end < start + assignment.length) {
     throw new Error('Packaged KJV search data has an unexpected format: ' + filename);
   }
-  const json = source.slice(start + assignment.length, end);
+  const json = source.slice(start + assignment.length, end).trim();
   // Generated object indexes may use a JavaScript trailing comma even though
   // the payload is parsed as JSON. Normalize only the final object-entry comma.
   return JSON.parse(allowTrailingObjectComma ? json.replace(/,(\s*})$/, '$1') : json);
@@ -1855,34 +1885,35 @@ async function fetchPackagedGzipJson(filename) {
     'kjv-corpus-phrase-index.json.gz': ['kjv-corpus-phrase-index.js', 'const KJV_CORPUS_PHRASE_INDEX = Object.freeze(', ');', true]
   };
   const fallback = fallbackAssignments[filename];
-  let response;
-  try {
-    response = await fetch(chrome.runtime.getURL(filename));
-  } catch (error) {
-    // A packaged extension-resource request can reject (rather than return
-    // HTTP 404) when Chromium cannot serve the generated sidecar. Preserve
-    // the original JavaScript assignment loader as a recovery path.
-    if (fallback) {
-      try {
-        return await fetchPackagedJsonAssignment(...fallback);
-      } catch (fallbackError) {
-        throw new Error(
-          'Unable to fetch compressed packaged KJV data ' + filename
-          + ' (' + String(error) + '); original-data fallback also failed: '
-          + String(fallbackError)
-        );
-      }
+  const loadOriginalData = async cause => {
+    if (!fallback) throw cause;
+    try {
+      return await fetchPackagedJsonAssignment(...fallback);
+    } catch (fallbackError) {
+      throw new Error(
+        'Unable to load compressed packaged KJV data ' + filename
+        + ' (' + String(cause) + '); original-data fallback also failed: '
+        + String(fallbackError)
+      );
     }
-    throw error;
+  };
+
+  try {
+    const response = await fetch(chrome.runtime.getURL(filename));
+    if (!response.ok || !response.body) {
+      throw new Error('Unable to fetch compressed packaged KJV data ' + filename + ': HTTP ' + response.status);
+    }
+    if (typeof DecompressionStream !== 'function') {
+      return loadOriginalData(new Error('DecompressionStream is unavailable'));
+    }
+    const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));
+    return await new Response(decompressed).json();
+  } catch (error) {
+    // Recover from every compressed-sidecar failure, not only a rejected fetch:
+    // HTTP errors, missing bodies, unavailable decompression, corrupt gzip,
+    // and invalid JSON can all prevent the generated asset from loading.
+    return loadOriginalData(error);
   }
-  if (response.status === 404 || typeof DecompressionStream !== 'function') {
-    if (fallback) return fetchPackagedJsonAssignment(...fallback);
-  }
-  if (!response.ok || !response.body) {
-    throw new Error('Unable to fetch compressed packaged KJV data ' + filename + ': HTTP ' + response.status);
-  }
-  const decompressed = response.body.pipeThrough(new DecompressionStream('gzip'));
-  return new Response(decompressed).json();
 }
 
 async function ensureKjvVerseCorpusLoaded() {
@@ -2125,7 +2156,18 @@ async function handleOmniboxCommand(text, disposition) {
   // Existing `b ...` path is deliberately untouched.
   return handleBCommand(text, disposition || 'currentTab');
 }
-chrome.omnibox.onInputEntered.addListener(handleOmniboxCommand);
+// Guard listener registration so an incomplete extension API surface cannot
+// abort evaluation of the entire MV3 service worker.
+if (chrome.omnibox && chrome.omnibox.onInputEntered &&
+    typeof chrome.omnibox.onInputEntered.addListener === 'function') {
+  chrome.omnibox.onInputEntered.addListener(handleOmniboxCommand);
+} else {
+  console.error('[KJV Scripture Tools] Omnibox API unavailable during service-worker startup; listener was not registered.', {
+    hasChrome: typeof chrome !== 'undefined',
+    hasOmnibox: Boolean(chrome && chrome.omnibox),
+    hasInputEntered: Boolean(chrome && chrome.omnibox && chrome.omnibox.onInputEntered)
+  });
+}
 
 // Canonicalize BLB destination URLs before checking open tabs. BLB may normalize
 // trailing slashes, hashes, or query presentation after navigation, so comparing
@@ -2583,7 +2625,7 @@ async function hasHostAccessForTab(tab) {
 
 function isTabUnavailableError(error) {
   const message = String(error?.message || error || '');
-  return /no tab with id|tab .*not found|cannot access contents of the page/i.test(message);
+  return /no tab with id|tab .*not found|cannot access contents of the page|frame with id [0-9]+ was removed/i.test(message);
 }
 
 function describeScriptInjectionError(error) {
@@ -2670,6 +2712,20 @@ async function auditPersistedRuntimeContentScriptRegistrations(registrations = n
     console.error('KJV Scripture Tools persisted content-script references unavailable package files: ' + JSON.stringify(result));
   }
   return result;
+}
+
+let persistedRuntimeContentScriptAuditPromise = null;
+function schedulePersistedRuntimeContentScriptAudit() {
+  if (persistedRuntimeContentScriptAuditPromise) return persistedRuntimeContentScriptAuditPromise;
+  const operation = auditPersistedRuntimeContentScriptRegistrations().catch(error => {
+    console.warn('KJV Scripture Tools persisted content-script audit failed: ' + String(error));
+  }).finally(() => {
+    if (persistedRuntimeContentScriptAuditPromise === operation) {
+      persistedRuntimeContentScriptAuditPromise = null;
+    }
+  });
+  persistedRuntimeContentScriptAuditPromise = operation;
+  return operation;
 }
 
 const contentScriptInjectionLocks = new Map();
@@ -2872,7 +2928,16 @@ async function ensureContentScriptInTab(tabId) {
       const files = contentScriptFilesForTab(tab, settings);
       if (!files.length) return false;
 
-      await ensureRuntimeContentScriptRegistered(tab, files);
+      const registrationReady = await ensureRuntimeContentScriptRegistered(tab, files);
+      if (!registrationReady) {
+        // Current-document injection alone would leave future navigations
+        // without the configured feature. Do not report this tab as activated
+        // when its persistent registration could not be established.
+        console.warn('KJV Scripture Tools skipped tab activation because persistent content-script registration failed:', {
+          tabId, tabUrl:tab.url, files
+        });
+        return false;
+      }
 
       // A newly enabled site may already be open, so install the MAIN-world
       // guard in that current document too. The registration above covers
@@ -3752,7 +3817,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
               '(?<![A-Za-z0-9])' +
               escapePattern(clean).replace(/\s+/g, '\\s+') +
               bookBoundary +
-              '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?(?!\\d)',
+              '\\s*(\\d+)\\s*:\\s*(\\d+)(?:\\s*-\\s*(\\d+))?(?!\\d)(?!-(?!\\s*\\d))',
               'gi'
             )
           });
@@ -3784,7 +3849,11 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     // so every parser caller receives the same canonical text.
     .replace(/[\u061c\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/gi, '')
     .replace(/[\u00a0\u2007\u202f]/g, ' ')
-    .replace(/[\u2010\u2011\u2012\u2013\u2014]/g, '-');
+    // A Unicode dash after a reference can be ordinary authored prose
+    // ("John 3:16 — free gift"), not an incomplete verse range. Normalize
+    // dash characters only when they introduce a numeric range endpoint;
+    // preserving prose punctuation lets the reference regex retain the verse.
+    .replace(/[\u2010-\u2015\u2212](?=\s*\d)/g, '-');
 
   const addRef = (book, chapter, from, to, originalText) => {
     if (!book || !Number.isInteger(chapter) || !Number.isInteger(from) || !Number.isInteger(to)) return;
@@ -4016,7 +4085,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
   // Pass 1b: ordinary single-verse references. Ranges and comma lists have
   // already been handled above, so this expression cannot swallow their
   // endpoints and reduce them to only the first verse.
-  const colonRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)(?!\d)(?!\s*-\s*\d)(?!\s*,\s*\d+(?:\s*$|\s*[,;]))/gi;
+  const colonRe = /(?<![A-Za-z0-9])((?:[1-3]\s*)?[A-Za-z][A-Za-z.'-]{1,24}(?:\s+[A-Za-z][A-Za-z.'-]{1,24}){0,3})\s*(\d+)\s*:\s*(\d+)(?!\d)(?!\s*-)(?!\s*,\s*\d+(?:\s*$|\s*[,;]))/gi;
   while ((m = colonRe.exec(source))) {
     if (isShadowedBookMatch(m.index)) continue;
     const rawBook = m[1].trim();
@@ -6726,15 +6795,8 @@ chrome.runtime.onStartup.addListener(() => installPdfSelectionContextMenu().then
   .then(tabs => syncPdfSelectionContextMenuVisibility(tabs[0]))
   .catch(() => {})));
 chrome.runtime.onStartup.addListener(() => refreshStudyAutoStopAlarm().catch(()=>{}));
-chrome.runtime.onStartup.addListener(() => auditPersistedRuntimeContentScriptRegistrations().catch(error => {
-  console.warn('KJV Scripture Tools persisted content-script audit failed: ' + String(error));
-}));
-
-// Also run on every service-worker start, including extension reloads from
-// the extensions page; onStartup alone does not cover manual reloads.
-auditPersistedRuntimeContentScriptRegistrations().catch(error => {
-  console.warn('KJV Scripture Tools persisted content-script audit failed: ' + String(error));
-});
+chrome.runtime.onStartup.addListener(() => schedulePersistedRuntimeContentScriptAudit());
+chrome.runtime.onInstalled.addListener(() => schedulePersistedRuntimeContentScriptAudit());
 
 installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
   .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))

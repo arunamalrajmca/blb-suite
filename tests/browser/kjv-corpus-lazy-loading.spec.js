@@ -110,18 +110,69 @@ test.describe('On-demand normalized KJV corpus loading', () => {
     expect(result.exactMatch).toEqual([43, 3, 16]);
   });
 
+  test('HTTP and corrupt compressed-sidecar failures fall back to original packaged data', async ({ extensionWorker }) => {
+    const result = await extensionWorker.evaluate(async () => {
+      const originalFetch = self.fetch;
+      const gzipFailures = [];
+      const fallbackFiles = [];
+      self.fetch = async (input, ...args) => {
+        const url = String(input);
+        if (url.endsWith('kjv-corpus-verses.json.gz')) {
+          gzipFailures.push('http-503');
+          return new Response('', { status:503 });
+        }
+        if (url.endsWith('kjv-corpus-word-verse-index.json.gz')) {
+          gzipFailures.push('invalid-gzip');
+          return new Response('not a gzip stream', { status:200 });
+        }
+        if (/kjv-corpus-(verses|word-verse-index)\.js(?:$|[?#])/.test(url)) {
+          fallbackFiles.push(url.split('/').pop());
+        }
+        return originalFetch(input, ...args);
+      };
+      try {
+        const [verses, wordVerseEntries] = await Promise.all([
+          fetchPackagedGzipJson('kjv-corpus-verses.json.gz'),
+          fetchPackagedGzipJson('kjv-corpus-word-verse-index.json.gz')
+        ]);
+        return {
+          gzipFailures,
+          fallbackFiles,
+          verseCount:verses.length,
+          wordEntryCount:wordVerseEntries.length
+        };
+      } finally {
+        self.fetch = originalFetch;
+      }
+    });
+
+    expect(result.gzipFailures).toEqual(['http-503', 'invalid-gzip']);
+    expect(result.fallbackFiles).toEqual(expect.arrayContaining([
+      'kjv-corpus-verses.js',
+      'kjv-corpus-word-verse-index.js'
+    ]));
+    expect(result.verseCount).toBe(31102);
+    expect(result.wordEntryCount).toBeGreaterThan(0);
+  });
+
   test('concurrent loads are deduplicated and a failed load can be retried', async ({ extensionWorker }) => {
     const result = await extensionWorker.evaluate(async () => {
       const originalFetch = self.fetch;
       let requests = 0;
-      let injectedFailure = false;
-      self.fetch = async (...args) => {
+      let gzipFailureInjected = false;
+      let fallbackFailureInjected = false;
+      self.fetch = async (input, ...args) => {
         requests++;
-        if (!injectedFailure) {
-          injectedFailure = true;
-          return { ok: false, status: 503 };
+        const url = String(input);
+        if (!gzipFailureInjected && url.endsWith('kjv-corpus-verses.json.gz')) {
+          gzipFailureInjected = true;
+          return new Response('', { status:503 });
         }
-        return originalFetch(...args);
+        if (!fallbackFailureInjected && url.endsWith('kjv-corpus-verses.js')) {
+          fallbackFailureInjected = true;
+          return new Response('', { status:503 });
+        }
+        return originalFetch(input, ...args);
       };
       let firstAttemptFailed = false;
       try {
@@ -144,7 +195,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
     });
 
     expect(result.firstAttemptFailed).toBe(true);
-    expect(result.requests).toBe(4);
+    expect(result.requests).toBe(5);
     expect(result.versesLoaded).toBe(true);
     expect(result.indexLoaded).toBe(true);
   });
@@ -189,26 +240,61 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
   const instrument = extensionDir => {
     const backgroundPath = path.join(extensionDir, 'background.js');
     let source = fs.readFileSync(backgroundPath, 'utf8');
-    const match = source.match(/^\uFEFF?\s*importScripts\(([^;]+)\);/);
-    if (!match) throw new Error('Unable to instrument the service-worker importScripts bootstrap');
-    const scripts = [...match[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(item => item[1]);
-    if (!scripts.length) throw new Error('No service-worker imports were found for A/B timing');
-    const replacement = 'const __blbProfileBootstrapAt = performance.now();\n'
-      + 'const __blbProfilePhases = [];\n'
-      + 'for (const __blbScript of ' + JSON.stringify(scripts) + ') {\n'
-      + '  const __blbImportStartedAt = performance.now();\n'
-      + '  importScripts(__blbScript);\n'
-      + "  __blbProfilePhases.push({ phase: 'service-worker-importScript', script: __blbScript, durationMs: performance.now() - __blbImportStartedAt });\n"
-      + '}\n'
-      + 'globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: __blbProfileBootstrapAt, phases: __blbProfilePhases };\n'
-      + 'globalThis.__BLB_PROFILE_LOAD__ = { events: [] };';
-    source = source.replace(match[0], replacement);
+    let scripts = [];
+    const legacyMatch = source.match(/^\uFEFF?\s*importScripts\(([^;]+)\);/);
+
+    if (legacyMatch) {
+      // The current-main baseline uses one importScripts(...) statement.
+      scripts = [...legacyMatch[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(item => item[1]);
+      if (!scripts.length) throw new Error('No service-worker imports were found for A/B timing');
+      const replacement = 'const __blbProfileBootstrapAt = performance.now();\n'
+        + 'const __blbProfilePhases = [];\n'
+        + 'for (const __blbScript of ' + JSON.stringify(scripts) + ') {\n'
+        + '  const __blbImportStartedAt = performance.now();\n'
+        + '  importScripts(__blbScript);\n'
+        + "  __blbProfilePhases.push({ phase: 'service-worker-importScript', script: __blbScript, durationMs: performance.now() - __blbImportStartedAt });\n"
+        + '}\n'
+        + 'globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: __blbProfileBootstrapAt, phases: __blbProfilePhases };\n'
+        + 'globalThis.__BLB_PROFILE_LOAD__ = { events: [] };';
+      source = source.replace(legacyMatch[0], replacement);
+    } else {
+      // The candidate now declares its ordered imports and imports each file
+      // separately so startup failures can be attributed to a filename.
+      const arrayMatch = source.match(/^\uFEFF?\s*const BLB_BACKGROUND_STARTUP_IMPORTS\s*=\s*(\[[\s\S]*?\]);/);
+      const loopMatch = source.match(/for\s*\(const scriptFile of BLB_BACKGROUND_STARTUP_IMPORTS\)\s*\{\s*try\s*\{\s*importScripts\(scriptFile\);\s*\}\s*catch\s*\(error\)\s*\{[\s\S]*?\n  \}\n\}/);
+      if (!arrayMatch || !loopMatch) {
+        throw new Error('Unable to instrument either legacy or per-file service-worker import bootstrap');
+      }
+      scripts = [...arrayMatch[1].matchAll(/['"]([^'"]+\.js)['"]/g)].map(item => item[1]);
+      if (!scripts.length) throw new Error('No service-worker imports were found for A/B timing');
+      const importCall = '    importScripts(scriptFile);';
+      if (!loopMatch[0].includes(importCall)) {
+        throw new Error('Per-file service-worker import loop did not contain its expected import call');
+      }
+      source = source.replace(arrayMatch[0],
+        'const __blbProfileBootstrapAt = performance.now();\n'
+        + 'const __blbProfilePhases = [];\n'
+        + arrayMatch[0]);
+      source = source.replace(importCall,
+        '    const __blbImportStartedAt = performance.now();\n'
+        + importCall + '\n'
+        + "    __blbProfilePhases.push({ phase: 'service-worker-importScript', script: scriptFile, durationMs: performance.now() - __blbImportStartedAt });");
+      const updatedLoopMatch = source.match(/for\s*\(const scriptFile of BLB_BACKGROUND_STARTUP_IMPORTS\)\s*\{\s*try\s*\{[\s\S]*?\n  \}\n\}/);
+      if (!updatedLoopMatch) throw new Error('Unable to locate instrumented per-file import loop');
+      source = source.replace(updatedLoopMatch[0],
+        updatedLoopMatch[0] + '\n'
+        + 'globalThis.__BLB_PROFILE_STARTUP__ = { bootstrapAt: __blbProfileBootstrapAt, phases: __blbProfilePhases };\n'
+        + 'globalThis.__BLB_PROFILE_LOAD__ = { events: [] };');
+    }
+
     const fetchStart = "  const response = await fetch(chrome.runtime.getURL(filename));";
     const fetchEnd = "  const source = await response.text();";
     const extractStart = "  const start = source.indexOf(assignment);";
     const extractEnd = "  const json = source.slice(start + assignment.length, end);";
-    const parseLine = "  return JSON.parse(allowTrailingObjectComma ? json.replace(/,(\\s*})$/, '$1') : json);";
-    if (!source.includes(fetchStart) || !source.includes(fetchEnd) || !source.includes(parseLine)) {
+    const parseLine = source.split('\n').find(line =>
+      line.trim().startsWith('return JSON.parse(allowTrailingObjectComma ? json.replace(')
+    );
+    if (!source.includes(fetchStart) || !source.includes(fetchEnd) || !parseLine) {
       throw new Error('Unable to instrument packaged JSON fetch/read/parse phases');
     }
     source = source.replace(fetchStart,

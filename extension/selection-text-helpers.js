@@ -7,7 +7,10 @@ function normalizeSelectedScriptureText(selectionText) {
       .normalize('NFKC')
       .replace(/[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '')
       .replace(/[\u00a0\u2007\u202f]/g, ' ')
-      .replace(/[\u2010-\u2015\u2212]/g, '-')
+      // Preserve dash punctuation before prose (for example, a reference
+      // followed by an em-dash aside). Normalize Unicode dashes only when
+      // they introduce a numeric verse-range endpoint.
+      .replace(/[\u2010-\u2015\u2212](?=\s*\d)/g, '-')
       .replace(/\s+/g, ' ')
       .trim();
   }
