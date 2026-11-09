@@ -479,6 +479,27 @@ test('OpenBible, Crossway and Sarata show BLB collection buttons on content page
 });
 
 
+
+test("The King's Bible shows its MultiVerse collector button with site toggles off", async ({ page, context, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    masterEnabled: true,
+    redirectEnabled: false,
+    pageSelectionButtonSites: {},
+    doubleClickBlbSites: {}
+  });
+  await context.route('https://thekingsbible.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: `<!doctype html><html><head><title>King's Bible fixture</title></head><body>
+      <main><h1>Faith</h1><a class="bible" href="/Bible/43/3?verse=16">John 3:16</a></main>
+    </body></html>`
+  }));
+  await page.goto('https://thekingsbible.com/dictionary/Faith', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#blb-suite-kingsbible-multiverse'))
+    .toHaveText('Open Bible References in BLB');
+});
+
 test('SermonIndex topic pages show the BLB references button and collect linked citations', async ({
   page, context, extensionStorage, extensionWorker
 }) => {
