@@ -398,7 +398,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
       "  globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-json-parse', file: filename, durationMs: performance.now() - __blbParseStarted });\n" +
       "  return __blbParsed;");
     const gzipStart = source.indexOf('async function fetchPackagedGzipJson(filename) {');
-    const gzipEnd = source.indexOf('\\nasync function ensureKjvVerseCorpusLoaded()', gzipStart);
+    const gzipEnd = source.indexOf('\nasync function ensureKjvVerseCorpusLoaded()', gzipStart);
     if (gzipStart >= 0 && gzipEnd > gzipStart) {
       let gzipLoader = source.slice(gzipStart, gzipEnd);
       const gzipFetchCall = 'const response = await fetch(chrome.runtime.getURL(filename));';
@@ -410,16 +410,16 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
         throw new Error('Unable to instrument gzip fetch/decompress/parse phases');
       }
       gzipLoader = gzipLoader.replace(gzipFetchCall,
-        'const __blbGzipFetchStarted = performance.now();\\n    ' + gzipFetchCall
-        + "\\n    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-gzip-fetch', file: filename, durationMs: performance.now() - __blbGzipFetchStarted });");
+        'const __blbGzipFetchStarted = performance.now();\n    ' + gzipFetchCall
+        + "\n    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-gzip-fetch', file: filename, durationMs: performance.now() - __blbGzipFetchStarted });");
       gzipLoader = gzipLoader.replace(gzipDecodeCall,
-        'const __blbGzipDecodeStarted = performance.now();\\n    ' + gzipDecodeCall);
+        'const __blbGzipDecodeStarted = performance.now();\n    ' + gzipDecodeCall);
       gzipLoader = gzipLoader.replace(gzipJsonReturn,
-        'const __blbDecompressedText = await new Response(decompressed).text();\\n'
-        + "    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-gzip-decompress-read', file: filename, durationMs: performance.now() - __blbGzipDecodeStarted });\\n"
-        + '    const __blbJsonParseStarted = performance.now();\\n'
-        + '    const __blbDecoded = JSON.parse(__blbDecompressedText);\\n'
-        + "    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-gzip-json-parse', file: filename, durationMs: performance.now() - __blbJsonParseStarted });\\n"
+        'const __blbDecompressedText = await new Response(decompressed).text();\n'
+        + "    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-gzip-decompress-read', file: filename, durationMs: performance.now() - __blbGzipDecodeStarted });\n"
+        + '    const __blbJsonParseStarted = performance.now();\n'
+        + '    const __blbDecoded = JSON.parse(__blbDecompressedText);\n'
+        + "    globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'packaged-gzip-json-parse', file: filename, durationMs: performance.now() - __blbJsonParseStarted });\n"
         + '    return __blbDecoded;');
       source = source.slice(0, gzipStart) + gzipLoader + source.slice(gzipEnd);
     }
@@ -430,15 +430,15 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     const corpusValidationStart = "      if (!Array.isArray(verseEntries) || verseEntries.length !== 31102) {";
     source = source.replace(corpusValidationStart,
       "      const __blbCorpusValidationStarted = performance.now();\n" + corpusValidationStart);
-    const fromEntriesValidation = "      const wordVerseIndex = Object.fromEntries(wordVerseEntries);";
-    source = source.replace(fromEntriesValidation,
-      "      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'corpus-data-validation', durationMs: performance.now() - __blbCorpusValidationStarted });\n" + fromEntriesValidation);
     const wordIndexValidationStart = "      if (!wordVerseIndex || typeof wordVerseIndex !== 'object'";
     source = source.replace(wordIndexValidationStart,
       "      const __blbWordIndexValidationStarted = performance.now();\n" + wordIndexValidationStart);
-    const corpusAssignment = "      self.KJV_CORPUS_VERSES = verseEntries;";
-    source = source.replace(corpusAssignment,
-      "      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'word-index-validation', durationMs: performance.now() - __blbWordIndexValidationStarted });\n" + corpusAssignment);
+    const verseAssignment = "      self.KJV_CORPUS_VERSES = verseEntries;";
+    source = source.replace(verseAssignment,
+      "      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'corpus-data-validation', durationMs: performance.now() - __blbCorpusValidationStarted });\n" + verseAssignment);
+    const wordIndexAssignment = "      self.KJV_CORPUS_WORD_VERSE_INDEX = wordVerseIndex;";
+    source = source.replace(wordIndexAssignment,
+      "      globalThis.__BLB_PROFILE_LOAD__?.events.push({ phase: 'word-index-validation', durationMs: performance.now() - __blbWordIndexValidationStarted });\n" + wordIndexAssignment);
     const rangeCall = "    const corpusRange = findKjvVerseRangeForSelection(source);";
     source = source.replace(rangeCall,
       "    const __blbRangeStarted = performance.now();\n" + rangeCall +
@@ -661,7 +661,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     // The lazy-loading experiment must preserve the baseline classification
     // for both variants; only the data-loading timing is allowed to differ.
     expect(sample.phraseType).toBe('KJV_PASSAGE');
-    expect(sample.phraseQuery).toBeTruthy();
+    expect(sample.phraseQuery).toBe('"god is love"');
     expect(sample.passageRef).toEqual({ book: 'john', chapter: 3, from: 16, to: 16 });
     // Both variants preserve lazy startup. The candidate short-phrase path
     // loads only verse text; the word index remains deferred until indexed
