@@ -2045,7 +2045,8 @@ async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
 let kjvCaseSensitiveWordsLoadPromise = null;
 let kjvOriginalCaseCorpusLoadPromise = null;
 let kjvPhraseIndexLoadPromise = null;
-let kjvVerseCorpusLoadPromise = null;
+let kjvVerseEntriesLoadPromise = null;
+let kjvWordVerseIndexLoadPromise = null;
 
 async function fetchPackagedJsonAssignment(filename, assignment, terminator, allowTrailingObjectComma = false) {
   const response = await fetch(chrome.runtime.getURL(filename));
@@ -2105,22 +2106,34 @@ async function fetchPackagedGzipJson(filename) {
   }
 }
 
-async function ensureKjvVerseCorpusLoaded() {
-  // The normalized verse corpus and word-to-verse candidate index are used
-  // only by local KJV matching. Keep both out of worker startup and fetch them
-  // together so every corpus lookup observes a complete, validated pair.
-  if (Array.isArray(self.KJV_CORPUS_VERSES)
-      && self.KJV_CORPUS_WORD_VERSE_INDEX
-      && typeof self.KJV_CORPUS_WORD_VERSE_INDEX === 'object') return;
-  if (!kjvVerseCorpusLoadPromise) {
-    kjvVerseCorpusLoadPromise = (async () => {
-      const [verseEntries, wordVerseEntries] = await Promise.all([
-        fetchPackagedGzipJson('kjv-corpus-verses.json.gz'),
-        fetchPackagedGzipJson('kjv-corpus-word-verse-index.json.gz')
-      ]);
+async function ensureKjvVerseEntriesLoaded() {
+  // Short, exact whitelist phrases can be verified against the normalized
+  // verse corpus alone. Keep the larger word→verse index out of that first use.
+  if (Array.isArray(self.KJV_CORPUS_VERSES)) return;
+  if (!kjvVerseEntriesLoadPromise) {
+    kjvVerseEntriesLoadPromise = (async () => {
+      const verseEntries = await fetchPackagedGzipJson('kjv-corpus-verses.json.gz');
       if (!Array.isArray(verseEntries) || verseEntries.length !== 31102) {
         throw new Error('The compressed normalized KJV verse corpus is empty or invalid');
       }
+      self.KJV_CORPUS_VERSES = verseEntries;
+    })().catch(error => {
+      kjvVerseEntriesLoadPromise = null;
+      throw error;
+    });
+  }
+  await kjvVerseEntriesLoadPromise;
+}
+
+async function ensureKjvWordVerseIndexLoaded() {
+  // The compact word→verse index is still loaded before every path that uses
+  // indexed candidate resolution. Only the separately verified short-phrase
+  // fast path is permitted to operate without it.
+  if (self.KJV_CORPUS_WORD_VERSE_INDEX
+      && typeof self.KJV_CORPUS_WORD_VERSE_INDEX === 'object') return;
+  if (!kjvWordVerseIndexLoadPromise) {
+    kjvWordVerseIndexLoadPromise = (async () => {
+      const wordVerseEntries = await fetchPackagedGzipJson('kjv-corpus-word-verse-index.json.gz');
       if (!Array.isArray(wordVerseEntries) || !wordVerseEntries.length) {
         throw new Error('The compressed KJV word-to-verse index is empty or invalid');
       }
@@ -2129,16 +2142,21 @@ async function ensureKjvVerseCorpusLoaded() {
           || !Object.keys(wordVerseIndex).length) {
         throw new Error('The compressed KJV word-to-verse index could not be constructed');
       }
-      self.KJV_CORPUS_VERSES = verseEntries;
       self.KJV_CORPUS_WORD_VERSE_INDEX = wordVerseIndex;
     })().catch(error => {
-      kjvVerseCorpusLoadPromise = null;
+      kjvWordVerseIndexLoadPromise = null;
       throw error;
     });
   }
-  await kjvVerseCorpusLoadPromise;
+  await kjvWordVerseIndexLoadPromise;
 }
 
+async function ensureKjvVerseCorpusLoaded() {
+  await Promise.all([
+    ensureKjvVerseEntriesLoaded(),
+    ensureKjvWordVerseIndexLoaded()
+  ]);
+}
 async function ensureKjvPhraseIndexLoaded() {
   // The generated phrase candidate index is needed only for multi-word KJV
   // phrase classification. Keep it out of worker startup and direct-reference
@@ -4589,6 +4607,19 @@ const KJV_PASSAGE_WEAK_SHORT = new Set([
   'out of the','into the land','in the land','upon the earth','of the word'
 ]);
 
+function findExactKjvPhraseInLoadedCorpus(phraseWords) {
+  const words = Array.isArray(phraseWords) ? phraseWords.filter(Boolean) : [];
+  if (words.length < 2 || !Array.isArray(KJV_CORPUS_VERSES)) return null;
+  const phrase = ' ' + words.join(' ') + ' ';
+  // The packaged verse entries are already lowercase and punctuation-normalized.
+  // Exact boundary matching preserves the authoritative contiguous-verse check.
+  for (const entry of KJV_CORPUS_VERSES) {
+    const verseText = String(entry?.[3] || '');
+    if ((' ' + verseText + ' ').includes(phrase)) return entry;
+  }
+  return null;
+}
+
 function isMeaningfulShortKjvPassage(text, wordCount) {
   const normalized = String(text || '').toLowerCase().trim();
   if (!normalized) return false;
@@ -5767,6 +5798,25 @@ async function classifySelectionForBlb(selectionText) {
   remainingText = removeQuotedTextFromSelection(remainingText);
 
   const remainingWordCount = (remainingText.match(/\S+/g) || []).length;
+
+  // The exact short whitelist is already deliberately curated to avoid noisy
+  // phrases. Verify its complete normalized wording directly in the verse
+  // corpus, so a common first phrase does not also have to load the word index
+  // and generated phrase-hash index. Non-whitelist phrases retain the existing
+  // indexed verification path below.
+  const shortPhraseWords = normalizeKjvPassageWords(remainingText);
+  if (!extractedRefs.length
+      && shortPhraseWords.length >= 2
+      && shortPhraseWords.length <= 4) {
+    const shortPhrase = shortPhraseWords.join(' ');
+    if (KJV_PASSAGE_SHORT_WHITELIST.has(shortPhrase)) {
+      await ensureKjvVerseEntriesLoaded();
+      if (findExactKjvPhraseInLoadedCorpus(shortPhraseWords)) {
+        const query = makeQuotedCriteriaOrQuery([shortPhrase]);
+        return {valid:true, type:'KJV_PASSAGE', text:query, kjvPassageQuery:query};
+      }
+    }
+  }
 
   if (remainingWordCount >= KJV_PASSAGE_MIN_WORDS) {
     await Promise.all([ensureKjvVerseCorpusLoaded(), ensureKjvPhraseIndexLoaded()]);
