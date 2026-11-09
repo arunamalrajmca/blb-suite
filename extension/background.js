@@ -1652,7 +1652,7 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
         // BLB may finish applying its saved favorite after the first change.
         // Keep enforcing the explicit request while that asynchronous preference
         // restoration settles; reacquire selectors because BLB can rebuild panes.
-        const enforcementDeadline = Date.now() + 3000;
+        const enforcementDeadline = Date.now() + 8000;
         while (Date.now() < enforcementDeadline) {
           panes = paneSelects();
           if (panes.left && panes.right && panes.left !== panes.right) {
