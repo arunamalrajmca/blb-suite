@@ -67,8 +67,9 @@ test.describe('remaining omnibox command routing', () => {
       const originalRecordStudyEntry = recordStudyEntry;
       const originalUpdate = chrome.tabs.update;
       const calls = [];
+      const navigations = [];
       try {
-        chrome.tabs.update = async details => { calls.push({ordinaryUrl:details.url}); return {}; };
+        chrome.tabs.update = async details => { navigations.push(details.url); return {}; };
         openBlbParallelVersion = async (url, version, disposition) => {
           calls.push({url, version, disposition});
           return {ok:true};
@@ -76,18 +77,19 @@ test.describe('remaining omnibox command routing', () => {
         recordStudyEntry = async () => {};
         await handleBCommand('Rom2 2 NIV', 'newBackgroundTab');
         await handleBCommand('Romans 2:2', 'currentTab');
-        return calls;
+        return {calls, navigations};
       } finally {
         openBlbParallelVersion = originalParallel;
         recordStudyEntry = originalRecordStudyEntry;
         chrome.tabs.update = originalUpdate;
       }
     });
-    expect(result).toEqual([{
+    expect(result.calls).toEqual([{
       url:'https://www.blueletterbible.org/kjv/rom/2/2/',
       version:'niv',
       disposition:'newBackgroundTab'
     }]);
+    expect(result.navigations).toEqual(['https://www.blueletterbible.org/kjv/rom/2/2/']);
   });
 
   test('parallel-version setup targets the opened BLB tab and the native parallel toggle', async ({ extensionWorker }) => {
