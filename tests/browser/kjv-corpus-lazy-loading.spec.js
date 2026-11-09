@@ -53,7 +53,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
     expect(['KJV_PHRASE', 'KJV_REFERENCE_RANGE']).toContain(result.decisionType);
   });
 
-  test('short exact KJV phrases load corpus and phrase-index data together', async ({ extensionWorker }) => {
+  test('short whitelisted KJV phrases load corpus without the phrase index', async ({ extensionWorker }) => {
     const result = await extensionWorker.evaluate(async () => {
       const decision = await classifySelectionForBlb('God is love');
       return {
@@ -65,6 +65,25 @@ test.describe('On-demand normalized KJV corpus loading', () => {
     });
 
     expect(result.decisionType).toBe('KJV_PASSAGE');
+    expect(result.versesLoaded).toBe(true);
+    expect(result.wordIndexLoaded).toBe(true);
+    expect(result.phraseIndexLoaded).toBe(false);
+  });
+
+  test('generated short KJV phrases load phrase-index data only when needed', async ({ extensionWorker }) => {
+    const result = await extensionWorker.evaluate(async () => {
+      const decision = await classifySelectionForBlb('good conscience');
+      return {
+        decisionType: decision.type,
+        query: decision.kjvPassageQuery || decision.text,
+        versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
+        wordIndexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX,
+        phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX
+      };
+    });
+
+    expect(result.decisionType).toBe('KJV_PASSAGE');
+    expect(result.query).toContain('good conscience');
     expect(result.versesLoaded).toBe(true);
     expect(result.wordIndexLoaded).toBe(true);
     expect(result.phraseIndexLoaded).toBe(true);
@@ -250,13 +269,22 @@ test('lazy corpus is reloaded correctly after a service-worker restart', async (
         wordIndex: typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined'
       };
       const phrase = await classifySelectionForBlb('God is love');
+      const afterPhrase = {
+        verses: Array.isArray(KJV_CORPUS_VERSES),
+        wordIndex: !!KJV_CORPUS_WORD_VERSE_INDEX,
+        phraseIndex: !!KJV_CORPUS_PHRASE_INDEX
+      };
+      const indexedPhrase = await classifySelectionForBlb('good conscience');
       return {
         initial,
         referenceType: reference.type,
         wordType: word.type,
         afterFastPaths,
         phraseType: phrase.type,
-        afterPhrase: {
+        afterPhrase,
+        indexedPhraseType: indexedPhrase.type,
+        indexedPhraseQuery: indexedPhrase.kjvPassageQuery || indexedPhrase.text,
+        afterIndexedPhrase: {
           verses: Array.isArray(KJV_CORPUS_VERSES),
           wordIndex: !!KJV_CORPUS_WORD_VERSE_INDEX,
           phraseIndex: !!KJV_CORPUS_PHRASE_INDEX
@@ -268,7 +296,10 @@ test('lazy corpus is reloaded correctly after a service-worker restart', async (
     expect(state.wordType).toBe('KJV_WORD');
     expect(state.afterFastPaths).toEqual({ verses: false, wordIndex: false });
     expect(state.phraseType).toBe('KJV_PASSAGE');
-    expect(state.afterPhrase).toEqual({ verses: true, wordIndex: true, phraseIndex: true });
+    expect(state.afterPhrase).toEqual({ verses: true, wordIndex: true, phraseIndex: false });
+    expect(state.indexedPhraseType).toBe('KJV_PASSAGE');
+    expect(state.indexedPhraseQuery).toContain('good conscience');
+    expect(state.afterIndexedPhrase).toEqual({ verses: true, wordIndex: true, phraseIndex: true });
   } finally {
     if (context) await context.close();
     fs.rmSync(profileDir, { recursive: true, force: true });
