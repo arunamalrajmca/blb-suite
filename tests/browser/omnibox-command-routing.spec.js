@@ -145,7 +145,8 @@ test.describe('remaining omnibox command routing', () => {
       </div>
       <div id="bodyCol1B">
         <select id="right-version">
-          <option value="KJV">King James Version</option>
+          <!-- Simulate BLB exposing a pane-specific option list: the right
+               pane need not include KJV to be a valid parallel selector. -->
           <option value="NIV">New International Version</option>
           <option value="NKJV" selected>New King James Version</option>
         </select>
