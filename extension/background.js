@@ -1557,6 +1557,29 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
           return null;
         };
 
+        // BLB applies the account/session's Favorite Parallel Translation asynchronously.
+        // Wait for its initial parallel-pane rendering to go quiet before overriding
+        // that preference with the version explicitly requested by the omnibox.
+        const waitForDomQuiet = async (quietMs = 1000, timeoutMs = 10000) => {
+          if (!document.body || typeof MutationObserver !== 'function') {
+            await new Promise(resolve => setTimeout(resolve, quietMs));
+            return false;
+          }
+          let lastMutation = Date.now();
+          const observer = new MutationObserver(() => { lastMutation = Date.now(); });
+          observer.observe(document.body, {subtree:true, childList:true, attributes:true, characterData:true});
+          const started = Date.now();
+          try {
+            while (Date.now() - started < timeoutMs) {
+              if (Date.now() - lastMutation >= quietMs) return true;
+              await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            return false;
+          } finally {
+            observer.disconnect();
+          }
+        };
+
         let selects = getVersionSelects();
         if (selects.length < 2) {
           const parallelToggle = document.querySelector('#pCol-toggleIcon');
@@ -1583,28 +1606,6 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
             left: (leftPane && current.find(select => leftPane.contains(select))) || byPosition[0] || null,
             right: (rightPane && current.find(select => rightPane.contains(select))) || byPosition[byPosition.length - 1] || null
           };
-        };
-        // BLB applies the account/session's Favorite Parallel Translation asynchronously.
-        // Wait for its initial parallel-pane rendering to go quiet before overriding
-        // that preference with the version explicitly requested by the omnibox.
-        const waitForDomQuiet = async (quietMs = 1000, timeoutMs = 10000) => {
-          if (!document.body || typeof MutationObserver !== 'function') {
-            await new Promise(resolve => setTimeout(resolve, quietMs));
-            return false;
-          }
-          let lastMutation = Date.now();
-          const observer = new MutationObserver(() => { lastMutation = Date.now(); });
-          observer.observe(document.body, {subtree:true, childList:true, attributes:true, characterData:true});
-          const started = Date.now();
-          try {
-            while (Date.now() - started < timeoutMs) {
-              if (Date.now() - lastMutation >= quietMs) return true;
-              await new Promise(resolve => setTimeout(resolve, 100));
-            }
-            return false;
-          } finally {
-            observer.disconnect();
-          }
         };
         const waitForStable = async predicate => {
           let stableValue = null;
