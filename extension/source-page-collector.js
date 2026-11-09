@@ -17,7 +17,8 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
         "mercyhouseministry.com":"mercyhouse",
         "openbible.info":"openbible",
         "crossway.org":"crossway",
-        "sarata.com":"sarata"
+        "sarata.com":"sarata",
+        "sermonindex.net":"sermonindex"
       })[host] || "";
       // These sites' homepages are general landing pages, not article/reference
       // pages. Keep the page-wide collection button limited to nested pages.
