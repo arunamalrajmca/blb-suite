@@ -1663,7 +1663,7 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
         if (!panes.right || panes.left === panes.right) {
           return {ok:false, reason:'right-pane-selector-lost-after-left-selection'};
         }
-        let rightChange = setVersion(panes.right, versionCode);
+        const rightChange = setVersion(panes.right, versionCode);
         if (!rightChange.ok) {
           return {ok:false, reason:'requested-version-option-not-found-in-right-pane'};
         }
@@ -1684,7 +1684,7 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
               setVersion(panes.left, 'kjv');
             }
             if (normalizeCode(panes.right.value) !== normalizeCode(rightOption.value)) {
-              rightChange = setVersion(panes.right, versionCode);
+              setVersion(panes.right, versionCode);
             }
           }
           await new Promise(resolve => setTimeout(resolve, 200));
