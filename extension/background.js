@@ -3849,11 +3849,7 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     // so every parser caller receives the same canonical text.
     .replace(/[\u061c\u200b-\u200f\u202a-\u202e\u2060\u2066-\u2069\ufeff]/gi, '')
     .replace(/[\u00a0\u2007\u202f]/g, ' ')
-    .replace(/[\u2010\u2011\u2012\u2013]/g, '-')
-    // Preserve an em dash before prose ("John 3:16 — free gift") so it
-    // cannot be mistaken for a dangling verse-range hyphen. Normalize it only
-    // when it introduces a numeric range endpoint.
-    .replace(/\u2014(?=\s*\d)/g, '-');
+    .replace(/[\u2010\u2011\u2012\u2013\u2014]/g, '-');
 
   const addRef = (book, chapter, from, to, originalText) => {
     if (!book || !Number.isInteger(chapter) || !Number.isInteger(from) || !Number.isInteger(to)) return;
