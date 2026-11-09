@@ -84,10 +84,10 @@ test('no optional host-permission regression', () => {
 test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse collector', () => {
   const collector = read('source-page-collector.js');
   const registry = read('source-page-collector-sites.js');
-  assert(registry.includes('"rediscover.bible":"rediscover"'));
-  assert(registry.includes('"sagacityweb.com":"sagacity"'));
-  assert(registry.includes('"thetreasuryofscriptureknowledge.com":"treasury"'));
-  assert(collector.includes('BLBSourcePageCollectorSites?.[host]'), 'collector must use the shared site registry');
+  assert(/"rediscover\\.bible"\\s*:\\s*\\{\\s*id:\\s*"rediscover"/.test(registry));
+  assert(/"sagacityweb\\.com"\\s*:\\s*\\{\\s*id:\\s*"sagacity"/.test(registry));
+  assert(/"thetreasuryofscriptureknowledge\\.com"\\s*:\\s*\\{\\s*id:\\s*"treasury"/.test(registry));
+  assert(collector.includes('BLBSourcePageCollectorSites?.[host]?.id'), 'collector must use the shared site registry metadata');
   assert(collector.includes('if (sourceSite && !isSourceHomepage)'));
   assert(collector.includes('document.querySelectorAll("a[href]")'));
   assert(collector.includes('if (sourceSite === "sagacity")'), 'Sagacity links must prefer the linked BLB citation over malformed/nested captions');
@@ -98,6 +98,7 @@ test('Rediscover, Sagacity, and TSK use the existing nested-page MultiVerse coll
   const background = read('background.js');
   assert(background.includes("'source-page-collector-sites.js'"), 'background must import the shared collector registry');
   assert(background.includes('BLBSourcePageCollectorSites || {}'), 'runtime injection must consult the shared collector registry');
+  assert(background.includes('collectorConfig?.mainWorldClickGuard === true'), 'optional MAIN-world click guards must come from shared registry metadata');
 });
 
 test('Rediscover, Sagacity, and TSK use optional access and dynamic injection only', () => {
