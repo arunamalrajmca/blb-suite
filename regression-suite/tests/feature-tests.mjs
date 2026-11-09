@@ -63,7 +63,8 @@ export function registerFeatureIntegrationTests(context) {
 section('features');
 test('Webster 1828 path remains wired', () => {
   const content = read('content.js'), webster = read('webster-collector.js'), bg = read('background.js');
-  assert(webster.includes('webstersdictionary1828.com'), 'Webster host missing');
+  assert(read('source-page-collector-sites.js').includes('"webstersdictionary1828.com"'), 'Webster host missing from the shared collector registry');
+  assert(webster.includes('websterCollectorConfig?.collectorModule === "webster"'), 'Webster collector must use shared registry metadata');
   assert(webster.includes('collectWebsterBibleRefs'), 'Webster collector missing');
   assert(webster.includes('blbSuiteOpenBackgroundUrl'), 'Webster opener missing');
   assert(content.includes('BLBWebsterCollectorModule') && content.includes('BLBWebsterCollector'), 'Webster module initialization and master-setting refresh hook missing');
@@ -84,7 +85,7 @@ test('Source-page Bible-reference collector remains wired', () => {
   const content = read('content.js'), collector = read('source-page-collector.js');
   const registry = read('source-page-collector-sites.js');
   const manifest = JSON.parse(read('manifest.json')), bg = read('background.js');
-  for (const host of ['christianity.com', 'gotquestions.org', 'crosswalk.com', 'enduringword.com', 'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com', 'dailyverses.net', 'churchofjesuschrist.org', 'mercyhouseministry.com', 'openbible.info', 'crossway.org', 'sarata.com', 'sermonindex.net']) {
+  for (const host of ['christianity.com', 'gotquestions.org', 'crosswalk.com', 'enduringword.com', 'rediscover.bible', 'sagacityweb.com', 'thetreasuryofscriptureknowledge.com', 'dailyverses.net', 'churchofjesuschrist.org', 'mercyhouseministry.com', 'openbible.info', 'crossway.org', 'sarata.com', 'sermonindex.net', 'thekingsbible.com', 'webstersdictionary1828.com']) {
     assert(registry.includes(host), `source-page collector registry missing host: ${host}`);
   }
   assert(collector.includes('BLBSourcePageCollectorSites?.[host]'), 'source-page collector does not use the shared host registry');
