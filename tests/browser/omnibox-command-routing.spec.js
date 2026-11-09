@@ -61,111 +61,26 @@ test.describe('remaining omnibox command routing', () => {
     ]);
   });
 
-  test('explicit omnibox versions request KJV-left parallel comparison instead of replacing KJV', async ({ extensionWorker }) => {
+  test('explicit omnibox version suffixes navigate to KJV without activating Parallel view', async ({ extensionWorker }) => {
     const result = await extensionWorker.evaluate(async () => {
-      const originalParallel = openBlbParallelVersion;
       const originalRecordStudyEntry = recordStudyEntry;
       const originalUpdate = chrome.tabs.update;
-      const calls = [];
       const navigations = [];
       try {
         chrome.tabs.update = async details => { navigations.push(details.url); return {}; };
-        openBlbParallelVersion = async (url, version, disposition) => {
-          calls.push({url, version, disposition});
-          return {ok:true};
-        };
         recordStudyEntry = async () => {};
         await handleBCommand('Rom2 2 NIV', 'newBackgroundTab');
         await handleBCommand('Romans 2:2', 'currentTab');
-        return {calls, navigations};
+        return navigations;
       } finally {
-        openBlbParallelVersion = originalParallel;
         recordStudyEntry = originalRecordStudyEntry;
         chrome.tabs.update = originalUpdate;
       }
     });
-    expect(result.calls).toEqual([{
-      url:'https://www.blueletterbible.org/kjv/rom/2/2/',
-      version:'niv',
-      disposition:'newBackgroundTab'
-    }]);
-    expect(result.navigations).toEqual(['https://www.blueletterbible.org/kjv/rom/2/2/']);
-  });
-
-  test('parallel-version setup overrides a delayed BLB favorite translation', async ({ page, extensionWorker }) => {
-    const result = await extensionWorker.evaluate(async () => {
-      const originalQuery = chrome.tabs.query;
-      const originalUpdate = chrome.tabs.update;
-      const originalWait = waitForTabTerminalLoad;
-      const originalExecute = chrome.scripting.executeScript;
-      let captured = null;
-      try {
-        chrome.tabs.query = async () => [{id:4321}];
-        chrome.tabs.update = async () => ({id:4321});
-        waitForTabTerminalLoad = async () => {};
-        chrome.scripting.executeScript = async options => {
-          captured = {
-            target:options.target,
-            args:options.args,
-            functionSource:String(options.func)
-          };
-          return [{result:{ok:true,leftVersion:'KJV',rightVersion:'NIV'}}];
-        };
-        const configured = await openBlbParallelVersion(
-          'https://www.blueletterbible.org/kjv/rom/2/2/', 'niv', 'currentTab'
-        );
-        return {configured,captured};
-      } finally {
-        chrome.tabs.query = originalQuery;
-        chrome.tabs.update = originalUpdate;
-        waitForTabTerminalLoad = originalWait;
-        chrome.scripting.executeScript = originalExecute;
-      }
-    });
-    expect(result.configured).toMatchObject({ok:true,leftVersion:'KJV',rightVersion:'NIV'});
-    expect(result.captured.target).toEqual({tabId:4321});
-    expect(result.captured.args).toEqual(['niv']);
-    expect(result.captured.functionSource).toContain('#pCol-toggleIcon');
-    expect(result.captured.functionSource).toContain('bodyCol1A');
-    expect(result.captured.functionSource).toContain('bodyCol1B');
-    expect(result.captured.functionSource).toContain('normalizeCode(select.value) === normalizeCode(option.value)');
-    expect(result.captured.functionSource).toContain('let panes = paneSelects()');
-    expect(result.captured.functionSource).toContain('const rightChange = setVersion(panes.right, versionCode)');
-    expect(result.captured.functionSource).toContain('waitForStable');
-    expect(result.captured.functionSource).toContain('const enforcementDeadline = Date.now() + 3000');
-    expect(result.captured.functionSource).toContain('while (Date.now() < enforcementDeadline)');
-
-    await page.setContent(`
-      <div id="bodyCol1A">
-        <select id="left-version">
-          <option value="KJV" selected>King James Version</option>
-          <option value="NIV">New International Version</option>
-          <option value="NKJV">New King James Version</option>
-        </select>
-      </div>
-      <div id="bodyCol1B">
-        <select id="right-version">
-          <!-- Simulate BLB exposing a pane-specific option list: the right
-               pane need not include KJV to be a valid parallel selector. -->
-          <option value="NIV">New International Version</option>
-          <option value="NKJV" selected>New King James Version</option>
-        </select>
-      </div>
-      <button id="pCol-toggleIcon">Parallel</button>
-    `);
-    const applied = await page.evaluate(async functionSource => {
-      const configure = (0, eval)(`(${functionSource})`);
-      const right = document.getElementById('right-version');
-      // Simulate BLB restoring the user's Favorite Parallel Translation after
-      // the initial explicit NIV selection has already been made.
-      setTimeout(() => {
-        right.value = 'NKJV';
-        right.dispatchEvent(new Event('change', {bubbles:true}));
-      }, 1600);
-      return configure('niv');
-    }, result.captured.functionSource);
-    expect(applied).toMatchObject({ok:true,leftVersion:'KJV',rightVersion:'NIV'});
-    await expect(page.locator('#right-version')).toHaveValue('NIV');
+    expect(result).toEqual([
+      'https://www.blueletterbible.org/kjv/rom/2/2/',
+      'https://www.blueletterbible.org/kjv/rom/2/2/'
+    ]);
   });
 
   test('cs command is gated by the master switch and forwards the disposition', async ({ extensionWorker }) => {
