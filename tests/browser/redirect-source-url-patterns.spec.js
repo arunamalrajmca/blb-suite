@@ -49,6 +49,9 @@ const sourcePageMultiVerseCode = read('extension/source-page-collector.js');
 async function initializeSourcePageMultiVerse(page) {
   await page.addScriptTag({ content: draggableButtonModule });
   await page.addScriptTag({ content: 'const makeBlbMultiVerseButtonDraggable = globalThis.BLBDraggableButtonModule.makeBlbMultiVerseButtonDraggable;' });
+  // The production manifest loads the shared supported-site registry before
+  // the collector. Keep this isolated browser harness in the same order.
+  await page.addScriptTag({ content: read('extension/source-page-collector-sites.js') });
   await page.addScriptTag({ content: sourcePageMultiVerseCode });
   await page.addScriptTag({ content: `BLBSourcePageCollectorModule.initialize({
     normalizeSelectionText,
