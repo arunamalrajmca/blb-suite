@@ -264,7 +264,11 @@ function normalizeSelectionText(s) {
     // Rich-text sites can insert invisible bidirectional formatting marks.
     .replace(/[\u061C\u200B-\u200F\u202A-\u202E\u2060\u2066-\u2069\uFEFF]/g, '')
     .replace(/[\u00A0\u2007\u202F]/g, ' ')
-    .replace(/[\u2010-\u2015\u2212]/g, '-')
+    // Keep Unicode dash punctuation before prose; normalize it only when
+    // it introduces a numeric verse-range endpoint. This matches the shared
+    // selection-text helper and prevents an em-dash aside from becoming a
+    // dangling ASCII-hyphen range marker.
+    .replace(/[\u2010-\u2015\u2212](?=\s*\d)/g, '-')
     .replace(/\s+/g, ' ')
     .trim();
 }
