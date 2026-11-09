@@ -140,7 +140,7 @@ test.describe('research-derived DOM regression smoke', () => {
 
   test('D22 reversed selection preserves the Bible reference', async ({ page, extensionStorage, extensionWorker }) => {
     await setup(page, extensionStorage);
-    await selectText(page, 'reverse', true);
+    await selectText(page, 'reverse-reference', true);
     await useShowOnBlb(page, extensionWorker, '/kjv/jhn/3/16/');
   });
 
