@@ -79,7 +79,7 @@ test('MAIN-world guard registration normalizes www hosts and is limited to artic
   expect(registration).toContain('collectorConfig?.mainWorldClickGuard === true');
   expect(registration).not.toContain('christianity.com');
   for (const host of ['christianity.com', 'gotquestions.org', 'crosswalk.com', 'enduringword.com', 'churchofjesuschrist.org', 'mercyhouseministry.com', 'openbible.info', 'crossway.org', 'sarata.com']) {
-    const entry = registry.split('\\n').find(line => line.includes(`"${host}"`));
+    const entry = registry.split('\n').find(line => line.includes(`"${host}"`));
     expect(entry, `${host} must be configured in the shared registry`).toContain('mainWorldClickGuard:true');
   }
   // ESV.org is redirect-only; it does not need the source-page click guard.
