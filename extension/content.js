@@ -1266,7 +1266,7 @@ function resolveBibleReferenceFromContextWindowCore(text, selectionStart, select
   // A verse cue such as "v.25" may be selected as either the cue or its
   // numeric token. Associate that number only with the nearest preceding
   // explicit reference in this same context window.
-  const cueNumber = /\b(?:v\.?|verses?)\s*(\d{1,3})\b/gi;
+  const cueNumber = /\b(?:v\.?|vs\.?|verses?)\s*(\d{1,3})\b/gi;
   let cueMatch;
   while ((cueMatch = cueNumber.exec(source))) {
     const numberStart = cueMatch.index + cueMatch[0].lastIndexOf(cueMatch[1]);
@@ -2148,7 +2148,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         ? domText(numericContextBlock)
         : '';
       const numericContextHasBook = hasExplicitBookLabel(numericContextText);
-      const numericContextHasVerseCue = /\b(?:v\.?|verses?)\s*\d{1,3}\b/i.test(numericContextText);
+      const numericContextHasVerseCue = /\b(?:v\.?|vs\.?|verses?)\s*\d{1,3}\b/i.test(numericContextText);
       if (!numericContextHasBook && !numericContextHasVerseCue) {
         // A standalone numeric token from 1–66 is also a supported book
         // selector. Resolve it only after exact positional citation matching
@@ -2639,13 +2639,13 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
       // context scan restricted to an exact standalone cue token.
       const normalizedElementToken = normalizeDoubleClickToken(clickedElementToken);
       const normalizedSelectedToken = normalizeDoubleClickToken(clickedWordText || clickedElementToken || selected);
-      const clickToken = /^(?:v|verse|verses)$/i.test(normalizedElementToken)
+      const clickToken = /^(?:v|vs|verse|verses)$/i.test(normalizedElementToken)
         ? normalizedElementToken
         : normalizedSelectedToken;
       // Only an explicit verse cue may trigger post-level context scanning.
       // Numeric clicks stay on the normal resolver path to avoid expensive
       // book/chapter searches for ordinary numbers.
-      const verseWordClick = /^(?:v|verse|verses)$/i.test(clickToken);
+      const verseWordClick = /^(?:v|vs|verse|verses)$/i.test(clickToken);
       const tokenElementIsExact = !!(initialNode && messageRoot.contains(initialNode) &&
         normalizedElementToken === clickToken);
       if (verseWordClick) {
@@ -3462,7 +3462,7 @@ function getDoubleClickSelection(event) {
 window.__blbSuiteResolveVerseCueContext = function(selectionText) {
   try {
     const selected = normalizeSelectionText(selectionText).normalize('NFKC');
-    if (!/^(?:v|verse|verses)$/i.test(normalizeDoubleClickToken(selected))) return null;
+    if (!/^(?:v|vs|verse|verses)$/i.test(normalizeDoubleClickToken(selected))) return null;
     const selection = window.getSelection?.();
     if (!selection?.rangeCount || selection.isCollapsed) return null;
     let target = selection.getRangeAt(0).commonAncestorContainer;
