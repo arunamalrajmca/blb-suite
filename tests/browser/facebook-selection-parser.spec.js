@@ -494,3 +494,39 @@ test('Facebook floating Show on BLB keeps KJV word Timothy selectable after a nu
     return tabs.find(url => url.includes('/search/search.cfm?Criteria='));
   }).toContain('Criteria=Timothy');
 });
+
+
+test('Supply of Grace Double-Click recognizes Vs as a verse cue', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    doubleClickBlbSites: { 'supplyofgrace.com': true, 'www.supplyofgrace.com': true }
+  });
+  await page.route('https://www.supplyofgrace.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Rejoicing Alway</title></head><body><main><article id="post"></article></main></body></html>'
+  }));
+  await page.goto('https://www.supplyofgrace.com/p/rejoicing-alway', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(500);
+  await page.locator('#post').evaluate(element => {
+    element.textContent = '1 Thessalonians 5:16-18 (KJV) Vs 16: Rejoice evermore.';
+    element.style.cssText = 'font:20px Arial,sans-serif;margin:24px;';
+  });
+  const point = await page.locator('#post').evaluate(element => {
+    const node = element.firstChild;
+    const start = node.textContent.indexOf('Vs');
+    const range = document.createRange();
+    range.setStart(node, start);
+    range.setEnd(node, start + 2);
+    const rect = range.getBoundingClientRect();
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  });
+  await page.mouse.dblclick(point.x, point.y);
+  await expect.poll(async () => {
+    const tabs = await extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({ url: 'https://www.blueletterbible.org/*' }))
+        .map(tab => tab.url || tab.pendingUrl || '')
+    );
+    return tabs.find(url => url.includes('/kjv/1th/5/'));
+  }, { timeout: 10000 }).toContain('/kjv/1th/5/16-18/');
+});
