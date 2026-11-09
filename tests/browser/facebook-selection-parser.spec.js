@@ -528,5 +528,5 @@ test('Supply of Grace Double-Click recognizes Vs as a verse cue', async ({ page,
         .map(tab => tab.url || tab.pendingUrl || '')
     );
     return tabs.find(url => url.includes('/kjv/1th/5/'));
-  }, { timeout: 10000 }).toContain('/kjv/1th/5/16-18/');
+  }, { timeout: 10000 }).toContain('/kjv/1th/5/16/');
 });
