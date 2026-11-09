@@ -132,7 +132,7 @@ test.describe('remaining omnibox command routing', () => {
     expect(result.captured.functionSource).toContain('let panes = paneSelects()');
     expect(result.captured.functionSource).toContain('const rightChange = setVersion(panes.right, versionCode)');
     expect(result.captured.functionSource).toContain('waitForStable');
-    expect(result.captured.functionSource).toContain('const enforcementDeadline = Date.now() + 3000');
+    expect(result.captured.functionSource).toContain('const enforcementDeadline = Date.now() + 8000');
     expect(result.captured.functionSource).toContain('while (Date.now() < enforcementDeadline)');
 
     await page.setContent(`
@@ -156,12 +156,12 @@ test.describe('remaining omnibox command routing', () => {
     const applied = await page.evaluate(async functionSource => {
       const configure = (0, eval)(`(${functionSource})`);
       const right = document.getElementById('right-version');
-      // Simulate BLB restoring the user's Favorite Parallel Translation after
+      // Simulate BLB restoring the user's Favorite Parallel Translation well after
       // the initial explicit NIV selection has already been made.
       setTimeout(() => {
         right.value = 'NKJV';
         right.dispatchEvent(new Event('change', {bubbles:true}));
-      }, 1600);
+      }, 4200);
       return configure('niv');
     }, result.captured.functionSource);
     expect(applied).toMatchObject({ok:true,leftVersion:'KJV',rightVersion:'NIV'});
