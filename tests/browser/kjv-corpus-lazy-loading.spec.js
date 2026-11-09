@@ -642,8 +642,17 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
       firstCorpusUseMs: median(rows.map(row => row.firstCorpusUseMs)),
       firstPhraseUseMs: median(rows.map(row => row.firstPhraseUseMs)),
       deferredWordIndexUseMs: median(rows.map(row => row.deferredWordIndexUseMs)),
-      warmCorpusUseMs: median(rows.map(row => row.warmCorpusUseMs))
+      warmCorpusUseMs: median(rows.map(row => row.warmCorpusUseMs)),
+      startupPlusFirstPhraseMs: median(rows.map(row => row.startupToFirstEvaluationMs + row.firstPhraseUseMs)),
+      firstPhrasePlusDeferredMs: median(rows.map(row => row.firstPhraseUseMs + row.deferredWordIndexUseMs)),
+      startupPlusFirstPhrasePlusDeferredMs: median(rows.map(row => row.startupToFirstEvaluationMs + row.firstPhraseUseMs + row.deferredWordIndexUseMs))
     };
+  };
+  const metricValue = (sample, key) => {
+    if (key === 'startupPlusFirstPhraseMs') return sample.startupToFirstEvaluationMs + sample.firstPhraseUseMs;
+    if (key === 'firstPhrasePlusDeferredMs') return sample.firstPhraseUseMs + sample.deferredWordIndexUseMs;
+    if (key === 'startupPlusFirstPhrasePlusDeferredMs') return sample.startupToFirstEvaluationMs + sample.firstPhraseUseMs + sample.deferredWordIndexUseMs;
+    return sample[key];
   };
   const metricKeys = [
     'startupToFirstEvaluationMs',
@@ -652,7 +661,10 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     'deferredWordIndexUseMs',
     'warmCorpusUseMs',
     'referenceOnlyMs',
-    'singleWordMs'
+    'singleWordMs',
+    'startupPlusFirstPhraseMs',
+    'firstPhrasePlusDeferredMs',
+    'startupPlusFirstPhrasePlusDeferredMs'
   ];
   const pairedChanges = Object.fromEntries(metricKeys.map(key => {
     const pairs = [];
@@ -660,8 +672,8 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
       const baseline = samples.find(row => row.variant === 'baseline' && row.repetition === repetition);
       const candidate = samples.find(row => row.variant === 'candidate' && row.repetition === repetition);
       if (!baseline || !candidate) continue;
-      const before = baseline[key];
-      const after = candidate[key];
+      const before = metricValue(baseline, key);
+      const after = metricValue(candidate, key);
       pairs.push({
         repetition,
         baselineMs:before,
