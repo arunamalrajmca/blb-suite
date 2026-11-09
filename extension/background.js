@@ -1516,6 +1516,99 @@ async function openSingleKjvVerse(entry, disposition = 'currentTab') {
   return true;
 }
 
+async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'currentTab') {
+  let tab = null;
+  if (disposition === 'newBackgroundTab') {
+    tab = await openBlbDestination(kjvUrl, false, false);
+  } else if (disposition === 'newForegroundTab') {
+    tab = await openBlbDestination(kjvUrl, true, true);
+  } else {
+    const activeTabs = await chrome.tabs.query({active:true, lastFocusedWindow:true});
+    const activeTab = activeTabs[0] || null;
+    tab = await chrome.tabs.update({url:kjvUrl});
+    if (!tab?.id && activeTab?.id != null) tab = activeTab;
+  }
+  if (!Number.isInteger(tab?.id)) {
+    console.warn('[KJV Scripture Tools] Unable to identify the BLB tab for Parallel Bible setup.');
+    return {ok:false, reason:'missing-tab-id'};
+  }
+
+  try {
+    await waitForTabTerminalLoad(tab.id, 20000);
+    const executions = await chrome.scripting.executeScript({
+      target:{tabId:tab.id},
+      args:[String(requestedVersion || '').toLowerCase()],
+      func: async versionCode => {
+        const normalizeCode = value => String(value || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const optionFor = (select, code) => Array.from(select.options || []).find(option => {
+          const value = normalizeCode(option.value);
+          const label = normalizeCode(option.textContent);
+          return value === code || label === code || label.endsWith(code);
+        });
+        const getVersionSelects = () => Array.from(document.querySelectorAll('select')).filter(select =>
+          optionFor(select, 'kjv') && optionFor(select, versionCode)
+        );
+        const waitFor = async predicate => {
+          for (let attempt = 0; attempt < 80; attempt++) {
+            const value = predicate();
+            if (value) return value;
+            await new Promise(resolve => setTimeout(resolve, 150));
+          }
+          return null;
+        };
+
+        let selects = getVersionSelects();
+        if (selects.length < 2) {
+          const parallelToggle = document.querySelector('#pCol-toggleIcon');
+          if (!parallelToggle) return {ok:false, reason:'parallel-toggle-not-found'};
+          parallelToggle.click();
+          selects = await waitFor(() => {
+            const found = getVersionSelects();
+            return found.length >= 2 ? found : null;
+          });
+        }
+        if (!selects || selects.length < 2) {
+          return {ok:false, reason:'parallel-version-selectors-not-found', selectorCount:selects?.length || 0};
+        }
+
+        const leftPane = document.getElementById('bodyCol1A');
+        const rightPane = document.getElementById('bodyCol1B');
+        const byPosition = [...selects].sort((a, b) => a.getBoundingClientRect().left - b.getBoundingClientRect().left);
+        const leftSelect = (leftPane && selects.find(select => leftPane.contains(select))) || byPosition[0];
+        const rightSelect = (rightPane && selects.find(select => rightPane.contains(select))) || byPosition[byPosition.length - 1];
+        if (!leftSelect || !rightSelect || leftSelect === rightSelect) {
+          return {ok:false, reason:'parallel-pane-version-selectors-not-distinct'};
+        }
+
+        const setVersion = (select, code) => {
+          const option = optionFor(select, code);
+          if (!option) return false;
+          select.value = option.value;
+          select.dispatchEvent(new Event('input', {bubbles:true}));
+          select.dispatchEvent(new Event('change', {bubbles:true}));
+          return true;
+        };
+        const leftSet = setVersion(leftSelect, 'kjv');
+        const rightSet = setVersion(rightSelect, versionCode);
+        return {
+          ok:leftSet && rightSet,
+          reason:leftSet && rightSet ? '' : 'requested-version-option-not-found',
+          leftVersion:leftSelect.value,
+          rightVersion:rightSelect.value
+        };
+      }
+    });
+    const result = executions?.[0]?.result || {ok:false, reason:'parallel-setup-returned-no-result'};
+    if (!result.ok) {
+      console.warn('[KJV Scripture Tools] Unable to configure BLB Parallel Bible view: ' + JSON.stringify(result));
+    }
+    return result;
+  } catch (error) {
+    console.warn('[KJV Scripture Tools] Unable to configure BLB Parallel Bible view:', error);
+    return {ok:false, reason:String(error?.message || error)};
+  }
+}
+
 async function handleBCommand(text, disposition = 'currentTab') {
   if (!(await isSuiteEnabled())) return;
   const t=normalizeBibleInput(text), low=t.toLowerCase();
@@ -1724,10 +1817,14 @@ async function handleBCommand(text, disposition = 'currentTab') {
 
     const resolved = resolveBibleReference(book.name, ch, from, to);
     if (resolved) {
-      const resolvedUrl = requestedVersion === "kjv"
-        ? resolved.url
-        : resolved.url.replace('/kjv/', `/${requestedVersion}/`);
-      chrome.tabs.update({url:resolvedUrl});
+      if (requestedVersion === "kjv") {
+        chrome.tabs.update({url:resolved.url});
+      } else {
+        // An explicit translation suffix means comparison, not replacement:
+        // keep KJV in the primary (left) pane and select the requested
+        // translation in BLB's native Parallel (right) pane.
+        await openBlbParallelVersion(resolved.url, requestedVersion, disposition);
+      }
       return;
     }
   }
