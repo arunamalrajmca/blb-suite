@@ -135,6 +135,8 @@ test.describe('remaining omnibox command routing', () => {
     expect(result.captured.functionSource).toContain('waitForDomQuiet');
     expect(result.captured.functionSource).toContain('await waitForDomQuiet();');
     expect(result.captured.functionSource).toContain('BLB applies the account/session\'s Favorite Parallel Translation asynchronously');
+    expect(result.captured.functionSource).toContain('const enforcementDeadline = Date.now() + 3000');
+    expect(result.captured.functionSource).toContain('while (Date.now() < enforcementDeadline)');
   });
 
   test('cs command is gated by the master switch and forwards the disposition', async ({ extensionWorker }) => {
