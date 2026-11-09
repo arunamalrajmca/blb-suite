@@ -7,7 +7,6 @@ test('source-page collector parses, canonicalizes, and deduplicates linked Bible
   await extensionStorage.set({
     masterEnabled: true,
     pageSelectionButtonSites: {},
-    doubleClickBlbSites: {},
     doubleClickBlbSites: {}
   });
 
