@@ -38,7 +38,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
         decisionType: decision.type,
         versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
         verseCount: KJV_CORPUS_VERSES?.length,
-        indexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX
+        indexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX)
           && typeof KJV_CORPUS_WORD_VERSE_INDEX === 'object',
         phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX,
         exactMatch: findSingleKjvPhraseMatch('For God so loved the world')?.slice(0, 3)
@@ -60,7 +60,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
         decisionType: decision.type,
         query: decision.kjvPassageQuery,
         versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
-        wordIndexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX,
+        wordIndexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX),
         phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX,
         exactMatch: !!findExactKjvPhraseInLoadedCorpus(['god', 'is', 'love'])
       };
@@ -81,7 +81,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
         decisionType: decision.type,
         query: decision.kjvPassageQuery,
         versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
-        wordIndexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX,
+        wordIndexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX),
         phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX
       };
     });
@@ -100,7 +100,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
         type: decision.type,
         query: decision.kjvPassageQuery,
         versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
-        wordIndexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX,
+        wordIndexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX),
         phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX
       };
     });
@@ -138,7 +138,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
         phraseType: phrase.type,
         phraseQuery: phrase.kjvPassageQuery,
         versesLoadedAfterPhrase: Array.isArray(KJV_CORPUS_VERSES),
-        wordIndexLoadedAfterPhrase: !!KJV_CORPUS_WORD_VERSE_INDEX,
+        wordIndexLoadedAfterPhrase: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX),
         phraseIndexLoadedAfterPhrase: !!KJV_CORPUS_PHRASE_INDEX
       };
     });
@@ -177,7 +177,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
           gzipRequests,
           fallbackRequests,
           verseCount: KJV_CORPUS_VERSES?.length,
-          wordIndexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX,
+          wordIndexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX),
           phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX,
           exactMatch: findSingleKjvPhraseMatch('For God so loved the world')?.slice(0, 3)
         };
@@ -274,7 +274,7 @@ test.describe('On-demand normalized KJV corpus loading', () => {
         firstAttemptFailed,
         requests,
         versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
-        indexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX
+        indexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX)
       };
     });
 
@@ -318,6 +318,14 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     maxBuffer: 100 * 1024 * 1024
   });
   execFileSync('tar', ['-xf', '-', '-C', baselineRoot], { cwd: repoRoot, input: archive });
+
+  // Build the same ignored gzip sidecars for the current-main baseline; without
+  // them the baseline silently falls back to the slower uncompressed JS assets.
+  execFileSync(process.execPath, [
+    path.resolve(repoRoot, 'scripts/generate-kjv-gzip-assets.cjs'),
+    path.join(baselineRoot, 'extension')
+  ], { cwd: repoRoot, stdio: 'pipe' });
+
   const variants = {
     baseline: path.join(baselineRoot, 'extension'),
     candidate: candidateRoot
@@ -504,7 +512,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
         const firstUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
         const afterFirstPhrase = {
           versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
-          wordIndexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX,
+          wordIndexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX),
           phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX
         };
 
@@ -516,7 +524,7 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
         const deferredUseProfileEvents = [...(globalThis.__BLB_PROFILE_LOAD__?.events || [])];
         const afterDeferredUse = {
           versesLoaded: Array.isArray(KJV_CORPUS_VERSES),
-          wordIndexLoaded: !!KJV_CORPUS_WORD_VERSE_INDEX,
+          wordIndexLoaded: (typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined' && !!KJV_CORPUS_WORD_VERSE_INDEX),
           phraseIndexLoaded: !!KJV_CORPUS_PHRASE_INDEX
         };
 
