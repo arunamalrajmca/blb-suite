@@ -1557,29 +1557,6 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
           return null;
         };
 
-        // BLB applies the account/session's Favorite Parallel Translation asynchronously.
-        // Wait for its initial parallel-pane rendering to go quiet before overriding
-        // that preference with the version explicitly requested by the omnibox.
-        const waitForDomQuiet = async (quietMs = 1000, timeoutMs = 10000) => {
-          if (!document.body || typeof MutationObserver !== 'function') {
-            await new Promise(resolve => setTimeout(resolve, quietMs));
-            return false;
-          }
-          let lastMutation = Date.now();
-          const observer = new MutationObserver(() => { lastMutation = Date.now(); });
-          observer.observe(document.body, {subtree:true, childList:true, attributes:true, characterData:true});
-          const started = Date.now();
-          try {
-            while (Date.now() - started < timeoutMs) {
-              if (Date.now() - lastMutation >= quietMs) return true;
-              await new Promise(resolve => setTimeout(resolve, 100));
-            }
-            return false;
-          } finally {
-            observer.disconnect();
-          }
-        };
-
         let selects = getVersionSelects();
         if (selects.length < 2) {
           const parallelToggle = document.querySelector('#pCol-toggleIcon');
@@ -1593,9 +1570,6 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
         if (!selects || selects.length < 2) {
           return {ok:false, reason:'parallel-version-selectors-not-found', selectorCount:selects?.length || 0};
         }
-
-        // Do not race BLB's asynchronous Favorite Parallel Translation restore.
-        await waitForDomQuiet();
 
         const paneSelects = () => {
           const leftPane = document.getElementById('bodyCol1A');
@@ -1690,8 +1664,6 @@ async function openBlbParallelVersion(kjvUrl, requestedVersion, disposition = 'c
           }
           await new Promise(resolve => setTimeout(resolve, 200));
         }
-        await waitForDomQuiet();
-
         const rightReady = await waitForStable(() => {
           const current = paneSelects();
           const leftOption = current.left && optionFor(current.left, 'kjv');
