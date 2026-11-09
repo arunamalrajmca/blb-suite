@@ -332,6 +332,7 @@ test.describe('real-browser source URL redirect regressions', () => {
       const targetUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
       await loadProductionRedirect(page, source.url);
       await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+      await page.addScriptTag({ content: read('extension/source-page-collector-sites.js') });
       await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
       await page.evaluate(() => {
         document.body.innerHTML = '<article><p>Keep this article open.</p><a id="passage" href="/bible-reference">John 3:16</a></article>';
@@ -348,6 +349,7 @@ test.describe('real-browser source URL redirect regressions', () => {
   test('Christianity.com click guard resolves chapter, single-verse, and verse-range links to KJV', async ({ page }) => {
     await loadProductionRedirect(page, 'https://www.christianity.com/faith/bible-study/article.html');
     await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+    await page.addScriptTag({ content: read('extension/source-page-collector-sites.js') });
     await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
     const cases = [
       {
@@ -386,6 +388,7 @@ test.describe('real-browser source URL redirect regressions', () => {
   test('Christianity.com click guard does not claim a passage when redirect is disabled', async ({ page }) => {
     await loadProductionRedirect(page, 'https://www.christianity.com/faith/bible-study/article.html');
     await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => false);' });
+    await page.addScriptTag({ content: read('extension/source-page-collector-sites.js') });
     await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
     const result = await page.evaluate(() => {
       // The disabled guard must leave the click alone. Prevent the browser's
@@ -408,6 +411,7 @@ test.describe('real-browser source URL redirect regressions', () => {
   test('Christianity.com passage guard leaves ordinary, foreign, modified, and download clicks alone', async ({ page }) => {
     await loadProductionRedirect(page, 'https://www.christianity.com/faith/bible-study/article.html');
     await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+    await page.addScriptTag({ content: read('extension/source-page-collector-sites.js') });
     await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
     const results = await page.evaluate(() => {
       document.body.innerHTML = [
@@ -626,6 +630,7 @@ test.describe('real-browser source URL redirect regressions', () => {
   test('Christianity.com passage click guard ignores non-passage links and preserves modified clicks', async ({ page }) => {
     await loadProductionRedirect(page, 'https://www.christianity.com/faith/bible-study/article.html');
     await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+    await page.addScriptTag({ content: read('extension/source-page-collector-sites.js') });
     await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
     const results = await page.evaluate(() => {
       document.body.innerHTML = [
@@ -670,6 +675,7 @@ test.describe('real-browser source URL redirect regressions', () => {
     ]) {
       await loadProductionRedirect(page, source.url);
       await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => false);' });
+      await page.addScriptTag({ content: read('extension/source-page-collector-sites.js') });
       await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
       const result = await page.evaluate(({href,label}) => {
         document.body.innerHTML = '';
@@ -720,6 +726,7 @@ test.describe('real-browser source URL redirect regressions', () => {
     ]) {
       await loadProductionRedirect(page, source.url);
       await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+      await page.addScriptTag({ content: read('extension/source-page-collector-sites.js') });
       await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
       const result = await page.evaluate(() => {
         document.body.innerHTML = [
@@ -905,6 +912,7 @@ test('ChurchofJesusChrist and Mercy House individual verse clicks open the exact
   for (const source of cases) {
     await loadProductionRedirect(page, source.pageUrl);
     await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+    await page.addScriptTag({ content: read('extension/source-page-collector-sites.js') });
     await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
     const result = await page.evaluate(({href,label}) => {
       document.body.innerHTML = '';
@@ -964,6 +972,7 @@ test('OpenBible, Crossway and Sarata individual verse links open the exact BLB K
   for (const source of cases) {
     await loadProductionRedirect(page, source.pageUrl);
     await page.addScriptTag({ content: 'installChristianityLinkRedirect(() => true);' });
+    await page.addScriptTag({ content: read('extension/source-page-collector-sites.js') });
     await page.addScriptTag({ content: read('extension/redirect-christianity-main-world.js') });
     const result = await page.evaluate(({href,label}) => {
       document.body.innerHTML = '';
