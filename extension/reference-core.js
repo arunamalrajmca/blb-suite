@@ -14,7 +14,7 @@ function normalizeBibleReferenceText(value) {
     // Normalize source citation markers only when immediately followed by a
     // verse number: "vs. 10" and "v10" become ordinary reference separators.
     .replace(/\bvs\.?\s*(?=\d)/gi, ':')
-    .replace(/\bv\s*(?=\d)/gi, ' ')
+    .replace(/\bv\s*(?:\(\s*(\d+)\s*\)|(\d+))/gi, (_, parenthesized, plain) => ' ' + (parenthesized || plain))
     .replace(/\s+/g, ' ')
     .trim();
 }
