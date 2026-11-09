@@ -482,3 +482,66 @@ test('OpenBible, Crossway and Sarata show BLB collection buttons on content page
   }
 });
 
+
+test('SermonIndex topic pages show the BLB references button and collect linked citations', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'sermonindex.net':true},
+    doubleClickBlbSites:{}
+  });
+
+  await context.route('https://sermonindex.net/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:`<!doctype html><html><head><title>Christian Life | SermonIndex</title></head><body>
+      <main>
+        <h1>Christian Life</h1>
+        <p><a href="/bible/wordstudy/JOH/3/16/">John 3:16</a></p>
+        <p><a href="/bible/wordstudy/ACT/2/38/">Acts 2:38</a></p>
+        <p><a href="/bible/wordstudy/EPH/1/13/">Ephesians 1:13-14</a></p>
+        <a href="/sermons/fixture/">1 Samuel 15 vs. 10</a>
+      </main>
+    </body></html>`
+  }));
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status:200, contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>BLB fixture</title></head><body>BLB fixture</body></html>'
+  }));
+
+  await extensionWorker.evaluate(() => {
+    globalThis.__blbSermonIndexCapture = message => {
+      if (message?.type === 'blbSuiteOpenWebsterMultiVerse') {
+        void chrome.storage.local.set({__blbTestSermonIndexRefs:message.refs || []});
+      }
+    };
+    chrome.runtime.onMessage.addListener(globalThis.__blbSermonIndexCapture);
+  });
+
+  await page.goto('https://sermonindex.net/topics/christian-life/', {waitUntil:'domcontentloaded'});
+  const button = page.locator('#blb-suite-sermonindex-multiverse');
+  await expect(button).toHaveText('Open Bible References in BLB');
+  await button.click();
+
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const saved = await chrome.storage.local.get({__blbTestSermonIndexRefs:[]});
+    return saved.__blbTestSermonIndexRefs.length;
+  }), {timeout:10000}).toBe(4);
+
+  const refs = await extensionWorker.evaluate(async () => {
+    const saved = await chrome.storage.local.get({__blbTestSermonIndexRefs:[]});
+    return saved.__blbTestSermonIndexRefs.map(ref => [
+      ref.book, ref.chapter, ref.from, ref.to, ref.url
+    ]);
+  });
+  expect(refs).toEqual([
+    ['john',3,16,16,'https://www.blueletterbible.org/kjv/jhn/3/16/'],
+    ['acts',2,38,38,'https://www.blueletterbible.org/kjv/act/2/38/'],
+    ['ephesians',1,13,14,'https://www.blueletterbible.org/kjv/eph/1/13-14/'],
+    ['1 samuel',15,10,10,'https://www.blueletterbible.org/kjv/1sa/15/10/']
+  ]);
+  await expect(page.locator('#blb-suite-sermonindex-multiverse-status'))
+    .toContainText('Opening 4 Bible references in BLB MultiVerse');
+});
