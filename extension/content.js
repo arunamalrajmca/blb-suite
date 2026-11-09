@@ -311,7 +311,10 @@ function formatSourceBibleBookName(book) {
 }
 
 function parseRef(text) {
-  const value=decodeSafe(text).trim();
+  const value=decodeSafe(text).trim()
+    // Source citations use "vs. 10" or "v10" as the verse separator.
+    .replace(/\bvs\.?\s*(?=\d)/gi, ' ')
+    .replace(/\bv\s*(?=\d)/gi, ' ');
   // Accept normal references and BiblePortal's dotted form, e.g.
   // John 3:16, John 3 16, and John.3.16.
   const m=value.match(/^(.+?)[\s.]+(\d+)(?:[:.\s]+(\d+)(?:-(\d+))?)?$/);
