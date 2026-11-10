@@ -43,13 +43,13 @@ if (!alwaysFull) {
     .split("\n").filter(Boolean);
 }
 
-const browserSpecPattern = /^tests\\/browser\\/[^/]+\\.spec\\.js$/;
+const browserSpecPattern = new RegExp("^tests/browser/[^/]+\\.spec\\.js$");
 // A spec whose only diff is removed lines does not need to execute: runtime
 // changes are covered by mapped specs, while added/modified test content still runs.
 function hasAddedSpecLines(path) {
-  const row = run(["diff", "--numstat", `${base}...HEAD`, "--", path]).split("\\n").find(Boolean);
+  const row = run(["diff", "--numstat", base + "...HEAD", "--", path]).split("\n").find(Boolean);
   if (!row) return false;
-  const added = row.split("\\t", 1)[0];
+  const added = row.split("\t", 1)[0];
   return added !== "0" && added !== "-";
 }
 const existingBrowserSpecs = new Set(run(["ls-tree", "-r", "--name-only", "HEAD", "--", "tests/browser"]).split("\n").filter(Boolean));
