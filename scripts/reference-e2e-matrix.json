@@ -49,5 +49,5 @@
     "group": "service-worker-lifecycle",
     "file": "tests/browser/service-worker-lifecycle.spec.js",
     "grep": ".*"
-  },
+  }
 ]
