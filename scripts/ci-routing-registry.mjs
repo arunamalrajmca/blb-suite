@@ -30,7 +30,9 @@ export const featureSpecs = [
       "tests/browser/pdf-selection-regressions.spec.js",
       "tests/browser/kjv-corpus-lazy-loading.spec.js",
       "tests/browser/audit-defect-regressions.spec.js",
-      "tests/browser/service-worker-lifecycle.spec.js"
+      "tests/browser/service-worker-lifecycle.spec.js",
+  "tests/browser/site-registration-opt-out-race.spec.js",
+      "tests/browser/site-registration-opt-out-race.spec.js"
     ]
   },
   {
