@@ -43,7 +43,15 @@ if (!alwaysFull) {
     .split("\n").filter(Boolean);
 }
 
-const browserSpecPattern = /^tests\/browser\/[^/]+\.spec\.js$/;
+const browserSpecPattern = /^tests\\/browser\\/[^/]+\\.spec\\.js$/;
+// A spec whose only diff is removed lines does not need to execute: runtime
+// changes are covered by mapped specs, while added/modified test content still runs.
+function hasAddedSpecLines(path) {
+  const row = run(["diff", "--numstat", `${base}...HEAD`, "--", path]).split("\\n").find(Boolean);
+  if (!row) return false;
+  const added = row.split("\\t", 1)[0];
+  return added !== "0" && added !== "-";
+}
 const existingBrowserSpecs = new Set(run(["ls-tree", "-r", "--name-only", "HEAD", "--", "tests/browser"]).split("\n").filter(Boolean));
 // Test-file edits alone must not launch feature E2E suites. Those suites are
 // selected by production-file changes below; this prevents a double-click test
@@ -116,7 +124,7 @@ for (const path of changed) {
   if (browserSpecPattern.test(path)) {
     // A test-only edit must not trigger E2E by itself, but when production code
     // changes in the same diff, run the changed spec alongside mapped coverage.
-    if (hasRuntimeChangeAlongsideBrowserSpec && existingBrowserSpecs.has(path)) changedBrowserSpecs.push(path);
+    if (hasRuntimeChangeAlongsideBrowserSpec && existingBrowserSpecs.has(path) && hasAddedSpecLines(path)) changedBrowserSpecs.push(path);
     continue;
   }
   if (ignoredNonRuntime(path)) continue;
