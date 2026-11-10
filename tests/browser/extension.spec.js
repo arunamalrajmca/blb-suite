@@ -1213,8 +1213,8 @@ test.describe('core user-visible E2E', () => {
     await page.waitForTimeout(1000);
 
     const cases = [
-      {reference:'Genesis 48-49', book:'Genesis'},
-      {reference:'Genesis 42-46', book:'Genesis'}
+      {reference:'Genesis 48-49'},
+      {reference:'Genesis 42-46'}
     ];
     const actions = ['Show on BLB','Right-Click','Alt+B','Double-Click'];
 
@@ -1275,7 +1275,16 @@ test.describe('core user-visible E2E', () => {
           }
         }
 
-        const destination = await waitForNewMultiVerseTab(extensionWorker,beforeIds);
+        console.log('[chapter-range matrix] completed action handoff', {
+          action, reference:item.reference, beforeIds
+        });
+        const destination = await waitForNewMultiVerseTab(extensionWorker,beforeIds).catch(async error => {
+          const observedTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+            tabs.map(tab => ({id:tab.id,url:tab.url || '',pendingUrl:tab.pendingUrl || ''}))
+          ));
+          throw new Error(action + ' failed to open MultiVerse for ' + item.reference +
+            '; observed tabs=' + JSON.stringify(observedTabs) + '; ' + String(error));
+        });
         const destinationUrl = [destination.url,destination.pendingUrl].find(value => {
           try {
             const url = new URL(value);
