@@ -84,7 +84,19 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
         const selection = window.getSelection();
         selection.removeAllRanges();
         selection.addRange(range);
+        window.__blbSuiteEnableSelectionDiagnostics = true;
+        const selectionProbe = {
+          text: selection.toString(),
+          rangeCount: selection.rangeCount,
+          collapsed: selection.isCollapsed,
+          startNode: selection.anchorNode?.nodeName || '',
+          startOffset: selection.anchorOffset,
+          endNode: selection.focusNode?.nodeName || '',
+          endOffset: selection.focusOffset,
+          directText: textNode.nodeValue
+        };
         const expected = getSelectionContextPosition();
+        const selectionDiagnostic = window.__blbSuiteSelectionContextDiagnostic || null;
         const iterations = 200;
         const samples = [];
         let checksum = 0;
@@ -102,6 +114,8 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
             selected: expected.text.slice(expected.start, expected.end),
             context: expected.text
           } : null,
+          selectionProbe,
+          selectionDiagnostic,
           checksum,
           samples,
           iterations
