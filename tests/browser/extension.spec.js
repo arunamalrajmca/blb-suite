@@ -444,7 +444,10 @@ test.describe('core user-visible E2E', () => {
           const button = page.locator('#blb-suite-page-selection-button');
           await expect(button).toBeVisible({ timeout: 10000 });
           await readResolverCalls(true);
-          await button.click();
+          // Invoke the actual button click handler without Playwright's pointer
+          // mousedown/mouseup sequence. Mouseup also refreshes selection-button
+          // context and is preparation, not a second invocation by the action.
+          await button.evaluate(element => element.click());
         } else if (action === 'Alt+B') {
           // Call the handler registered for the browser command; Playwright's
           // keyboard simulation does not dispatch Chrome extension commands.
