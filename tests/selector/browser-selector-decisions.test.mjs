@@ -560,6 +560,17 @@ test("shared background changes keep the site-registration race in its isolated 
   });
 });
 
+test("deletion-only changes to a large browser spec do not rerun the removed spec", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/background.js", "// shared background change\\n");
+    commitChange(root, "tests/browser/extension.spec.js", "");
+    const output = select(root, base);
+    assert.ok(output.includes("full_browser_suite=true"));
+    assert.ok(!output.includes("changed_browser_specs=tests/browser/extension.spec.js"));
+    assert.ok(output.includes("changed_browser_specs=\\n"));
+  });
+});
+
 test("mixed runtime and browser-spec change selects the whole changed spec", () => {
   withFixture((root, base) => {
     commitChange(root, "extension/omnibox-search-helpers.js", "// changed\n");
