@@ -1275,9 +1275,6 @@ test.describe('core user-visible E2E', () => {
           }
         }
 
-        console.log('[chapter-range matrix] completed action handoff', {
-          action, reference:item.reference, beforeIds
-        });
         const destination = await waitForNewMultiVerseTab(extensionWorker,beforeIds).catch(async error => {
           const observedTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
             tabs.map(tab => ({id:tab.id,url:tab.url || '',pendingUrl:tab.pendingUrl || ''}))
