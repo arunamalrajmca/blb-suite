@@ -62,77 +62,15 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
   });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#blb-suite-page-selection-button')).toBeAttached({ timeout: 10000 });
-  const domContext = await extensionWorker.evaluate(async () => {
+  const domMeasurement = await extensionWorker.evaluate(async () => {
     const tabs = await chrome.tabs.query({ url: 'https://example.com/*' });
     const tab = tabs[0];
     if (!tab?.id) throw new Error('Expected the example.com benchmark tab');
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      world: 'ISOLATED',
-      func: () => {
-        if (typeof getSelectionContextPosition !== 'function') {
-          throw new Error('The production live DOM selection-context extractor is unavailable');
-        }
-        const paragraph = document.createElement('p');
-        paragraph.id = 'blb-selection-phase-context-fixture';
-        paragraph.textContent = 'John 3:16';
-        document.body.appendChild(paragraph);
-        const textNode = paragraph.firstChild;
-        const range = document.createRange();
-        range.setStart(textNode, 0);
-        range.setEnd(textNode, 'John'.length);
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-        window.__blbSuiteEnableSelectionDiagnostics = true;
-        const selectionProbe = {
-          text: selection.toString(),
-          rangeCount: selection.rangeCount,
-          collapsed: selection.isCollapsed,
-          startNode: selection.anchorNode?.nodeName || '',
-          startOffset: selection.anchorOffset,
-          endNode: selection.focusNode?.nodeName || '',
-          endOffset: selection.focusOffset,
-          directText: textNode.nodeValue
-        };
-        const expected = getSelectionContextPosition();
-        const selectionDiagnostic = window.__blbSuiteSelectionContextDiagnostic || null;
-        const iterations = 200;
-        const samples = [];
-        let checksum = 0;
-        for (let sample = 0; sample < 9; sample++) {
-          for (let warm = 0; warm < 10; warm++) getSelectionContextPosition();
-          const started = performance.now();
-          for (let i = 0; i < iterations; i++) {
-            const result = getSelectionContextPosition();
-            if (result?.text && result.text.slice(result.start, result.end) === 'John') checksum++;
-          }
-          samples.push({ durationMs: performance.now() - started });
-        }
-        return JSON.stringify({
-          expected: expected ? {
-            selected: expected.text.slice(expected.start, expected.end),
-            context: expected.text
-          } : null,
-          selectionProbe,
-          selectionDiagnostic,
-          checksum,
-          samples,
-          iterations
-        });
-      }
-    });
-    return {
-      resultCount: results.length,
-      frames: results.map(item => ({ frameId: item.frameId, result: item.result ?? null })),
-      tabId: tab.id
-    };
+    return chrome.tabs.sendMessage(tab.id, { type: '__blbSelectionPhaseBenchmark' });
   });
 
-  expect(domContext.resultCount, JSON.stringify(domContext)).toBe(1);
-  const domMeasurement = domContext.frames[0]?.result ? JSON.parse(domContext.frames[0].result) : null;
-  expect(domMeasurement?.expected?.selected, JSON.stringify(domContext)).toBe('John');
-  expect(domMeasurement?.expected?.context).toContain('John 3:16');
+  expect(domMeasurement?.error || domMeasurement?.expected?.selected).toBe('John');
+  expect(domMeasurement.expected.context).toContain('John 3:16');
   expect(domMeasurement.checksum).toBeGreaterThan(0);
 
   const corpus = await extensionWorker.evaluate(async () => {
