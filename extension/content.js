@@ -83,7 +83,6 @@ function safeRuntimeSendMessage(message, onError = null) {
 // whether the user's per-site double-click preference enables the listener.
 try { window.__blbSuiteContentScriptLoadedV2 = true; } catch (_) {}
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
-const BLB_ORIGIN = BLBShared.urls.blbOrigin;
 // Unified content script.
 
 // Keep the content script resident on HTTP/HTTPS pages. Feature activation is
