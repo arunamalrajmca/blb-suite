@@ -6,8 +6,7 @@ async function createExtensionMessagePage(context, extensionId) {
   return page;
 }
 
-test('hostname text never enables Show on BLB by default', async ({ context, extensionId }) => {
-  const messagePage = await createExtensionMessagePage(context, extensionId);
+test('hostname text never enables Show on BLB without an explicit site preference', async ({ extensionWorker }) => {
   const hostnames = [
     'bible.com',
     'www.bible.com',
@@ -17,19 +16,17 @@ test('hostname text never enables Show on BLB by default', async ({ context, ext
     'example.com'
   ];
 
-  const results = await messagePage.evaluate(async (hosts) => {
+  const results = await extensionWorker.evaluate(async (hosts) => {
+    await chrome.storage.local.set({masterEnabled:true, pageSelectionButtonSites:{}});
     const output = {};
     for (const hostname of hosts) {
-      output[hostname] = await chrome.runtime.sendMessage({
-        type: 'blbSuiteGetDefaultSiteStatus',
-        hostname
-      });
+      output[hostname] = await isPageButtonEnabledForHostname(hostname);
     }
     return output;
   }, hostnames);
 
   for (const hostname of hostnames) {
-    expect(results[hostname], hostname).toMatchObject({ ok: true, enabled: false });
+    expect(results[hostname], hostname).toBe(false);
   }
 });
 
