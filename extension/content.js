@@ -868,18 +868,51 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.\\s*)(\\d{1,3})\\s*[:.]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?!-(?!\\s*\\d))(?=$|[^A-Za-z0-9])', 'gi'),
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})\\s*[:.]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?!-(?!\\s*\\d))(?=$|[^A-Za-z0-9])', 'gi'),
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')\\s+(\\d{1,3})\\s+(\\d{1,3})(?=$|[^A-Za-z0-9])', 'gi'),
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.\\s*)(\\d{1,3})\\s*-\\s*(\\d{1,3})(?!\\s*[:.]\\s*\\d)(?=$|[^A-Za-z0-9])', 'gi'),
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.\\s*)(\\d{1,3})(?!\\s*[:.]\\s*\\d)(?=$|[^A-Za-z0-9])', 'gi'),
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})(?!\\s*[:.]\\s*\\d)(?=$|[^A-Za-z0-9])', 'gi')
     ];
     for (let patternIndex = 0; patternIndex < patterns.length; patternIndex++) {
       const pattern = patterns[patternIndex];
-      const chapterOnly = patternIndex >= 3;
+      const chapterRange = patternIndex === 3;
+      const chapterOnly = patternIndex >= 4;
       let match;
       while ((match = pattern.exec(source))) {
         const citationStart = match.index + match[0].indexOf(match[1]);
         const citationEnd = match.index + match[0].length;
         if (selectionStart >= citationEnd || selectionEnd <= citationStart) continue;
         const chapter = Number(match[2]);
+        if (chapterRange) {
+          const lastChapter = Number(match[3]);
+          if (entry.book.chapterCount <= 1 || lastChapter <= chapter ||
+              lastChapter > entry.book.chapterCount) continue;
+          const refs = [];
+          for (let currentChapter = chapter; currentChapter <= lastChapter; currentChapter++) {
+            const resolvedChapter = resolveBibleReference(entry.book.name, currentChapter, null, null);
+            if (!resolvedChapter) {
+              refs.length = 0;
+              break;
+            }
+            refs.push({
+              book:resolvedChapter.book.name,
+              chapter:resolvedChapter.chapter,
+              from:null,
+              to:null,
+              url:resolvedChapter.url,
+              version:'kjv',
+              text:resolvedChapter.book.name + ' ' + resolvedChapter.chapter
+            });
+          }
+          if (refs.length > 1) return {
+            book:entry.book.name,
+            chapter,
+            from:null,
+            to:null,
+            url:refs[0].url,
+            refs
+          };
+          continue;
+        }
         const resolved = chapterOnly
           ? resolveBibleReference(entry.book.name, chapter, null, null)
           : resolveBibleReference(
@@ -890,6 +923,7 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
           book: resolved.book, chapter: resolved.chapter,
           from: resolved.from, to: resolved.to, url: resolved.url
         };
+      }
       }
     }
   }
@@ -1168,48 +1202,6 @@ function resolveBibleReferenceFromContextWindowCore(text, selectionStart, select
     const tokenStart = bookTokenMatch.index;
     const tokenEnd = tokenStart + bookTokenMatch[0].length;
     if (selectionStart >= tokenEnd || selectionEnd <= tokenStart) continue;
-    // A book-name double-click inside a chapter-only range (for example,
-    // "Genesis 48-49") must retain the complete cross-chapter selection.
-    // Resolve each chapter as a whole-chapter reference so the background
-    // MultiVerse opener can expand and batch every verse instead of silently
-    // reducing the gesture to the first chapter's first verse.
-    const chapterRangeMatch = source.slice(tokenEnd).match(
-      /^(?:\s+|\.(?=\d)\s*)([1-9]\d{0,2})\s*[-–—]\s*([1-9]\d{0,2})(?!\s*[:.]\s*\d)/
-    );
-    if (chapterRangeMatch && book.chapterCount > 1) {
-      const firstChapter = Number(chapterRangeMatch[1]);
-      const lastChapter = Number(chapterRangeMatch[2]);
-      if (firstChapter <= lastChapter && lastChapter <= book.chapterCount && lastChapter > firstChapter) {
-        const chapterRefs = [];
-        for (let chapter = firstChapter; chapter <= lastChapter; chapter++) {
-          const resolved = resolveBibleReference(book.name, chapter, null, null);
-          if (!resolved) {
-            chapterRefs.length = 0;
-            break;
-          }
-          chapterRefs.push({
-            book:resolved.book.name,
-            chapter:resolved.chapter,
-            from:null,
-            to:null,
-            url:resolved.url,
-            version:'kjv',
-            text:resolved.book.name + ' ' + resolved.chapter
-          });
-        }
-        if (chapterRefs.length > 1) {
-          return {
-            book:book.name,
-            chapter:firstChapter,
-            from:null,
-            to:null,
-            url:chapterRefs[0].url,
-            refs:chapterRefs
-          };
-        }
-      }
-    }
-
     const chapterMatch = source.slice(tokenEnd).match(/^(?:\s+|\.(?=\d)\s*)([1-9]\d{0,2})(?!\s*[:.]\s*\d)/);
     if (!chapterMatch) continue;
     const chapter = Number(chapterMatch[1]);
