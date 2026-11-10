@@ -1735,8 +1735,6 @@ function openCaseSensitiveNativeSearch(query, disposition = 'currentTab') {
   return chrome.tabs.update({url});
 }
 
-const CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS = 1000;
-const CASE_SENSITIVE_MULTI_VERSE_TAB_LOAD_TIMEOUT_MS = 15000;
 let kjvCaseSensitiveWordsLoadPromise = null;
 let kjvOriginalCaseCorpusLoadPromise = null;
 let kjvPhraseIndexLoadPromise = null;
