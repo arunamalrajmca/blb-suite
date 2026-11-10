@@ -223,8 +223,11 @@ function formatSourceBibleBookName(book) {
 function parseRef(text) {
   const value=decodeSafe(text).trim()
     // Source citations use "vs. 10" or "v10" as the verse separator.
-    .replace(/\bvs\.?\s*(?=\d)/gi, ' ')
-    .replace(/\bv\s*(?:\(\s*(\d+)\s*\)|(\d+))/gi, (_, parenthesized, plain) => ' ' + (parenthesized || plain));
+    // Normalize any supported verse cue before parsing the numeric reference.
+    .replace(
+      new RegExp('\\\\b' + VERSE_CUE_TOKEN_SOURCE + '\\\\s*(?:\\\\(\\\\s*(\\\\d+)\\\\s*\\\\)|(\\\\d+))', 'gi'),
+      (_, parenthesized, plain) => ' ' + (parenthesized || plain)
+    );
   // Accept normal references and BiblePortal's dotted form, e.g.
   // John 3:16, John 3 16, and John.3.16.
   const m=value.match(/^(.+?)[\s.]+(\d+)(?:[:.\s]+(\d+)(?:-(\d+))?)?$/);
@@ -3577,7 +3580,7 @@ function handleDoubleClickBlb(event) {
         // physical event target where needed. The generic caret-target helper
         // can return a nearby/stale element on pages with inline citation spans.
         const cueElement = [physicalTarget, getDoubleClickTargetElement(event)].find(candidate =>
-          /^(?:v\.?|vs\.?|verse|verses)$/i.test(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
+          isVerseCueToken(normalizeSelectionText(candidate?.textContent || '').normalize('NFKC'))
         );
         const possibleNumberedBookSuffix=isNumberedBookSuffixCandidate;
         const possibleCanonicalBookSuffix=isCanonicalBookSuffixCandidate;
