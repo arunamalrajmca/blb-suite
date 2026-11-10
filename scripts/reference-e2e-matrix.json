@@ -76,7 +76,7 @@
     "grep": ".*"
   },
   {
-    "group": "right-panel-default-expanded",
+    "group": "kjv-only-parallel-panel-guard",
     "file": "tests/browser/right-panel-default-expanded.spec.js",
     "grep": ".*"
   },
