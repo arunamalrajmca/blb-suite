@@ -162,6 +162,8 @@ try {
     'tests/browser/study-backup-restore.spec.js',
     'tests/browser/feature-lifecycle-regressions.spec.js',
     'tests/browser/extension.spec.js',
+    'tests/browser/selection-phase-performance.spec.js',
+    'tests/browser/service-worker-lifecycle.spec.js',
     'tests/browser/shared-regex-patterns.spec.js',
     'tests/browser/rediscover-sagacity-button.spec.js',
     'tests/browser/research-dom-smoke.spec.js',
@@ -279,6 +281,8 @@ try {
   assertValue(result, 'full_browser_suite', false, 'isolated background omnibox behavior');
   assert(result.values.changed_specs.includes('tests/browser/omnibox-command-routing.spec.js'),
     'background changes must select focused omnibox routing coverage');
+  assert(result.values.changed_specs.includes('tests/browser/service-worker-lifecycle.spec.js'),
+    'background changes must select real service-worker lifecycle coverage');
   assert(result.values.changed_browser_specs.includes('tests/browser/omnibox-command-routing.spec.js'),
     'the explicitly paired omnibox regression must execute');
   assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
@@ -388,6 +392,8 @@ try {
   commit('mixed mapped and shared change');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', true, 'mixed changes');
+  assert(result.values.changed_specs.includes('tests/browser/selection-phase-performance.spec.js'),
+    'content-script changes must select the measured selection-pipeline regression');
   console.log('PASS: mixed feature/shared changes force broad browser coverage');
 
   // Deleting a mapped feature still selects that feature's tests.
