@@ -13,7 +13,7 @@ const groupsWorkflow = readFileSync(
 
 test("matrix-owned changed browser specs are delegated instead of run a second time in Group A", () => {
   const caseBlock = groupsWorkflow.match(
-    /tests\/browser\/redirect-source-url-patterns\.spec\.js\|([\s\S]*?)\)\n\s+if \(\[\[ "\$REFERENCE_GATE_REQUIRED"/
+    /tests\/browser\/redirect-source-url-patterns\.spec\.js\|([\s\S]*?)\)\n\s+if \[\[ "\$REFERENCE_GATE_REQUIRED"/
   );
   assert.ok(caseBlock, "Group A must retain an explicit reference-matrix delegation case");
 
