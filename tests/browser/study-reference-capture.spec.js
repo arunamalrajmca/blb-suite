@@ -6,7 +6,14 @@ async function startStudyTopic({ context, extensionId, extensionStorage }) {
   await extensionStorage.clear();
   const popup = await context.newPage();
   await popup.goto('chrome-extension://' + extensionId + '/popup.html');
+  // A newly opened popup starts with its controls hidden while it resolves the
+  // active tab, saved settings, and Study state. Wait for that async bootstrap
+  // before interacting; otherwise fill() can sit on a hidden input until the
+  // entire Playwright test times out.
+  await expect(popup.locator('body')).not.toHaveClass(/popup-loading/, { timeout: 15000 });
+  await expect(popup.locator('#studyPanel')).toBeVisible({ timeout: 10000 });
   const topic = 'Reference capture ' + Date.now();
+  await expect(popup.locator('#studyTopic')).toBeVisible();
   await popup.locator('#studyTopic').fill(topic);
   await expect(popup.locator('#startTopic')).toBeEnabled();
   await popup.locator('#startTopic').click();
