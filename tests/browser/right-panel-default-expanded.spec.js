@@ -1,7 +1,5 @@
 const { test, expect } = require('./fixtures');
 
-test.describe.configure({ mode: 'serial' });
-
 const PAGE_TEMPLATES = [
   { name: 'verse', path: '/kjv/gen/1/1/', hasPanel: true },
   { name: 'MultiVerse', path: '/tools/MultiVerse.cfm', hasPanel: false },
@@ -25,10 +23,10 @@ function blbPageFixture({ hasPanel, restoreMs = null, panelExpanded = false }) {
     'window.__calls = []; window.BLB = { siteResizeToggle(side) {' +
     'window.__calls.push(side); if (side !== "right") return;' +
     'const panel = document.getElementById("bodyCol1A");' +
-    'if (panel) panel.classList.remove("hidden");' +
-    'document.getElementById("siteExpandRight").classList.add("hidden");' +
-    'if (!window.__restoreScheduled) { window.__restoreScheduled = true; ' + restore + ' }' +
-    '}};</script></head><body><main>BLB page content</main>' + panelMarkup +
+    'if (panel) panel.classList.toggle("hidden");' +
+    'document.getElementById("siteExpandRight").classList.toggle("hidden");' +
+    '}};' + restore +
+    '</script></head><body><main>BLB page content</main>' + panelMarkup +
     '<div id="siteExpandLeft" class="site-expand-container left"></div>' +
     '<div id="siteExpandRight" class="site-expand-container right" onclick="BLB.siteResizeToggle(\'right\')"></div>' +
     '</body></html>';
@@ -45,55 +43,57 @@ async function openBlbFixture(context, pagePath, options) {
 }
 
 for (const template of PAGE_TEMPLATES) {
-  test('right panel expands by default on BLB ' + template.name + ' pages', async ({ context, extensionStorage }) => {
+  test('KJV-only mode does not auto-open the BLB Parallel panel on ' + template.name + ' pages', async ({ context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true });
-    const page = await openBlbFixture(context, template.path, template);
-    await page.waitForFunction(() => window.__calls.length === 1 &&
-      document.getElementById('siteExpandRight')?.classList.contains('hidden'));
+    const page = await openBlbFixture(context, template.path, {
+      hasPanel: template.hasPanel,
+      panelExpanded: false
+    });
+    await page.waitForTimeout(350);
     expect(await page.evaluate(() => ({
       calls: window.__calls,
-      controlHidden: document.getElementById('siteExpandRight').classList.contains('hidden')
-    }))).toEqual({ calls: ['right'], controlHidden: true });
-    if (template.hasPanel) await expect(page.locator('#bodyCol1A')).not.toHaveClass(/hidden/);
+      controlVisible: !document.getElementById('siteExpandRight').classList.contains('hidden'),
+      panelExpanded: !!document.getElementById('bodyCol1A') &&
+        !document.getElementById('bodyCol1A').classList.contains('hidden')
+    }))).toEqual({ calls: [], controlVisible: true, panelExpanded: false });
   });
 }
 
-test('verse right panel is re-expanded after delayed saved-layout restoration', async ({ context, extensionStorage }) => {
+test('saved-layout restoration does not trigger automatic Parallel panel activation', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
-  const page = await openBlbFixture(context, '/kjv/gen/1/1/', { hasPanel: true, restoreMs: 1200 });
-  await page.waitForFunction(() => window.__calls.length === 2 &&
-    document.getElementById('bodyCol1A')?.classList.contains('hidden') === false, { timeout: 10000 });
+  const page = await openBlbFixture(context, '/kjv/gen/1/1/', {
+    hasPanel: true,
+    restoreMs: 1200,
+    panelExpanded: false
+  });
+  await page.waitForTimeout(1600);
   expect(await page.evaluate(() => ({
     calls: window.__calls,
     panelExpanded: !document.getElementById('bodyCol1A').classList.contains('hidden'),
-    controlHidden: document.getElementById('siteExpandRight').classList.contains('hidden')
-  }))).toEqual({ calls: ['right', 'right'], panelExpanded: true, controlHidden: true });
+    controlVisible: !document.getElementById('siteExpandRight').classList.contains('hidden')
+  }))).toEqual({ calls: [], panelExpanded: false, controlVisible: true });
 });
 
-test('right panel remains untouched when the global Suite switch is OFF', async ({ context, extensionStorage }) => {
+test('the global Suite switch OFF leaves the BLB Parallel panel untouched', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: false });
   const page = await openBlbFixture(context, '/lexicon/g25/kjv/tr/0-1/', { hasPanel: false });
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(350);
   expect(await page.evaluate(() => ({
     calls: window.__calls,
-    controlHidden: document.getElementById('siteExpandRight').classList.contains('hidden')
-  }))).toEqual({ calls: [], controlHidden: false });
+    controlVisible: !document.getElementById('siteExpandRight').classList.contains('hidden')
+  }))).toEqual({ calls: [], controlVisible: true });
 });
 
-test('an already-expanded verse panel is not toggled when BLB temporarily leaves the native control visible', async ({ context, extensionStorage }) => {
+test('an already-expanded verse panel is not toggled', async ({ context, extensionStorage }) => {
   await extensionStorage.set({ masterEnabled: true });
   const page = await openBlbFixture(context, '/kjv/gen/1/1/', {
     hasPanel: true,
     panelExpanded: true
   });
-  await page.waitForTimeout(300);
+  await page.waitForTimeout(350);
   expect(await page.evaluate(() => ({
     calls: window.__calls,
     panelExpanded: !document.getElementById('bodyCol1A').classList.contains('hidden'),
     controlVisible: !document.getElementById('siteExpandRight').classList.contains('hidden')
-  }))).toEqual({
-    calls: [],
-    panelExpanded: true,
-    controlVisible: true
-  });
+  }))).toEqual({ calls: [], panelExpanded: true, controlVisible: true });
 });

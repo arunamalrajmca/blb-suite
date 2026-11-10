@@ -49,5 +49,40 @@
     "group": "service-worker-lifecycle",
     "file": "tests/browser/service-worker-lifecycle.spec.js",
     "grep": ".*"
+  },
+  {
+    "group": "kjv-corpus-lazy-loading",
+    "file": "tests/browser/kjv-corpus-lazy-loading.spec.js",
+    "grep": ".*"
+  },
+  {
+    "group": "known-host-extension",
+    "file": "tests/browser/known-host-extension.spec.js",
+    "grep": ".*"
+  },
+  {
+    "group": "multiverse-contiguous-range-routing",
+    "file": "tests/browser/multiverse-contiguous-range-routing.spec.js",
+    "grep": ".*"
+  },
+  {
+    "group": "multiverse-disjoint-chapter-post",
+    "file": "tests/browser/multiverse-disjoint-chapter-post.spec.js",
+    "grep": ".*"
+  },
+  {
+    "group": "pr-422-feature-regressions",
+    "file": "tests/browser/pr-422-feature-regressions.spec.js",
+    "grep": ".*"
+  },
+  {
+    "group": "kjv-only-parallel-panel-guard",
+    "file": "tests/browser/right-panel-default-expanded.spec.js",
+    "grep": ".*"
+  },
+  {
+    "group": "site-registration-opt-out-race",
+    "file": "tests/browser/site-registration-opt-out-race.spec.js",
+    "grep": ".*"
   }
 ]

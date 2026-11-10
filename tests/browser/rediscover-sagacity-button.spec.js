@@ -6,11 +6,14 @@ const vm = require('node:vm');
 const root = path.resolve(__dirname, '../..');
 const content = fs.readFileSync(path.join(root, 'extension/content.js'), 'utf8');
 const sourceCollector = fs.readFileSync(path.join(root, 'extension/source-page-collector.js'), 'utf8');
+const sourceCollectorSites = fs.readFileSync(path.join(root, 'extension/source-page-collector-sites.js'), 'utf8');
 
 test('Rediscover, Sagacity, and TSK use the existing current-page MultiVerse collector', () => {
-  expect(sourceCollector).toContain('"rediscover.bible":"rediscover"');
-  expect(sourceCollector).toContain('"sagacityweb.com":"sagacity"');
-  expect(sourceCollector).toContain('"thetreasuryofscriptureknowledge.com":"treasury"');
+  // Host-to-site IDs live in the shared registry imported by the worker,
+  // not in the collector implementation itself.
+  expect(sourceCollectorSites).toContain('"rediscover.bible": { id:"rediscover" }');
+  expect(sourceCollectorSites).toContain('"sagacityweb.com": { id:"sagacity" }');
+  expect(sourceCollectorSites).toContain('"thetreasuryofscriptureknowledge.com": { id:"treasury" }');
   expect(sourceCollector).toContain('if (sourceSite && !isSourceHomepage)');
   expect(sourceCollector).toContain('document.querySelectorAll("a[href]")');
   expect(sourceCollector).toContain('openSourcePageBibleReferencesInMultiVerse');

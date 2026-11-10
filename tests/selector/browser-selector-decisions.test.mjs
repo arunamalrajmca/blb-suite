@@ -518,6 +518,24 @@ test("extension reference-coverage matrix skips unrelated mapped features", () =
 
   const full = selectReferenceMatrix(entries, { full: true });
   assert.ok(full.some(entry => entry.group === "extension-spec-reference-coverage"));
+  const recentlyMissedSpecs = [
+    "tests/browser/kjv-corpus-lazy-loading.spec.js",
+    "tests/browser/known-host-extension.spec.js",
+    "tests/browser/multiverse-contiguous-range-routing.spec.js",
+    "tests/browser/multiverse-disjoint-chapter-post.spec.js",
+    "tests/browser/pr-422-feature-regressions.spec.js",
+    "tests/browser/right-panel-default-expanded.spec.js",
+    "tests/browser/site-registration-opt-out-race.spec.js"
+  ];
+  for (const spec of recentlyMissedSpecs) {
+    assert.ok(entries.some(entry => entry.file === spec || entry.files?.includes(spec)),
+      spec + " must have a dedicated reference-matrix entry");
+    assert.ok(selectReferenceMatrix(entries, { changedSpecs: spec }).some(entry =>
+      entry.file === spec || entry.files?.includes(spec)),
+    spec + " must be selected when its feature changes");
+    assert.ok(full.some(entry => entry.file === spec || entry.files?.includes(spec)),
+      spec + " must run during a full browser regression");
+  }
 });
 
 test("optional E2E workflows exclude selector-only and store-only scripts from broad triggers", () => {
