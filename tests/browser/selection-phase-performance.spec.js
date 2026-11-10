@@ -172,5 +172,4 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
     }
   };
   process.stdout.write('BLB_SELECTION_PHASE_BENCHMARK ' + JSON.stringify(report) + '\n');
-  throw new Error('BLB_SELECTION_PHASE_BENCHMARK ' + JSON.stringify(report));
 });
