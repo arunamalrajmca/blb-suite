@@ -553,10 +553,10 @@ test("shared background changes keep the site-registration race in its isolated 
     commitChange(root, "extension/background.js", "// shared background change\\n");
     commitChange(root, "tests/browser/site-registration-opt-out-race.spec.js", "// focused race regression\\n");
     const output = select(root, base);
-    assert.match(output, /full_browser_suite=true/);
-    assert.match(output, /changed_browser_specs=tests\\/browser\\/site-registration-opt-out-race\\.spec\\.js/);
-    assert.doesNotMatch(output, /changed_browser_specs=.*extension\\.spec\\.js/);
-    assert.match(output, /group_a_required=true/);
+    assert.ok(output.includes("full_browser_suite=true"));
+    assert.ok(output.includes("changed_browser_specs=tests/browser/site-registration-opt-out-race.spec.js"));
+    assert.ok(!output.includes("changed_browser_specs=tests/browser/extension.spec.js"));
+    assert.ok(output.includes("group_a_required=true"));
   });
 });
 
