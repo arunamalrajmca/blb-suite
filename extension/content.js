@@ -222,7 +222,6 @@ function formatSourceBibleBookName(book) {
 
 function parseRef(text) {
   const value=decodeSafe(text).trim()
-    // Source citations use "vs. 10" or "v10" as the verse separator.
     // Normalize any supported verse cue before parsing the numeric reference.
     .replace(
       new RegExp('\\\\b' + VERSE_CUE_TOKEN_SOURCE + '\\\\s*(?:\\\\(\\\\s*(\\\\d+)\\\\s*\\\\)|(\\\\d+))', 'gi'),
