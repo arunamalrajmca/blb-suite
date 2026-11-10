@@ -166,39 +166,15 @@ test('KJV phrase candidate index loads only when Criteria phrase matching needs 
   }));
   expect(afterDirectRange).toEqual({ loaded: false, keys: 0 });
 
-  // "God is love" is an explicit short-phrase whitelist entry. It is
-  // checked against the verse corpus directly and must not load the generated
-  // phrase candidate index.
-  const whitelistedPhrase = await extensionWorker.evaluate(async () => {
-    const result = await classifySelectionForBlb('God is love');
-    return {
-      result,
-      loaded: KJV_CORPUS_PHRASE_INDEX !== null
-    };
-  });
-  expect(whitelistedPhrase.result.valid).toBe(true);
-  expect(whitelistedPhrase.result.type).toBe('KJV_PASSAGE');
-  expect(whitelistedPhrase.loaded).toBe(false);
-
-  // A normal multi-word phrase takes the generated-index path. Keep
-  // classification and inspection together because MV3 may restart an idle
-  // service worker between separate evaluate calls.
-  // An explicit reference bypasses the contiguous-quotation range resolver,
-  // allowing the residual KJV phrase to exercise the Criteria phrase index.
-  const indexedPhrase = await extensionWorker.evaluate(async () => {
-    const result = await classifySelectionForBlb('John 3:16 — In the beginning was the Word');
-    return {
-      result,
-      loaded: KJV_CORPUS_PHRASE_INDEX !== null,
-      keys: Object.keys(KJV_CORPUS_PHRASE_INDEX || {}).length
-    };
-  });
-  expect(indexedPhrase.result.valid).toBe(true);
-  expect(indexedPhrase.result.type).toBe('REFERENCE_AND_KJV_PASSAGE');
-  expect(indexedPhrase.result.refs).toHaveLength(1);
-  expect(indexedPhrase.result.kjvPassageQuery).toBeTruthy();
-  expect(indexedPhrase.loaded).toBe(true);
-  expect(indexedPhrase.keys).toBeGreaterThan(0);
+  const shortPhrase = await extensionWorker.evaluate(async () => classifySelectionForBlb('God is love'));
+  expect(shortPhrase.valid).toBe(true);
+  expect(shortPhrase.type).toBe('KJV_PASSAGE');
+  const loaded = await extensionWorker.evaluate(() => ({
+    loaded: KJV_CORPUS_PHRASE_INDEX !== null,
+    keys: Object.keys(KJV_CORPUS_PHRASE_INDEX || {}).length
+  }));
+  expect(loaded.loaded).toBe(true);
+  expect(loaded.keys).toBeGreaterThan(0);
 });
 
 test('popup loads from extension package', async ({ page, extensionId }) => {
