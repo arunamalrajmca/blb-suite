@@ -76,6 +76,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/criteria-search-navigation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/feature-lifecycle-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/extension.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/site-registration-opt-out-race.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/selection-phase-performance.spec.js", "import { test } from '@playwright/test';\\n");
   put(root, "tests/browser/service-worker-lifecycle.spec.js", "import { test } from '@playwright/test';\\n");
   put(root, "tests/browser/redirect-toggle-isolation.spec.js", "import { test } from '@playwright/test';\n");
@@ -544,6 +545,18 @@ test("browser-spec-only edit does not launch feature E2E", () => {
     assert.match(output, /changed_specs=\n/);
     assert.match(output, /changed_browser_specs=\n/);
     assert.match(output, /group_a_required=false/);
+  });
+});
+
+test("shared background changes keep the site-registration race in its isolated spec", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/background.js", "// shared background change\\n");
+    commitChange(root, "tests/browser/site-registration-opt-out-race.spec.js", "// focused race regression\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=true/);
+    assert.match(output, /changed_browser_specs=tests\\/browser\\/site-registration-opt-out-race\\.spec\\.js/);
+    assert.doesNotMatch(output, /changed_browser_specs=.*extension\\.spec\\.js/);
+    assert.match(output, /group_a_required=true/);
   });
 });
 
