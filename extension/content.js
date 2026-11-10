@@ -2327,6 +2327,23 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
               );
             }
           };
+          // A book-name click on a chapter-only cross-chapter range must
+          // preserve the complete range. Reuse the shared positional grammar
+          // so this path produces the same whole-chapter MultiVerse refs as
+          // the other selection actions, rather than falling back to chapter 1.
+          const chapterRangeReference = resolvePositionalBookCitation(
+            exactClickedBook.name + ' ' + followingText,
+            0,
+            exactClickedBook.name.length
+          );
+          if (Array.isArray(chapterRangeReference?.refs) &&
+              chapterRangeReference.refs.length > 1) {
+            writeFacebookDoubleClickDiagnostic({
+              chapterRangeReference
+            });
+            return chapterRangeReference;
+          }
+
           // Match the shared positional grammar: colon, dotted, and
           // whitespace-separated chapter/verse forms. One number is
           // chapter-only; a second adjacent number is its verse.
