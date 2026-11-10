@@ -3194,7 +3194,6 @@ test('runtime content-script registrations update using the supported scripts-ar
   });
 });
 
-
 test('concurrent tabs serialize runtime script registration for the same origin', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(async () => {
     const url = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
