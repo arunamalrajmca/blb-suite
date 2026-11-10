@@ -125,7 +125,7 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
     return results[0]?.result;
   });
 
-  expect(domContext?.expected?.selected).toBe('John');
+  expect(domContext?.expected?.selected, JSON.stringify(domContext)).toBe('John');
   expect(domContext?.expected?.context).toContain('John 3:16');
   expect(domContext.checksum).toBeGreaterThan(0);
 
