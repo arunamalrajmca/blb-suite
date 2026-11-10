@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
+import { selectReferenceMatrix } from "../../scripts/select-reference-matrix.mjs";
 
 const selectorSource = readFileSync(
   new URL("../../scripts/select-browser-specs.mjs", import.meta.url),
@@ -472,6 +473,50 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
   assert.match(groupA, /npx playwright test "\$spec"/);
   assert.match(groupA, /browser_e2e_required == 'true'/);
   assert.match(groupB, /browser_e2e_required == 'true'/);
+});
+
+test("core user-action E2E stays scoped to core-mapped or full-suite changes", () => {
+  const workflow = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url),
+    "utf8"
+  );
+  assert.match(workflow, /Run complete core user-action regressions[\\s\\S]*?inputs\\.full_browser_suite == 'true'[\\s\\S]*?tests\\/browser\\/e2e-core-user-actions\\.spec\\.js/);
+  assert.doesNotMatch(workflow, /reference-plus-prose attempt 1\\/3/);
+
+  withFixture((root, base) => {
+    commitChange(root, "extension/blb-draggable-button.js", "// unrelated feature change\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /changed_specs=tests\\/browser\\/blb-draggable-button\\.spec\\.js/);
+    assert.doesNotMatch(output, /changed_specs=.*e2e-core-user-actions/);
+  });
+  withFixture((root, base) => {
+    commitChange(root, "extension/multiverse-copy.js", "// core user-action dependency change\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /changed_specs=.*e2e-core-user-actions\\.spec\\.js/);
+  });
+});
+
+test("extension reference-coverage matrix skips unrelated mapped features", () => {
+  const entries = JSON.parse(readFileSync(
+    new URL("../../scripts/reference-e2e-matrix.json", import.meta.url),
+    "utf8"
+  ));
+  const unrelated = selectReferenceMatrix(entries, {
+    full: false,
+    changedSpecs: "tests/browser/blb-draggable-button.spec.js"
+  });
+  assert.ok(!unrelated.some(entry => entry.group === "extension-spec-reference-coverage"));
+
+  const extensionSpec = selectReferenceMatrix(entries, {
+    full: false,
+    changedSpecs: "tests/browser/extension.spec.js"
+  });
+  assert.ok(extensionSpec.some(entry => entry.group === "extension-spec-reference-coverage"));
+
+  const full = selectReferenceMatrix(entries, { full: true });
+  assert.ok(full.some(entry => entry.group === "extension-spec-reference-coverage"));
 });
 
 test("optional E2E workflows exclude selector-only and store-only scripts from broad triggers", () => {
