@@ -1168,6 +1168,48 @@ function resolveBibleReferenceFromContextWindowCore(text, selectionStart, select
     const tokenStart = bookTokenMatch.index;
     const tokenEnd = tokenStart + bookTokenMatch[0].length;
     if (selectionStart >= tokenEnd || selectionEnd <= tokenStart) continue;
+    // A book-name double-click inside a chapter-only range (for example,
+    // "Genesis 48-49") must retain the complete cross-chapter selection.
+    // Resolve each chapter as a whole-chapter reference so the background
+    // MultiVerse opener can expand and batch every verse instead of silently
+    // reducing the gesture to the first chapter's first verse.
+    const chapterRangeMatch = source.slice(tokenEnd).match(
+      /^(?:\s+|\.(?=\d)\s*)([1-9]\d{0,2})\s*[-–—]\s*([1-9]\d{0,2})(?!\s*[:.]\s*\d)/
+    );
+    if (chapterRangeMatch && book.chapterCount > 1) {
+      const firstChapter = Number(chapterRangeMatch[1]);
+      const lastChapter = Number(chapterRangeMatch[2]);
+      if (firstChapter <= lastChapter && lastChapter <= book.chapterCount && lastChapter > firstChapter) {
+        const chapterRefs = [];
+        for (let chapter = firstChapter; chapter <= lastChapter; chapter++) {
+          const resolved = resolveBibleReference(book.name, chapter, null, null);
+          if (!resolved) {
+            chapterRefs.length = 0;
+            break;
+          }
+          chapterRefs.push({
+            book:resolved.book.name,
+            chapter:resolved.chapter,
+            from:null,
+            to:null,
+            url:resolved.url,
+            version:'kjv',
+            text:resolved.book.name + ' ' + resolved.chapter
+          });
+        }
+        if (chapterRefs.length > 1) {
+          return {
+            book:book.name,
+            chapter:firstChapter,
+            from:null,
+            to:null,
+            url:chapterRefs[0].url,
+            refs:chapterRefs
+          };
+        }
+      }
+    }
+
     const chapterMatch = source.slice(tokenEnd).match(/^(?:\s+|\.(?=\d)\s*)([1-9]\d{0,2})(?!\s*[:.]\s*\d)/);
     if (!chapterMatch) continue;
     const chapter = Number(chapterMatch[1]);
