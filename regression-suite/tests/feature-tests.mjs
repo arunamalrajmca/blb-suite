@@ -140,7 +140,8 @@ test('permission Allow/Deny/Re-Allow lifecycle remains wired', () => {
   assert(bg.includes('permissions?.onAdded') || bg.includes('onAdded?.addListener'), 'permission-added activation missing');
   assert(bg.includes('permissions.contains'), 'permission detection missing');
   assert(bg.includes('permissions') && bg.includes('request'), 'permission request missing');
-  assert(popup.includes('requestCurrentSiteAccess'), 'site-access request missing');
+  assert(popup.includes('chrome.permissions.request({origins:[currentSiteOrigin]})'), 'site-access permission request missing');
+  assert(popup.includes('pinSiteFeatureChoice'), 'site-feature preference must be pinned before the permission prompt');
   assert(popup.includes('setPageButton(on)'), 'site feature enable/disable state missing');
   assert(popup.includes('sites[state.siteKey] = !!on'), 'site feature state persistence missing');
 });
