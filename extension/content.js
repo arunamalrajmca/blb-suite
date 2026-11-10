@@ -924,7 +924,6 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
           from: resolved.from, to: resolved.to, url: resolved.url
         };
       }
-      }
     }
   }
   return null;
