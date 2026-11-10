@@ -48,17 +48,6 @@ function normalizeSiteHostname(hostname) {
   return host;
 }
 
-function hostnameMatchesBundledPattern(hostname, pattern) {
-  const host = normalizeSiteHostname(hostname);
-  let p = String(pattern || '').trim().toLowerCase();
-  if (p.startsWith('www.')) p = p.slice(4);
-  if (!host || !p || p.includes('/') || p.includes(':')) return false;
-  // Bundled patterns are hostname globs. '*' matches zero or more hostname
-  // characters, so entries such as svg*.example.org are supported.
-  const escaped = p.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
-  try { return new RegExp('^' + escaped + '$', 'i').test(host); } catch (_) { return false; }
-}
-
 async function isSiteEnabledByDefault(hostname, title = '') {
   // A hostname containing "bible" is not evidence that the user enabled a
   // feature. Keep this default OFF; explicit per-site preferences are checked
@@ -68,11 +57,6 @@ async function isSiteEnabledByDefault(hostname, title = '') {
 
 function redirectToHomepage() {
   chrome.tabs.update({url: DEFAULT_HOMEPAGE_URL});
-}
-
-function getChapterVerseCount(book, chapter) {
-  return book && book.verses && chapter > 0 && chapter <= book.verses.length
-    ? book.verses[chapter - 1] : null;
 }
 
 bookData.forEach(book => { book.aliases = buildBookAliases(book); });
@@ -213,33 +197,6 @@ async function checkStudyAutoStop() {
   const lastActivity = Number(data.studyLastActivityAt) || 0;
   if (!lastActivity) { await chrome.storage.local.set({studyLastActivityAt:Date.now()}); return; }
   if (Date.now() - lastActivity >= minutes * 60 * 1000) await stopStudyRecording('inactivity');
-}
-
-async function ensureCurrentStudySession() {
-  const data = await getStudySessions();
-  let current = data.sessions.find(s => s.id === data.currentId);
-  if (current) return {sessions:data.sessions, current};
-
-  current = createStudySession("Uncategorized");
-  data.sessions.push(current);
-  await saveStudySessions(data.sessions, {currentStudySessionId:current.id});
-  return {sessions:data.sessions, current};
-}
-
-async function startStudySession(title, initialNote = "") {
-  const data = await getStudySessions();
-  const session = createStudySession(title);
-  const note = String(initialNote || "").trim();
-  if (note) session.notes.push(note);
-  data.sessions.push(session);
-  const normalizedTitle = normalizeStudyTopic(title);
-  const savedTopics = [...data.savedTopics];
-  if (normalizedTitle && normalizedTitle.toLowerCase() !== "uncategorized" && !savedTopics.some(t => String(t).toLowerCase() === normalizedTitle.toLowerCase())) {
-    savedTopics.push(normalizedTitle);
-  }
-  await saveStudySessions(data.sessions, {currentStudySessionId:session.id, studyTopics:savedTopics, studyLastActivityAt:Date.now(), studyPausedTopic:'', studyPauseReason:''});
-  await refreshStudyAutoStopAlarm();
-  return session;
 }
 
 function titleCaseStudyTopic(value) {
@@ -481,12 +438,6 @@ function updateTrackedMultiVerseTabs(mutator) {
   });
   pendingMultiVerseTrackingUpdate = run.then(() => undefined, () => undefined);
   return run;
-}
-
-async function setTrackedMultiVerseTab(tabId, setKey) {
-  await updateTrackedMultiVerseTabs(map => {
-    map[String(tabId)] = {key:setKey, updatedAt:Date.now()};
-  });
 }
 
 async function clearTrackedMultiVerseTab(tabId) {
@@ -1785,25 +1736,6 @@ function openCaseSensitiveNativeSearch(query, disposition = 'currentTab') {
   return chrome.tabs.update({url});
 }
 
-function buildCaseSensitiveMultiVerseUrls(refs, maxUrlLength = 6000, maxReferencesPerUrl = Infinity) {
-  const sorted = (refs || []).map(e => ({bookNumber:Number(e.bookNumber), chapter:Number(e.chapter), verse:Number(e.verse)}))
-    .filter(e => Number.isFinite(e.bookNumber) && Number.isFinite(e.chapter) && Number.isFinite(e.verse))
-    .sort((a,b) => a.bookNumber-b.bookNumber || a.chapter-b.chapter || a.verse-b.verse);
-  if (!sorted.length) return [];
-  const urls=[]; let chunk=[];
-  for (const ref of sorted) {
-    const candidate=[...chunk,ref];
-    const url=BLBCaseSensitiveCore.buildBlbMultiVerseUrl(candidate, bookData, 'KJV');
-    // Keep URL size safe and allow callers to respect BLB's per-page verse display limit.
-    if (chunk.length && (url.length > maxUrlLength || chunk.length >= maxReferencesPerUrl)) {
-      urls.push(BLBCaseSensitiveCore.buildBlbMultiVerseUrl(chunk, bookData, 'KJV'));
-      chunk=[ref];
-    } else chunk=candidate;
-  }
-  if (chunk.length) urls.push(BLBCaseSensitiveCore.buildBlbMultiVerseUrl(chunk, bookData, 'KJV'));
-  return urls;
-}
-
 const CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS = 1000;
 const CASE_SENSITIVE_MULTI_VERSE_TAB_LOAD_TIMEOUT_MS = 15000;
 
@@ -1834,25 +1766,6 @@ async function paceCaseSensitiveTab(tabPromise) {
   if (tab?.id != null) await waitForTabTerminalLoad(tab.id);
   await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
   return tab;
-}
-
-async function openCaseSensitiveDestinations(urls, disposition = 'currentTab') {
-  const targets=[...new Set((urls||[]).filter(Boolean))];
-  if (!targets.length) throw new Error('No BLB Multi-Verse destinations');
-
-  // Use the established generic BLB destination opener. Do not maintain a
-  // separate case-sensitive MultiVerse tab identity or matching path.
-  const first = disposition === 'newForegroundTab'
-    ? await openBlbDestination(targets[0], true, true)
-    : disposition === 'newBackgroundTab'
-      ? await openBlbDestination(targets[0], false, false)
-      : await chrome.tabs.update({url:targets[0]});
-
-  await paceCaseSensitiveTab(Promise.resolve(first));
-
-  for (let i=1;i<targets.length;i++) {
-    await paceCaseSensitiveTab(openBlbDestination(targets[i], false, false));
-  }
 }
 let kjvCaseSensitiveWordsLoadPromise = null;
 let kjvOriginalCaseCorpusLoadPromise = null;
@@ -2191,18 +2104,6 @@ if (chrome.omnibox && chrome.omnibox.onInputEntered &&
 // Canonicalize BLB destination URLs before checking open tabs. BLB may normalize
 // trailing slashes, hashes, or query presentation after navigation, so comparing
 // the raw tab.url string can miss an already-open destination and create duplicates.
-function getBlbKjvChapterKey(url) {
-  try {
-    const u = new URL(String(url || ''));
-    const host = u.hostname.toLowerCase().replace(/^www\./, '');
-    if (host !== BLB_HOSTNAME) return null;
-    const m = u.pathname.match(/^\/kjv\/([^/]+)\/(\d+)(?:\/[^/]*)?\/?$/i);
-    if (!m) return null;
-    const rawBook = m[1].toLowerCase();
-    const book = bookData.find(b => String(b.urlKey || '').toLowerCase() === rawBook || String(b.name || '').toLowerCase().replace(/\s+/g,'-') === rawBook);
-    return `blb-kjv-chapter|${book ? String(book.bookNumber) : rawBook}|${m[2]}`;
-  } catch (_) { return null; }
-}
 
 function canonicalBlbTabKey(url) {
   try {
@@ -3825,10 +3726,6 @@ function normalizePdfBookName(value) {
     .trim();
 }
 
-function compactPdfBookName(value) {
-  return normalizePdfBookName(value).replace(/\s+/g, '');
-}
-
 function extractBibleRefsFromSelectedTextUncached(text) {
   const refs = [];
   const seen = new Set();
@@ -4318,13 +4215,6 @@ function isKjvVocabularySelection(selectionText) {
 
 function normalizeSingleWordForKjvVocabulary(selectionText) {
   return globalThis.BLBSelectionTextHelpers.normalizeSingleWordForKjvVocabulary(selectionText);
-}
-
-function isSingleWordInKjvVocabulary(selectionText) {
-  const source = normalizeSelectedScriptureText(selectionText);
-  if ((source.match(/\S+/g) || []).length !== 1) return false;
-  const word = normalizeSingleWordForKjvVocabulary(source);
-  return !!word && KJV_CORPUS_WORD_INDEX.has(word);
 }
 
 const selectionBookNamePatterns = (() => {
@@ -5365,21 +5255,6 @@ function extractKjvPassageSearchQuery(selectionText, excludedVerseTexts = [], op
   return query || null;
 }
 
-async function searchSelectionInKjv(selectionText, decision = null) {
-  const source = stripLeadingSelectionMarkers(normalizeSelectedScriptureText(selectionText));
-  const wordCount = (source.match(/\S+/g) || []).length;
-  if (!source) return false;
-
-  // The generic selection classifier has already established that every word
-  // belongs to the exact KJV vocabulary. Reuse that decision instead of
-  // scanning the same words a second time.
-  if (!decision || !decision.valid || (decision.type !== 'KJV_WORD' && decision.type !== 'KJV_PHRASE')) return false;
-
-  const blb = `${BLB_SEARCH_URL}?Criteria=${encodeURIComponent(source).replace(/%20/g,'+')}`;
-  await openBlbDestination(blb, false);
-  return true;
-}
-
 // Resolve a KJV verse directly from the canonical corpus position instead
 // of lazily building a 31,102-entry Map on the first paragraph selection.
 // BOOKS already contains every chapter's verse count, so chapter offsets can
@@ -5812,26 +5687,7 @@ async function openBlbBook(bookOrNumber, tabBehavior = {activeIfNew:true, activa
   const bookNumber = String(book.bookNumber);
   const key = `blb-book|${bookNumber}`;
   if (pendingBlbDestinations.has(key)) return pendingBlbDestinations.get(key);
-
-  const getBookNumberFromTabUrl = (candidateUrl) => {
-    try {
-      if (!candidateUrl) return null;
-      const u = new URL(String(candidateUrl));
-    const host = u.hostname.toLowerCase().replace(/^www\./, '');
-      if (host !== BLB_HOSTNAME && !host.endsWith('.blueletterbible.org')) return null;
-
-      const parts = u.pathname.split('/').filter(Boolean).map(part => {
-        try { return decodeURIComponent(part).toLowerCase(); } catch (_) { return part.toLowerCase(); }
-      });
-      if (parts[0] !== 'kjv' || !parts[1]) return null;
-
-      const urlKey = parts[1];
-      const matchedBook = bookData.find(b => String(b.urlKey || '').toLowerCase() === urlKey);
-      return matchedBook ? String(matchedBook.bookNumber) : null;
-    } catch (_) {
-      return null;
-    }
-  };
+;
 
   const operation = (async () => {
     const target = `${BLB_HOME_URL}kjv/${book.urlKey}/1/`;
