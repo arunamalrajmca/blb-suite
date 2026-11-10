@@ -34,7 +34,10 @@ test('Sagacity dotted BLB Criteria resolves Matt. 12.37 as Matthew 12:37', () =>
     expect(end).toBeGreaterThan(start + 2);
     return content.slice(start, end);
   };
+  const cueDefinition = content.match(/^const VERSE_CUE_TOKEN_SOURCE = .*;$/m)?.[0];
+  expect(cueDefinition).toBeTruthy();
   const helpers = vm.runInNewContext([
+    cueDefinition,
     extractFunction('decodeSafe'),
     extractFunction('parseRef'),
     extractFunction('normalizeSourceBibleBook'),
@@ -86,7 +89,10 @@ test('Sagacity browser collector captures Matt. 12:37 from malformed nested BLB 
   await page.addScriptTag({ path: path.join(root, 'extension/book-aliases.js') });
   await page.addScriptTag({ path: path.join(root, 'extension/reference-core.js') });
 
+  const cueDefinition = content.match(/^const VERSE_CUE_TOKEN_SOURCE = .*;$/m)?.[0];
+  expect(cueDefinition).toBeTruthy();
   const helpers = [
+    cueDefinition,
     extractFunction(content, 'normalizeSelectionText'),
     extractFunction(content, 'decodeSafe'),
     extractFunction(content, 'parseRef'),
