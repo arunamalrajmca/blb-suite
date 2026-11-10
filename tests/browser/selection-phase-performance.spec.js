@@ -171,5 +171,5 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
       phraseIndexWarmMedianMs: Number(median(corpus.phraseIndexWarmSamples).toFixed(3))
     }
   };
-  process.stdout.write('BLB_SELECTION_PHASE_BENCHMARK ' + JSON.stringify(report) + '\\n');
+  process.stdout.write('BLB_SELECTION_PHASE_BENCHMARK ' + JSON.stringify(report) + '\n');
 });
