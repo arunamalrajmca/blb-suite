@@ -70,8 +70,8 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
       target: { tabId: tab.id },
       world: 'ISOLATED',
       func: () => {
-        if (typeof getContextualBibleReference !== 'function') {
-          throw new Error('The production live DOM contextual resolver is unavailable');
+        if (typeof getSelectionContextPosition !== 'function') {
+          throw new Error('The production live DOM selection-context extractor is unavailable');
         }
         const paragraph = document.createElement('p');
         paragraph.id = 'blb-selection-phase-context-fixture';
@@ -84,26 +84,23 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
         const selection = window.getSelection();
         selection.removeAllRanges();
         selection.addRange(range);
-        const expected = getContextualBibleReference('John');
+        const expected = getSelectionContextPosition();
         const iterations = 200;
         const samples = [];
         let checksum = 0;
         for (let sample = 0; sample < 9; sample++) {
-          for (let warm = 0; warm < 10; warm++) getContextualBibleReference('John');
+          for (let warm = 0; warm < 10; warm++) getSelectionContextPosition();
           const started = performance.now();
           for (let i = 0; i < iterations; i++) {
-            const result = getContextualBibleReference('John');
-            if (result?.url) checksum++;
+            const result = getSelectionContextPosition();
+            if (result?.text && result.text.slice(result.start, result.end) === 'John') checksum++;
           }
           samples.push({ durationMs: performance.now() - started });
         }
         return {
           expected: expected ? {
-            book: expected.book?.name || expected.book || '',
-            chapter: expected.chapter,
-            from: expected.from,
-            to: expected.to,
-            url: expected.url || ''
+            selected: expected.text.slice(expected.start, expected.end),
+            context: expected.text
           } : null,
           checksum,
           samples,
@@ -114,7 +111,8 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
     return results[0]?.result;
   });
 
-  expect(domContext?.expected?.url).toContain('/kjv/jhn/3/16/');
+  expect(domContext?.expected?.selected).toBe('John');
+  expect(domContext?.expected?.context).toContain('John 3:16');
   expect(domContext.checksum).toBeGreaterThan(0);
 
   const corpus = await extensionWorker.evaluate(async () => {
@@ -162,7 +160,7 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
       checksum: parser.checksum,
       ...summarize(parser.samples, parser.iterations)
     },
-    liveDomContext: {
+    domSelectionContext: {
       expected: domContext.expected,
       checksum: domContext.checksum,
       ...summarize(domContext.samples, domContext.iterations)
