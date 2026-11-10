@@ -122,12 +122,18 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
         };
       }
     });
-    return results[0]?.result;
+    return {
+      resultCount: results.length,
+      frames: results.map(item => ({ frameId: item.frameId, result: item.result ?? null })),
+      tabId: tab.id
+    };
   });
 
-  expect(domContext?.expected?.selected, JSON.stringify(domContext)).toBe('John');
-  expect(domContext?.expected?.context).toContain('John 3:16');
-  expect(domContext.checksum).toBeGreaterThan(0);
+  expect(domContext.resultCount, JSON.stringify(domContext)).toBe(1);
+  const domMeasurement = domContext.frames[0]?.result;
+  expect(domMeasurement?.expected?.selected, JSON.stringify(domContext)).toBe('John');
+  expect(domMeasurement?.expected?.context).toContain('John 3:16');
+  expect(domMeasurement.checksum).toBeGreaterThan(0);
 
   const corpus = await extensionWorker.evaluate(async () => {
     const initial = {
@@ -175,9 +181,9 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
       ...summarize(parser.samples, parser.iterations)
     },
     domSelectionContext: {
-      expected: domContext.expected,
-      checksum: domContext.checksum,
-      ...summarize(domContext.samples, domContext.iterations)
+      expected: domMeasurement.expected,
+      checksum: domMeasurement.checksum,
+      ...summarize(domMeasurement.samples, domMeasurement.iterations)
     },
     corpus: {
       initial: corpus.initial,
