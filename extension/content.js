@@ -2034,8 +2034,8 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         // whitespace-separated references (e.g. "Exodus 1" and
         // "Ezra 1 1"). Keep numeric clicks tied to this exact token offset
         // before considering the standalone-number/book fallback.
-        return resolvePositionalBookCitation(normalizedSource, start, end)
-          || resolveBibleReferenceFromContextWindow(normalizedSource, start, end);
+        return resolveBibleReferenceFromContextWindow(normalizedSource, start, end)
+          || resolvePositionalBookCitation(normalizedSource, start, end);
       };
 
       // Prefer the exact physical target element over caret-derived offsets.
