@@ -61,19 +61,25 @@ async function getState() {
   const isSensitiveSite = isSensitiveSiteUrl(activeUrl);
   const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
   let hasCurrentSiteAccess = true;
+  let hasSiteSpecificAccess = true;
   if (!isBlbSite && currentSiteOrigin) {
     try {
       hasCurrentSiteAccess = await chrome.permissions.contains({origins:[currentSiteOrigin]});
+      // Wildcard redirect permissions can satisfy contains() for a specific
+      // origin. Independent site features require the exact host grant.
+      const permissions = await chrome.permissions.getAll();
+      const origins = Array.isArray(permissions?.origins) ? permissions.origins : [];
+      hasSiteSpecificAccess = origins.includes(currentSiteOrigin);
     } catch (_) {
       hasCurrentSiteAccess = false;
+      hasSiteSpecificAccess = false;
     }
   }
-  // Site features are OFF unless the user explicitly enabled them for this host.
-  // Wildcard redirect access never enables either independent site feature.
+  // Site features are OFF unless explicitly enabled and granted for this host.
   const effectivePageEnabled = Object.prototype.hasOwnProperty.call(pageSites, siteKey)
-    && pageSites[siteKey] === true && hasCurrentSiteAccess;
+    && pageSites[siteKey] === true && hasCurrentSiteAccess && hasSiteSpecificAccess;
   const effectiveDoubleEnabled = Object.prototype.hasOwnProperty.call(doubleSites, siteKey)
-    && doubleSites[siteKey] === true && hasCurrentSiteAccess;
+    && doubleSites[siteKey] === true && hasCurrentSiteAccess && hasSiteSpecificAccess;
   return {
     master: data.masterEnabled !== false,
     // Both site-based toggles are OFF by default. An explicit per-site setting
