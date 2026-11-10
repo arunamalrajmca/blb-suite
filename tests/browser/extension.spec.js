@@ -1175,6 +1175,106 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  test('chapter-only cross-chapter ranges resolve through all four selection actions', async ({ page, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{'example.com':true},
+      doubleClickBlbSites:{'example.com':true}
+    });
+    await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+    await expect(page.locator('body')).toBeVisible();
+    await page.waitForTimeout(1000);
+
+    const cases = [
+      {reference:'Genesis 48-49', book:'Genesis'},
+      {reference:'Genesis 42-46', book:'Genesis'}
+    ];
+    const actions = ['Show on BLB','Right-Click','Alt+B','Double-Click'];
+
+    for (let caseIndex=0; caseIndex<cases.length; caseIndex++) {
+      const item = cases[caseIndex];
+      await page.evaluate(({reference,index}) => {
+        const article = document.createElement('article');
+        article.id = 'four-action-chapter-range-' + index;
+        article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;color:#000;padding:12px;font:24px Arial,sans-serif;';
+        const paragraph = document.createElement('p');
+        paragraph.id = 'four-action-chapter-range-text-' + index;
+        const book = document.createElement('span');
+        book.id = 'four-action-chapter-range-book-' + index;
+        book.textContent = 'Genesis';
+        paragraph.append(book, document.createTextNode(' ' + reference.slice('Genesis '.length)));
+        article.appendChild(paragraph);
+        document.body.appendChild(article);
+      }, {reference:item.reference,index:caseIndex});
+
+      for (const action of actions) {
+        await page.bringToFront();
+        const beforeIds = await extensionWorker.evaluate(() =>
+          chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+        );
+        const selector = '#four-action-chapter-range-text-' + caseIndex;
+        const bookSelector = '#four-action-chapter-range-book-' + caseIndex;
+
+        if (action === 'Double-Click') {
+          await page.evaluate(() => window.getSelection()?.removeAllRanges());
+          await page.locator(bookSelector).dblclick();
+        } else {
+          await page.locator(selector).evaluate(element => {
+            const range = document.createRange();
+            range.selectNodeContents(element);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            element.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));
+          });
+          expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe(item.reference);
+
+          if (action === 'Show on BLB') {
+            const button = page.locator('#blb-suite-page-selection-button');
+            await expect(button,'floating action must appear for ' + item.reference).toBeVisible({timeout:10000});
+            await button.click();
+          } else if (action === 'Right-Click') {
+            await extensionWorker.evaluate(async selectedText => {
+              const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+              if (!tab?.id) throw new Error('No active source tab for right-click chapter-range action');
+              await handleBlbSelectionContextMenuClick({
+                menuItemId:'blb-suite-web-selection',
+                selectionText:selectedText
+              },tab);
+            },item.reference);
+          } else {
+            const result = await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+            expect(result?.ok,'Alt+B must accept ' + item.reference).toBe(true);
+          }
+        }
+
+        const destination = await waitForTab(extensionWorker, tab => {
+          if (beforeIds.includes(tab.id)) return false;
+          return (tab.urls || [tab.url,tab.pendingUrl]).some(value => {
+            try {
+              const url = new URL(value);
+              return url.hostname === 'www.blueletterbible.org' &&
+                (url.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
+                 url.searchParams.get('blbSuiteMultiVerse') === '1');
+            } catch (_) { return false; }
+          });
+        },15000);
+        const destinationUrl = (destination.urls || [destination.url,destination.pendingUrl]).find(value => {
+          try {
+            const url = new URL(value);
+            return url.hostname === 'www.blueletterbible.org' &&
+              (url.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
+               url.searchParams.get('blbSuiteMultiVerse') === '1');
+          } catch (_) { return false; }
+        });
+        expect(destinationUrl,action + ' must route ' + item.reference + ' to MultiVerse').toBeTruthy();
+        await removeTabById(extensionWorker,destination.id);
+        await page.evaluate(() => window.getSelection()?.removeAllRanges());
+      }
+    }
+  });
+
   test('Same-chapter range resolution covers all 66 books on Double-Click @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(360000);
     const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
