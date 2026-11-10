@@ -183,8 +183,10 @@ test('KJV phrase candidate index loads only when Criteria phrase matching needs 
   // A normal multi-word phrase takes the generated-index path. Keep
   // classification and inspection together because MV3 may restart an idle
   // service worker between separate evaluate calls.
+  // An explicit reference bypasses the contiguous-quotation range resolver,
+  // allowing the residual KJV phrase to exercise the Criteria phrase index.
   const indexedPhrase = await extensionWorker.evaluate(async () => {
-    const result = await classifySelectionForBlb('In the beginning was the Word');
+    const result = await classifySelectionForBlb('John 3:16 — In the beginning was the Word');
     return {
       result,
       loaded: KJV_CORPUS_PHRASE_INDEX !== null,
@@ -192,7 +194,9 @@ test('KJV phrase candidate index loads only when Criteria phrase matching needs 
     };
   });
   expect(indexedPhrase.result.valid).toBe(true);
-  expect(indexedPhrase.result.type).toBe('KJV_PHRASE');
+  expect(indexedPhrase.result.type).toBe('REFERENCE_AND_KJV_PASSAGE');
+  expect(indexedPhrase.result.refs).toHaveLength(1);
+  expect(indexedPhrase.result.kjvPassageQuery).toBeTruthy();
   expect(indexedPhrase.loaded).toBe(true);
   expect(indexedPhrase.keys).toBeGreaterThan(0);
 });
