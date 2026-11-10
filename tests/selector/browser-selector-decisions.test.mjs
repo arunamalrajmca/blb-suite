@@ -567,7 +567,7 @@ test("deletion-only changes to a large browser spec do not rerun the removed spe
     const output = select(root, base);
     assert.ok(output.includes("full_browser_suite=true"));
     assert.ok(!output.includes("changed_browser_specs=tests/browser/extension.spec.js"));
-    assert.ok(output.includes("changed_browser_specs=\\n"));
+    assert.ok(output.includes("changed_browser_specs=\n"));
   });
 });
 
