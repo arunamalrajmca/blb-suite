@@ -55,7 +55,6 @@ test('a real MV3 service-worker termination is recovered by a content-script sel
       return currentTargets.some(target => target.targetId === workerTarget.targetId);
     }, {timeout:5000}).toBe(false);
 
-    const restartedWorkerPromise = context.waitForEvent('serviceworker', {timeout:10000});
     await page.evaluate(() => window.dispatchEvent(new Event('blb-suite-test-wake-worker')));
 
     await page.waitForFunction(() => {
@@ -69,8 +68,17 @@ test('a real MV3 service-worker termination is recovered by a content-script sel
     );
     expect(response).toMatchObject({ok:true});
 
-    const restartedWorker = await restartedWorkerPromise;
-    expect(restartedWorker.url()).toBe(workerTarget.url);
+    let restartedWorkerTarget = null;
+    await expect.poll(async () => {
+      const {targetInfos:currentTargets} = await cdp.send('Target.getTargets');
+      restartedWorkerTarget = currentTargets.find(target =>
+        target.type === 'service_worker' &&
+        target.url === workerTarget.url &&
+        target.targetId !== workerTarget.targetId
+      ) || null;
+      return !!restartedWorkerTarget;
+    }, {timeout:10000}).toBe(true);
+    expect(restartedWorkerTarget.url).toBe(workerTarget.url);
   } finally {
     await cdp.detach();
   }
