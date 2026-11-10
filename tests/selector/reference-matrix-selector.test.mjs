@@ -36,6 +36,20 @@ test("test spec edited alongside runtime preserves the existing generic-spec exc
   assert.ok(selected.some(entry => entry.group === "redirect-source-smoke-batch"));
 });
 
+test("selection phase benchmark changes select their focused matrix entry", () => {
+  const selected = selectReferenceMatrix(entries, {
+    changedSpecs: "tests/browser/selection-phase-performance.spec.js"
+  });
+  assert.deepEqual(selected.map(entry => entry.group), ["selection-phase-performance"]);
+});
+
+test("service-worker lifecycle changes select their focused matrix entry", () => {
+  const selected = selectReferenceMatrix(entries, {
+    changedSpecs: "tests/browser/service-worker-lifecycle.spec.js"
+  });
+  assert.deepEqual(selected.map(entry => entry.group), ["service-worker-lifecycle"]);
+});
+
 test("unselected matrix entries are omitted before runner allocation", () => {
   assert.deepEqual(selectReferenceMatrix(entries, { changedSpecs: "tests/browser/redirect-hostnames.spec.js" }).map(x => x.group), ["redirect-source-smoke-batch"]);
   assert.deepEqual(selectReferenceMatrix(entries, { changedSpecs: "" }), []);

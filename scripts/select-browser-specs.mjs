@@ -165,6 +165,8 @@ const values = {
     "tests/browser/audit-defect-regressions.spec.js",
     "tests/browser/case-sensitive-routing-behavior.spec.js",
     "tests/browser/extension.spec.js",
+    "tests/browser/selection-phase-performance.spec.js",
+    "tests/browser/service-worker-lifecycle.spec.js",
     "tests/browser/known-host-extension.spec.js",
     "tests/browser/pr-422-feature-regressions.spec.js",
    
@@ -178,6 +180,8 @@ const values = {
   )),
   reference_required: String(has(
     "tests/browser/extension.spec.js",
+    "tests/browser/selection-phase-performance.spec.js",
+    "tests/browser/service-worker-lifecycle.spec.js",
     "tests/browser/known-host-extension.spec.js",
     "tests/browser/pr-422-feature-regressions.spec.js",
    

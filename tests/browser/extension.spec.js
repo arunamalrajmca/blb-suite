@@ -24,6 +24,32 @@ async function waitForBlbTabPath(extensionWorker, expectedPath, timeout = 10000)
   return match;
 }
 
+async function waitForNewMultiVerseTab(extensionWorker, beforeIds, timeout = 15000) {
+  let match = null;
+  await expect.poll(async () => {
+    const tabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
+      items.map(tab => ({
+        id:tab.id,
+        url:tab.url || '',
+        pendingUrl:tab.pendingUrl || ''
+      }))
+    ));
+    match = tabs.find(tab => {
+      if (beforeIds.includes(tab.id)) return false;
+      return [tab.url,tab.pendingUrl].some(value => {
+        try {
+          const url = new URL(value);
+          return url.hostname === 'www.blueletterbible.org' &&
+            (url.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
+             url.searchParams.get('blbSuiteMultiVerse') === '1');
+        } catch (_) { return false; }
+      });
+    }) || null;
+    return !!match;
+  }, {timeout}).toBeTruthy();
+  return match;
+}
+
 async function waitForNewBlbTabPathOnEvent(extensionWorker, beforeIds, expectedPath, timeout = 1200) {
   return extensionWorker.evaluate(({ beforeIds, expectedPath, timeout }) => new Promise((resolve, reject) => {
     const before = new Set(beforeIds);
@@ -1170,6 +1196,102 @@ test.describe('core user-visible E2E', () => {
             } catch (_) {}
           }
         }), beforeIds);
+        await page.evaluate(() => window.getSelection()?.removeAllRanges());
+      }
+    }
+  });
+
+  test('chapter-only cross-chapter ranges resolve through all four selection actions', async ({ page, extensionStorage, extensionWorker }) => {
+    test.setTimeout(240000);
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{'example.com':true},
+      doubleClickBlbSites:{'example.com':true}
+    });
+    await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+    await expect(page.locator('body')).toBeVisible();
+    await page.waitForTimeout(1000);
+
+    const cases = [
+      {reference:'Genesis 48-49'},
+      {reference:'Genesis 42-46'}
+    ];
+    const actions = ['Show on BLB','Right-Click','Alt+B','Double-Click'];
+
+    for (let caseIndex=0; caseIndex<cases.length; caseIndex++) {
+      const item = cases[caseIndex];
+      await page.evaluate(({reference,index}) => {
+        const article = document.createElement('article');
+        article.id = 'four-action-chapter-range-' + index;
+        article.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;color:#000;padding:12px;font:24px Arial,sans-serif;';
+        const paragraph = document.createElement('p');
+        paragraph.id = 'four-action-chapter-range-text-' + index;
+        const book = document.createElement('span');
+        book.id = 'four-action-chapter-range-book-' + index;
+        book.textContent = 'Genesis';
+        paragraph.append(book, document.createTextNode(' ' + reference.slice('Genesis '.length)));
+        article.appendChild(paragraph);
+        document.body.appendChild(article);
+      }, {reference:item.reference,index:caseIndex});
+
+      for (const action of actions) {
+        await page.bringToFront();
+        const beforeIds = await extensionWorker.evaluate(() =>
+          chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+        );
+        const selector = '#four-action-chapter-range-text-' + caseIndex;
+        const bookSelector = '#four-action-chapter-range-book-' + caseIndex;
+
+        if (action === 'Double-Click') {
+          await page.evaluate(() => window.getSelection()?.removeAllRanges());
+          await page.locator(bookSelector).dblclick();
+        } else {
+          await page.locator(selector).evaluate(element => {
+            const range = document.createRange();
+            range.selectNodeContents(element);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            element.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));
+          });
+          expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe(item.reference);
+
+          if (action === 'Show on BLB') {
+            const button = page.locator('#blb-suite-page-selection-button');
+            await expect(button,'floating action must appear for ' + item.reference).toBeVisible({timeout:10000});
+            await button.click();
+          } else if (action === 'Right-Click') {
+            await extensionWorker.evaluate(async selectedText => {
+              const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+              if (!tab?.id) throw new Error('No active source tab for right-click chapter-range action');
+              await handleBlbSelectionContextMenuClick({
+                menuItemId:'blb-suite-web-selection',
+                selectionText:selectedText
+              },tab);
+            },item.reference);
+          } else {
+            const result = await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+            expect(result?.ok,'Alt+B must accept ' + item.reference).toBe(true);
+          }
+        }
+
+        const destination = await waitForNewMultiVerseTab(extensionWorker,beforeIds).catch(async error => {
+          const observedTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+            tabs.map(tab => ({id:tab.id,url:tab.url || '',pendingUrl:tab.pendingUrl || ''}))
+          ));
+          throw new Error(action + ' failed to open MultiVerse for ' + item.reference +
+            '; observed tabs=' + JSON.stringify(observedTabs) + '; ' + String(error));
+        });
+        const destinationUrl = [destination.url,destination.pendingUrl].find(value => {
+          try {
+            const url = new URL(value);
+            return url.hostname === 'www.blueletterbible.org' &&
+              (url.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
+               url.searchParams.get('blbSuiteMultiVerse') === '1');
+          } catch (_) { return false; }
+        });
+        expect(destinationUrl,action + ' must route ' + item.reference + ' to MultiVerse').toBeTruthy();
+        await removeTabById(extensionWorker,destination.id);
         await page.evaluate(() => window.getSelection()?.removeAllRanges());
       }
     }

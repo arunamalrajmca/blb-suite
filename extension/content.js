@@ -868,18 +868,51 @@ function resolvePositionalBookCitation(text, selectionStart, selectionEnd) {
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.\\s*)(\\d{1,3})\\s*[:.]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?!-(?!\\s*\\d))(?=$|[^A-Za-z0-9])', 'gi'),
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})\\s*[:.]\\s*(\\d{1,3})(?:\\s*[-–—]\\s*(\\d{1,3}))?(?!-(?!\\s*\\d))(?=$|[^A-Za-z0-9])', 'gi'),
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')\\s+(\\d{1,3})\\s+(\\d{1,3})(?=$|[^A-Za-z0-9])', 'gi'),
+      new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.\\s*)(\\d{1,3})\\s*-\\s*(\\d{1,3})(?!\\s*[:.]\\s*\\d)(?=$|[^A-Za-z0-9])', 'gi'),
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(?:\\s+|\\.\\s*)(\\d{1,3})(?!\\s*[:.]\\s*\\d)(?=$|[^A-Za-z0-9])', 'gi'),
       new RegExp('(?:^|[^A-Za-z0-9])(' + escaped + ')(\\d{1,3})(?!\\s*[:.]\\s*\\d)(?=$|[^A-Za-z0-9])', 'gi')
     ];
     for (let patternIndex = 0; patternIndex < patterns.length; patternIndex++) {
       const pattern = patterns[patternIndex];
-      const chapterOnly = patternIndex >= 3;
+      const chapterRange = patternIndex === 3;
+      const chapterOnly = patternIndex >= 4;
       let match;
       while ((match = pattern.exec(source))) {
         const citationStart = match.index + match[0].indexOf(match[1]);
         const citationEnd = match.index + match[0].length;
         if (selectionStart >= citationEnd || selectionEnd <= citationStart) continue;
         const chapter = Number(match[2]);
+        if (chapterRange) {
+          const lastChapter = Number(match[3]);
+          if (entry.book.chapterCount <= 1 || lastChapter <= chapter ||
+              lastChapter > entry.book.chapterCount) continue;
+          const refs = [];
+          for (let currentChapter = chapter; currentChapter <= lastChapter; currentChapter++) {
+            const resolvedChapter = resolveBibleReference(entry.book.name, currentChapter, null, null);
+            if (!resolvedChapter) {
+              refs.length = 0;
+              break;
+            }
+            refs.push({
+              book:resolvedChapter.book.name,
+              chapter:resolvedChapter.chapter,
+              from:null,
+              to:null,
+              url:resolvedChapter.url,
+              version:'kjv',
+              text:resolvedChapter.book.name + ' ' + resolvedChapter.chapter
+            });
+          }
+          if (refs.length > 1) return {
+            book:entry.book.name,
+            chapter,
+            from:null,
+            to:null,
+            url:refs[0].url,
+            refs
+          };
+          continue;
+        }
         const resolved = chapterOnly
           ? resolveBibleReference(entry.book.name, chapter, null, null)
           : resolveBibleReference(
@@ -2001,8 +2034,14 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         // whitespace-separated references (e.g. "Exodus 1" and
         // "Ezra 1 1"). Keep numeric clicks tied to this exact token offset
         // before considering the standalone-number/book fallback.
+        const positionalReference = resolvePositionalBookCitation(normalizedSource, start, end);
+        // A complete chapter-only range must outrank a single-chapter fallback.
+        // For verse citations, preserve the richer context-window result.
+        if (Array.isArray(positionalReference?.refs) && positionalReference.refs.length > 1) {
+          return positionalReference;
+        }
         return resolveBibleReferenceFromContextWindow(normalizedSource, start, end)
-          || resolvePositionalBookCitation(normalizedSource, start, end);
+          || positionalReference;
       };
 
       // Prefer the exact physical target element over caret-derived offsets.
@@ -2288,6 +2327,23 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
               );
             }
           };
+          // A book-name click on a chapter-only cross-chapter range must
+          // preserve the complete range. Reuse the shared positional grammar
+          // so this path produces the same whole-chapter MultiVerse refs as
+          // the other selection actions, rather than falling back to chapter 1.
+          const chapterRangeReference = resolvePositionalBookCitation(
+            exactClickedBook.name + ' ' + followingText,
+            0,
+            exactClickedBook.name.length
+          );
+          if (Array.isArray(chapterRangeReference?.refs) &&
+              chapterRangeReference.refs.length > 1) {
+            writeFacebookDoubleClickDiagnostic({
+              chapterRangeReference
+            });
+            return chapterRangeReference;
+          }
+
           // Match the shared positional grammar: colon, dotted, and
           // whitespace-separated chapter/verse forms. One number is
           // chapter-only; a second adjacent number is its verse.
@@ -2375,6 +2431,11 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             // richer result when both resolve the same exact clicked token.
             const referenceScore = reference => {
               if (!reference) return -1;
+              // A whole-chapter range carries explicit MultiVerse refs. Prefer
+              // that complete positional match over a single-chapter fallback.
+              if (Array.isArray(reference.refs) && reference.refs.length > 1) {
+                return 200 + reference.refs.length;
+              }
               if (reference.from == null) return 0;
               return 100 + Math.max(0, Number(reference.to || reference.from) - Number(reference.from));
             };
@@ -2507,6 +2568,11 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             );
             const referenceScore = reference => {
               if (!reference) return -1;
+              // A whole-chapter range carries explicit MultiVerse refs. Prefer
+              // that complete positional match over a single-chapter fallback.
+              if (Array.isArray(reference.refs) && reference.refs.length > 1) {
+                return 200 + reference.refs.length;
+              }
               if (reference.from == null) return 0;
               return 100 + Math.max(0, Number(reference.to || reference.from) - Number(reference.from));
             };

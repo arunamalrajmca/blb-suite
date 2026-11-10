@@ -39,5 +39,15 @@
       "tests/browser/redirect-toggle-isolation.spec.js"
     ],
     "grep": ".*"
+  },
+  {
+    "group": "selection-phase-performance",
+    "file": "tests/browser/selection-phase-performance.spec.js",
+    "grep": ".*"
+  },
+  {
+    "group": "service-worker-lifecycle",
+    "file": "tests/browser/service-worker-lifecycle.spec.js",
+    "grep": ".*"
   }
 ]

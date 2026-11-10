@@ -12,7 +12,8 @@ export const featureSpecs = [
     paths: ["extension/content.js"],
     specs: [
       "tests/browser/redirect-toggle-isolation.spec.js",
-      "tests/browser/multiverse-clipboard-reference-pattern.spec.js"
+      "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
+      "tests/browser/selection-phase-performance.spec.js"
     ]
   },
   {
@@ -28,7 +29,8 @@ export const featureSpecs = [
       "tests/browser/omnibox-command-routing.spec.js",
       "tests/browser/pdf-selection-regressions.spec.js",
       "tests/browser/kjv-corpus-lazy-loading.spec.js",
-      "tests/browser/audit-defect-regressions.spec.js"
+      "tests/browser/audit-defect-regressions.spec.js",
+      "tests/browser/service-worker-lifecycle.spec.js"
     ]
   },
   {
@@ -141,6 +143,8 @@ export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.
   "tests/browser/audit-defect-regressions.spec.js",
   "tests/browser/omnibox-boolean-operators.spec.js",
   "tests/browser/e2e-core-user-actions.spec.js",
+  "tests/browser/selection-phase-performance.spec.js",
+  "tests/browser/service-worker-lifecycle.spec.js",
   "tests/browser/kings-bible-collector-behavior.spec.js",
   "tests/browser/feature-lifecycle-regressions.spec.js",
   "tests/browser/study-backup-restore.spec.js",
