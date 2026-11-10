@@ -34,8 +34,6 @@ function runInjectionHelper(functionNames, { settings, tabs }) {
     chrome,
     URL,
     BLB_HOSTNAME: 'blueletterbible.org',
-    isSensitiveSiteHostname: value => /(?:bank|banking|banker|credit.?union|financial|finance|hospital|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)/i.test(String(value || '')),
-    isSensitiveSiteUrl: value => /payment/i.test(String(value || '')) || /(?:bank|banking|banker|credit.?union|financial|finance|hospital|health|healthcare|clinic|medical|patient|mychart|insurance|insurer|assurance|claims)/i.test(String(value || '')),
     injected,
     isHttpPageUrl: url => /^https?:\/\//i.test(String(url || '')),
     originPatternForUrl: url => {
@@ -53,6 +51,10 @@ function runInjectionHelper(functionNames, { settings, tabs }) {
     hasHostAccessForTab: async tab => tab.hostAccess === true,
     ensureContentScriptInTab: async id => { injected.push(id); return true; }
   };
+  context.globalThis = context;
+  vm.runInNewContext(sharedRegexPatterns, context);
+  context.isSensitiveSiteHostname = value => context.BLBShared.isSensitiveSiteHostname(value);
+  context.isSensitiveSiteUrl = value => context.BLBShared.isSensitiveSiteUrl(value);
   const snippets = [];
   for (const name of functionNames) {
     if (name === 'injectEnabledTabsForGrantedOrigins') {
