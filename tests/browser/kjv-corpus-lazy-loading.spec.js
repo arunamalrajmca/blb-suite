@@ -546,9 +546,9 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
         const corpusStillLoadedAfterFastPaths = typeof KJV_CORPUS_VERSES !== 'undefined'
           && typeof KJV_CORPUS_WORD_VERSE_INDEX !== 'undefined';
 
-        // First try the common exact whitelist phrase. The candidate should
-        // need only normalized verse text; the current-main baseline also loads
-        // its word and phrase indexes for this same classification.
+        // Both current-main and candidate use the short-phrase whitelist:
+        // verify against normalized verse text without loading either large index.
+        // The A/B comparison measures startup and deferred indexed-use costs.
         const firstPhraseStartedAt = performance.now();
         const phrase = await classifySelectionForBlb('God is love');
         const firstPhraseUseMs = performance.now() - firstPhraseStartedAt;
@@ -736,14 +736,12 @@ test('interleaved 15-pair cold-start and first-corpus-use A/B against current ma
     expect(sample.afterFirstPhrase.versesLoaded).toBe(true);
     expect(sample.afterDeferredUse.versesLoaded).toBe(true);
     expect(sample.afterDeferredUse.wordIndexLoaded).toBe(true);
-    if (sample.variant === 'baseline') {
-      expect(sample.afterFirstPhrase.wordIndexLoaded).toBe(true);
-      expect(sample.afterFirstPhrase.phraseIndexLoaded).toBe(true);
-    } else {
-      expect(sample.afterFirstPhrase.wordIndexLoaded).toBe(false);
-      expect(sample.afterFirstPhrase.phraseIndexLoaded).toBe(false);
-      expect(sample.afterDeferredUse.phraseIndexLoaded).toBe(false);
-    }
+    // Current main already contains the short-phrase whitelist optimization,
+    // so both variants must defer the word and phrase indexes at this point.
+    expect(sample.afterFirstPhrase.wordIndexLoaded).toBe(false);
+    expect(sample.afterFirstPhrase.phraseIndexLoaded).toBe(false);
+    // The longer exact passage loads the word index, but not the phrase index.
+    expect(sample.afterDeferredUse.phraseIndexLoaded).toBe(false);
     expect(sample.warmPassageType).toBe('KJV_REFERENCE_RANGE');
   }
 });
