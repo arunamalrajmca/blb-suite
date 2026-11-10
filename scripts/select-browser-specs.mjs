@@ -175,6 +175,9 @@ const values = {
     "tests/browser/extension.spec.js",
     "tests/browser/selection-phase-performance.spec.js",
     "tests/browser/service-worker-lifecycle.spec.js",
+    "tests/browser/kjv-corpus-lazy-loading.spec.js",
+    "tests/browser/right-panel-default-expanded.spec.js",
+    "tests/browser/site-registration-opt-out-race.spec.js",
     "tests/browser/known-host-extension.spec.js",
     "tests/browser/pr-422-feature-regressions.spec.js",
    
