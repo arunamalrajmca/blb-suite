@@ -83,21 +83,20 @@ test.describe('independent site feature permissions and global redirects', () =>
     expect(popup.slice(doubleHandlerStart, listenerStart)).toContain("setIndependentSiteFeature('doubleClick', on)");
   });
 
-  test('existing broad permission is reused without requesting a redundant site grant', async () => {
-    const start = popup.indexOf('async function requestCurrentSiteAccess(');
-    const end = popup.indexOf('\n\nasync function setPageButton', start);
+  test('site permission is requested synchronously after pinning the preference', () => {
+    const start = popup.indexOf('async function setIndependentSiteFeature(feature, on) {');
+    const end = popup.indexOf('\nasync function handlePageButtonToggle(on)', start);
     expect(start).toBeGreaterThanOrEqual(0);
     expect(end).toBeGreaterThan(start);
-    const calls = [];
-    const context = {
-      chrome: { permissions: {
-        contains: async details => { calls.push(['contains', details]); return true; },
-        request: async details => { calls.push(['request', details]); return true; }
-      }}
-    };
-    vm.runInNewContext(popup.slice(start, end), context);
-    expect(await context.requestCurrentSiteAccess('https://sagacityweb.com/*')).toBe(true);
-    expect(calls.map(call => call[0])).toEqual(['contains']);
+    const handler = popup.slice(start, end);
+    const pinIndex = handler.indexOf('const pinPromise = on');
+    const permissionIndex = handler.indexOf('chrome.permissions.request({origins:[currentSiteOrigin]})');
+    const firstAwaitIndex = handler.indexOf('await ');
+    expect(pinIndex).toBeGreaterThanOrEqual(0);
+    expect(permissionIndex).toBeGreaterThan(pinIndex);
+    expect(firstAwaitIndex).toBeGreaterThan(permissionIndex);
+    expect(handler).toContain('.then(granted => granted === true)');
+    expect(handler).toContain('.catch(() => false)');
   });
 
 });
