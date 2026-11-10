@@ -5,14 +5,6 @@ async function removeTabById(extensionWorker, id) {
   await extensionWorker.evaluate(tabId => chrome.tabs.remove(tabId).catch(() => {}), id);
 }
 
-async function dblclickAt(locator, rect) {
-  const box = await locator.boundingBox();
-  expect(box).toBeTruthy();
-  await locator.dblclick({
-    position: { x: rect.x - box.x, y: rect.y - box.y }
-  });
-}
-
 async function waitForBlbTabPath(extensionWorker, expectedPath, timeout = 10000) {
   let match = null;
   await expect.poll(async () => {
@@ -164,19 +156,23 @@ test('KJV phrase candidate index loads only when Criteria phrase matching needs 
   expect(singleWord.type).toBe('KJV_WORD');
   expect(await extensionWorker.evaluate(() => KJV_CORPUS_PHRASE_INDEX)).toBeNull();
 
-  const phrase = await extensionWorker.evaluate(async () => classifySelectionForBlb('For God so loved the world'));
-  expect(phrase.valid).toBe(true);
-  expect(phrase.type).toBe('KJV_REFERENCE_RANGE');
-  expect(phrase.directRef.url).toContain('/kjv/jhn/3/16');
-  const afterDirectRange = await extensionWorker.evaluate(() => ({
-    loaded: KJV_CORPUS_PHRASE_INDEX !== null,
-    keys: Object.keys(KJV_CORPUS_PHRASE_INDEX || {}).length
-  }));
-  expect(afterDirectRange).toEqual({ loaded: false, keys: 0 });
+  const directRange = await extensionWorker.evaluate(async () => classifySelectionForBlb('For God so loved the world'));
+  expect(directRange.valid).toBe(true);
+  expect(directRange.type).toBe('KJV_REFERENCE_RANGE');
+  expect(directRange.directRef.url).toContain('/kjv/jhn/3/16');
+  expect(await extensionWorker.evaluate(() => KJV_CORPUS_PHRASE_INDEX)).toBeNull();
 
-  const shortPhrase = await extensionWorker.evaluate(async () => classifySelectionForBlb('God is love'));
-  expect(shortPhrase.valid).toBe(true);
-  expect(shortPhrase.type).toBe('KJV_PASSAGE');
+  // A mixed explicit-reference + unquoted KJV phrase reaches the actual
+  // Criteria phrase-index path without being consumed by contiguous-range
+  // classification or the short-phrase whitelist.
+  const mixedSelection = await extensionWorker.evaluate(async () =>
+    classifySelectionForBlb('John 3:16 — In the beginning was the Word')
+  );
+  expect(mixedSelection.valid).toBe(true);
+  expect(mixedSelection.type).toBe('REFERENCE_AND_KJV_PASSAGE');
+  expect(mixedSelection.refs).toHaveLength(1);
+  expect(mixedSelection.kjvPassageQuery).toContain('"in the beginning was the word"');
+
   const loaded = await extensionWorker.evaluate(() => ({
     loaded: KJV_CORPUS_PHRASE_INDEX !== null,
     keys: Object.keys(KJV_CORPUS_PHRASE_INDEX || {}).length
@@ -184,7 +180,6 @@ test('KJV phrase candidate index loads only when Criteria phrase matching needs 
   expect(loaded.loaded).toBe(true);
   expect(loaded.keys).toBeGreaterThan(0);
 });
-
 test('popup loads from extension package', async ({ page, extensionId }) => {
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await expect(page).toHaveTitle('KJV Scripture Tools');

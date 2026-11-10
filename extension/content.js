@@ -83,40 +83,8 @@ function safeRuntimeSendMessage(message, onError = null) {
 // whether the user's per-site double-click preference enables the listener.
 try { window.__blbSuiteContentScriptLoadedV2 = true; } catch (_) {}
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
-const BLB_ORIGIN = BLBShared.urls.blbOrigin;
 // Unified content script.
 
-// Access policy:
-//   * Local files: only PDF, HTML, and HTM files are supported.
-//   * Webpages: hostnames containing "bible" are enabled by default.
-//     Other sites become active when the user has explicitly enabled either
-//     Show on BLB or Double-Click BLB for that hostname. Those preferences
-//     live in chrome.storage.local and survive extension updates.
-async function blbSuiteAccessAllowed() {
-  const protocol = String(location.protocol || '').toLowerCase();
-  const href = String(location.href || '');
-
-  if (protocol === 'file:') {
-    return /\.(?:pdf|html?|xhtml)(?:$|[?#])/i.test(href);
-  }
-
-  if (protocol !== 'http:' && protocol !== 'https:') return false;
-
-  const host = String(location.hostname || '').toLowerCase().replace(/^www\./, '');
-  if (!host) return false;
-  if (host.includes('bible')) return true;
-
-  try {
-    const stored = await chrome.storage.local.get({pageSelectionButtonSites:{}, doubleClickBlbSites:{}});
-    const pageSites = stored.pageSelectionButtonSites && typeof stored.pageSelectionButtonSites === 'object'
-      ? stored.pageSelectionButtonSites : {};
-    const doubleSites = stored.doubleClickBlbSites && typeof stored.doubleClickBlbSites === 'object'
-      ? stored.doubleClickBlbSites : {};
-    return pageSites[host] === true || doubleSites[host] === true;
-  } catch (_) {
-    return false;
-  }
-}
 // Keep the content script resident on HTTP/HTTPS pages. Feature activation is
 // controlled by the site settings below. Exiting the content script here made
 // a later popup toggle unable to activate an already-open page reliably.
@@ -208,9 +176,6 @@ function normalizeSelectionText(s) {
     .replace(/[\u2010-\u2015\u2212](?=\s*\d)/g, '-')
     .replace(/\s+/g, ' ')
     .trim();
-}
-function norm(s) {
-  return normalizeSelectionText(s).toLowerCase().replace(/[_]/g,"-").replace(/[.]/g,"").replace(/\s+/g,"-").replace(/-+/g,"-");
 }
 function bookKey(value) {
   const book = resolveBibleBook(value);

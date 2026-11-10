@@ -18,18 +18,21 @@ test('case-sensitive zero-result fallback cannot redirect to BLB home', () => {
   assert(fn.includes('openCaseSensitiveNativeSearch(parsed.rawQuery, disposition)'), 'native fallback missing');
   assert(!fn.includes("chrome.tabs.update({url:homeUrl})"), 'unsafe BLB-home fallback remains');
 });
-test('case-sensitive MultiVerse destinations are rate-limited by tab load', () => {
-  const start=bg.indexOf('const CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS');
-  const end=bg.indexOf('\nasync function handleCaseSensitiveBCommand', start);
-  assert(start >= 0 && end > start, 'case-sensitive destination throttle block missing');
-  const fn=bg.slice(start,end);
-  assert(fn.includes('CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS'), 'inter-tab cooldown missing');
-  assert(fn.includes('setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS)'), 'inter-tab cooldown must precede subsequent navigation');
-  assert(fn.includes('for (let i=1;i<targets.length;i++)'), 'destination loop missing');
-  assert(fn.includes('function waitForTabTerminalLoad'), 'terminal tab-load wait helper missing');
-  assert(fn.includes('chrome.tabs.onUpdated.addListener'), 'terminal tab-load observer missing');
-  assert(fn.includes('chrome.tabs.onUpdated.removeListener(onUpdated)'), 'tab-load observer must be removed after each destination');
-  assert(fn.includes('await waitForTabTerminalLoad(tab.id)'), 'each created tab must wait for terminal load');
+test('case-sensitive MultiVerse results use the shared canonical batch handoff', () => {
+  const start=bg.indexOf('async function handleCaseSensitiveBCommand');
+  const end=bg.indexOf('\nasync function handleOmniboxCommand', start);
+  assert(start >= 0 && end > start, 'case-sensitive command handler block missing');
+  const handler=bg.slice(start,end);
+  assert(handler.includes('openBlbMultiVerseRefs(multiVerseRefs, disposition !== \'newBackgroundTab\', {preferredTabId:originatingTabId})'), 'case-sensitive results must use the shared MultiVerse batch manager');
+
+  const batchStart=bg.indexOf('async function openBlbMultiVerseRefs(');
+  const batchEnd=bg.indexOf('\n// Shared destination identity/reuse/creation coordinator', batchStart);
+  assert(batchStart >= 0 && batchEnd > batchStart, 'shared MultiVerse batch manager missing');
+  const batch=bg.slice(batchStart,batchEnd);
+  assert(batch.includes('offset += BLB_MULTIVERSE_MAX_VERSES'), 'shared manager must preserve the 200-verse batch limit');
+  assert(batch.includes('openBlbMultiVerseRefsSingleBatch'), 'each batch must use the shared single-batch handoff');
+  assert(batch.includes('Promise.all(batches.map'), 'all batches must be scheduled through the shared handoff path');
+  assert(bg.includes('function grantMultiVersePostSlot'), 'shared FIFO POST scheduling must remain available');
 });
 
 test('case-sensitive zero-result path preserves native-search fallback', () => {
