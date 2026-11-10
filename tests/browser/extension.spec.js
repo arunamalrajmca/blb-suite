@@ -3229,6 +3229,11 @@ test('rapid site opt-out waits for an older registration reconciliation before u
         pageSelectionButtonSites:{...previous.pageSelectionButtonSites,[key]:true},
         doubleClickBlbSites:previous.doubleClickBlbSites
       });
+      // Drain the storage.onChanged reconciliation caused by setup before
+      // instrumenting the deliberately delayed ON pass below.
+      await reconcileRuntimeContentScriptRegistrations();
+      await runtimeContentScriptReconciliationQueue;
+      await chrome.scripting.unregisterContentScripts({ids:[id]}).catch(() => {});
       chrome.scripting.getRegisteredContentScripts = wrappedGet;
       const olderEnabledPass = reconcileRuntimeContentScriptRegistrations();
       await inspectionStarted;
