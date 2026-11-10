@@ -3879,19 +3879,6 @@ function disableDoubleClickBlb() {
   doubleClickBound = false;
 }
 
-async function getSiteDefaultEnabled() {
-  try {
-    const response = await safeRuntimeSendMessage({
-      type:'blbSuiteGetDefaultSiteStatus',
-      hostname:location.hostname,
-      title:document.title || ''
-    });
-    return response?.enabled === true;
-  } catch (_) {
-    return false;
-  }
-}
-
 async function refreshDoubleClickBlb() {
   try {
     const siteKey = getPageSelectionSiteKey();
@@ -3904,8 +3891,7 @@ async function refreshDoubleClickBlb() {
     const sites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
       ? data.doubleClickBlbSites : {};
     const hasExplicitPreference = Object.prototype.hasOwnProperty.call(sites, siteKey);
-    const defaultEnabled = await getSiteDefaultEnabled();
-    doubleClickBlbEnabled = hasExplicitPreference ? sites[siteKey] === true : defaultEnabled;
+    doubleClickBlbEnabled = hasExplicitPreference && sites[siteKey] === true;
     if (doubleClickBlbEnabled) enableDoubleClickBlb();
     else disableDoubleClickBlb();
   } catch (_) {
@@ -3954,7 +3940,6 @@ const blbPageSelectionButton = globalThis.BLBPageSelectionButtonModule.initializ
   safeRuntimeSendMessage: safeRuntimeSendMessage,
   isSensitiveSiteHostname: isSensitiveSiteHostname,
    isSensitiveSiteUrl: isSensitiveSiteUrl,
-  getSiteDefaultEnabled: getSiteDefaultEnabled,
   refreshDoubleClickBlb: refreshDoubleClickBlb,
   suiteSettingsReadyPromise: suiteSettingsReadyPromise,
   isSuiteEnabledNow: () => suiteEnabled,
