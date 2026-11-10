@@ -33,7 +33,6 @@ let KJV_CORPUS_PHRASE_INDEX = null;
 // Shared reference core.
 const SEARCH_RANGES = [{"keyword":"ot","csr":"1"},{"keyword":"torah","csr":"2"},{"keyword":"hb","csr":"3"},{"keyword":"pb","csr":"4"},{"keyword":"wl","csr":"5"},{"keyword":"pp","csr":"6"},{"keyword":"maj","csr":"7"},{"keyword":"min","csr":"8"},{"keyword":"nt","csr":"9"},{"keyword":"mmlj","csr":"10"},{"keyword":"lkep","csr":"11"},{"keyword":"pep","csr":"12"},{"keyword":"gep","csr":"13"},{"keyword":"lj","csr":"14"}];
 const BLB_HOSTNAME = BLBShared.hostnames.blb;
-const BLB_ORIGIN = BLBShared.urls.blbOrigin;
 const BLB_HOME_URL = BLBShared.urls.blbHome;
 const BLB_SEARCH_URL = BLBShared.urls.blbSearch;
 const bookData = BOOKS;
@@ -1738,35 +1737,6 @@ function openCaseSensitiveNativeSearch(query, disposition = 'currentTab') {
 
 const CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS = 1000;
 const CASE_SENSITIVE_MULTI_VERSE_TAB_LOAD_TIMEOUT_MS = 15000;
-
-function waitForTabTerminalLoad(tabId, timeout = CASE_SENSITIVE_MULTI_VERSE_TAB_LOAD_TIMEOUT_MS) {
-  return new Promise(resolve => {
-    let settled = false;
-    let timer = 0;
-    const finish = () => {
-      if (settled) return;
-      settled = true;
-      if (timer) clearTimeout(timer);
-      chrome.tabs.onUpdated.removeListener(onUpdated);
-      resolve();
-    };
-    const onUpdated = (updatedTabId, changeInfo) => {
-      if (updatedTabId === tabId && changeInfo.status === 'complete') finish();
-    };
-    chrome.tabs.onUpdated.addListener(onUpdated);
-    timer = setTimeout(finish, timeout);
-    chrome.tabs.get(tabId).then(tab => {
-      if (tab?.status === 'complete') finish();
-    }).catch(() => finish());
-  });
-}
-
-async function paceCaseSensitiveTab(tabPromise) {
-  const tab = await tabPromise;
-  if (tab?.id != null) await waitForTabTerminalLoad(tab.id);
-  await new Promise(resolve => setTimeout(resolve, CASE_SENSITIVE_MULTI_VERSE_TAB_COOLDOWN_MS));
-  return tab;
-}
 let kjvCaseSensitiveWordsLoadPromise = null;
 let kjvOriginalCaseCorpusLoadPromise = null;
 let kjvPhraseIndexLoadPromise = null;
@@ -3718,13 +3688,6 @@ async function installRules() {
 // content script cannot reliably read its internal PDF text. Chrome's
 // context-menu API, however, receives selected text directly from the PDF
 // viewer. This provides a reliable fallback for selectable PDF text.
-function normalizePdfBookName(value) {
-  return String(value || '')
-    .toLowerCase()
-    .replace(/[.]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
 
 function extractBibleRefsFromSelectedTextUncached(text) {
   const refs = [];
@@ -3893,8 +3856,6 @@ function extractBibleRefsFromSelectedTextUncached(text) {
     if (!book) continue;
 
     let currentChapter = Number(leading[2]);
-    const firstFrom = Number(leading[3]);
-    const firstTo = Number(leading[4] || leading[3]);
     let rest = clause.slice(leading[0].length);
     // The first explicit reference is already handled by the normal scanner.
     // Parse only comma continuations from here onward.
@@ -5687,7 +5648,7 @@ async function openBlbBook(bookOrNumber, tabBehavior = {activeIfNew:true, activa
   const bookNumber = String(book.bookNumber);
   const key = `blb-book|${bookNumber}`;
   if (pendingBlbDestinations.has(key)) return pendingBlbDestinations.get(key);
-;
+
 
   const operation = (async () => {
     const target = `${BLB_HOME_URL}kjv/${book.urlKey}/1/`;
