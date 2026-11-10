@@ -41,34 +41,12 @@ function deriveSiteCaption(siteKey) {
   return host;
 }
 
-async function getDefaultSiteEnabled(siteKey, pageTitle = '') {
-  if (!siteKey) return false;
-  try {
-    const response = await chrome.runtime.sendMessage({type:'blbSuiteGetDefaultSiteStatus', hostname:siteKey, title:pageTitle});
-    return response?.enabled === true;
-  } catch (_) { return false; }
-}
-
-async function hasSiteFeatureHostAccess(origin) {
-  if (!origin) return false;
-  try {
-    // Wildcard redirect permission must not implicitly activate the
-    // independent per-site Show on BLB and Double-click features.
-    const permissions = await chrome.permissions.getAll();
-    const origins = Array.isArray(permissions?.origins) ? permissions.origins : [];
-    return origins.includes(origin);
-  } catch (_) {
-    return false;
-  }
-}
-
 async function getState() {
   const [tabs, data] = await Promise.all([
     chrome.tabs.query({active:true, currentWindow:true}),
     chrome.storage.local.get({masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false})
   ]);
   const pageTitle = tabs[0]?.title || '';
-  const pageTitleForDefaultCheck = pageTitle;
   const activeUrl = String(tabs[0]?.url || '');
   currentSiteUrl = activeUrl;
   try {
@@ -79,7 +57,6 @@ async function getState() {
   const siteKey = getSiteKey(activeUrl, pageTitle);
   const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? data.pageSelectionButtonSites : {};
   const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? data.doubleClickBlbSites : {};
-  const defaultEnabled = await getDefaultSiteEnabled(siteKey, pageTitleForDefaultCheck);
   const isBlbSite = siteKey === BLB_HOSTNAME;
   const isSensitiveSite = isSensitiveSiteUrl(activeUrl);
   const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
@@ -88,23 +65,21 @@ async function getState() {
   if (!isBlbSite && currentSiteOrigin) {
     try {
       hasCurrentSiteAccess = await chrome.permissions.contains({origins:[currentSiteOrigin]});
-      hasSiteSpecificAccess = await hasSiteFeatureHostAccess(currentSiteOrigin);
+      // Wildcard redirect permissions can satisfy contains() for a specific
+      // origin. Independent site features require the exact host grant.
+      const permissions = await chrome.permissions.getAll();
+      const origins = Array.isArray(permissions?.origins) ? permissions.origins : [];
+      hasSiteSpecificAccess = origins.includes(currentSiteOrigin);
     } catch (_) {
       hasCurrentSiteAccess = false;
       hasSiteSpecificAccess = false;
     }
   }
-  // An explicit per-site preference remains independent of global redirects.
-  // Wildcard HTTP(S) access can authorize an explicitly enabled feature, but
-  // must not make the host-based defaults (for example, bible.com) appear ON.
-  // There are no hostname-based defaults; only explicit saved per-site choices enable features.
-  const effectiveDefaultEnabled = defaultEnabled && hasCurrentSiteAccess && hasSiteSpecificAccess;
+  // Site features are OFF unless explicitly enabled and granted for this host.
   const effectivePageEnabled = Object.prototype.hasOwnProperty.call(pageSites, siteKey)
-    ? pageSites[siteKey] === true && hasCurrentSiteAccess
-    : effectiveDefaultEnabled;
+    && pageSites[siteKey] === true && hasCurrentSiteAccess && hasSiteSpecificAccess;
   const effectiveDoubleEnabled = Object.prototype.hasOwnProperty.call(doubleSites, siteKey)
-    ? doubleSites[siteKey] === true && hasCurrentSiteAccess
-    : effectiveDefaultEnabled;
+    && doubleSites[siteKey] === true && hasCurrentSiteAccess && hasSiteSpecificAccess;
   return {
     master: data.masterEnabled !== false,
     // Both site-based toggles are OFF by default. An explicit per-site setting

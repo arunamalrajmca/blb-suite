@@ -1,6 +1,6 @@
 // Floating Show on BLB page-selection control and its lifecycle.
 (function (global) {
-  function initialize({ BLBShared, KJV_CORPUS_WORD_INDEX, isNumberedBookSuffixCandidate, getNumberedBookSuffixSearchText, resolveBibleReference, resolveBibleBook, resolveBibleReferenceText, normalizeSelectionText, normalizeDoubleClickToken, getContextualBibleReference, safeRuntimeSendMessage, isSensitiveSiteHostname, isSensitiveSiteUrl, getSiteDefaultEnabled, refreshDoubleClickBlb, suiteSettingsReadyPromise, isSuiteEnabledNow, makeBlbMultiVerseButtonDraggable, getPageSelectionSiteKey }) {
+  function initialize({ BLBShared, KJV_CORPUS_WORD_INDEX, isNumberedBookSuffixCandidate, getNumberedBookSuffixSearchText, resolveBibleReference, resolveBibleBook, resolveBibleReferenceText, normalizeSelectionText, normalizeDoubleClickToken, getContextualBibleReference, safeRuntimeSendMessage, isSensitiveSiteHostname, isSensitiveSiteUrl, refreshDoubleClickBlb, suiteSettingsReadyPromise, isSuiteEnabledNow, makeBlbMultiVerseButtonDraggable, getPageSelectionSiteKey }) {
     // ---------- Floating page selection button ----------
     // This feature is intentionally dormant unless the user enables "Show on BLB".
     // Alt+B and right-click remain independent entry points.
@@ -602,10 +602,8 @@
           ? data.pageSelectionButtonSites
           : {};
         const hasExplicitPreference = Object.prototype.hasOwnProperty.call(sites, siteKey);
-        // Show on BLB is site-based. An explicit site setting wins; otherwise the
-        // hostname/default-sites rule supplies the site's default (ON or OFF).
-        const defaultEnabled = await getSiteDefaultEnabled();
-        const shouldEnable = hasExplicitPreference ? sites[siteKey] === true : defaultEnabled;
+        // Show on BLB is OFF by default; only an explicit per-site choice enables it.
+        const shouldEnable = hasExplicitPreference && sites[siteKey] === true;
         // Keep the native context-menu item in lockstep with the exact setting that
         // controls the floating Show on BLB button.
         await safeRuntimeSendMessage({type:'blbSuiteSyncSelectionContextMenu'});

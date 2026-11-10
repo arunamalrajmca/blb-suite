@@ -5,15 +5,34 @@ const vm = require('node:vm');
 
 const popup = fs.readFileSync(path.resolve(__dirname, '../../extension/popup.js'), 'utf8');
 
-function runSiteAccessHelper(origins) {
-  const start = popup.indexOf('async function hasSiteFeatureHostAccess(origin) {');
-  const end = popup.indexOf('\nasync function getState()', start);
-  if (start < 0 || end < 0) throw new Error('Could not extract hasSiteFeatureHostAccess from extension/popup.js');
+function runPopupState({origins = [], pagePrefs = {}, doublePrefs = {}} = {}) {
+  const start = popup.indexOf('async function getState() {');
+  const end = popup.indexOf('\nconst extensionVersion', start);
+  if (start < 0 || end < 0) throw new Error('Could not extract getState from extension/popup.js');
   const context = {
-    chrome: { permissions: { getAll: async () => ({ origins }) } }
+    URL,
+    BLB_HOSTNAME: 'blueletterbible.org',
+    getSiteKey: () => 'sagacityweb.com',
+    isSensitiveSiteUrl: () => false,
+    deriveSiteCaption: () => 'sagacityweb.com',
+    chrome: {
+      tabs: { query: async () => [{url:'https://sagacityweb.com/', title:'Sagacity'}] },
+      storage: { local: { get: async () => ({
+        masterEnabled:true,
+        pageSelectionButtonSites:pagePrefs,
+        doubleClickBlbSites:doublePrefs,
+        redirectEnabled:false
+      }) } },
+      permissions: {
+        contains: async ({origins:requested}) => requested.every(origin =>
+          origins.includes(origin) || origins.includes('https://*/*') || origins.includes('http://*/*')
+        ),
+        getAll: async () => ({origins})
+      }
+    }
   };
-  vm.runInNewContext(popup.slice(start, end), context);
-  return context.hasSiteFeatureHostAccess;
+  vm.runInNewContext(`${popup.slice(start, end)}\nthis.getState = getState;`, context);
+  return context.getState();
 }
 
 test.describe('site feature fail-closed guards', () => {
@@ -49,18 +68,30 @@ test.describe('site feature fail-closed guards', () => {
 });
 
 test.describe('independent site feature permissions and global redirects', () => {
-  test('wildcard redirect grants do not activate per-site features', async () => {
-    const hasSiteFeatureHostAccess = runSiteAccessHelper(['http://*/*', 'https://*/*']);
-    expect(await hasSiteFeatureHostAccess('https://sagacityweb.com/*')).toBe(false);
+  test('wildcard redirect grants do not enable site features without explicit preferences', async () => {
+    const state = await runPopupState({origins:['http://*/*', 'https://*/*']});
+    expect(state.pageButton).toBe(false);
+    expect(state.doubleClick).toBe(false);
   });
 
-  test('a specific site grant still authorizes its site features', async () => {
-    const hasSiteFeatureHostAccess = runSiteAccessHelper([
-      'http://*/*',
-      'https://*/*',
-      'https://sagacityweb.com/*'
-    ]);
-    expect(await hasSiteFeatureHostAccess('https://sagacityweb.com/*')).toBe(true);
+  test('wildcard-only redirect grants do not authorize explicitly enabled site features', async () => {
+    const state = await runPopupState({
+      origins:['http://*/*', 'https://*/*'],
+      pagePrefs:{'sagacityweb.com':true},
+      doublePrefs:{'sagacityweb.com':true}
+    });
+    expect(state.pageButton).toBe(false);
+    expect(state.doubleClick).toBe(false);
+  });
+
+  test('explicit site preferences enable their features when exact host access is granted', async () => {
+    const state = await runPopupState({
+      origins:['https://sagacityweb.com/*'],
+      pagePrefs:{'sagacityweb.com':true},
+      doublePrefs:{'sagacityweb.com':true}
+    });
+    expect(state.pageButton).toBe(true);
+    expect(state.doubleClick).toBe(true);
   });
 
   test('each site feature toggle routes through the independent permission handler', () => {
