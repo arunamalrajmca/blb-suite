@@ -62,20 +62,6 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
   });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#blb-suite-page-selection-button')).toBeAttached({ timeout: 10000 });
-  await page.evaluate(() => {
-    const paragraph = document.createElement('p');
-    paragraph.id = 'blb-selection-phase-context-fixture';
-    paragraph.innerHTML = '<span id="blb-phase-book">John</span><span> 3:16</span>';
-    document.body.appendChild(paragraph);
-    const book = document.getElementById('blb-phase-book').firstChild;
-    const range = document.createRange();
-    range.setStart(book, 0);
-    range.setEnd(book, book.textContent.length);
-    const selection = window.getSelection();
-    selection.removeAllRanges();
-    selection.addRange(range);
-  });
-
   const domContext = await extensionWorker.evaluate(async () => {
     const tabs = await chrome.tabs.query({ url: 'https://example.com/*' });
     const tab = tabs[0];
@@ -87,6 +73,17 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
         if (typeof getContextualBibleReference !== 'function') {
           throw new Error('The production live DOM contextual resolver is unavailable');
         }
+        const paragraph = document.createElement('p');
+        paragraph.id = 'blb-selection-phase-context-fixture';
+        paragraph.innerHTML = '<span id="blb-phase-book">John</span><span> 3:16</span>';
+        document.body.appendChild(paragraph);
+        const book = document.getElementById('blb-phase-book').firstChild;
+        const range = document.createRange();
+        range.setStart(book, 0);
+        range.setEnd(book, book.textContent.length);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
         const expected = getContextualBibleReference('John');
         const iterations = 200;
         const samples = [];
