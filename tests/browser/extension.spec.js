@@ -3028,43 +3028,39 @@ test('Double-clicking the Mt abbreviation opens its complete chapter-and-verse r
 
 test('runtime content-script registrations update using the supported scripts-array API', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(async () => {
-    // Christianity.com is a registered source-page collector, so its runtime
-    // registration is eligible for settings reconciliation throughout this
-    // test. Keep the test focused on the scripts-array update API rather than
-    // manually registering a disabled BLB origin that reconciliation may
-    // correctly remove.
+    // Use the statically granted BLB host and explicitly enable its site
+    // feature. Reconciliation requires host access as well as a site setting;
+    // Christianity.com's collector registration alone does not grant access.
+    const settings = await chrome.storage.local.get({ pageSelectionButtonSites: {} });
+    const previousSites = settings.pageSelectionButtonSites;
+    const siteKey = normalizeSiteHostname(BLB_HOSTNAME);
+    await chrome.storage.local.set({
+      pageSelectionButtonSites: { ...previousSites, [siteKey]: true }
+    });
+    await reconcileRuntimeContentScriptRegistrations();
+
     const item = {
-      url: 'https://christianity.com/example',
+      url: 'https://www.blueletterbible.org/example',
       first: ['content.js'],
       second: ['content.js', 'redirect-scripttagger.js']
     };
     const pattern = originPatternForUrl(item.url);
     const id = runtimeContentScriptIdForPattern(pattern);
-    const mainWorldId = id + '-main-world';
     try {
-      await chrome.scripting.unregisterContentScripts({ ids: [id, mainWorldId] }).catch(() => {});
-      await chrome.scripting.registerContentScripts([{
-        id:mainWorldId,
-        matches:[pattern],
-        js:['redirect-scripttagger.js'],
-        runAt:'document_start',
-        world:'MAIN',
-        persistAcrossSessions:true
-      }]);
+      await chrome.scripting.unregisterContentScripts({ ids: [id] }).catch(() => {});
       const firstRegistered = await ensureRuntimeContentScriptRegistered({ url: item.url, id: 1 }, item.first);
       const afterFirst = await chrome.scripting.getRegisteredContentScripts({ ids: [id] });
       const secondRegistered = await ensureRuntimeContentScriptRegistered({ url: item.url, id: 1 }, item.second);
       const afterSecond = await chrome.scripting.getRegisteredContentScripts({ ids: [id] });
-      const mainWorld = await chrome.scripting.getRegisteredContentScripts({ ids: [mainWorldId] });
       return {
         firstRegistered,
         secondRegistered,
         firstScripts: afterFirst[0]?.js || [],
-        secondScripts: afterSecond[0]?.js || [],
-        mainWorld: mainWorld.map(script => ({ js: script.js, world: script.world }))
+        secondScripts: afterSecond[0]?.js || []
       };
     } finally {
-      await chrome.scripting.unregisterContentScripts({ ids: [id, mainWorldId] }).catch(() => {});
+      await chrome.scripting.unregisterContentScripts({ ids: [id] }).catch(() => {});
+      await chrome.storage.local.set({ pageSelectionButtonSites: previousSites });
     }
   });
 
@@ -3072,8 +3068,7 @@ test('runtime content-script registrations update using the supported scripts-ar
     firstRegistered: true,
     secondRegistered: true,
     firstScripts: ['content.js'],
-    secondScripts: ['content.js', 'redirect-scripttagger.js'],
-    mainWorld: [{ js: ['source-page-collector-sites.js','redirect-christianity-main-world.js'], world: 'MAIN' }]
+    secondScripts: ['content.js', 'redirect-scripttagger.js']
   });
 });
 
