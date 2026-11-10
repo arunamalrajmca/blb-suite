@@ -62,76 +62,52 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
   });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('#blb-suite-page-selection-button')).toBeAttached({ timeout: 10000 });
-  const domContext = await extensionWorker.evaluate(async () => {
+  const selectionProbe = await page.evaluate(() => {
+    const paragraph = document.createElement('p');
+    paragraph.id = 'blb-selection-phase-context-fixture';
+    paragraph.textContent = 'John 3:16';
+    document.body.appendChild(paragraph);
+    const textNode = paragraph.firstChild;
+    const range = document.createRange();
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, 'John'.length);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return {
+      text: selection.toString(),
+      rangeCount: selection.rangeCount,
+      collapsed: selection.isCollapsed
+    };
+  });
+  expect(selectionProbe.text).toBe('John');
+  expect(selectionProbe.rangeCount).toBe(1);
+  const domMeasurement = await extensionWorker.evaluate(async () => {
     const tabs = await chrome.tabs.query({ url: 'https://example.com/*' });
     const tab = tabs[0];
     if (!tab?.id) throw new Error('Expected the example.com benchmark tab');
-    const results = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      world: 'ISOLATED',
-      func: () => {
-        const paragraph = document.createElement('p');
-        paragraph.id = 'blb-selection-phase-context-fixture';
-        paragraph.textContent = 'John 3:16';
-        document.body.appendChild(paragraph);
-        const textNode = paragraph.firstChild;
-        const range = document.createRange();
-        range.setStart(textNode, 0);
-        range.setEnd(textNode, 'John'.length);
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-        let expected = null;
-        let error = '';
-        try {
-          if (typeof getSelectionContextPosition !== 'function') {
-            throw new Error('Production selection-context function unavailable in injected isolated world');
-          }
-          const position = getSelectionContextPosition();
-          expected = position ? {
-            selected: position.text.slice(position.start, position.end),
-            context: position.text
-          } : null;
-        } catch (caught) {
-          error = caught?.message || String(caught);
-        }
-        const iterations = 200;
-        const samples = [];
-        let checksum = 0;
-        for (let sample = 0; sample < 9; sample++) {
-          for (let warm = 0; warm < 10; warm++) getSelectionContextPosition();
-          const started = performance.now();
-          for (let i = 0; i < iterations; i++) {
-            const result = getSelectionContextPosition();
-            if (result?.text && result.text.slice(result.start, result.end) === 'John') checksum++;
-          }
-          samples.push({ durationMs: performance.now() - started });
-        }
-        const report = {
-          expected,
-          error,
-          selectionText: selection.toString(),
-          rangeCount: selection.rangeCount,
-          collapsed: selection.isCollapsed,
-          checksum,
-          samples,
-          iterations
-        };
-        document.documentElement.setAttribute(
-          'data-blb-selection-phase-benchmark',
-          JSON.stringify(report)
-        );
-        return true;
-      }
+    const resolve = () => chrome.tabs.sendMessage(tab.id, {
+      type: 'blbSuiteResolveContextualSelection',
+      selectionText: 'John'
     });
-    return { resultCount: results.length, tabId: tab.id };
+    const expected = await resolve();
+    const iterations = 100;
+    const samples = [];
+    let checksum = 0;
+    for (let sample = 0; sample < 9; sample++) {
+      for (let warm = 0; warm < 5; warm++) await resolve();
+      const started = performance.now();
+      for (let i = 0; i < iterations; i++) {
+        const result = await resolve();
+        if (result?.ok && result.reference?.url?.includes('/kjv/jhn/3/16/')) checksum++;
+      }
+      samples.push({ durationMs: performance.now() - started });
+    }
+    return { expected, checksum, samples, iterations };
   });
-  expect(domContext.resultCount).toBe(1);
-  const domReportText = await page.locator('html').getAttribute('data-blb-selection-phase-benchmark');
-  expect(domReportText, JSON.stringify(domContext)).toBeTruthy();
-  const domMeasurement = JSON.parse(domReportText);
-  expect(domMeasurement.error || domMeasurement.expected?.selected, JSON.stringify(domMeasurement)).toBe('John');
-  expect(domMeasurement.expected.context).toContain('John 3:16');
+
+  expect(domMeasurement.expected?.ok).toBe(true);
+  expect(domMeasurement.expected?.reference?.url).toContain('/kjv/jhn/3/16/');
   expect(domMeasurement.checksum).toBeGreaterThan(0);
 
   const corpus = await extensionWorker.evaluate(async () => {
