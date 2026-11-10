@@ -224,7 +224,7 @@ function parseRef(text) {
   const value=decodeSafe(text).trim()
     // Normalize any supported verse cue before parsing the numeric reference.
     .replace(
-      new RegExp('\\\\b' + VERSE_CUE_TOKEN_SOURCE + '\\\\s*(?:\\\\(\\\\s*(\\\\d+)\\\\s*\\\\)|(\\\\d+))', 'gi'),
+      new RegExp(String.raw`\b${VERSE_CUE_TOKEN_SOURCE}\s*(?:\(\s*(\d+)\s*\)|(\d+))`, 'gi'),
       (_, parenthesized, plain) => ' ' + (parenthesized || plain)
     );
   // Accept normal references and BiblePortal's dotted form, e.g.
