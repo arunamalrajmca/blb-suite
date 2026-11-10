@@ -75,12 +75,12 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
         }
         const paragraph = document.createElement('p');
         paragraph.id = 'blb-selection-phase-context-fixture';
-        paragraph.innerHTML = '<span id="blb-phase-book">John</span><span> 3:16</span>';
+        paragraph.textContent = 'John 3:16';
         document.body.appendChild(paragraph);
-        const book = document.getElementById('blb-phase-book').firstChild;
+        const textNode = paragraph.firstChild;
         const range = document.createRange();
-        range.setStart(book, 0);
-        range.setEnd(book, book.textContent.length);
+        range.setStart(textNode, 0);
+        range.setEnd(textNode, 'John'.length);
         const selection = window.getSelection();
         selection.removeAllRanges();
         selection.addRange(range);
