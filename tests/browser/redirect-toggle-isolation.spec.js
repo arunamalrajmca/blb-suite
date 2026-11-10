@@ -23,9 +23,12 @@ function runPopupState({origins = [], pagePrefs = {}, doublePrefs = {}} = {}) {
         doubleClickBlbSites:doublePrefs,
         redirectEnabled:false
       }) } },
-      permissions: { contains: async ({origins:requested}) => requested.every(origin =>
-        origins.includes(origin) || origins.includes('https://*/*') || origins.includes('http://*/*')
-      ) }
+      permissions: {
+        contains: async ({origins:requested}) => requested.every(origin =>
+          origins.includes(origin) || origins.includes('https://*/*') || origins.includes('http://*/*')
+        ),
+        getAll: async () => ({origins})
+      }
     }
   };
   vm.runInNewContext(`${popup.slice(start, end)}\nthis.getState = getState;`, context);
@@ -71,7 +74,17 @@ test.describe('independent site feature permissions and global redirects', () =>
     expect(state.doubleClick).toBe(false);
   });
 
-  test('explicit site preferences enable their features when host access is granted', async () => {
+  test('wildcard-only redirect grants do not authorize explicitly enabled site features', async () => {
+    const state = await runPopupState({
+      origins:['http://*/*', 'https://*/*'],
+      pagePrefs:{'sagacityweb.com':true},
+      doublePrefs:{'sagacityweb.com':true}
+    });
+    expect(state.pageButton).toBe(false);
+    expect(state.doubleClick).toBe(false);
+  });
+
+  test('explicit site preferences enable their features when exact host access is granted', async () => {
     const state = await runPopupState({
       origins:['https://sagacityweb.com/*'],
       pagePrefs:{'sagacityweb.com':true},
