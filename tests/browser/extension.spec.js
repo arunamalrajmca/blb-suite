@@ -180,6 +180,52 @@ test('KJV phrase candidate index loads only when Criteria phrase matching needs 
   expect(loaded.loaded).toBe(true);
   expect(loaded.keys).toBeGreaterThan(0);
 });
+test('MultiVerse preserves all 4,201 unique verses across 22 batches', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const refs = [];
+    for (const book of bookData) {
+      for (let chapter = 1; chapter <= Number(book.chapterCount); chapter++) {
+        const verseCount = Number(book.verses?.[chapter - 1] || 0);
+        // Alternate verses so the input cannot collapse into one continuous
+        // same-chapter range; stop at the exact stress-case size.
+        for (let verse = 1; verse <= verseCount; verse += 2) {
+          refs.push({ book: book.name, chapter, from: verse, to: verse });
+          if (refs.length === 4201) break;
+        }
+        if (refs.length === 4201) break;
+      }
+      if (refs.length === 4201) break;
+    }
+    if (refs.length !== 4201) {
+      throw new Error('Could not construct 4,201 valid unique KJV verses; built ' + refs.length);
+    }
+
+    const captured = [];
+    const originalOpenBatch = openBlbMultiVerseRefsSingleBatch;
+    openBlbMultiVerseRefsSingleBatch = async (_refs, _active, _allowSingleVerseBatch, _preferredTabId, preparedVerses) => {
+      captured.push(Array.isArray(preparedVerses) ? preparedVerses.map(verse => ({...verse})) : []);
+      return { ok: true, tabId: captured.length };
+    };
+    try {
+      const opened = await openBlbMultiVerseRefs(refs, false);
+      return {
+        opened,
+        batchSizes: captured.map(batch => batch.length),
+        flattened: captured.flat().map(verse => [verse.bookNumber, verse.chapter, verse.from, verse.version]),
+        inputCount: refs.length
+      };
+    } finally {
+      openBlbMultiVerseRefsSingleBatch = originalOpenBatch;
+    }
+  });
+
+  expect(result.inputCount).toBe(4201);
+  expect(result.opened).toMatchObject({ ok: true, count: 4201, batchCount: 22, truncated: false });
+  expect(result.batchSizes).toEqual([...Array(21).fill(200), 1]);
+  expect(result.flattened).toHaveLength(4201);
+  expect(new Set(result.flattened.map(verse => verse.join('|'))).size).toBe(4201);
+});
+ 
 test('popup loads from extension package', async ({ page, extensionId }) => {
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await expect(page).toHaveTitle('KJV Scripture Tools');
