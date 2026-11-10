@@ -57,19 +57,20 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
 
   await extensionStorage.set({
     masterEnabled: true,
-    pageSelectionButtonSites: {},
+    pageSelectionButtonSites: { 'example.com': true },
     doubleClickBlbSites: { 'example.com': true }
   });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#blb-suite-page-selection-button')).toBeAttached({ timeout: 10000 });
   await page.evaluate(() => {
     const paragraph = document.createElement('p');
     paragraph.id = 'blb-selection-phase-context-fixture';
-    paragraph.innerHTML = '<span>John </span><span>3</span><span>:</span><span id="blb-phase-verse">16</span>';
+    paragraph.innerHTML = '<span id="blb-phase-book">John</span><span> 3:16</span>';
     document.body.appendChild(paragraph);
-    const verse = document.getElementById('blb-phase-verse').firstChild;
+    const book = document.getElementById('blb-phase-book').firstChild;
     const range = document.createRange();
-    range.setStart(verse, 0);
-    range.setEnd(verse, verse.textContent.length);
+    range.setStart(book, 0);
+    range.setEnd(book, book.textContent.length);
     const selection = window.getSelection();
     selection.removeAllRanges();
     selection.addRange(range);
@@ -86,15 +87,15 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
         if (typeof getContextualBibleReference !== 'function') {
           throw new Error('The production live DOM contextual resolver is unavailable');
         }
-        const expected = getContextualBibleReference('16');
+        const expected = getContextualBibleReference('John');
         const iterations = 200;
         const samples = [];
         let checksum = 0;
         for (let sample = 0; sample < 9; sample++) {
-          for (let warm = 0; warm < 10; warm++) getContextualBibleReference('16');
+          for (let warm = 0; warm < 10; warm++) getContextualBibleReference('John');
           const started = performance.now();
           for (let i = 0; i < iterations; i++) {
-            const result = getContextualBibleReference('16');
+            const result = getContextualBibleReference('John');
             if (result?.url) checksum++;
           }
           samples.push({ durationMs: performance.now() - started });
