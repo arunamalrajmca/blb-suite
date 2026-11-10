@@ -3233,7 +3233,8 @@ test('rapid site opt-out waits for an older registration reconciliation before u
       // instrumenting the deliberately delayed ON pass below.
       await reconcileRuntimeContentScriptRegistrations();
       await runtimeContentScriptReconciliationQueue;
-      await chrome.scripting.unregisterContentScripts({ids:[id]}).catch(() => {});
+      // Keep the enabled registration in place so the delayed older pass
+      // snapshots it before the opt-out arrives, then tries to retain it.
       chrome.scripting.getRegisteredContentScripts = wrappedGet;
       const olderEnabledPass = reconcileRuntimeContentScriptRegistrations();
       await inspectionStarted;
