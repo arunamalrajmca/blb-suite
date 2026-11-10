@@ -913,6 +913,65 @@ test.describe('core user-visible E2E', () => {
     });
   });
 
+  test('Show on BLB preserves the page selection when the handoff fails', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled:true, pageSelectionButtonSites:{ 'example.com':true } });
+    await page.goto('https://example.com/', { waitUntil:'domcontentloaded' });
+    await expect(page.locator('body')).toBeVisible();
+    await page.evaluate(() => {
+      const paragraph = document.createElement('p');
+      paragraph.id = 'blb-e2e-failed-handoff-selection';
+      paragraph.textContent = 'John 3:16';
+      document.body.appendChild(paragraph);
+      const range = document.createRange();
+      range.selectNodeContents(paragraph);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles:true }));
+    });
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout:10000 });
+    const sourceTabId = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({ active:true, currentWindow:true }).then(([tab]) => tab?.id)
+    );
+    const patched = await extensionWorker.evaluate(async tabId => {
+      const [result] = await chrome.scripting.executeScript({
+        target:{ tabId },
+        world:'ISOLATED',
+        func:() => {
+          window.__blbSuiteOriginalRuntimeSendMessage = chrome.runtime.sendMessage;
+          try {
+            chrome.runtime.sendMessage = () => Promise.resolve({ ok:false });
+            return chrome.runtime.sendMessage !== window.__blbSuiteOriginalRuntimeSendMessage;
+          } catch (_) {
+            return false;
+          }
+        }
+      });
+      return result?.result === true;
+    }, sourceTabId);
+    expect(patched, 'test must intercept the content-script handoff without changing production code').toBe(true);
+    try {
+      await button.evaluate(element => element.click());
+      await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), {
+        message:'A failed Show on BLB handoff must preserve the selected text for retry'
+      }).toBe('John 3:16');
+    } finally {
+      await extensionWorker.evaluate(async tabId => {
+        await chrome.scripting.executeScript({
+          target:{ tabId },
+          world:'ISOLATED',
+          func:() => {
+            if (window.__blbSuiteOriginalRuntimeSendMessage) {
+              chrome.runtime.sendMessage = window.__blbSuiteOriginalRuntimeSendMessage;
+              delete window.__blbSuiteOriginalRuntimeSendMessage;
+            }
+          }
+        });
+      }, sourceTabId);
+    }
+  });
+
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
