@@ -166,15 +166,21 @@ test('KJV phrase candidate index loads only when Criteria phrase matching needs 
   }));
   expect(afterDirectRange).toEqual({ loaded: false, keys: 0 });
 
-  const shortPhrase = await extensionWorker.evaluate(async () => classifySelectionForBlb('God is love'));
-  expect(shortPhrase.valid).toBe(true);
-  expect(shortPhrase.type).toBe('KJV_PASSAGE');
-  const loaded = await extensionWorker.evaluate(() => ({
-    loaded: KJV_CORPUS_PHRASE_INDEX !== null,
-    keys: Object.keys(KJV_CORPUS_PHRASE_INDEX || {}).length
-  }));
-  expect(loaded.loaded).toBe(true);
-  expect(loaded.keys).toBeGreaterThan(0);
+  // Keep classification and the in-memory index inspection in one worker
+  // evaluation. MV3 may terminate/restart an idle service worker between
+  // separate evaluate calls, which would reset this module-scoped lazy index.
+  const shortPhrase = await extensionWorker.evaluate(async () => {
+    const result = await classifySelectionForBlb('God is love');
+    return {
+      result,
+      loaded: KJV_CORPUS_PHRASE_INDEX !== null,
+      keys: Object.keys(KJV_CORPUS_PHRASE_INDEX || {}).length
+    };
+  });
+  expect(shortPhrase.result.valid).toBe(true);
+  expect(shortPhrase.result.type).toBe('KJV_PASSAGE');
+  expect(shortPhrase.loaded).toBe(true);
+  expect(shortPhrase.keys).toBeGreaterThan(0);
 });
 
 test('popup loads from extension package', async ({ page, extensionId }) => {
