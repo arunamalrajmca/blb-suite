@@ -15,7 +15,7 @@ function blbPageFixture({ hasPanel, restoreMs = null, panelExpanded = false }) {
     '  if (panel) panel.classList.add("hidden");',
     '  document.getElementById("siteExpandRight").classList.remove("hidden");',
     '}, ' + restoreMs + ');'
-  ].join('\\n');
+  ].join('\n');
   const panelMarkup = hasPanel
     ? '<div id="bodyCol1A" class="bodyColumns' + (panelExpanded ? '' : ' hidden') + '">Parallel Bible</div>'
     : '';
@@ -25,10 +25,10 @@ function blbPageFixture({ hasPanel, restoreMs = null, panelExpanded = false }) {
     'const panel = document.getElementById("bodyCol1A");' +
     'if (panel) panel.classList.toggle("hidden");' +
     'document.getElementById("siteExpandRight").classList.toggle("hidden");' +
-    '}};</script></head><body><main>BLB page content</main>' + panelMarkup +
+    '}};' + restore +
+    '</script></head><body><main>BLB page content</main>' + panelMarkup +
     '<div id="siteExpandLeft" class="site-expand-container left"></div>' +
-    '<div id="siteExpandRight" class="site-expand-container right" onclick="BLB.siteResizeToggle(\\'right\\')"></div>' +
-    restore +
+    '<div id="siteExpandRight" class="site-expand-container right" onclick="BLB.siteResizeToggle(\'right\')"></div>' +
     '</body></html>';
 }
 
