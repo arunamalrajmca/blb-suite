@@ -24,6 +24,32 @@ async function waitForBlbTabPath(extensionWorker, expectedPath, timeout = 10000)
   return match;
 }
 
+async function waitForNewMultiVerseTab(extensionWorker, beforeIds, timeout = 15000) {
+  let match = null;
+  await expect.poll(async () => {
+    const tabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
+      items.map(tab => ({
+        id:tab.id,
+        url:tab.url || '',
+        pendingUrl:tab.pendingUrl || ''
+      }))
+    ));
+    match = tabs.find(tab => {
+      if (beforeIds.includes(tab.id)) return false;
+      return [tab.url,tab.pendingUrl].some(value => {
+        try {
+          const url = new URL(value);
+          return url.hostname === 'www.blueletterbible.org' &&
+            (url.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
+             url.searchParams.get('blbSuiteMultiVerse') === '1');
+        } catch (_) { return false; }
+      });
+    }) || null;
+    return !!match;
+  }, {timeout}).toBeTruthy();
+  return match;
+}
+
 async function waitForNewBlbTabPathOnEvent(extensionWorker, beforeIds, expectedPath, timeout = 1200) {
   return extensionWorker.evaluate(({ beforeIds, expectedPath, timeout }) => new Promise((resolve, reject) => {
     const before = new Set(beforeIds);
@@ -1249,18 +1275,8 @@ test.describe('core user-visible E2E', () => {
           }
         }
 
-        const destination = await waitForTab(extensionWorker, tab => {
-          if (beforeIds.includes(tab.id)) return false;
-          return (tab.urls || [tab.url,tab.pendingUrl]).some(value => {
-            try {
-              const url = new URL(value);
-              return url.hostname === 'www.blueletterbible.org' &&
-                (url.pathname.toLowerCase() === '/tools/multiverse.cfm' ||
-                 url.searchParams.get('blbSuiteMultiVerse') === '1');
-            } catch (_) { return false; }
-          });
-        },15000);
-        const destinationUrl = (destination.urls || [destination.url,destination.pendingUrl]).find(value => {
+        const destination = await waitForNewMultiVerseTab(extensionWorker,beforeIds);
+        const destinationUrl = [destination.url,destination.pendingUrl].find(value => {
           try {
             const url = new URL(value);
             return url.hostname === 'www.blueletterbible.org' &&
