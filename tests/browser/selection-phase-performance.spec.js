@@ -149,13 +149,13 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
 
   const report = {
     benchmark: 'selection-pipeline-phases',
-    note: 'Diagnostic timings only; no production instrumentation or behavior changes.',
+    note: 'DOM timing includes the real content-script message dispatch and contextual resolver; diagnostic only, no production changes.',
     parser: {
       inputCount: parserInput.length,
       checksum: parser.checksum,
       ...summarize(parser.samples, parser.iterations)
     },
-    domSelectionContext: {
+    domContextualResolution: {
       expected: domMeasurement.expected,
       checksum: domMeasurement.checksum,
       ...summarize(domMeasurement.samples, domMeasurement.iterations)
@@ -172,4 +172,5 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
     }
   };
   process.stdout.write('BLB_SELECTION_PHASE_BENCHMARK ' + JSON.stringify(report) + '\n');
+  throw new Error('BLB_SELECTION_PHASE_BENCHMARK ' + JSON.stringify(report));
 });
