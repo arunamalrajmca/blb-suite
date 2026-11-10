@@ -377,9 +377,11 @@ test.describe('core user-visible E2E', () => {
       ['#matrix-verse-18', 'verse', '/kjv/mat/27/18/']
     ];
     const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];
+    const actionTimings = [];
 
     for (const [selector, cueWord, expectedPath] of cases) {
       for (const action of actions) {
+        const actionStartedAt = performance.now();
         const cue = page.locator(selector);
         await expect(cue).toHaveText(cueWord);
         // Show on BLB, Alt+B, and Right-Click consume an existing native
@@ -487,6 +489,7 @@ test.describe('core user-visible E2E', () => {
           selector,
           selectedText: cueWord
         });
+        actionTimings.push({ action, selector, durationMs: performance.now() - actionStartedAt });
         const openedPaths = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
           tabs.filter(tab => !before.includes(tab.id)).map(tab => {
             try {
@@ -510,6 +513,22 @@ test.describe('core user-visible E2E', () => {
         }), expectedPath);
       }
     }
+
+    const timingSummary = actions.map(action => {
+      const samples = actionTimings.filter(sample => sample.action === action)
+        .map(sample => sample.durationMs).sort((a, b) => a - b);
+      return {
+        action,
+        samples: samples.length,
+        medianMs: Number(samples[Math.floor(samples.length / 2)].toFixed(2)),
+        p90Ms: Number(samples[Math.min(samples.length - 1, Math.floor((samples.length - 1) * 0.9))].toFixed(2))
+      };
+    });
+    console.log('BLB_SELECTION_ACTION_TIMING ' + JSON.stringify({
+      benchmark: 'single-word-verse-cue-four-action-e2e',
+      note: 'Includes selection setup, action handling, BLB tab creation/reuse and activation; diagnostic only, not an isolated resolver measurement.',
+      timingSummary
+    }));
   });
 
   test('all 66 canonical book suffixes resolve through all four actions with both separators', async ({ page, extensionStorage, extensionWorker }) => {
