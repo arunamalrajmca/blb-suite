@@ -192,19 +192,6 @@ async function setMaster(on) {
   updateStudyButtons();
 }
 
-async function requestCurrentSiteAccess(origin = currentSiteOrigin) {
-  if (!origin) return false;
-  try {
-    // A previously granted broad HTTP(S) redirect permission already covers
-    // this site. Reuse it instead of prompting for a redundant site grant.
-    if (await chrome.permissions.contains({origins:[origin]})) return true;
-    return await chrome.permissions.request({origins:[origin]});
-  } catch (_) {
-    return false;
-  }
-}
-
-
 async function pinSiteFeatureChoice(feature, otherFeatureEnabled) {
   // Hand the preference to the service worker before opening Chrome's host
   // permission prompt. The popup may be destroyed while that prompt is shown;
@@ -632,8 +619,6 @@ function updateStudyButtons() {
   noteInput.placeholder = isRecordingSelected ? 'Add a note to the selected topic...' : (hasTopic ? 'Start recording to add notes' : 'Select a topic and start recording');
   renderSelectedTopicInfo();
 }
-function escapeHtml(value) { return String(value || '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c])); }
-
 function closeDownloadMenu() { downloadMenu.classList.remove('open'); }
 function closeDateQuickMenu() { dateQuickMenu.classList.remove('open'); }
 function openDateQuickMenu() { closeDownloadMenu(); dateQuickMenu.classList.add('open'); }
@@ -972,20 +957,8 @@ async function clearTopicSelectionInput() {
   topicInput.focus();
 }
 
-let topicPersistTimer = null;
 // Preserve input entered while asynchronous popup initialization is still reading saved state.
 let topicInputEdited = false;
-
-function queueTopicPersistence() {
-  const topic = titleCase(topicInput.value);
-  if (!topic) return;
-  topicInput.value = topic;
-  if (topicPersistTimer) clearTimeout(topicPersistTimer);
-  topicPersistTimer = setTimeout(() => {
-    topicPersistTimer = null;
-    void persistTopicValue(topic);
-  }, 250);
-}
 
 async function persistTopicValue(topic) {
   const value = titleCase(topic);
@@ -1037,10 +1010,6 @@ topicInput.addEventListener('focus', () => {
 topicInput.addEventListener('blur', () => {
   const topic = titleCase(topicInput.value);
   if (!topic) return;
-  if (topicPersistTimer) {
-    clearTimeout(topicPersistTimer);
-    topicPersistTimer = null;
-  }
   void persistTopicValue(topic);
 });
 
