@@ -28,7 +28,7 @@ function runPopupState({origins = [], pagePrefs = {}, doublePrefs = {}} = {}) {
       ) }
     }
   };
-  vm.runInNewContext(`${popup.slice(start, end)}\\nthis.getState = getState;`, context);
+  vm.runInNewContext(`${popup.slice(start, end)}\nthis.getState = getState;`, context);
   return context.getState();
 }
 
