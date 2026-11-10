@@ -378,26 +378,31 @@ test.describe('core user-visible E2E', () => {
     ];
     const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];
     const actionTimings = [];
-    // Read the opt-in resolver counter from the extension's isolated world.
-    // Reset immediately before each user action so selection-change/button
-    // preparation work cannot be mistaken for resolver work during the action.
-    const readResolverCalls = async reset => extensionWorker.evaluate(async shouldReset => {
-      const [tab] = await chrome.tabs.query({ active:true, currentWindow:true });
-      if (!tab?.id) throw new Error('No active tab for resolver-call diagnostics');
-      const [injected] = await chrome.scripting.executeScript({
-        target: { tabId:tab.id },
-        world: 'ISOLATED',
-        func: resetCalls => {
-          window.__blbSuiteEnableDoubleClickEquivalentDiagnostics = true;
-          if (resetCalls) window.__blbSuiteDoubleClickEquivalentCalls = [];
-          return Array.isArray(window.__blbSuiteDoubleClickEquivalentCalls)
-            ? [...window.__blbSuiteDoubleClickEquivalentCalls]
-            : [];
-        },
-        args: [shouldReset]
-      });
-      return injected?.result || [];
-    }, reset);
+    let currentExtensionWorker = extensionWorker;
+    // Read the opt-in resolver counter from the original source tab's isolated
+    // world. The BLB action activates a new tab and can outlive/replace the
+    // worker target object, so reacquire the current service-worker target and
+    // keep the source tab ID instead of querying whichever tab is active later.
+    const readResolverCalls = async (reset, sourceTabId) => {
+      const workers = page.context().serviceWorkers();
+      currentExtensionWorker = workers[workers.length - 1]
+        || await page.context().waitForEvent('serviceworker', { timeout:5000 });
+      return currentExtensionWorker.evaluate(async ({ shouldReset, targetTabId }) => {
+        const [injected] = await chrome.scripting.executeScript({
+          target: { tabId:targetTabId },
+          world: 'ISOLATED',
+          func: resetCalls => {
+            window.__blbSuiteEnableDoubleClickEquivalentDiagnostics = true;
+            if (resetCalls) window.__blbSuiteDoubleClickEquivalentCalls = [];
+            return Array.isArray(window.__blbSuiteDoubleClickEquivalentCalls)
+              ? [...window.__blbSuiteDoubleClickEquivalentCalls]
+              : [];
+          },
+          args: [shouldReset]
+        });
+        return injected?.result || [];
+      }, { shouldReset:reset, targetTabId:sourceTabId });
+    };
 
     for (const [selector, cueWord, expectedPath] of cases) {
       for (const action of actions) {
@@ -423,7 +428,10 @@ test.describe('core user-visible E2E', () => {
           await page.evaluate(() => window.getSelection()?.removeAllRanges());
         }
 
-        const beforeIds = await extensionWorker.evaluate(() =>
+        const sourceTabId = await currentExtensionWorker.evaluate(() =>
+          chrome.tabs.query({ active:true, currentWindow:true }).then(([tab]) => tab?.id)
+        );
+        const beforeIds = await currentExtensionWorker.evaluate(() =>
           chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
         );
 
@@ -443,22 +451,25 @@ test.describe('core user-visible E2E', () => {
           }), { message: 'Show on BLB must resolve the current cue selection before click' }).toBe(expectedPath);
           const button = page.locator('#blb-suite-page-selection-button');
           await expect(button).toBeVisible({ timeout: 10000 });
-          await readResolverCalls(true);
+          await readResolverCalls(true, sourceTabId);
           // Invoke the actual button click handler without Playwright's pointer
           // mousedown/mouseup sequence. Mouseup also refreshes selection-button
           // context and is preparation, not a second invocation by the action.
           await button.evaluate(element => element.click());
+          await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), {
+            message: 'Successful Show on BLB invocation must clear the page selection'
+          }).toBe('');
         } else if (action === 'Alt+B') {
           // Call the handler registered for the browser command; Playwright's
           // keyboard simulation does not dispatch Chrome extension commands.
-          await readResolverCalls(true);
-          await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+          await readResolverCalls(true, sourceTabId);
+          await currentExtensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
         } else if (action === 'Right-Click') {
           // Exercise the exact background handler registered with
           // chrome.contextMenus.onClicked; Playwright cannot open Chrome's
           // native extension context-menu UI.
-          await readResolverCalls(true);
-          await extensionWorker.evaluate(async selectedText => {
+          await readResolverCalls(true, sourceTabId);
+          await currentExtensionWorker.evaluate(async selectedText => {
             const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
             await handleBlbSelectionContextMenuClick({
               menuItemId:'blb-suite-web-selection',
@@ -479,7 +490,7 @@ test.describe('core user-visible E2E', () => {
               };
             }, true);
           });
-          await readResolverCalls(true);
+          await readResolverCalls(true, sourceTabId);
           await cue.dblclick();
           // The runtime message is asynchronous. Wait for either its response
           // or its rejection diagnostic before reading the attributes.
@@ -511,17 +522,17 @@ test.describe('core user-visible E2E', () => {
             .toBe(expectedToken);
         }
 
-        const resolverCalls = await readResolverCalls(false);
+        const resolverCalls = await readResolverCalls(false, sourceTabId);
         expect(resolverCalls, action + ' must enter the shared double-click-equivalent resolver exactly once for ' + cueWord)
           .toEqual([cueWord]);
 
-        await activateBlbTabForPath(extensionWorker, expectedPath, {
+        await activateBlbTabForPath(currentExtensionWorker, expectedPath, {
           fragment: action,
           selector,
           selectedText: cueWord
         });
         actionTimings.push({ action, selector, durationMs: performance.now() - actionStartedAt });
-        const openedPaths = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+        const openedPaths = await currentExtensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
           tabs.filter(tab => !before.includes(tab.id)).map(tab => {
             try {
               const url = new URL(String(tab.url || tab.pendingUrl || ''));
@@ -532,7 +543,7 @@ test.describe('core user-visible E2E', () => {
         expect(openedPaths, action + ' with selected cue "' + cueWord + '" must open its adjacent passage')
           .toContain(expectedPath);
 
-        await extensionWorker.evaluate(path => chrome.tabs.query({}).then(async tabs => {
+        await currentExtensionWorker.evaluate(path => chrome.tabs.query({}).then(async tabs => {
           for (const tab of tabs) {
             try {
               const url = new URL(String(tab.url || tab.pendingUrl || ''));
