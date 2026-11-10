@@ -2034,8 +2034,14 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
         // whitespace-separated references (e.g. "Exodus 1" and
         // "Ezra 1 1"). Keep numeric clicks tied to this exact token offset
         // before considering the standalone-number/book fallback.
+        const positionalReference = resolvePositionalBookCitation(normalizedSource, start, end);
+        // A complete chapter-only range must outrank a single-chapter fallback.
+        // For verse citations, preserve the richer context-window result.
+        if (Array.isArray(positionalReference?.refs) && positionalReference.refs.length > 1) {
+          return positionalReference;
+        }
         return resolveBibleReferenceFromContextWindow(normalizedSource, start, end)
-          || resolvePositionalBookCitation(normalizedSource, start, end);
+          || positionalReference;
       };
 
       // Prefer the exact physical target element over caret-derived offsets.
