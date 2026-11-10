@@ -1014,7 +1014,7 @@ if ([decodeStart, bookKeyStart, blbUrlStart, parseStart, redirectStart].some(ind
   throw new Error('Could not locate source-site redirect helpers in extension/content.js');
 }
 // Exercise the production book table, alias resolver, reference validator, and URL builder.
-const helpers = sharedPatternsSource + '\n' + booksSource + '\n' + aliasesSource + '\n' + referenceCoreSource + '\n' +
+const helpers = "const VERSE_CUE_TOKEN_SOURCE = String.raw`(?:v\\.?|vs\\.?|verse|verses)`;" + '\n' + sharedPatternsSource + '\n' + booksSource + '\n' + aliasesSource + '\n' + referenceCoreSource + '\n' +
   source.slice(bookKeyStart, redirectStart) + sourceRedirectModule +
   '\nconst redirectBibleSite = BLBSourceBibleRedirectModule.initialize({ BLBShared, BOOKS, bookKey, parseChristianityBibleLink, validateSourceBibleReference, parseRef, decodeSafe, blbUrl, openBlbDestinationFromContent });';
 
