@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { mappedSpecs } from "../../scripts/ci-routing-registry.mjs";
 
 const matrix = JSON.parse(readFileSync(
   new URL("../../scripts/reference-e2e-matrix.json", import.meta.url),
@@ -27,6 +28,7 @@ test("matrix-owned changed browser specs are delegated instead of run a second t
   matrixOwned.delete("tests/browser/extension.spec.js");
 
   for (const spec of matrixOwned) {
+    assert.ok(mappedSpecs.has(spec), "matrix-owned spec must not enter the Group A unmapped fallback: " + spec);
     assert.ok(delegated.has(spec), "matrix-owned spec must be delegated: " + spec);
   }
 });
