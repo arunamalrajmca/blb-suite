@@ -47,13 +47,6 @@ function normalizeSiteHostname(hostname) {
   return host;
 }
 
-async function isSiteEnabledByDefault(hostname, title = '') {
-  // A hostname containing "bible" is not evidence that the user enabled a
-  // feature. Keep this default OFF; explicit per-site preferences are checked
-  // separately by isPageButtonEnabledForHostname and the Double-click path.
-  return false;
-}
-
 function redirectToHomepage() {
   chrome.tabs.update({url: DEFAULT_HOMEPAGE_URL});
 }
@@ -2976,7 +2969,7 @@ chrome.runtime.onMessage.addListener((message, sender) => {
   return false;
 });
 
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteGetDefaultSiteStatus","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
 // Serialize MultiVerse POST scheduling while creating all destination tabs immediately.
 // Reserve submission timestamps in one shared FIFO queue, but never sleep inside the
@@ -3548,12 +3541,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     syncWebSelectionContextMenuVisibility(sender?.tab)
       .then(() => sendResponse({ok:true}))
       .catch(() => sendResponse({ok:false}));
-    return true;
-  }
-
-  if (message.type === 'blbSuiteGetDefaultSiteStatus') {
-    const enabled = await isSiteEnabledByDefault(String(message.hostname || ''), String(message.title || ''));
-    sendResponse({ok:true, enabled});
     return true;
   }
 
@@ -6212,7 +6199,7 @@ function isPdfViewerTab(tab) {
   return key === '__blb_local_pdf__' || key === '__blb_pdf_viewer__';
 }
 
-async function isPageButtonEnabledForHostname(hostname, title = '') {
+async function isPageButtonEnabledForHostname(hostname) {
   const siteKey = normalizeSiteHostname(hostname);
   if (!siteKey || (siteKey !== BLB_HOSTNAME && siteKey.endsWith('.blueletterbible.org'))) return false;
   // Stale preferences must never bypass the sensitive-site policy.
@@ -6224,7 +6211,7 @@ async function isPageButtonEnabledForHostname(hostname, title = '') {
   // Without an explicit preference, the feature is OFF.
   if (siteKey === BLB_HOSTNAME) return sites[siteKey] === true;
   if (Object.prototype.hasOwnProperty.call(sites, siteKey)) return sites[siteKey] === true;
-  return isSiteEnabledByDefault(siteKey, title);
+  return false;
 }
 
 async function shouldShowBlbContextMenu(tab, selectionText) {
@@ -6234,7 +6221,7 @@ async function shouldShowBlbContextMenu(tab, selectionText) {
   // floating Show on BLB button. Do not require a content-script visibility
   // signal or a classifier just to expose the menu item.
   if (isSensitiveSiteUrl(tab?.url || '')) return false;
-  return await isPageButtonEnabledForHostname(siteKey, tab?.title || '');
+  return await isPageButtonEnabledForHostname(siteKey);
 }
 
 let selectionMenuOperation = Promise.resolve();
