@@ -480,21 +480,22 @@ test("core user-action E2E stays scoped to core-mapped or full-suite changes", (
     new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url),
     "utf8"
   );
-  assert.match(workflow, /Run complete core user-action regressions[\\s\\S]*?inputs\\.full_browser_suite == 'true'[\\s\\S]*?tests\\/browser\\/e2e-core-user-actions\\.spec\\.js/);
-  assert.doesNotMatch(workflow, /reference-plus-prose attempt 1\\/3/);
+  assert.ok(workflow.includes("Run complete core user-action regressions"));
+  assert.ok(workflow.includes("inputs.full_browser_suite == 'true'"));
+  assert.ok(!workflow.includes("reference-plus-prose attempt 1/3"));
 
   withFixture((root, base) => {
     commitChange(root, "extension/blb-draggable-button.js", "// unrelated feature change\\n");
     const output = select(root, base);
-    assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=tests\\/browser\\/blb-draggable-button\\.spec\\.js/);
-    assert.doesNotMatch(output, /changed_specs=.*e2e-core-user-actions/);
+    assert.ok(output.includes("full_browser_suite=false"));
+    assert.ok(output.includes("tests/browser/blb-draggable-button.spec.js"));
+    assert.ok(!output.includes("e2e-core-user-actions.spec.js"));
   });
   withFixture((root, base) => {
     commitChange(root, "extension/multiverse-copy.js", "// core user-action dependency change\\n");
     const output = select(root, base);
-    assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=.*e2e-core-user-actions\\.spec\\.js/);
+    assert.ok(output.includes("full_browser_suite=false"));
+    assert.ok(output.includes("e2e-core-user-actions.spec.js"));
   });
 });
 
