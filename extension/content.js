@@ -161,12 +161,12 @@ function openBlbDestinationFromContent(url) {
 }
 
 // Shared vocabulary for every verse-cue click and number-association path.
-const VERSE_CUE_TOKEN_SOURCE = String.raw`(?:v\\.?|vs\\.?|verse|verses)`;
+const VERSE_CUE_TOKEN_SOURCE = String.raw`(?:v\.?|vs\.?|verse|verses)`;
 function isVerseCueToken(value) {
   return new RegExp('^' + VERSE_CUE_TOKEN_SOURCE + '$', 'i').test(normalizeDoubleClickToken(value));
 }
 function hasVerseCueNumber(value) {
-  return new RegExp(String.raw`\\b${VERSE_CUE_TOKEN_SOURCE}\\s*\\d{1,3}\\b`, 'i').test(String(value || ''));
+  return new RegExp(String.raw`\b${VERSE_CUE_TOKEN_SOURCE}\s*\d{1,3}\b`, 'i').test(String(value || ''));
 }
 function normalizeSelectionText(s) {
   return String(s || '')
