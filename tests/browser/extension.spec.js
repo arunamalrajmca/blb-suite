@@ -3194,7 +3194,7 @@ test('runtime content-script registrations update using the supported scripts-ar
   });
 });
 
-test('rapid site opt-out waits for an older registration reconciliation before unregistering', async ({ extensionWorker }) => {
+) => {
   const result = await extensionWorker.evaluate(async () => {
     const key = 'example.com';
     const url = 'https://example.com/';
