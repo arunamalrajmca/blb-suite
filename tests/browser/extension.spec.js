@@ -177,7 +177,7 @@ test('KJV phrase candidate index loads only when Criteria phrase matching needs 
     };
   });
   expect(whitelistedPhrase.result.valid).toBe(true);
-  expect(whitelistedPhrase.result.type).toBe('KJV_PHRASE');
+  expect(whitelistedPhrase.result.type).toBe('KJV_PASSAGE');
   expect(whitelistedPhrase.loaded).toBe(false);
 
   // A normal multi-word phrase takes the generated-index path. Keep
