@@ -5,14 +5,6 @@ async function removeTabById(extensionWorker, id) {
   await extensionWorker.evaluate(tabId => chrome.tabs.remove(tabId).catch(() => {}), id);
 }
 
-async function dblclickAt(locator, rect) {
-  const box = await locator.boundingBox();
-  expect(box).toBeTruthy();
-  await locator.dblclick({
-    position: { x: rect.x - box.x, y: rect.y - box.y }
-  });
-}
-
 async function waitForBlbTabPath(extensionWorker, expectedPath, timeout = 10000) {
   let match = null;
   await expect.poll(async () => {
