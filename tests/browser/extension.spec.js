@@ -378,6 +378,26 @@ test.describe('core user-visible E2E', () => {
     ];
     const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];
     const actionTimings = [];
+    // Read the opt-in resolver counter from the extension's isolated world.
+    // Reset immediately before each user action so selection-change/button
+    // preparation work cannot be mistaken for resolver work during the action.
+    const readResolverCalls = async reset => extensionWorker.evaluate(async shouldReset => {
+      const [tab] = await chrome.tabs.query({ active:true, currentWindow:true });
+      if (!tab?.id) throw new Error('No active tab for resolver-call diagnostics');
+      const [injected] = await chrome.scripting.executeScript({
+        target: { tabId:tab.id },
+        world: 'ISOLATED',
+        func: resetCalls => {
+          window.__blbSuiteEnableDoubleClickEquivalentDiagnostics = true;
+          if (resetCalls) window.__blbSuiteDoubleClickEquivalentCalls = [];
+          return Array.isArray(window.__blbSuiteDoubleClickEquivalentCalls)
+            ? [...window.__blbSuiteDoubleClickEquivalentCalls]
+            : [];
+        },
+        args: [shouldReset]
+      });
+      return injected?.result || [];
+    }, reset);
 
     for (const [selector, cueWord, expectedPath] of cases) {
       for (const action of actions) {
@@ -423,15 +443,18 @@ test.describe('core user-visible E2E', () => {
           }), { message: 'Show on BLB must resolve the current cue selection before click' }).toBe(expectedPath);
           const button = page.locator('#blb-suite-page-selection-button');
           await expect(button).toBeVisible({ timeout: 10000 });
+          await readResolverCalls(true);
           await button.click();
         } else if (action === 'Alt+B') {
           // Call the handler registered for the browser command; Playwright's
           // keyboard simulation does not dispatch Chrome extension commands.
+          await readResolverCalls(true);
           await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
         } else if (action === 'Right-Click') {
           // Exercise the exact background handler registered with
           // chrome.contextMenus.onClicked; Playwright cannot open Chrome's
           // native extension context-menu UI.
+          await readResolverCalls(true);
           await extensionWorker.evaluate(async selectedText => {
             const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
             await handleBlbSelectionContextMenuClick({
@@ -453,6 +476,7 @@ test.describe('core user-visible E2E', () => {
               };
             }, true);
           });
+          await readResolverCalls(true);
           await cue.dblclick();
           // The runtime message is asynchronous. Wait for either its response
           // or its rejection diagnostic before reading the attributes.
@@ -483,6 +507,10 @@ test.describe('core user-visible E2E', () => {
           expect(selectedToken, selector + ': native double-click must isolate the cue token')
             .toBe(expectedToken);
         }
+
+        const resolverCalls = await readResolverCalls(false);
+        expect(resolverCalls, action + ' must enter the shared double-click-equivalent resolver exactly once for ' + cueWord)
+          .toEqual([cueWord]);
 
         await activateBlbTabForPath(extensionWorker, expectedPath, {
           fragment: action,
