@@ -91,10 +91,10 @@ test.describe('independent site feature permissions and global redirects', () =>
     const handler = popup.slice(start, end);
     const pinIndex = handler.indexOf('const pinPromise = on');
     const permissionIndex = handler.indexOf('chrome.permissions.request({origins:[currentSiteOrigin]})');
-    const firstAwaitIndex = handler.indexOf('await ');
+    const stateAwaitIndex = handler.indexOf('const state = await getState()');
     expect(pinIndex).toBeGreaterThanOrEqual(0);
     expect(permissionIndex).toBeGreaterThan(pinIndex);
-    expect(firstAwaitIndex).toBeGreaterThan(permissionIndex);
+    expect(stateAwaitIndex).toBeGreaterThan(permissionIndex);
     expect(handler).toContain('.then(granted => granted === true)');
     expect(handler).toContain('.catch(() => false)');
   });
