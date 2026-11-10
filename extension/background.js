@@ -2755,7 +2755,7 @@ async function unregisterRuntimeContentScriptForPattern(pattern) {
   } catch (_) {}
 }
 
-async function reconcileRuntimeContentScriptRegistrations() {
+async function reconcileRuntimeContentScriptRegistrationsNow() {
   const data = await chrome.storage.local.get({
     masterEnabled:true,
     pageSelectionButtonSites:{},
@@ -2795,6 +2795,18 @@ async function reconcileRuntimeContentScriptRegistrations() {
     }
     await ensureRuntimeContentScriptRegistered(tab, files);
   }));
+}
+
+// Serialize settings-driven reconciliation. Rapid ON/OFF changes can otherwise
+// overlap: an older enabled snapshot may finish after the newer opt-out pass
+// and recreate a persistent registration that should have been removed.
+let runtimeContentScriptReconciliationQueue = Promise.resolve();
+function reconcileRuntimeContentScriptRegistrations() {
+  const operation = runtimeContentScriptReconciliationQueue
+    .catch(() => {})
+    .then(() => reconcileRuntimeContentScriptRegistrationsNow());
+  runtimeContentScriptReconciliationQueue = operation.then(() => undefined, () => undefined);
+  return operation;
 }
 
 async function ensureContentScriptInTab(tabId) {

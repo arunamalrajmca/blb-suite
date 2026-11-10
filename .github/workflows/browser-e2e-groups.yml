@@ -125,19 +125,6 @@ jobs:
       - name: Run omnibox behavior regressions
         if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/omnibox-boolean-operators.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/omnibox-boolean-operators.spec.js')) }}
         run: npx playwright test tests/browser/omnibox-boolean-operators.spec.js
-      - name: Diagnose reference-plus-prose selection in three isolated runs
-        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/e2e-core-user-actions.spec.js') }}
-        continue-on-error: true
-        shell: bash
-        run: |
-          set +e
-          for attempt in 1 2 3; do
-            echo "===== isolated reference-plus-prose attempt $attempt/3 ====="
-            npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep "selection containing a reference and authored prose opens MultiVerse and Criteria Search"
-            result=$?
-            echo "===== isolated attempt $attempt exit code: $result ====="
-          done
-          exit 0
       # Disable fail-fast for this core file so one intermittent failure does not hide later test results.
       - name: Run complete core user-action regressions
         if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/e2e-core-user-actions.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/e2e-core-user-actions.spec.js')) }}

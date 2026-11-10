@@ -164,6 +164,7 @@ try {
     'tests/browser/extension.spec.js',
     'tests/browser/selection-phase-performance.spec.js',
     'tests/browser/service-worker-lifecycle.spec.js',
+    'tests/browser/site-registration-opt-out-race.spec.js',
     'tests/browser/shared-regex-patterns.spec.js',
     'tests/browser/rediscover-sagacity-button.spec.js',
     'tests/browser/research-dom-smoke.spec.js',
@@ -438,6 +439,22 @@ try {
   assert(result.values.changed_browser_specs.includes('tests/browser/extension.spec.js'),
     'mixed runtime change must include its changed browser regression spec');
   console.log('PASS: mixed runtime and browser-spec changes run the edited regression spec');
+
+  // Shared background changes must retain the dedicated site-registration race regression,
+  // without pulling the test back into the much larger extension.spec.js file.
+  resetScenario(base);
+  write('extension/background.js', '// shared background registration change\\n');
+  write('tests/browser/site-registration-opt-out-race.spec.js', '// focused registration race regression\\n');
+  commit('change background and focused registration regression');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', true, 'background plus focused registration spec');
+  assert(result.values.changed_browser_specs.includes('tests/browser/site-registration-opt-out-race.spec.js'),
+    'the focused registration race spec must run when changed alongside runtime');
+  assert(!result.values.changed_browser_specs.includes('tests/browser/extension.spec.js'),
+    'the broad extension spec must not be selected for this isolated regression');
+  assert(result.values.changed_specs.includes('tests/browser/site-registration-opt-out-race.spec.js'),
+    'background changes must select the dedicated registration race coverage');
+  console.log('PASS: background registration changes use isolated race coverage');
 
   // CI selector infrastructure changes are validated by the package gate and must not launch browser E2E.
   resetScenario(base);

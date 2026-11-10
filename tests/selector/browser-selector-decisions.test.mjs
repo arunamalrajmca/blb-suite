@@ -4,6 +4,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
+import { selectReferenceMatrix } from "../../scripts/select-reference-matrix.mjs";
 
 const selectorSource = readFileSync(
   new URL("../../scripts/select-browser-specs.mjs", import.meta.url),
@@ -76,6 +77,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/criteria-search-navigation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/feature-lifecycle-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/extension.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/site-registration-opt-out-race.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/selection-phase-performance.spec.js", "import { test } from '@playwright/test';\\n");
   put(root, "tests/browser/service-worker-lifecycle.spec.js", "import { test } from '@playwright/test';\\n");
   put(root, "tests/browser/redirect-toggle-isolation.spec.js", "import { test } from '@playwright/test';\n");
@@ -473,6 +475,51 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
   assert.match(groupB, /browser_e2e_required == 'true'/);
 });
 
+test("core user-action E2E stays scoped to core-mapped or full-suite changes", () => {
+  const workflow = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url),
+    "utf8"
+  );
+  assert.ok(workflow.includes("Run complete core user-action regressions"));
+  assert.ok(workflow.includes("inputs.full_browser_suite == 'true'"));
+  assert.ok(!workflow.includes("reference-plus-prose attempt 1/3"));
+
+  withFixture((root, base) => {
+    commitChange(root, "extension/blb-draggable-button.js", "// unrelated feature change\\n");
+    const output = select(root, base);
+    assert.ok(output.includes("full_browser_suite=false"));
+    assert.ok(output.includes("tests/browser/blb-draggable-button.spec.js"));
+    assert.ok(!output.includes("e2e-core-user-actions.spec.js"));
+  });
+  withFixture((root, base) => {
+    commitChange(root, "extension/multiverse-copy.js", "// core user-action dependency change\\n");
+    const output = select(root, base);
+    assert.ok(output.includes("full_browser_suite=false"));
+    assert.ok(output.includes("e2e-core-user-actions.spec.js"));
+  });
+});
+
+test("extension reference-coverage matrix skips unrelated mapped features", () => {
+  const entries = JSON.parse(readFileSync(
+    new URL("../../scripts/reference-e2e-matrix.json", import.meta.url),
+    "utf8"
+  ));
+  const unrelated = selectReferenceMatrix(entries, {
+    full: false,
+    changedSpecs: "tests/browser/blb-draggable-button.spec.js"
+  });
+  assert.ok(!unrelated.some(entry => entry.group === "extension-spec-reference-coverage"));
+
+  const extensionSpec = selectReferenceMatrix(entries, {
+    full: false,
+    changedSpecs: "tests/browser/extension.spec.js"
+  });
+  assert.ok(extensionSpec.some(entry => entry.group === "extension-spec-reference-coverage"));
+
+  const full = selectReferenceMatrix(entries, { full: true });
+  assert.ok(full.some(entry => entry.group === "extension-spec-reference-coverage"));
+});
+
 test("optional E2E workflows exclude selector-only and store-only scripts from broad triggers", () => {
   for (const workflowPath of [
     "../../.github/workflows/browser-e2e-reference.yml",
@@ -544,6 +591,29 @@ test("browser-spec-only edit does not launch feature E2E", () => {
     assert.match(output, /changed_specs=\n/);
     assert.match(output, /changed_browser_specs=\n/);
     assert.match(output, /group_a_required=false/);
+  });
+});
+
+test("shared background changes keep the site-registration race in its isolated spec", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/background.js", "// shared background change\\n");
+    commitChange(root, "tests/browser/site-registration-opt-out-race.spec.js", "// focused race regression\\n");
+    const output = select(root, base);
+    assert.ok(output.includes("full_browser_suite=true"));
+    assert.ok(output.includes("changed_browser_specs=tests/browser/site-registration-opt-out-race.spec.js"));
+    assert.ok(!output.includes("changed_browser_specs=tests/browser/extension.spec.js"));
+    assert.ok(output.includes("group_a_required=true"));
+  });
+});
+
+test("deletion-only changes to a large browser spec do not rerun the removed spec", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/background.js", "// shared background change\\n");
+    commitChange(root, "tests/browser/extension.spec.js", "");
+    const output = select(root, base);
+    assert.ok(output.includes("full_browser_suite=true"));
+    assert.ok(!output.includes("changed_browser_specs=tests/browser/extension.spec.js"));
+    assert.ok(output.includes("changed_browser_specs=\n"));
   });
 });
 
