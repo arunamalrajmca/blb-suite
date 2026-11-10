@@ -2408,6 +2408,11 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             // richer result when both resolve the same exact clicked token.
             const referenceScore = reference => {
               if (!reference) return -1;
+              // A whole-chapter range carries explicit MultiVerse refs. Prefer
+              // that complete positional match over a single-chapter fallback.
+              if (Array.isArray(reference.refs) && reference.refs.length > 1) {
+                return 200 + reference.refs.length;
+              }
               if (reference.from == null) return 0;
               return 100 + Math.max(0, Number(reference.to || reference.from) - Number(reference.from));
             };
@@ -2540,6 +2545,11 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
             );
             const referenceScore = reference => {
               if (!reference) return -1;
+              // A whole-chapter range carries explicit MultiVerse refs. Prefer
+              // that complete positional match over a single-chapter fallback.
+              if (Array.isArray(reference.refs) && reference.refs.length > 1) {
+                return 200 + reference.refs.length;
+              }
               if (reference.from == null) return 0;
               return 100 + Math.max(0, Number(reference.to || reference.from) - Number(reference.from));
             };
