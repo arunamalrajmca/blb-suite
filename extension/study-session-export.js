@@ -143,20 +143,6 @@
       const wrapToWidth = (text, maxWidth, size, bold=false) => { const words=String(text||'').trim().split(/\s+/).filter(Boolean); if(!words.length) return ['']; const out=[]; let line=''; for(const word of words){ const candidate=line?`${line} ${word}`:word; if(line && pdfTextWidth(candidate,size,bold)>maxWidth){ out.push(line); line=word; } else line=candidate; } if(line) out.push(line); return out; };
       const drawJustifiedLine = (font,size,x,yPos,text,targetWidth,bold=false,lastLine=false) => { const value=String(text||''); const spaces=(value.match(/ /g)||[]).length; const natural=pdfTextWidth(value,size,bold); const extra=(!lastLine&&spaces>0)?Math.max(0,(targetWidth-natural)/spaces):0; commands.push('BT',`/${font} ${size} Tf`,`${extra.toFixed(3)} Tw`,`${x} ${yPos} Td`,`(${esc(value)}) Tj`,'ET'); };
     
-      function wrap(text, maxChars) {
-        const words = String(text || '').trim().split(/\s+/).filter(Boolean);
-        if (!words.length) return [''];
-        const out = [];
-        let line = '';
-        for (const word of words) {
-          const next = line ? `${line} ${word}` : word;
-          if (next.length > maxChars && line) { out.push(line); line = word; }
-          else line = next;
-        }
-        if (line) out.push(line);
-        return out;
-      }
-    
       const blue = '0.08 0.30 0.55';
       const dark = '0.12 0.13 0.16';
       const muted = '0.42 0.44 0.48';
