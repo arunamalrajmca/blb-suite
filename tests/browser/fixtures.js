@@ -48,6 +48,52 @@ const test = base.extend({
     try {
       const copyStartedAt = process.hrtime.bigint();
       fs.cpSync(sourceExtensionPath, extensionPath, { recursive: true });
+      // Expose the real content-script selection-context function only inside
+      // this disposable test copy, via a message handler in its own JS world.
+      fs.appendFileSync(path.join(extensionPath, 'content.js'), `
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type !== '__blbSelectionPhaseBenchmark') return;
+  try {
+    const paragraph = document.createElement('p');
+    paragraph.id = 'blb-selection-phase-context-fixture';
+    paragraph.textContent = 'John 3:16';
+    document.body.appendChild(paragraph);
+    const textNode = paragraph.firstChild;
+    const range = document.createRange();
+    range.setStart(textNode, 0);
+    range.setEnd(textNode, 'John'.length);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    const expected = getSelectionContextPosition();
+    if (!expected) throw new Error('Production selection-context extraction returned null');
+    const iterations = 200;
+    const samples = [];
+    let checksum = 0;
+    for (let sample = 0; sample < 9; sample++) {
+      for (let warm = 0; warm < 10; warm++) getSelectionContextPosition();
+      const started = performance.now();
+      for (let i = 0; i < iterations; i++) {
+        const result = getSelectionContextPosition();
+        if (result?.text && result.text.slice(result.start, result.end) === 'John') checksum++;
+      }
+      samples.push({ durationMs: performance.now() - started });
+    }
+    sendResponse({
+      expected: {
+        selected: expected.text.slice(expected.start, expected.end),
+        context: expected.text
+      },
+      checksum,
+      samples,
+      iterations
+    });
+  } catch (error) {
+    sendResponse({ error: error?.message || String(error) });
+  }
+  return true;
+});
+`);
       // Generate the compressed search sidecars from the authoritative source
       // datasets before launching the unpacked test extension.
       execFileSync(process.execPath, [
