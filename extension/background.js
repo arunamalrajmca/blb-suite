@@ -2800,6 +2800,7 @@ async function reconcileRuntimeContentScriptRegistrationsNow() {
 // Serialize settings-driven reconciliation. Rapid ON/OFF changes can otherwise
 // overlap: an older enabled snapshot may finish after the newer opt-out pass
 // and recreate a persistent registration that should have been removed.
+// Keep the queue worker-wide: the registered-script set is shared across tabs.
 let runtimeContentScriptReconciliationQueue = Promise.resolve();
 function reconcileRuntimeContentScriptRegistrations() {
   const operation = runtimeContentScriptReconciliationQueue
