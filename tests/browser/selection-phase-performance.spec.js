@@ -109,7 +109,7 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
           }
           samples.push({ durationMs: performance.now() - started });
         }
-        return {
+        return JSON.stringify({
           expected: expected ? {
             selected: expected.text.slice(expected.start, expected.end),
             context: expected.text
@@ -119,7 +119,7 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
           checksum,
           samples,
           iterations
-        };
+        });
       }
     });
     return {
@@ -130,7 +130,7 @@ test('selection pipeline phase benchmark: parser, live DOM context, and KJV corp
   });
 
   expect(domContext.resultCount, JSON.stringify(domContext)).toBe(1);
-  const domMeasurement = domContext.frames[0]?.result;
+  const domMeasurement = domContext.frames[0]?.result ? JSON.parse(domContext.frames[0].result) : null;
   expect(domMeasurement?.expected?.selected, JSON.stringify(domContext)).toBe('John');
   expect(domMeasurement?.expected?.context).toContain('John 3:16');
   expect(domMeasurement.checksum).toBeGreaterThan(0);
