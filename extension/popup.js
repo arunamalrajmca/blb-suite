@@ -41,19 +41,6 @@ function deriveSiteCaption(siteKey) {
   return host;
 }
 
-async function hasSiteFeatureHostAccess(origin) {
-  if (!origin) return false;
-  try {
-    // Wildcard redirect permission must not implicitly activate the
-    // independent per-site Show on BLB and Double-click features.
-    const permissions = await chrome.permissions.getAll();
-    const origins = Array.isArray(permissions?.origins) ? permissions.origins : [];
-    return origins.includes(origin);
-  } catch (_) {
-    return false;
-  }
-}
-
 async function getState() {
   const [tabs, data] = await Promise.all([
     chrome.tabs.query({active:true, currentWindow:true}),
@@ -74,14 +61,11 @@ async function getState() {
   const isSensitiveSite = isSensitiveSiteUrl(activeUrl);
   const isPdfContext = siteKey === '__blb_local_pdf__' || siteKey === '__blb_pdf_viewer__';
   let hasCurrentSiteAccess = true;
-  let hasSiteSpecificAccess = true;
   if (!isBlbSite && currentSiteOrigin) {
     try {
       hasCurrentSiteAccess = await chrome.permissions.contains({origins:[currentSiteOrigin]});
-      hasSiteSpecificAccess = await hasSiteFeatureHostAccess(currentSiteOrigin);
     } catch (_) {
       hasCurrentSiteAccess = false;
-      hasSiteSpecificAccess = false;
     }
   }
   // Site features are OFF unless the user explicitly enabled them for this host.
