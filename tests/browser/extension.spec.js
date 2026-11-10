@@ -574,7 +574,9 @@ test.describe('core user-visible E2E', () => {
         action,
         samples: samples.length,
         medianMs: Number(samples[Math.floor(samples.length / 2)].toFixed(2)),
-        p90Ms: Number(samples[Math.min(samples.length - 1, Math.floor((samples.length - 1) * 0.9))].toFixed(2))
+        p90Ms: Number(samples[Math.min(samples.length - 1, Math.floor((samples.length - 1) * 0.9))].toFixed(2)),
+        resolverCallCounts: actionTimings.filter(sample => sample.action === action)
+          .map(sample => sample.resolverCallCount)
       };
     });
     console.log('BLB_SELECTION_ACTION_TIMING ' + JSON.stringify({
