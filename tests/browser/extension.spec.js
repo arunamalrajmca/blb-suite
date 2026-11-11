@@ -3063,7 +3063,11 @@ test.describe('core user-visible E2E', () => {
       {reference:'John 3:16-18', path:'/kjv/jhn/3/16-18/'},
       {reference:'Jn 3:16', path:'/kjv/jhn/3/16/'},
       {reference:'II Thessalonians 2:1', path:'/kjv/2th/2/1/'},
-      {reference:'1 Corinthians 13:1', path:'/kjv/1co/13/1/'}
+      {reference:'1 Corinthians 13:1', path:'/kjv/1co/13/1/'},
+      {reference:'2 Timothy 3:4', path:'/kjv/2ti/3/4/'},
+      {reference:'Gal.1.8,9', path:'/kjv/gal/1/8-9/'},
+      {reference:'Rev.14.6,7', path:'/kjv/rev/14/6-7/'},
+      {reference:'\\u2066Matthew\\u2069 \\u206614\\u2069:\\u206622\\u2069–\\u206633\\u2069', path:'/kjv/mat/14/22-33/'}
     ];
     const actions = ['Show on BLB','Right-Click','Alt+B','Double-Click'];
     const failures = [];
@@ -3073,6 +3077,7 @@ test.describe('core user-visible E2E', () => {
         document.getElementById('four-action-grammar-reference')?.remove();
         const root = document.createElement('p');
         root.id = 'four-action-grammar-reference';
+        root.setAttribute('dir', 'auto');
         root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;color:#000;padding:12px;font:24px Arial,sans-serif;';
         const tokenPattern = /[A-Za-z]+|[0-9]+/g;
         let lastIndex = 0;
@@ -3175,6 +3180,144 @@ test.describe('core user-visible E2E', () => {
       }
     }
     expect(failures,'four-action reference grammar failures: ' + JSON.stringify(failures,null,2)).toEqual([]);
+  });
+
+  test('Standalone Timothy after a numbered-book prefix remains a word search through all four actions', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({
+      masterEnabled: true,
+      pageSelectionButtonSites: { 'facebook.com': true, 'www.facebook.com': true },
+      doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true }
+    });
+    await page.route('https://www.facebook.com/**', route => route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><head><title>Facebook Timothy word-search context</title></head><body></body></html>'
+    }));
+    await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const article = document.createElement('article');
+      article.setAttribute('role', 'article');
+      article.innerHTML = '<div data-ad-comet-preview="message"><div dir="auto">2 <span id="standalone-timothy">Timothy</span> is Paul’s final letter to the church.</div></div>';
+      document.body.appendChild(article);
+    });
+
+    for (const action of ['Show on BLB', 'Right-Click', 'Alt+B', 'Double-Click']) {
+      if (action === 'Double-Click') {
+        await page.locator('#standalone-timothy').dblclick();
+      } else {
+        await page.locator('#standalone-timothy').evaluate(element => {
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+        });
+        expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe('Timothy');
+        if (action === 'Show on BLB') {
+          const button = page.locator('#blb-suite-page-selection-button');
+          await expect(button).toBeVisible({ timeout: 10000 });
+          await button.click();
+        } else if (action === 'Right-Click') {
+          await extensionWorker.evaluate(async selectionText => {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            await handleBlbSelectionContextMenuClick({
+              menuItemId: 'blb-suite-web-selection',
+              selectionText
+            }, tab);
+          }, 'Timothy');
+        } else {
+          await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+        }
+      }
+
+      const result = await waitForTab(extensionWorker, tab => {
+        try {
+          const url = new URL(tab.pendingUrl || tab.url);
+          return url.hostname === 'www.blueletterbible.org'
+            && url.pathname === '/search/search.cfm'
+            && url.searchParams.get('Criteria') === 'Timothy';
+        } catch (_) { return false; }
+      });
+      const resultUrl = new URL(result.pendingUrl || result.url);
+      expect(resultUrl.searchParams.get('Criteria'), action + ' must search the selected KJV word only').toBe('Timothy');
+      expect(resultUrl.pathname, action + ' must not navigate to a guessed numbered-book passage').toBe('/search/search.cfm');
+
+      const incorrectTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.filter(tab => {
+        try {
+          const url = new URL(tab.pendingUrl || tab.url);
+          return url.hostname === 'www.blueletterbible.org'
+            && (url.pathname.startsWith('/kjv/2ti/') || url.searchParams.get('Criteria') === '2 timothy');
+        } catch (_) { return false; }
+      }).map(tab => tab.url || tab.pendingUrl || '')));
+      expect(incorrectTabs, action + ' must not reinterpret Timothy as the full book name').toEqual([]);
+      await extensionWorker.evaluate(id => chrome.tabs.remove(id).catch(() => {}), result.id);
+      await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    }
+  });
+
+  test('Floating Show on BLB refreshes keyboard-adjusted selection context instead of reusing stale context', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({
+      masterEnabled: true,
+      pageSelectionButtonSites: { 'example.com': true }
+    });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const root = document.createElement('p');
+      root.id = 'keyboard-selection-context';
+      root.contentEditable = 'true';
+      root.textContent = 'Genesis 1:1 and John 3:16';
+      root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(root);
+      const node = root.firstChild;
+      const start = node.textContent.indexOf('Genesis');
+      const range = document.createRange();
+      range.setStart(node, start);
+      range.setEnd(node, start + 'Genesis'.length);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+    });
+
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe('Genesis');
+
+    await page.locator('#keyboard-selection-context').evaluate(root => {
+      root.focus();
+      const node = root.firstChild;
+      const start = node.textContent.indexOf('John');
+      const range = document.createRange();
+      range.setStart(node, start);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    for (let i = 0; i < 4; i++) await page.keyboard.press('Shift+ArrowRight');
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || '')).toBe('John');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await button.click();
+
+    await activateBlbTabForPath(extensionWorker, '/kjv/jhn/3/16/', {
+      fragment: 'keyboard-adjusted selection must use John 3:16 rather than prior Genesis context',
+      selector: '#keyboard-selection-context',
+      selectedText: 'John'
+    });
+    const passagePaths = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+      tabs.map(tab => {
+        try {
+          const url = new URL(tab.pendingUrl || tab.url);
+          return url.hostname.endsWith('blueletterbible.org') && url.pathname.startsWith('/kjv/')
+            ? url.pathname : '';
+        } catch (_) { return ''; }
+      }).filter(Boolean)
+    ));
+    expect(passagePaths).toContain('/kjv/jhn/3/16/');
+    expect(passagePaths).not.toContain('/kjv/gen/1/1/');
   });
 
   test('All 66 canonical books and every configured alias resolve to the correct book', async ({ extensionWorker }) => {
