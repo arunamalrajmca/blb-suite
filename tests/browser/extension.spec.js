@@ -1616,16 +1616,21 @@ test.describe('core user-visible E2E', () => {
     test.setTimeout(180000);
     await extensionStorage.set({
       masterEnabled: true,
-      pageSelectionButtonSites: { 'example.com': true },
-      doubleClickBlbSites: { 'example.com': true }
+      pageSelectionButtonSites: { 'facebook.com': true, 'www.facebook.com': true },
+      doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true }
     });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.route('https://www.facebook.com/**', route => route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><head><title>Facebook separate-post context test</title></head><body></body></html>'
+    }));
+    await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
     await page.evaluate(() => {
       const feed = document.createElement('main');
       feed.innerHTML = [
-        '<article role="article" id="preceding-post"><div dir="auto">Luke 21–22</div></article>',
-        '<article role="article" id="target-post"><div dir="auto">Read this: <span id="target-luke-book">Luke</span> <span>22</span>:<span>26</span></div></article>'
+        '<article role="article" id="preceding-post"><div data-ad-comet-preview="message"><div dir="auto">Luke 21–22</div></div></article>',
+        '<article role="article" id="target-post"><div data-ad-comet-preview="message"><div dir="auto">Read this: <span id="target-luke-book">Luke</span> <span>22</span>:<span>26</span> KJV</div></div></article>'
       ].join('');
       document.body.appendChild(feed);
     });
@@ -1640,14 +1645,13 @@ test.describe('core user-visible E2E', () => {
       if (action === 'Double-Click') {
         await page.locator('#target-luke-book').dblclick();
       } else {
-        await page.evaluate(() => {
-          const target = document.querySelector('#target-luke-book');
+        await page.locator('#target-luke-book').evaluate(element => {
           const range = document.createRange();
-          range.selectNodeContents(target);
+          range.selectNodeContents(element);
           const selection = window.getSelection();
           selection.removeAllRanges();
           selection.addRange(range);
-          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
         });
         expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe('Luke');
 
