@@ -63,9 +63,12 @@ function sendRuntimeMessageWithRetry(message, sendMessage, onError = null) {
      message.type === 'blbSuiteOpenDoubleClickSelectionText');
   const send = async attempt => {
     try {
-      const messageStartedAt = performance.now();
+      const measureStage = window.__blbSuiteEnableSelectionStageTiming === true;
+      const messageStartedAt = measureStage ? performance.now() : null;
       try { return await sendMessage(message); }
-      finally { recordBlbSelectionStage('runtime-message-roundtrip', messageStartedAt, {messageType:String(message?.type || '')}); }
+      finally {
+        if (measureStage) recordBlbSelectionStage('runtime-message-roundtrip', messageStartedAt, {messageType:String(message?.type || '')});
+      }
     } catch (error) {
       const errorText = String(error?.message || error || '');
       if (retryableSelectionRequest && attempt < 2 && /\bNo SW\b/i.test(errorText)) {
@@ -1607,6 +1610,9 @@ function getContextualBibleReferenceCore(selectionText) {
 }
 
 function getContextualBibleReference(selectionText) {
+  if (window.__blbSuiteEnableSelectionStageTiming !== true) {
+    return getContextualBibleReferenceCore(selectionText);
+  }
   const startedAt = performance.now();
   try { return getContextualBibleReferenceCore(selectionText); }
   finally { recordBlbSelectionStage('contextual-resolution', startedAt, {token:String(selectionText || '').slice(0,32)}); }
