@@ -1203,9 +1203,10 @@ test.describe('core user-visible E2E', () => {
     expect(handoffMs).toBeLessThan(1500);
   });
 
-  test('X tweet text resolves book clicks from exact caret ranges', async ({ page, extensionStorage, extensionWorker }) => {
+  test('X tweet text resolves book clicks from exact caret ranges through all four selection actions', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({
       masterEnabled: true,
+      pageSelectionButtonSites: { 'x.com': true },
       doubleClickBlbSites: { 'x.com': true }
     });
     await page.route('https://x.com/**', route => route.fulfill({
@@ -1213,29 +1214,58 @@ test.describe('core user-visible E2E', () => {
       contentType: 'text/html; charset=utf-8',
       body: `<!doctype html><html><head><title>X fixture</title></head><body>
         <main>
-          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto" style="font:24px Arial,sans-serif">Matthew 22:37</span></div></article>
-          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto" style="font:24px Arial,sans-serif">Genesis 17:8</span></div></article>
-          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto" style="font:24px Arial,sans-serif"><span>Genesis</span><span> </span><span>35</span><span>:</span><span>11</span></span></div></article>
+          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto"><span id="x-book-matthew">Matthew</span> 22:37</span></div></article>
+          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto"><span id="x-book-genesis-17">Genesis</span> 17:8</span></div></article>
+          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto"><span id="x-book-genesis-35">Genesis</span> 35:11</span></div></article>
         </main>
       </body></html>`
     }));
     await page.goto('https://x.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
 
-    // X renders tweet text as continuous text nodes inside rich-text spans;
-    // book words do not have dedicated elements with matching textContent.
     const cases = [
-      { text: 'Matthew 22:37', path: '/kjv/mat/22/37/' },
-      { text: 'Genesis 17:8', path: '/kjv/gen/17/8/' },
-      { text: 'Genesis 35:11', path: '/kjv/gen/35/11/' }
+      { selector: '#x-book-matthew', text: 'Matthew', path: '/kjv/mat/22/37/' },
+      { selector: '#x-book-genesis-17', text: 'Genesis', path: '/kjv/gen/17/8/' },
+      { selector: '#x-book-genesis-35', text: 'Genesis', path: '/kjv/gen/35/11/' }
     ];
     for (const item of cases) {
-      const tweetText = page.locator('[data-testid="tweetText"] span').filter({ hasText: item.text });
-      await expect(tweetText).toHaveText(item.text);
-      await tweetText.dblclick({ position: { x: 32, y: 12 } });
-      const resolved = await waitForBlbTabPath(extensionWorker, item.path);
-      expect(new URL(resolved.pendingUrl || resolved.url).pathname).toBe(item.path);
-      await removeTabById(extensionWorker, resolved.id);
+      for (const action of ['Show on BLB', 'Right-Click', 'Alt+B', 'Double-Click']) {
+        await page.bringToFront();
+        if (action === 'Double-Click') {
+          await page.locator(item.selector).dblclick();
+        } else {
+          await page.locator(item.selector).evaluate(element => {
+            const range = document.createRange();
+            range.selectNodeContents(element);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+          });
+          expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe(item.text);
+          if (action === 'Show on BLB') {
+            const button = page.locator('#blb-suite-page-selection-button');
+            await expect(button).toBeVisible({ timeout: 10000 });
+            await button.click();
+          } else if (action === 'Right-Click') {
+            await extensionWorker.evaluate(async selectionText => {
+              const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+              await handleBlbSelectionContextMenuClick({
+                menuItemId: 'blb-suite-web-selection',
+                selectionText
+              }, tab);
+            }, item.text);
+          } else {
+            await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+          }
+        }
+
+        const resolved = await waitForBlbTabPath(extensionWorker, item.path);
+        expect(new URL(resolved.pendingUrl || resolved.url).pathname, action + ' ' + item.text)
+          .toBe(item.path);
+        await removeTabById(extensionWorker, resolved.id);
+        await page.evaluate(() => window.getSelection()?.removeAllRanges());
+      }
     }
   });
 
