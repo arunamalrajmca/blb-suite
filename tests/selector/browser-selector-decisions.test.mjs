@@ -620,6 +620,7 @@ test("shared background changes keep the site-registration race in its isolated 
     const output = select(root, base);
     assert.ok(output.includes("full_browser_suite=true"));
     assert.ok(output.includes("changed_browser_specs=tests/browser/site-registration-opt-out-race.spec.js"));
+    assert.ok(output.includes("tests/browser/optional-host-permission-lifecycle.spec.js"));
     assert.ok(!output.includes("changed_browser_specs=tests/browser/extension.spec.js"));
     assert.ok(output.includes("group_a_required=true"));
   });
