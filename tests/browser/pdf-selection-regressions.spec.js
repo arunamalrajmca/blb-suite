@@ -69,3 +69,70 @@ test.describe('PDF selection context-menu regressions', () => {
     expect(pdfUpdates.filter(update => update.visible === true).length).toBeGreaterThanOrEqual(2);
   });
 });
+
+
+test('local PDF context-menu handoff opens a selected full Bible reference through the PDF-safe path', async ({
+  extensionWorker
+}) => {
+  const previous = await extensionWorker.evaluate(async () => chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    redirectEnabled:false
+  }));
+  const beforeTabs = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({})).map(tab => tab.id)
+  );
+  const sourceTabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+
+  try {
+    await extensionWorker.evaluate(async () => {
+      await chrome.storage.local.set({
+        masterEnabled:true,
+        pageSelectionButtonSites:{'__blb_local_pdf__':true},
+        doubleClickBlbSites:{},
+        redirectEnabled:false
+      });
+    });
+
+    const eligibility = await extensionWorker.evaluate(async tabId => {
+      const pdfTab = {id:tabId,url:'file:///C:/Bible/notes.pdf',title:'notes.pdf'};
+      return {
+        siteKey:pageSelectionSettingKeyFromTab(pdfTab),
+        menuVisible:await shouldShowBlbContextMenu(pdfTab,'John 3:16')
+      };
+    }, sourceTabId);
+    expect(eligibility.siteKey).toBe('__blb_local_pdf__');
+    expect(eligibility.menuVisible).toBe(true);
+
+    await extensionWorker.evaluate(async tabId => {
+      await handleBlbSelectionContextMenuClick({
+        menuItemId:'blb-suite-pdf-selection',
+        selectionText:'John 3:16'
+      }, {
+        id:tabId,
+        url:'file:///C:/Bible/notes.pdf',
+        title:'notes.pdf'
+      });
+    }, sourceTabId);
+
+    await expect.poll(() => extensionWorker.evaluate(async before => {
+      const tabs=await chrome.tabs.query({});
+      return tabs.some(tab => !before.includes(tab.id) &&
+        String(tab.url || '').includes('/kjv/jhn/3/16/'));
+    }, beforeTabs), {timeout:15000}).toBe(true);
+  } finally {
+    await extensionWorker.evaluate(async ({settings,before}) => {
+      const tabs=await chrome.tabs.query({});
+      const created=tabs.filter(tab => !before.includes(tab.id) &&
+        String(tab.url || '').includes('blueletterbible.org'));
+      await Promise.all(created.map(tab => chrome.tabs.remove(tab.id).catch(() => {})));
+      await chrome.storage.local.set(settings);
+    }, {
+      settings:previous,
+      before:beforeTabs
+    });
+  }
+});
