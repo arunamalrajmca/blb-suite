@@ -587,12 +587,10 @@ jobs:
             spec="${specs[$index]}"
             [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
             printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-            if [[ "$spec" == "tests/browser/extension.spec.js" ]] && grep -q "Reference grammar representatives resolve through all four selection actions @failure-first" "$spec"; then
-              echo "Running the previously failing four-action grammar test first"
-              npx playwright test "$spec" --grep "Reference grammar representatives resolve through all four selection actions"
-              echo "Running the remaining @failure-first tests"
-              npx playwright test "$spec" --grep "@failure-first" --grep-invert "Reference grammar representatives resolve through all four selection actions"
-              echo "Running all remaining tests"
+            if [[ "$spec" == "tests/browser/extension.spec.js" ]] && grep -q "@failure-first" "$spec"; then
+              echo "Running temporary @failure-first tests before the remaining spec tests"
+              npx playwright test "$spec" --grep "@failure-first"
+              echo "Running all tests without the temporary @failure-first marker"
               npx playwright test "$spec" --grep-invert "@failure-first"
             else
               npx playwright test "$spec"
