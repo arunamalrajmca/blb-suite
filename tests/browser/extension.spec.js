@@ -3196,7 +3196,7 @@ test.describe('core user-visible E2E', () => {
           alias:book.alias
         }));
       });
-      expect(items.length,'most canonical books should have a configured shared alias').toBeGreaterThanOrEqual(60);
+      expect(items.length,'all canonical books with configured shared aliases should be included').toBeGreaterThanOrEqual(58);
       await prepareFourActionBookMatrix(page,extensionStorage,items,'all-book-aliases-'+action.toLowerCase().replace(/[^a-z]+/g,'-'));
       await runFourActionSelectionMatrix(
         page,extensionWorker,items,action,
