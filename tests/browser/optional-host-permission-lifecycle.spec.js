@@ -20,6 +20,7 @@ test('optional host permission grant, revocation, and re-grant reconcile site re
       ? [{id:tabId,url:'https://example.org/',title:'Example Domain'}]
       : originalQuery(query);
   }, targetTabId);
+  await popup.evaluate(() => getState());
 
   const registrationId = await extensionWorker.evaluate(url =>
     runtimeContentScriptIdForPattern(originPatternForUrl(url)), hostUrl
@@ -63,6 +64,7 @@ test('optional host permission grant, revocation, and re-grant reconcile site re
         ? [{id:tabId,url:'https://example.org/',title:'Example Domain'}]
         : originalQuery(query);
     }, targetTabId);
+    await popup.evaluate(() => getState());
     await popup.locator('#pageButton').click();
     await expect.poll(permissionGranted, {timeout:10000}).toBe(true);
     await expect.poll(registrationExists, {timeout:10000}).toBe(true);
