@@ -587,14 +587,7 @@ jobs:
             spec="${specs[$index]}"
             [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
             printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-            if [[ "$spec" == "tests/browser/extension.spec.js" ]] && grep -q "@failure-first" "$spec"; then
-              echo "Running temporary @failure-first tests before the remaining spec tests"
-              npx playwright test "$spec" --grep "@failure-first"
-              echo "Running all tests without the temporary @failure-first marker"
-              npx playwright test "$spec" --grep-invert "@failure-first"
-            else
-              npx playwright test "$spec"
-            fi
+            npx playwright test "$spec"
           done
       - name: Upload focused behavior diagnostics
         if: ${{ !cancelled() }}
