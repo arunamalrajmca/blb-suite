@@ -1305,7 +1305,7 @@ test.describe('core user-visible E2E', () => {
       }), expectedPath);
     }
   });
-  test('Acts 7, v.25, and compact references resolve through all four selection actions @failure-first', async ({ page, extensionStorage, extensionWorker }) => {
+  test('Acts 7, v.25, and compact references resolve through all four selection actions', async ({ page, extensionStorage, extensionWorker }) => {
     // This matrix opens and closes a real BLB tab for every action/case.
     // Keep it beyond Playwright's 60-second default so timeout teardown does
     // not interrupt a still-running button interaction.
@@ -1579,7 +1579,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Same-chapter range resolution covers all 66 books on Double-Click @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Same-chapter range resolution covers all 66 books on Double-Click', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(360000);
     const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
       number: Number(book.bookNumber),
@@ -1642,7 +1642,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Facebook Luke 22:26 stays scoped to its own post through all four selection actions @failure-first', async ({ page, extensionStorage, extensionWorker }) => {
+  test('Facebook Luke 22:26 stays scoped to its own post through all four selection actions', async ({ page, extensionStorage, extensionWorker }) => {
     test.setTimeout(180000);
     await extensionStorage.set({
       masterEnabled: true,
@@ -2096,7 +2096,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click uses the browser token, not the whole surrounding line @failure-first', async ({ page, context, extensionStorage }) => {
+  test('Double-click uses the browser token, not the whole surrounding line', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     // Wait for asynchronous double-click settings initialization before the first gesture.
@@ -2542,7 +2542,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click positional context — standalone numeric book tokens remain independent @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click positional context — standalone numeric book tokens remain independent', async ({ page, context, extensionStorage, extensionWorker }) => {
     // Exhaustive 66-book coverage needs more than Playwright's 60s default
     // because every gesture opens and closes a real BLB tab.
     test.setTimeout(180000);
@@ -2642,7 +2642,7 @@ test.describe('core user-visible E2E', () => {
     if (process.env.BLB_PROFILE_BROWSER_FIXTURES === '1') console.log('BLB_ASSERT_PROFILE ' + JSON.stringify({ phase: 'double-click-reference-assertion', durationMs: Number(process.hrtime.bigint() - profileStartedAt) / 1e6, contextCandidate: isContextCandidate, token }));
   }
 
-  test('Double-click numbered-book suffixes resolve every supported numbered-book alias @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click numbered-book suffixes resolve every supported numbered-book alias', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(240000);
     // Derive all numbered-book cases from the production alias map and canonical
     // BOOKS list. No parallel family, alias, or URL-key list belongs in this test.
@@ -2937,7 +2937,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click numbered-book suffixes preserve standalone KJV word destinations without a prefix @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click numbered-book suffixes preserve standalone KJV word destinations without a prefix', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(120000);
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
@@ -3005,7 +3005,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click Sam abbreviation resolves from its adjacent numbered prefix @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click Sam abbreviation resolves from its adjacent numbered prefix', async ({ page, context, extensionStorage, extensionWorker }) => {
     for (const number of [1, 2]) {
       await setupDoubleClickReferencePage(
         page, extensionStorage,
@@ -3096,7 +3096,7 @@ test.describe('core user-visible E2E', () => {
   // attributable and independently rerunnable. Each case exercises all four
   // actions against the full expected destination.
   for (const [caseIndex, item] of fourActionReferenceGrammarCases.entries()) {
-    test('Reference grammar ' + String(caseIndex + 1).padStart(2, '0') + ': ' + item.reference + ' resolves through all four actions @failure-first', async ({ page, extensionStorage, extensionWorker }) => {
+    test('Reference grammar ' + String(caseIndex + 1).padStart(2, '0') + ': ' + item.reference + ' resolves through all four actions', async ({ page, extensionStorage, extensionWorker }) => {
       test.setTimeout(120000);
       await extensionStorage.set({
         masterEnabled:true,
@@ -3260,15 +3260,32 @@ test.describe('core user-visible E2E', () => {
         }
       }
 
-      const result = await waitForTab(extensionWorker, tab => {
-        try {
-          const url = new URL(tab.pendingUrl || tab.url);
-          return url.hostname === 'www.blueletterbible.org'
-            && url.pathname === '/search/search.cfm'
-            && url.searchParams.get('Criteria') === 'Timothy';
-        } catch (_) { return false; }
-      });
-      const resultUrl = new URL(result.pendingUrl || result.url);
+      const result = await expect.poll(async () => extensionWorker.evaluate(() =>
+        chrome.tabs.query({}).then(tabs => {
+          const tab = tabs.find(candidate => {
+            try {
+              const url = new URL(candidate.pendingUrl || candidate.url);
+              return url.hostname === 'www.blueletterbible.org'
+                && url.pathname === '/search/search.cfm'
+                && url.searchParams.get('Criteria') === 'Timothy';
+            } catch (_) { return false; }
+          });
+          return tab ? { id: tab.id, url: tab.pendingUrl || tab.url } : null;
+        })
+      ), { timeout: 10000, message: action + ' should open Criteria Search for Timothy' }).not.toBeNull();
+      const resultTab = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs => {
+        const tab = tabs.find(candidate => {
+          try {
+            const url = new URL(candidate.pendingUrl || candidate.url);
+            return url.hostname === 'www.blueletterbible.org'
+              && url.pathname === '/search/search.cfm'
+              && url.searchParams.get('Criteria') === 'Timothy';
+          } catch (_) { return false; }
+        });
+        return tab ? { id: tab.id, url: tab.pendingUrl || tab.url } : null;
+      }));
+      expect(resultTab).not.toBeNull();
+      const resultUrl = new URL(resultTab.url);
       expect(resultUrl.searchParams.get('Criteria'), action + ' must search the selected KJV word only').toBe('Timothy');
       expect(resultUrl.pathname, action + ' must not navigate to a guessed numbered-book passage').toBe('/search/search.cfm');
 
@@ -3280,7 +3297,7 @@ test.describe('core user-visible E2E', () => {
         } catch (_) { return false; }
       }).map(tab => tab.url || tab.pendingUrl || '')));
       expect(incorrectTabs, action + ' must not reinterpret Timothy as the full book name').toEqual([]);
-      await extensionWorker.evaluate(id => chrome.tabs.remove(id).catch(() => {}), result.id);
+      await extensionWorker.evaluate(id => chrome.tabs.remove(id).catch(() => {}), resultTab.id);
       await page.evaluate(() => window.getSelection()?.removeAllRanges());
     }
   });
