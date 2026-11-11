@@ -1,6 +1,6 @@
 const { test, expect } = require('./fixtures');
 
-test('host-access revocation reconciliation removes persistent site registration but preserves the explicit opt-in', async ({
+test('host-access revocation removes registrations and a later grant reactivates the preserved opt-in', async ({
   page, extensionWorker, extensionStorage
 }) => {
   const pattern = 'https://example.com/*';
@@ -41,6 +41,10 @@ test('host-access revocation reconciliation removes persistent site registration
       chrome.permissions.onRemoved.hasListeners()
     );
     expect(revocationListenerPresent).toBe(true);
+    const grantListenerPresent = await extensionWorker.evaluate(() =>
+      chrome.permissions.onAdded.hasListeners()
+    );
+    expect(grantListenerPresent).toBe(true);
 
     // Headless Chromium cannot accept Chrome's native optional-permission
     // prompt. Simulate the post-revocation permission lookup at the API
@@ -66,6 +70,14 @@ test('host-access revocation reconciliation removes persistent site registration
       return data.pageSelectionButtonSites['example.com'];
     });
     expect(storedPreference).toBe(true);
+
+    // Simulate Chrome's onAdded handler after access is restored. The original
+    // permission API is back in place, so the retained opt-in should register
+    // the content script again for the already-open tab.
+    await extensionWorker.evaluate(pattern =>
+      injectEnabledTabsForGrantedOrigins([pattern]), pattern
+    );
+    await expect.poll(registrationExists, {timeout:10000}).toBe(true);
   } finally {
     await extensionWorker.evaluate(async ({originPattern,settings}) => {
       const id=runtimeContentScriptIdForPattern(originPattern);
