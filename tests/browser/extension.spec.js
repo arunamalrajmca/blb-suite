@@ -3071,7 +3071,7 @@ test.describe('core user-visible E2E', () => {
   // 66-book × multi-variant copy here doubled the release runtime and could hit
   // the 4-minute per-test timeout without adding coverage.
 
-  test('Reference grammar representatives resolve through all four selection actions', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Reference grammar representatives resolve through all four selection actions @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(600000);
     await extensionStorage.set({
       masterEnabled:true,
