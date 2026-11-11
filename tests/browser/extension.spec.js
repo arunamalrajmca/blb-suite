@@ -2115,8 +2115,12 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Standalone numeric tokens on separate lines do not inherit adjacent Bible-reference context', async ({ page, context, extensionStorage, extensionWorker }) => {
-    await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
+  test('Standalone numeric tokens on separate lines stay independent through all four selection actions', async ({ page, context, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({
+      masterEnabled: true,
+      pageSelectionButtonSites: { 'example.com': true },
+      doubleClickBlbSites: { 'example.com': true }
+    });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
     await page.evaluate(() => {
@@ -2127,29 +2131,69 @@ test.describe('core user-visible E2E', () => {
     });
 
     const cases = [
-      ['line-chapter', '/kjv/lev/1/1/'],
-      ['line-verse', '/kjv/neh/1/1/']
+      ['line-chapter', '3', '/kjv/lev/1/1/'],
+      ['line-verse', '16', '/kjv/neh/1/1/']
     ];
+    const actions = ['Show on BLB', 'Right-Click', 'Alt+B', 'Double-Click'];
 
-    for (const [id, expectedPath] of cases) {
-      const target = page.locator('#' + id);
-      await target.dblclick();
-      await activateBlbTabForPath(extensionWorker, expectedPath, {
-        fragment: id,
-        selector: '#' + id,
-        selectedText: id.replace('line-', '')
-      });
-      await extensionWorker.evaluate((path) => chrome.tabs.query({}).then(async tabs => {
-        const matches = tabs.filter(tab => {
-          try {
-            const pathname = new URL(String(tab.url || tab.pendingUrl || '')).pathname;
-            return pathname === path || pathname.startsWith(path.replace(/\/$/, '') + '/');
-          } catch (_) { return false; }
-        });
-        for (const tab of matches) if (tab.id != null) {
-          try { await chrome.tabs.remove(tab.id); } catch (_) {}
+    for (const [id, token, expectedPath] of cases) {
+      for (const action of actions) {
+        await page.bringToFront();
+        const target = page.locator('#' + id);
+        if (action === 'Double-Click') {
+          await page.evaluate(() => window.getSelection()?.removeAllRanges());
+          await target.dblclick();
+        } else {
+          await target.evaluate(element => {
+            const range = document.createRange();
+            range.selectNodeContents(element);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+          });
+          expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe(token);
+
+          if (action === 'Show on BLB') {
+            const button = page.locator('#blb-suite-page-selection-button');
+            await expect(button, 'Show on BLB button for standalone number ' + token).toBeVisible({ timeout: 10000 });
+            await button.click();
+          } else if (action === 'Alt+B') {
+            await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+          } else {
+            await extensionWorker.evaluate(async selectedText => {
+              const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+              if (!tab?.id) throw new Error('No active source tab for context-menu action');
+              await handleBlbSelectionContextMenuClick({
+                menuItemId: 'blb-suite-web-selection',
+                selectionText: selectedText
+              }, tab);
+            }, token);
+          }
         }
-      }), expectedPath);
+
+        const matchedTabIds = await activateBlbTabForPath(extensionWorker, expectedPath, {
+          fragment: action + ' ' + token,
+          selector: '#' + id,
+          selectedText: token
+        });
+        expect(matchedTabIds.length, action + ' must resolve standalone number ' + token + ' without borrowing the other line').toBeGreaterThan(0);
+
+        const numericCriteriaTabs = await extensionWorker.evaluate(expected => chrome.tabs.query({}).then(tabs =>
+          tabs.filter(tab => {
+            try {
+              const url = new URL(String(tab.url || tab.pendingUrl || ''));
+              return url.hostname === 'www.blueletterbible.org'
+                && url.pathname === '/search/search.cfm'
+                && (url.searchParams.get('Criteria') || '').trim() === expected;
+            } catch (_) { return false; }
+          }).map(tab => ({ id: tab.id, url: tab.url || tab.pendingUrl || '' }))
+        ), token);
+        expect(numericCriteriaTabs, action + ' must not send standalone numeric token ' + token + ' to Criteria Search').toEqual([]);
+
+        await extensionWorker.evaluate(ids => Promise.all(ids.map(id => chrome.tabs.remove(id).catch(() => {}))), matchedTabIds);
+        await page.evaluate(() => window.getSelection()?.removeAllRanges());
+      }
     }
   });
 
