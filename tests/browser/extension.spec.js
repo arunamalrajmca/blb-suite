@@ -1203,9 +1203,10 @@ test.describe('core user-visible E2E', () => {
     expect(handoffMs).toBeLessThan(1500);
   });
 
-  test('X tweet text resolves book clicks from exact caret ranges', async ({ page, extensionStorage, extensionWorker }) => {
+  test('X tweet text resolves book clicks from exact caret ranges through all four selection actions', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({
       masterEnabled: true,
+      pageSelectionButtonSites: { 'x.com': true },
       doubleClickBlbSites: { 'x.com': true }
     });
     await page.route('https://x.com/**', route => route.fulfill({
@@ -1213,29 +1214,58 @@ test.describe('core user-visible E2E', () => {
       contentType: 'text/html; charset=utf-8',
       body: `<!doctype html><html><head><title>X fixture</title></head><body>
         <main>
-          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto" style="font:24px Arial,sans-serif">Matthew 22:37</span></div></article>
-          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto" style="font:24px Arial,sans-serif">Genesis 17:8</span></div></article>
-          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto" style="font:24px Arial,sans-serif"><span>Genesis</span><span> </span><span>35</span><span>:</span><span>11</span></span></div></article>
+          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto"><span id="x-book-matthew">Matthew</span> 22:37</span></div></article>
+          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto"><span id="x-book-genesis-17">Genesis</span> 17:8</span></div></article>
+          <article data-testid="tweet"><div data-testid="tweetText"><span dir="auto"><span id="x-book-genesis-35">Genesis</span><span> </span><span>35</span><span>:</span><span>11</span></span></div></article>
         </main>
       </body></html>`
     }));
     await page.goto('https://x.com/', { waitUntil: 'domcontentloaded' });
     await page.waitForTimeout(1000);
 
-    // X renders tweet text as continuous text nodes inside rich-text spans;
-    // book words do not have dedicated elements with matching textContent.
     const cases = [
-      { text: 'Matthew 22:37', path: '/kjv/mat/22/37/' },
-      { text: 'Genesis 17:8', path: '/kjv/gen/17/8/' },
-      { text: 'Genesis 35:11', path: '/kjv/gen/35/11/' }
+      { selector: '#x-book-matthew', text: 'Matthew', path: '/kjv/mat/22/37/' },
+      { selector: '#x-book-genesis-17', text: 'Genesis', path: '/kjv/gen/17/8/' },
+      { selector: '#x-book-genesis-35', text: 'Genesis', path: '/kjv/gen/35/11/' }
     ];
     for (const item of cases) {
-      const tweetText = page.locator('[data-testid="tweetText"] span').filter({ hasText: item.text });
-      await expect(tweetText).toHaveText(item.text);
-      await tweetText.dblclick({ position: { x: 32, y: 12 } });
-      const resolved = await waitForBlbTabPath(extensionWorker, item.path);
-      expect(new URL(resolved.pendingUrl || resolved.url).pathname).toBe(item.path);
-      await removeTabById(extensionWorker, resolved.id);
+      for (const action of ['Show on BLB', 'Right-Click', 'Alt+B', 'Double-Click']) {
+        await page.bringToFront();
+        if (action === 'Double-Click') {
+          await page.locator(item.selector).dblclick();
+        } else {
+          await page.locator(item.selector).evaluate(element => {
+            const range = document.createRange();
+            range.selectNodeContents(element);
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            selection.addRange(range);
+            document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+          });
+          expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe(item.text);
+          if (action === 'Show on BLB') {
+            const button = page.locator('#blb-suite-page-selection-button');
+            await expect(button).toBeVisible({ timeout: 10000 });
+            await button.click();
+          } else if (action === 'Right-Click') {
+            await extensionWorker.evaluate(async selectionText => {
+              const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+              await handleBlbSelectionContextMenuClick({
+                menuItemId: 'blb-suite-web-selection',
+                selectionText
+              }, tab);
+            }, item.text);
+          } else {
+            await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+          }
+        }
+
+        const resolved = await waitForBlbTabPath(extensionWorker, item.path);
+        expect(new URL(resolved.pendingUrl || resolved.url).pathname, action + ' ' + item.text)
+          .toBe(item.path);
+        await removeTabById(extensionWorker, resolved.id);
+        await page.evaluate(() => window.getSelection()?.removeAllRanges());
+      }
     }
   });
 
@@ -1275,7 +1305,7 @@ test.describe('core user-visible E2E', () => {
       }), expectedPath);
     }
   });
-  test('Acts 7, v.25, and compact references resolve through all four selection actions @failure-first', async ({ page, extensionStorage, extensionWorker }) => {
+  test('Acts 7, v.25, and compact references resolve through all four selection actions', async ({ page, extensionStorage, extensionWorker }) => {
     // This matrix opens and closes a real BLB tab for every action/case.
     // Keep it beyond Playwright's 60-second default so timeout teardown does
     // not interrupt a still-running button interaction.
@@ -1549,7 +1579,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Same-chapter range resolution covers all 66 books on Double-Click @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Same-chapter range resolution covers all 66 books on Double-Click', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(360000);
     const books = await extensionWorker.evaluate(() => BOOKS.map(book => ({
       number: Number(book.bookNumber),
@@ -1609,6 +1639,99 @@ test.describe('core user-visible E2E', () => {
           }
         }
       }, { beforeIds, expectedPath });
+    }
+  });
+
+  test('Facebook Luke 22:26 stays scoped to its own post through all four selection actions', async ({ page, extensionStorage, extensionWorker }) => {
+    test.setTimeout(180000);
+    await extensionStorage.set({
+      masterEnabled: true,
+      pageSelectionButtonSites: { 'facebook.com': true, 'www.facebook.com': true },
+      doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true }
+    });
+    await page.route('https://www.facebook.com/**', route => route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><head><title>Facebook separate-post context test</title></head><body></body></html>'
+    }));
+    await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const feed = document.createElement('main');
+      feed.innerHTML = [
+        '<article role="article" id="preceding-post"><div data-ad-comet-preview="message"><div dir="auto">Luke 21–22</div></div></article>',
+        '<article role="article" id="target-post"><div data-ad-comet-preview="message"><div dir="auto">Read this: <span id="target-luke-book">Luke</span> <span>22</span>:<span>26</span> KJV</div></div></article>'
+      ].join('');
+      document.body.appendChild(feed);
+    });
+
+    const expectedPath = '/kjv/luk/22/26/';
+    for (const action of ['Show on BLB', 'Right-Click', 'Alt+B', 'Double-Click']) {
+      await page.bringToFront();
+      const beforeIds = await extensionWorker.evaluate(() =>
+        chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+      );
+
+      if (action === 'Double-Click') {
+        await page.locator('#target-luke-book').dblclick();
+      } else {
+        await page.locator('#target-luke-book').evaluate(element => {
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+        });
+        expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe('Luke');
+
+        if (action === 'Show on BLB') {
+          const button = page.locator('#blb-suite-page-selection-button');
+          await expect(button).toBeVisible({ timeout: 10000 });
+          await button.click();
+        } else if (action === 'Right-Click') {
+          await extensionWorker.evaluate(async selectionText => {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            await handleBlbSelectionContextMenuClick({
+              menuItemId: 'blb-suite-web-selection',
+              selectionText
+            }, tab);
+          }, 'Luke');
+        } else {
+          await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+        }
+      }
+
+      await activateBlbTabForPath(extensionWorker, expectedPath, {
+        fragment: action + ' target Facebook post Luke token',
+        selector: '#target-post',
+        selectedText: action === 'Double-Click'
+          ? await page.evaluate(() => window.getSelection()?.toString() || '')
+          : 'Luke'
+      });
+      const openedPaths = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+        tabs.filter(tab => !before.includes(tab.id)).map(tab => {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            return url.hostname.endsWith('blueletterbible.org') ? url.pathname : '';
+          } catch (_) { return ''; }
+        }).filter(Boolean)
+      ), beforeIds);
+      expect(openedPaths, action + ' must resolve the target post, not preceding Luke 21–22')
+        .toContain(expectedPath);
+      expect(openedPaths, action + ' must not resolve the preceding post').not.toContain('/kjv/luk/21-22/');
+
+      await extensionWorker.evaluate(before => chrome.tabs.query({}).then(async tabs => {
+        for (const tab of tabs) {
+          if (tab.id == null || before.includes(tab.id)) continue;
+          try {
+            if (new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org')) {
+              await chrome.tabs.remove(tab.id);
+            }
+          } catch (_) {}
+        }
+      }), beforeIds);
+      await page.evaluate(() => window.getSelection()?.removeAllRanges());
     }
   });
 
@@ -1973,7 +2096,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click uses the browser token, not the whole surrounding line @failure-first', async ({ page, context, extensionStorage }) => {
+  test('Double-click uses the browser token, not the whole surrounding line', async ({ page, context, extensionStorage }) => {
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
     // Wait for asynchronous double-click settings initialization before the first gesture.
@@ -2419,7 +2542,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click positional context — standalone numeric book tokens remain independent @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click positional context — standalone numeric book tokens remain independent', async ({ page, context, extensionStorage, extensionWorker }) => {
     // Exhaustive 66-book coverage needs more than Playwright's 60s default
     // because every gesture opens and closes a real BLB tab.
     test.setTimeout(180000);
@@ -2519,7 +2642,7 @@ test.describe('core user-visible E2E', () => {
     if (process.env.BLB_PROFILE_BROWSER_FIXTURES === '1') console.log('BLB_ASSERT_PROFILE ' + JSON.stringify({ phase: 'double-click-reference-assertion', durationMs: Number(process.hrtime.bigint() - profileStartedAt) / 1e6, contextCandidate: isContextCandidate, token }));
   }
 
-  test('Double-click numbered-book suffixes resolve every supported numbered-book alias @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click numbered-book suffixes resolve every supported numbered-book alias', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(240000);
     // Derive all numbered-book cases from the production alias map and canonical
     // BOOKS list. No parallel family, alias, or URL-key list belongs in this test.
@@ -2814,7 +2937,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click numbered-book suffixes preserve standalone KJV word destinations without a prefix @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click numbered-book suffixes preserve standalone KJV word destinations without a prefix', async ({ page, context, extensionStorage, extensionWorker }) => {
     test.setTimeout(120000);
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
@@ -2882,7 +3005,7 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
-  test('Double-click Sam abbreviation resolves from its adjacent numbered prefix @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
+  test('Double-click Sam abbreviation resolves from its adjacent numbered prefix', async ({ page, context, extensionStorage, extensionWorker }) => {
     for (const number of [1, 2]) {
       await setupDoubleClickReferencePage(
         page, extensionStorage,
@@ -2948,38 +3071,46 @@ test.describe('core user-visible E2E', () => {
   // 66-book × multi-variant copy here doubled the release runtime and could hit
   // the 4-minute per-test timeout without adding coverage.
 
-  test('Reference grammar representatives resolve through all four selection actions', async ({ page, context, extensionStorage, extensionWorker }) => {
-    test.setTimeout(600000);
-    await extensionStorage.set({
-      masterEnabled:true,
-      pageSelectionButtonSites:{'example.com':true},
-      doubleClickBlbSites:{'example.com':true}
-    });
-    await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
-    await expect(page.locator('body')).toBeVisible();
-    await page.waitForTimeout(1000);
+  const fourActionReferenceGrammarCases = [
+    {reference:'Genesis 1:1', path:'/kjv/gen/1/1/'},
+    {reference:'Genesis 1.1', path:'/kjv/gen/1/1/'},
+    {reference:'Genesis 1 1', path:'/kjv/gen/1/1/'},
+    {reference:'Genesis 1', path:'/kjv/gen/1/'},
+    {reference:'John 3:16-18', path:'/kjv/jhn/3/16-18/'},
+    {reference:'Jn 3:16', path:'/kjv/jhn/3/16/'},
+    {reference:'II Thessalonians 2:1', path:'/kjv/2th/2/1/'},
+    {reference:'1 Corinthians 13:1', path:'/kjv/1co/13/1/'},
+    {reference:'2 Timothy 3:4', path:'/kjv/2ti/3/4/'},
+    {reference:'Ps 23:1', path:'/kjv/psa/23/1/'},
+    {reference:'Prov 3:5', path:'/kjv/pro/3/5/'},
+    {reference:'1 Thes 1:1', path:'/kjv/1th/1/1/'},
+    {reference:'2 Thes 1:1', path:'/kjv/2th/1/1/'},
+    {reference:'1 Pet 1:1', path:'/kjv/1pe/1/1/'},
+    {reference:'2 Pet 1:1', path:'/kjv/2pe/1/1/'},
+    {reference:'Gal.1.8,9', path:'/kjv/gal/1/8-9/'},
+    {reference:'Rev.14.6,7', path:'/kjv/rev/14/6-7/'},
+    {reference:'\u2066Matthew\u2069\u00A0\u206614\u2069:\u206622\u2069–\u206633\u2069', path:'/kjv/mat/14/22-33/'}
+  ];
 
-    // The exhaustive syntax/alias grammar remains covered by the Double-click
-    // suite. This companion matrix checks representative forms through every
-    // action, selecting each constituent token just as the exhaustive tests do.
-    const cases = [
-      {reference:'Genesis 1:1', path:'/kjv/gen/1/1/'},
-      {reference:'Genesis 1.1', path:'/kjv/gen/1/1/'},
-      {reference:'Genesis 1 1', path:'/kjv/gen/1/1/'},
-      {reference:'Genesis 1', path:'/kjv/gen/1/'},
-      {reference:'John 3:16-18', path:'/kjv/jhn/3/16-18/'},
-      {reference:'Jn 3:16', path:'/kjv/jhn/3/16/'},
-      {reference:'II Thessalonians 2:1', path:'/kjv/2th/2/1/'},
-      {reference:'1 Corinthians 13:1', path:'/kjv/1co/13/1/'}
-    ];
-    const actions = ['Show on BLB','Right-Click','Alt+B','Double-Click'];
-    const failures = [];
+  // Keep each syntax form as its own test so slow/hung references are
+  // attributable and independently rerunnable. Each case exercises all four
+  // actions against the full expected destination.
+  for (const [caseIndex, item] of fourActionReferenceGrammarCases.entries()) {
+    test('Reference grammar ' + String(caseIndex + 1).padStart(2, '0') + ': ' + item.reference + ' resolves through all four actions', async ({ page, extensionStorage, extensionWorker }) => {
+      test.setTimeout(120000);
+      await extensionStorage.set({
+        masterEnabled:true,
+        pageSelectionButtonSites:{'example.com':true},
+        doubleClickBlbSites:{'example.com':true}
+      });
+      await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+      await expect(page.locator('body')).toBeVisible();
 
-    for (const item of cases) {
       await page.evaluate(reference => {
         document.getElementById('four-action-grammar-reference')?.remove();
         const root = document.createElement('p');
         root.id = 'four-action-grammar-reference';
+        root.setAttribute('dir', 'auto');
         root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;color:#000;padding:12px;font:24px Arial,sans-serif;';
         const tokenPattern = /[A-Za-z]+|[0-9]+/g;
         let lastIndex = 0;
@@ -2997,91 +3128,241 @@ test.describe('core user-visible E2E', () => {
         document.body.appendChild(root);
       }, item.reference);
 
-      const tokenCount = await page.locator('#four-action-grammar-reference span[data-index]').count();
-      for (let tokenIndex = 0; tokenIndex < tokenCount; tokenIndex++) {
-        const selector = '#four-action-grammar-reference span[data-index="' + tokenIndex + '"]';
-        const selectedText = await page.locator(selector).textContent();
-        for (const action of actions) {
-          await page.bringToFront();
-          const beforeIds = await extensionWorker.evaluate(() =>
-            chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
-          );
-          try {
-            let actionSelectionText = selectedText;
-            if (action === 'Double-Click') {
-              await page.evaluate(() => window.getSelection()?.removeAllRanges());
-              await page.locator(selector).dblclick();
-              actionSelectionText = await page.evaluate(() => window.getSelection()?.toString() || '');
-              // Native word selection may include adjacent punctuation and
-              // neighboring numeric components (for example, "1.1"). Assert
-              // that the physical gesture selected text, then validate the
-              // resolver against the complete expected destination below.
-              expect(actionSelectionText.length).toBeGreaterThan(0);
+      // The book-name token carries the reference context. Numeric-token
+      // independence and suffix behavior have separate all-four-action tests.
+      const bookToken = page.locator('#four-action-grammar-reference span[data-index]').filter({
+        hasText: /^[A-Za-z]+$/
+      }).last();
+      await expect(bookToken).toHaveCount(1);
+      const tokenIndex = await bookToken.getAttribute('data-index');
+      const selector = '#four-action-grammar-reference span[data-index="' + tokenIndex + '"]';
+      const selectedText = await page.locator(selector).textContent();
+
+      for (const action of ['Show on BLB','Right-Click','Alt+B','Double-Click']) {
+        await page.bringToFront();
+        const beforeIds = await extensionWorker.evaluate(() =>
+          chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
+        );
+        let actionSelectionText = selectedText;
+        try {
+          if (action === 'Double-Click') {
+            await page.evaluate(() => window.getSelection()?.removeAllRanges());
+            await page.locator(selector).dblclick();
+            actionSelectionText = await page.evaluate(() => window.getSelection()?.toString() || '');
+            expect(actionSelectionText.length).toBeGreaterThan(0);
+          } else {
+            await page.locator(selector).evaluate(element => {
+              const range = document.createRange();
+              range.selectNodeContents(element);
+              const selection = window.getSelection();
+              selection.removeAllRanges();
+              selection.addRange(range);
+              element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+            });
+            expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe(selectedText);
+
+            if (action === 'Show on BLB') {
+              const button = page.locator('#blb-suite-page-selection-button');
+              await expect(button, 'Show on BLB button for ' + item.reference)
+                .toBeVisible({timeout:10000});
+              await button.click();
+            } else if (action === 'Alt+B') {
+              await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
             } else {
-              await page.locator(selector).evaluate(element => {
-                const range = document.createRange();
-                range.selectNodeContents(element);
-                const selection = window.getSelection();
-                selection.removeAllRanges();
-                selection.addRange(range);
-                element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-              });
-              expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe(selectedText);
-
-              if (action === 'Show on BLB') {
-                const button = page.locator('#blb-suite-page-selection-button');
-                await expect(button, 'Show on BLB button for ' + item.reference + ' token ' + selectedText)
-                  .toBeVisible({timeout:10000});
-                await button.click();
-              } else if (action === 'Alt+B') {
-                await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
-              } else {
-                await extensionWorker.evaluate(async selected => {
-                  const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
-                  if (!tab?.id) throw new Error('No active source tab for context-menu action');
-                  await handleBlbSelectionContextMenuClick({
-                    menuItemId:'blb-suite-web-selection',
-                    selectionText:selected
-                  },tab);
-                }, selectedText);
-              }
+              await extensionWorker.evaluate(async selected => {
+                const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+                if (!tab?.id) throw new Error('No active source tab for context-menu action');
+                await handleBlbSelectionContextMenuClick({
+                  menuItemId:'blb-suite-web-selection',
+                  selectionText:selected
+                },tab);
+              }, selectedText);
             }
-
-            const matchedTabIds = await activateBlbTabForPath(extensionWorker,item.path,{
-              fragment:action + ' ' + item.reference,
-              selector,
-              selectedText:actionSelectionText
-            });
-            expect(matchedTabIds.length, action + ' should resolve ' + item.reference + ' token ' + selectedText)
-              .toBeGreaterThan(0);
-            await extensionWorker.evaluate(ids => Promise.all(ids.map(id =>
-              chrome.tabs.remove(id).catch(() => {})
-            )),matchedTabIds);
-          } catch (error) {
-            failures.push({
-              reference:item.reference,
-              token:selectedText,
-              action,
-              selectedText:actionSelectionText,
-              expectedPath:item.path,
-              error:String(error.message || error)
-            });
-            await extensionWorker.evaluate(before => chrome.tabs.query({}).then(async tabs => {
-              for (const tab of tabs) {
-                if (tab.id == null || before.includes(tab.id)) continue;
-                try {
-                  if (new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org')) {
-                    await chrome.tabs.remove(tab.id);
-                  }
-                } catch (_) {}
-              }
-            }),beforeIds);
           }
-          await page.evaluate(() => window.getSelection()?.removeAllRanges());
+
+          const matchedTabIds = await activateBlbTabForPath(extensionWorker,item.path,{
+            fragment:action + ' ' + item.reference,
+            selector,
+            selectedText:actionSelectionText
+          });
+          expect(matchedTabIds.length, action + ' should resolve ' + item.reference + ' token ' + selectedText)
+            .toBeGreaterThan(0);
+          await extensionWorker.evaluate(ids => Promise.all(ids.map(id =>
+            chrome.tabs.remove(id).catch(() => {})
+          )),matchedTabIds);
+        } catch (error) {
+          await extensionWorker.evaluate(before => chrome.tabs.query({}).then(async tabs => {
+            for (const tab of tabs) {
+              if (tab.id == null || before.includes(tab.id)) continue;
+              try {
+                if (new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org')) {
+                  await chrome.tabs.remove(tab.id);
+                }
+              } catch (_) {}
+            }
+          }),beforeIds);
+          throw new Error('Reference "' + item.reference + '" failed for ' + action +
+            ' (selected "' + actionSelectionText + '", expected ' + item.path + '): ' +
+            String(error.message || error));
+        }
+        await page.evaluate(() => window.getSelection()?.removeAllRanges());
+      }
+    });
+  }
+
+  test('Standalone Timothy after a numbered-book prefix remains a word search through all four actions', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({
+      masterEnabled: true,
+      pageSelectionButtonSites: { 'facebook.com': true, 'www.facebook.com': true },
+      doubleClickBlbSites: { 'facebook.com': true, 'www.facebook.com': true }
+    });
+    await page.route('https://www.facebook.com/**', route => route.fulfill({
+      status: 200,
+      contentType: 'text/html',
+      body: '<!doctype html><html><head><title>Facebook Timothy word-search context</title></head><body></body></html>'
+    }));
+    await page.goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const article = document.createElement('article');
+      article.setAttribute('role', 'article');
+      article.innerHTML = '<div data-ad-comet-preview="message"><div dir="auto">2 <span id="standalone-timothy">Timothy</span> is Paul’s final letter to the church.</div></div>';
+      document.body.appendChild(article);
+    });
+
+    for (const action of ['Show on BLB', 'Right-Click', 'Alt+B', 'Double-Click']) {
+      if (action === 'Double-Click') {
+        await page.locator('#standalone-timothy').dblclick();
+      } else {
+        await page.locator('#standalone-timothy').evaluate(element => {
+          const range = document.createRange();
+          range.selectNodeContents(element);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+        });
+        expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe('Timothy');
+        if (action === 'Show on BLB') {
+          const button = page.locator('#blb-suite-page-selection-button');
+          await expect(button).toBeVisible({ timeout: 10000 });
+          await button.click();
+        } else if (action === 'Right-Click') {
+          await extensionWorker.evaluate(async selectionText => {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            await handleBlbSelectionContextMenuClick({
+              menuItemId: 'blb-suite-web-selection',
+              selectionText
+            }, tab);
+          }, 'Timothy');
+        } else {
+          await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
         }
       }
+
+      await expect.poll(async () => extensionWorker.evaluate(() =>
+        chrome.tabs.query({}).then(tabs => {
+          const tab = tabs.find(candidate => {
+            try {
+              const url = new URL(candidate.pendingUrl || candidate.url);
+              return url.hostname === 'www.blueletterbible.org'
+                && url.pathname === '/search/search.cfm'
+                && url.searchParams.get('Criteria') === 'Timothy';
+            } catch (_) { return false; }
+          });
+          return tab ? { id: tab.id, url: tab.pendingUrl || tab.url } : null;
+        })
+      ), { timeout: 10000, message: action + ' should open Criteria Search for Timothy' }).not.toBeNull();
+      const resultTab = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs => {
+        const tab = tabs.find(candidate => {
+          try {
+            const url = new URL(candidate.pendingUrl || candidate.url);
+            return url.hostname === 'www.blueletterbible.org'
+              && url.pathname === '/search/search.cfm'
+              && url.searchParams.get('Criteria') === 'Timothy';
+          } catch (_) { return false; }
+        });
+        return tab ? { id: tab.id, url: tab.pendingUrl || tab.url } : null;
+      }));
+      expect(resultTab).not.toBeNull();
+      const resultUrl = new URL(resultTab.url);
+      expect(resultUrl.searchParams.get('Criteria'), action + ' must search the selected KJV word only').toBe('Timothy');
+      expect(resultUrl.pathname, action + ' must not navigate to a guessed numbered-book passage').toBe('/search/search.cfm');
+
+      const incorrectTabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs => tabs.filter(tab => {
+        try {
+          const url = new URL(tab.pendingUrl || tab.url);
+          return url.hostname === 'www.blueletterbible.org'
+            && (url.pathname.startsWith('/kjv/2ti/') || url.searchParams.get('Criteria') === '2 timothy');
+        } catch (_) { return false; }
+      }).map(tab => tab.url || tab.pendingUrl || '')));
+      expect(incorrectTabs, action + ' must not reinterpret Timothy as the full book name').toEqual([]);
+      await extensionWorker.evaluate(id => chrome.tabs.remove(id).catch(() => {}), resultTab.id);
+      await page.evaluate(() => window.getSelection()?.removeAllRanges());
     }
-    expect(failures,'four-action reference grammar failures: ' + JSON.stringify(failures,null,2)).toEqual([]);
+  });
+
+  test('Floating Show on BLB refreshes keyboard-adjusted selection context instead of reusing stale context', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({
+      masterEnabled: true,
+      pageSelectionButtonSites: { 'example.com': true }
+    });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const root = document.createElement('p');
+      root.id = 'keyboard-selection-context';
+      root.contentEditable = 'true';
+      root.textContent = 'Genesis 1:1 and John 3:16';
+      root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(root);
+      const node = root.firstChild;
+      const start = node.textContent.indexOf('Genesis');
+      const range = document.createRange();
+      range.setStart(node, start);
+      range.setEnd(node, start + 'Genesis'.length);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+    });
+
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe('Genesis');
+
+    await page.locator('#keyboard-selection-context').evaluate(root => {
+      root.focus();
+      const node = root.firstChild;
+      const start = node.textContent.indexOf('John');
+      const range = document.createRange();
+      range.setStart(node, start);
+      range.collapse(true);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    for (let i = 0; i < 4; i++) await page.keyboard.press('Shift+ArrowRight');
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || '')).toBe('John');
+    await expect(button).toBeVisible({ timeout: 10000 });
+    await button.click();
+
+    await activateBlbTabForPath(extensionWorker, '/kjv/jhn/3/16/', {
+      fragment: 'keyboard-adjusted selection must use John 3:16 rather than prior Genesis context',
+      selector: '#keyboard-selection-context',
+      selectedText: 'John'
+    });
+    const passagePaths = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs =>
+      tabs.map(tab => {
+        try {
+          const url = new URL(tab.pendingUrl || tab.url);
+          return url.hostname.endsWith('blueletterbible.org') && url.pathname.startsWith('/kjv/')
+            ? url.pathname : '';
+        } catch (_) { return ''; }
+      }).filter(Boolean)
+    ));
+    expect(passagePaths).toContain('/kjv/jhn/3/16/');
+    expect(passagePaths).not.toContain('/kjv/gen/1/1/');
   });
 
   test('All 66 canonical books and every configured alias resolve to the correct book', async ({ extensionWorker }) => {
