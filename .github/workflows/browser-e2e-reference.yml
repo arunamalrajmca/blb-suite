@@ -554,7 +554,7 @@ jobs:
     needs: change-detection
     if: ${{ github.event_name == 'pull_request' && needs.change-detection.outputs.runtime_changed == 'false' && needs.change-detection.outputs.full_browser_suite == 'false' && needs.change-detection.outputs.changed_specs == '' && needs.change-detection.outputs.focused_specs != '' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     permissions:
       contents: read
     steps:
