@@ -1612,6 +1612,95 @@ test.describe('core user-visible E2E', () => {
     }
   });
 
+  test('Facebook Luke 22:26 stays scoped to its own post through all four selection actions @failure-first', async ({ page, extensionStorage, extensionWorker }) => {
+    test.setTimeout(180000);
+    await extensionStorage.set({
+      masterEnabled: true,
+      pageSelectionButtonSites: { 'example.com': true },
+      doubleClickBlbSites: { 'example.com': true }
+    });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(1000);
+    await page.evaluate(() => {
+      const feed = document.createElement('main');
+      feed.innerHTML = [
+        '<article role="article" id="preceding-post"><div dir="auto">Luke 21–22</div></article>',
+        '<article role="article" id="target-post"><div dir="auto">Read this: <span id="target-luke-book">Luke</span> <span>22</span>:<span>26</span></div></article>'
+      ].join('');
+      document.body.appendChild(feed);
+    });
+
+    const expectedPath = '/kjv/luk/22/26/';
+    for (const action of ['Show on BLB', 'Right-Click', 'Alt+B', 'Double-Click']) {
+      await page.bringToFront();
+      const beforeIds = await extensionWorker.evaluate(() =>
+        chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+      );
+
+      if (action === 'Double-Click') {
+        await page.locator('#target-luke-book').dblclick();
+      } else {
+        await page.evaluate(() => {
+          const target = document.querySelector('#target-luke-book');
+          const range = document.createRange();
+          range.selectNodeContents(target);
+          const selection = window.getSelection();
+          selection.removeAllRanges();
+          selection.addRange(range);
+          document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+        });
+        expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe('Luke');
+
+        if (action === 'Show on BLB') {
+          const button = page.locator('#blb-suite-page-selection-button');
+          await expect(button).toBeVisible({ timeout: 10000 });
+          await button.click();
+        } else if (action === 'Right-Click') {
+          await extensionWorker.evaluate(async selectionText => {
+            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            await handleBlbSelectionContextMenuClick({
+              menuItemId: 'blb-suite-web-selection',
+              selectionText
+            }, tab);
+          }, 'Luke');
+        } else {
+          await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+        }
+      }
+
+      await activateBlbTabForPath(extensionWorker, expectedPath, {
+        fragment: action + ' target Facebook post Luke token',
+        selector: '#target-post',
+        selectedText: action === 'Double-Click'
+          ? await page.evaluate(() => window.getSelection()?.toString() || '')
+          : 'Luke'
+      });
+      const openedPaths = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+        tabs.filter(tab => !before.includes(tab.id)).map(tab => {
+          try {
+            const url = new URL(String(tab.url || tab.pendingUrl || ''));
+            return url.hostname.endsWith('blueletterbible.org') ? url.pathname : '';
+          } catch (_) { return ''; }
+        }).filter(Boolean)
+      ), beforeIds);
+      expect(openedPaths, action + ' must resolve the target post, not preceding Luke 21–22')
+        .toContain(expectedPath);
+      expect(openedPaths, action + ' must not resolve the preceding post').not.toContain('/kjv/luk/21-22/');
+
+      await extensionWorker.evaluate(before => chrome.tabs.query({}).then(async tabs => {
+        for (const tab of tabs) {
+          if (tab.id == null || before.includes(tab.id)) continue;
+          try {
+            if (new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org')) {
+              await chrome.tabs.remove(tab.id);
+            }
+          } catch (_) {}
+        }
+      }), beforeIds);
+      await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    }
+  });
+
   test('Show on BLB handles a selected Facebook-style post reference across nested blocks', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
