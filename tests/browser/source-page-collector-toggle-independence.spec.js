@@ -50,7 +50,7 @@ test('registered source-page collector remains injected while redirect handlers 
   ]);
 });
 
-test('Open Bible References in BLB button follows redirect and SUITE master toggles', async ({
+test('Open Bible References in BLB button ignores redirect toggle and follows SUITE master', async ({
   page, extensionStorage
 }) => {
   await extensionStorage.set({
@@ -69,15 +69,12 @@ test('Open Bible References in BLB button follows redirect and SUITE master togg
   await page.goto('https://www.dailyverses.net/dailyverse', {waitUntil:'domcontentloaded'});
 
   const button = page.locator('#blb-suite-dailyverses-multiverse');
-  await expect(button).toHaveCount(0);
+  await expect(button).toBeVisible();
 
   await extensionStorage.set({redirectEnabled:true});
   await expect(button).toBeVisible();
 
   await extensionStorage.set({redirectEnabled:false});
-  await expect(button).toHaveCount(0);
-
-  await extensionStorage.set({redirectEnabled:true});
   await expect(button).toBeVisible();
 
   await extensionStorage.set({masterEnabled:false});
