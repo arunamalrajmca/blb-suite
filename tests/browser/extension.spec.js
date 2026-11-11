@@ -3071,44 +3071,41 @@ test.describe('core user-visible E2E', () => {
   // 66-book × multi-variant copy here doubled the release runtime and could hit
   // the 4-minute per-test timeout without adding coverage.
 
-  test('Reference grammar representatives resolve through all four selection actions @failure-first', async ({ page, context, extensionStorage, extensionWorker }) => {
-    test.setTimeout(600000);
-    await extensionStorage.set({
-      masterEnabled:true,
-      pageSelectionButtonSites:{'example.com':true},
-      doubleClickBlbSites:{'example.com':true}
-    });
-    await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
-    await expect(page.locator('body')).toBeVisible();
-    await page.waitForTimeout(1000);
+  const fourActionReferenceGrammarCases = [
+    {reference:'Genesis 1:1', path:'/kjv/gen/1/1/'},
+    {reference:'Genesis 1.1', path:'/kjv/gen/1/1/'},
+    {reference:'Genesis 1 1', path:'/kjv/gen/1/1/'},
+    {reference:'Genesis 1', path:'/kjv/gen/1/'},
+    {reference:'John 3:16-18', path:'/kjv/jhn/3/16-18/'},
+    {reference:'Jn 3:16', path:'/kjv/jhn/3/16/'},
+    {reference:'II Thessalonians 2:1', path:'/kjv/2th/2/1/'},
+    {reference:'1 Corinthians 13:1', path:'/kjv/1co/13/1/'},
+    {reference:'2 Timothy 3:4', path:'/kjv/2ti/3/4/'},
+    {reference:'Ps 23:1', path:'/kjv/psa/23/1/'},
+    {reference:'Prov 3:5', path:'/kjv/pro/3/5/'},
+    {reference:'1 Thes 1:1', path:'/kjv/1th/1/1/'},
+    {reference:'2 Thes 1:1', path:'/kjv/2th/1/1/'},
+    {reference:'1 Pet 1:1', path:'/kjv/1pe/1/1/'},
+    {reference:'2 Pet 1:1', path:'/kjv/2pe/1/1/'},
+    {reference:'Gal.1.8,9', path:'/kjv/gal/1/8-9/'},
+    {reference:'Rev.14.6,7', path:'/kjv/rev/14/6-7/'},
+    {reference:'\\u2066Matthew\\u2069\\u00A0\\u206614\\u2069:\\u206622\\u2069–\\u206633\\u2069', path:'/kjv/mat/14/22-33/'}
+  ];
 
-    // The exhaustive syntax/alias grammar remains covered by the Double-click
-    // suite. This companion matrix checks representative forms through every
-    // action, selecting each constituent token just as the exhaustive tests do.
-    const cases = [
-      {reference:'Genesis 1:1', path:'/kjv/gen/1/1/'},
-      {reference:'Genesis 1.1', path:'/kjv/gen/1/1/'},
-      {reference:'Genesis 1 1', path:'/kjv/gen/1/1/'},
-      {reference:'Genesis 1', path:'/kjv/gen/1/'},
-      {reference:'John 3:16-18', path:'/kjv/jhn/3/16-18/'},
-      {reference:'Jn 3:16', path:'/kjv/jhn/3/16/'},
-      {reference:'II Thessalonians 2:1', path:'/kjv/2th/2/1/'},
-      {reference:'1 Corinthians 13:1', path:'/kjv/1co/13/1/'},
-      {reference:'2 Timothy 3:4', path:'/kjv/2ti/3/4/'},
-      {reference:'Ps 23:1', path:'/kjv/psa/23/1/'},
-      {reference:'Prov 3:5', path:'/kjv/pro/3/5/'},
-      {reference:'1 Thes 1:1', path:'/kjv/1th/1/1/'},
-      {reference:'2 Thes 1:1', path:'/kjv/2th/1/1/'},
-      {reference:'1 Pet 1:1', path:'/kjv/1pe/1/1/'},
-      {reference:'2 Pet 1:1', path:'/kjv/2pe/1/1/'},
-      {reference:'Gal.1.8,9', path:'/kjv/gal/1/8-9/'},
-      {reference:'Rev.14.6,7', path:'/kjv/rev/14/6-7/'},
-      {reference:'\u2066Matthew\u2069\u00A0\u206614\u2069:\u206622\u2069–\u206633\u2069', path:'/kjv/mat/14/22-33/'}
-    ];
-    const actions = ['Show on BLB','Right-Click','Alt+B','Double-Click'];
-    const failures = [];
+  // Keep each syntax form as its own test so slow/hung references are
+  // attributable and independently rerunnable. Each case exercises all four
+  // actions against the full expected destination.
+  for (const [caseIndex, item] of fourActionReferenceGrammarCases.entries()) {
+    test('Reference grammar ' + String(caseIndex + 1).padStart(2, '0') + ': ' + item.reference + ' resolves through all four actions @failure-first', async ({ page, extensionStorage, extensionWorker }) => {
+      test.setTimeout(120000);
+      await extensionStorage.set({
+        masterEnabled:true,
+        pageSelectionButtonSites:{'example.com':true},
+        doubleClickBlbSites:{'example.com':true}
+      });
+      await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+      await expect(page.locator('body')).toBeVisible();
 
-    for (const item of cases) {
       await page.evaluate(reference => {
         document.getElementById('four-action-grammar-reference')?.remove();
         const root = document.createElement('p');
@@ -3131,98 +3128,87 @@ test.describe('core user-visible E2E', () => {
         document.body.appendChild(root);
       }, item.reference);
 
-      // One context-bearing book token per syntax form is sufficient for the
-      // four-action grammar matrix. Numeric-token independence and suffix
-      // handling have dedicated all-four-action regressions; iterating every
-      // token here multiplied this matrix into ~250 navigation cycles.
+      // The book-name token carries the reference context. Numeric-token
+      // independence and suffix behavior have separate all-four-action tests.
       const bookToken = page.locator('#four-action-grammar-reference span[data-index]').filter({
         hasText: /^[A-Za-z]+$/
       }).last();
       await expect(bookToken).toHaveCount(1);
       const tokenIndex = await bookToken.getAttribute('data-index');
-      for (const action of actions) {
-        const selector = '#four-action-grammar-reference span[data-index="' + tokenIndex + '"]';
-        const selectedText = await page.locator(selector).textContent();
+      const selector = '#four-action-grammar-reference span[data-index="' + tokenIndex + '"]';
+      const selectedText = await page.locator(selector).textContent();
+
+      for (const action of ['Show on BLB','Right-Click','Alt+B','Double-Click']) {
         await page.bringToFront();
-          const beforeIds = await extensionWorker.evaluate(() =>
-            chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
-          );
-          let actionSelectionText = selectedText;
-          try {
-            if (action === 'Double-Click') {
-              await page.evaluate(() => window.getSelection()?.removeAllRanges());
-              await page.locator(selector).dblclick();
-              actionSelectionText = await page.evaluate(() => window.getSelection()?.toString() || '');
-              // Native word selection may include adjacent punctuation and
-              // neighboring numeric components (for example, "1.1"). Assert
-              // that the physical gesture selected text, then validate the
-              // resolver against the complete expected destination below.
-              expect(actionSelectionText.length).toBeGreaterThan(0);
+        const beforeIds = await extensionWorker.evaluate(() =>
+          chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
+        );
+        let actionSelectionText = selectedText;
+        try {
+          if (action === 'Double-Click') {
+            await page.evaluate(() => window.getSelection()?.removeAllRanges());
+            await page.locator(selector).dblclick();
+            actionSelectionText = await page.evaluate(() => window.getSelection()?.toString() || '');
+            expect(actionSelectionText.length).toBeGreaterThan(0);
+          } else {
+            await page.locator(selector).evaluate(element => {
+              const range = document.createRange();
+              range.selectNodeContents(element);
+              const selection = window.getSelection();
+              selection.removeAllRanges();
+              selection.addRange(range);
+              element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
+            });
+            expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe(selectedText);
+
+            if (action === 'Show on BLB') {
+              const button = page.locator('#blb-suite-page-selection-button');
+              await expect(button, 'Show on BLB button for ' + item.reference)
+                .toBeVisible({timeout:10000});
+              await button.click();
+            } else if (action === 'Alt+B') {
+              await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
             } else {
-              await page.locator(selector).evaluate(element => {
-                const range = document.createRange();
-                range.selectNodeContents(element);
-                const selection = window.getSelection();
-                selection.removeAllRanges();
-                selection.addRange(range);
-                element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
-              });
-              expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe(selectedText);
-
-              if (action === 'Show on BLB') {
-                const button = page.locator('#blb-suite-page-selection-button');
-                await expect(button, 'Show on BLB button for ' + item.reference + ' token ' + selectedText)
-                  .toBeVisible({timeout:10000});
-                await button.click();
-              } else if (action === 'Alt+B') {
-                await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
-              } else {
-                await extensionWorker.evaluate(async selected => {
-                  const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
-                  if (!tab?.id) throw new Error('No active source tab for context-menu action');
-                  await handleBlbSelectionContextMenuClick({
-                    menuItemId:'blb-suite-web-selection',
-                    selectionText:selected
-                  },tab);
-                }, selectedText);
-              }
+              await extensionWorker.evaluate(async selected => {
+                const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
+                if (!tab?.id) throw new Error('No active source tab for context-menu action');
+                await handleBlbSelectionContextMenuClick({
+                  menuItemId:'blb-suite-web-selection',
+                  selectionText:selected
+                },tab);
+              }, selectedText);
             }
-
-            const matchedTabIds = await activateBlbTabForPath(extensionWorker,item.path,{
-              fragment:action + ' ' + item.reference,
-              selector,
-              selectedText:actionSelectionText
-            });
-            expect(matchedTabIds.length, action + ' should resolve ' + item.reference + ' token ' + selectedText)
-              .toBeGreaterThan(0);
-            await extensionWorker.evaluate(ids => Promise.all(ids.map(id =>
-              chrome.tabs.remove(id).catch(() => {})
-            )),matchedTabIds);
-          } catch (error) {
-            failures.push({
-              reference:item.reference,
-              token:selectedText,
-              action,
-              selectedText:actionSelectionText,
-              expectedPath:item.path,
-              error:String(error.message || error)
-            });
-            await extensionWorker.evaluate(before => chrome.tabs.query({}).then(async tabs => {
-              for (const tab of tabs) {
-                if (tab.id == null || before.includes(tab.id)) continue;
-                try {
-                  if (new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org')) {
-                    await chrome.tabs.remove(tab.id);
-                  }
-                } catch (_) {}
-              }
-            }),beforeIds);
           }
+
+          const matchedTabIds = await activateBlbTabForPath(extensionWorker,item.path,{
+            fragment:action + ' ' + item.reference,
+            selector,
+            selectedText:actionSelectionText
+          });
+          expect(matchedTabIds.length, action + ' should resolve ' + item.reference + ' token ' + selectedText)
+            .toBeGreaterThan(0);
+          await extensionWorker.evaluate(ids => Promise.all(ids.map(id =>
+            chrome.tabs.remove(id).catch(() => {})
+          )),matchedTabIds);
+        } catch (error) {
+          await extensionWorker.evaluate(before => chrome.tabs.query({}).then(async tabs => {
+            for (const tab of tabs) {
+              if (tab.id == null || before.includes(tab.id)) continue;
+              try {
+                if (new URL(String(tab.url || tab.pendingUrl || '')).hostname.endsWith('blueletterbible.org')) {
+                  await chrome.tabs.remove(tab.id);
+                }
+              } catch (_) {}
+            }
+          }),beforeIds);
+          throw new Error('Reference "' + item.reference + '" failed for ' + action +
+            ' (selected "' + actionSelectionText + '", expected ' + item.path + '): ' +
+            String(error.message || error));
+        }
         await page.evaluate(() => window.getSelection()?.removeAllRanges());
       }
-    }
-    expect(failures,'four-action reference grammar failures: ' + JSON.stringify(failures,null,2)).toEqual([]);
-  });
+    });
+  }
 
   test('Standalone Timothy after a numbered-book prefix remains a word search through all four actions', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({
