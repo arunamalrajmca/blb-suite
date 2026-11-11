@@ -579,11 +579,14 @@ test.describe('core user-visible E2E', () => {
           .map(sample => sample.resolverCallCount)
       };
     });
-    console.log('BLB_SELECTION_ACTION_TIMING ' + JSON.stringify({
+    // Playwright captures console.log from passing tests and only prints it
+    // on failure. Write directly to the CI process stream so the benchmark
+    // measurements remain visible in successful run logs.
+    process.stdout.write('BLB_SELECTION_ACTION_TIMING ' + JSON.stringify({
       benchmark: 'single-word-verse-cue-four-action-e2e',
       note: 'Includes selection setup, action handling, BLB tab creation/reuse and activation; diagnostic only, not an isolated resolver measurement.',
       timingSummary
-    }));
+    }) + '\\n');
   });
 
   test('all 66 canonical book suffixes resolve through all four actions with both separators', async ({ page, extensionStorage, extensionWorker }) => {
