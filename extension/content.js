@@ -1,6 +1,14 @@
 // Top-level execution marker lets the browser E2E distinguish file execution
 // from failures inside the async initializer below.
 try { window.__blbSuiteContentScriptFileExecutedV3 = true; } catch (_) {}
+function recordBlbSelectionStage(stage, startedAt, details = {}) {
+  try {
+    if (window.__blbSuiteEnableSelectionStageTiming !== true) return;
+    const rows = Array.isArray(window.__blbSuiteSelectionStageTimings) ? window.__blbSuiteSelectionStageTimings : [];
+    rows.push({action:String(window.__blbSuiteSelectionTimingAction || 'unknown'),stage,durationMs:Number((performance.now()-startedAt).toFixed(3)),...details});
+    window.__blbSuiteSelectionStageTimings = rows;
+  } catch (_) {}
+}
 // Runtime messaging can throw synchronously when an extension is reloaded or
 // updated while an old content script is still attached to a page. Keep that
 // stale-page condition silent and fail closed instead of surfacing
@@ -55,7 +63,12 @@ function sendRuntimeMessageWithRetry(message, sendMessage, onError = null) {
      message.type === 'blbSuiteOpenDoubleClickSelectionText');
   const send = async attempt => {
     try {
-      return await sendMessage(message);
+      const measureStage = window.__blbSuiteEnableSelectionStageTiming === true;
+      const messageStartedAt = measureStage ? performance.now() : null;
+      try { return await sendMessage(message); }
+      finally {
+        if (measureStage) recordBlbSelectionStage('runtime-message-roundtrip', messageStartedAt, {messageType:String(message?.type || '')});
+      }
     } catch (error) {
       const errorText = String(error?.message || error || '');
       if (retryableSelectionRequest && attempt < 2 && /\bNo SW\b/i.test(errorText)) {
@@ -1485,7 +1498,7 @@ function getDoubleClickEquivalentSelectionContext(selectionText, preferredTarget
   return null;
 }
 
-function getContextualBibleReference(selectionText) {
+function getContextualBibleReferenceCore(selectionText) {
   const selected = normalizeSelectionText(selectionText);
   if (!selected) return null;
 
@@ -1594,6 +1607,15 @@ function getContextualBibleReference(selectionText) {
   // already has a block-local fallback (getDoubleClickBlockContextReference)
   // and waits briefly for the native selection to settle.
   return null;
+}
+
+function getContextualBibleReference(selectionText) {
+  if (window.__blbSuiteEnableSelectionStageTiming !== true) {
+    return getContextualBibleReferenceCore(selectionText);
+  }
+  const startedAt = performance.now();
+  try { return getContextualBibleReferenceCore(selectionText); }
+  finally { recordBlbSelectionStage('contextual-resolution', startedAt, {token:String(selectionText || '').slice(0,32)}); }
 }
 
 function getStandaloneBookReference(selectionText) {

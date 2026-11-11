@@ -405,6 +405,25 @@ test.describe('core user-visible E2E', () => {
       }, { shouldReset:reset, targetTabId:sourceTabId });
     };
 
+    const enableStageTiming = async (action, sourceTabId) => {
+      await currentExtensionWorker.evaluate(({ action }) => {
+        globalThis.__blbSuiteEnableSelectionStageTiming = true;
+        globalThis.__blbSuiteSelectionTimingAction = action;
+        globalThis.__blbSuiteSelectionStageTimings = [];
+      }, { action });
+      await currentExtensionWorker.evaluate(async ({ action, targetTabId }) => {
+        await chrome.scripting.executeScript({
+          target:{tabId:targetTabId}, world:'ISOLATED',
+          func:({action}) => {
+            window.__blbSuiteEnableSelectionStageTiming = true;
+            window.__blbSuiteSelectionTimingAction = action;
+            window.__blbSuiteSelectionStageTimings = [];
+          },
+          args:[{action}]
+        });
+      }, { action, targetTabId:sourceTabId });
+    };
+
     for (const [selector, cueWord, expectedPath] of cases) {
       for (const action of actions) {
         let actionStartedAt;
@@ -435,7 +454,6 @@ test.describe('core user-visible E2E', () => {
         const beforeIds = await currentExtensionWorker.evaluate(() =>
           chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
         );
-
         if (action === 'Show on BLB') {
           // Clear diagnostics left by earlier actions, then wait for this exact
           // selection's contextual resolver result before clicking the button.
@@ -456,6 +474,7 @@ test.describe('core user-visible E2E', () => {
           // Invoke the actual button click handler without Playwright's pointer
           // mousedown/mouseup sequence. Mouseup also refreshes selection-button
           // context and is preparation, not a second invocation by the action.
+          await enableStageTiming(action, sourceTabId);
           actionStartedAt = performance.now();
           await button.evaluate(element => element.click());
           await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), {
@@ -466,6 +485,7 @@ test.describe('core user-visible E2E', () => {
           // Call the handler registered for the browser command; Playwright's
           // keyboard simulation does not dispatch Chrome extension commands.
           await readResolverCalls(true, sourceTabId);
+          await enableStageTiming(action, sourceTabId);
           actionStartedAt = performance.now();
           await currentExtensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
         } else if (action === 'Right-Click') {
@@ -473,6 +493,7 @@ test.describe('core user-visible E2E', () => {
           // chrome.contextMenus.onClicked; Playwright cannot open Chrome's
           // native extension context-menu UI.
           await readResolverCalls(true, sourceTabId);
+          await enableStageTiming(action, sourceTabId);
           actionStartedAt = performance.now();
           await currentExtensionWorker.evaluate(async selectedText => {
             const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
@@ -496,6 +517,7 @@ test.describe('core user-visible E2E', () => {
             }, true);
           });
           await readResolverCalls(true, sourceTabId);
+          await enableStageTiming(action, sourceTabId);
           actionStartedAt = performance.now();
           await cue.dblclick();
           // The runtime message is asynchronous. Wait for either its response
@@ -552,7 +574,32 @@ test.describe('core user-visible E2E', () => {
           selector,
           selectedText: cueWord
         });
-        actionTimings.push({ action, selector, resolverCallCount:resolverCalls.length, durationMs: performance.now() - actionStartedAt });
+        const stageTimings = await currentExtensionWorker.evaluate(async targetTabId => {
+          const [injected] = await chrome.scripting.executeScript({
+            target:{tabId:targetTabId}, world:'ISOLATED',
+            func:() => Array.isArray(window.__blbSuiteSelectionStageTimings) ? [...window.__blbSuiteSelectionStageTimings] : []
+          });
+          return {
+            content:injected?.result || [],
+            background:Array.isArray(globalThis.__blbSuiteSelectionStageTimings) ? [...globalThis.__blbSuiteSelectionStageTimings] : []
+          };
+        }, sourceTabId);
+        // Turn instrumentation off immediately so later specs/actions do not
+        // accumulate unrelated timing events in the long-lived worker/page.
+        await currentExtensionWorker.evaluate(() => {
+          globalThis.__blbSuiteEnableSelectionStageTiming = false;
+        });
+        await currentExtensionWorker.evaluate(async targetTabId => {
+          await chrome.scripting.executeScript({
+            target:{tabId:targetTabId}, world:'ISOLATED',
+            func:() => { window.__blbSuiteEnableSelectionStageTiming = false; }
+          });
+        }, sourceTabId);
+        actionTimings.push({
+          action, selector, resolverCallCount:resolverCalls.length,
+          durationMs:performance.now()-actionStartedAt,
+          stageTimings:[...stageTimings.content,...stageTimings.background]
+        });
         const openedPaths = await currentExtensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
           tabs.filter(tab => !before.includes(tab.id)).map(tab => {
             try {
@@ -577,29 +624,73 @@ test.describe('core user-visible E2E', () => {
       }
     }
 
+    // Nearest-rank percentile: for five observations p90 is the maximum,
+    // rather than the fourth observation (which is only the 80th percentile).
+    const percentile = (values, fraction) => {
+      if (!values.length) return null;
+      const sorted = [...values].sort((a,b) => a-b);
+      return sorted[Math.max(0, Math.ceil(fraction * sorted.length) - 1)];
+    };
     const timingSummary = actions.map(action => {
       const samples = actionTimings.filter(sample => sample.action === action)
-        .map(sample => sample.durationMs).sort((a, b) => a - b);
+        .map(sample => sample.durationMs);
+      const median = percentile(samples, 0.5);
+      const p90 = percentile(samples, 0.9);
       return {
         action,
         samples: samples.length,
-        medianMs: Number(samples[Math.floor(samples.length / 2)].toFixed(2)),
-        p90Ms: Number(samples[Math.min(samples.length - 1, Math.floor((samples.length - 1) * 0.9))].toFixed(2)),
+        medianMs: median == null ? null : Number(median.toFixed(2)),
+        p90Ms: p90 == null ? null : Number(p90.toFixed(2)),
         resolverCallCounts: actionTimings.filter(sample => sample.action === action)
           .map(sample => sample.resolverCallCount)
       };
     });
+    // First sum repeated events within each action/fixture. The five fixture
+    // totals are the independent observations used for median and p90.
+    const stageSummary = actions.flatMap(action => {
+      const actionSamples = actionTimings.filter(sample => sample.action === action);
+      const stages = [...new Set(actionSamples.flatMap(sample =>
+        sample.stageTimings.map(item => item.stage)))];
+      return stages.map(stage => {
+        const perFixture = actionSamples.map(sample => {
+          const events = sample.stageTimings.filter(item => item.stage === stage);
+          return {
+            selector:sample.selector,
+            durationMs:events.reduce((total,item) => total + item.durationMs, 0),
+            eventCount:events.length
+          };
+        }).filter(sample => sample.eventCount > 0);
+        const durations = perFixture.map(sample => sample.durationMs);
+        const median = percentile(durations, 0.5);
+        const p90 = percentile(durations, 0.9);
+        return {
+          action, stage, samples:perFixture.length,
+          eventCountTotal:perFixture.reduce((total,sample) => total + sample.eventCount, 0),
+          eventCounts:perFixture.map(sample => sample.eventCount),
+          medianMs:median == null ? null : Number(median.toFixed(2)),
+          p90Ms:p90 == null ? null : Number(p90.toFixed(2)),
+          perFixture:perFixture.map(sample => ({
+            selector:sample.selector,
+            durationMs:Number(sample.durationMs.toFixed(3)),
+            eventCount:sample.eventCount
+          }))
+        };
+      });
+    });
     const benchmarkReport = {
-      benchmark: 'single-word-verse-cue-four-action-e2e',
-      note: 'Measures from action invocation through BLB tab activation; excludes preselection and Show on BLB button/context readiness; diagnostic only, not an isolated resolver measurement.',
-      timingSummary
+      benchmark:'single-word-verse-cue-four-action-stage-breakdown',
+      note:'Opt-in timings measure local contextual resolution, content-to-worker message round trips, background context/clear message round trips, and local DOM selection clearing. Double-click retains its physical gesture-specific path.',
+      timingSummary, stageSummary, samples:actionTimings
     };
     const reportJson = JSON.stringify(benchmarkReport, null, 2);
     // Persist a machine-readable artifact and add a concise GitHub Actions
     // step-summary entry. Playwright's configured CI output may suppress
     // arbitrary stdout from successful tests.
-    fs.mkdirSync('test-results', { recursive: true });
-    fs.writeFileSync('test-results/selection-action-timing.json', reportJson + '\n');
+    // Playwright clears its configured outputDir before each separate
+    // spec invocation in Group A. Keep this report outside test-results so
+    // later specs in the same job cannot erase it before artifact upload.
+    fs.mkdirSync('selection-stage-benchmark', { recursive: true });
+    fs.writeFileSync('selection-stage-benchmark/selection-action-timing.json', reportJson + '\n');
     if (process.env.GITHUB_STEP_SUMMARY) {
       fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
         '\n### Four-action selection benchmark\n\n' + reportJson + '\n');
@@ -3434,18 +3525,23 @@ test('persisted registration audit runs only on install/update and browser start
 
 test('overlapping startup and install events share one persisted-registration audit', async ({ extensionWorker }) => {
   const count = await extensionWorker.evaluate(async () => {
-    // The browser's initial onStartup event may already have started an audit
-    // before this test can instrument the Chrome API. Let that audit settle so
-    // the two calls below are the only work measured by this assertion.
+    // Let any initial browser startup audit settle before installing a deferred
+    // API response. Keep the next audit pending while the two explicit calls
+    // overlap, so a late onStartup/onInstalled callback also joins that same
+    // in-flight operation instead of making this assertion timing-sensitive.
     if (persistedRuntimeContentScriptAuditPromise) {
       await persistedRuntimeContentScriptAuditPromise;
     }
 
     const originalGetRegistered = chrome.scripting.getRegisteredContentScripts;
     let calls = 0;
-    const wrappedGetRegistered = async (...args) => {
+    let releaseAudit;
+    const wrappedGetRegistered = (...args) => {
       calls++;
-      return originalGetRegistered.apply(chrome.scripting, args);
+      return new Promise((resolve, reject) => {
+        releaseAudit = () => Promise.resolve(originalGetRegistered.apply(chrome.scripting, args))
+          .then(resolve, reject);
+      });
     };
     chrome.scripting.getRegisteredContentScripts = wrappedGetRegistered;
     if (chrome.scripting.getRegisteredContentScripts !== wrappedGetRegistered) {
@@ -3454,12 +3550,16 @@ test('overlapping startup and install events share one persisted-registration au
     }
 
     try {
-      await Promise.all([
-        schedulePersistedRuntimeContentScriptAudit(),
-        schedulePersistedRuntimeContentScriptAudit()
-      ]);
-      return calls;
+      const first = schedulePersistedRuntimeContentScriptAudit();
+      const second = schedulePersistedRuntimeContentScriptAudit();
+      await Promise.resolve();
+      await Promise.resolve();
+      const observedCalls = calls;
+      if (typeof releaseAudit === 'function') releaseAudit();
+      await Promise.all([first, second]);
+      return observedCalls;
     } finally {
+      if (typeof releaseAudit === 'function') releaseAudit();
       chrome.scripting.getRegisteredContentScripts = originalGetRegistered;
     }
   });

@@ -202,6 +202,14 @@ jobs:
             npx playwright test "$spec"
           done
 
+      - name: Upload Group A selection-stage benchmark
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-suite-selection-stage-benchmark
+          path: selection-stage-benchmark/selection-action-timing.json
+          if-no-files-found: ignore
+          retention-days: 14
 
   core-study-sessions:
     if: ${{ inputs.study_sessions_required == 'true' }}
