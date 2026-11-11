@@ -1,4 +1,5 @@
 const { test, expect } = require('./fixtures');
+const fs = require('node:fs');
 
 async function removeTabById(extensionWorker, id) {
   if (id == null) return;
@@ -583,14 +584,21 @@ test.describe('core user-visible E2E', () => {
           .map(sample => sample.resolverCallCount)
       };
     });
-    // Playwright captures console.log from passing tests and only prints it
-    // on failure. Write directly to the CI process stream so the benchmark
-    // measurements remain visible in successful run logs.
-    process.stdout.write('BLB_SELECTION_ACTION_TIMING ' + JSON.stringify({
+    const benchmarkReport = {
       benchmark: 'single-word-verse-cue-four-action-e2e',
       note: 'Includes selection setup, action handling, BLB tab creation/reuse and activation; diagnostic only, not an isolated resolver measurement.',
       timingSummary
-    }) + '\n');
+    };
+    const reportJson = JSON.stringify(benchmarkReport, null, 2);
+    // Persist a machine-readable artifact and add a concise GitHub Actions
+    // step-summary entry. Playwright's configured CI output may suppress
+    // arbitrary stdout from successful tests.
+    fs.mkdirSync('test-results', { recursive: true });
+    fs.writeFileSync('test-results/selection-action-timing.json', reportJson + '\n');
+    if (process.env.GITHUB_STEP_SUMMARY) {
+      fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
+        '\n### Four-action selection benchmark\n\n' + reportJson + '\n');
+    }
   });
 
   test('all 66 canonical book suffixes resolve through all four actions with both separators', async ({ page, extensionStorage, extensionWorker }) => {
