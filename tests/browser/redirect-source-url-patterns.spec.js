@@ -1155,6 +1155,10 @@ test.describe('source Bible URL syntax regression coverage', () => {
       .toBe('https://www.blueletterbible.org/kjv/psa/23/1/');
     expect(runSourceRedirect('https://www.bible.com/bible/111/1JN.4.7-8.esv').redirectedTo)
       .toBe('https://www.blueletterbible.org/kjv/1jo/4/7-8/');
+    expect(runSourceRedirect('https://www.bible.com/bible/1/MAT.14.22-33.KJV').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/mat/14/22-33/');
+    expect(runSourceRedirect('https://www.bible.com/bible/1/php.3.1-21.KJV').redirectedTo)
+      .toBe('https://www.blueletterbible.org/kjv/phl/3/1-21/');
   });
 
   test('BibleGateway passage search supports single verses, ranges, and ignored versions', () => {
