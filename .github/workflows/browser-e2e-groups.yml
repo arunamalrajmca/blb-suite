@@ -207,7 +207,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: blb-suite-selection-stage-benchmark
-          path: test-results/selection-action-timing.json
+          path: selection-stage-benchmark/selection-action-timing.json
           if-no-files-found: ignore
           retention-days: 14
 
