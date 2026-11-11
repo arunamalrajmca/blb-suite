@@ -407,7 +407,7 @@ test.describe('core user-visible E2E', () => {
 
     for (const [selector, cueWord, expectedPath] of cases) {
       for (const action of actions) {
-        const actionStartedAt = performance.now();
+        let actionStartedAt;
         const cue = page.locator(selector);
         await expect(cue).toHaveText(cueWord);
         // Show on BLB, Alt+B, and Right-Click consume an existing native
@@ -456,6 +456,7 @@ test.describe('core user-visible E2E', () => {
           // Invoke the actual button click handler without Playwright's pointer
           // mousedown/mouseup sequence. Mouseup also refreshes selection-button
           // context and is preparation, not a second invocation by the action.
+          actionStartedAt = performance.now();
           await button.evaluate(element => element.click());
           await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), {
             message: 'Successful Show on BLB invocation must clear the page selection'
@@ -464,12 +465,14 @@ test.describe('core user-visible E2E', () => {
           // Call the handler registered for the browser command; Playwright's
           // keyboard simulation does not dispatch Chrome extension commands.
           await readResolverCalls(true, sourceTabId);
+          actionStartedAt = performance.now();
           await currentExtensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
         } else if (action === 'Right-Click') {
           // Exercise the exact background handler registered with
           // chrome.contextMenus.onClicked; Playwright cannot open Chrome's
           // native extension context-menu UI.
           await readResolverCalls(true, sourceTabId);
+          actionStartedAt = performance.now();
           await currentExtensionWorker.evaluate(async selectedText => {
             const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
             await handleBlbSelectionContextMenuClick({
@@ -492,6 +495,7 @@ test.describe('core user-visible E2E', () => {
             }, true);
           });
           await readResolverCalls(true, sourceTabId);
+          actionStartedAt = performance.now();
           await cue.dblclick();
           // The runtime message is asynchronous. Wait for either its response
           // or its rejection diagnostic before reading the attributes.
@@ -586,7 +590,7 @@ test.describe('core user-visible E2E', () => {
     });
     const benchmarkReport = {
       benchmark: 'single-word-verse-cue-four-action-e2e',
-      note: 'Includes selection setup, action handling, BLB tab creation/reuse and activation; diagnostic only, not an isolated resolver measurement.',
+      note: 'Measures from action invocation through BLB tab activation; excludes preselection and Show on BLB button/context readiness; diagnostic only, not an isolated resolver measurement.',
       timingSummary
     };
     const reportJson = JSON.stringify(benchmarkReport, null, 2);
