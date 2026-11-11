@@ -3260,7 +3260,7 @@ test.describe('core user-visible E2E', () => {
         }
       }
 
-      const result = await expect.poll(async () => extensionWorker.evaluate(() =>
+      await expect.poll(async () => extensionWorker.evaluate(() =>
         chrome.tabs.query({}).then(tabs => {
           const tab = tabs.find(candidate => {
             try {
