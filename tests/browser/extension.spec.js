@@ -3097,7 +3097,7 @@ test.describe('core user-visible E2E', () => {
       {reference:'2 Timothy 3:4', path:'/kjv/2ti/3/4/'},
       {reference:'Gal.1.8,9', path:'/kjv/gal/1/8-9/'},
       {reference:'Rev.14.6,7', path:'/kjv/rev/14/6-7/'},
-      {reference:'\\u2066Matthew\\u2069 \\u206614\\u2069:\\u206622\\u2069–\\u206633\\u2069', path:'/kjv/mat/14/22-33/'}
+      {reference:'\u2066Matthew\u2069 \u206614\u2069:\u206622\u2069–\u206633\u2069', path:'/kjv/mat/14/22-33/'}
     ];
     const actions = ['Show on BLB','Right-Click','Alt+B','Double-Click'];
     const failures = [];
