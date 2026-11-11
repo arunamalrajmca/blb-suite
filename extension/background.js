@@ -6057,6 +6057,8 @@ async function getActiveTabSelection(tabId) {
     // Protected pages such as Chrome's built-in PDF viewer cannot be scripted.
     // The existing right-click context-menu path remains the PDF-safe method.
     return '';
+  } finally {
+    recordBlbBackgroundSelectionStage('selection-text-script-fallback', fallbackStartedAt);
   }
 }
 
