@@ -578,6 +578,17 @@ test.describe('core user-visible E2E', () => {
             background:Array.isArray(globalThis.__blbSuiteSelectionStageTimings) ? [...globalThis.__blbSuiteSelectionStageTimings] : []
           };
         }, sourceTabId);
+        // Turn instrumentation off immediately so later specs/actions do not
+        // accumulate unrelated timing events in the long-lived worker/page.
+        await currentExtensionWorker.evaluate(() => {
+          globalThis.__blbSuiteEnableSelectionStageTiming = false;
+        });
+        await currentExtensionWorker.evaluate(async targetTabId => {
+          await chrome.scripting.executeScript({
+            target:{tabId:targetTabId}, world:'ISOLATED',
+            func:() => { window.__blbSuiteEnableSelectionStageTiming = false; }
+          });
+        }, sourceTabId);
         actionTimings.push({
           action, selector, resolverCallCount:resolverCalls.length,
           durationMs:performance.now()-actionStartedAt,
