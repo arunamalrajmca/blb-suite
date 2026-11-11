@@ -4368,3 +4368,66 @@ test('reinjecting the current content bundle replaces a stale Show on BLB contro
     selectedText:'John 3:16'
   });
 });
+
+test('@failure-first MultiVerse reports a failed batch and succeeds when the transient batch failure is retried', async ({ extensionWorker }) => {
+  const outcome = await extensionWorker.evaluate(async () => {
+    const refs = [];
+    for (const book of bookData) {
+      for (let chapter = 1; chapter <= Number(book.chapterCount); chapter++) {
+        const verseCount = Number(book.verses?.[chapter - 1] || 0);
+        for (let verse = 1; verse <= verseCount; verse += 2) {
+          refs.push({ book: book.name, chapter, from: verse, to: verse });
+          if (refs.length === 201) break;
+        }
+        if (refs.length === 201) break;
+      }
+      if (refs.length === 201) break;
+    }
+    if (refs.length !== 201) {
+      throw new Error('Could not construct 201 valid unique KJV verses; built ' + refs.length);
+    }
+
+    const originalOpenBatch = openBlbMultiVerseRefsSingleBatch;
+    let failSecondBatchOnce = true;
+    const attempts = [];
+    openBlbMultiVerseRefsSingleBatch = async (_refs, _active, _allowSingleVerseBatch, _preferredTabId, preparedVerses) => {
+      const batchSize = Array.isArray(preparedVerses) ? preparedVerses.length : 0;
+      attempts.push(batchSize);
+      if (batchSize === 1 && failSecondBatchOnce) {
+        failSecondBatchOnce = false;
+        return { ok: false, reason: 'injected-transient-batch-failure' };
+      }
+      return { ok: true, tabId: attempts.length };
+    };
+
+    try {
+      const first = await openBlbMultiVerseRefs(refs, false);
+      const attemptsAfterFirst = [...attempts];
+      const second = await openBlbMultiVerseRefs(refs, false);
+      return {
+        first,
+        second,
+        attemptsAfterFirst,
+        allAttempts: attempts
+      };
+    } finally {
+      openBlbMultiVerseRefsSingleBatch = originalOpenBatch;
+    }
+  });
+
+  expect(outcome.attemptsAfterFirst).toEqual([200, 1]);
+  expect(outcome.first).toMatchObject({
+    ok: false,
+    reason: 'injected-transient-batch-failure',
+    count: 200,
+    batchCount: 1,
+    failedBatch: 2
+  });
+  expect(outcome.allAttempts).toEqual([200, 1, 200, 1]);
+  expect(outcome.second).toMatchObject({
+    ok: true,
+    count: 201,
+    batchCount: 2,
+    truncated: false
+  });
+});
