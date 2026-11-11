@@ -32,6 +32,7 @@ export const featureSpecs = [
       "tests/browser/audit-defect-regressions.spec.js",
       "tests/browser/service-worker-lifecycle.spec.js",
       "tests/browser/site-registration-opt-out-race.spec.js",
+  "tests/browser/optional-host-permission-lifecycle.spec.js",
       "tests/browser/optional-host-permission-lifecycle.spec.js"
     ]
   },
