@@ -3,17 +3,22 @@ const { test, expect } = require('./fixtures');
 test('optional host permission grant, revocation, and re-grant reconcile site registrations', async ({
   page, context, extensionId, extensionWorker
 }) => {
+  test.setTimeout(30000);
   const origin = 'https://example.org/*';
   const hostUrl = 'https://example.org/';
-  await page.goto(hostUrl, { waitUntil:'domcontentloaded' });
+  console.log('[optional-permission] navigating to host page');
+  await page.goto(hostUrl, { waitUntil:'domcontentloaded', timeout:10000 });
+  console.log('[optional-permission] host page ready');
 
   const targetTabId = await extensionWorker.evaluate(async () =>
     (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
   );
   expect(Number.isInteger(targetTabId)).toBe(true);
 
+  console.log('[optional-permission] opening extension settings page');
   const popup = await context.newPage();
-  await popup.goto(`chrome-extension://${extensionId}/popup.html`);
+  await popup.goto(`chrome-extension://${extensionId}/popup.html`, {waitUntil:'domcontentloaded',timeout:10000});
+  console.log('[optional-permission] extension settings page ready');
   await popup.evaluate(tabId => {
     const originalQuery = chrome.tabs.query.bind(chrome.tabs);
     chrome.tabs.query = async query => query?.active && query?.currentWindow
@@ -21,6 +26,7 @@ test('optional host permission grant, revocation, and re-grant reconcile site re
       : originalQuery(query);
   }, targetTabId);
   await popup.evaluate(async () => render(await getState()));
+  console.log('[optional-permission] target site controls rendered');
 
   const registrationId = await extensionWorker.evaluate(url =>
     runtimeContentScriptIdForPattern(originPatternForUrl(url)), hostUrl
@@ -38,8 +44,11 @@ test('optional host permission grant, revocation, and re-grant reconcile site re
 
     // The click is a real extension-page user gesture, allowing Chrome to
     // process permissions.request for this optional origin.
-    await popup.locator('#pageButton').click();
-    await expect.poll(permissionGranted, {timeout:10000}).toBe(true);
+    console.log('[optional-permission] requesting initial host grant');
+    await popup.locator('#pageButton').click({timeout:5000});
+    console.log('[optional-permission] initial grant request clicked');
+    await expect.poll(permissionGranted, {timeout:5000}).toBe(true);
+    console.log('[optional-permission] initial host grant observed');
     await expect.poll(registrationExists, {timeout:10000}).toBe(true);
 
     const removed = await extensionWorker.evaluate(pattern =>
