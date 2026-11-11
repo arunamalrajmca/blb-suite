@@ -15,9 +15,10 @@ test('registered source-page collection buttons are independent of external-link
         redirectEnabled
       };
       const files = contentScriptFilesForTab(tab, settings);
+      const shouldInject = await shouldInjectContentScriptForTab(tab, settings);
       results.push({
         redirectEnabled,
-        shouldInject:shouldInjectContentScriptForTab(tab, settings),
+        shouldInject,
         hasCollectorBundle:files.includes('content.js') &&
           files.includes('source-page-collector.js'),
         hasRedirectBundle:files.includes('redirect-scripttagger.js') &&
