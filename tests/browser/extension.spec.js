@@ -405,6 +405,25 @@ test.describe('core user-visible E2E', () => {
       }, { shouldReset:reset, targetTabId:sourceTabId });
     };
 
+    const enableStageTiming = async (action, sourceTabId) => {
+      await currentExtensionWorker.evaluate(({ action }) => {
+        globalThis.__blbSuiteEnableSelectionStageTiming = true;
+        globalThis.__blbSuiteSelectionTimingAction = action;
+        globalThis.__blbSuiteSelectionStageTimings = [];
+      }, { action });
+      await currentExtensionWorker.evaluate(async ({ action, targetTabId }) => {
+        await chrome.scripting.executeScript({
+          target:{tabId:targetTabId}, world:'ISOLATED',
+          func:({action}) => {
+            window.__blbSuiteEnableSelectionStageTiming = true;
+            window.__blbSuiteSelectionTimingAction = action;
+            window.__blbSuiteSelectionStageTimings = [];
+          },
+          args:[{action}]
+        });
+      }, { action, targetTabId:sourceTabId });
+    };
+
     for (const [selector, cueWord, expectedPath] of cases) {
       for (const action of actions) {
         let actionStartedAt;
@@ -435,23 +454,6 @@ test.describe('core user-visible E2E', () => {
         const beforeIds = await currentExtensionWorker.evaluate(() =>
           chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
         );
-        await currentExtensionWorker.evaluate(({ action }) => {
-          globalThis.__blbSuiteEnableSelectionStageTiming = true;
-          globalThis.__blbSuiteSelectionTimingAction = action;
-          globalThis.__blbSuiteSelectionStageTimings = [];
-        }, { action });
-        await currentExtensionWorker.evaluate(async ({ action, targetTabId }) => {
-          await chrome.scripting.executeScript({
-            target:{tabId:targetTabId}, world:'ISOLATED',
-            func:({action}) => {
-              window.__blbSuiteEnableSelectionStageTiming = true;
-              window.__blbSuiteSelectionTimingAction = action;
-              window.__blbSuiteSelectionStageTimings = [];
-            },
-            args:[{action}]
-          });
-        }, { action, targetTabId:sourceTabId });
-
         if (action === 'Show on BLB') {
           // Clear diagnostics left by earlier actions, then wait for this exact
           // selection's contextual resolver result before clicking the button.
@@ -472,6 +474,7 @@ test.describe('core user-visible E2E', () => {
           // Invoke the actual button click handler without Playwright's pointer
           // mousedown/mouseup sequence. Mouseup also refreshes selection-button
           // context and is preparation, not a second invocation by the action.
+          await enableStageTiming(action, sourceTabId);
           actionStartedAt = performance.now();
           await button.evaluate(element => element.click());
           await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), {
@@ -482,6 +485,7 @@ test.describe('core user-visible E2E', () => {
           // Call the handler registered for the browser command; Playwright's
           // keyboard simulation does not dispatch Chrome extension commands.
           await readResolverCalls(true, sourceTabId);
+          await enableStageTiming(action, sourceTabId);
           actionStartedAt = performance.now();
           await currentExtensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
         } else if (action === 'Right-Click') {
@@ -489,6 +493,7 @@ test.describe('core user-visible E2E', () => {
           // chrome.contextMenus.onClicked; Playwright cannot open Chrome's
           // native extension context-menu UI.
           await readResolverCalls(true, sourceTabId);
+          await enableStageTiming(action, sourceTabId);
           actionStartedAt = performance.now();
           await currentExtensionWorker.evaluate(async selectedText => {
             const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
@@ -512,6 +517,7 @@ test.describe('core user-visible E2E', () => {
             }, true);
           });
           await readResolverCalls(true, sourceTabId);
+          await enableStageTiming(action, sourceTabId);
           actionStartedAt = performance.now();
           await cue.dblclick();
           // The runtime message is asynchronous. Wait for either its response
