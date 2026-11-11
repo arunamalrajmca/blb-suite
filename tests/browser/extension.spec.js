@@ -377,9 +377,36 @@ test.describe('core user-visible E2E', () => {
       ['#matrix-verse-18', 'verse', '/kjv/mat/27/18/']
     ];
     const actions = ['Show on BLB', 'Alt+B', 'Right-Click', 'Double-Click'];
+    const actionTimings = [];
+    let currentExtensionWorker = extensionWorker;
+    // Read the opt-in resolver counter from the original source tab's isolated
+    // world. The BLB action activates a new tab and can outlive/replace the
+    // worker target object, so reacquire the current service-worker target and
+    // keep the source tab ID instead of querying whichever tab is active later.
+    const readResolverCalls = async (reset, sourceTabId) => {
+      const workers = page.context().serviceWorkers();
+      currentExtensionWorker = workers[workers.length - 1]
+        || await page.context().waitForEvent('serviceworker', { timeout:5000 });
+      return currentExtensionWorker.evaluate(async ({ shouldReset, targetTabId }) => {
+        const [injected] = await chrome.scripting.executeScript({
+          target: { tabId:targetTabId },
+          world: 'ISOLATED',
+          func: resetCalls => {
+            window.__blbSuiteEnableDoubleClickEquivalentDiagnostics = true;
+            if (resetCalls) window.__blbSuiteDoubleClickEquivalentCalls = [];
+            return Array.isArray(window.__blbSuiteDoubleClickEquivalentCalls)
+              ? [...window.__blbSuiteDoubleClickEquivalentCalls]
+              : [];
+          },
+          args: [shouldReset]
+        });
+        return injected?.result || [];
+      }, { shouldReset:reset, targetTabId:sourceTabId });
+    };
 
     for (const [selector, cueWord, expectedPath] of cases) {
       for (const action of actions) {
+        const actionStartedAt = performance.now();
         const cue = page.locator(selector);
         await expect(cue).toHaveText(cueWord);
         // Show on BLB, Alt+B, and Right-Click consume an existing native
@@ -401,7 +428,10 @@ test.describe('core user-visible E2E', () => {
           await page.evaluate(() => window.getSelection()?.removeAllRanges());
         }
 
-        const beforeIds = await extensionWorker.evaluate(() =>
+        const sourceTabId = await currentExtensionWorker.evaluate(() =>
+          chrome.tabs.query({ active:true, currentWindow:true }).then(([tab]) => tab?.id)
+        );
+        const beforeIds = await currentExtensionWorker.evaluate(() =>
           chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
         );
 
@@ -421,16 +451,25 @@ test.describe('core user-visible E2E', () => {
           }), { message: 'Show on BLB must resolve the current cue selection before click' }).toBe(expectedPath);
           const button = page.locator('#blb-suite-page-selection-button');
           await expect(button).toBeVisible({ timeout: 10000 });
-          await button.click();
+          await readResolverCalls(true, sourceTabId);
+          // Invoke the actual button click handler without Playwright's pointer
+          // mousedown/mouseup sequence. Mouseup also refreshes selection-button
+          // context and is preparation, not a second invocation by the action.
+          await button.evaluate(element => element.click());
+          await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), {
+            message: 'Successful Show on BLB invocation must clear the page selection'
+          }).toBe('');
         } else if (action === 'Alt+B') {
           // Call the handler registered for the browser command; Playwright's
           // keyboard simulation does not dispatch Chrome extension commands.
-          await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+          await readResolverCalls(true, sourceTabId);
+          await currentExtensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
         } else if (action === 'Right-Click') {
           // Exercise the exact background handler registered with
           // chrome.contextMenus.onClicked; Playwright cannot open Chrome's
           // native extension context-menu UI.
-          await extensionWorker.evaluate(async selectedText => {
+          await readResolverCalls(true, sourceTabId);
+          await currentExtensionWorker.evaluate(async selectedText => {
             const [tab] = await chrome.tabs.query({active:true,currentWindow:true});
             await handleBlbSelectionContextMenuClick({
               menuItemId:'blb-suite-web-selection',
@@ -451,6 +490,7 @@ test.describe('core user-visible E2E', () => {
               };
             }, true);
           });
+          await readResolverCalls(true, sourceTabId);
           await cue.dblclick();
           // The runtime message is asynchronous. Wait for either its response
           // or its rejection diagnostic before reading the attributes.
@@ -482,12 +522,28 @@ test.describe('core user-visible E2E', () => {
             .toBe(expectedToken);
         }
 
-        await activateBlbTabForPath(extensionWorker, expectedPath, {
+        const resolverCalls = await readResolverCalls(false, sourceTabId);
+        if (action === 'Double-Click') {
+          // A physical double-click includes native selection updates before
+          // the dblclick handler; those can independently consult the shared
+          // resolver. Require the expected token, but use this as the baseline
+          // rather than treating browser gesture preparation as action work.
+          expect(resolverCalls.length, 'Double-Click must enter the shared resolver for ' + cueWord)
+            .toBeGreaterThan(0);
+          expect(resolverCalls.every(token => token === cueWord),
+            'Double-Click resolver calls must remain scoped to the selected cue').toBe(true);
+        } else {
+          expect(resolverCalls, action + ' must enter the shared double-click-equivalent resolver exactly once for ' + cueWord)
+            .toEqual([cueWord]);
+        }
+
+        await activateBlbTabForPath(currentExtensionWorker, expectedPath, {
           fragment: action,
           selector,
           selectedText: cueWord
         });
-        const openedPaths = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+        actionTimings.push({ action, selector, resolverCallCount:resolverCalls.length, durationMs: performance.now() - actionStartedAt });
+        const openedPaths = await currentExtensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
           tabs.filter(tab => !before.includes(tab.id)).map(tab => {
             try {
               const url = new URL(String(tab.url || tab.pendingUrl || ''));
@@ -498,7 +554,7 @@ test.describe('core user-visible E2E', () => {
         expect(openedPaths, action + ' with selected cue "' + cueWord + '" must open its adjacent passage')
           .toContain(expectedPath);
 
-        await extensionWorker.evaluate(path => chrome.tabs.query({}).then(async tabs => {
+        await currentExtensionWorker.evaluate(path => chrome.tabs.query({}).then(async tabs => {
           for (const tab of tabs) {
             try {
               const url = new URL(String(tab.url || tab.pendingUrl || ''));
@@ -510,6 +566,24 @@ test.describe('core user-visible E2E', () => {
         }), expectedPath);
       }
     }
+
+    const timingSummary = actions.map(action => {
+      const samples = actionTimings.filter(sample => sample.action === action)
+        .map(sample => sample.durationMs).sort((a, b) => a - b);
+      return {
+        action,
+        samples: samples.length,
+        medianMs: Number(samples[Math.floor(samples.length / 2)].toFixed(2)),
+        p90Ms: Number(samples[Math.min(samples.length - 1, Math.floor((samples.length - 1) * 0.9))].toFixed(2)),
+        resolverCallCounts: actionTimings.filter(sample => sample.action === action)
+          .map(sample => sample.resolverCallCount)
+      };
+    });
+    console.log('BLB_SELECTION_ACTION_TIMING ' + JSON.stringify({
+      benchmark: 'single-word-verse-cue-four-action-e2e',
+      note: 'Includes selection setup, action handling, BLB tab creation/reuse and activation; diagnostic only, not an isolated resolver measurement.',
+      timingSummary
+    }));
   });
 
   test('all 66 canonical book suffixes resolve through all four actions with both separators', async ({ page, extensionStorage, extensionWorker }) => {
@@ -837,6 +911,65 @@ test.describe('core user-visible E2E', () => {
       selector: '.dt-post-body',
       selectedText: await page.evaluate(() => window.getSelection?.().toString() || '')
     });
+  });
+
+  test('Show on BLB preserves the page selection when the handoff fails', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled:true, pageSelectionButtonSites:{ 'example.com':true } });
+    await page.goto('https://example.com/', { waitUntil:'domcontentloaded' });
+    await expect(page.locator('body')).toBeVisible();
+    await page.evaluate(() => {
+      const paragraph = document.createElement('p');
+      paragraph.id = 'blb-e2e-failed-handoff-selection';
+      paragraph.textContent = 'John 3:16';
+      document.body.appendChild(paragraph);
+      const range = document.createRange();
+      range.selectNodeContents(paragraph);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles:true }));
+    });
+    const button = page.locator('#blb-suite-page-selection-button');
+    await expect(button).toBeVisible({ timeout:10000 });
+    const sourceTabId = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({ active:true, currentWindow:true }).then(([tab]) => tab?.id)
+    );
+    const patched = await extensionWorker.evaluate(async tabId => {
+      const [result] = await chrome.scripting.executeScript({
+        target:{ tabId },
+        world:'ISOLATED',
+        func:() => {
+          window.__blbSuiteOriginalRuntimeSendMessage = chrome.runtime.sendMessage;
+          try {
+            chrome.runtime.sendMessage = () => Promise.resolve({ ok:false });
+            return chrome.runtime.sendMessage !== window.__blbSuiteOriginalRuntimeSendMessage;
+          } catch (_) {
+            return false;
+          }
+        }
+      });
+      return result?.result === true;
+    }, sourceTabId);
+    expect(patched, 'test must intercept the content-script handoff without changing production code').toBe(true);
+    try {
+      await button.evaluate(element => element.click());
+      await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), {
+        message:'A failed Show on BLB handoff must preserve the selected text for retry'
+      }).toBe('John 3:16');
+    } finally {
+      await extensionWorker.evaluate(async tabId => {
+        await chrome.scripting.executeScript({
+          target:{ tabId },
+          world:'ISOLATED',
+          func:() => {
+            if (window.__blbSuiteOriginalRuntimeSendMessage) {
+              chrome.runtime.sendMessage = window.__blbSuiteOriginalRuntimeSendMessage;
+              delete window.__blbSuiteOriginalRuntimeSendMessage;
+            }
+          }
+        });
+      }, sourceTabId);
+    }
   });
 
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage, extensionWorker }) => {
