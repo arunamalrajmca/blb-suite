@@ -459,7 +459,8 @@ test.describe('core user-visible E2E', () => {
           actionStartedAt = performance.now();
           await button.evaluate(element => element.click());
           await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || ''), {
-            message: 'Successful Show on BLB invocation must clear the page selection'
+            message: 'Successful Show on BLB invocation must clear the page selection',
+            intervals: [5, 10, 20, 50]
           }).toBe('');
         } else if (action === 'Alt+B') {
           // Call the handler registered for the browser command; Playwright's
@@ -503,7 +504,7 @@ test.describe('core user-visible E2E', () => {
             const root = document.querySelector('#single-word-verse-cue-matrix');
             return root?.hasAttribute('data-blb-verse-context-response')
               || root?.hasAttribute('data-blb-verse-context-send-error');
-          }, { timeout: 3000 }).catch(() => {});
+          }, null, { timeout: 3000, polling: 'raf' }).catch(() => {});
           const gestureDiagnostics = await page.evaluate(() => ({
             event: window.__blbSuiteTestDoubleClickEvent,
             context: document.querySelector('#single-word-verse-cue-matrix')
