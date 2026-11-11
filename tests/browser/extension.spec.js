@@ -586,7 +586,7 @@ test.describe('core user-visible E2E', () => {
       benchmark: 'single-word-verse-cue-four-action-e2e',
       note: 'Includes selection setup, action handling, BLB tab creation/reuse and activation; diagnostic only, not an isolated resolver measurement.',
       timingSummary
-    }) + '\\n');
+    }) + '\n');
   });
 
   test('all 66 canonical book suffixes resolve through all four actions with both separators', async ({ page, extensionStorage, extensionWorker }) => {
