@@ -624,28 +624,57 @@ test.describe('core user-visible E2E', () => {
       }
     }
 
+    // Nearest-rank percentile: for five observations p90 is the maximum,
+    // rather than the fourth observation (which is only the 80th percentile).
+    const percentile = (values, fraction) => {
+      if (!values.length) return null;
+      const sorted = [...values].sort((a,b) => a-b);
+      return sorted[Math.max(0, Math.ceil(fraction * sorted.length) - 1)];
+    };
     const timingSummary = actions.map(action => {
       const samples = actionTimings.filter(sample => sample.action === action)
-        .map(sample => sample.durationMs).sort((a, b) => a - b);
+        .map(sample => sample.durationMs);
+      const median = percentile(samples, 0.5);
+      const p90 = percentile(samples, 0.9);
       return {
         action,
         samples: samples.length,
-        medianMs: Number(samples[Math.floor(samples.length / 2)].toFixed(2)),
-        p90Ms: Number(samples[Math.min(samples.length - 1, Math.floor((samples.length - 1) * 0.9))].toFixed(2)),
+        medianMs: median == null ? null : Number(median.toFixed(2)),
+        p90Ms: p90 == null ? null : Number(p90.toFixed(2)),
         resolverCallCounts: actionTimings.filter(sample => sample.action === action)
           .map(sample => sample.resolverCallCount)
       };
     });
+    // First sum repeated events within each action/fixture. The five fixture
+    // totals are the independent observations used for median and p90.
     const stageSummary = actions.flatMap(action => {
-      const stages = [...new Set(actionTimings.filter(sample => sample.action === action)
-        .flatMap(sample => sample.stageTimings.map(stage => stage.stage)))];
+      const actionSamples = actionTimings.filter(sample => sample.action === action);
+      const stages = [...new Set(actionSamples.flatMap(sample =>
+        sample.stageTimings.map(item => item.stage)))];
       return stages.map(stage => {
-        const values = actionTimings.filter(sample => sample.action === action)
-          .flatMap(sample => sample.stageTimings.filter(item => item.stage === stage).map(item => item.durationMs))
-          .sort((a,b) => a-b);
-        return {action,stage,samples:values.length,
-          medianMs:values.length ? Number(values[Math.floor(values.length/2)].toFixed(2)) : null,
-          p90Ms:values.length ? Number(values[Math.min(values.length-1,Math.floor((values.length-1)*0.9))].toFixed(2)) : null};
+        const perFixture = actionSamples.map(sample => {
+          const events = sample.stageTimings.filter(item => item.stage === stage);
+          return {
+            selector:sample.selector,
+            durationMs:events.reduce((total,item) => total + item.durationMs, 0),
+            eventCount:events.length
+          };
+        }).filter(sample => sample.eventCount > 0);
+        const durations = perFixture.map(sample => sample.durationMs);
+        const median = percentile(durations, 0.5);
+        const p90 = percentile(durations, 0.9);
+        return {
+          action, stage, samples:perFixture.length,
+          eventCountTotal:perFixture.reduce((total,sample) => total + sample.eventCount, 0),
+          eventCounts:perFixture.map(sample => sample.eventCount),
+          medianMs:median == null ? null : Number(median.toFixed(2)),
+          p90Ms:p90 == null ? null : Number(p90.toFixed(2)),
+          perFixture:perFixture.map(sample => ({
+            selector:sample.selector,
+            durationMs:Number(sample.durationMs.toFixed(3)),
+            eventCount:sample.eventCount
+          }))
+        };
       });
     });
     const benchmarkReport = {
