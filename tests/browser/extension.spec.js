@@ -2945,7 +2945,7 @@ test.describe('core user-visible E2E', () => {
           const span = document.createElement('span');
           span.dataset.index = String(tokenIndex++);
           span.textContent = match[0];
-          span.style.padding = '0 2px';
+          span.style.cssText = 'display:inline-block;padding:0 2px;';
           root.appendChild(span);
           lastIndex = match.index + match[0].length;
         }
