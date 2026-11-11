@@ -241,9 +241,7 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
         }
     
         async function ensureSourcePageMultiVerseButton() {
-          const settings = await chrome.storage.local.get({redirectEnabled:false});
-          if (!(await isSuiteEnabled()) || settings.redirectEnabled !== true ||
-              !document.body || document.getElementById(buttonId)) return;
+          if (!(await isSuiteEnabled()) || !document.body || document.getElementById(buttonId)) return;
           const button = document.createElement("button");
           button.id = buttonId;
           button.type = "button";
@@ -269,13 +267,11 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
         setTimeout(ensureSourcePageButtonWhenReady, 1500);
     
         chrome.storage.onChanged.addListener(changes => {
-          if (changes.masterEnabled?.newValue === false ||
-              changes.redirectEnabled?.newValue === false) {
+          if (changes.masterEnabled?.newValue === false) {
             document.getElementById(buttonId)?.remove();
             document.getElementById(buttonId + "-reset-position")?.remove();
             document.getElementById(statusId)?.remove();
-          } else if (changes.masterEnabled?.newValue === true ||
-                     changes.redirectEnabled?.newValue === true) {
+          } else if (changes.masterEnabled?.newValue === true) {
             ensureSourcePageButtonWhenReady();
           }
         });
