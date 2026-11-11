@@ -81,9 +81,9 @@ for (const file of jsFiles) {
 if (!process.exitCode) pass(jsFiles.length + ' JavaScript files parse successfully');
 
 const source = jsFiles.map(f => fs.readFileSync(f, 'utf8')).join('\n');
-for (const s of ['chrome.permissions.request', 'chrome.permissions.contains', 'chrome.permissions.onAdded', 'chrome.scripting.executeScript']) {
-  const present = s === 'chrome.permissions.onAdded'
-    ? source.includes('chrome.permissions?.onAdded?.addListener') || source.includes('chrome.permissions.onAdded.addListener')
+for (const s of ['chrome.permissions.request', 'chrome.permissions.contains', 'chrome.permissions.onAdded', 'chrome.permissions.onRemoved', 'chrome.scripting.executeScript']) {
+  const present = s === 'chrome.permissions.onAdded' || s === 'chrome.permissions.onRemoved'
+    ? source.includes('chrome.permissions?.' + s.split('.').at(-1) + '?.addListener') || source.includes(s + '.addListener')
     : source.includes(s);
   if (present) pass('architecture API present: ' + s);
   else fail('architecture API missing: ' + s);
