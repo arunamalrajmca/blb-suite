@@ -3522,18 +3522,23 @@ test('persisted registration audit runs only on install/update and browser start
 
 test('overlapping startup and install events share one persisted-registration audit', async ({ extensionWorker }) => {
   const count = await extensionWorker.evaluate(async () => {
-    // The browser's initial onStartup event may already have started an audit
-    // before this test can instrument the Chrome API. Let that audit settle so
-    // the two calls below are the only work measured by this assertion.
+    // Let any initial browser startup audit settle before installing a deferred
+    // API response. Keep the next audit pending while the two explicit calls
+    // overlap, so a late onStartup/onInstalled callback also joins that same
+    // in-flight operation instead of making this assertion timing-sensitive.
     if (persistedRuntimeContentScriptAuditPromise) {
       await persistedRuntimeContentScriptAuditPromise;
     }
 
     const originalGetRegistered = chrome.scripting.getRegisteredContentScripts;
     let calls = 0;
-    const wrappedGetRegistered = async (...args) => {
+    let releaseAudit;
+    const wrappedGetRegistered = (...args) => {
       calls++;
-      return originalGetRegistered.apply(chrome.scripting, args);
+      return new Promise((resolve, reject) => {
+        releaseAudit = () => Promise.resolve(originalGetRegistered.apply(chrome.scripting, args))
+          .then(resolve, reject);
+      });
     };
     chrome.scripting.getRegisteredContentScripts = wrappedGetRegistered;
     if (chrome.scripting.getRegisteredContentScripts !== wrappedGetRegistered) {
@@ -3542,12 +3547,16 @@ test('overlapping startup and install events share one persisted-registration au
     }
 
     try {
-      await Promise.all([
-        schedulePersistedRuntimeContentScriptAudit(),
-        schedulePersistedRuntimeContentScriptAudit()
-      ]);
-      return calls;
+      const first = schedulePersistedRuntimeContentScriptAudit();
+      const second = schedulePersistedRuntimeContentScriptAudit();
+      await Promise.resolve();
+      await Promise.resolve();
+      const observedCalls = calls;
+      if (typeof releaseAudit === 'function') releaseAudit();
+      await Promise.all([first, second]);
+      return observedCalls;
     } finally {
+      if (typeof releaseAudit === 'function') releaseAudit();
       chrome.scripting.getRegisteredContentScripts = originalGetRegistered;
     }
   });
