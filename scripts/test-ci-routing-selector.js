@@ -165,6 +165,7 @@ try {
     'tests/browser/selection-phase-performance.spec.js',
     'tests/browser/service-worker-lifecycle.spec.js',
     'tests/browser/site-registration-opt-out-race.spec.js',
+    'tests/browser/optional-host-permission-lifecycle.spec.js',
     'tests/browser/shared-regex-patterns.spec.js',
     'tests/browser/rediscover-sagacity-button.spec.js',
     'tests/browser/research-dom-smoke.spec.js',
