@@ -3095,6 +3095,12 @@ test.describe('core user-visible E2E', () => {
       {reference:'II Thessalonians 2:1', path:'/kjv/2th/2/1/'},
       {reference:'1 Corinthians 13:1', path:'/kjv/1co/13/1/'},
       {reference:'2 Timothy 3:4', path:'/kjv/2ti/3/4/'},
+      {reference:'Ps 23:1', path:'/kjv/psa/23/1/'},
+      {reference:'Prov 3:5', path:'/kjv/pro/3/5/'},
+      {reference:'1 Thes 1:1', path:'/kjv/1th/1/1/'},
+      {reference:'2 Thes 1:1', path:'/kjv/2th/1/1/'},
+      {reference:'1 Pet 1:1', path:'/kjv/1pe/1/1/'},
+      {reference:'2 Pet 1:1', path:'/kjv/2pe/1/1/'},
       {reference:'Gal.1.8,9', path:'/kjv/gal/1/8-9/'},
       {reference:'Rev.14.6,7', path:'/kjv/rev/14/6-7/'},
       {reference:'\u2066Matthew\u2069 \u206614\u2069:\u206622\u2069–\u206633\u2069', path:'/kjv/mat/14/22-33/'}
