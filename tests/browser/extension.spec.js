@@ -4375,7 +4375,7 @@ test('@failure-first MultiVerse reports a failed batch and succeeds when the tra
     for (const book of bookData) {
       for (let chapter = 1; chapter <= Number(book.chapterCount); chapter++) {
         const verseCount = Number(book.verses?.[chapter - 1] || 0);
-        for (let verse = 1; verse <= verseCount; verse++) {
+        for (let verse = 1; verse <= verseCount; verse += 2) {
           refs.push({ book: book.name, chapter, from: verse, to: verse });
           if (refs.length === 201) break;
         }
