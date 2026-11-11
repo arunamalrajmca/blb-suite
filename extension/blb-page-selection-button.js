@@ -517,6 +517,7 @@
     }
     
     function clearBlbPageSelectionAfterAction() {
+      const clearStartedAt = performance.now();
       // Hide synchronously before clearing the native selection; otherwise the
       // selectionchange observer can briefly re-show the floating button.
       setBlbPageButtonVisible(false);
@@ -527,6 +528,7 @@
       lastSelectionContextualReference = null;
       lastSelectionContextualText = '';
       try { window.getSelection?.()?.removeAllRanges(); } catch (_) {}
+      if (typeof recordBlbSelectionStage === 'function') recordBlbSelectionStage('selection-clear-local', clearStartedAt);
     }
     
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
