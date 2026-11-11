@@ -6619,6 +6619,16 @@ chrome.permissions?.onAdded?.addListener(details => {
   injectEnabledTabsForGrantedOrigins(details?.origins || []).catch(() => {});
 });
 
+// Chrome can revoke optional host access outside the extension UI. Reconcile
+// persisted registrations immediately so a site no longer retains a runtime
+// content-script registration after its grant is removed. Keep the explicit
+// site preference intact; a later re-grant can reactivate it through onAdded.
+chrome.permissions?.onRemoved?.addListener(() => {
+  reconcileRuntimeContentScriptRegistrations().catch(error => {
+    console.warn('KJV Scripture Tools permission-revocation reconciliation failed:', String(error));
+  });
+});
+
 chrome.runtime.onInstalled.addListener(async details => {
   if (details.reason === "install") {
     const data = await chrome.storage.local.get({redirectEnabled:null, masterEnabled:null});
