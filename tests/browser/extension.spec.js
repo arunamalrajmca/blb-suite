@@ -435,6 +435,22 @@ test.describe('core user-visible E2E', () => {
         const beforeIds = await currentExtensionWorker.evaluate(() =>
           chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
         );
+        await currentExtensionWorker.evaluate(({ action }) => {
+          globalThis.__blbSuiteEnableSelectionStageTiming = true;
+          globalThis.__blbSuiteSelectionTimingAction = action;
+          globalThis.__blbSuiteSelectionStageTimings = [];
+        }, { action });
+        await currentExtensionWorker.evaluate(async ({ action, targetTabId }) => {
+          await chrome.scripting.executeScript({
+            target:{tabId:targetTabId}, world:'ISOLATED',
+            func:({action}) => {
+              window.__blbSuiteEnableSelectionStageTiming = true;
+              window.__blbSuiteSelectionTimingAction = action;
+              window.__blbSuiteSelectionStageTimings = [];
+            },
+            args:[{action}]
+          });
+        }, { action, targetTabId:sourceTabId });
 
         if (action === 'Show on BLB') {
           // Clear diagnostics left by earlier actions, then wait for this exact
@@ -552,7 +568,21 @@ test.describe('core user-visible E2E', () => {
           selector,
           selectedText: cueWord
         });
-        actionTimings.push({ action, selector, resolverCallCount:resolverCalls.length, durationMs: performance.now() - actionStartedAt });
+        const stageTimings = await currentExtensionWorker.evaluate(async targetTabId => {
+          const [injected] = await chrome.scripting.executeScript({
+            target:{tabId:targetTabId}, world:'ISOLATED',
+            func:() => Array.isArray(window.__blbSuiteSelectionStageTimings) ? [...window.__blbSuiteSelectionStageTimings] : []
+          });
+          return {
+            content:injected?.result || [],
+            background:Array.isArray(globalThis.__blbSuiteSelectionStageTimings) ? [...globalThis.__blbSuiteSelectionStageTimings] : []
+          };
+        }, sourceTabId);
+        actionTimings.push({
+          action, selector, resolverCallCount:resolverCalls.length,
+          durationMs:performance.now()-actionStartedAt,
+          stageTimings:[...stageTimings.content,...stageTimings.background]
+        });
         const openedPaths = await currentExtensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
           tabs.filter(tab => !before.includes(tab.id)).map(tab => {
             try {
@@ -589,10 +619,22 @@ test.describe('core user-visible E2E', () => {
           .map(sample => sample.resolverCallCount)
       };
     });
+    const stageSummary = actions.flatMap(action => {
+      const stages = [...new Set(actionTimings.filter(sample => sample.action === action)
+        .flatMap(sample => sample.stageTimings.map(stage => stage.stage)))];
+      return stages.map(stage => {
+        const values = actionTimings.filter(sample => sample.action === action)
+          .flatMap(sample => sample.stageTimings.filter(item => item.stage === stage).map(item => item.durationMs))
+          .sort((a,b) => a-b);
+        return {action,stage,samples:values.length,
+          medianMs:values.length ? Number(values[Math.floor(values.length/2)].toFixed(2)) : null,
+          p90Ms:values.length ? Number(values[Math.min(values.length-1,Math.floor((values.length-1)*0.9))].toFixed(2)) : null};
+      });
+    });
     const benchmarkReport = {
-      benchmark: 'single-word-verse-cue-four-action-e2e',
-      note: 'Measures from action invocation through BLB tab activation; excludes preselection and Show on BLB button/context readiness; diagnostic only, not an isolated resolver measurement.',
-      timingSummary
+      benchmark:'single-word-verse-cue-four-action-stage-breakdown',
+      note:'Opt-in timings measure local contextual resolution, content-to-worker message round trips, background context/clear message round trips, and local DOM selection clearing. Double-click retains its physical gesture-specific path.',
+      timingSummary, stageSummary, samples:actionTimings
     };
     const reportJson = JSON.stringify(benchmarkReport, null, 2);
     // Persist a machine-readable artifact and add a concise GitHub Actions
