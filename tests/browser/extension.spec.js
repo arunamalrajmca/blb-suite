@@ -3089,7 +3089,7 @@ test.describe('core user-visible E2E', () => {
     {reference:'2 Pet 1:1', path:'/kjv/2pe/1/1/'},
     {reference:'Gal.1.8,9', path:'/kjv/gal/1/8-9/'},
     {reference:'Rev.14.6,7', path:'/kjv/rev/14/6-7/'},
-    {reference:'\\u2066Matthew\\u2069\\u00A0\\u206614\\u2069:\\u206622\\u2069–\\u206633\\u2069', path:'/kjv/mat/14/22-33/'}
+    {reference:'\u2066Matthew\u2069\u00A0\u206614\u2069:\u206622\u2069–\u206633\u2069', path:'/kjv/mat/14/22-33/'}
   ];
 
   // Keep each syntax form as its own test so slow/hung references are
