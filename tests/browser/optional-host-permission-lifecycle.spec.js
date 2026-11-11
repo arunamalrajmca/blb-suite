@@ -19,14 +19,18 @@ test('optional host permission grant, revocation, and re-grant reconcile site re
   const popup = await context.newPage();
   await popup.goto(`chrome-extension://${extensionId}/popup.html`, {waitUntil:'domcontentloaded',timeout:10000});
   console.log('[optional-permission] extension settings page ready');
-  await popup.evaluate(tabId => {
+  const initialPopupState = await popup.evaluate(tabId => {
     const originalQuery = chrome.tabs.query.bind(chrome.tabs);
     chrome.tabs.query = async query => query?.active && query?.currentWindow
       ? [{id:tabId,url:'https://example.org/',title:'Example Domain'}]
       : originalQuery(query);
+    return getState();
   }, targetTabId);
-  await popup.evaluate(async () => render(await getState()));
-  console.log('[optional-permission] target site controls rendered');
+  await popup.evaluate(state => render(state), initialPopupState);
+  expect(initialPopupState.siteKey).toBe('example.org');
+  expect(initialPopupState.master).toBe(true);
+  await expect(popup.locator('#pageButton')).toBeEnabled({timeout:5000});
+  console.log('[optional-permission] target site controls rendered and enabled');
 
   const registrationId = await extensionWorker.evaluate(url =>
     runtimeContentScriptIdForPattern(originPatternForUrl(url)), hostUrl
@@ -67,14 +71,17 @@ test('optional host permission grant, revocation, and re-grant reconcile site re
     // Re-open the page controls so the retained explicit choice can be
     // re-authorized by the user after access is granted again.
     await popup.reload();
-    await popup.evaluate(tabId => {
+    const regrantState = await popup.evaluate(tabId => {
       const originalQuery = chrome.tabs.query.bind(chrome.tabs);
       chrome.tabs.query = async query => query?.active && query?.currentWindow
         ? [{id:tabId,url:'https://example.org/',title:'Example Domain'}]
         : originalQuery(query);
+      return getState();
     }, targetTabId);
-    await popup.evaluate(async () => render(await getState()));
-    await popup.locator('#pageButton').click();
+    await popup.evaluate(state => render(state), regrantState);
+    expect(regrantState.siteKey).toBe('example.org');
+    await expect(popup.locator('#pageButton')).toBeEnabled({timeout:5000});
+    await popup.locator('#pageButton').click({timeout:5000});
     await expect.poll(permissionGranted, {timeout:10000}).toBe(true);
     await expect.poll(registrationExists, {timeout:10000}).toBe(true);
   } finally {
