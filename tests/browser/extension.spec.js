@@ -686,8 +686,11 @@ test.describe('core user-visible E2E', () => {
     // Persist a machine-readable artifact and add a concise GitHub Actions
     // step-summary entry. Playwright's configured CI output may suppress
     // arbitrary stdout from successful tests.
-    fs.mkdirSync('test-results', { recursive: true });
-    fs.writeFileSync('test-results/selection-action-timing.json', reportJson + '\n');
+    // Playwright clears its configured outputDir before each separate
+    // spec invocation in Group A. Keep this report outside test-results so
+    // later specs in the same job cannot erase it before artifact upload.
+    fs.mkdirSync('selection-stage-benchmark', { recursive: true });
+    fs.writeFileSync('selection-stage-benchmark/selection-action-timing.json', reportJson + '\n');
     if (process.env.GITHUB_STEP_SUMMARY) {
       fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,
         '\n### Four-action selection benchmark\n\n' + reportJson + '\n');
