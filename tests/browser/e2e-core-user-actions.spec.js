@@ -2063,4 +2063,45 @@ test('Double-Click on Vs. resolves the following verse in the same article citat
   });
   expect(new URL(destination.pendingUrl || destination.url).pathname).toBe('/kjv/1th/5/17/');
   await removeTabById(extensionWorker, destination.id);
+
+  test('physical Alt+B keyboard shortcut opens the selected Bible reference', async ({
+    page, extensionStorage, extensionWorker
+  }) => {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{'example.com':true},
+      doubleClickBlbSites:{}
+    });
+    await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+    await page.evaluate(() => {
+      const target=document.createElement('p');
+      target.id='physical-alt-b-selection';
+      target.textContent='John 3:16';
+      target.style.cssText='position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(target);
+      const range=document.createRange();
+      range.selectNodeContents(target);
+      const selection=window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      window.focus();
+    });
+
+    const beforeIds=await extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({})).map(tab => tab.id)
+    );
+    await page.bringToFront();
+    await page.keyboard.press('Alt+B');
+
+    const destination=await waitForTab(extensionWorker, tab => {
+      if (beforeIds.includes(tab.id)) return false;
+      try {
+        const url=new URL(tab.pendingUrl || tab.url);
+        return url.hostname==='www.blueletterbible.org' && url.pathname==='/kjv/jhn/3/16/';
+      } catch (_) { return false; }
+    });
+    expect(new URL(destination.pendingUrl || destination.url).pathname).toBe('/kjv/jhn/3/16/');
+    await removeTabById(extensionWorker,destination.id);
+  });
+
 });
