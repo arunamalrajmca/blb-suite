@@ -3140,8 +3140,8 @@ test.describe('core user-visible E2E', () => {
           const beforeIds = await extensionWorker.evaluate(() =>
             chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
           );
+          let actionSelectionText = selectedText;
           try {
-            let actionSelectionText = selectedText;
             if (action === 'Double-Click') {
               await page.evaluate(() => window.getSelection()?.removeAllRanges());
               await page.locator(selector).dblclick();
