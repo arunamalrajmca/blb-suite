@@ -395,3 +395,93 @@ test('Study Sessions confirmed deletion stops and removes only the selected reco
   await page.close();
 });
 
+test('Global master OFF blocks all four selection actions while preserving site preferences', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled: false,
+    redirectEnabled: false,
+    pageSelectionButtonSites: { 'example.com': true },
+    doubleClickBlbSites: { 'example.com': true }
+  });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.bringToFront();
+
+  const tab = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({ active: true, currentWindow: true }))[0]
+  );
+  expect(tab?.id).toEqual(expect.any(Number));
+
+  // Exercise the exact background message boundary used by the floating
+  // button and Double-click content-script actions. Execute in the tab's
+  // isolated world so Chromium supplies the real sender.tab metadata.
+  const messageResults = await extensionWorker.evaluate(async tabId => {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'ISOLATED',
+      func: async () => {
+        const floating = await safeRuntimeSendMessage({
+          type: 'blbSuiteOpenSelectionText',
+          requestId: 'master-off-floating-' + Date.now(),
+          text: 'John 3:16'
+        });
+        const doubleClick = await safeRuntimeSendMessage({
+          type: 'blbSuiteOpenDoubleClickSelectionText',
+          requestId: 'master-off-double-click-' + Date.now(),
+          text: 'John 3:16'
+        });
+        return { floating, doubleClick };
+      }
+    });
+    return results[0]?.result || null;
+  }, tab.id);
+
+  expect(messageResults?.floating?.ok).toBe(false);
+  expect(messageResults?.doubleClick?.ok).toBe(false);
+
+  // Right-click uses the registered context-menu handler; Alt+B uses the
+  // registered command handler. Both must independently enforce the master
+  // switch even when their per-site preferences remain enabled.
+  const otherResults = await extensionWorker.evaluate(async activeTab => {
+    await handleBlbSelectionContextMenuClick({
+      menuItemId: 'blb-suite-web-selection',
+      selectionText: 'John 3:16'
+    }, activeTab);
+    const altB = await handleOpenBibleSelectionCommand();
+    return {
+      altB,
+      pageButtonEligible: await isPageButtonEnabledForHostname('example.com'),
+      contextMenuEligible: await shouldShowBlbContextMenu(activeTab, 'John 3:16')
+    };
+  }, tab);
+
+  expect(otherResults.altB).toMatchObject({ ok: false, reason: 'disabled' });
+  expect(otherResults.pageButtonEligible).toBe(false);
+  expect(otherResults.contextMenuEligible).toBe(false);
+
+  const finalState = await extensionWorker.evaluate(async () => {
+    const settings = await chrome.storage.local.get({
+      masterEnabled: true,
+      redirectEnabled: true,
+      pageSelectionButtonSites: {},
+      doubleClickBlbSites: {}
+    });
+    const tabs = await chrome.tabs.query({});
+    const openedReferenceTabs = tabs.filter(item => {
+      try {
+        const url = new URL(String(item.url || item.pendingUrl || ''));
+        return url.hostname === 'www.blueletterbible.org' &&
+          url.pathname === '/kjv/jhn/3/16/';
+      } catch (_) { return false; }
+    });
+    return { settings, openedReferenceTabCount: openedReferenceTabs.length };
+  });
+
+  expect(finalState.settings).toMatchObject({
+    masterEnabled: false,
+    redirectEnabled: false,
+    pageSelectionButtonSites: { 'example.com': true },
+    doubleClickBlbSites: { 'example.com': true }
+  });
+  expect(finalState.openedReferenceTabCount).toBe(0);
+});
