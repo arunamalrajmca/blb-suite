@@ -420,12 +420,12 @@ test('Global master OFF blocks all four selection actions while preserving site 
       target: { tabId },
       world: 'ISOLATED',
       func: async () => {
-        const floating = await safeRuntimeSendMessage({
+        const floating = await chrome.runtime.sendMessage({
           type: 'blbSuiteOpenSelectionText',
           requestId: 'master-off-floating-' + Date.now(),
           text: 'John 3:16'
         });
-        const doubleClick = await safeRuntimeSendMessage({
+        const doubleClick = await chrome.runtime.sendMessage({
           type: 'blbSuiteOpenDoubleClickSelectionText',
           requestId: 'master-off-double-click-' + Date.now(),
           text: 'John 3:16'
