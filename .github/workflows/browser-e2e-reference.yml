@@ -589,3 +589,13 @@ jobs:
             printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
             npx playwright test "$spec"
           done
+      - name: Upload focused behavior diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-suite-focused-behavior-diagnostics
+          path: |
+            test-results/selection-action-timing.json
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
