@@ -1081,6 +1081,15 @@ test.describe('core user-visible E2E', () => {
         });
       }, sourceTabId);
     }
+
+    // Retry the same still-live selection after restoring normal messaging.
+    await button.click();
+    await activateBlbTabForPath(extensionWorker, '/kjv/jhn/3/16/', {
+      fragment:'John 3:16',
+      selector:'#blb-e2e-failed-handoff-selection',
+      selectedText:'John 3:16'
+    });
+    await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || '')).toBe('');
   });
 
   test('Show on BLB opens an exact selected reference', async ({ page, context, extensionStorage, extensionWorker }) => {
@@ -4429,5 +4438,183 @@ test('@failure-first MultiVerse reports a failed batch and succeeds when the tra
     count: 201,
     batchCount: 2,
     truncated: false
+  });
+});
+
+
+test('@failure-first Right-click preserves a selected reference after transient failure and succeeds on retry', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{},
+    redirectEnabled:false
+  });
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  await page.evaluate(() => {
+    const p=document.createElement('p');
+    p.id='right-click-recovery-reference';
+    p.textContent='John 3:16';
+    document.body.appendChild(p);
+    const range=document.createRange();
+    range.selectNodeContents(p);
+    const selection=window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+  const outcome=await extensionWorker.evaluate(async () => {
+    const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+    const original=openSharedSelectionAction;
+    let failOnce=true;
+    let calls=0;
+    openSharedSelectionAction=async (...args) => {
+      calls++;
+      if (failOnce) {
+        failOnce=false;
+        throw new Error('injected transient right-click destination failure');
+      }
+      return original(...args);
+    };
+    const info={menuItemId:'blb-suite-web-selection',selectionText:'John 3:16'};
+    const tabInfo={id:tab.id,url:tab.url,title:tab.title};
+    try {
+      await handleBlbSelectionContextMenuClick(info,tabInfo);
+      const afterFailure=await getActiveTabSelection(tab.id);
+      await handleBlbSelectionContextMenuClick(info,tabInfo);
+      const afterRetry=await getActiveTabSelection(tab.id);
+      return {calls,afterFailure,afterRetry};
+    } finally {
+      openSharedSelectionAction=original;
+    }
+  });
+  expect(outcome.calls).toBe(2);
+  expect(outcome.afterFailure).toBe('John 3:16');
+  expect(outcome.afterRetry).toBe('');
+  await activateBlbTabForPath(extensionWorker,'/kjv/jhn/3/16/',{
+    fragment:'John 3:16',
+    selector:'#right-click-recovery-reference',
+    selectedText:'John 3:16'
+  });
+});
+
+test('@failure-first Alt+B preserves a selected reference after transient failure and succeeds on retry', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{},
+    redirectEnabled:false
+  });
+  await page.goto('https://example.com/',{waitUntil:'domcontentloaded'});
+  await page.evaluate(() => {
+    const p=document.createElement('p');
+    p.id='alt-b-recovery-reference';
+    p.textContent='John 3:16';
+    document.body.appendChild(p);
+    const range=document.createRange();
+    range.selectNodeContents(p);
+    const selection=window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+  const outcome=await extensionWorker.evaluate(async () => {
+    const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+    const original=openSharedSelectionAction;
+    let failOnce=true;
+    let calls=0;
+    openSharedSelectionAction=async (...args) => {
+      calls++;
+      if (failOnce) {
+        failOnce=false;
+        throw new Error('injected transient Alt+B destination failure');
+      }
+      return original(...args);
+    };
+    try {
+      const first=await handleOpenBibleSelectionCommand();
+      const afterFailure=await getActiveTabSelection(tab.id);
+      const second=await handleOpenBibleSelectionCommand();
+      const afterRetry=await getActiveTabSelection(tab.id);
+      return {calls,first,second,afterFailure,afterRetry};
+    } finally {
+      openSharedSelectionAction=original;
+    }
+  });
+  expect(outcome.calls).toBe(2);
+  expect(outcome.first.ok).toBe(false);
+  expect(outcome.afterFailure).toBe('John 3:16');
+  expect(outcome.second.ok).toBe(true);
+  expect(outcome.afterRetry).toBe('');
+  await activateBlbTabForPath(extensionWorker,'/kjv/jhn/3/16/',{
+    fragment:'John 3:16',
+    selector:'#alt-b-recovery-reference',
+    selectedText:'John 3:16'
+  });
+});
+
+test('@failure-first Double-click reports a transient destination failure and succeeds on a fresh retry', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{'example.com':true},
+    redirectEnabled:false
+  });
+  await page.goto('https://example.com/',{waitUntil:'domcontentloaded'});
+  await page.evaluate(() => {
+    const p=document.createElement('p');
+    p.id='double-click-recovery-reference';
+    p.textContent='John 3:16';
+    document.body.appendChild(p);
+    const range=document.createRange();
+    range.selectNodeContents(p);
+    const selection=window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+  const tabId=await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+  const outcome=await extensionWorker.evaluate(async id => {
+    const original=openBlbDestination;
+    let failOnce=true;
+    let calls=0;
+    openBlbDestination=async (...args) => {
+      calls++;
+      if (failOnce) {
+        failOnce=false;
+        throw new Error('injected transient Double-click destination failure');
+      }
+      return original(...args);
+    };
+    const send=async requestId => {
+      const [injected]=await chrome.scripting.executeScript({
+        target:{tabId:id},
+        world:'ISOLATED',
+        func:async payload => chrome.runtime.sendMessage(payload),
+        args:[{
+          type:'blbSuiteOpenDoubleClickSelectionText',
+          text:'John 3:16',
+          contextualReference:{url:'https://www.blueletterbible.org/kjv/jhn/3/16/'},
+          contextualReferenceResolved:true,
+          requestId,
+          tabBehavior:{activeIfNew:true,activateExisting:true}
+        }]
+      });
+      return injected?.result;
+    };
+    try {
+      const first=await send('dblclick-recovery-first-'+Date.now());
+      const second=await send('dblclick-recovery-second-'+Date.now());
+      return {calls,first,second};
+    } finally {
+      openBlbDestination=original;
+    }
+  },tabId);
+  expect(outcome.calls).toBe(2);
+  expect(outcome.first).toMatchObject({ok:false});
+  expect(outcome.second).toMatchObject({ok:true,contextual:true,actionSource:'double-click'});
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString() || '')).toBe('John 3:16');
+  await activateBlbTabForPath(extensionWorker,'/kjv/jhn/3/16/',{
+    fragment:'John 3:16',
+    selector:'#double-click-recovery-reference',
+    selectedText:'John 3:16'
   });
 });
