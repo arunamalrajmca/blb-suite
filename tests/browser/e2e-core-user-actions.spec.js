@@ -2063,8 +2063,9 @@ test('Double-Click on Vs. resolves the following verse in the same article citat
   });
   expect(new URL(destination.pendingUrl || destination.url).pathname).toBe('/kjv/1th/5/17/');
   await removeTabById(extensionWorker, destination.id);
+});
 
-  test('physical Alt+B keyboard shortcut opens the selected Bible reference', async ({
+test('physical Alt+B keyboard shortcut opens the selected Bible reference', async ({
     page, extensionStorage, extensionWorker
   }) => {
     await extensionStorage.set({
@@ -2104,4 +2105,3 @@ test('Double-Click on Vs. resolves the following verse in the same article citat
     await removeTabById(extensionWorker,destination.id);
   });
 
-});
