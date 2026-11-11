@@ -2963,10 +2963,16 @@ test.describe('core user-visible E2E', () => {
             chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
           );
           try {
+            let actionSelectionText = selectedText;
             if (action === 'Double-Click') {
               await page.evaluate(() => window.getSelection()?.removeAllRanges());
               await page.locator(selector).dblclick();
-              expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe(selectedText);
+              actionSelectionText = await page.evaluate(() => window.getSelection()?.toString() || '');
+              // Native word selection may include adjacent punctuation and
+              // neighboring numeric components (for example, "1.1"). Assert
+              // that the physical gesture selected text, then validate the
+              // resolver against the complete expected destination below.
+              expect(actionSelectionText.length).toBeGreaterThan(0);
             } else {
               await page.locator(selector).evaluate(element => {
                 const range = document.createRange();
@@ -3000,7 +3006,7 @@ test.describe('core user-visible E2E', () => {
             const matchedTabIds = await activateBlbTabForPath(extensionWorker,item.path,{
               fragment:action + ' ' + item.reference,
               selector,
-              selectedText
+              selectedText:actionSelectionText
             });
             expect(matchedTabIds.length, action + ' should resolve ' + item.reference + ' token ' + selectedText)
               .toBeGreaterThan(0);
@@ -3012,6 +3018,7 @@ test.describe('core user-visible E2E', () => {
               reference:item.reference,
               token:selectedText,
               action,
+              selectedText:actionSelectionText,
               expectedPath:item.path,
               error:String(error.message || error)
             });
