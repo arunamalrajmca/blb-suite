@@ -32,7 +32,6 @@ export const featureSpecs = [
       "tests/browser/audit-defect-regressions.spec.js",
       "tests/browser/service-worker-lifecycle.spec.js",
       "tests/browser/site-registration-opt-out-race.spec.js",
-  "tests/browser/optional-host-permission-lifecycle.spec.js",
       "tests/browser/optional-host-permission-lifecycle.spec.js"
     ]
   },
@@ -149,6 +148,7 @@ export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.
   "tests/browser/selection-phase-performance.spec.js",
   "tests/browser/service-worker-lifecycle.spec.js",
   "tests/browser/site-registration-opt-out-race.spec.js",
+  "tests/browser/optional-host-permission-lifecycle.spec.js",
   "tests/browser/kings-bible-collector-behavior.spec.js",
   "tests/browser/feature-lifecycle-regressions.spec.js",
   "tests/browser/study-backup-restore.spec.js",
