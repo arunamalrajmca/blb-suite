@@ -6020,10 +6020,15 @@ async function getActiveTabSelection(tabId) {
   // scripting.executeScript round-trip and its injection/context overhead on
   // the latency-sensitive Alt+B path. Protected pages (notably PDF viewers)
   // fall back to scripting and retain the documented PDF behavior.
+  const messageStartedAt = performance.now();
   try {
     const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteGetActiveSelectionText'});
     if (response?.ok) return String(response.text || '').trim();
-  } catch (_) {}
+  } catch (_) {
+  } finally {
+    recordBlbBackgroundSelectionStage('selection-text-message-roundtrip', messageStartedAt);
+  }
+  const fallbackStartedAt = performance.now();
   try {
     const result = await chrome.scripting.executeScript({
       target: {tabId},
