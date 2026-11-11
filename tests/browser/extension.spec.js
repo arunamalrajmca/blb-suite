@@ -3071,6 +3071,140 @@ test.describe('core user-visible E2E', () => {
   // 66-book × multi-variant copy here doubled the release runtime and could hit
   // the 4-minute per-test timeout without adding coverage.
 
+
+  // Close the remaining parity gap between exhaustive Double-Click coverage
+  // and the three selection-based entry points. The existing all-66 range
+  // test intentionally remains the Double-Click baseline; these tests exercise
+  // the same 66 valid same-chapter ranges through each other action separately.
+  async function prepareFourActionBookMatrix(page, extensionStorage, items, idPrefix) {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{'example.com':true},
+      doubleClickBlbSites:{'example.com':true}
+    });
+    await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+    await expect(page.locator('body')).toBeVisible();
+    await page.evaluate(({items,idPrefix}) => {
+      document.getElementById(idPrefix)?.remove();
+      const root=document.createElement('main');
+      root.id=idPrefix;
+      root.style.cssText='position:fixed;left:12px;top:12px;z-index:2147483647;background:#fff;color:#000;padding:8px;font:18px Arial,sans-serif;max-height:calc(100vh - 24px);overflow:auto;';
+      for (let index=0;index<items.length;index++) {
+        const paragraph=document.createElement('p');
+        paragraph.id=idPrefix+'-'+index;
+        paragraph.textContent=items[index].reference;
+        root.appendChild(paragraph);
+      }
+      document.body.appendChild(root);
+    },{items,idPrefix});
+    await page.waitForTimeout(750);
+  }
+
+  async function runFourActionSelectionMatrix(page, extensionWorker, items, action, idPrefix) {
+    for (let index=0;index<items.length;index++) {
+      const item=items[index];
+      const selector='#'+idPrefix+'-'+index;
+      await page.bringToFront();
+      await page.locator(selector).evaluate(element => {
+        const range=document.createRange();
+        range.selectNodeContents(element);
+        const selection=window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+        element.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true,view:window}));
+      });
+      expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe(item.reference);
+
+      if (action==='Show on BLB') {
+        const button=page.locator('#blb-suite-page-selection-button');
+        await expect(button,'floating action for '+item.reference).toBeVisible({timeout:10000});
+        await button.click();
+      } else if (action==='Right-Click') {
+        await extensionWorker.evaluate(async selectedText => {
+          const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
+          if (!tab?.id) throw new Error('No active source tab for context-menu matrix');
+          await handleBlbSelectionContextMenuClick({
+            menuItemId:'blb-suite-web-selection',
+            selectionText:selectedText
+          },tab);
+        },item.reference);
+      } else if (action==='Alt+B') {
+        const result=await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+        expect(result?.ok,'Alt+B must accept '+item.reference).toBe(true);
+      } else {
+        throw new Error('Unsupported selection action: '+action);
+      }
+
+      const openedIds=await activateBlbTabForPath(extensionWorker,item.path,{
+        fragment:action+' '+item.reference,
+        selector,
+        selectedText:item.reference
+      });
+      expect(openedIds.length,action+' must resolve '+item.reference+' to '+item.path).toBeGreaterThan(0);
+      await extensionWorker.evaluate(ids => Promise.all(ids.map(id =>
+        chrome.tabs.remove(id).catch(() => {})
+      )),openedIds);
+      await page.evaluate(() => window.getSelection()?.removeAllRanges());
+    }
+  }
+
+  const selectionMatrixActions=['Show on BLB','Right-Click','Alt+B'];
+
+  for (const action of selectionMatrixActions) {
+    test('Same-chapter ranges — all 66 books through '+action, async ({page,extensionStorage,extensionWorker}) => {
+      test.setTimeout(360000);
+      const books=await extensionWorker.evaluate(() => BOOKS.map(book => ({
+        name:book.name,
+        urlKey:book.urlKey
+      })));
+      expect(books,'the production book table must contain all 66 canonical books').toHaveLength(66);
+      const items=books.map(book => ({
+        reference:book.name+' 1:1-2',
+        path:'/kjv/'+book.urlKey+'/1/1-2/'
+      }));
+      await prepareFourActionBookMatrix(page,extensionStorage,items,'all-66-range-'+action.toLowerCase().replace(/[^a-z]+/g,'-'));
+      await runFourActionSelectionMatrix(
+        page,extensionWorker,items,action,
+        'all-66-range-'+action.toLowerCase().replace(/[^a-z]+/g,'-')
+      );
+    });
+  }
+
+  // The exhaustive alias resolver test below covers every configured alias
+  // through Double-Click. This companion matrix checks one canonical alias
+  // representative per book through the other three entry points, preventing
+  // shared-alias routing from silently diverging between action handlers.
+  for (const action of selectionMatrixActions) {
+    test('Shared book aliases — every aliasable book through '+action, async ({page,extensionStorage,extensionWorker}) => {
+      test.setTimeout(360000);
+      const items=await extensionWorker.evaluate(() => {
+        const shortestByBook=Object.create(null);
+        for (const [alias,target] of Object.entries(BOOK_ALIASES || {})) {
+          const current=shortestByBook[target];
+          if (!current || alias.length<current.length || (alias.length===current.length && alias<current)) {
+            shortestByBook[target]=alias;
+          }
+        }
+        return BOOKS.map(book => ({
+          name:book.name,
+          urlKey:book.urlKey,
+          alias:shortestByBook[book.name]
+        })).filter(book => book.alias).map(book => ({
+          reference:book.alias+' 1:1',
+          path:'/kjv/'+book.urlKey+'/1/1/',
+          book:book.name,
+          alias:book.alias
+        }));
+      });
+      expect(items.length,'most canonical books should have a configured shared alias').toBeGreaterThanOrEqual(60);
+      await prepareFourActionBookMatrix(page,extensionStorage,items,'all-book-aliases-'+action.toLowerCase().replace(/[^a-z]+/g,'-'));
+      await runFourActionSelectionMatrix(
+        page,extensionWorker,items,action,
+        'all-book-aliases-'+action.toLowerCase().replace(/[^a-z]+/g,'-')
+      );
+    });
+  }
+
   const fourActionReferenceGrammarCases = [
     {reference:'Genesis 1:1', path:'/kjv/gen/1/1/'},
     {reference:'Genesis 1.1', path:'/kjv/gen/1/1/'},
