@@ -1300,6 +1300,10 @@ test.describe('core user-visible E2E', () => {
         '<p><span id="first-cor-prefix">1</span> <span id="first-cor-book">Cor</span> 13:1</p>',
         '<p><span id="second-th-prefix">II</span> <span id="second-th-book">Th</span> 2:1</p>',
         '<p><span id="third-john-prefix">III</span> <span id="third-john-book">Jn</span> 1:1</p>',
+        '<p><span id="ps-book">Ps</span> 23:1</p>',
+        '<p><span id="prov-book">Prov</span> 3:5</p>',
+        '<p><span id="first-thes-prefix">1</span> <span id="first-thes-book">Thes</span> 4:16</p>',
+        '<p><span id="second-pet-prefix">2</span> <span id="second-pet-book">Pet</span> 1:3</p>',
         '<p><span id="comma-romans-book">Romans</span> <span id="comma-romans-chapter">10</span>:<span id="comma-romans-first">9</span>,<span id="comma-romans-second">10</span></p>',
         '<p><span id="standalone-cor">Cor</span></p>',
         '<p><span id="standalone-th">Th</span></p>',
@@ -1327,6 +1331,10 @@ test.describe('core user-visible E2E', () => {
       ['#first-cor-book', 'Cor', '/kjv/1co/13/1/'],
       ['#second-th-book', 'Th', '/kjv/2th/2/1/'],
       ['#third-john-book', 'Jn', '/kjv/3jo/1/1/'],
+      ['#ps-book', 'Ps', '/kjv/psa/23/1/'],
+      ['#prov-book', 'Prov', '/kjv/pro/3/5/'],
+      ['#first-thes-book', 'Thes', '/kjv/1th/4/16/'],
+      ['#second-pet-book', 'Pet', '/kjv/2pe/1/3/'],
       ['#comma-romans-book', 'Romans', '/kjv/rom/10/9-10/'],
       ['#comma-romans-chapter', '10', '/kjv/rom/10/9-10/'],
       ['#comma-romans-first', '9', '/kjv/rom/10/9-10/'],
@@ -2924,22 +2932,31 @@ test.describe('core user-visible E2E', () => {
     const failures = [];
 
     for (const item of cases) {
-      const tokens = item.reference.trim().split(/\\s+/);
       await page.evaluate(reference => {
         document.getElementById('four-action-grammar-reference')?.remove();
         const root = document.createElement('p');
         root.id = 'four-action-grammar-reference';
         root.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;color:#000;padding:12px;font:24px Arial,sans-serif;';
-        root.innerHTML = reference.split(/\\s+/).map((token,index) =>
-          '<span data-index="' + index + '" style="display:inline-block;padding:0 3px"></span>'
-        ).join(' ');
-        [...root.querySelectorAll('span')].forEach((span,index) => { span.textContent = reference.split(/\\s+/)[index]; });
+        const tokenPattern = /[A-Za-z]+|[0-9]+/g;
+        let lastIndex = 0;
+        let tokenIndex = 0;
+        for (const match of reference.matchAll(tokenPattern)) {
+          if (match.index > lastIndex) root.appendChild(document.createTextNode(reference.slice(lastIndex, match.index)));
+          const span = document.createElement('span');
+          span.dataset.index = String(tokenIndex++);
+          span.textContent = match[0];
+          span.style.padding = '0 2px';
+          root.appendChild(span);
+          lastIndex = match.index + match[0].length;
+        }
+        if (lastIndex < reference.length) root.appendChild(document.createTextNode(reference.slice(lastIndex)));
         document.body.appendChild(root);
       }, item.reference);
 
-      for (let tokenIndex=0; tokenIndex<tokens.length; tokenIndex++) {
+      const tokenCount = await page.locator('#four-action-grammar-reference span[data-index]').count();
+      for (let tokenIndex = 0; tokenIndex < tokenCount; tokenIndex++) {
         const selector = '#four-action-grammar-reference span[data-index="' + tokenIndex + '"]';
-        const selectedText = tokens[tokenIndex];
+        const selectedText = await page.locator(selector).textContent();
         for (const action of actions) {
           await page.bringToFront();
           const beforeIds = await extensionWorker.evaluate(() =>
@@ -2949,6 +2966,7 @@ test.describe('core user-visible E2E', () => {
             if (action === 'Double-Click') {
               await page.evaluate(() => window.getSelection()?.removeAllRanges());
               await page.locator(selector).dblclick();
+              expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe(selectedText);
             } else {
               await page.locator(selector).evaluate(element => {
                 const range = document.createRange();
@@ -2956,7 +2974,7 @@ test.describe('core user-visible E2E', () => {
                 const selection = window.getSelection();
                 selection.removeAllRanges();
                 selection.addRange(range);
-                document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true,cancelable:true}));
+                element.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true, view: window }));
               });
               expect(await page.evaluate(() => window.getSelection()?.toString() || '')).toBe(selectedText);
 
