@@ -3137,7 +3137,7 @@ test.describe('core user-visible E2E', () => {
       // token here multiplied this matrix into ~250 navigation cycles.
       const bookToken = page.locator('#four-action-grammar-reference span[data-index]').filter({
         hasText: /^[A-Za-z]+$/
-      }).first();
+      }).last();
       await expect(bookToken).toHaveCount(1);
       const tokenIndex = await bookToken.getAttribute('data-index');
       for (const action of actions) {
