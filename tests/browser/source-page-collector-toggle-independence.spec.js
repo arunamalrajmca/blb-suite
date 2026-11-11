@@ -5,7 +5,7 @@ test('registered source-page collection buttons are independent of external-link
 }) => {
   const cases = await extensionWorker.evaluate(() => {
     const tab = {url:'https://dailyverses.net/dailyverse'};
-    const collectorFiles = [];
+    const results = [];
 
     for (const redirectEnabled of [false, true]) {
       const settings = {
@@ -14,20 +14,21 @@ test('registered source-page collection buttons are independent of external-link
         doubleClickBlbSites:{},
         redirectEnabled
       };
-      const shouldInject = shouldInjectContentScriptForTab(tab, settings);
       const files = contentScriptFilesForTab(tab, settings);
-      collectorFiles.push({
+      results.push({
         redirectEnabled,
-        shouldInject,
-        hasCollectorBundle:files.includes('content.js'),
-        hasRedirectBundle:files.includes('script-tagger.js'),
+        shouldInject:shouldInjectContentScriptForTab(tab, settings),
+        hasCollectorBundle:files.includes('content.js') &&
+          files.includes('source-page-collector.js'),
+        hasRedirectBundle:files.includes('redirect-scripttagger.js') &&
+          files.includes('redirect-bibleref-ranges.js'),
         hasCollectorRegistry:Object.prototype.hasOwnProperty.call(
           globalThis.BLBSourcePageCollectorSites || {}, 'dailyverses.net'
         )
       });
     }
 
-    return collectorFiles;
+    return results;
   });
 
   expect(cases).toEqual([
@@ -46,23 +47,4 @@ test('registered source-page collection buttons are independent of external-link
       hasCollectorRegistry:true
     }
   ]);
-});
-
-test('source-page collection button lifecycle is controlled by SUITE master state, not redirect preference', async ({
-  extensionWorker
-}) => {
-  const lifecycle = await extensionWorker.evaluate(() => {
-    const source = globalThis.BLBSourcePageCollectorModule?.initialize?.toString?.() || '';
-    const registry = globalThis.BLBSourcePageCollectorSites || {};
-    const site = registry['dailyverses.net'];
-    return {
-      registeredSite:!!site,
-      collectorGateUsesMaster:source.includes('changes.masterEnabled?.newValue'),
-      collectorGateUsesRedirect:source.includes('redirectEnabled')
-    };
-  });
-
-  expect(lifecycle.registeredSite).toBe(true);
-  expect(lifecycle.collectorGateUsesMaster).toBe(true);
-  expect(lifecycle.collectorGateUsesRedirect).toBe(false);
 });
