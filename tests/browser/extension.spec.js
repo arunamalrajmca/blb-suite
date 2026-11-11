@@ -3131,12 +3131,19 @@ test.describe('core user-visible E2E', () => {
         document.body.appendChild(root);
       }, item.reference);
 
-      const tokenCount = await page.locator('#four-action-grammar-reference span[data-index]').count();
-      for (let tokenIndex = 0; tokenIndex < tokenCount; tokenIndex++) {
+      // One context-bearing book token per syntax form is sufficient for the
+      // four-action grammar matrix. Numeric-token independence and suffix
+      // handling have dedicated all-four-action regressions; iterating every
+      // token here multiplied this matrix into ~250 navigation cycles.
+      const bookToken = page.locator('#four-action-grammar-reference span[data-index]').filter({
+        hasText: /^[A-Za-z]+$/
+      }).first();
+      await expect(bookToken).toHaveCount(1);
+      const tokenIndex = await bookToken.getAttribute('data-index');
+      for (const action of actions) {
         const selector = '#four-action-grammar-reference span[data-index="' + tokenIndex + '"]';
         const selectedText = await page.locator(selector).textContent();
-        for (const action of actions) {
-          await page.bringToFront();
+        await page.bringToFront();
           const beforeIds = await extensionWorker.evaluate(() =>
             chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id).filter(id => id != null))
           );
@@ -3211,8 +3218,7 @@ test.describe('core user-visible E2E', () => {
               }
             }),beforeIds);
           }
-          await page.evaluate(() => window.getSelection()?.removeAllRanges());
-        }
+        await page.evaluate(() => window.getSelection()?.removeAllRanges());
       }
     }
     expect(failures,'four-action reference grammar failures: ' + JSON.stringify(failures,null,2)).toEqual([]);
