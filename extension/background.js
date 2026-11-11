@@ -5676,7 +5676,8 @@ async function openBlbBook(bookOrNumber, tabBehavior = {activeIfNew:true, activa
 
 async function getContextualSelectionReference(tabId, selectionText) {
   if (!Number.isInteger(tabId)) return null;
-  const messageStartedAt = performance.now();
+  const measureStage = globalThis.__blbSuiteEnableSelectionStageTiming === true;
+  const messageStartedAt = measureStage ? performance.now() : null;
   try {
     const response = await chrome.tabs.sendMessage(tabId, {
       type: 'blbSuiteResolveContextualSelection',
@@ -5689,7 +5690,7 @@ async function getContextualSelectionReference(tabId, selectionText) {
     // fallback, preserving the PDF-safe right-click path.
     return null;
   } finally {
-    recordBlbBackgroundSelectionStage('context-message-roundtrip', messageStartedAt);
+    if (measureStage) recordBlbBackgroundSelectionStage('context-message-roundtrip', messageStartedAt);
   }
 }
 
@@ -6020,15 +6021,16 @@ async function getActiveTabSelection(tabId) {
   // scripting.executeScript round-trip and its injection/context overhead on
   // the latency-sensitive Alt+B path. Protected pages (notably PDF viewers)
   // fall back to scripting and retain the documented PDF behavior.
-  const messageStartedAt = performance.now();
+  const measureStage = globalThis.__blbSuiteEnableSelectionStageTiming === true;
+  const messageStartedAt = measureStage ? performance.now() : null;
   try {
     const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteGetActiveSelectionText'});
     if (response?.ok) return String(response.text || '').trim();
   } catch (_) {
   } finally {
-    recordBlbBackgroundSelectionStage('selection-text-message-roundtrip', messageStartedAt);
+    if (measureStage) recordBlbBackgroundSelectionStage('selection-text-message-roundtrip', messageStartedAt);
   }
-  const fallbackStartedAt = performance.now();
+  const fallbackStartedAt = measureStage ? performance.now() : null;
   try {
     const result = await chrome.scripting.executeScript({
       target: {tabId},
@@ -6058,7 +6060,7 @@ async function getActiveTabSelection(tabId) {
     // The existing right-click context-menu path remains the PDF-safe method.
     return '';
   } finally {
-    recordBlbBackgroundSelectionStage('selection-text-script-fallback', fallbackStartedAt);
+    if (measureStage) recordBlbBackgroundSelectionStage('selection-text-script-fallback', fallbackStartedAt);
   }
 }
 
@@ -6481,14 +6483,15 @@ chrome.contextMenus.onClicked.addListener(handleBlbSelectionContextMenuClick);
 
 async function clearPageSelectionAfterBlbAction(tabId) {
   if (!Number.isInteger(tabId)) return;
-  const clearStartedAt = performance.now();
+  const measureStage = globalThis.__blbSuiteEnableSelectionStageTiming === true;
+  const clearStartedAt = measureStage ? performance.now() : null;
   try {
     await chrome.tabs.sendMessage(tabId, {type:'blbSuiteClearPageSelection'});
   } catch (_) {
     // Some supported pages (notably PDF viewers) may not expose a content
     // script message endpoint; the BLB action itself should still complete.
   } finally {
-    recordBlbBackgroundSelectionStage('selection-clear-message-roundtrip', clearStartedAt);
+    if (measureStage) recordBlbBackgroundSelectionStage('selection-clear-message-roundtrip', clearStartedAt);
   }
 }
 
