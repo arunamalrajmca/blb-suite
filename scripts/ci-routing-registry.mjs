@@ -88,6 +88,14 @@ export const featureSpecs = [
     specs: ["tests/browser/webster-collector-behavior.spec.js"]
   },
   {
+    paths: ["extension/source-page-collector-sites.js"],
+    specs: [
+      "tests/browser/source-page-collector-behavior.spec.js",
+      "tests/browser/source-page-button-redirect-separation.spec.js",
+      "tests/browser/redirect-hostnames.spec.js"
+    ]
+  },
+  {
     paths: ["extension/source-page-collector.js"],
     specs: ["tests/browser/source-page-collector-behavior.spec.js", "tests/browser/source-page-button-redirect-separation.spec.js"]
   },
