@@ -267,3 +267,13 @@ export const referenceRequiredSpecs = new Set([
   "tests/browser/pdf-selection-regressions.spec.js",
   "tests/browser/source-page-button-redirect-separation.spec.js"
 ]);
+
+
+// Specs that require the Group A runner itself. Specs delegated to the
+// References or Study Sessions workflows are excluded to avoid allocating a
+// second runner when those dedicated gates already own the selected work.
+export const groupAExecutionSpecs = new Set(
+  [...groupARequiredSpecs].filter(spec =>
+    !referenceRequiredSpecs.has(spec) && !studySessionSpecs.has(spec)
+  )
+);
