@@ -96,6 +96,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/redirect-toggle-isolation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/multiverse-clipboard-reference-pattern.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/popup-master-toggle-regression.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/popup-site-toggle-independence.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/facebook-selection-parser.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/substack-selection-parser.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/omnibox-command-routing.spec.js", "import { test } from '@playwright/test';\n");
@@ -178,6 +179,7 @@ test("site-feature fail-closed behavior runs in the required gate for popup and 
     assert.match(popupOutput, /full_browser_suite=false/);
     assert.match(popupOutput, /changed_specs=.*redirect-toggle-isolation\.spec\.js/);
     assert.match(popupOutput, /changed_specs=.*popup-master-toggle-regression\.spec\.js/);
+    assert.match(popupOutput, /changed_specs=.*popup-site-toggle-independence\.spec\.js/);
     assert.match(popupOutput, /group_b_required=false/);
     assert.match(popupOutput, /reference_required=true/);
   });
@@ -186,6 +188,7 @@ test("site-feature fail-closed behavior runs in the required gate for popup and 
     const backgroundOutput = select(root, base);
     assert.match(backgroundOutput, /full_browser_suite=true/);
     assert.match(backgroundOutput, /changed_specs=.*popup-master-toggle-regression\.spec\.js/);
+    assert.match(backgroundOutput, /changed_specs=.*popup-site-toggle-independence\.spec\.js/);
     assert.match(backgroundOutput, /changed_specs=.*facebook-selection-parser\.spec\.js/);
     assert.match(backgroundOutput, /changed_specs=.*substack-selection-parser\.spec\.js/);
     assert.match(backgroundOutput, /changed_specs=.*omnibox-command-routing\.spec\.js/);
