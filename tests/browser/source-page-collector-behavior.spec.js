@@ -428,6 +428,7 @@ test('OpenBible, Crossway and Sarata show BLB collection buttons on content page
         '<a href="/bible/chapter/Psalms.23.html#23:1">The LORD is my shepherd</a>',
         '<a href="/bible/verses/John.3.html#3:16">For God so loved the world</a>',
         '<a href="/bible/verses/1-Samuel.3.html#3:14-15">1 Samuel 3:14-15</a>',
+        '<a href="/bible/verses/John.3.html#3:16-14">Invalid reversed range</a>',
         '<a href="/bible/verses/John.3.html#4:16">Mismatched fragment chapter</a>'
       ],
       button: '#blb-suite-sarata-multiverse',
