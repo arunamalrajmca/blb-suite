@@ -57,11 +57,11 @@ test('selected Study Topic exports a PDF containing its saved reference and note
 
   await expect.poll(async () => {
     const downloads = await allDownloads(extensionWorker);
-    return downloads.filter(item => item.state === 'complete' && /^data:application\/pdf;base64,/.test(item.url || '')).length;
+    return downloads.filter(item => item.state === 'complete' && /^data:application\\/pdf;base64,/.test(item.url || '')).length;
   }).toBeGreaterThan(0);
 
   const downloads = await allDownloads(extensionWorker);
-  const item = downloads.find(entry => entry.state === 'complete' && /^data:application\/pdf;base64,/.test(entry.url || ''));
+  const item = downloads.find(entry => entry.state === 'complete' && /^data:application\\/pdf;base64,/.test(entry.url || ''));
   expect(item).toBeDefined();
   const pdf = Buffer.from(item.url.split(',')[1], 'base64').toString('latin1');
   expect(pdf.startsWith('%PDF-1.4')).toBe(true);
@@ -70,5 +70,39 @@ test('selected Study Topic exports a PDF containing its saved reference and note
   expect(pdf).toContain(note);
   expect(pdf).toContain('Grace');
 
+  await page.close();
+});
+
+test('Study exports reject empty data, invalid dates, and topics without content without downloading', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+
+  const emptyWhole = await page.evaluate(() => chrome.runtime.sendMessage({
+    type: 'blbSuiteDownloadStudyWhole'
+  }));
+  expect(emptyWhole).toEqual({ok:false});
+
+  const invalidDate = await page.evaluate(() => chrome.runtime.sendMessage({
+    type: 'blbSuiteDownloadStudyDate',
+    date: '2026-02-31'
+  }));
+  expect(invalidDate).toEqual({ok:false});
+
+  const emptyTopic = 'Empty export topic ' + Date.now();
+  const saved = await page.evaluate(topic => chrome.runtime.sendMessage({
+    type: 'blbSuiteSaveStudyTopic',
+    title: topic
+  }), emptyTopic);
+  expect(saved).toMatchObject({ok:true, topic:emptyTopic});
+
+  const topicExport = await page.evaluate(topic => chrome.runtime.sendMessage({
+    type: 'blbSuiteDownloadStudyTopic',
+    topic
+  }), emptyTopic);
+  expect(topicExport).toEqual({ok:false});
+  expect(await allDownloads(extensionWorker)).toEqual([]);
   await page.close();
 });
