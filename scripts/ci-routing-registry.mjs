@@ -149,6 +149,12 @@ export const featureSpecs = [
   }
 ];
 
+  {
+    paths: ["extension/new-reference-only.js"],
+    specs: ["tests/browser/shared-regex-patterns.spec.js"]
+  }
+];
+
 export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.spec.js",
   "tests/browser/audit-defect-regressions.spec.js",
   "tests/browser/omnibox-boolean-operators.spec.js",
