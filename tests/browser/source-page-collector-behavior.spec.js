@@ -487,7 +487,7 @@ test('OpenBible, Crossway and Sarata show BLB collection buttons on content page
     await expect.poll(async () => extensionWorker.evaluate(async () => {
       const saved = await chrome.storage.local.get({ __blbTestThreeSiteRefs: [] });
       return saved.__blbTestThreeSiteRefs.length;
-    }), { timeout: 10000 }).toBe(2);
+    }), { timeout: 10000 }).toBe(fixture.expected.length);
 
     const refs = await extensionWorker.evaluate(async () => {
       const saved = await chrome.storage.local.get({ __blbTestThreeSiteRefs: [] });
