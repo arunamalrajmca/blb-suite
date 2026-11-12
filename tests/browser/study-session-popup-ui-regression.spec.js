@@ -231,7 +231,7 @@ test('Study Sessions popup exposes whole-study and date-filtered PDF downloads',
 
   await expect.poll(async () => extensionWorker.evaluate(() => new Promise(resolve => {
     chrome.downloads.search({}, items => resolve((items || []).filter(item =>
-      item.state === 'complete' && /^data:application\\/pdf;base64,/.test(item.url || '')
+      item.state === 'complete' && /^data:application\/pdf;base64,/.test(item.url || '')
     ).length));
   }))).toBeGreaterThanOrEqual(2);
   await page.close();
