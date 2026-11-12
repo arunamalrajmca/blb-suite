@@ -167,7 +167,7 @@ async function setMaster(on) {
   updateStudyButtons();
 }
 
-async function pinSiteFeatureChoice(feature, otherFeatureEnabled) {
+async function pinSiteFeatureChoice(feature) {
   // Hand the preference to the service worker before opening Chrome's host
   // permission prompt. The popup may be destroyed while that prompt is shown;
   // the background can finish the durable write and inject after permission.
@@ -176,8 +176,7 @@ async function pinSiteFeatureChoice(feature, otherFeatureEnabled) {
     return await chrome.runtime.sendMessage({
       type:'blbSuitePrepareSiteFeatureToggle',
       origin:currentSiteOrigin,
-      feature,
-      otherFeatureEnabled:otherFeatureEnabled === true
+      feature
     });
   } catch (_) {
     return {ok:false};
@@ -1148,16 +1147,11 @@ async function cancelPendingSiteFeatureChoice(feature) {
 async function setIndependentSiteFeature(feature, on) {
   // Do not request host permissions or persist feature opt-ins on sensitive sites.
   if (isSensitiveSiteUrl(currentSiteUrl)) { render(await getState()); return; }
-  // Capture the other toggle before any permission change can alter defaults.
-  const otherFeatureEnabled = feature === 'pageButton'
-    ? document.getElementById('doubleClick').checked
-    : document.getElementById('pageButton').checked;
-
   // Start pinning the explicit choice immediately. The popup can be closed by
   // Chrome while its permission prompt is open; waiting for getState() first
   // delayed this durable write until after that interruption.
   const pinPromise = on
-    ? pinSiteFeatureChoice(feature, otherFeatureEnabled)
+    ? pinSiteFeatureChoice(feature)
     : Promise.resolve();
 
   // permissions.request must still be invoked synchronously in the original
