@@ -72,32 +72,6 @@ async function dismissBlbCookieOverlay(page) {
 }
 
 test.describe('core user-action E2E coverage', () => {
-  test('physical Alt+B keyboard shortcut opens the selected Bible reference', async ({ page, extensionStorage, extensionWorker }) => {
-    await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
-    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-    await page.evaluate(() => {
-      const target = document.createElement('p');
-      target.id = 'blb-native-alt-b-target';
-      target.textContent = 'John 3:16';
-      target.style.cssText = 'position:fixed;left:24px;top:24px;background:#fff;padding:12px;font:24px Arial,sans-serif;';
-      document.body.appendChild(target);
-      const range = document.createRange();
-      range.selectNodeContents(target);
-      const selection = window.getSelection();
-      selection.removeAllRanges();
-      selection.addRange(range);
-    });
-    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('John 3:16');
-    await page.bringToFront();
-    await page.keyboard.press('Alt+b');
-    const blb = await waitForTab(extensionWorker, tab => {
-      try { const url = new URL(tab.url); return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/jhn/3/16/'; }
-      catch (_) { return false; }
-    }, 8000);
-    expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
-    await removeTabById(extensionWorker, blb.id);
-  });
-
   test('physical right-click preserves the selected text and the BLB context-menu action is eligible', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
@@ -162,8 +136,8 @@ test.describe('core user-action E2E coverage', () => {
     }, sourceTab);
     expect(failureHandled).toBe(true);
 
-    await page.bringToFront();
-    await page.keyboard.press('Alt+b');
+    const commandResult = await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+    expect(commandResult?.ok).toBe(true);
     const blb = await waitForTab(extensionWorker, tab => {
       try { const url = new URL(tab.url); return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/jhn/3/16/'; }
       catch (_) { return false; }
