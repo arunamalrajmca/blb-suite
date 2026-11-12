@@ -21,6 +21,8 @@ const testHosts = [
   'https://www.bible.com/*',
   'https://www.christianity.com/*',
   'https://www.crosswalk.com/*',
+  'https://www.thekingsbible.com/*',
+  'https://thekingsbible.com/*',
   'https://www.enduringword.com/*',
   'https://www.churchofjesuschrist.org/*',
   'https://mercyhouseministry.com/*',
@@ -532,6 +534,29 @@ test('all 14 registered page-button hosts show the exact button on content pages
     await page.goto(contentPage, {waitUntil:'domcontentloaded'});
     await expect(button, contentPage + ' must show the expected page button')
       .toHaveText('Open Bible References in BLB');
+  }
+});
+
+
+test("The King's Bible dictionary and concordance pages render the BLB references button", async ({
+  page, extensionStorage
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+  await page.route('https://www.thekingsbible.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>The King\'s Bible fixture</title></head><body><main><a class="bible" href="/Bible/1/1">Genesis 1:1</a></main></body></html>'
+  }));
+
+  for (const path of ['/dictionary/Faith', '/concordance/Creation']) {
+    await page.goto('https://www.thekingsbible.com' + path, {waitUntil:'domcontentloaded'});
+    const button = page.locator('#blb-suite-kingsbible-multiverse');
+    await expect(button, path).toHaveText('Open Bible References in BLB');
   }
 });
 
