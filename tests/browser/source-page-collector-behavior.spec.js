@@ -196,6 +196,8 @@ test('ChurchofJesusChrist shows its BLB references button on scripture-study pag
               <a href="/study/scriptures/ot/prov/14?id=p32&lang=eng">Proverbs 14:32</a>
               <a href="/study/scriptures/nt/1-pet/1?id=p3-p4&lang=eng">1 Peter 1:3-4</a>
               <a href="/study/scriptures/nt/1-thes/5?id=p8&lang=eng">1 Thessalonians 5:8</a>
+              <a href="/study/scriptures/nt/2-tim/1?id=p7-p8&lang=eng">2 Timothy 1:7-8</a>
+              <a href="/study/scriptures/nt/rom/8?id=p9-p8&lang=eng">Invalid reversed range</a>
               <a href="/study/manual/lesson?lang=eng">Study lesson</a>
             </main>
           </body></html>`
@@ -227,7 +229,7 @@ test('ChurchofJesusChrist shows its BLB references button on scripture-study pag
   await expect.poll(async () => extensionWorker.evaluate(async () => {
     const saved = await chrome.storage.local.get({ __blbTestChurchOfJesusChristRefs: [] });
     return saved.__blbTestChurchOfJesusChristRefs.length;
-  }), { timeout: 10000 }).toBe(6);
+  }), { timeout: 10000 }).toBe(7);
 
   const refs = await extensionWorker.evaluate(async () => {
     const saved = await chrome.storage.local.get({ __blbTestChurchOfJesusChristRefs: [] });
@@ -281,10 +283,17 @@ test('ChurchofJesusChrist shows its BLB references button on scripture-study pag
       from: 8,
       to: 8,
       url: 'https://www.blueletterbible.org/kjv/1th/5/8/'
+    },
+    {
+      book: '2 timothy',
+      chapter: 1,
+      from: 7,
+      to: 8,
+      url: 'https://www.blueletterbible.org/kjv/2ti/1/7-8/'
     }
   ]);
   await expect(page.locator('#blb-suite-churchofjesuschrist-multiverse-status'))
-    .toContainText('Opening 6 Bible references in BLB MultiVerse');
+    .toContainText('Opening 7 Bible references in BLB MultiVerse');
 });
 
 test('Mercy House shows its BLB references button on article pages and collects linked verse URLs', async ({
@@ -309,6 +318,8 @@ test('Mercy House shows its BLB references button on article pages and collects 
               <h1>His Mercies Are New Every Morning</h1>
               <a href="/bible/?b=Lamentations&c=3&v=22-23">Lamentations 3:22-23</a>
               <a href="/bible/?b=Exodus&c=16&v=21">Exodus 16:21</a>
+              <a href="/bible/?b=Romans&c=8&v=1–2">Romans 8:1–2</a>
+              <a href="/bible/?b=Romans&c=8&v=9-8">Invalid reversed range</a>
               <a href="/about/">About Mercy House</a>
             </main>
           </body></html>`
@@ -340,7 +351,7 @@ test('Mercy House shows its BLB references button on article pages and collects 
   await expect.poll(async () => extensionWorker.evaluate(async () => {
     const saved = await chrome.storage.local.get({ __blbTestMercyHouseRefs: [] });
     return saved.__blbTestMercyHouseRefs.length;
-  }), { timeout: 10000 }).toBe(2);
+  }), { timeout: 10000 }).toBe(3);
 
   const refs = await extensionWorker.evaluate(async () => {
     const saved = await chrome.storage.local.get({ __blbTestMercyHouseRefs: [] });
@@ -356,10 +367,14 @@ test('Mercy House shows its BLB references button on article pages and collects 
     {
       book: 'exodus', chapter: 16, from: 21, to: 21,
       url: 'https://www.blueletterbible.org/kjv/exo/16/21/'
+    },
+    {
+      book: 'romans', chapter: 8, from: 1, to: 2,
+      url: 'https://www.blueletterbible.org/kjv/rom/8/1-2/'
     }
   ]);
   await expect(page.locator('#blb-suite-mercyhouse-multiverse-status'))
-    .toContainText('Opening 2 Bible references in BLB MultiVerse');
+    .toContainText('Opening 3 Bible references in BLB MultiVerse');
 });
 
 test('OpenBible, Crossway and Sarata show BLB collection buttons on content pages and collect their verse links', async ({
@@ -411,12 +426,16 @@ test('OpenBible, Crossway and Sarata show BLB collection buttons on content page
       article: 'https://sarata.com/bible/chapter/Psalms.23.html',
       refs: [
         '<a href="/bible/chapter/Psalms.23.html#23:1">The LORD is my shepherd</a>',
-        '<a href="/bible/verses/John.3.html#3:16">For God so loved the world</a>'
+        '<a href="/bible/verses/John.3.html#3:16">For God so loved the world</a>',
+        '<a href="/bible/verses/1-Samuel.3.html#3:14-15">1 Samuel 3:14-15</a>',
+        '<a href="/bible/verses/John.3.html#3:16-14">Invalid reversed range</a>',
+        '<a href="/bible/verses/John.3.html#4:16">Mismatched fragment chapter</a>'
       ],
       button: '#blb-suite-sarata-multiverse',
       expected: [
         ['psalms', 23, 1, 'https://www.blueletterbible.org/kjv/psa/23/1/'],
-        ['john', 3, 16, 'https://www.blueletterbible.org/kjv/jhn/3/16/']
+        ['john', 3, 16, 'https://www.blueletterbible.org/kjv/jhn/3/16/'],
+        ['1 samuel', 3, 14, 'https://www.blueletterbible.org/kjv/1sa/3/14-15/']
       ]
     }
   ];
@@ -469,7 +488,7 @@ test('OpenBible, Crossway and Sarata show BLB collection buttons on content page
     await expect.poll(async () => extensionWorker.evaluate(async () => {
       const saved = await chrome.storage.local.get({ __blbTestThreeSiteRefs: [] });
       return saved.__blbTestThreeSiteRefs.length;
-    }), { timeout: 10000 }).toBe(2);
+    }), { timeout: 10000 }).toBe(fixture.expected.length);
 
     const refs = await extensionWorker.evaluate(async () => {
       const saved = await chrome.storage.local.get({ __blbTestThreeSiteRefs: [] });
