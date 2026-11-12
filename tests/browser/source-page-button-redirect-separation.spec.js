@@ -55,7 +55,7 @@ test('Open Bible References in BLB remains visible across redirect changes and f
 }) => {
   await extensionStorage.set({
     masterEnabled:true,
-    redirectEnabled:false,
+    redirectEnabled:true,
     pageSelectionButtonSites:{},
     doubleClickBlbSites:{}
   });
