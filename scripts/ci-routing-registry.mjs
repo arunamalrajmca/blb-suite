@@ -145,7 +145,7 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/Tutorial.html", "extension/Tutorial.js"],
-    specs: ["tests/browser/pr-422-feature-regressions.spec.js"]
+    specs: ["tests/browser/pr-422-feature-regressions.spec.js", "tests/browser/tutorial-page-behavior.spec.js"]
   }
 ];
 
@@ -166,6 +166,7 @@ export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.
   "tests/browser/extension.spec.js",
   "tests/browser/known-host-extension.spec.js",
   "tests/browser/pr-422-feature-regressions.spec.js",
+  "tests/browser/tutorial-page-behavior.spec.js",
  
   "tests/browser/redirect-hostnames.spec.js",
   "tests/browser/blb-non-kjv-redirect.spec.js",
@@ -238,6 +239,7 @@ export const groupARequiredSpecs = new Set([
   "tests/browser/site-registration-opt-out-race.spec.js",
   "tests/browser/known-host-extension.spec.js",
   "tests/browser/pr-422-feature-regressions.spec.js",
+  "tests/browser/tutorial-page-behavior.spec.js",
   "tests/browser/site-feature-defaults.spec.js"
 ]);
 
