@@ -10,7 +10,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import {
   featureSpecs, mappedSpecs, separatelyManagedSpecs, studySessionSpecs,
-  groupARequiredSpecs, groupAExecutionSpecs, groupBRequiredSpecs, referenceRequiredSpecs
+  groupAExecutionSpecs, groupBRequiredSpecs, referenceRequiredSpecs, referenceDelegatedSpecs
 } from "./ci-routing-registry.mjs";
 import { isNonRuntimePath } from "./ci-change-policy.mjs";
 
