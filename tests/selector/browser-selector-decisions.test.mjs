@@ -73,6 +73,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/multiverse-handoff.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/blb-passive-new-tab-targets.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/source-page-collector-behavior.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/source-page-button-redirect-separation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/blb-verse-link-navigation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/criteria-search-navigation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/feature-lifecycle-regressions.spec.js", "import { test } from '@playwright/test';\n");
