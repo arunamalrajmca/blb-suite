@@ -366,8 +366,8 @@ test("Study session export source selects its focused PDF download browser spec"
     commitChange(root, "tests/browser/study-session-popup-ui-regression.spec.js", "// updated Study export assertions\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=tests\/browser\/study-session-export\.spec\.js/);
-    assert.match(output, /changed_browser_specs=tests\/browser\/study-session-export\.spec\.js/);
+    assert.match(output, /changed_specs=tests\/browser\/study-session-popup-ui-regression\.spec\.js/);
+    assert.match(output, /changed_browser_specs=tests\/browser\/study-session-popup-ui-regression\.spec\.js/);
     assert.match(output, /group_a_required=false/);
     assert.match(output, /study_sessions_required=true/);
     assert.match(output, /group_b_required=false/);
