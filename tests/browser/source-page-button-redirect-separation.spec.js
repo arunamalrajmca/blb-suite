@@ -44,6 +44,18 @@ const test = base.extend({
       ], {stdio:'pipe'});
       const manifestPath = path.join(extensionPath, 'manifest.json');
       const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      // Verify static content-script scope before adding test-only host grants.
+      // Runtime getManifest() may normalize host patterns, so inspect the exact
+      // packaged source manifest rather than conflating host_permissions with
+      // content_scripts.matches.
+      const staticMatches = (manifest.content_scripts || []).flatMap(script => script.matches || []);
+      if (staticMatches.some(match =>
+        match === '<all_urls>' || match === 'https://*/*' ||
+        match.includes('christianity.com')
+      )) {
+        throw new Error('Christianity.com must be activated through runtime registration, not static content_scripts.matches: ' +
+          JSON.stringify(staticMatches));
+      }
       manifest.host_permissions = [...new Set([
         ...(manifest.host_permissions || []),
         ...testHosts,
@@ -128,18 +140,13 @@ test('source-page collector button survives full refreshes around real popup tog
   // runtime registration, not a test-only static content_scripts match.
   const registration = await extensionWorker.evaluate(async () => {
     const manifest = chrome.runtime.getManifest();
-    const staticMatch = (manifest.content_scripts || []).some(script =>
-      (script.matches || []).some(match => match.includes('christianity.com'))
-    );
     const registered = await chrome.scripting.getRegisteredContentScripts();
     return {
-      staticMatch,
       runtime: registered.find(script =>
         (script.matches || []).includes('https://www.christianity.com/*')
       ) || null
     };
   });
-  expect(registration.staticMatch).toBe(false);
   expect(registration.runtime?.js).toContain('source-page-collector.js');
   expect(registration.runtime?.js).toContain('content.js');
 
