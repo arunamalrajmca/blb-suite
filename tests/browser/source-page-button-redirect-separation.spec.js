@@ -51,7 +51,7 @@ const test = base.extend({
       const staticMatches = (manifest.content_scripts || []).flatMap(script => script.matches || []);
       if (staticMatches.some(match =>
         match === '<all_urls>' || match === 'https://*/*' ||
-        match.includes('christianity.com')
+        (match.includes('christianity.com') || match.includes('crosswalk.com'))
       )) {
         throw new Error('Christianity.com must be activated through runtime registration, not static content_scripts.matches: ' +
           JSON.stringify(staticMatches));
