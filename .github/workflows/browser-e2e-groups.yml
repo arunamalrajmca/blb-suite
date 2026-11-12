@@ -91,9 +91,9 @@ jobs:
           for index in "${!specs[@]}"; do
             spec="${specs[$index]}"
             [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
-            printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-            npx playwright test "$spec"
+            printf '[%s/%s] Selected %s\n' "$((index + 1))" "$total" "$spec"
           done
+          npx playwright test "${specs[@]}" --max-failures=1
 
       - name: Run source URL parser regressions
         if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/redirect-source-url-patterns.spec.js') && !(inputs.browser_e2e_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js')))) }}
