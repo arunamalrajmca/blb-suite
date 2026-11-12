@@ -153,7 +153,7 @@ test('source-page collector button survives a full refresh with redirects OFF an
     pageSelectionButtonSites:{},
     doubleClickBlbSites:{}
   });
-  await page.route('https://www.dailyverses.net/dailyverse', route =>
+  await page.route('https://www.christianity.com/wiki/prayer/test-article.html', route =>
     route.fulfill({
       status:200,
       contentType:'text/html',
@@ -161,8 +161,8 @@ test('source-page collector button survives a full refresh with redirects OFF an
     })
   );
 
-  await page.goto('https://www.dailyverses.net/dailyverse', {waitUntil:'domcontentloaded'});
-  const button = page.locator('#blb-suite-dailyverses-multiverse');
+  await page.goto('https://www.christianity.com/wiki/prayer/test-article.html', {waitUntil:'domcontentloaded'});
+  const button = page.locator('#blb-suite-christianity-multiverse');
   await expect(button).toBeVisible();
 
   // The fixture must not statically inject source-page scripts. Confirm that
@@ -170,13 +170,13 @@ test('source-page collector button survives a full refresh with redirects OFF an
   const registration = await extensionWorker.evaluate(async () => {
     const manifest = chrome.runtime.getManifest();
     const staticMatch = (manifest.content_scripts || []).some(script =>
-      (script.matches || []).some(match => match.includes('dailyverses.net'))
+      (script.matches || []).some(match => match.includes('christianity.com'))
     );
     const registered = await chrome.scripting.getRegisteredContentScripts();
     return {
       staticMatch,
       runtime: registered.find(script =>
-        (script.matches || []).includes('https://www.dailyverses.net/*')
+        (script.matches || []).includes('https://www.christianity.com/*')
       ) || null
     };
   });
