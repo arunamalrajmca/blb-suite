@@ -86,3 +86,95 @@ test('host-access revocation removes registrations and a later grant reactivates
     }, {originPattern:pattern,settings:previous});
   }
 });
+test('current-tab activation falls back when persistent content-script registration fails', async ({ page, extensionStorage, extensionWorker }) => {
+  // Load the tab before enabling the feature so the normal onUpdated path
+  // cannot race this test's deliberately failed registration.
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{},
+    redirectEnabled:false
+  });
+
+  const activated = await extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({url:'https://example.com/*'});
+    const tab = tabs[0];
+    if (!tab?.id) throw new Error('Expected the example.com test tab to exist');
+    // Let any settings-change activation started by the fixture settle first.
+    const pendingActivation = contentScriptInjectionLocks.get(tab.id);
+    if (pendingActivation) await pendingActivation.catch(() => {});
+    const pattern = originPatternForUrl(tab.url);
+    const registered = await chrome.scripting.getRegisteredContentScripts();
+    const matchingIds = registered
+      .filter(entry => entry.matches?.includes(pattern) && entry.id.startsWith('blb-suite-runtime-'))
+      .map(entry => entry.id);
+    if (matchingIds.length) {
+      await chrome.scripting.unregisterContentScripts({ids:matchingIds});
+    }
+    const remaining = (await chrome.scripting.getRegisteredContentScripts())
+      .filter(entry => entry.matches?.includes(pattern) && entry.id.startsWith('blb-suite-runtime-'));
+    if (remaining.length) {
+      throw new Error('Could not remove existing example.com registrations: ' + remaining.map(entry => entry.id).join(', '));
+    }
+    const originalRegister = chrome.scripting.registerContentScripts;
+    const failingRegister = async () => {
+      throw new Error('Simulated persistent registration failure');
+    };
+    chrome.scripting.registerContentScripts = failingRegister;
+    if (chrome.scripting.registerContentScripts !== failingRegister) {
+      chrome.scripting.registerContentScripts = originalRegister;
+      throw new Error('Unable to instrument registerContentScripts for activation-failure test');
+    }
+    try {
+      return await ensureContentScriptInTab(tab.id);
+    } finally {
+      chrome.scripting.registerContentScripts = originalRegister;
+    }
+  });
+
+  expect(activated).toBe(true);
+});
+
+test('a stale redirect-rule update cannot finish after a newer OFF update', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const originalGet = chrome.storage.local.get;
+    const originalUpdate = chrome.declarativeNetRequest.updateDynamicRules;
+    const updates = [];
+    let readCount = 0;
+    let releaseFirstRead;
+    let signalFirstRead;
+    const firstReadStarted = new Promise(resolve => { signalFirstRead = resolve; });
+
+    chrome.storage.local.get = async defaults => {
+      if (defaults && Object.prototype.hasOwnProperty.call(defaults, 'redirectEnabled') &&
+          Object.prototype.hasOwnProperty.call(defaults, 'masterEnabled')) {
+        readCount++;
+        if (readCount === 1) {
+          signalFirstRead();
+          return await new Promise(resolve => { releaseFirstRead = resolve; });
+        }
+        return {redirectEnabled:false, masterEnabled:true};
+      }
+      return originalGet.call(chrome.storage.local, defaults);
+    };
+    chrome.declarativeNetRequest.updateDynamicRules = async details => {
+      updates.push({addRuleCount:details.addRules.length, removeRuleIds:[...details.removeRuleIds]});
+    };
+
+    try {
+      const olderOn = installRules();
+      await firstReadStarted;
+      const newerOff = installRules();
+      releaseFirstRead({redirectEnabled:true, masterEnabled:true});
+      await Promise.all([olderOn, newerOff]);
+      return {updates, finalAddRuleCount:updates.at(-1)?.addRuleCount ?? null};
+    } finally {
+      chrome.storage.local.get = originalGet;
+      chrome.declarativeNetRequest.updateDynamicRules = originalUpdate;
+    }
+  });
+
+  expect(result.updates.length).toBe(2);
+  expect(result.finalAddRuleCount).toBe(0);
+});

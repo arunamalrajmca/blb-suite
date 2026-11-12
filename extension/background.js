@@ -2846,13 +2846,12 @@ async function ensureContentScriptInTab(tabId) {
 
       const registrationReady = await ensureRuntimeContentScriptRegistered(tab, files);
       if (!registrationReady) {
-        // Current-document injection alone would leave future navigations
-        // without the configured feature. Do not report this tab as activated
-        // when its persistent registration could not be established.
-        console.warn('KJV Scripture Tools skipped tab activation because persistent content-script registration failed:', {
+        // Keep the current page usable even when Chrome rejects a persistent
+        // registration update. The direct executeScript path below activates
+        // this document; tabs.onUpdated retries activation on later navigations.
+        console.warn('KJV Scripture Tools is using current-tab injection because persistent content-script registration failed:', {
           tabId, tabUrl:tab.url, files
         });
-        return false;
       }
 
       // A newly enabled site may already be open, so install the MAIN-world
@@ -3688,14 +3687,25 @@ const dynamicRules = [
 dynamicRules[0].condition={regexFilter:"^https://www\\.blueletterbible\\.org/net/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)-([a-zA-Z0-9]+)/s_\\d+$",resourceTypes:["main_frame"]};
 dynamicRules[1].condition={regexFilter:"^https://www\\.blueletterbible\\.org/net/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)/([a-zA-Z0-9]+)/s_\\d+$",resourceTypes:["main_frame"]};
 
-async function installRules() {
-  try {
-    const data = await chrome.storage.local.get({redirectEnabled:false, masterEnabled:true});
-    await chrome.declarativeNetRequest.updateDynamicRules({
-      removeRuleIds: dynamicRules.map(x=>x.id),
-      addRules: data.masterEnabled !== false && data.redirectEnabled ? dynamicRules : []
+// DNR updates are global state. Serialize every startup, storage-change, and
+// explicit refresh so an older storage snapshot cannot finish after a newer
+// OFF update and restore redirect rules.
+let dynamicRulesUpdateQueue = Promise.resolve();
+function installRules() {
+  const operation = dynamicRulesUpdateQueue
+    .catch(() => {})
+    .then(async () => {
+      const data = await chrome.storage.local.get({redirectEnabled:false, masterEnabled:true});
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: dynamicRules.map(x=>x.id),
+        addRules: data.masterEnabled !== false && data.redirectEnabled === true ? dynamicRules : []
+      });
+    })
+    .catch(error => {
+      console.error("KJV Scripture Tools DNR setup:", error);
     });
-  } catch(e) { console.error("KJV Scripture Tools DNR setup:",e); }
+  dynamicRulesUpdateQueue = operation.then(() => undefined, () => undefined);
+  return operation;
 }
 
 // ---------- PDF selected-text Bible-reference helper ----------
