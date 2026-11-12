@@ -3,36 +3,35 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { execFileSync } = require('node:child_process');
+const vm = require('node:vm');
 
 const sourceExtensionPath = path.resolve(__dirname, '../../extension');
-const testHosts = [
-  'https://example.com/*',
-  'https://www.facebook.com/*',
-  'https://rediscover.bible/*',
-  'https://www.rediscover.bible/*',
-  'https://sagacityweb.com/*',
-  'https://www.sagacityweb.com/*',
-  'https://thetreasuryofscriptureknowledge.com/*',
-  'https://www.thetreasuryofscriptureknowledge.com/*',
-  'https://www.sermonindex.net/*',
-  'https://x.com/*',
-  'https://www.gotquestions.org/*',
-  'https://www.dailyverses.net/*',
-  'https://www.bible.com/*',
-  'https://www.christianity.com/*',
-  'https://www.crosswalk.com/*',
-  'https://www.thekingsbible.com/*',
-  'https://thekingsbible.com/*',
-  'https://www.enduringword.com/*',
-  'https://www.churchofjesuschrist.org/*',
-  'https://mercyhouseministry.com/*',
-  'https://www.openbible.info/*',
-  'https://www.crossway.org/*',
-  'https://sarata.com/*',
-  'https://www.supplyofgrace.com/*',
-  'https://sermonindex.net/*',
-  'https://webstersdictionary1828.com/*'
-];
+const testHosts = [];
+
+function readSourcePageCollectorRegistry(extensionPath) {
+  const registryPath = path.join(extensionPath, 'source-page-collector-sites.js');
+  const registryGlobal = {};
+  vm.runInNewContext(fs.readFileSync(registryPath, 'utf8'), {
+    globalThis: registryGlobal
+  }, {filename:registryPath});
+  const registry = registryGlobal.BLBSourcePageCollectorSites;
+  if (!registry || typeof registry !== 'object') {
+    throw new Error('Could not load the production source-page collector registry');
+  }
+  return registry;
+}
+
+function sharedPageButtonHosts(extensionPath) {
+  return Object.entries(readSourcePageCollectorRegistry(extensionPath))
+    .filter(([, config]) => config && typeof config.id === 'string' && config.id)
+    .map(([host, config]) => ({host, siteId:config.id}));
+}
+
+function specializedCollectorHosts(extensionPath) {
+  return Object.entries(readSourcePageCollectorRegistry(extensionPath))
+    .filter(([, config]) => config && config.collectorModule)
+    .map(([host, config]) => ({host, collectorModule:config.collectorModule}));
+}
 
 const test = base.extend({
   extensionPath: [async ({}, use) => {
@@ -494,25 +493,11 @@ test('Christianity.com and Crosswalk.com exclude homepages while enabling nested
 });
 
 
-test('all 14 registered page-button hosts show the exact button on content pages and exclude homepages', async ({
-  page, extensionStorage
+test('every shared-registry page-button host shows the exact button on content pages and excludes homepages', async ({
+  page, extensionStorage, extensionPath
 }) => {
-  const cases = [
-    ['https://www.christianity.com/', 'https://www.christianity.com/wiki/prayer/test-article.html', 'christianity'],
-    ['https://www.gotquestions.org/', 'https://www.gotquestions.org/test-article.html', 'gotquestions'],
-    ['https://www.crosswalk.com/', 'https://www.crosswalk.com/devotionals/test-article.html', 'crosswalk'],
-    ['https://www.enduringword.com/', 'https://www.enduringword.com/bible-commentary/genesis-1/', 'enduringword'],
-    ['https://www.rediscover.bible/', 'https://www.rediscover.bible/articles/test-article', 'rediscover'],
-    ['https://sagacityweb.com/', 'https://sagacityweb.com/articles/test-article', 'sagacity'],
-    ['https://www.thetreasuryofscriptureknowledge.com/', 'https://www.thetreasuryofscriptureknowledge.com/articles/test-article', 'treasury'],
-    ['https://www.dailyverses.net/', 'https://www.dailyverses.net/dailyverse', 'dailyverses'],
-    ['https://www.churchofjesuschrist.org/', 'https://www.churchofjesuschrist.org/study/scriptures/ot/gen/1?lang=eng', 'churchofjesuschrist'],
-    ['https://mercyhouseministry.com/', 'https://mercyhouseministry.com/articles/test-article', 'mercyhouse'],
-    ['https://www.openbible.info/', 'https://www.openbible.info/topics/test-article', 'openbible'],
-    ['https://www.crossway.org/', 'https://www.crossway.org/articles/test-article', 'crossway'],
-    ['https://sarata.com/', 'https://sarata.com/bible/chapter/Genesis.1.html', 'sarata'],
-    ['https://sermonindex.net/', 'https://sermonindex.net/articles/test-article', 'sermonindex']
-  ];
+  const cases = sharedPageButtonHosts(extensionPath);
+  expect(cases.length, 'the shared page-button registry must not be empty').toBeGreaterThan(0);
 
   await extensionStorage.set({
     masterEnabled:true,
@@ -526,7 +511,9 @@ test('all 14 registered page-button hosts show the exact button on content pages
     body:'<!doctype html><html><head><title>Page-button host fixture</title></head><body><main>Fixture content</main></body></html>'
   }));
 
-  for (const [homepage, contentPage, siteId] of cases) {
+  for (const {host, siteId} of cases) {
+    const homepage = 'https://' + host + '/';
+    const contentPage = 'https://' + host + '/__blb-suite-regression__/content';
     const button = page.locator('#blb-suite-' + siteId + '-multiverse');
     await page.goto(homepage, {waitUntil:'domcontentloaded'});
     await expect(button, homepage + ' must not show the page button').toHaveCount(0);
@@ -537,6 +524,16 @@ test('all 14 registered page-button hosts show the exact button on content pages
   }
 });
 
+test('every specialized source-page collector has dedicated button-rendering regression coverage', async ({
+  extensionPath
+}) => {
+  const specialized = specializedCollectorHosts(extensionPath);
+  const covered = new Set(['thekingsbible.com', 'webstersdictionary1828.com']);
+  const uncovered = specialized.map(({host}) => host).filter(host => !covered.has(host));
+  const stale = [...covered].filter(host => !specialized.some(item => item.host === host));
+  expect({uncovered, stale}, 'update dedicated collector tests when specialized registry entries change')
+    .toEqual({uncovered:[], stale:[]});
+});
 
 test("The King's Bible dictionary and concordance pages render the BLB references button", async ({
   page, extensionStorage
@@ -676,24 +673,13 @@ test('Open Bible References in BLB remains visible across redirect changes and f
 
 
 test('same-tab redirect re-enable restores source-page buttons on every registered host', async ({
-  page, extensionStorage
+  page, extensionStorage, extensionPath
 }) => {
-  const cases = [
-    ['https://www.christianity.com/wiki/prayer/test-article.html', 'christianity'],
-    ['https://www.gotquestions.org/test-article.html', 'gotquestions'],
-    ['https://www.crosswalk.com/devotionals/test-article.html', 'crosswalk'],
-    ['https://www.enduringword.com/bible-commentary/genesis-1/', 'enduringword'],
-    ['https://www.rediscover.bible/articles/test-article', 'rediscover'],
-    ['https://sagacityweb.com/articles/test-article', 'sagacity'],
-    ['https://www.thetreasuryofscriptureknowledge.com/articles/test-article', 'treasury'],
-    ['https://www.dailyverses.net/dailyverse', 'dailyverses'],
-    ['https://www.churchofjesuschrist.org/study/scriptures/ot/gen/1?lang=eng', 'churchofjesuschrist'],
-    ['https://mercyhouseministry.com/articles/test-article', 'mercyhouse'],
-    ['https://www.openbible.info/topics/test-article', 'openbible'],
-    ['https://www.crossway.org/articles/test-article', 'crossway'],
-    ['https://sarata.com/bible/chapter/Genesis.1.html', 'sarata'],
-    ['https://sermonindex.net/articles/test-article', 'sermonindex']
-  ];
+  const cases = sharedPageButtonHosts(extensionPath)
+    .map(({host, siteId}) => ({
+      url:'https://' + host + '/__blb-suite-regression__/content',
+      siteId
+    }));
 
   await extensionStorage.set({
     masterEnabled:true,
