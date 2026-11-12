@@ -251,7 +251,7 @@ test('Study Sessions History menu opens the saved Strong\'s entries and Criteria
   await expect(page.locator('#historyVerseRefs')).toBeEnabled();
   await page.locator('#historyVerseRefs').click();
   await expect(page.locator('#studyStatus')).toContainText('Opening 2 references in MultiVerse');
-  await expect.poll(() => submittedMultiVerseText).toBe('John 3:16; Romans 8:28');
+  await expect.poll(() => submittedMultiVerseText).toBe('john 3:16; romans 8:28');
   await page.close();
 });
 
