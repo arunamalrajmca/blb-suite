@@ -2998,7 +2998,7 @@ function recordBlbBackgroundSelectionStage(stage, startedAt, details = {}) {
     globalThis.__blbSuiteSelectionStageTimings = rows;
   } catch (_) {}
 }
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl"]);
 
 // Serialize MultiVerse POST scheduling while creating all destination tabs immediately.
 // Reserve submission timestamps in one shared FIFO queue, but never sleep inside the
@@ -3485,26 +3485,37 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ok:false, ...(blbSite ? {blockedBlbDoubleClick:true} : {})});
         return true;
       }
-      const data = await chrome.storage.local.get({masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}});
+      const data = await chrome.storage.local.get({masterEnabled:true,pendingSiteFeatureToggles:{}});
       if (data.masterEnabled === false) {
         sendResponse({ok:false});
         return true;
       }
-      const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object' ? {...data.pageSelectionButtonSites} : {};
-      const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object' ? {...data.doubleClickBlbSites} : {};
-      if (feature === 'pageButton') {
-        pageSites[key] = true;
-        if (blbSite) {
-          // BLB's own pages get Show on BLB only; Double-click remains blocked.
-          doubleSites[key] = false;
-        } else if (!Object.prototype.hasOwnProperty.call(doubleSites, key)) {
-          doubleSites[key] = message.otherFeatureEnabled === true;
-        }
-      } else {
-        doubleSites[key] = true;
-        if (!Object.prototype.hasOwnProperty.call(pageSites, key)) pageSites[key] = message.otherFeatureEnabled === true;
-      }
-      await chrome.storage.local.set({pageSelectionButtonSites:pageSites,doubleClickBlbSites:doubleSites});
+      const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
+        ? {...data.pendingSiteFeatureToggles} : {};
+      const permissionOrigin = parsed.origin + '/*';
+      pending[permissionOrigin] = {
+        feature,
+        requestedAt:Date.now()
+      };
+      await chrome.storage.local.set({pendingSiteFeatureToggles:pending});
+      sendResponse({ok:true, pending:true});
+    } catch (error) {
+      sendResponse({ok:false,error:String(error)});
+    }
+    return true;
+  }
+
+  if (message.type === 'blbSuiteCancelSiteFeatureToggle') {
+    try {
+      const origin = String(message.origin || '');
+      const parsed = new URL(origin.endsWith('/*') ? origin.slice(0, -1) : origin);
+      if (!/^https?:$/.test(parsed.protocol)) { sendResponse({ok:false}); return true; }
+      const permissionOrigin = parsed.origin + '/*';
+      const data = await chrome.storage.local.get({pendingSiteFeatureToggles:{}});
+      const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
+        ? {...data.pendingSiteFeatureToggles} : {};
+      if (pending[permissionOrigin]?.feature === message.feature) delete pending[permissionOrigin];
+      await chrome.storage.local.set({pendingSiteFeatureToggles:pending});
       sendResponse({ok:true});
     } catch (error) {
       sendResponse({ok:false,error:String(error)});
@@ -6711,23 +6722,90 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (changes.currentStudySessionId || changes.studyAutoStopMinutes || changes.masterEnabled) refreshStudyAutoStopAlarm().catch(()=>{});
 });
 
-chrome.permissions.onAdded.addListener(() => {
-  // A feature preference may be persisted before Chrome finishes its host
-  // permission prompt. Retry injection after the grant arrives.
-  chrome.tabs.query({active:true,currentWindow:true}).then(async tabs => {
-    const data = await chrome.storage.local.get({masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}});
-    if (data.masterEnabled === false) return;
-    for (const tab of tabs) {
-      if (!tab?.id) continue;
-      const key = pageSelectionSettingKeyFromTab(tab);
-      const hasPageCollectorButton = Object.prototype.hasOwnProperty.call(
-        globalThis.BLBSourcePageCollectorSites || {}, key
-      );
-      if (key && !isSensitiveSiteUrl(tab.url) && (hasPageCollectorButton || data.pageSelectionButtonSites?.[key] === true || data.doubleClickBlbSites?.[key] === true)) {
-        await ensureContentScriptInTab(tab.id);
-      }
+const SITE_FEATURE_PERMISSION_PENDING_TTL_MS = 5 * 60 * 1000;
+
+async function commitPendingSiteFeatureTogglesForGrantedOrigins(origins, now = Date.now()) {
+  const grantedOrigins = new Set(Array.isArray(origins) ? origins.map(String) : []);
+  if (!grantedOrigins.size) return {committed:[], expired:[]};
+  const data = await chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{}
+  });
+  const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
+    ? {...data.pendingSiteFeatureToggles} : {};
+  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
+    ? {...data.pageSelectionButtonSites} : {};
+  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
+    ? {...data.doubleClickBlbSites} : {};
+  const committed = [];
+  const expired = [];
+
+  for (const [origin, intent] of Object.entries(pending)) {
+    const requestedAt = Number(intent?.requestedAt);
+    if (!Number.isFinite(requestedAt) || now - requestedAt > SITE_FEATURE_PERMISSION_PENDING_TTL_MS || now < requestedAt) {
+      delete pending[origin];
+      expired.push(origin);
+      continue;
     }
-  }).catch(() => {});
+    if (!grantedOrigins.has(origin)) continue;
+    let parsed;
+    try { parsed = new URL(origin.endsWith('/*') ? origin.slice(0, -1) : origin); } catch (_) {
+      delete pending[origin];
+      expired.push(origin);
+      continue;
+    }
+    const key = normalizeSiteHostname(parsed.hostname);
+    const feature = intent?.feature;
+    if (data.masterEnabled === false || !key || isSensitiveSiteHostname(parsed.hostname) ||
+        (key === BLB_HOSTNAME && feature !== 'pageButton') ||
+        (feature !== 'pageButton' && feature !== 'doubleClick')) {
+      delete pending[origin];
+      expired.push(origin);
+      continue;
+    }
+    if (feature === 'pageButton') {
+      pageSites[key] = true;
+      if (key === BLB_HOSTNAME) doubleSites[key] = false;
+    } else {
+      doubleSites[key] = true;
+    }
+    delete pending[origin];
+    committed.push({origin,feature});
+  }
+
+  if (committed.length || expired.length) {
+    await chrome.storage.local.set({
+      pendingSiteFeatureToggles:pending,
+      pageSelectionButtonSites:pageSites,
+      doubleClickBlbSites:doubleSites
+    });
+  }
+  return {committed,expired};
+}
+
+chrome.permissions.onAdded.addListener(permissions => {
+  const grantedOrigins = Array.isArray(permissions?.origins) ? permissions.origins : [];
+  // Only a recent pending intent for this exact granted host is committed.
+  // A denied prompt leaves no active preference, and a later unrelated grant
+  // cannot resurrect that stale opt-in after the short pending window.
+  commitPendingSiteFeatureTogglesForGrantedOrigins(grantedOrigins).then(() =>
+    chrome.tabs.query({active:true,currentWindow:true}).then(async tabs => {
+      const data = await chrome.storage.local.get({masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}});
+      if (data.masterEnabled === false) return;
+      for (const tab of tabs) {
+        if (!tab?.id) continue;
+        const key = pageSelectionSettingKeyFromTab(tab);
+        const hasPageCollectorButton = Object.prototype.hasOwnProperty.call(
+          globalThis.BLBSourcePageCollectorSites || {}, key
+        );
+        if (key && !isSensitiveSiteUrl(tab.url) && (hasPageCollectorButton || data.pageSelectionButtonSites?.[key] === true || data.doubleClickBlbSites?.[key] === true)) {
+          await ensureContentScriptInTab(tab.id);
+        }
+      }
+    })
+  ).catch(() => {});
 });
 
 chrome.alarms.onAlarm.addListener(alarm => {

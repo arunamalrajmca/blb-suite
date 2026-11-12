@@ -118,11 +118,14 @@ test('local PDF context-menu handoff opens a selected full Bible reference throu
       });
     }, sourceTabId);
 
-    await expect.poll(() => extensionWorker.evaluate(async before => {
+    // The shared BLB destination manager intentionally reuses an existing
+    // John 3:16 tab when one is already open. Verify the destination is active,
+    // rather than requiring every successful handoff to create a new tab.
+    await expect.poll(() => extensionWorker.evaluate(async () => {
       const tabs=await chrome.tabs.query({});
-      return tabs.some(tab => !before.includes(tab.id) &&
-        String(tab.url || '').includes('/kjv/jhn/3/16/'));
-    }, beforeTabs), {timeout:15000}).toBe(true);
+      return tabs.some(tab => tab.active &&
+        String(tab.url || tab.pendingUrl || '').includes('/kjv/jhn/3/16/'));
+    }), {timeout:15000}).toBe(true);
   } finally {
     await extensionWorker.evaluate(async ({settings,before}) => {
       const tabs=await chrome.tabs.query({});

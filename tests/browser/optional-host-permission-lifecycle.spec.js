@@ -86,6 +86,143 @@ test('host-access revocation removes registrations and a later grant reactivates
     }, {originPattern:pattern,settings:previous});
   }
 });
+test('site-feature opt-ins are committed only when the matching pending host permission is granted', async ({
+  extensionWorker, extensionStorage
+}) => {
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{}
+  }));
+  const requestedAt = Date.now();
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{'example.com':false},
+      doubleClickBlbSites:{'example.com':true,'example.org':false},
+      pendingSiteFeatureToggles:{
+        'https://example.com/*':{feature:'pageButton',otherFeatureEnabled:true,requestedAt},
+        'https://example.org/*':{feature:'doubleClick',otherFeatureEnabled:true,requestedAt}
+      }
+    });
+
+    const beforeGrant = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      pageSelectionButtonSites:{},doubleClickBlbSites:{},pendingSiteFeatureToggles:{}
+    }));
+    expect(beforeGrant.pageSelectionButtonSites['example.com']).toBe(false);
+    expect(beforeGrant.doubleClickBlbSites['example.org']).toBe(false);
+
+    const unrelatedGrant = await extensionWorker.evaluate(() =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins(['https://unrelated.example/*'])
+    );
+    expect(unrelatedGrant.committed).toEqual([]);
+
+    const pageGrant = await extensionWorker.evaluate(() =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins(['https://example.com/*'])
+    );
+    expect(pageGrant.committed).toEqual([{origin:'https://example.com/*',feature:'pageButton'}]);
+
+    const doubleGrant = await extensionWorker.evaluate(() =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins(['https://example.org/*'])
+    );
+    expect(doubleGrant.committed).toEqual([{origin:'https://example.org/*',feature:'doubleClick'}]);
+
+    const afterGrant = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      pageSelectionButtonSites:{},doubleClickBlbSites:{},pendingSiteFeatureToggles:{}
+    }));
+    expect(afterGrant.pageSelectionButtonSites['example.com']).toBe(true);
+    expect(afterGrant.doubleClickBlbSites['example.com']).toBe(true);
+    expect(afterGrant.doubleClickBlbSites['example.org']).toBe(true);
+    expect(afterGrant.pageSelectionButtonSites['example.org']).toBeUndefined();
+    expect(afterGrant.pendingSiteFeatureToggles).toEqual({});
+  } finally {
+    await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
+  }
+});
+
+
+test('granting either site feature never changes the other feature setting', async ({ extensionWorker, extensionStorage }) => {
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, pendingSiteFeatureToggles:{}
+  }));
+  try {
+    for (const feature of ['pageButton', 'doubleClick']) {
+      for (const otherState of ['on', 'off', 'unset']) {
+        const hostname = `${feature}-${otherState}.example`.toLowerCase();
+        const pageSites = {};
+        const doubleSites = {};
+        const otherKey = feature === 'pageButton' ? 'doubleClickBlbSites' : 'pageSelectionButtonSites';
+        const targetKey = feature === 'pageButton' ? 'pageSelectionButtonSites' : 'doubleClickBlbSites';
+        if (otherState === 'on') (feature === 'pageButton' ? doubleSites : pageSites)[hostname] = true;
+        if (otherState === 'off') (feature === 'pageButton' ? doubleSites : pageSites)[hostname] = false;
+        await extensionStorage.set({
+          masterEnabled:true,
+          pageSelectionButtonSites:pageSites,
+          doubleClickBlbSites:doubleSites,
+          pendingSiteFeatureToggles:{
+            [`https://${hostname}/*`]:{feature,requestedAt:Date.now()}
+          }
+        });
+        const result = await extensionWorker.evaluate(origin =>
+          commitPendingSiteFeatureTogglesForGrantedOrigins([origin]),
+          `https://${hostname}/*`
+        );
+        expect(result.committed).toHaveLength(1);
+        const stored = await extensionWorker.evaluate(() => chrome.storage.local.get({
+          pageSelectionButtonSites:{}, doubleClickBlbSites:{}
+        }));
+        expect(stored[targetKey][hostname]).toBe(true);
+        if (otherState === 'unset') {
+          expect(stored[otherKey][hostname]).toBeUndefined();
+        } else {
+          expect(stored[otherKey][hostname]).toBe(otherState === 'on');
+        }
+      }
+    }
+  } finally {
+    await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
+  }
+});
+
+test('a denied site-feature permission intent expires and cannot activate on a later unrelated grant', async ({
+  extensionWorker, extensionStorage
+}) => {
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{}
+  }));
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{'example.com':false},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{
+        'https://example.com/*':{
+          feature:'pageButton',
+          otherFeatureEnabled:false,
+          requestedAt:Date.now() - 5 * 60 * 1000 - 1
+        }
+      }
+    });
+    const result = await extensionWorker.evaluate(() =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins(['https://example.com/*'])
+    );
+    expect(result.committed).toEqual([]);
+    expect(result.expired).toEqual(['https://example.com/*']);
+
+    const afterGrant = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      pageSelectionButtonSites:{},pendingSiteFeatureToggles:{}
+    }));
+    expect(afterGrant.pageSelectionButtonSites['example.com']).toBe(false);
+    expect(afterGrant.pendingSiteFeatureToggles).toEqual({});
+  } finally {
+    await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
+  }
+});
+
 test('current-tab activation falls back when persistent content-script registration fails', async ({ page, extensionStorage, extensionWorker }) => {
   // Load the tab before enabling the feature so the normal onUpdated path
   // cannot race this test's deliberately failed registration.

@@ -122,8 +122,14 @@ test('BLB permits Show on BLB only and never enables Double-click', async ({ con
     feature:'pageButton',
     otherFeatureEnabled:true
   }));
-  const storedAfterPageButton = await extensionWorker.evaluate(async () =>
-    chrome.storage.local.get({pageSelectionButtonSites:{},doubleClickBlbSites:{}})
+  const storedBeforeGrant = await extensionWorker.evaluate(async () =>
+    chrome.storage.local.get({pageSelectionButtonSites:{},doubleClickBlbSites:{},pendingSiteFeatureToggles:{}})
+  );
+  const committed = await extensionWorker.evaluate(() =>
+    commitPendingSiteFeatureTogglesForGrantedOrigins(['https://www.blueletterbible.org/*'])
+  );
+  const storedAfterGrant = await extensionWorker.evaluate(async () =>
+    chrome.storage.local.get({pageSelectionButtonSites:{},doubleClickBlbSites:{},pendingSiteFeatureToggles:{}})
   );
   const doubleClick = await messagePage.evaluate(async () => chrome.runtime.sendMessage({
     type:'blbSuitePrepareSiteFeatureToggle',
@@ -131,13 +137,83 @@ test('BLB permits Show on BLB only and never enables Double-click', async ({ con
     feature:'doubleClick',
     otherFeatureEnabled:true
   }));
-  const result = {pageButton,storedAfterPageButton,doubleClick};
-  expect(result.pageButton).toMatchObject({ok:true});
-  expect(result.storedAfterPageButton.pageSelectionButtonSites['blueletterbible.org']).toBe(true);
-  expect(result.storedAfterPageButton.doubleClickBlbSites['blueletterbible.org']).toBe(false);
+  const result = {pageButton,storedBeforeGrant,committed,storedAfterGrant,doubleClick};
+  expect(result.pageButton).toMatchObject({ok:true,pending:true});
+  expect(result.storedBeforeGrant.pageSelectionButtonSites['blueletterbible.org']).toBeUndefined();
+  expect(result.storedBeforeGrant.pendingSiteFeatureToggles['https://www.blueletterbible.org/*'].feature).toBe('pageButton');
+  expect(result.committed.committed).toEqual([{origin:'https://www.blueletterbible.org/*',feature:'pageButton'}]);
+  expect(result.storedAfterGrant.pageSelectionButtonSites['blueletterbible.org']).toBe(true);
+  expect(result.storedAfterGrant.doubleClickBlbSites['blueletterbible.org']).toBe(false);
   expect(result.doubleClick).toMatchObject({ok:false,blockedBlbDoubleClick:true});
 });
 
+test('a denied site-feature permission request cancels its pending opt-in', async ({ context, extensionId, extensionWorker }) => {
+  const messagePage = await createExtensionMessagePage(context, extensionId);
+  try {
+    await extensionWorker.evaluate(() => chrome.storage.local.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{}
+    }));
+    const prepared = await messagePage.evaluate(() => chrome.runtime.sendMessage({
+      type:'blbSuitePrepareSiteFeatureToggle',
+      origin:'https://example.com/*',
+      feature:'doubleClick',
+      otherFeatureEnabled:false
+    }));
+    expect(prepared).toMatchObject({ok:true,pending:true});
+    const cancelled = await messagePage.evaluate(() => chrome.runtime.sendMessage({
+      type:'blbSuiteCancelSiteFeatureToggle',
+      origin:'https://example.com/*',
+      feature:'doubleClick'
+    }));
+    expect(cancelled).toMatchObject({ok:true});
+    const stored = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{}
+    }));
+    expect(stored.doubleClickBlbSites['example.com']).toBeUndefined();
+    expect(stored.pageSelectionButtonSites['example.com']).toBeUndefined();
+    expect(stored.pendingSiteFeatureToggles).toEqual({});
+  } finally {
+    await messagePage.close();
+  }
+});
+test('closing the popup leaves a pending site opt-in that the matching permission grant can commit', async ({ context, extensionId, extensionWorker }) => {
+  const messagePage = await createExtensionMessagePage(context, extensionId);
+  await extensionWorker.evaluate(() => chrome.storage.local.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{}
+  }));
+  const prepared = await messagePage.evaluate(() => chrome.runtime.sendMessage({
+    type:'blbSuitePrepareSiteFeatureToggle',
+    origin:'https://example.com/*',
+    feature:'pageButton',
+    otherFeatureEnabled:false
+  }));
+  expect(prepared).toMatchObject({ok:true,pending:true});
+  await messagePage.close();
+
+  const beforeGrant = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    pageSelectionButtonSites:{},pendingSiteFeatureToggles:{}
+  }));
+  expect(beforeGrant.pageSelectionButtonSites['example.com']).toBeUndefined();
+  expect(beforeGrant.pendingSiteFeatureToggles['https://example.com/*'].feature).toBe('pageButton');
+
+  const committed = await extensionWorker.evaluate(() =>
+    commitPendingSiteFeatureTogglesForGrantedOrigins(['https://example.com/*'])
+  );
+  expect(committed.committed).toEqual([{origin:'https://example.com/*',feature:'pageButton'}]);
+  const afterGrant = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    pageSelectionButtonSites:{},pendingSiteFeatureToggles:{}
+  }));
+  expect(afterGrant.pageSelectionButtonSites['example.com']).toBe(true);
+  expect(afterGrant.pendingSiteFeatureToggles).toEqual({});
+});
 test('BLB page selection reuses a Criteria search tab and prioritizes references', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(async () => {
     const query = `blb-suite-dedupe-${Date.now()}`;
