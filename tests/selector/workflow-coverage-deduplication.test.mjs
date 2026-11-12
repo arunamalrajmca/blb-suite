@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   mappedSpecs, separatelyManagedSpecs, referenceDelegatedSpecs,
-  groupARequiredSpecs, groupAExecutionSpecs, groupBRequiredSpecs,
+  groupARequiredSpecs, groupBRequiredSpecs,
   referenceRequiredSpecs, studySessionSpecs
 } from "../../scripts/ci-routing-registry.mjs";
 
@@ -32,8 +32,8 @@ test("matrix-owned changed browser specs are delegated by the central registry",
     assert.ok(mappedSpecs.has(spec), "matrix-owned spec must not enter the Group A unmapped fallback: " + spec);
   }
 
-  for (const spec of groupAExecutionSpecs) {
-    assert.ok(groupsWorkflow.includes(spec), "Group A execution ownership must have a workflow invocation: " + spec);
+  for (const spec of groupARequiredSpecs) {
+    assert.ok(mappedSpecs.has(spec), "Group A gate ownership must be a classified spec: " + spec);
   }
   for (const spec of groupBRequiredSpecs) {
     assert.ok(groupsWorkflow.includes(spec), "Group B ownership must have a workflow invocation: " + spec);
@@ -61,14 +61,16 @@ test("gate ownership sets are subsets of the authoritative mapped browser-spec i
   }
 });
 
-test("Group A execution ownership excludes specs delegated to References or Study Sessions", () => {
-  for (const spec of groupAExecutionSpecs) {
-    assert.ok(groupARequiredSpecs.has(spec), "Group A execution spec must remain in its original ownership set: " + spec);
-    assert.ok(!referenceDelegatedSpecs.has(spec), "Reference-delegated spec must not require Group A execution: " + spec);
-    assert.ok(!studySessionSpecs.has(spec), "Study Sessions spec must not require Group A execution: " + spec);
-  }
+test("Group A changed-spec execution uses selector-filtered ownership rather than workflow-local lists", () => {
+  assert.ok(groupsWorkflow.includes("inputs.group_a_changed_browser_specs"));
+  assert.ok(groupsWorkflow.includes("GROUP_A_CHANGED_BROWSER_SPECS"));
+  assert.doesNotMatch(groupsWorkflow, /case "\\$spec" in/);
   for (const spec of referenceDelegatedSpecs) {
-    assert.ok(!groupAExecutionSpecs.has(spec), "Reference-delegated spec must not allocate Group A: " + spec);
+    assert.ok(mappedSpecs.has(spec), "delegated spec must remain classified: " + spec);
+  }
+  for (const spec of studySessionSpecs) {
+    assert.ok(!referenceDelegatedSpecs.has(spec) || mappedSpecs.has(spec),
+      "Study Sessions ownership must not lose classification: " + spec);
   }
 });
 
