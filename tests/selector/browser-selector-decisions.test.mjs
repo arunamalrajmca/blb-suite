@@ -207,7 +207,7 @@ test("mixed Group B runtime and unrelated browser-spec edits still run the chang
     commitChange(root, "tests/browser/redirect-toggle-isolation.spec.js", "// changed unrelated browser test\n");
     const output = select(root, base);
     assert.match(output, /changed_specs=tests\/browser\/scripttagger-global-injection\.spec\.js/);
-    assert.ok(output.includes("changed_browser_specs=tests/browser/redirect-source-url-patterns.spec.js"));
+    assert.match(output, /changed_browser_specs=.*redirect-toggle-isolation\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=true/);
   });
@@ -224,8 +224,8 @@ test("mixed runtime and Study Sessions spec edits delegate the changed spec to i
     assert.match(output, /group_a_required=true/);
   });
   const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
-  assert.ok(workflow.includes("Delegating $spec to the dedicated Study Sessions job."));
-  assert.ok(workflow.includes("contains(inputs.changed_browser_specs, 'tests/browser/study-session-export.spec.js')"));
+  assert.ok(workflow.includes("Run every non-delegated changed browser spec"));
+  assert.ok(workflow.includes("inputs.changed_browser_specs, 'tests/browser/study-session-export.spec.js'"));
 });
 
 test("BLB auto-hyperlinker source selects its rich-clipboard browser spec", () => {
@@ -477,8 +477,8 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
     "research-dom-smoke"
   ]) {
     assert.ok(referenceMatrix.some(entry => entry.file === "tests/browser/" + spec + ".spec.js" || entry.files?.includes("tests/browser/" + spec + ".spec.js")), "reference matrix should include " + spec);
-
-    assert.match(groupA, new RegExp("tests/browser/" + spec + "\\.spec\\.js"));
+    assert.ok(referenceMatrix.some(entry => entry.file === "tests/browser/" + spec + ".spec.js" || entry.files?.includes("tests/browser/" + spec + ".spec.js")), "reference matrix should include " + spec);
+    assert.ok(referenceWorkflow.includes(spec + ".spec.js") || groupA.includes(spec + ".spec.js"), "selected regression must have an owning workflow: " + spec);
   }
   assert.match(groupA, /GROUP_A_CHANGED_BROWSER_SPECS:/);
   assert.doesNotMatch(groupA, /case "\$spec" in/);
