@@ -938,11 +938,8 @@ test("shared-core runtime changes retain full browser coverage and all applicabl
 
 test("reference-only feature ownership does not allocate Group A", () => {
   const referenceOnlyRegistry = registrySource.replace(
-    `];
-
-export const mappedSpecs`,
-    `,
-  {
+    "];\\n\\nexport const mappedSpecs",
+    `  {
     paths: ["extension/new-reference-only.js"],
     specs: ["tests/browser/shared-regex-patterns.spec.js"]
   }
