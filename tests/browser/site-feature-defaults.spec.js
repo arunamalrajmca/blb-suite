@@ -181,6 +181,39 @@ test('a denied site-feature permission request cancels its pending opt-in', asyn
     await messagePage.close();
   }
 });
+test('closing the popup leaves a pending site opt-in that the matching permission grant can commit', async ({ context, extensionId, extensionWorker }) => {
+  const messagePage = await createExtensionMessagePage(context, extensionId);
+  await extensionWorker.evaluate(() => chrome.storage.local.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{}
+  }));
+  const prepared = await messagePage.evaluate(() => chrome.runtime.sendMessage({
+    type:'blbSuitePrepareSiteFeatureToggle',
+    origin:'https://example.com/*',
+    feature:'pageButton',
+    otherFeatureEnabled:false
+  }));
+  expect(prepared).toMatchObject({ok:true,pending:true});
+  await messagePage.close();
+
+  const beforeGrant = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    pageSelectionButtonSites:{},pendingSiteFeatureToggles:{}
+  }));
+  expect(beforeGrant.pageSelectionButtonSites['example.com']).toBeUndefined();
+  expect(beforeGrant.pendingSiteFeatureToggles['https://example.com/*'].feature).toBe('pageButton');
+
+  const committed = await extensionWorker.evaluate(() =>
+    commitPendingSiteFeatureTogglesForGrantedOrigins(['https://example.com/*'])
+  );
+  expect(committed.committed).toEqual([{origin:'https://example.com/*',feature:'pageButton'}]);
+  const afterGrant = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    pageSelectionButtonSites:{},pendingSiteFeatureToggles:{}
+  }));
+  expect(afterGrant.pageSelectionButtonSites['example.com']).toBe(true);
+  expect(afterGrant.pendingSiteFeatureToggles).toEqual({});
+});
 test('BLB page selection reuses a Criteria search tab and prioritizes references', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(async () => {
     const query = `blb-suite-dedupe-${Date.now()}`;
