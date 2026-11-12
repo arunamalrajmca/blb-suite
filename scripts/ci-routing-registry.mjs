@@ -149,6 +149,7 @@ export const featureSpecs = [
   }
 ];
 
+
 export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.spec.js",
   "tests/browser/audit-defect-regressions.spec.js",
   "tests/browser/omnibox-boolean-operators.spec.js",
@@ -206,4 +207,93 @@ export const studySessionSpecs = new Set(["tests/browser/feature-lifecycle-regre
   "tests/browser/study-reference-capture.spec.js",
   "tests/browser/study-session-export.spec.js",
   "tests/browser/study-session-popup-ui-regression.spec.js"
+]);
+
+
+// CI gate ownership. These sets drive selector outputs and are contract-tested
+// against the workflow execution/delegation steps to prevent inventory drift.
+export const groupARequiredSpecs = new Set([
+  "tests/browser/redirect-source-url-patterns.spec.js",
+  "tests/browser/omnibox-boolean-operators.spec.js",
+  "tests/browser/e2e-core-user-actions.spec.js",
+  "tests/browser/multiverse-contiguous-range-routing.spec.js",
+  "tests/browser/multiverse-disjoint-chapter-post.spec.js",
+  "tests/browser/multiverse-tool-view.spec.js",
+  "tests/browser/multiverse-handoff.spec.js",
+  "tests/browser/blb-passive-new-tab-targets.spec.js",
+  "tests/browser/source-page-collector-behavior.spec.js",
+  "tests/browser/blb-verse-link-navigation.spec.js",
+  "tests/browser/criteria-search-navigation.spec.js",
+  "tests/browser/kings-bible-collector-behavior.spec.js",
+  "tests/browser/webster-collector-behavior.spec.js",
+  "tests/browser/blb-auto-hyperlinker.spec.js",
+  "tests/browser/blb-draggable-button.spec.js",
+  "tests/browser/audit-defect-regressions.spec.js",
+  "tests/browser/case-sensitive-routing-behavior.spec.js",
+  "tests/browser/extension.spec.js",
+  "tests/browser/selection-phase-performance.spec.js",
+  "tests/browser/service-worker-lifecycle.spec.js",
+  "tests/browser/kjv-corpus-lazy-loading.spec.js",
+  "tests/browser/right-panel-default-expanded.spec.js",
+  "tests/browser/site-registration-opt-out-race.spec.js",
+  "tests/browser/known-host-extension.spec.js",
+  "tests/browser/pr-422-feature-regressions.spec.js",
+  "tests/browser/site-feature-defaults.spec.js"
+]);
+
+export const groupBRequiredSpecs = new Set([
+  "tests/browser/redirect-hostnames.spec.js",
+  "tests/browser/blb-non-kjv-redirect.spec.js",
+  "tests/browser/scripttagger-global-injection.spec.js"
+]);
+
+export const referenceRequiredSpecs = new Set([
+  "tests/browser/extension.spec.js",
+  "tests/browser/selection-phase-performance.spec.js",
+  "tests/browser/service-worker-lifecycle.spec.js",
+  "tests/browser/known-host-extension.spec.js",
+  "tests/browser/pr-422-feature-regressions.spec.js",
+  "tests/browser/multiverse-contiguous-range-routing.spec.js",
+  "tests/browser/multiverse-disjoint-chapter-post.spec.js",
+  "tests/browser/shared-regex-patterns.spec.js",
+  "tests/browser/rediscover-sagacity-button.spec.js",
+  "tests/browser/research-dom-smoke.spec.js",
+  "tests/browser/redirect-source-url-patterns.spec.js",
+  "tests/browser/redirect-toggle-isolation.spec.js",
+  "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
+  "tests/browser/popup-master-toggle-regression.spec.js",
+  "tests/browser/facebook-selection-parser.spec.js",
+  "tests/browser/substack-selection-parser.spec.js",
+  "tests/browser/omnibox-command-routing.spec.js",
+  "tests/browser/pdf-selection-regressions.spec.js",
+  "tests/browser/source-page-button-redirect-separation.spec.js"
+]);
+
+
+// Browser specs delegated from the Group A changed-spec runner to the
+// References gate when that gate owns the selected change.
+export const referenceDelegatedSpecs = new Set([
+  "tests/browser/redirect-source-url-patterns.spec.js",
+  "tests/browser/redirect-hostnames.spec.js",
+  "tests/browser/blb-non-kjv-redirect.spec.js",
+  "tests/browser/redirect-toggle-isolation.spec.js",
+  "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
+  "tests/browser/popup-master-toggle-regression.spec.js",
+  "tests/browser/facebook-selection-parser.spec.js",
+  "tests/browser/substack-selection-parser.spec.js",
+  "tests/browser/omnibox-command-routing.spec.js",
+  "tests/browser/pdf-selection-regressions.spec.js",
+  "tests/browser/shared-regex-patterns.spec.js",
+  "tests/browser/rediscover-sagacity-button.spec.js",
+  "tests/browser/research-dom-smoke.spec.js",
+  "tests/browser/right-panel-default-expanded.spec.js",
+  "tests/browser/selection-phase-performance.spec.js",
+  "tests/browser/service-worker-lifecycle.spec.js",
+  "tests/browser/kjv-corpus-lazy-loading.spec.js",
+  "tests/browser/known-host-extension.spec.js",
+  "tests/browser/multiverse-contiguous-range-routing.spec.js",
+  "tests/browser/multiverse-disjoint-chapter-post.spec.js",
+  "tests/browser/pr-422-feature-regressions.spec.js",
+  "tests/browser/site-registration-opt-out-race.spec.js",
+  "tests/browser/source-page-button-redirect-separation.spec.js"
 ]);

@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { selectReferenceMatrix } from "../../scripts/select-reference-matrix.mjs";
+import { referenceDelegatedSpecs } from "../../scripts/ci-routing-registry.mjs";
 
 const selectorSource = readFileSync(
   new URL("../../scripts/select-browser-specs.mjs", import.meta.url),
@@ -16,6 +17,10 @@ const classifierSource = readFileSync(
 );
 const registrySource = readFileSync(
   new URL("../../scripts/ci-routing-registry.mjs", import.meta.url),
+  "utf8"
+);
+const policySource = readFileSync(
+  new URL("../../scripts/ci-change-policy.mjs", import.meta.url),
   "utf8"
 );
 const referenceMatrixSource = readFileSync(
@@ -41,6 +46,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "scripts/select-browser-specs.mjs", selector);
   put(root, "scripts/classify-ci-changes.mjs", classifierSource);
   put(root, "scripts/ci-routing-registry.mjs", registry);
+  put(root, "scripts/ci-change-policy.mjs", policySource);
   put(root, "scripts/reference-e2e-matrix.json", referenceMatrixSource);
   put(root, "package.json", JSON.stringify({ name: "fixture", version: "1.0.0", scripts: { test: "before" } }) + "\n");
   put(root, "extension/content.js");
@@ -202,7 +208,7 @@ test("mixed Group B runtime and unrelated browser-spec edits still run the chang
     commitChange(root, "tests/browser/redirect-toggle-isolation.spec.js", "// changed unrelated browser test\n");
     const output = select(root, base);
     assert.match(output, /changed_specs=tests\/browser\/scripttagger-global-injection\.spec\.js/);
-    assert.match(output, /changed_browser_specs=tests\/browser\/redirect-toggle-isolation\.spec\.js/);
+    assert.match(output, /changed_browser_specs=.*redirect-toggle-isolation\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=true/);
   });
@@ -219,8 +225,8 @@ test("mixed runtime and Study Sessions spec edits delegate the changed spec to i
     assert.match(output, /group_a_required=true/);
   });
   const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
-  assert.ok(workflow.includes("Delegating $spec to the dedicated Study Sessions job."));
-  assert.ok(workflow.includes("contains(inputs.changed_browser_specs, 'tests/browser/study-session-export.spec.js')"));
+  assert.ok(workflow.includes("Run every non-delegated changed browser spec"));
+  assert.ok(workflow.includes("inputs.changed_browser_specs, 'tests/browser/study-session-export.spec.js'"));
 });
 
 test("BLB auto-hyperlinker source selects its rich-clipboard browser spec", () => {
@@ -471,12 +477,16 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
     "rediscover-sagacity-button",
     "research-dom-smoke"
   ]) {
-    assert.ok(referenceMatrix.some(entry => entry.file === "tests/browser/" + spec + ".spec.js" || entry.files?.includes("tests/browser/" + spec + ".spec.js")), "reference matrix should include " + spec);
-
-    assert.match(groupA, new RegExp("tests/browser/" + spec + "\\.spec\\.js"));
+    const file = "tests/browser/" + spec + ".spec.js";
+    assert.ok(referenceMatrix.some(entry => entry.file === file || entry.files?.includes(file)),
+      "reference matrix should include " + spec);
+    assert.ok(referenceDelegatedSpecs.has(file),
+      "delegated ownership must be explicit in the registry: " + spec);
   }
-  assert.match(groupA, /REFERENCE_GATE_REQUIRED:/);
-  assert.match(groupA, /Delegating \$spec to the required browser-e2e gate/);
+  assert.ok(referenceWorkflow.includes("select-reference-matrix.mjs"));
+
+  assert.match(groupA, /GROUP_A_CHANGED_BROWSER_SPECS:/);
+  assert.doesNotMatch(groupA, /case "\$spec" in/);
   assert.match(groupA, /browser_e2e_required:/);
   assert.match(groupB, /inputs\.browser_e2e_required == 'true'/);
   assert.ok(referenceWorkflow.includes("browser_e2e_required: ${{ needs.change-detection.outputs.browser_e2e_required }}"));
@@ -861,4 +871,90 @@ test("source-page registry changes select only the registry-driven site and clic
     assert.match(output, /reference_required=true/);
     assert.match(output, /study_sessions_required=false/);
   });
+});
+
+
+test("feature-only ownership selects only its execution gate", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/blb-auto-hyperlinker.js", "// rich clipboard behavior changed\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=false/);
+    assert.match(output, /reference_required=false/);
+    assert.match(output, /study_sessions_required=false/);
+  });
+  withFixture((root, base) => {
+    commitChange(root, "extension/redirect-scripttagger.js", "// ScriptTagger injection changed\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /group_a_required=false/);
+    assert.match(output, /group_b_required=true/);
+    assert.match(output, /reference_required=false/);
+    assert.match(output, /study_sessions_required=false/);
+  });
+  withFixture((root, base) => {
+    commitChange(root, "extension/study-session-export.js", "// Study export changed\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /group_a_required=false/);
+    assert.match(output, /group_b_required=false/);
+    assert.match(output, /reference_required=false/);
+    assert.match(output, /study_sessions_required=true/);
+  });
+});
+
+test("reference-delegated redirect regressions retain every explicitly required gate", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/redirect-bibleref-ranges.js", "// redirect parser feature changed\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=true/);
+    assert.match(output, /reference_required=true/);
+    assert.ok(output.includes("group_a_changed_browser_specs=" + "\n"));
+  });
+});
+
+test("changed browser specs delegated to References are removed from Group A execution list", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/redirect-bibleref-ranges.js", "// redirect parser feature changed\\n");
+    commitChange(root, "tests/browser/redirect-source-url-patterns.spec.js", "// changed reference matrix regression\\n");
+    const output = select(root, base);
+    assert.match(output, /reference_required=true/);
+    assert.ok(output.includes("changed_browser_specs=tests/browser/redirect-source-url-patterns.spec.js"));
+    assert.ok(output.includes("group_a_changed_browser_specs=" + "\n"));
+    assert.match(output, /group_a_required=true/);
+  });
+});
+
+test("shared-core runtime changes retain full browser coverage and all applicable gates", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/content.js", "// shared content behavior changed\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=true/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=true/);
+    assert.match(output, /reference_required=true/);
+    assert.match(output, /study_sessions_required=true/);
+  });
+});
+
+
+test("reference-only feature ownership does not allocate Group A", () => {
+  const referenceOnlyRegistry = registrySource.replace(
+    `paths: ["extension/multiverse-handoff.js"],
+    specs: ["tests/browser/multiverse-handoff.spec.js"]`,
+    `paths: ["extension/new-reference-only.js"],
+    specs: ["tests/browser/shared-regex-patterns.spec.js"]`
+  );
+  assert.notEqual(referenceOnlyRegistry, registrySource, "fixture must add an isolated reference-owned feature mapping");
+  withFixture((root, base) => {
+    commitChange(root, "extension/new-reference-only.js", "// isolated reference feature changed\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /group_a_required=false/);
+    assert.match(output, /group_b_required=false/);
+    assert.match(output, /reference_required=true/);
+  }, selectorSource, referenceOnlyRegistry);
 });

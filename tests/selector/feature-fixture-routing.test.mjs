@@ -7,6 +7,7 @@ import { dirname, join } from "node:path";
 
 const selectorSource = readFileSync(new URL("../../scripts/select-browser-specs.mjs", import.meta.url), "utf8");
 const registrySource = readFileSync(new URL("../../scripts/ci-routing-registry.mjs", import.meta.url), "utf8");
+const policySource = readFileSync(new URL("../../scripts/ci-change-policy.mjs", import.meta.url), "utf8");
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -25,6 +26,8 @@ test("research smoke fixture edits select only their dedicated browser coverage"
     const registryPath = join(root, "scripts/ci-routing-registry.mjs");
     mkdirSync(dirname(registryPath), { recursive: true });
     writeFileSync(registryPath, registrySource);
+    const policyPath = join(root, "scripts/ci-change-policy.mjs");
+    writeFileSync(policyPath, policySource);
     writeFileSync(specPath, "import { test } from '@playwright/test';\ntest('fixture', async () => {});\n");
     writeFileSync(fixturePath, "<html><body>baseline</body></html>\n");
     git(root, "init", "-q");

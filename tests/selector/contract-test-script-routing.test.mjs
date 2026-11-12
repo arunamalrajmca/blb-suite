@@ -1,5 +1,9 @@
 import test from "node:test";
-import { featureSpecs, mappedSpecs, separatelyManagedSpecs } from "../../scripts/ci-routing-registry.mjs";
+import {
+  featureSpecs, mappedSpecs, separatelyManagedSpecs, groupARequiredSpecs,
+  groupBRequiredSpecs, referenceRequiredSpecs,
+  referenceDelegatedSpecs, studySessionSpecs
+} from "../../scripts/ci-routing-registry.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -9,6 +13,7 @@ import { dirname, join } from "node:path";
 const selectorSource = readFileSync(new URL("../../scripts/select-browser-specs.mjs", import.meta.url), "utf8");
 const registrySource = readFileSync(new URL("../../scripts/ci-routing-registry.mjs", import.meta.url), "utf8");
 const classifierSource = readFileSync(new URL("../../scripts/classify-ci-changes.mjs", import.meta.url), "utf8");
+const policySource = readFileSync(new URL("../../scripts/ci-change-policy.mjs", import.meta.url), "utf8");
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -20,6 +25,7 @@ function runScenario(changedPath) {
     for (const [path, content] of [
       ["scripts/select-browser-specs.mjs", selectorSource],
       ["scripts/ci-routing-registry.mjs", registrySource],
+      ["scripts/ci-change-policy.mjs", policySource],
       ["scripts/classify-ci-changes.mjs", classifierSource]
     ]) {
       const target = join(root, path);
@@ -91,4 +97,17 @@ test("every feature-owned browser regression has an explicit CI classification",
     .filter(spec => !classified.has(spec))
     .sort();
   assert.deepEqual(missing, [], "feature routing must not select specs omitted from CI ownership classification");
+
+  const ownershipSets = [
+    groupARequiredSpecs, groupBRequiredSpecs,
+    referenceRequiredSpecs, referenceDelegatedSpecs, studySessionSpecs
+  ];
+  for (const ownership of ownershipSets) {
+    for (const spec of ownership) {
+      assert.ok(classified.has(spec), "gate ownership must refer to a classified browser spec: " + spec);
+    }
+  }
+  for (const spec of groupARequiredSpecs) {
+    assert.ok(classified.has(spec), "Group A gate ownership must remain classified: " + spec);
+  }
 });

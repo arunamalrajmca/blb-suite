@@ -127,6 +127,7 @@ jobs:
       full_browser_suite: ${{ steps.browser-select.outputs.full_browser_suite }}
       changed_specs: ${{ steps.browser-select.outputs.changed_specs }}
       changed_browser_specs: ${{ steps.browser-select.outputs.changed_browser_specs }}
+      group_a_changed_browser_specs: ${{ steps.browser-select.outputs.group_a_changed_browser_specs }}
       unmapped_specs: ${{ steps.browser-select.outputs.unmapped_specs }}
       group_a_required: ${{ steps.browser-select.outputs.group_a_required }}
       study_sessions_required: ${{ steps.browser-select.outputs.study_sessions_required }}
@@ -421,6 +422,7 @@ jobs:
       full_browser_suite: ${{ needs.change-detection.outputs.full_browser_suite }}
       changed_specs: ${{ needs.change-detection.outputs.changed_specs }}
       changed_browser_specs: ${{ needs.change-detection.outputs.changed_browser_specs }}
+      group_a_changed_browser_specs: ${{ needs.change-detection.outputs.group_a_changed_browser_specs }}
       unmapped_specs: ${{ needs.change-detection.outputs.unmapped_specs }}
       group_a_required: ${{ needs.change-detection.outputs.group_a_required }}
       study_sessions_required: ${{ needs.change-detection.outputs.study_sessions_required }}

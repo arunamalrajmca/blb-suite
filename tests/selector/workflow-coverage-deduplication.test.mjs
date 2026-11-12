@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { mappedSpecs } from "../../scripts/ci-routing-registry.mjs";
+import {
+  mappedSpecs, separatelyManagedSpecs, referenceDelegatedSpecs,
+  groupARequiredSpecs, groupBRequiredSpecs,
+  referenceRequiredSpecs, studySessionSpecs
+} from "../../scripts/ci-routing-registry.mjs";
 
 const matrix = JSON.parse(readFileSync(
   new URL("../../scripts/reference-e2e-matrix.json", import.meta.url),
@@ -11,29 +15,69 @@ const groupsWorkflow = readFileSync(
   new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url),
   "utf8"
 );
+const referenceWorkflow = readFileSync(
+  new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url),
+  "utf8"
+);
 
-test("matrix-owned changed browser specs are delegated instead of run a second time in Group A", () => {
-  const caseBlock = groupsWorkflow.match(
-    /tests\/browser\/redirect-source-url-patterns\.spec\.js\|([\s\S]*?)\)\n\s+if \[\[ "\$REFERENCE_GATE_REQUIRED"/
-  );
-  assert.ok(caseBlock, "Group A must retain an explicit reference-matrix delegation case");
-
-  const delegated = new Set([
-    "tests/browser/redirect-source-url-patterns.spec.js",
-    ...[...caseBlock[1].matchAll(/tests\/browser\/[\w-]+\.spec\.js/g)].map(match => match[0])
-  ]);
+test("matrix-owned changed browser specs are delegated by the central registry", () => {
   const matrixOwned = new Set(matrix.flatMap(entry =>
     entry.files || (entry.file ? [entry.file] : [])
   ));
   matrixOwned.delete("tests/browser/extension.spec.js");
 
+  assert.deepEqual([...referenceDelegatedSpecs].sort(), [...matrixOwned].sort(),
+    "the registry's delegated-spec inventory must exactly match the reference matrix ownership");
   for (const spec of matrixOwned) {
     assert.ok(mappedSpecs.has(spec), "matrix-owned spec must not enter the Group A unmapped fallback: " + spec);
-    assert.ok(delegated.has(spec), "matrix-owned spec must be delegated: " + spec);
+  }
+
+  for (const spec of groupARequiredSpecs) {
+    assert.ok(mappedSpecs.has(spec), "Group A gate ownership must be a classified spec: " + spec);
+  }
+  for (const spec of groupBRequiredSpecs) {
+    assert.ok(groupsWorkflow.includes(spec), "Group B ownership must have a workflow invocation: " + spec);
+  }
+  for (const spec of studySessionSpecs) {
+    assert.ok(groupsWorkflow.includes(spec), "Study Sessions ownership must have a workflow invocation: " + spec);
+  }
+
+  assert.ok(groupsWorkflow.includes("inputs.group_a_changed_browser_specs"));
+  const runnerStart = groupsWorkflow.indexOf("- name: Run every non-delegated changed browser spec");
+  const runnerEnd = groupsWorkflow.indexOf(String.fromCharCode(10) + "      - name:", runnerStart);
+  assert.ok(runnerStart >= 0 && runnerEnd > runnerStart, "filtered changed-spec runner must exist");
+  const changedSpecRunner = groupsWorkflow.slice(runnerStart, runnerEnd);
+  assert.ok(changedSpecRunner.includes('npx playwright test "${specs[@]}" --max-failures=1'));
+  assert.equal(changedSpecRunner.split("npx playwright test").length - 1, 1,
+    "changed browser specs should share one Playwright process");
+  assert.ok(referenceWorkflow.includes("group_a_changed_browser_specs: ${{ steps.browser-select.outputs.group_a_changed_browser_specs }}"));
+  assert.ok(referenceWorkflow.includes("group_a_changed_browser_specs: ${{ needs.change-detection.outputs.group_a_changed_browser_specs }}"));
+  assert.doesNotMatch(groupsWorkflow, /case "\$spec" in/, "workflow must not maintain a second delegated-spec inventory");
+});
+
+test("gate ownership sets are subsets of the authoritative mapped browser-spec inventory", () => {
+  const classifications = [
+    groupARequiredSpecs, groupBRequiredSpecs,
+    referenceRequiredSpecs, referenceDelegatedSpecs, studySessionSpecs
+  ];
+  for (const classification of classifications) {
+    for (const spec of classification) {
+      assert.ok(mappedSpecs.has(spec) || separatelyManagedSpecs.has(spec),
+        "gate-owned spec must be classified for focused CI: " + spec);
+    }
   }
 });
 
-test("dedicated Group A runs defer to the changed-spec runner when that file changed", () => {
+test("Group A changed-spec execution uses selector-filtered ownership rather than workflow-local lists", () => {
+  assert.ok(groupsWorkflow.includes("inputs.group_a_changed_browser_specs"));
+  assert.ok(groupsWorkflow.includes("GROUP_A_CHANGED_BROWSER_SPECS"));
+  assert.doesNotMatch(groupsWorkflow, /case "\$spec" in/);
+  for (const spec of referenceDelegatedSpecs) {
+    assert.ok(mappedSpecs.has(spec), "delegated spec must remain classified: " + spec);
+  }
+});
+
+test("dedicated Group A steps defer to the changed-spec runner when that file changed", () => {
   const auditStep = groupsWorkflow.match(
     /- name: Run confirmed audit defect regressions\n\s+if: ([^\n]+)/
   );
