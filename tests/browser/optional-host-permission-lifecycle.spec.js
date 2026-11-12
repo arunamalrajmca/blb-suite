@@ -159,7 +159,7 @@ test('a denied site-feature permission intent expires and cannot activate on a l
         'https://example.com/*':{
           feature:'pageButton',
           otherFeatureEnabled:false,
-          requestedAt:Date.now() - SITE_FEATURE_PERMISSION_PENDING_TTL_MS - 1
+          requestedAt:Date.now() - 5 * 60 * 1000 - 1
         }
       }
     });
