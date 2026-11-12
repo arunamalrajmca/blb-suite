@@ -105,7 +105,7 @@ for (const feature of ['pageButton', 'doubleClick']) {
       permission: false
     });
 
-    await page.locator(`#${feature}`).check();
+    await page.locator(feature === 'pageButton' ? '#pageSetting .slider' : '#doubleSetting .slider').click();
     await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
       pageSelectionButtonSites: { [SITE]: feature === 'doubleClick' },
       doubleClickBlbSites: { [SITE]: feature === 'pageButton' },
