@@ -148,6 +148,7 @@ try {
     'tests/browser/multiverse-handoff.spec.js',
     'tests/browser/blb-passive-new-tab-targets.spec.js',
     'tests/browser/source-page-collector-behavior.spec.js',
+    'tests/browser/source-page-button-redirect-separation.spec.js',
     'tests/browser/blb-verse-link-navigation.spec.js',
     'tests/browser/criteria-search-navigation.spec.js',
     'tests/browser/site-feature-defaults.spec.js',

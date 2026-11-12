@@ -266,12 +266,17 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
         setTimeout(ensureSourcePageButtonWhenReady, 500);
         setTimeout(ensureSourcePageButtonWhenReady, 1500);
     
-        chrome.storage.onChanged.addListener(changes => {
+        chrome.storage.onChanged.addListener((changes, areaName) => {
+          if (areaName !== "local") return;
           if (changes.masterEnabled?.newValue === false) {
             document.getElementById(buttonId)?.remove();
             document.getElementById(buttonId + "-reset-position")?.remove();
             document.getElementById(statusId)?.remove();
-          } else if (changes.masterEnabled?.newValue === true) {
+          } else if (changes.masterEnabled?.newValue === true ||
+                     changes.redirectEnabled?.newValue === true) {
+            // Re-ensure the collector control when redirects are re-enabled.
+            // Redirect preference does not gate visibility; this event only
+            // repairs an already-open page if its control was lost.
             ensureSourcePageButtonWhenReady();
           }
         });

@@ -24,6 +24,13 @@ const sourceExtensionPath = process.env.BLB_EXTENSION_PATH
 const testHosts = [
   'https://example.com/*',
   'https://www.facebook.com/*',
+  'https://rediscover.bible/*',
+  'https://www.rediscover.bible/*',
+  'https://sagacityweb.com/*',
+  'https://www.sagacityweb.com/*',
+  'https://thetreasuryofscriptureknowledge.com/*',
+  'https://www.thetreasuryofscriptureknowledge.com/*',
+  'https://www.sermonindex.net/*',
   'https://x.com/*',
   'https://www.gotquestions.org/*',
   'https://www.dailyverses.net/*',

@@ -77,9 +77,69 @@ test('Open Bible References in BLB remains visible across redirect changes and f
   await extensionStorage.set({redirectEnabled:false});
   await expect(button).toBeVisible();
 
+  // A lost control must be restored by the collector's own redirect-enabled
+  // storage-change listener, even though the page itself is not reloaded.
+  await button.evaluate(element => element.remove());
+  await expect(button).toHaveCount(0);
+  await extensionStorage.set({redirectEnabled:true});
+  await expect(button).toBeVisible();
+
+  await extensionStorage.set({redirectEnabled:false});
+  await expect(button).toBeVisible();
+
   await extensionStorage.set({masterEnabled:false});
   await expect(button).toHaveCount(0);
 
   await extensionStorage.set({masterEnabled:true});
   await expect(button).toBeVisible();
+});
+
+
+test('same-tab redirect re-enable restores source-page buttons on every registered host', async ({
+  page, extensionStorage
+}) => {
+  const cases = [
+    ['https://www.christianity.com/wiki/prayer/test-article.html', 'christianity'],
+    ['https://www.gotquestions.org/test-article.html', 'gotquestions'],
+    ['https://www.crosswalk.com/devotionals/test-article.html', 'crosswalk'],
+    ['https://www.enduringword.com/bible-commentary/genesis-1/', 'enduringword'],
+    ['https://www.rediscover.bible/articles/test-article', 'rediscover'],
+    ['https://sagacityweb.com/articles/test-article', 'sagacity'],
+    ['https://www.thetreasuryofscriptureknowledge.com/articles/test-article', 'treasury'],
+    ['https://www.dailyverses.net/dailyverse', 'dailyverses'],
+    ['https://www.churchofjesuschrist.org/study/scriptures/ot/gen/1?lang=eng', 'churchofjesuschrist'],
+    ['https://mercyhouseministry.com/articles/test-article', 'mercyhouse'],
+    ['https://www.openbible.info/topics/test-article', 'openbible'],
+    ['https://www.crossway.org/articles/test-article', 'crossway'],
+    ['https://sarata.com/bible/chapter/Genesis.1.html', 'sarata'],
+    ['https://sermonindex.net/articles/test-article', 'sermonindex']
+  ];
+
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+  await page.route('https://**/*', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>Source page refresh test</title></head><body><main>Source page</main></body></html>'
+  }));
+
+  for (const [url, siteId] of cases) {
+    await page.goto(url, {waitUntil:'domcontentloaded'});
+    const button = page.locator('#blb-suite-' + siteId + '-multiverse');
+    await expect(button, url).toBeVisible();
+
+    // Simulate the missing control after the user turns redirects OFF, then
+    // re-enable from this same site's popup. The collector's own storage
+    // listener must restore the control without requiring navigation.
+    await button.evaluate(element => element.remove());
+    await extensionStorage.set({redirectEnabled:true});
+    await expect(button, url + ' after redirect ON').toBeVisible();
+
+    await extensionStorage.set({redirectEnabled:false});
+    await expect(button, url + ' after redirect OFF').toBeVisible();
+  }
 });

@@ -73,6 +73,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/multiverse-handoff.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/blb-passive-new-tab-targets.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/source-page-collector-behavior.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/source-page-button-redirect-separation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/blb-verse-link-navigation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/criteria-search-navigation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/feature-lifecycle-regressions.spec.js", "import { test } from '@playwright/test';\n");
@@ -382,12 +383,15 @@ test("KJV case-sensitive word-set source selects executable focused coverage in 
   });
 });
 
+
+
 test("source-page collector selects direct reference collection behavior coverage", () => {
   withFixture((root, base) => {
     commitChange(root, "extension/source-page-collector.js", "// changed collector\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=tests\/browser\/source-page-collector-behavior\.spec\.js/);
+    assert.match(output, /changed_specs=.*tests\/browser\/source-page-collector-behavior\.spec\.js/);
+    assert.match(output, /changed_specs=.*tests\/browser\/source-page-button-redirect-separation\.spec\.js/);
     assert.doesNotMatch(output, /changed_specs=.*tests\/browser\/extension\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);

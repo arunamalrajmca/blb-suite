@@ -89,7 +89,7 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/source-page-collector.js"],
-    specs: ["tests/browser/source-page-collector-behavior.spec.js"]
+    specs: ["tests/browser/source-page-collector-behavior.spec.js", "tests/browser/source-page-button-redirect-separation.spec.js"]
   },
   {
     paths: ["extension/multiverse-copy.js"],
@@ -172,6 +172,7 @@ export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.
   "tests/browser/multiverse-handoff.spec.js",
   "tests/browser/blb-passive-new-tab-targets.spec.js",
   "tests/browser/source-page-collector-behavior.spec.js",
+  "tests/browser/source-page-button-redirect-separation.spec.js",
   "tests/browser/blb-verse-link-navigation.spec.js",
   "tests/browser/criteria-search-navigation.spec.js",
   "tests/browser/performance.spec.js",
