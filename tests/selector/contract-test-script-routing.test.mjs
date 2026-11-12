@@ -13,6 +13,7 @@ import { dirname, join } from "node:path";
 const selectorSource = readFileSync(new URL("../../scripts/select-browser-specs.mjs", import.meta.url), "utf8");
 const registrySource = readFileSync(new URL("../../scripts/ci-routing-registry.mjs", import.meta.url), "utf8");
 const classifierSource = readFileSync(new URL("../../scripts/classify-ci-changes.mjs", import.meta.url), "utf8");
+const policySource = readFileSync(new URL("../../scripts/ci-change-policy.mjs", import.meta.url), "utf8");
 
 function git(cwd, ...args) {
   return execFileSync("git", args, { cwd, encoding: "utf8" }).trim();
@@ -24,6 +25,7 @@ function runScenario(changedPath) {
     for (const [path, content] of [
       ["scripts/select-browser-specs.mjs", selectorSource],
       ["scripts/ci-routing-registry.mjs", registrySource],
+      ["scripts/ci-change-policy.mjs", policySource],
       ["scripts/classify-ci-changes.mjs", classifierSource]
     ]) {
       const target = join(root, path);
