@@ -32,37 +32,22 @@ test('native redirect hostname lists stay normalized and in sync', () => {
   expect(content).toMatch(/REDIRECT_HOSTS\.has\(location\.hostname\.toLowerCase\(\)\.replace\(\/\^www\\\.\/\s*,\s*['"]['"]\)\)/);
 });
 
-test('bare and www source hostnames normalize to the same native redirect key', () => {
-  const normalize = hostname => hostname.toLowerCase().replace(/^www\./, '');
-  const supported = new Set([
-    'bible.com',
-    'biblegateway.com',
-    'bibleref.com',
-    'biblehub.com',
-    'bibleportal.com',
-    'christianity.com',
-    'churchofjesuschrist.org',
-    'crosswalk.com',
-    'enduringword.com',
-    'esv.org',
-    'gotquestions.org',
-    'mercyhouseministry.com',
-    'openbible.info',
-    'crossway.org',
-    'sarata.com',
-    'kingjamesbibleonline.org',
-    'kjbo.org',
-    'kjv.site',
-    'm.kjv.site',
-    'officialkingjamesbible.com',
-    'thekingsbible.com',
-    'webstersdictionary1828.com',
-    'blueletterbible.org'
-  ]);
+test('every production redirect hostname normalizes bare, www, and uppercase variants to its registered key', () => {
+  const background = fs.readFileSync(path.join(root, 'extension/background.js'), 'utf8');
+  const content = fs.readFileSync(path.join(root, 'extension/content.js'), 'utf8');
+  const backgroundHosts = readHostnameSet(background, 'REDIRECT_HOSTNAMES');
+  const contentHosts = readHostnameSet(content, 'REDIRECT_HOSTS');
+  const normalize = hostname => hostname.toLowerCase().replace(/^www\\./, '');
 
-  for (const host of supported) {
-    expect(supported.has(normalize(host))).toBe(true);
-    expect(supported.has(normalize(`www.${host}`))).toBe(true);
+  // Use the production sets as the source of truth. Adding a supported
+  // redirect hostname automatically adds its normalization cases here.
+  expect([...contentHosts].sort()).toEqual([...backgroundHosts].sort());
+  for (const host of backgroundHosts) {
+    expect(normalize(host), host).toBe(host);
+    expect(normalize(`www.${host}`), host).toBe(host);
+    expect(normalize(host.toUpperCase()), host).toBe(host);
+    expect(normalize(`WWW.${host.toUpperCase()}`), host).toBe(host);
+    expect(backgroundHosts, host).toContain(normalize(`www.${host}`));
   }
 });
 
