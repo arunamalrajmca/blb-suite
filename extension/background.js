@@ -2846,13 +2846,12 @@ async function ensureContentScriptInTab(tabId) {
 
       const registrationReady = await ensureRuntimeContentScriptRegistered(tab, files);
       if (!registrationReady) {
-        // Current-document injection alone would leave future navigations
-        // without the configured feature. Do not report this tab as activated
-        // when its persistent registration could not be established.
-        console.warn('KJV Scripture Tools skipped tab activation because persistent content-script registration failed:', {
+        // Keep the current page usable even when Chrome rejects a persistent
+        // registration update. The direct executeScript path below activates
+        // this document; tabs.onUpdated retries activation on later navigations.
+        console.warn('KJV Scripture Tools is using current-tab injection because persistent content-script registration failed:', {
           tabId, tabUrl:tab.url, files
         });
-        return false;
       }
 
       // A newly enabled site may already be open, so install the MAIN-world
