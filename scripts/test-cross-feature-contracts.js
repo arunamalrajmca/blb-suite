@@ -77,17 +77,19 @@ try {
   // by its allowlist. This prevents a handler from existing in source while
   // remaining unreachable because its message type was omitted from the set.
   const asyncRouterStart = background.indexOf(
-    "chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {\\n  if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;"
+    "if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;"
   );
   const asyncRouterEnd = background.indexOf("// Keep the original BLB /net fallback", asyncRouterStart);
-  const asyncAllowlist = background.match(/const ASYNC_MESSAGE_TYPES = new Set\\(\\[([\\s\\S]*?)\\]\\);/);
+  const allowlistStart = background.indexOf("const ASYNC_MESSAGE_TYPES = new Set([");
+  const allowlistEnd = background.indexOf("]);", allowlistStart);
   assert.ok(asyncRouterStart >= 0 && asyncRouterEnd > asyncRouterStart,
     'general async message router must retain a bounded, identifiable handler block');
-  assert.ok(asyncAllowlist, 'general async message router must retain its explicit allowlist');
-  const allowedMessageTypes = new Set([...asyncAllowlist[1].matchAll(/["']([^"']+)["']/g)]
-    .map(match => match[1]));
+  assert.ok(allowlistStart >= 0 && allowlistEnd > allowlistStart,
+    'general async message router must retain its explicit allowlist');
+  const allowedMessageTypes = new Set([...background.slice(allowlistStart, allowlistEnd)
+    .matchAll(/["']([^"']+)["']/g)].map(match => match[1]));
   const routedMessageTypes = [...background.slice(asyncRouterStart, asyncRouterEnd)
-    .matchAll(/message(?:\\?\\.)?\\.type\\s*(?:===|!==)\\s*["']([^"']+)["']/g)]
+    .matchAll(/message(?:\?\.)?\.type\s*(?:===|!==)\s*["']([^"']+)["']/g)]
     .map(match => match[1]);
   assert.ok(routedMessageTypes.length > 0, 'general async message router must expose explicit message branches');
   const unregisteredMessageTypes = [...new Set(routedMessageTypes)]
