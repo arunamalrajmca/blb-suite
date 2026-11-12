@@ -10,7 +10,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import {
   featureSpecs, mappedSpecs, separatelyManagedSpecs, studySessionSpecs,
-  groupARequiredSpecs, groupBRequiredSpecs, referenceRequiredSpecs
+  groupARequiredSpecs, groupAExecutionSpecs, groupBRequiredSpecs, referenceRequiredSpecs
 } from "./ci-routing-registry.mjs";
 import { isNonRuntimePath } from "./ci-change-policy.mjs";
 
@@ -156,20 +156,24 @@ const selected = [...specs].filter(path => existingBrowserSpecs.has(path)).sort(
 
 
 const unmapped = selected.filter(path => !mappedSpecs.has(path) && !separatelyManagedSpecs.has(path));
-const has = (...names) => full || selected.some(path => names.includes(path));
+const referenceGateRequired = full || selected.some(path => referenceRequiredSpecs.has(path));
+const groupAChangedBrowserSpecs = changedBrowserSpecs.filter(path =>
+  !studySessionSpecs.has(path) &&
+  !(referenceGateRequired && (full || selected.includes(path)) && referenceRequiredSpecs.has(path))
+);
 
 
 const values = {
   full_browser_suite: String(full),
   changed_specs: selected.join(","),
   changed_browser_specs: changedBrowserSpecs.join(","),
+  group_a_changed_browser_specs: groupAChangedBrowserSpecs.join(","),
   unmapped_specs: unmapped.join(","),
   extension_spec_required: String(full || selected.includes("tests/browser/extension.spec.js")),
-  group_a_required: String(full || [...groupARequiredSpecs].some(path => selected.includes(path)) || unmapped.length > 0 || (!focusedSourcePageRuntimeChange &&
-    changedBrowserSpecs.some(path => !studySessionSpecs.has(path)))),
+  group_a_required: String(full || [...groupAExecutionSpecs].some(path => selected.includes(path)) || unmapped.length > 0 || (!focusedSourcePageRuntimeChange && groupAChangedBrowserSpecs.length > 0)),
   study_sessions_required: String(full || [...selected, ...changedBrowserSpecs].some(path => studySessionSpecs.has(path))),
   group_b_required: String(full || [...groupBRequiredSpecs].some(path => selected.includes(path))),
-  reference_required: String(full || [...referenceRequiredSpecs].some(path => selected.includes(path)))
+  reference_required: String(referenceGateRequired)
 };
 const output = process.env.GITHUB_OUTPUT;
 if (output) appendFileSync(output, Object.entries(values).map(([k,v]) => `${k}=${v}\n`).join(""));
