@@ -894,12 +894,12 @@ test("feature-only ownership selects only its execution gate", () => {
   });
 });
 
-test("reference-delegated redirect regressions do not allocate a redundant Group A runner", () => {
+test("reference-delegated redirect regressions retain every explicitly required gate", () => {
   withFixture((root, base) => {
     commitChange(root, "extension/redirect-bibleref-ranges.js", "// redirect parser feature changed\\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /group_a_required=false/);
+    assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=true/);
     assert.match(output, /reference_required=true/);
     assert.match(output, /group_a_changed_browser_specs=\\n/);
@@ -914,7 +914,7 @@ test("changed browser specs delegated to References are removed from Group A exe
     assert.match(output, /reference_required=true/);
     assert.match(output, /changed_browser_specs=tests\\/browser\\/redirect-source-url-patterns\\.spec\\.js/);
     assert.match(output, /group_a_changed_browser_specs=\\n/);
-    assert.match(output, /group_a_required=false/);
+    assert.match(output, /group_a_required=true/);
   });
 });
 
@@ -928,4 +928,27 @@ test("shared-core runtime changes retain full browser coverage and all applicabl
     assert.match(output, /reference_required=true/);
     assert.match(output, /study_sessions_required=true/);
   });
+});
+
+
+test("reference-only feature ownership does not allocate Group A", () => {
+  const referenceOnlyRegistry = registrySource.replace(
+    "];\\n\\nexport const mappedSpecs",
+    `  {
+    paths: ["extension/new-reference-only.js"],
+    specs: ["tests/browser/shared-regex-patterns.spec.js"]
+  }
+];
+
+export const mappedSpecs`
+  );
+  assert.notEqual(referenceOnlyRegistry, registrySource, "fixture must add an isolated reference-owned feature mapping");
+  withFixture((root, base) => {
+    commitChange(root, "extension/new-reference-only.js", "// isolated reference feature changed\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /group_a_required=false/);
+    assert.match(output, /group_b_required=false/);
+    assert.match(output, /reference_required=true/);
+  }, selectorSource, referenceOnlyRegistry);
 });
