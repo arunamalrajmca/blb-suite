@@ -18,6 +18,10 @@ const registrySource = readFileSync(
   new URL("../../scripts/ci-routing-registry.mjs", import.meta.url),
   "utf8"
 );
+const policySource = readFileSync(
+  new URL("../../scripts/ci-change-policy.mjs", import.meta.url),
+  "utf8"
+);
 const referenceMatrixSource = readFileSync(
   new URL("../../scripts/reference-e2e-matrix.json", import.meta.url),
   "utf8"
@@ -41,6 +45,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "scripts/select-browser-specs.mjs", selector);
   put(root, "scripts/classify-ci-changes.mjs", classifierSource);
   put(root, "scripts/ci-routing-registry.mjs", registry);
+  put(root, "scripts/ci-change-policy.mjs", policySource);
   put(root, "scripts/reference-e2e-matrix.json", referenceMatrixSource);
   put(root, "package.json", JSON.stringify({ name: "fixture", version: "1.0.0", scripts: { test: "before" } }) + "\n");
   put(root, "extension/content.js");
