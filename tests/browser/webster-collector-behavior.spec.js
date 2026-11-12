@@ -126,7 +126,7 @@ test.describe('Webster collector behavior', () => {
     await page.goto('https://webstersdictionary1828.com/dictionary/Faith', { waitUntil: 'domcontentloaded' });
 
     const button = page.locator('#blb-suite-webster-multiverse');
-    await expect(button).toBeVisible({ timeout: 10000 });
+    await expect(button).toHaveText('Open Bible References in BLB', { timeout: 10000 });
     await button.click();
 
     let handoffUrl = '';
