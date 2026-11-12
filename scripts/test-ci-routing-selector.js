@@ -358,6 +358,8 @@ try {
         'page-selection changes must select the explicit Bible.com opt-in regression');
       assert(result.values.changed_specs.includes('tests/browser/research-dom-smoke.spec.js'),
         'page-selection changes must select the expanded DOM-selection regression matrix');
+      assert(result.values.changed_specs.includes('tests/browser/source-page-button-redirect-separation.spec.js'),
+        'page-selection refresh changes must select source-page button restoration coverage');
       assertValue(result, 'group_a_required', true, file);
       assertValue(result, 'reference_required', true, file);
     }
