@@ -43,12 +43,12 @@ test("matrix-owned changed browser specs are delegated by the central registry",
   }
 
   assert.ok(groupsWorkflow.includes("inputs.group_a_changed_browser_specs"));
-  const changedSpecRunner = groupsWorkflow.match(
-    /- name: Run every non-delegated changed browser spec([\\s\\S]*?)(?=\\n      - name:)/
-  );
-  assert.ok(changedSpecRunner, "filtered changed-spec runner must exist");
-  assert.match(changedSpecRunner[1], /npx playwright test "\\$\\{specs\\[@\\]\\}" --max-failures=1/);
-  assert.equal((changedSpecRunner[1].match(/npx playwright test/g) || []).length, 1,
+  const runnerStart = groupsWorkflow.indexOf("- name: Run every non-delegated changed browser spec");
+  const runnerEnd = groupsWorkflow.indexOf("\\n      - name:", runnerStart);
+  assert.ok(runnerStart >= 0 && runnerEnd > runnerStart, "filtered changed-spec runner must exist");
+  const changedSpecRunner = groupsWorkflow.slice(runnerStart, runnerEnd);
+  assert.ok(changedSpecRunner.includes('npx playwright test "${specs[@]}" --max-failures=1'));
+  assert.equal(changedSpecRunner.split("npx playwright test").length - 1, 1,
     "changed browser specs should share one Playwright process");
   assert.ok(referenceWorkflow.includes("group_a_changed_browser_specs: ${{ steps.browser-select.outputs.group_a_changed_browser_specs }}"));
   assert.ok(referenceWorkflow.includes("group_a_changed_browser_specs: ${{ needs.change-detection.outputs.group_a_changed_browser_specs }}"));
