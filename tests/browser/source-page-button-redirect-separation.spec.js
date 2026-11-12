@@ -441,7 +441,7 @@ test('Crosswalk source-page collector button survives full refreshes around real
     });
 
   expect(offRefreshDiagnostics.registered.find(item =>
-    item.id === 'blb-suite-runtime-3p3w7i'
+    (item.matches || []).includes('https://www.crosswalk.com/*')
   )?.persistAcrossSessions).toBe(true);
   expect(offRefreshDiagnostics.documentState?.collectorRegistryPresent).toBe(true);
 });
