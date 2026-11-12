@@ -186,6 +186,55 @@ test('source-page collector button survives full refreshes around real popup tog
   await page.reload({waitUntil:'domcontentloaded'});
   await page.waitForTimeout(1000);
   const offRefreshVisible = await button.isVisible().catch(() => false);
+  const collectDiagnostics = async () => extensionWorker.evaluate(async url => {
+    const tabs = await chrome.tabs.query({url:'https://www.christianity.com/*'});
+    const tab = tabs.find(item => item.url === url) || tabs[0];
+    const settings = await chrome.storage.local.get({
+      masterEnabled:true, redirectEnabled:false,
+      pageSelectionButtonSites:{}, doubleClickBlbSites:{}
+    });
+    const registrations = await chrome.scripting.getRegisteredContentScripts();
+    const pattern = 'https://www.christianity.com/*';
+    const permission = await chrome.permissions.contains({origins:[pattern]});
+    const shouldInject = tab ? await shouldInjectContentScriptForTab(tab, settings) : false;
+    const files = tab ? contentScriptFilesForTab(tab, settings) : [];
+    let documentState = null;
+    let injectionError = null;
+    if (tab?.id != null) {
+      try {
+        const result = await chrome.scripting.executeScript({
+          target:{tabId:tab.id},
+          func:async () => {
+            let suiteEnabled = null;
+            try { suiteEnabled = typeof isSuiteEnabled === 'function' ? await isSuiteEnabled() : null; } catch (_) {}
+            return {
+              href:location.href,
+              readyState:document.readyState,
+              bodyPresent:!!document.body,
+              suiteEnabled,
+              collectorModulePresent:!!globalThis.BLBSourcePageCollectorModule,
+              collectorRegistryPresent:!!globalThis.BLBSourcePageCollectorSites?.['christianity.com'],
+              buttonPresent:!!document.getElementById('blb-suite-christianity-multiverse')
+            };
+          }
+        });
+        documentState = result?.[0]?.result || null;
+      } catch (error) {
+        injectionError = String(error?.message || error);
+      }
+    }
+    return {
+      redirectEnabled:settings.redirectEnabled,
+      masterEnabled:settings.masterEnabled,
+      permission,
+      shouldInject,
+      expectedFiles:files,
+      registered:registrations.filter(item => (item.matches || []).includes(pattern)),
+      tab:tab ? {id:tab.id,url:tab.url,status:tab.status} : null,
+      documentState,
+      injectionError
+    };
+  }, sourceUrl);
   const offRefreshDiagnostics = await collectDiagnostics();
 
   // Turn redirects ON from the same source tab context even if the OFF refresh
