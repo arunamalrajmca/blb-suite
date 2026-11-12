@@ -85,3 +85,62 @@ test("active Study Topic captures Strong's lexicon references and deduplicates r
   await page.reload({ waitUntil: 'domcontentloaded' });
   await expect.poll(async () => (await currentSession(extensionWorker))?.strongs || []).toEqual(['G26']);
 });
+
+
+test('Study capture rejects inactive topics and master-OFF state across passage, search, and Strong’s routes', async ({
+  page, context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await startStudyTopic({ context, extensionId, extensionStorage });
+  await routeBlbFixture(context);
+
+  const initial = await extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get(['studySessions', 'currentStudySessionId']);
+    return {
+      sessionId: state.currentStudySessionId,
+      session: state.studySessions.find(item => item.id === state.currentStudySessionId)
+    };
+  });
+  expect(initial.sessionId).toBeTruthy();
+
+  // A saved session without an active recording must not collect any route.
+  await extensionWorker.evaluate(id => chrome.storage.local.set({ currentStudySessionId: null }), initial.sessionId);
+  await page.goto(blbOrigin + '/kjv/jhn/3/16/', { waitUntil: 'domcontentloaded' });
+  await page.goto(blbOrigin + '/search/search.cfm?Criteria=grace', { waitUntil: 'domcontentloaded' });
+  await page.goto(blbOrigin + '/lexicon/g26/kjv/tr/0-1/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(300);
+  let saved = await extensionWorker.evaluate(async id => {
+    const state = await chrome.storage.local.get('studySessions');
+    return state.studySessions.find(item => item.id === id);
+  }, initial.sessionId);
+  expect(saved.refs || []).toEqual([]);
+  expect(saved.searchTerms || []).toEqual([]);
+  expect(saved.strongs || []).toEqual([]);
+
+  // An active session is still gated by the global master switch.
+  await extensionWorker.evaluate(id => chrome.storage.local.set({
+    currentStudySessionId: id,
+    masterEnabled: false
+  }), initial.sessionId);
+  await page.goto(blbOrigin + '/kjv/jhn/3/16/', { waitUntil: 'domcontentloaded' });
+  await page.goto(blbOrigin + '/search/search.cfm?Criteria=grace', { waitUntil: 'domcontentloaded' });
+  await page.goto(blbOrigin + '/lexicon/g26/kjv/tr/0-1/', { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(300);
+  saved = await extensionWorker.evaluate(async id => {
+    const state = await chrome.storage.local.get('studySessions');
+    return state.studySessions.find(item => item.id === id);
+  }, initial.sessionId);
+  expect(saved.refs || []).toEqual([]);
+  expect(saved.searchTerms || []).toEqual([]);
+  expect(saved.strongs || []).toEqual([]);
+
+  // Restoring the master switch allows all three capture types independently.
+  await extensionWorker.evaluate(() => chrome.storage.local.set({ masterEnabled: true }));
+  await page.goto(blbOrigin + '/kjv/jhn/3/16/', { waitUntil: 'domcontentloaded' });
+  await expect.poll(async () => (await currentSession(extensionWorker))?.refs || []).toContainEqual(
+    expect.objectContaining({ book: 'john', chapter: 3, from: 16, to: 16, version: 'kjv' })
+  );
+  await page.goto(blbOrigin + '/search/search.cfm?Criteria=grace', { waitUntil: 'domcontentloaded' });
+  await expect.poll(async () => (await currentSession(extensionWorker))?.searchTerms || []).toContain('Grace');
+  await page.goto(blbOrigin + '/lexicon/g26/kjv/tr/0-1/', { waitUntil: 'domcontentloaded' });
+  await expect.poll(async () => (await currentSession(extensionWorker))?.strongs || []).toContain('G26');
+});
