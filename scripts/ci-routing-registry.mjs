@@ -269,11 +269,39 @@ export const referenceRequiredSpecs = new Set([
 ]);
 
 
+// Browser specs delegated from the Group A changed-spec runner to the
+// References gate when that gate owns the selected change.
+export const referenceDelegatedSpecs = new Set([
+  "tests/browser/redirect-source-url-patterns.spec.js",
+  "tests/browser/redirect-hostnames.spec.js",
+  "tests/browser/blb-non-kjv-redirect.spec.js",
+  "tests/browser/redirect-toggle-isolation.spec.js",
+  "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
+  "tests/browser/popup-master-toggle-regression.spec.js",
+  "tests/browser/facebook-selection-parser.spec.js",
+  "tests/browser/substack-selection-parser.spec.js",
+  "tests/browser/omnibox-command-routing.spec.js",
+  "tests/browser/pdf-selection-regressions.spec.js",
+  "tests/browser/shared-regex-patterns.spec.js",
+  "tests/browser/rediscover-sagacity-button.spec.js",
+  "tests/browser/research-dom-smoke.spec.js",
+  "tests/browser/right-panel-default-expanded.spec.js",
+  "tests/browser/selection-phase-performance.spec.js",
+  "tests/browser/service-worker-lifecycle.spec.js",
+  "tests/browser/kjv-corpus-lazy-loading.spec.js",
+  "tests/browser/known-host-extension.spec.js",
+  "tests/browser/multiverse-contiguous-range-routing.spec.js",
+  "tests/browser/multiverse-disjoint-chapter-post.spec.js",
+  "tests/browser/pr-422-feature-regressions.spec.js",
+  "tests/browser/site-registration-opt-out-race.spec.js",
+  "tests/browser/source-page-button-redirect-separation.spec.js"
+]);
+
 // Specs that require the Group A runner itself. Specs delegated to the
 // References or Study Sessions workflows are excluded to avoid allocating a
 // second runner when those dedicated gates already own the selected work.
 export const groupAExecutionSpecs = new Set(
   [...groupARequiredSpecs].filter(spec =>
-    !referenceRequiredSpecs.has(spec) && !studySessionSpecs.has(spec)
+    !referenceDelegatedSpecs.has(spec) && !studySessionSpecs.has(spec)
   )
 );
