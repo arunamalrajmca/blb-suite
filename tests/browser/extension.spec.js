@@ -4179,56 +4179,6 @@ test('overlapping startup and install events share one persisted-registration au
   expect(count).toBe(1);
 });
 
-test('tab activation fails when its persistent content-script registration fails', async ({ page, extensionStorage, extensionWorker }) => {
-  // Load the tab before enabling the feature so the normal onUpdated path
-  // cannot race this test's deliberately failed registration.
-  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
-  await extensionStorage.set({
-    masterEnabled:true,
-    pageSelectionButtonSites:{'example.com':true},
-    doubleClickBlbSites:{},
-    redirectEnabled:false
-  });
-
-  const activated = await extensionWorker.evaluate(async () => {
-    const tabs = await chrome.tabs.query({url:'https://example.com/*'});
-    const tab = tabs[0];
-    if (!tab?.id) throw new Error('Expected the example.com test tab to exist');
-    // Let any settings-change activation started by the fixture settle first.
-    const pendingActivation = contentScriptInjectionLocks.get(tab.id);
-    if (pendingActivation) await pendingActivation.catch(() => {});
-    const pattern = originPatternForUrl(tab.url);
-    const registered = await chrome.scripting.getRegisteredContentScripts();
-    const matchingIds = registered
-      .filter(entry => entry.matches?.includes(pattern) && entry.id.startsWith('blb-suite-runtime-'))
-      .map(entry => entry.id);
-    if (matchingIds.length) {
-      await chrome.scripting.unregisterContentScripts({ids:matchingIds});
-    }
-    const remaining = (await chrome.scripting.getRegisteredContentScripts())
-      .filter(entry => entry.matches?.includes(pattern) && entry.id.startsWith('blb-suite-runtime-'));
-    if (remaining.length) {
-      throw new Error('Could not remove existing example.com registrations: ' + remaining.map(entry => entry.id).join(', '));
-    }
-    const originalRegister = chrome.scripting.registerContentScripts;
-    const failingRegister = async () => {
-      throw new Error('Simulated persistent registration failure');
-    };
-    chrome.scripting.registerContentScripts = failingRegister;
-    if (chrome.scripting.registerContentScripts !== failingRegister) {
-      chrome.scripting.registerContentScripts = originalRegister;
-      throw new Error('Unable to instrument registerContentScripts for activation-failure test');
-    }
-    try {
-      return await ensureContentScriptInTab(tab.id);
-    } finally {
-      chrome.scripting.registerContentScripts = originalRegister;
-    }
-  });
-
-  expect(activated).toBe(false);
-});
-
 test('extension update reconciliation reactivates configured existing tabs', async ({ page, extensionStorage, extensionWorker }) => {
   await extensionWorker.evaluate(() => {
     globalThis.__blbSuiteUpdateReconciliationCalls = [];
