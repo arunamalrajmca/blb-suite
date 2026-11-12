@@ -1,13 +1,5 @@
 /* Source-page Bible reference collection for supported commentary/reference sites. */
 globalThis.BLBSourcePageCollectorModule = Object.freeze({
-  refresh() {
-    try {
-      const refresh = globalThis.__BLBSourcePageCollectorRefresh;
-      return typeof refresh === 'function' ? refresh() : Promise.resolve();
-    } catch (_) {
-      return Promise.resolve();
-    }
-  },
   initialize({ normalizeSelectionText, parseRef, normalizeSourceBibleBook, resolveBibleReference, blbUrl, formatSourceBibleBookName, isSuiteEnabled, makeBlbMultiVerseButtonDraggable }) {
     // ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------
     {
@@ -266,10 +258,6 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
         }
     
         const ensureSourcePageButtonWhenReady = () => ensureSourcePageMultiVerseButton().catch(() => {});
-        // Keep an explicit refresh hook so an already-running content script can
-        // restore this page control after a settings-driven tab refresh without
-        // reinjecting the entire bundle into the existing document.
-        globalThis.__BLBSourcePageCollectorRefresh = ensureSourcePageButtonWhenReady;
         if (document.readyState === "loading") {
           document.addEventListener("DOMContentLoaded", ensureSourcePageButtonWhenReady, {once:true});
         } else {
@@ -278,12 +266,17 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
         setTimeout(ensureSourcePageButtonWhenReady, 500);
         setTimeout(ensureSourcePageButtonWhenReady, 1500);
     
-        chrome.storage.onChanged.addListener(changes => {
+        chrome.storage.onChanged.addListener((changes, areaName) => {
+          if (areaName !== "local") return;
           if (changes.masterEnabled?.newValue === false) {
             document.getElementById(buttonId)?.remove();
             document.getElementById(buttonId + "-reset-position")?.remove();
             document.getElementById(statusId)?.remove();
-          } else if (changes.masterEnabled?.newValue === true) {
+          } else if (changes.masterEnabled?.newValue === true ||
+                     changes.redirectEnabled?.newValue === true) {
+            // Re-ensure the collector control when redirects are re-enabled.
+            // Redirect preference does not gate visibility; this event only
+            // repairs an already-open page if its control was lost.
             ensureSourcePageButtonWhenReady();
           }
         });
