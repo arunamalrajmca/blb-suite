@@ -146,7 +146,10 @@ test('Study Sessions History menu opens the saved Strong\'s entries and Criteria
         title: value,
         date,
         dateLabel: date,
-        refs: [],
+        refs: [
+          {book:'John', bookNumber:43, chapter:3, from:16, to:16, version:'kjv', text:'3:16'},
+          {book:'Romans', bookNumber:45, chapter:8, from:28, to:28, version:'kjv', text:'8:28'}
+        ],
         strongs: ['H430'],
         searchTerms: ['Grace', 'Mercy'],
         notes: []
@@ -183,6 +186,19 @@ test('Study Sessions History menu opens the saved Strong\'s entries and Criteria
       if (!String(tab.url || '').includes('/search/search.cfm?')) return false;
       const criteria = new URL(tab.url).searchParams.get('Criteria') || '';
       return criteria.toLowerCase() === 'grace or mercy';
+    });
+  })).toBe(true);
+
+  await page.locator('#multiView').click();
+  await expect(page.locator('#historyVerseRefs')).toBeEnabled();
+  await page.locator('#historyVerseRefs').click();
+  await expect(page.locator('#studyStatus')).toContainText('Opening 2 references in MultiVerse');
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({});
+    return tabs.some(tab => {
+      if (!String(tab.url || '').includes('/multiverse-post.html?')) return false;
+      const mvText = new URL(tab.url).searchParams.get('mvText') || '';
+      return mvText.includes('John 3:16') && mvText.includes('Romans 8:28');
     });
   })).toBe(true);
   await page.close();
