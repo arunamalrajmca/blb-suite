@@ -72,6 +72,95 @@ async function dismissBlbCookieOverlay(page) {
 }
 
 test.describe('core user-action E2E coverage', () => {
+  test('physical right-click preserves the selected text and the BLB context-menu action is eligible', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const target = document.createElement('p');
+      target.id = 'blb-native-context-menu-target';
+      target.textContent = 'John 3:16';
+      target.style.cssText = 'position:fixed;left:24px;top:24px;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(target);
+      window.__blbNativeContextMenuEvent = null;
+      document.addEventListener('contextmenu', event => {
+        window.__blbNativeContextMenuEvent = {
+          selection: window.getSelection()?.toString() || '',
+          targetText: event.target?.textContent || ''
+        };
+      }, true);
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    await page.locator('#blb-native-context-menu-target').click({ button: 'right' });
+    expect(await page.evaluate(() => window.__blbNativeContextMenuEvent))
+      .toEqual({ selection: 'John 3:16', targetText: 'John 3:16' });
+    const tab = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({ active: true, currentWindow: true }).then(([active]) => active)
+    );
+    expect(await extensionWorker.evaluate(active =>
+      shouldShowBlbContextMenu(active, 'John 3:16'), tab)).toBe(true);
+    const beforeIds = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({}).then(tabs => tabs.map(item => item.id))
+    );
+    await extensionWorker.evaluate(async active => {
+      await handleBlbSelectionContextMenuClick({
+        menuItemId: 'blb-suite-web-selection',
+        selectionText: 'John 3:16'
+      }, active);
+    }, tab);
+    const blb = await waitForTab(extensionWorker, item => {
+      try { const url = new URL(item.url); return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/jhn/3/16/'; }
+      catch (_) { return false; }
+    });
+    expect(beforeIds).not.toContain(blb.id);
+    await removeTabById(extensionWorker, blb.id);
+  });
+
+  test('a failed context-menu action leaves Alt+B available for the same selection', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const target = document.createElement('p');
+      target.id = 'blb-action-isolation-target';
+      target.textContent = 'John 3:16';
+      document.body.appendChild(target);
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    const sourceTab = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({ active: true, currentWindow: true }).then(([active]) => active)
+    );
+    const failureHandled = await extensionWorker.evaluate(async tab => {
+      const original = openSharedSelectionAction;
+      try {
+        openSharedSelectionAction = async () => { throw new Error('intentional context-menu action failure'); };
+        await handleBlbSelectionContextMenuClick({
+          menuItemId: 'blb-suite-web-selection',
+          selectionText: 'John 3:16'
+        }, tab);
+        return true;
+      } finally {
+        openSharedSelectionAction = original;
+      }
+    }, sourceTab);
+    expect(failureHandled).toBe(true);
+
+    const commandResult = await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+    expect(commandResult?.ok).toBe(true);
+    const blb = await waitForTab(extensionWorker, tab => {
+      try { const url = new URL(tab.url); return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/jhn/3/16/'; }
+      catch (_) { return false; }
+    });
+    expect(new URL(blb.url).pathname).toBe('/kjv/jhn/3/16/');
+    await removeTabById(extensionWorker, blb.id);
+  });
+
   test('Alt+B command path opens an exact selected Bible reference', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
