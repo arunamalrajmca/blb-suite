@@ -14,7 +14,11 @@ async function preparePopup(page, extensionId, extensionStorage, extensionWorker
     pendingSiteFeatureToggles: {}
   });
 
-  await page.addInitScript(({ permissionResult }) => {
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.locator('body').evaluate(body =>
+    !body.classList.contains('popup-loading')
+  )).toBe(true);
+  await page.evaluate(async permissionResult => {
     const originalQuery = chrome.tabs.query.bind(chrome.tabs);
     Object.defineProperty(chrome.tabs, 'query', {
       configurable: true,
@@ -26,12 +30,8 @@ async function preparePopup(page, extensionId, extensionStorage, extensionWorker
       configurable: true,
       value: async () => permissionResult
     });
-  }, { permissionResult: permission });
-
-  await page.goto(`chrome-extension://${extensionId}/popup.html`);
-  await expect.poll(() => page.locator('body').evaluate(body =>
-    !body.classList.contains('popup-loading')
-  )).toBe(true);
+    render(await getState());
+  }, permission);
   await expect(page.locator('#pageButton')).toBeVisible();
   await expect(page.locator('#doubleClick')).toBeVisible();
   await expect(page.locator('#pageButton')).toBeEnabled();
@@ -123,7 +123,11 @@ for (const feature of ['pageButton', 'doubleClick']) {
       pendingSiteFeatureToggles: {}
     });
 
-    await page.addInitScript(() => {
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    await expect.poll(() => page.locator('body').evaluate(body =>
+      !body.classList.contains('popup-loading')
+    )).toBe(true);
+    await page.evaluate(async () => {
       const originalQuery = chrome.tabs.query.bind(chrome.tabs);
       Object.defineProperty(chrome.tabs, 'query', {
         configurable: true,
@@ -138,9 +142,8 @@ for (const feature of ['pageButton', 'doubleClick']) {
           window.__sitePermissionRequested = true;
         })
       });
+      render(await getState());
     });
-
-    await page.goto(`chrome-extension://${extensionId}/popup.html`);
     await expect(page.locator(`#${feature}`)).toBeVisible();
     await page.locator(`#${feature}`).check();
     await expect.poll(() => page.evaluate(() => window.__sitePermissionRequested)).toBe(true);
