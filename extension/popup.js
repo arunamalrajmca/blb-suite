@@ -1134,6 +1134,17 @@ document.getElementById('extensionVersion')?.addEventListener('click', async eve
   }
 });
 document.getElementById('master').addEventListener('change', e => setMaster(e.target.checked));
+async function cancelPendingSiteFeatureChoice(feature) {
+  if (!currentSiteOrigin) return;
+  try {
+    await chrome.runtime.sendMessage({
+      type:'blbSuiteCancelSiteFeatureToggle',
+      origin:currentSiteOrigin,
+      feature
+    });
+  } catch (_) {}
+}
+
 async function setIndependentSiteFeature(feature, on) {
   // Do not request host permissions or persist feature opt-ins on sensitive sites.
   if (isSensitiveSiteUrl(currentSiteUrl)) { render(await getState()); return; }
@@ -1172,6 +1183,7 @@ async function setIndependentSiteFeature(feature, on) {
   if (on) {
     const [granted] = await Promise.all([accessPromise, pinPromise]);
     if (!granted) {
+      await cancelPendingSiteFeatureChoice(feature);
       if (feature === 'pageButton') await setPageButton(false);
       else if (feature === 'doubleClick') await setDoubleClick(false);
       render(await getState());
