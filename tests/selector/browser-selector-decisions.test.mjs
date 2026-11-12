@@ -862,3 +862,70 @@ test("source-page registry changes select only the registry-driven site and clic
     assert.match(output, /study_sessions_required=false/);
   });
 });
+
+
+test("feature-only ownership selects only its execution gate", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/blb-auto-hyperlinker.js", "// rich clipboard behavior changed\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=false/);
+    assert.match(output, /reference_required=false/);
+    assert.match(output, /study_sessions_required=false/);
+  });
+  withFixture((root, base) => {
+    commitChange(root, "extension/redirect-scripttagger.js", "// ScriptTagger injection changed\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /group_a_required=false/);
+    assert.match(output, /group_b_required=true/);
+    assert.match(output, /reference_required=false/);
+    assert.match(output, /study_sessions_required=false/);
+  });
+  withFixture((root, base) => {
+    commitChange(root, "extension/study-session-export.js", "// Study export changed\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /group_a_required=false/);
+    assert.match(output, /group_b_required=false/);
+    assert.match(output, /reference_required=false/);
+    assert.match(output, /study_sessions_required=true/);
+  });
+});
+
+test("reference-delegated redirect regressions do not allocate a redundant Group A runner", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/redirect-bibleref-ranges.js", "// redirect parser feature changed\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /group_a_required=false/);
+    assert.match(output, /group_b_required=true/);
+    assert.match(output, /reference_required=true/);
+    assert.match(output, /group_a_changed_browser_specs=\\n/);
+  });
+});
+
+test("changed browser specs delegated to References are removed from Group A execution list", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/redirect-bibleref-ranges.js", "// redirect parser feature changed\\n");
+    commitChange(root, "tests/browser/redirect-source-url-patterns.spec.js", "// changed reference matrix regression\\n");
+    const output = select(root, base);
+    assert.match(output, /reference_required=true/);
+    assert.match(output, /changed_browser_specs=tests\\/browser\\/redirect-source-url-patterns\\.spec\\.js/);
+    assert.match(output, /group_a_changed_browser_specs=\\n/);
+    assert.match(output, /group_a_required=false/);
+  });
+});
+
+test("shared-core runtime changes retain full browser coverage and all applicable gates", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/content.js", "// shared content behavior changed\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=true/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=true/);
+    assert.match(output, /reference_required=true/);
+    assert.match(output, /study_sessions_required=true/);
+  });
+});
