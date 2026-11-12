@@ -26,9 +26,20 @@ test("matrix-owned changed browser specs are delegated by the central registry",
   ));
   matrixOwned.delete("tests/browser/extension.spec.js");
 
+  assert.deepEqual([...referenceDelegatedSpecs].sort(), [...matrixOwned].sort(),
+    "the registry's delegated-spec inventory must exactly match the reference matrix ownership");
   for (const spec of matrixOwned) {
     assert.ok(mappedSpecs.has(spec), "matrix-owned spec must not enter the Group A unmapped fallback: " + spec);
-    assert.ok(referenceDelegatedSpecs.has(spec), "matrix-owned spec must be delegated: " + spec);
+  }
+
+  for (const spec of groupAExecutionSpecs) {
+    assert.ok(groupsWorkflow.includes(spec), "Group A execution ownership must have a workflow invocation: " + spec);
+  }
+  for (const spec of groupBRequiredSpecs) {
+    assert.ok(groupsWorkflow.includes(spec), "Group B ownership must have a workflow invocation: " + spec);
+  }
+  for (const spec of studySessionSpecs) {
+    assert.ok(groupsWorkflow.includes(spec), "Study Sessions ownership must have a workflow invocation: " + spec);
   }
 
   assert.ok(groupsWorkflow.includes("inputs.group_a_changed_browser_specs"));
