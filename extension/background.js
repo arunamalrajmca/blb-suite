@@ -2482,7 +2482,12 @@ function contentScriptFilesForTab(tab, data) {
     (blbSite ? pageSites[key] === true : (pageSites[key] === true || doubleSites[key] === true)));
   const redirectEnabled = data.redirectEnabled === true;
   const needsFullBundle = explicitSiteFeature || (redirectEnabled && isRedirectHostname(hostname));
-  if (needsFullBundle && redirectEnabled) {
+
+  // Source-page collector hosts keep a stable registration across Redirect
+  // ON/OFF changes. The redirect handlers are storage-gated and remain inert
+  // while Redirect is OFF; keeping the same JS list avoids updating a live
+  // collector registration and losing its isolated-world site registry.
+  if (needsFullBundle && (redirectEnabled || hasPageCollectorButton)) {
     return [...BLB_CONTENT_SCRIPT_FILES, ...SCRIPT_TAGGER_CONTENT_SCRIPT_FILES, ...BIBLEREF_RANGE_CONTENT_SCRIPT_FILES];
   }
   if (needsFullBundle) return BLB_CONTENT_SCRIPT_FILES;
@@ -2645,11 +2650,13 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
         runAt:'document_start',
         persistAcrossSessions:true
       }]);
-    } else if (JSON.stringify(existing[0].js || []) !== JSON.stringify(files)) {
+    } else if (JSON.stringify(existing[0].js || []) !== JSON.stringify(files) ||
+               existing[0].persistAcrossSessions !== true) {
       await chrome.scripting.updateContentScripts([{
         id,
         js:files,
-        runAt:'document_start'
+        runAt:'document_start',
+        persistAcrossSessions:true
       }]);
     }
 
@@ -2673,12 +2680,14 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
           persistAcrossSessions:true
         }]);
       } else if (JSON.stringify(registeredMain[0].js || []) !== JSON.stringify(mainWorldFiles) ||
-                 registeredMain[0].world !== 'MAIN') {
+                 registeredMain[0].world !== 'MAIN' ||
+                 registeredMain[0].persistAcrossSessions !== true) {
         await chrome.scripting.updateContentScripts([{
           id:mainWorldId,
           js:mainWorldFiles,
           runAt:'document_start',
-          world:'MAIN'
+          world:'MAIN',
+          persistAcrossSessions:true
         }]);
       }
     }
