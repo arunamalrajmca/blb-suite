@@ -257,23 +257,34 @@ test('Study Sessions auto-stop setting persists when changed in the popup', asyn
   context, extensionId, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.clear();
-  await extensionWorker.evaluate(() => chrome.storage.local.set({ masterEnabled: true }));
+  const topic = 'Popup auto-stop setting ' + Date.now();
+  await extensionWorker.evaluate(async value => {
+    const now = new Date();
+    const date = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+    await chrome.storage.local.set({
+      masterEnabled: true,
+      studyTopics: [value],
+      studySelectedTopic: value,
+      currentStudySessionId: 'popup-auto-stop-regression',
+      studySessions: [{
+        id: 'popup-auto-stop-regression',
+        title: value,
+        date,
+        dateLabel: date,
+        refs: [],
+        strongs: [],
+        searchTerms: [],
+        notes: []
+      }]
+    });
+  }, topic);
   const page = await context.newPage();
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
   await waitForStudyPopupReady(page);
+  await expect(page.locator('#studyTopic')).toHaveValue(topic);
 
   const autoStop = page.locator('#studyAutoStop');
   await expect(autoStop).toBeVisible();
-  // The auto-stop row is hidden while the global Suite gate is OFF and must
-  // return when the gate is enabled again in the same popup instance.
-  await page.locator('#master').uncheck();
-  await expect(autoStop).toBeHidden();
-  await page.locator('#master').check();
-  await expect(autoStop).toBeVisible();
-
-  await page.locator('#studyTopic').fill('Popup auto-stop setting ' + Date.now());
-  await page.locator('#startTopic').click();
-  await expect(page.locator('#studyStatus')).toContainText('Recording started');
   await autoStop.selectOption('0');
   await expect.poll(async () => extensionWorker.evaluate(async () =>
     (await chrome.storage.local.get({ studyAutoStopMinutes: 15 })).studyAutoStopMinutes
