@@ -485,3 +485,48 @@ test('Global master OFF blocks all four selection actions while preserving site 
   });
   expect(finalState.openedReferenceTabCount).toBe(0);
 });
+
+
+test('Study Sessions auto-stop alarm follows recording, settings, and master-toggle lifecycle', async ({ extensionWorker, extensionStorage }) => {
+  const alarmName = 'blb-study-auto-stop';
+  const readAlarm = () => extensionWorker.evaluate(name => chrome.alarms.get(name), alarmName);
+  const waitForAlarm = async expected => {
+    await expect.poll(async () => Boolean(await readAlarm()), { timeout: 10000 }).toBe(expected);
+  };
+
+  await extensionStorage.clear();
+  await extensionStorage.set({ masterEnabled: true, studyAutoStopMinutes: 10 });
+  expect(await readAlarm()).toBeUndefined();
+
+  const topic = 'BLB regression alarm lifecycle ' + Date.now();
+  const started = await extensionWorker.evaluate(value => startStudyTopicFromPopup(value), topic);
+  expect(started).toMatchObject({ ok: true, recording: true });
+  await waitForAlarm(true);
+  expect(await readAlarm()).toMatchObject({ periodInMinutes: 1 });
+
+  // Changing the inactivity threshold keeps the periodic alarm active while
+  // changing the value that checkStudyAutoStop reads on each alarm tick.
+  await extensionStorage.set({ studyAutoStopMinutes: 20 });
+  await expect.poll(() => extensionWorker.evaluate(() => getStudyAutoStopMinutes())).toBe(20);
+  await waitForAlarm(true);
+
+  // Disabling auto-stop clears the scheduled alarm without ending the session.
+  await extensionStorage.set({ studyAutoStopMinutes: 0 });
+  await waitForAlarm(false);
+  let state = await extensionWorker.evaluate(() => chrome.storage.local.get({ currentStudySessionId: null }));
+  expect(state.currentStudySessionId).toBeTruthy();
+
+  // Re-enabling the setting recreates the alarm for the still-active session.
+  await extensionStorage.set({ studyAutoStopMinutes: 10 });
+  await waitForAlarm(true);
+
+  // The global master gate clears the alarm; restoring it recreates the alarm
+  // because the recording itself remains active.
+  await extensionStorage.set({ masterEnabled: false });
+  await waitForAlarm(false);
+  await extensionStorage.set({ masterEnabled: true });
+  await waitForAlarm(true);
+
+  await extensionWorker.evaluate(() => stopStudyRecording('manual'));
+  await waitForAlarm(false);
+});
