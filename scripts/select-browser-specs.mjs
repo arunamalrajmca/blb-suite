@@ -159,7 +159,7 @@ const unmapped = selected.filter(path => !mappedSpecs.has(path) && !separatelyMa
 const referenceGateRequired = full || selected.some(path => referenceRequiredSpecs.has(path));
 const groupAChangedBrowserSpecs = changedBrowserSpecs.filter(path =>
   !studySessionSpecs.has(path) &&
-  !(referenceGateRequired && (full || selected.includes(path)) && referenceRequiredSpecs.has(path))
+  !(referenceGateRequired && (full || selected.includes(path)) && referenceDelegatedSpecs.has(path))
 );
 
 
