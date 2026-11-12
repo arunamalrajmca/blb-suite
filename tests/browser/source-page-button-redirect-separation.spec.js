@@ -145,7 +145,7 @@ test('same-tab redirect re-enable restores source-page buttons on every register
 });
 
 test('source-page collector button survives a full refresh with redirects OFF and ON', async ({
-  page, extensionStorage
+  page, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.set({
     masterEnabled:true,
@@ -164,6 +164,25 @@ test('source-page collector button survives a full refresh with redirects OFF an
   await page.goto('https://www.dailyverses.net/dailyverse', {waitUntil:'domcontentloaded'});
   const button = page.locator('#blb-suite-dailyverses-multiverse');
   await expect(button).toBeVisible();
+
+  // The fixture must not statically inject source-page scripts. Confirm that
+  // the real background runtime registration owns this host instead.
+  const registration = await extensionWorker.evaluate(async () => {
+    const manifest = chrome.runtime.getManifest();
+    const staticMatch = (manifest.content_scripts || []).some(script =>
+      (script.matches || []).some(match => match.includes('dailyverses.net'))
+    );
+    const registered = await chrome.scripting.getRegisteredContentScripts();
+    return {
+      staticMatch,
+      runtime: registered.find(script =>
+        (script.matches || []).includes('https://www.dailyverses.net/*')
+      ) || null
+    };
+  });
+  expect(registration.staticMatch).toBe(false);
+  expect(registration.runtime?.js).toContain('source-page-collector.js');
+  expect(registration.runtime?.js).toContain('content.js');
 
   // Match the reported sequence: turn redirects OFF while the control remains
   // visible, then refresh the source page. The collector is independent of the
