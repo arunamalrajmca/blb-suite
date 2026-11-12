@@ -530,3 +530,117 @@ test('Study Sessions auto-stop alarm follows recording, settings, and master-tog
   await extensionWorker.evaluate(() => stopStudyRecording('manual'));
   await waitForAlarm(false);
 });
+
+test('Global master OFF then ON restores both independently enabled site selection features', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    redirectEnabled: false,
+    pageSelectionButtonSites: { 'example.com': true },
+    doubleClickBlbSites: { 'example.com': true }
+  });
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  await page.bringToFront();
+
+  const floatingButton = page.locator('#blb-suite-page-selection-button');
+  await expect(floatingButton).toBeVisible({ timeout: 10000 });
+  await extensionStorage.set({ masterEnabled: false });
+  await expect(floatingButton).toBeHidden({ timeout: 10000 });
+
+  await expect.poll(() => extensionWorker.evaluate(async () => ({
+    pageButton: await isPageButtonEnabledForHostname('example.com'),
+    contextMenu: await shouldShowBlbContextMenu({
+      url: 'https://example.com/', title: 'Example'
+    }, 'John 3:16')
+  }))).toEqual({ pageButton: false, contextMenu: false });
+
+  // Re-enabling the global switch must reactivate both independently saved
+  // site features, not just restore the floating button's eligibility.
+  await extensionStorage.set({ masterEnabled: true });
+  await expect(floatingButton).toBeVisible({ timeout: 15000 });
+  await expect.poll(() => extensionWorker.evaluate(async () => ({
+    pageButton: await isPageButtonEnabledForHostname('example.com'),
+    contextMenu: await shouldShowBlbContextMenu({
+      url: 'https://example.com/', title: 'Example'
+    }, 'John 3:16')
+  }))).toEqual({ pageButton: true, contextMenu: true });
+
+  // Exercise the restored Double-click listener with a real browser gesture.
+  await page.evaluate(() => {
+    const target = document.createElement('p');
+    target.id = 'global-toggle-restored-double-click';
+    target.textContent = 'John 3:16';
+    target.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(target);
+  });
+  const beforeIds = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+  );
+  await page.locator('#global-toggle-restored-double-click').dblclick();
+  await expect.poll(() => extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+    tabs.some(tab => !before.includes(tab.id) &&
+      /blueletterbible\\.org$/.test(new URL(tab.url || tab.pendingUrl || 'about:blank').hostname) &&
+      new URL(tab.url || tab.pendingUrl || 'about:blank').pathname === '/kjv/jhn/3/16/')
+  )), beforeIds), { timeout: 15000 }).toBe(true);
+});
+
+
+test('sensitive-site policy blocks all four selection actions despite stale enabled site preferences', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    redirectEnabled: false,
+    pageSelectionButtonSites: { 'gov.scot': true },
+    doubleClickBlbSites: { 'gov.scot': true }
+  });
+  await page.route('https://www.gov.scot/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><head><title>Government test page</title></head><body><p id="sensitive-all-actions">John 3:16</p></body></html>'
+  }));
+  await page.goto('https://www.gov.scot/', { waitUntil: 'domcontentloaded' });
+  await page.bringToFront();
+
+  // Floating Show on BLB and Double-click must not be activated on a sensitive
+  // host, even when stale per-site preferences remain enabled.
+  await expect(page.locator('#blb-suite-page-selection-button')).toHaveCount(0);
+  const beforeIds = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+  );
+  await page.locator('#sensitive-all-actions').dblclick();
+
+  // The native context-menu surface is unavailable in headless Chromium.
+  // Exercise the exact registered onClicked handler and its eligibility gate.
+  const tab = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({ active: true, currentWindow: true }).then(([active]) => active)
+  );
+  const gates = await extensionWorker.evaluate(async activeTab => {
+    const rightClickEligible = await shouldShowBlbContextMenu(activeTab, 'John 3:16');
+    await handleBlbSelectionContextMenuClick({
+      menuItemId: 'blb-suite-web-selection',
+      selectionText: 'John 3:16'
+    }, activeTab);
+    const altB = await handleOpenBibleSelectionCommand();
+    return {
+      floatingEligible: await isPageButtonEnabledForHostname('gov.scot'),
+      rightClickEligible,
+      altB
+    };
+  }, tab);
+
+  expect(gates.floatingEligible).toBe(false);
+  expect(gates.rightClickEligible).toBe(false);
+  expect(gates.altB).toMatchObject({ ok: false, reason: 'site-disabled' });
+
+  await expect.poll(() => extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+    tabs.filter(item => !before.includes(item.id) && (() => {
+      try {
+        const url = new URL(item.url || item.pendingUrl || 'about:blank');
+        return url.hostname === 'www.blueletterbible.org' &&
+          url.pathname === '/kjv/jhn/3/16/';
+      } catch (_) { return false; }
+    })()).length
+  ), beforeIds), { timeout: 3000 }).toBe(0);
+});
