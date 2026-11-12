@@ -3495,7 +3495,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const permissionOrigin = parsed.origin + '/*';
       pending[permissionOrigin] = {
         feature,
-        otherFeatureEnabled:message.otherFeatureEnabled === true,
         requestedAt:Date.now()
       };
       await chrome.storage.local.set({pendingSiteFeatureToggles:pending});
@@ -6769,14 +6768,8 @@ async function commitPendingSiteFeatureTogglesForGrantedOrigins(origins, now = D
     if (feature === 'pageButton') {
       pageSites[key] = true;
       if (key === BLB_HOSTNAME) doubleSites[key] = false;
-      else if (!Object.prototype.hasOwnProperty.call(doubleSites, key)) {
-        doubleSites[key] = intent.otherFeatureEnabled === true;
-      }
     } else {
       doubleSites[key] = true;
-      if (!Object.prototype.hasOwnProperty.call(pageSites, key)) {
-        pageSites[key] = intent.otherFeatureEnabled === true;
-      }
     }
     delete pending[origin];
     committed.push({origin,feature});
