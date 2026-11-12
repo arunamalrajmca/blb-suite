@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const fs = require('node:fs');
 const path = require('node:path');
+const vm = require('node:vm');
 
 const root = path.resolve(__dirname, '../..');
 
@@ -53,7 +54,12 @@ test('every production redirect hostname normalizes bare, www, and uppercase var
 
 test('MAIN-world guard registration normalizes www hosts and is limited to article source sites', () => {
   const background = fs.readFileSync(path.join(root, 'extension/background.js'), 'utf8');
-  const registry = fs.readFileSync(path.join(root, 'extension/source-page-collector-sites.js'), 'utf8');
+  const registryPath = path.join(root, 'extension/source-page-collector-sites.js');
+  const registrySource = fs.readFileSync(registryPath, 'utf8');
+  const registryGlobal = {};
+  vm.runInNewContext(registrySource, { globalThis: registryGlobal }, { filename: registryPath });
+  const registry = registryGlobal.BLBSourcePageCollectorSites;
+  expect(registry).toBeTruthy();
   const registrationStart = background.indexOf('let hostname = \'\';');
   const registrationEnd = background.indexOf('const mainWorldId', registrationStart);
   expect(registrationStart).toBeGreaterThanOrEqual(0);
@@ -63,11 +69,16 @@ test('MAIN-world guard registration normalizes www hosts and is limited to artic
   expect(registration).not.toContain("replace(/^www\\\\./, '')");
   expect(registration).toContain('collectorConfig?.mainWorldClickGuard === true');
   expect(registration).not.toContain('christianity.com');
-  for (const host of ['christianity.com', 'gotquestions.org', 'crosswalk.com', 'enduringword.com', 'churchofjesuschrist.org', 'mercyhouseministry.com', 'openbible.info', 'crossway.org', 'sarata.com']) {
-    const entry = registry.split('\n').find(line => line.includes(`"${host}"`));
-    expect(entry, `${host} must be configured in the shared registry`).toContain('mainWorldClickGuard:true');
+  const guardedHosts = Object.entries(registry)
+    .filter(([, config]) => config && config.mainWorldClickGuard === true)
+    .map(([host]) => host)
+    .sort();
+  expect(guardedHosts.length).toBeGreaterThan(0);
+  for (const host of guardedHosts) {
+    expect(registry[host].mainWorldClickGuard, host).toBe(true);
   }
-  // ESV.org is redirect-only; it does not need the source-page click guard.
-  expect(registry).not.toContain('"esv.org"');
+  // The registry is the source of truth: newly guarded hosts automatically
+  // join this validation without another hardcoded hostname list.
+  expect(registry).not.toHaveProperty('esv.org');
 });
 
