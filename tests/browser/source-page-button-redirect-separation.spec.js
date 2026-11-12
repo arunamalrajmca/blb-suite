@@ -77,18 +77,11 @@ test('Open Bible References in BLB remains visible across redirect changes and f
   await extensionStorage.set({redirectEnabled:false});
   await expect(button).toBeVisible();
 
-  // Model a stale/missing page control after the redirect toggle is changed
-  // from this same site. Re-enabling redirects refreshes the active tab through
-  // ensureContentScriptInTab(), whose resident-script message must also refresh
-  // the source-page collector rather than only selection features.
+  // A lost control must be restored by the collector's own redirect-enabled
+  // storage-change listener, even though the page itself is not reloaded.
   await button.evaluate(element => element.remove());
   await expect(button).toHaveCount(0);
   await extensionStorage.set({redirectEnabled:true});
-  const result = await extensionWorker.evaluate(async () => {
-    const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
-    return tabs[0]?.id == null ? false : ensureContentScriptInTab(tabs[0].id);
-  });
-  expect(result).toBe(true);
   await expect(button).toBeVisible();
 
   await extensionStorage.set({redirectEnabled:false});
@@ -102,8 +95,8 @@ test('Open Bible References in BLB remains visible across redirect changes and f
 });
 
 
-test('same-tab redirect re-enable refresh restores source-page buttons on every registered host', async ({
-  page, extensionWorker, extensionStorage
+test('same-tab redirect re-enable restores source-page buttons on every registered host', async ({
+  page, extensionStorage
 }) => {
   const cases = [
     ['https://www.christianity.com/wiki/prayer/test-article.html', 'christianity'],
@@ -139,15 +132,11 @@ test('same-tab redirect re-enable refresh restores source-page buttons on every 
     const button = page.locator('#blb-suite-' + siteId + '-multiverse');
     await expect(button, url).toBeVisible();
 
-    // The source-page collector must be recoverable on the same document when
-    // the user turns redirects back ON from this site's own popup.
+    // Simulate the missing control after the user turns redirects OFF, then
+    // re-enable from this same site's popup. The collector's own storage
+    // listener must restore the control without requiring navigation.
     await button.evaluate(element => element.remove());
     await extensionStorage.set({redirectEnabled:true});
-    const activated = await extensionWorker.evaluate(async () => {
-      const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
-      return tabs[0]?.id == null ? false : ensureContentScriptInTab(tabs[0].id);
-    });
-    expect(activated, url).toBe(true);
     await expect(button, url + ' after redirect ON').toBeVisible();
 
     await extensionStorage.set({redirectEnabled:false});
