@@ -89,7 +89,9 @@ const ignoredNonRuntime = path =>
 const focusedOmniboxBackgroundChange = changed.length === 2
   && changed.includes("extension/background.js")
   && changed.includes("tests/browser/omnibox-command-routing.spec.js");
-const focusedSourcePageRuntimeChange = changed.filter(path => !ignoredNonRuntime(path)).length === 1
+const focusedSourcePageRuntimeChange = changed.filter(path =>
+  !ignoredNonRuntime(path) && !browserSpecPattern.test(path)
+).length === 1
   && changed.includes("extension/background.js")
   && changed.includes("tests/browser/source-page-button-redirect-separation.spec.js")
   && changed.includes("tests/browser/scripttagger-global-injection.spec.js");
