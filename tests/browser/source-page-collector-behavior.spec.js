@@ -564,3 +564,38 @@ test('SermonIndex topic pages show the BLB references button and collect linked 
   await expect(page.locator('#blb-suite-sermonindex-multiverse-status'))
     .toContainText('Opening 4 Bible references in BLB MultiVerse');
 });
+
+
+test('source-page collector reports an empty-reference page without sending a MultiVerse request', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    masterEnabled: true,
+    pageSelectionButtonSites: { 'gotquestions.org': true },
+    doubleClickBlbSites: {}
+  });
+  await context.route('https://www.gotquestions.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>Article without Bible links</title></head><body><main><h1>General article</h1><a href="/about/">About</a><a href="https://example.com/">External resource</a></main></body></html>'
+  }));
+  await extensionWorker.evaluate(() => {
+    globalThis.__blbEmptyCollectorRequests = 0;
+    globalThis.__blbEmptyCollectorCapture = message => {
+      if (message?.type === 'blbSuiteOpenWebsterMultiVerse') {
+        globalThis.__blbEmptyCollectorRequests++;
+      }
+    };
+    chrome.runtime.onMessage.addListener(globalThis.__blbEmptyCollectorCapture);
+  });
+
+  await page.goto('https://www.gotquestions.org/general-article.html', { waitUntil: 'domcontentloaded' });
+  const button = page.locator('#blb-suite-gotquestions-multiverse');
+  await expect(button).toHaveText('Open Bible References in BLB');
+  await button.click();
+
+  await expect(page.locator('#blb-suite-gotquestions-multiverse-status'))
+    .toContainText('No linked Bible references found on this page.');
+  expect(await extensionWorker.evaluate(() => globalThis.__blbEmptyCollectorRequests)).toBe(0);
+});
