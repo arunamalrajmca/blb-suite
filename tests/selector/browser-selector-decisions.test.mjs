@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { selectReferenceMatrix } from "../../scripts/select-reference-matrix.mjs";
@@ -936,12 +936,16 @@ test("every protected shared-core path retains full browser coverage and all app
     "extension/regex-patterns.js",
     "extension/books.js",
     "extension/book-aliases.js",
-    "extension/kjv-corpus-original.js",
+    "extension/kjv-corpus-original-case.js",
+    "extension/manifest.json",
     "extension/case-sensitive-search-core.js",
     "extension/case-sensitive-routing.js",
     "tests/browser/fixtures.js"
   ];
-  for (const path of sharedCorePaths) {
+  const corpusPaths = readdirSync(new URL("../../extension", import.meta.url))
+    .filter(file => /^kjv-corpus-.*\\.js$/.test(file))
+    .map(file => "extension/" + file);
+  for (const path of new Set([...sharedCorePaths, ...corpusPaths])) {
     withFixture((root, base) => {
       commitChange(root, path, "// shared-core change\\n");
       const output = select(root, base);
