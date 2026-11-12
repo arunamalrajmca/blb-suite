@@ -595,7 +595,28 @@ jobs:
           const selected = process.env.BLB_FOCUSED_SPEC;
           if (!selected) throw new Error('BLB_FOCUSED_SPEC is required');
           const testDir = path.resolve(process.cwd(), 'tests/browser');
-          const testMatch = [new RegExp(path.basename(selected).replace(/\./g, '\\\\.'))];
+          const escapedName = path.basename(selected).split('.').join(String.fromCharCode(92) + '.');
+          const testMatch = [new RegExp(escapedName + '
+          module.exports = {
+            ...base,
+            testDir,
+            projects: base.projects.map(project => ({ ...project, testDir, testMatch }))
+          };
+          EOF
+            BLB_FOCUSED_SPEC="$spec" npx playwright test --config=.playwright-focused.config.cjs
+            rm -f .playwright-focused.config.cjs
+          done
+      - name: Upload focused behavior diagnostics
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v6
+        with:
+          name: blb-suite-focused-behavior-diagnostics
+          path: |
+            test-results/selection-action-timing.json
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 14
+)];
           module.exports = {
             ...base,
             testDir,
