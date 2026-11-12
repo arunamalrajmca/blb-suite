@@ -9,8 +9,8 @@ async function preparePopup(page, extensionId, extensionStorage, extensionWorker
 } = {}) {
   await extensionStorage.set({
     masterEnabled: true,
-    pageSelectionButtonSites: { [SITE]: pageButton },
-    doubleClickBlbSites: { [SITE]: doubleClick },
+    pageSelectionButtonSites: pageButton === undefined ? {} : { [SITE]: pageButton },
+    doubleClickBlbSites: doubleClick === undefined ? {} : { [SITE]: doubleClick },
     pendingSiteFeatureToggles: {}
   });
 
