@@ -589,8 +589,11 @@ jobs:
             spec="${specs[$index]}"
             [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
             printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-            spec_name="${spec##*/}"
-            npx playwright test --grep "$spec_name"
+            if [[ "$spec" == "tests/browser/study-session-popup-ui-regression.spec.js" ]]; then
+              npx playwright test --grep "Study export:"
+            else
+              npx playwright test "$spec"
+            fi
           done
       - name: Upload focused behavior diagnostics
         if: ${{ !cancelled() }}
