@@ -494,11 +494,6 @@ function updateStudyButtons() {
     if (resumeStudyButton) resumeStudyButton.style.display = 'none';
     return;
   }
-  // A previous master-OFF render hides this row inline. Restore its
-  // stylesheet-controlled layout whenever the Suite is enabled again.
-  const autoStopRow = studyAutoStop?.closest('.autostop-row');
-  if (autoStopRow) autoStopRow.style.display = '';
-
   const topic = selectedTopic();
   const existing = !!findTopicKey(topic);
   const hasTopic = topic.length > 0;
