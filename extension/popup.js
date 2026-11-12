@@ -1176,6 +1176,10 @@ async function setIndependentSiteFeature(feature, on) {
   const state = await getState();
   if (!state.siteKey || !state.master || (state.isBlbSite && feature !== 'pageButton') ||
       (state.isSensitiveSite && !state.isBlbSite) || (feature === 'doubleClick' && state.isPdfContext)) {
+    if (on) {
+      await pinPromise;
+      await cancelPendingSiteFeatureChoice(feature);
+    }
     render(state);
     return;
   }
