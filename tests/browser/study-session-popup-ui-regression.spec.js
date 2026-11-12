@@ -203,11 +203,20 @@ test('Study Sessions History menu opens the saved Strong\'s entries and Criteria
     });
   }, normalizedTopic);
 
+  let submittedMultiVerseText = '';
   await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
     status: 200,
     contentType: 'text/html; charset=utf-8',
     body: '<!doctype html><html><head><title>Study history fixture</title></head><body>Study history fixture</body></html>'
   }));
+  await context.route('https://www.blueletterbible.org/tools/MultiVerse.cfm', route => {
+    submittedMultiVerseText = new URLSearchParams(route.request().postData() || '').get('mvText') || '';
+    return route.fulfill({
+      status: 200,
+      contentType: 'text/html; charset=utf-8',
+      body: '<!doctype html><html><head><title>MultiVerse fixture</title></head><body>MultiVerse fixture</body></html>'
+    });
+  });
   const page = await context.newPage();
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
   await waitForStudyPopupReady(page);
@@ -239,14 +248,7 @@ test('Study Sessions History menu opens the saved Strong\'s entries and Criteria
   await expect(page.locator('#historyVerseRefs')).toBeEnabled();
   await page.locator('#historyVerseRefs').click();
   await expect(page.locator('#studyStatus')).toContainText('Opening 2 references in MultiVerse');
-  await expect.poll(async () => extensionWorker.evaluate(async () => {
-    const tabs = await chrome.tabs.query({});
-    return tabs.some(tab => {
-      if (!String(tab.url || '').includes('/multiverse-post.html?')) return false;
-      const mvText = new URL(tab.url).searchParams.get('mvText') || '';
-      return mvText.includes('John 3:16') && mvText.includes('Romans 8:28');
-    });
-  })).toBe(true);
+  await expect.poll(() => submittedMultiVerseText).toBe('John 3:16; Romans 8:28');
   await page.close();
 });
 
