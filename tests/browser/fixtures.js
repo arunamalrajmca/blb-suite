@@ -98,10 +98,10 @@ const test = base.extend({
       const manifestStartedAt = process.hrtime.bigint();
       const manifestPath = path.join(extensionPath, 'manifest.json');
       const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-      manifest.host_permissions = [...new Set([...(manifest.host_permissions || []), ...testHosts, 'http://*/*', 'https://*/*'])];
-      // Do not add test hosts to static content_scripts.matches. Supported source
-      // pages are activated through the same runtime registration path as users.
-      // Grant host access only; background.js must register and inject their scripts.
+      manifest.host_permissions = [...new Set([...(manifest.host_permissions || []), ...testHosts])];
+      for (const contentScript of manifest.content_scripts || []) {
+        contentScript.matches = [...new Set([...(contentScript.matches || []), ...testHosts])];
+      }
       fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
       profileFixture('manifest-test-host-preparation', manifestStartedAt, { hostCount: testHosts.length });
       await use(extensionPath);
