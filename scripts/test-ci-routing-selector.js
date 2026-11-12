@@ -302,7 +302,8 @@ try {
   assertValue(result, 'full_browser_suite', false, 'source-page runtime registration');
   assert(result.values.changed_specs.includes('tests/browser/source-page-button-redirect-separation.spec.js'));
   assert(result.values.changed_specs.includes('tests/browser/scripttagger-global-injection.spec.js'));
-  assert(result.values.changed_browser_specs.includes('tests/browser/source-page-button-redirect-separation.spec.js'));
+  assert(!result.values.changed_browser_specs.includes('tests/browser/source-page-button-redirect-separation.spec.js'),
+    'matrix-managed source-page refresh coverage must be delegated to the reference matrix');
   assert(result.values.changed_browser_specs.includes('tests/browser/scripttagger-global-injection.spec.js'));
   assertValue(result, 'group_a_required', false, 'source-page runtime registration');
   assertValue(result, 'group_b_required', true, 'source-page runtime registration');

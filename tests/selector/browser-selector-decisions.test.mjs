@@ -395,7 +395,7 @@ test("source-page collector selects direct reference collection behavior coverag
     assert.doesNotMatch(output, /changed_specs=.*tests\/browser\/extension\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
-    assert.match(output, /reference_required=false/);
+    assert.match(output, /reference_required=true/);
   });
 });
 
