@@ -542,6 +542,19 @@ test('Global master OFF then ON restores both independently enabled site selecti
   });
   await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
   await page.bringToFront();
+  await page.evaluate(() => {
+    const target = document.createElement('p');
+    target.id = 'global-toggle-restored-double-click';
+    target.textContent = 'John 3:16';
+    target.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+    document.body.appendChild(target);
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+  });
 
   const floatingButton = page.locator('#blb-suite-page-selection-button');
   await expect(floatingButton).toBeVisible({ timeout: 10000 });
@@ -567,13 +580,7 @@ test('Global master OFF then ON restores both independently enabled site selecti
   }))).toEqual({ pageButton: true, contextMenu: true });
 
   // Exercise the restored Double-click listener with a real browser gesture.
-  await page.evaluate(() => {
-    const target = document.createElement('p');
-    target.id = 'global-toggle-restored-double-click';
-    target.textContent = 'John 3:16';
-    target.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
-    document.body.appendChild(target);
-  });
+  await page.evaluate(() => window.getSelection()?.removeAllRanges());
   const beforeIds = await extensionWorker.evaluate(() =>
     chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
   );
