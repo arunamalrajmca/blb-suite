@@ -11,6 +11,12 @@ async function waitForStudyPopupReady(page) {
   await expect(page.locator('#studyTopic')).toBeEnabled();
 }
 
+async function allDownloads(extensionWorker) {
+  return extensionWorker.evaluate(() => new Promise(resolve => {
+    chrome.downloads.search({}, items => resolve(items || []));
+  }));
+}
+
 test('Study Sessions auto-stop setting persists when changed in the popup', async ({
   context, extensionId, extensionStorage, extensionWorker
 }) => {
