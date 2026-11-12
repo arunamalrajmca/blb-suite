@@ -102,6 +102,21 @@ test.describe('core user-action E2E coverage', () => {
     );
     expect(await extensionWorker.evaluate(active =>
       shouldShowBlbContextMenu(active, 'John 3:16'), tab)).toBe(true);
+    const beforeIds = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({}).then(tabs => tabs.map(item => item.id))
+    );
+    await extensionWorker.evaluate(async active => {
+      await handleBlbSelectionContextMenuClick({
+        menuItemId: 'blb-suite-web-selection',
+        selectionText: 'John 3:16'
+      }, active);
+    }, tab);
+    const blb = await waitForTab(extensionWorker, item => {
+      try { const url = new URL(item.url); return url.hostname === 'www.blueletterbible.org' && url.pathname === '/kjv/jhn/3/16/'; }
+      catch (_) { return false; }
+    });
+    expect(beforeIds).not.toContain(blb.id);
+    await removeTabById(extensionWorker, blb.id);
   });
 
   test('a failed context-menu action leaves Alt+B available for the same selection', async ({ page, extensionStorage, extensionWorker }) => {
