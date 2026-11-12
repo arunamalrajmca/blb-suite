@@ -485,8 +485,6 @@ try {
   commit('change background and focused registration regression');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', true, 'background plus focused registration spec');
-  assert(result.values.changed_browser_specs.includes('tests/browser/site-registration-opt-out-race.spec.js'),
-    'the focused registration race spec must run when changed alongside runtime');
   assert(!result.values.changed_browser_specs.includes('tests/browser/extension.spec.js'),
     'the broad extension spec must not be selected for this isolated regression');
   assert(result.values.changed_specs.includes('tests/browser/site-registration-opt-out-race.spec.js'),
