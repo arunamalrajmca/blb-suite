@@ -261,3 +261,96 @@ test('disabled Suite does not hide or process a generated MultiVerse page', asyn
     pending: null
   });
 });
+
+test('MultiVerse handoff reveals the page when retrieval never returns the requested results', async ({ page, context }) => {
+  await context.route('https://example.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: `<!doctype html><html><head><title>Unsuccessful MultiVerse retrieval</title></head><body>
+      <h2>MultiVerse Retrieval</h2>
+      <input id="references" type="text">
+      <input id="retrieve" type="button" value="Retrieve">
+      <main id="results">No results returned</main>
+      <script>
+        window.retrieveCount = 0;
+        document.querySelector('#retrieve').addEventListener('click', () => {
+          window.retrieveCount += 1;
+        });
+      </script>
+    </body></html>`
+  }));
+  await page.goto(HANDOFF_URL, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    window.__handoffMessages = [];
+    const nativeNow = Date.now.bind(Date);
+    let simulatedNow = 0;
+    Date.now = () => window.retrieveCount ? (simulatedNow += 5000) : nativeNow();
+    Object.defineProperty(window, 'chrome', {
+      configurable: true,
+      value: { runtime: { sendMessage: async message => {
+        window.__handoffMessages.push(message.type);
+        return message.type === 'blbSuiteGetPendingMultiVerseRefs'
+          ? { ok: true, refs: [{ book: 'John', chapter: 3, from: 16, to: 16 }] }
+          : { ok: true };
+      } } }
+    });
+  });
+  await page.addScriptTag({ path: path.join(__dirname, '../../extension/multiverse-handoff.js') });
+  await page.evaluate(() => window.BLBMultiVerseHandoffModule.initialize({
+    BLBShared: { hostnames: { blbWww: 'example.com' } },
+    isSuiteEnabled: async () => true,
+    resolveBibleBook: book => book === 'John' ? { urlKey: 'jhn' } : null
+  }));
+
+  await expect.poll(() => page.evaluate(() => ({
+    messages: window.__handoffMessages,
+    retrieveCount: window.retrieveCount,
+    visibility: document.documentElement.style.visibility,
+    pending: document.documentElement.dataset.blbSuiteMultiVersePending || null,
+    expectedResultPresent: Boolean(document.querySelector('a[href*="/kjv/jhn/3/16/"]'))
+  })), { timeout: 5000 }).toEqual({
+    messages: ['blbSuiteGetPendingMultiVerseRefs', 'blbSuiteConsumePendingMultiVerseRefs'],
+    retrieveCount: 1,
+    visibility: '',
+    pending: null,
+    expectedResultPresent: false
+  });
+});
+
+test('disabled Suite does not hide or process a generated MultiVerse page', async ({ page, context }) => {
+  await context.route('https://example.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>Disabled MultiVerse handoff</title></head><body><main>Native MultiVerse page</main></body></html>'
+  }));
+  await page.goto(HANDOFF_URL, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    window.__handoffMessages = [];
+    window.__enabledCheck = false;
+    Object.defineProperty(window, 'chrome', {
+      configurable: true,
+      value: { runtime: { sendMessage: async message => {
+        window.__handoffMessages.push(message.type);
+        return { ok: true, refs: [{ book: 'John', chapter: 3, from: 16, to: 16 }] };
+      } } }
+    });
+  });
+  await page.addScriptTag({ path: path.join(__dirname, '../../extension/multiverse-handoff.js') });
+  await page.evaluate(() => window.BLBMultiVerseHandoffModule.initialize({
+    BLBShared: { hostnames: { blbWww: 'example.com' } },
+    isSuiteEnabled: async () => { window.__enabledCheck = true; return false; },
+    resolveBibleBook: () => ({ urlKey: 'jhn' })
+  }));
+
+  await expect.poll(() => page.evaluate(() => ({
+    enabledCheck: window.__enabledCheck,
+    messages: window.__handoffMessages,
+    visibility: document.documentElement.style.visibility,
+    pending: document.documentElement.dataset.blbSuiteMultiVersePending || null
+  }))).toEqual({
+    enabledCheck: true,
+    messages: [],
+    visibility: '',
+    pending: null
+  });
+});
