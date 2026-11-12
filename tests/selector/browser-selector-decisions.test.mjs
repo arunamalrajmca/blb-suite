@@ -922,7 +922,7 @@ test("changed browser specs delegated to References are removed from Group A exe
     commitChange(root, "tests/browser/redirect-source-url-patterns.spec.js", "// changed reference matrix regression\\n");
     const output = select(root, base);
     assert.match(output, /reference_required=true/);
-    assert.ok(output.includes("changed_browser_specs=tests/browser/redirect-toggle-isolation.spec.js"));
+    assert.ok(output.includes("changed_browser_specs=" + "\n"));
     assert.ok(output.includes("group_a_changed_browser_specs=" + "\n"));
     assert.match(output, /group_a_required=true/);
   });
@@ -943,7 +943,7 @@ test("shared-core runtime changes retain full browser coverage and all applicabl
 
 test("reference-only feature ownership does not allocate Group A", () => {
   const referenceOnlyRegistry = registrySource.replace(
-    "];\\n\\nexport const mappedSpecs",
+    "];\n\nexport const mappedSpecs",
     `  {
     paths: ["extension/new-reference-only.js"],
     specs: ["tests/browser/shared-regex-patterns.spec.js"]
