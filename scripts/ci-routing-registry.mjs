@@ -149,7 +149,6 @@ export const featureSpecs = [
   }
 ];
 
- ];
 
 export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.spec.js",
   "tests/browser/audit-defect-regressions.spec.js",
