@@ -144,29 +144,30 @@ test('same-tab redirect re-enable restores source-page buttons on every register
   }
 });
 
-test('source-page collector button survives a full refresh with redirects OFF and ON', async ({
+test('source-page collector button survives full refreshes around real popup toggles', async ({
   page, extensionStorage, extensionWorker, context, extensionId
 }) => {
+  const sourceUrl = 'https://www.christianity.com/wiki/prayer/test-article.html';
   await extensionStorage.set({
     masterEnabled:true,
     redirectEnabled:true,
     pageSelectionButtonSites:{},
     doubleClickBlbSites:{}
   });
-  await page.route('https://www.christianity.com/wiki/prayer/test-article.html', route =>
+  await page.route(sourceUrl, route =>
     route.fulfill({
       status:200,
       contentType:'text/html',
-      body:'<!doctype html><html><head><title>Daily verse refresh test</title></head><body><main>Daily verse</main></body></html>'
+      body:'<!doctype html><html><head><title>Christianity article refresh test</title></head><body><main>Article</main></body></html>'
     })
   );
 
-  await page.goto('https://www.christianity.com/wiki/prayer/test-article.html', {waitUntil:'domcontentloaded'});
+  await page.goto(sourceUrl, {waitUntil:'domcontentloaded'});
   const button = page.locator('#blb-suite-christianity-multiverse');
   await expect(button).toBeVisible();
 
-  // The fixture must not statically inject source-page scripts. Confirm that
-  // the real background runtime registration owns this host instead.
+  // Confirm this supported nested page is activated only through a persistent
+  // runtime registration, not a test-only static content_scripts match.
   const registration = await extensionWorker.evaluate(async () => {
     const manifest = chrome.runtime.getManifest();
     const staticMatch = (manifest.content_scripts || []).some(script =>
@@ -184,41 +185,61 @@ test('source-page collector button survives a full refresh with redirects OFF an
   expect(registration.runtime?.js).toContain('source-page-collector.js');
   expect(registration.runtime?.js).toContain('content.js');
 
-  // Exercise the actual popup handler, not a direct storage write. The test
-  // fixture pre-grants HTTP(S) access so the real permission request resolves
-  // without a native browser prompt.
-  const popup = await context.newPage();
-  await popup.goto('chrome-extension://' + extensionId + '/popup.html');
-  const redirectToggle = popup.locator('#redirectEnabled');
-  const redirectSwitch = popup.locator('#redirectSetting .switch');
-  await expect(redirectSwitch).toBeVisible();
-  await expect(redirectToggle).toBeChecked();
+  // The test opens the actual popup document and clicks its real visible
+  // control. Because Playwright opens that document as a tab, explicitly map
+  // the popup's current-window tab query back to the still-active source tab.
+  // This models Chrome's action-popup context: tabs.query(active,currentWindow)
+  // must resolve to Christianity.com, never to popup.html.
+  const openPopupForSourceTab = async () => {
+    await page.bringToFront();
+    const popup = await context.newPage();
+    await popup.goto('chrome-extension://' + extensionId + '/popup.html');
+    await popup.evaluate(async () => {
+      const nativeQuery = chrome.tabs.query.bind(chrome.tabs);
+      Object.defineProperty(chrome.tabs, 'query', {
+        configurable:true,
+        value:async queryInfo => {
+          if (queryInfo?.active === true && queryInfo?.currentWindow === true) {
+            const sourceTabs = await nativeQuery({url:'https://www.christianity.com/*'});
+            if (sourceTabs.length) return sourceTabs;
+          }
+          return nativeQuery(queryInfo);
+        }
+      });
+      const activeTabs = await chrome.tabs.query({active:true,currentWindow:true});
+      if (activeTabs.length !== 1 ||
+          !String(activeTabs[0].url || '').startsWith('https://www.christianity.com/')) {
+        throw new Error('Popup active-tab context did not resolve to the Christianity.com source tab');
+      }
+    });
+    return popup;
+  };
 
-  // Match the reported sequence: turn redirects OFF while the control remains
-  // visible, then refresh the source page. The collector is independent of the
-  // global redirect preference and must initialize in the new document.
-  await redirectSwitch.click();
+  // Turn redirects OFF using the popup control, then refresh the nested page.
+  const popupOff = await openPopupForSourceTab();
+  await expect(popupOff.locator('#redirectEnabled')).toBeChecked();
+  await popupOff.locator('#redirectSetting .switch').click();
   await expect.poll(async () => extensionWorker.evaluate(async () =>
     (await chrome.storage.local.get({redirectEnabled:null})).redirectEnabled
   )).toBe(false);
-  await expect(button).toBeVisible();
-  await popup.close();
+  await popupOff.close();
+
+  await page.bringToFront();
   await page.reload({waitUntil:'domcontentloaded'});
   await expect(button, 'button after refresh while redirects are OFF').toBeVisible();
 
-  // Re-enable redirects from the popup while this source page is the active
-  // website tab. The collector button must remain present.
-  const reenablePopup = await context.newPage();
-  await reenablePopup.goto('chrome-extension://' + extensionId + '/popup.html');
-  await reenablePopup.locator('#redirectSetting .switch').click();
+  // Turn redirects ON from the same source tab context. This also exercises
+  // setRedirect(true)'s explicit blbSuiteEnsureContentScript tab handoff.
+  const popupOn = await openPopupForSourceTab();
+  await expect(popupOn.locator('#redirectEnabled')).not.toBeChecked();
+  await popupOn.locator('#redirectSetting .switch').click();
   await expect.poll(async () => extensionWorker.evaluate(async () =>
     (await chrome.storage.local.get({redirectEnabled:false})).redirectEnabled
   )).toBe(true);
   await expect(button, 'button after redirects are re-enabled').toBeVisible();
-  await reenablePopup.close();
+  await popupOn.close();
 
-  // Also verify that a second full navigation still initializes the button
-  // when redirects are ON.
+  await page.bringToFront();
   await page.reload({waitUntil:'domcontentloaded'});
   await expect(button, 'button after refresh while redirects are ON').toBeVisible();
 });
