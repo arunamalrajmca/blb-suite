@@ -917,7 +917,7 @@ test("changed browser specs delegated to References are removed from Group A exe
     commitChange(root, "tests/browser/redirect-source-url-patterns.spec.js", "// changed reference matrix regression\\n");
     const output = select(root, base);
     assert.match(output, /reference_required=true/);
-    assert.match(output, /changed_browser_specs=tests\\/browser\\/redirect-source-url-patterns\\.spec\\.js/);
+    assert.ok(output.includes("changed_browser_specs=tests/browser/redirect-source-url-patterns.spec.js"));
     assert.match(output, /group_a_changed_browser_specs=\\n/);
     assert.match(output, /group_a_required=true/);
   });
