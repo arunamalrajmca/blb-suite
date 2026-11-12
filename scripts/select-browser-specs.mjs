@@ -192,7 +192,7 @@ const values = {
    
     "tests/browser/site-feature-defaults.spec.js",
   ) || unmapped.length > 0 || (!focusedSourcePageRuntimeChange &&
-    changedBrowserSpecs.some(path => !studySessionSpecs.has(path))),
+    changedBrowserSpecs.some(path => !studySessionSpecs.has(path)))),
   study_sessions_required: String(full || [...selected, ...changedBrowserSpecs].some(path => studySessionSpecs.has(path))),
   group_b_required: String(has(
     "tests/browser/redirect-hostnames.spec.js",
