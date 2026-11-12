@@ -73,6 +73,29 @@ try {
   assert.doesNotMatch(popup.match(/const STUDY_BACKUP_KEYS = \[[^\]]*\]/)?.[0] || '', /masterEnabled|pageSelectionButtonSites|doubleClickBlbSites|redirectEnabled/, 'Study backup must not include global/site settings');
   console.log('PASS: Study backup excludes extension-wide and per-site settings');
 
+  // Every explicit branch inside the general async router must be admitted
+  // by its allowlist. This prevents a handler from existing in source while
+  // remaining unreachable because its message type was omitted from the set.
+  const asyncRouterStart = background.indexOf(
+    "chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {\\n  if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;"
+  );
+  const asyncRouterEnd = background.indexOf("// Keep the original BLB /net fallback", asyncRouterStart);
+  const asyncAllowlist = background.match(/const ASYNC_MESSAGE_TYPES = new Set\\(\\[([\\s\\S]*?)\\]\\);/);
+  assert.ok(asyncRouterStart >= 0 && asyncRouterEnd > asyncRouterStart,
+    'general async message router must retain a bounded, identifiable handler block');
+  assert.ok(asyncAllowlist, 'general async message router must retain its explicit allowlist');
+  const allowedMessageTypes = new Set([...asyncAllowlist[1].matchAll(/["']([^"']+)["']/g)]
+    .map(match => match[1]));
+  const routedMessageTypes = [...background.slice(asyncRouterStart, asyncRouterEnd)
+    .matchAll(/message(?:\\?\\.)?\\.type\\s*(?:===|!==)\\s*["']([^"']+)["']/g)]
+    .map(match => match[1]);
+  assert.ok(routedMessageTypes.length > 0, 'general async message router must expose explicit message branches');
+  const unregisteredMessageTypes = [...new Set(routedMessageTypes)]
+    .filter(type => !allowedMessageTypes.has(type));
+  assert.deepEqual(unregisteredMessageTypes, [],
+    'every explicit message branch in the general async router must be allowlisted');
+  console.log('PASS: all general async message branches are registered in the allowlist');
+
   // Content-script dependency order is part of the integration contract:
   // reference-core must be available before content.js executes.
   const scripts = (manifest.content_scripts || []).flatMap(entry => entry.js || []);
