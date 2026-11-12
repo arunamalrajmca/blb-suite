@@ -491,6 +491,50 @@ test('Christianity.com and Crosswalk.com exclude homepages while enabling nested
   }
 });
 
+
+test('all 14 registered page-button hosts show the exact button on content pages and exclude homepages', async ({
+  page, extensionStorage
+}) => {
+  const cases = [
+    ['https://www.christianity.com/', 'https://www.christianity.com/wiki/prayer/test-article.html', 'christianity'],
+    ['https://www.gotquestions.org/', 'https://www.gotquestions.org/test-article.html', 'gotquestions'],
+    ['https://www.crosswalk.com/', 'https://www.crosswalk.com/devotionals/test-article.html', 'crosswalk'],
+    ['https://www.enduringword.com/', 'https://www.enduringword.com/bible-commentary/genesis-1/', 'enduringword'],
+    ['https://www.rediscover.bible/', 'https://www.rediscover.bible/articles/test-article', 'rediscover'],
+    ['https://sagacityweb.com/', 'https://sagacityweb.com/articles/test-article', 'sagacity'],
+    ['https://www.thetreasuryofscriptureknowledge.com/', 'https://www.thetreasuryofscriptureknowledge.com/articles/test-article', 'treasury'],
+    ['https://www.dailyverses.net/', 'https://www.dailyverses.net/dailyverse', 'dailyverses'],
+    ['https://www.churchofjesuschrist.org/', 'https://www.churchofjesuschrist.org/study/scriptures/ot/gen/1?lang=eng', 'churchofjesuschrist'],
+    ['https://mercyhouseministry.com/', 'https://mercyhouseministry.com/articles/test-article', 'mercyhouse'],
+    ['https://www.openbible.info/', 'https://www.openbible.info/topics/test-article', 'openbible'],
+    ['https://www.crossway.org/', 'https://www.crossway.org/articles/test-article', 'crossway'],
+    ['https://sarata.com/', 'https://sarata.com/bible/chapter/Genesis.1.html', 'sarata'],
+    ['https://sermonindex.net/', 'https://sermonindex.net/articles/test-article', 'sermonindex']
+  ];
+
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+  await page.route('https://**/*', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>Page-button host fixture</title></head><body><main>Fixture content</main></body></html>'
+  }));
+
+  for (const [homepage, contentPage, siteId] of cases) {
+    const button = page.locator('#blb-suite-' + siteId + '-multiverse');
+    await page.goto(homepage, {waitUntil:'domcontentloaded'});
+    await expect(button, homepage + ' must not show the page button').toHaveCount(0);
+
+    await page.goto(contentPage, {waitUntil:'domcontentloaded'});
+    await expect(button, contentPage + ' must show the expected page button')
+      .toHaveText('Open Bible References in BLB');
+  }
+});
+
 test('registered source-page collector remains available regardless of redirect preference', async ({
   extensionWorker
 }) => {
