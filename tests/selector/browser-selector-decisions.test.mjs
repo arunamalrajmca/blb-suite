@@ -943,7 +943,7 @@ test("every protected shared-core path retains full browser coverage and all app
     "tests/browser/fixtures.js"
   ];
   const corpusPaths = readdirSync(new URL("../../extension", import.meta.url))
-    .filter(file => /^kjv-corpus-.*\\.js$/.test(file))
+    .filter(file => /^kjv-corpus-.*\.js$/.test(file))
     .map(file => "extension/" + file);
   for (const path of new Set([...sharedCorePaths, ...corpusPaths])) {
     withFixture((root, base) => {
