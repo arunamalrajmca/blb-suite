@@ -91,6 +91,12 @@ for (const path of [
 }
 
 
+test("feature path ownership is unique so selector lookup cannot silently shadow a mapping", () => {
+  const paths = featureSpecs.flatMap(group => group.paths);
+  assert.equal(new Set(paths).size, paths.length,
+    "each changed runtime path must have exactly one authoritative feature mapping");
+});
+
 test("every feature-owned browser regression has an explicit CI classification", () => {
   const classified = new Set([...mappedSpecs, ...separatelyManagedSpecs]);
   const missing = [...new Set(featureSpecs.flatMap(group => group.specs))]
