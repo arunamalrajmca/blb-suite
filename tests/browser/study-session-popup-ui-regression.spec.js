@@ -458,16 +458,19 @@ test('Study export: rejects empty data, malformed dates, and topics without cont
   expect(invalidDate).toEqual({ok:false});
 
   const emptyTopic = 'Empty export topic ' + Date.now();
+  const normalizedEmptyTopic = emptyTopic.split(' ').map(word =>
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  ).join(' ');
   const saved = await page.evaluate(topic => chrome.runtime.sendMessage({
     type: 'blbSuiteSaveStudyTopic',
     title: topic
   }), emptyTopic);
-  expect(saved).toMatchObject({ok:true, topic:emptyTopic});
+  expect(saved).toMatchObject({ok:true, topic:normalizedEmptyTopic});
 
   const topicExport = await page.evaluate(topic => chrome.runtime.sendMessage({
     type: 'blbSuiteDownloadStudyTopic',
     topic
-  }), emptyTopic);
+  }), saved.topic);
   expect(topicExport).toEqual({ok:false});
   expect(await allDownloads(extensionWorker)).toEqual([]);
   await page.close();
