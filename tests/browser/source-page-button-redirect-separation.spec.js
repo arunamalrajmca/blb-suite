@@ -280,6 +280,217 @@ test('source-page collector button survives full refreshes around real popup tog
   expect(offRefreshDiagnostics.documentState?.collectorRegistryPresent).toBe(true);
 });
 
+test('Crosswalk source-page collector button survives full refreshes around real popup toggles', async ({
+  page, extensionStorage, extensionWorker, context, extensionId
+}) => {
+  const sourceUrl = 'https://www.crosswalk.com/devotionals/test-article.html';
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+  await page.route(sourceUrl, route =>
+    route.fulfill({
+      status:200,
+      contentType:'text/html',
+      body:'<!doctype html><html><head><title>Crosswalk article refresh test</title></head><body><main>Article</main></body></html>'
+    })
+  );
+
+  await page.goto(sourceUrl, {waitUntil:'domcontentloaded'});
+  const button = page.locator('#blb-suite-crosswalk-multiverse');
+  await expect(button).toBeVisible();
+
+  // Confirm this supported nested page is activated only through a persistent
+  // runtime registration, not a test-only static content_scripts match.
+  const registration = await extensionWorker.evaluate(async () => {
+    const manifest = chrome.runtime.getManifest();
+    const registered = await chrome.scripting.getRegisteredContentScripts();
+    return {
+      runtime: registered.find(script =>
+        (script.matches || []).includes('https://www.crosswalk.com/*')
+      ) || null
+    };
+  });
+  expect(registration.runtime?.js).toContain('source-page-collector.js');
+  expect(registration.runtime?.js).toContain('content.js');
+
+  // The test opens the actual popup document and clicks its real visible
+  // control. Because Playwright opens that document as a tab, explicitly map
+  // the popup's current-window tab query back to the still-active source tab.
+  // This models Chrome's action-popup context: tabs.query(active,currentWindow)
+  // must resolve to Crosswalk.com, never to popup.html.
+  const openPopupForSourceTab = async () => {
+    await page.bringToFront();
+    const popup = await context.newPage();
+    await popup.goto('chrome-extension://' + extensionId + '/popup.html');
+    await popup.evaluate(async () => {
+      const nativeQuery = chrome.tabs.query.bind(chrome.tabs);
+      Object.defineProperty(chrome.tabs, 'query', {
+        configurable:true,
+        value:async queryInfo => {
+          if (queryInfo?.active === true && queryInfo?.currentWindow === true) {
+            const sourceTabs = await nativeQuery({url:'https://www.crosswalk.com/*'});
+            if (sourceTabs.length) return sourceTabs;
+          }
+          return nativeQuery(queryInfo);
+        }
+      });
+      const activeTabs = await chrome.tabs.query({active:true,currentWindow:true});
+      if (activeTabs.length !== 1 ||
+          !String(activeTabs[0].url || '').startsWith('https://www.crosswalk.com/')) {
+        throw new Error('Popup active-tab context did not resolve to the Crosswalk.com source tab');
+      }
+    });
+    return popup;
+  };
+
+  // Turn redirects OFF using the popup control, then refresh the nested page.
+  const popupOff = await openPopupForSourceTab();
+  await expect(popupOff.locator('#redirectEnabled')).toBeChecked();
+  await popupOff.locator('#redirectSetting .switch').click();
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({redirectEnabled:null})).redirectEnabled
+  )).toBe(false);
+  await popupOff.close();
+
+  await page.bringToFront();
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.waitForTimeout(1000);
+  const offRefreshVisible = await button.isVisible().catch(() => false);
+  const collectDiagnostics = async () => extensionWorker.evaluate(async url => {
+    const tabs = await chrome.tabs.query({url:'https://www.crosswalk.com/*'});
+    const tab = tabs.find(item => item.url === url) || tabs[0];
+    const settings = await chrome.storage.local.get({
+      masterEnabled:true, redirectEnabled:false,
+      pageSelectionButtonSites:{}, doubleClickBlbSites:{}
+    });
+    const registrations = await chrome.scripting.getRegisteredContentScripts();
+    const pattern = 'https://www.crosswalk.com/*';
+    const permission = await chrome.permissions.contains({origins:[pattern]});
+    const shouldInject = tab ? await shouldInjectContentScriptForTab(tab, settings) : false;
+    const files = tab ? contentScriptFilesForTab(tab, settings) : [];
+    let documentState = null;
+    let injectionError = null;
+    if (tab?.id != null) {
+      try {
+        const result = await chrome.scripting.executeScript({
+          target:{tabId:tab.id},
+          func:async () => {
+            let suiteEnabled = null;
+            try { suiteEnabled = typeof isSuiteEnabled === 'function' ? await isSuiteEnabled() : null; } catch (_) {}
+            return {
+              href:location.href,
+              readyState:document.readyState,
+              bodyPresent:!!document.body,
+              suiteEnabled,
+              collectorModulePresent:!!globalThis.BLBSourcePageCollectorModule,
+              collectorRegistryPresent:!!globalThis.BLBSourcePageCollectorSites?.['crosswalk.com'],
+              buttonPresent:!!document.getElementById('blb-suite-crosswalk-multiverse')
+            };
+          }
+        });
+        documentState = result?.[0]?.result || null;
+      } catch (error) {
+        injectionError = String(error?.message || error);
+      }
+    }
+    return {
+      redirectEnabled:settings.redirectEnabled,
+      masterEnabled:settings.masterEnabled,
+      permission,
+      shouldInject,
+      expectedFiles:files,
+      registered:registrations.filter(item => (item.matches || []).includes(pattern)),
+      tab:tab ? {id:tab.id,url:tab.url,status:tab.status} : null,
+      documentState,
+      injectionError
+    };
+  }, sourceUrl);
+  const offRefreshDiagnostics = await collectDiagnostics();
+
+  // Turn redirects ON from the same source tab context even if the OFF refresh
+  // lost the button. Capture whether the normal popup path repairs that loss.
+  const popupOn = await openPopupForSourceTab();
+  await expect(popupOn.locator('#redirectEnabled')).not.toBeChecked();
+  await popupOn.locator('#redirectSetting .switch').click();
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({redirectEnabled:false})).redirectEnabled
+  )).toBe(true);
+  const reenableVisible = await button.isVisible().catch(() => false);
+  const reenableDiagnostics = await collectDiagnostics();
+  await popupOn.close();
+
+  await page.bringToFront();
+  await page.reload({waitUntil:'domcontentloaded'});
+  await page.waitForTimeout(1000);
+  const onRefreshVisible = await button.isVisible().catch(() => false);
+  const onRefreshDiagnostics = await collectDiagnostics();
+
+  expect({
+    offRefreshVisible,
+    reenableVisible,
+    onRefreshVisible
+  }, 'OFF-refresh, ON-recovery, and ON-refresh diagnostics: ' +
+    JSON.stringify({offRefreshDiagnostics, reenableDiagnostics, onRefreshDiagnostics}, null, 2))
+    .toEqual({
+      offRefreshVisible:true,
+      reenableVisible:true,
+      onRefreshVisible:true
+    });
+
+  expect(offRefreshDiagnostics.registered.find(item =>
+    item.id === 'blb-suite-runtime-3p3w7i'
+  )?.persistAcrossSessions).toBe(true);
+  expect(offRefreshDiagnostics.documentState?.collectorRegistryPresent).toBe(true);
+});
+
+
+test('Christianity.com and Crosswalk.com exclude homepages while enabling nested-page buttons', async ({
+  page, extensionStorage
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+
+  const cases = [
+    {
+      home:'https://www.christianity.com/',
+      article:'https://www.christianity.com/wiki/prayer/test-article.html',
+      selector:'#blb-suite-christianity-multiverse'
+    },
+    {
+      home:'https://www.crosswalk.com/',
+      article:'https://www.crosswalk.com/devotionals/test-article.html',
+      selector:'#blb-suite-crosswalk-multiverse'
+    }
+  ];
+
+  for (const fixture of cases) {
+    await page.route(fixture.home, route => route.fulfill({
+      status:200,
+      contentType:'text/html',
+      body:'<!doctype html><html><head><title>Homepage exclusion fixture</title></head><body><main>Homepage</main></body></html>'
+    }));
+    await page.route(fixture.article, route => route.fulfill({
+      status:200,
+      contentType:'text/html',
+      body:'<!doctype html><html><head><title>Nested article fixture</title></head><body><main>Article</main></body></html>'
+    }));
+
+    await page.goto(fixture.home, {waitUntil:'domcontentloaded'});
+    await expect(page.locator(fixture.selector), fixture.home).toHaveCount(0);
+
+    await page.goto(fixture.article, {waitUntil:'domcontentloaded'});
+    await expect(page.locator(fixture.selector), fixture.article)
+      .toHaveText('Open Bible References in BLB');
+  }
+});
+
 test('registered source-page collector remains available regardless of redirect preference', async ({
   extensionWorker
 }) => {
