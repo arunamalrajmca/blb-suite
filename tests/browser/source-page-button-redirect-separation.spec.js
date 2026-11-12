@@ -190,13 +190,14 @@ test('source-page collector button survives a full refresh with redirects OFF an
   const popup = await context.newPage();
   await popup.goto('chrome-extension://' + extensionId + '/popup.html');
   const redirectToggle = popup.locator('#redirectEnabled');
-  await expect(redirectToggle).toBeVisible();
+  const redirectSwitch = popup.locator('#redirectSetting .switch');
+  await expect(redirectSwitch).toBeVisible();
   await expect(redirectToggle).toBeChecked();
 
   // Match the reported sequence: turn redirects OFF while the control remains
   // visible, then refresh the source page. The collector is independent of the
   // global redirect preference and must initialize in the new document.
-  await redirectToggle.uncheck();
+  await redirectSwitch.click();
   await expect.poll(async () => extensionWorker.evaluate(async () =>
     (await chrome.storage.local.get({redirectEnabled:null})).redirectEnabled
   )).toBe(false);
@@ -209,7 +210,7 @@ test('source-page collector button survives a full refresh with redirects OFF an
   // website tab. The collector button must remain present.
   const reenablePopup = await context.newPage();
   await reenablePopup.goto('chrome-extension://' + extensionId + '/popup.html');
-  await reenablePopup.locator('#redirectEnabled').check();
+  await reenablePopup.locator('#redirectSetting .switch').click();
   await expect.poll(async () => extensionWorker.evaluate(async () =>
     (await chrome.storage.local.get({redirectEnabled:false})).redirectEnabled
   )).toBe(true);
