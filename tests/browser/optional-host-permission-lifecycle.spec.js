@@ -134,8 +134,52 @@ test('site-feature opt-ins are committed only when the matching pending host per
     expect(afterGrant.pageSelectionButtonSites['example.com']).toBe(true);
     expect(afterGrant.doubleClickBlbSites['example.com']).toBe(true);
     expect(afterGrant.doubleClickBlbSites['example.org']).toBe(true);
-    expect(afterGrant.pageSelectionButtonSites['example.org']).toBe(true);
+    expect(afterGrant.pageSelectionButtonSites['example.org']).toBeUndefined();
     expect(afterGrant.pendingSiteFeatureToggles).toEqual({});
+  } finally {
+    await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
+  }
+});
+
+
+test('granting either site feature never changes the other feature setting', async ({ extensionWorker, extensionStorage }) => {
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, pendingSiteFeatureToggles:{}
+  }));
+  try {
+    for (const feature of ['pageButton', 'doubleClick']) {
+      for (const otherState of ['on', 'off', 'unset']) {
+        const hostname = `${feature}-${otherState}.example`;
+        const pageSites = {};
+        const doubleSites = {};
+        const otherKey = feature === 'pageButton' ? 'doubleClickBlbSites' : 'pageSelectionButtonSites';
+        const targetKey = feature === 'pageButton' ? 'pageSelectionButtonSites' : 'doubleClickBlbSites';
+        if (otherState === 'on') (feature === 'pageButton' ? doubleSites : pageSites)[hostname] = true;
+        if (otherState === 'off') (feature === 'pageButton' ? doubleSites : pageSites)[hostname] = false;
+        await extensionStorage.set({
+          masterEnabled:true,
+          pageSelectionButtonSites:pageSites,
+          doubleClickBlbSites:doubleSites,
+          pendingSiteFeatureToggles:{
+            [`https://${hostname}/*`]:{feature,requestedAt:Date.now()}
+          }
+        });
+        const result = await extensionWorker.evaluate(origin =>
+          commitPendingSiteFeatureTogglesForGrantedOrigins([origin]),
+          `https://${hostname}/*`
+        );
+        expect(result.committed).toHaveLength(1);
+        const stored = await extensionWorker.evaluate(() => chrome.storage.local.get({
+          pageSelectionButtonSites:{}, doubleClickBlbSites:{}
+        }));
+        expect(stored[targetKey][hostname]).toBe(true);
+        if (otherState === 'unset') {
+          expect(stored[otherKey][hostname]).toBeUndefined();
+        } else {
+          expect(stored[otherKey][hostname]).toBe(otherState === 'on');
+        }
+      }
+    }
   } finally {
     await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
   }
