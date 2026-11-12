@@ -31,6 +31,44 @@ test('hostname text never enables Show on BLB without an explicit site preferenc
 });
 
 
+
+test('every registered source-page collector host stays opted out by default', async ({ extensionWorker }) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const previous = await chrome.storage.local.get({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{}
+    });
+    try {
+      await chrome.storage.local.set({
+        masterEnabled:true,
+        pageSelectionButtonSites:{},
+        doubleClickBlbSites:{}
+      });
+      const registry = globalThis.BLBSourcePageCollectorSites || {};
+      const hosts = Object.keys(registry);
+      const states = [];
+      for (const hostname of hosts) {
+        states.push({
+          hostname,
+          bare: await isPageButtonEnabledForHostname(hostname),
+          www: await isPageButtonEnabledForHostname('www.' + hostname)
+        });
+      }
+      return { hosts, states };
+    } finally {
+      await chrome.storage.local.set(previous);
+    }
+  });
+
+  expect(result.hosts.length).toBeGreaterThan(0);
+  expect(new Set(result.hosts).size).toBe(result.hosts.length);
+  for (const state of result.states) {
+    expect(state.bare, state.hostname).toBe(false);
+    expect(state.www, `www.${state.hostname}`).toBe(false);
+  }
+});
+
 test('sensitive-site feature toggles are blocked even when the user has opted in', async ({ context, extensionId }) => {
   const messagePage = await createExtensionMessagePage(context, extensionId);
   const results = await messagePage.evaluate(async () => {
