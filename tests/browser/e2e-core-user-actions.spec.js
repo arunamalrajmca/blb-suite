@@ -98,6 +98,38 @@ test.describe('core user-action E2E coverage', () => {
     await removeTabById(extensionWorker, blb.id);
   });
 
+  test('physical right-click preserves the selected text and the BLB context-menu action is eligible', async ({ page, extensionStorage, extensionWorker }) => {
+    await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
+    await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+    await page.evaluate(() => {
+      const target = document.createElement('p');
+      target.id = 'blb-native-context-menu-target';
+      target.textContent = 'John 3:16';
+      target.style.cssText = 'position:fixed;left:24px;top:24px;background:#fff;padding:12px;font:24px Arial,sans-serif;';
+      document.body.appendChild(target);
+      window.__blbNativeContextMenuEvent = null;
+      document.addEventListener('contextmenu', event => {
+        window.__blbNativeContextMenuEvent = {
+          selection: window.getSelection()?.toString() || '',
+          targetText: event.target?.textContent || ''
+        };
+      }, true);
+      const range = document.createRange();
+      range.selectNodeContents(target);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    await page.locator('#blb-native-context-menu-target').click({ button: 'right' });
+    expect(await page.evaluate(() => window.__blbNativeContextMenuEvent))
+      .toEqual({ selection: 'John 3:16', targetText: 'John 3:16' });
+    const tab = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({ active: true, currentWindow: true }).then(([active]) => active)
+    );
+    expect(await extensionWorker.evaluate(active =>
+      shouldShowBlbContextMenu(active, 'John 3:16'), tab)).toBe(true);
+  });
+
   test('Alt+B command path opens an exact selected Bible reference', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: { 'example.com': true } });
     await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
