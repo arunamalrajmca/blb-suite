@@ -928,16 +928,30 @@ test("changed browser specs delegated to References are removed from Group A exe
   });
 });
 
-test("shared-core runtime changes retain full browser coverage and all applicable gates", () => {
-  withFixture((root, base) => {
-    commitChange(root, "extension/content.js", "// shared content behavior changed\\n");
-    const output = select(root, base);
-    assert.match(output, /full_browser_suite=true/);
-    assert.match(output, /group_a_required=true/);
-    assert.match(output, /group_b_required=true/);
-    assert.match(output, /reference_required=true/);
-    assert.match(output, /study_sessions_required=true/);
-  });
+test("every protected shared-core path retains full browser coverage and all applicable gates", () => {
+  const sharedCorePaths = [
+    "extension/background.js",
+    "extension/content.js",
+    "extension/reference-core.js",
+    "extension/regex-patterns.js",
+    "extension/books.js",
+    "extension/book-aliases.js",
+    "extension/kjv-corpus-original.js",
+    "extension/case-sensitive-search-core.js",
+    "extension/case-sensitive-routing.js",
+    "tests/browser/fixtures.js"
+  ];
+  for (const path of sharedCorePaths) {
+    withFixture((root, base) => {
+      commitChange(root, path, "// shared-core change\\n");
+      const output = select(root, base);
+      assert.match(output, /full_browser_suite=true/, path);
+      assert.match(output, /group_a_required=true/, path);
+      assert.match(output, /group_b_required=true/, path);
+      assert.match(output, /reference_required=true/, path);
+      assert.match(output, /study_sessions_required=true/, path);
+    });
+  }
 });
 
 
