@@ -76,7 +76,7 @@ test('user guide Copy button uses the execCommand fallback when Clipboard API is
     document.execCommand = command => {
       if (command === 'copy') {
         window.__tutorialFallbackValue = document.activeElement.value;
-        window.__tutorialFallbackSelection = window.getSelection().toString();
+        window.__tutorialFallbackSelection = document.activeElement.value.slice(document.activeElement.selectionStart, document.activeElement.selectionEnd);
         return true;
       }
       return false;
