@@ -132,6 +132,14 @@ const hasRuntimeChangeAlongsideBrowserSpec = changed.some(path =>
 );
 for (const path of changed) {
   if (browserSpecPattern.test(path)) {
+    // This regression is deliberately matrix-managed, but test-only edits to
+    // it must still execute its focused reference-matrix job. Otherwise a
+    // failing reproduction can be edited without ever rerunning that test.
+    if (path === "tests/browser/source-page-button-redirect-separation.spec.js" &&
+        existingBrowserSpecs.has(path) && hasAddedSpecLines(path)) {
+      specs.add(path);
+      continue;
+    }
     // A test-only edit must not trigger E2E by itself, but when production code
     // changes in the same diff, run the changed spec alongside mapped coverage.
     if (hasRuntimeChangeAlongsideBrowserSpec && existingBrowserSpecs.has(path) &&
