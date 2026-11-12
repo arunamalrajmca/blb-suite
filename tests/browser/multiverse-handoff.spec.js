@@ -92,3 +92,79 @@ test('Suite-generated MultiVerse page stays hidden until the requested results a
     expectedResultPresent: true
   });
 });
+
+
+test('MultiVerse handoff reveals the page when no pending references exist', async ({ page, context }) => {
+  await context.route('https://example.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>Empty MultiVerse handoff</title></head><body><main>No pending retrieval</main></body></html>'
+  }));
+  await page.goto(HANDOFF_URL, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    window.__handoffMessages = [];
+    Object.defineProperty(window, 'chrome', {
+      configurable: true,
+      value: { runtime: { sendMessage: async message => {
+        window.__handoffMessages.push(message.type);
+        return message.type === 'blbSuiteGetPendingMultiVerseRefs'
+          ? { ok: true, refs: [] }
+          : { ok: true };
+      } } }
+    });
+  });
+  await page.addScriptTag({ path: path.join(__dirname, '../../extension/multiverse-handoff.js') });
+  await page.evaluate(() => window.BLBMultiVerseHandoffModule.initialize({
+    BLBShared: { hostnames: { blbWww: 'example.com' } },
+    isSuiteEnabled: async () => true,
+    resolveBibleBook: () => null
+  }));
+
+  await expect.poll(() => page.evaluate(() => ({
+    messages: window.__handoffMessages,
+    visibility: document.documentElement.style.visibility,
+    pending: document.documentElement.dataset.blbSuiteMultiVersePending || null
+  }))).toEqual({
+    messages: ['blbSuiteGetPendingMultiVerseRefs'],
+    visibility: '',
+    pending: null
+  });
+});
+
+test('MultiVerse handoff reveals the page when retrieval controls are unavailable', async ({ page, context }) => {
+  await context.route('https://example.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>Missing MultiVerse controls</title></head><body><main>BLB controls did not load</main></body></html>'
+  }));
+  await page.goto(HANDOFF_URL, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    window.__handoffMessages = [];
+    Object.defineProperty(window, 'chrome', {
+      configurable: true,
+      value: { runtime: { sendMessage: async message => {
+        window.__handoffMessages.push(message.type);
+        return message.type === 'blbSuiteGetPendingMultiVerseRefs'
+          ? { ok: true, refs: [{ book: 'John', chapter: 3, from: 16, to: 16 }] }
+          : { ok: true };
+      } } }
+    });
+  });
+  await page.addScriptTag({ path: path.join(__dirname, '../../extension/multiverse-handoff.js') });
+  await page.evaluate(() => window.BLBMultiVerseHandoffModule.initialize({
+    BLBShared: { hostnames: { blbWww: 'example.com' } },
+    isSuiteEnabled: async () => true,
+    resolveBibleBook: book => book === 'John' ? { urlKey: 'jhn' } : null
+  }));
+
+  await expect.poll(() => page.evaluate(() => ({
+    messages: window.__handoffMessages,
+    visibility: document.documentElement.style.visibility,
+    pending: document.documentElement.dataset.blbSuiteMultiVersePending || null
+  })), { timeout: 7000 }).toEqual({
+    messages: ['blbSuiteGetPendingMultiVerseRefs'],
+    visibility: '',
+    pending: null
+  });
+  expect(await page.locator('main').textContent()).toBe('BLB controls did not load');
+});
