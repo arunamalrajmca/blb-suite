@@ -3,8 +3,8 @@ const { test, expect } = require('./fixtures');
 const SITE = 'example.com';
 
 async function preparePopup(page, extensionId, extensionStorage, extensionWorker, {
-  pageButton = false,
-  doubleClick = false,
+  pageButton,
+  doubleClick,
   permission = true
 } = {}) {
   await extensionStorage.set({
