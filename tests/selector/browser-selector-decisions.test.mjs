@@ -480,7 +480,7 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
 
     assert.match(groupA, new RegExp("tests/browser/" + spec + "\\.spec\\.js"));
   }
-  assert.match(groupA, /REFERENCE_GATE_REQUIRED:/);
+  assert.match(groupA, /GROUP_A_CHANGED_BROWSER_SPECS:/);
   assert.match(groupA, /Delegating \$spec to the required browser-e2e gate/);
   assert.match(groupA, /browser_e2e_required:/);
   assert.match(groupB, /inputs\.browser_e2e_required == 'true'/);
@@ -907,7 +907,7 @@ test("reference-delegated redirect regressions retain every explicitly required 
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=true/);
     assert.match(output, /reference_required=true/);
-    assert.match(output, /group_a_changed_browser_specs=\\n/);
+    assert.ok(output.includes("group_a_changed_browser_specs=" + "\\n"));
   });
 });
 
@@ -938,7 +938,12 @@ test("shared-core runtime changes retain full browser coverage and all applicabl
 
 test("reference-only feature ownership does not allocate Group A", () => {
   const referenceOnlyRegistry = registrySource.replace(
-    `];
+    `,
+  {
+    paths: ["extension/new-reference-only.js"],
+    specs: ["tests/browser/shared-regex-patterns.spec.js"]
+  }
+];
 
 export const mappedSpecs`,
     `  {
