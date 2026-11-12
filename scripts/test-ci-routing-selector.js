@@ -448,6 +448,21 @@ try {
   assert.equal(result.values.changed_specs, '', 'focused test-only changes should not select broad E2E specs');
   console.log('PASS: focused behavior spec edits avoid broad E2E groups');
 
+  // The source-page refresh regression is matrix-managed, but changes to this
+  // test alone must rerun its focused matrix job rather than silently skip it.
+  resetScenario(base);
+  write('tests/browser/source-page-button-redirect-separation.spec.js', '// source-page regression test-only edit\\n');
+  commit('change source-page refresh regression only');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', false, 'source-page focused spec only');
+  assert(result.values.changed_specs.includes('tests/browser/source-page-button-redirect-separation.spec.js'),
+    'source-page test-only edits must select the focused reference-matrix job');
+  assertValue(result, 'reference_required', true, 'source-page focused spec only');
+  assertValue(result, 'group_a_required', false, 'source-page focused spec only');
+  assertValue(result, 'group_b_required', false, 'source-page focused spec only');
+  assertValue(result, 'study_sessions_required', false, 'source-page focused spec only');
+  console.log('PASS: source-page regression edits rerun only their focused matrix coverage');
+
   // Mixed production + browser-spec edits must run the edited spec too.
   // Test-only edits stay skipped, but a runtime change must not silently skip
   // the regression test added alongside that runtime change.
