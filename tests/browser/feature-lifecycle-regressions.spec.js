@@ -581,6 +581,27 @@ test('Global master OFF then ON restores both independently enabled site selecti
 
   // Exercise the restored Double-click listener with a real browser gesture.
   await page.evaluate(() => window.getSelection()?.removeAllRanges());
+  const contentState = await extensionWorker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) return null;
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      world: 'ISOLATED',
+      func: () => ({
+        suiteEnabled: typeof suiteEnabled === 'boolean' ? suiteEnabled : null,
+        doubleClickBlbEnabled: typeof doubleClickBlbEnabled === 'boolean' ? doubleClickBlbEnabled : null,
+        doubleClickSettingsReady: typeof doubleClickSettingsReady === 'boolean' ? doubleClickSettingsReady : null
+      })
+    });
+    return result?.result || null;
+  });
+  console.log('[global-toggle recovery] content state after re-enable:', contentState);
+  expect(contentState).toMatchObject({
+    suiteEnabled: true,
+    doubleClickBlbEnabled: true,
+    doubleClickSettingsReady: true
+  });
+
   const beforeIds = await extensionWorker.evaluate(() =>
     chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
   );
