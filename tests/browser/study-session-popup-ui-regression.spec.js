@@ -262,12 +262,18 @@ test('Study Sessions auto-stop setting persists when changed in the popup', asyn
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
   await waitForStudyPopupReady(page);
 
+  const autoStop = page.locator('#studyAutoStop');
+  await expect(autoStop).toBeVisible();
+  // The auto-stop row is hidden while the global Suite gate is OFF and must
+  // return when the gate is enabled again in the same popup instance.
+  await page.locator('#master').uncheck();
+  await expect(autoStop).toBeHidden();
+  await page.locator('#master').check();
+  await expect(autoStop).toBeVisible();
+
   await page.locator('#studyTopic').fill('Popup auto-stop setting ' + Date.now());
   await page.locator('#startTopic').click();
   await expect(page.locator('#studyStatus')).toContainText('Recording started');
-
-  const autoStop = page.locator('#studyAutoStop');
-  await expect(autoStop).toBeVisible();
   await autoStop.selectOption('0');
   await expect.poll(async () => extensionWorker.evaluate(async () =>
     (await chrome.storage.local.get({ studyAutoStopMinutes: 15 })).studyAutoStopMinutes
