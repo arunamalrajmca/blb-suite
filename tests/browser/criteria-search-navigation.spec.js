@@ -94,3 +94,37 @@ test('global Suite OFF preserves native same-tab Criteria Search popup navigatio
   )).toBe(true);
   expect(after.some(tab => (tab.url || tab.pendingUrl || '') === STRONG_SEARCH_URL)).toBe(false);
 });
+
+
+test('enabled Criteria Search opens ordinary KJV verse results in a new tab but leaves unrelated links native', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({ masterEnabled: true });
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: `<!doctype html><html><head><title>Criteria Search results fixture</title></head><body>
+      <a id="verse-result" href="https://www.blueletterbible.org/kjv/jhn/3/16/">John 3:16</a>
+      <a id="ordinary-link" href="https://www.blueletterbible.org/about/">About BLB</a>
+    </body></html>`
+  }));
+  await page.goto(SEARCH_URL, { waitUntil: 'domcontentloaded' });
+  await page.waitForTimeout(500);
+
+  const sourceUrl = page.url();
+  const before = await getBlbTabs(extensionWorker);
+  await page.locator('#verse-result').click();
+
+  await expect.poll(async () => {
+    const tabs = await getBlbTabs(extensionWorker);
+    return tabs.some(tab =>
+      !before.some(item => item.id === tab.id) &&
+      new URL(tab.url || tab.pendingUrl || '').pathname === '/kjv/jhn/3/16/'
+    );
+  }, { timeout: 10000 }).toBe(true);
+  expect(page.url()).toBe(sourceUrl);
+
+  await page.locator('#ordinary-link').click();
+  await expect(page).toHaveURL('https://www.blueletterbible.org/about/');
+});

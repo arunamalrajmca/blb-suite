@@ -68,3 +68,26 @@ test('sensitive-page popup replaces all normal controls with a brief privacy not
   await expect(page.locator('.popup-card')).toBeHidden();
   await expect(page.locator('#master')).toBeHidden();
 });
+
+
+test('popup theme preference persists when the popup is reopened', async ({
+  page, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({ popupTheme: 'dark' });
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+
+  await expect(page.locator('body')).not.toHaveClass(/\blight\b/);
+  const themeToggle = page.locator('#themeToggle');
+  await expect(themeToggle).toHaveAttribute('aria-label', 'Switch to light theme');
+
+  await themeToggle.click();
+  await expect(page.locator('body')).toHaveClass(/\blight\b/);
+  await expect(themeToggle).toHaveAttribute('aria-label', 'Switch to dark theme');
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({ popupTheme: 'dark' })).popupTheme
+  )).toBe('light');
+
+  await page.reload();
+  await expect(page.locator('body')).toHaveClass(/\blight\b/);
+  await expect(page.locator('#themeToggle')).toHaveAttribute('aria-label', 'Switch to dark theme');
+});
