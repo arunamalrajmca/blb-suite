@@ -1,5 +1,9 @@
 import test from "node:test";
-import { featureSpecs, mappedSpecs, separatelyManagedSpecs } from "../../scripts/ci-routing-registry.mjs";
+import {
+  featureSpecs, mappedSpecs, separatelyManagedSpecs, groupARequiredSpecs,
+  groupAExecutionSpecs, groupBRequiredSpecs, referenceRequiredSpecs,
+  referenceDelegatedSpecs, studySessionSpecs
+} from "../../scripts/ci-routing-registry.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -91,4 +95,19 @@ test("every feature-owned browser regression has an explicit CI classification",
     .filter(spec => !classified.has(spec))
     .sort();
   assert.deepEqual(missing, [], "feature routing must not select specs omitted from CI ownership classification");
+
+  const ownershipSets = [
+    groupARequiredSpecs, groupAExecutionSpecs, groupBRequiredSpecs,
+    referenceRequiredSpecs, referenceDelegatedSpecs, studySessionSpecs
+  ];
+  for (const ownership of ownershipSets) {
+    for (const spec of ownership) {
+      assert.ok(classified.has(spec), "gate ownership must refer to a classified browser spec: " + spec);
+    }
+  }
+  for (const spec of groupAExecutionSpecs) {
+    assert.ok(groupARequiredSpecs.has(spec), "Group A execution must be a subset of Group A ownership");
+    assert.ok(!referenceDelegatedSpecs.has(spec), "Reference-delegated specs cannot be Group A execution");
+    assert.ok(!studySessionSpecs.has(spec), "Study Sessions specs cannot be Group A execution");
+  }
 });
