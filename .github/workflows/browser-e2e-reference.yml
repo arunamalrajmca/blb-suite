@@ -594,7 +594,7 @@ jobs:
             printf 'Spec file: '; ls -l "$spec"
             npx playwright --version
             echo "Playwright resolved configuration:"
-            npx playwright test --config=playwright.config.js --show-config
+            node -e "const c=require('./playwright.config.js'); console.log(JSON.stringify({testDir:c.testDir,testMatch:c.testMatch,testIgnore:c.testIgnore,projects:c.projects?.map(p=>({name:p.name,testDir:p.testDir,testMatch:p.testMatch,testIgnore:p.testIgnore}))},null,2))"
             echo "Browser spec inventory:"
             find tests/browser -maxdepth 1 -type f -name '*.spec.js' -printf '%f\\n' | sort | head -40
             echo "Target spec first lines:"
