@@ -73,7 +73,7 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/multiverse-post.html", "extension/multiverse-post.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/multiverse-disjoint-chapter-post.spec.js"]
+    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/multiverse-disjoint-chapter-post.spec.js", "tests/browser/multiverse-post-failure-regressions.spec.js"]
   },
   {
     paths: ["extension/popup.html", "extension/popup.js"],
@@ -168,6 +168,7 @@ export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.
   "tests/browser/multiverse-tab-reuse.spec.js",
   "tests/browser/multiverse-contiguous-range-routing.spec.js",
   "tests/browser/multiverse-disjoint-chapter-post.spec.js",
+  "tests/browser/multiverse-post-failure-regressions.spec.js",
   "tests/browser/multiverse-tool-view.spec.js",
   "tests/browser/multiverse-handoff.spec.js",
   "tests/browser/blb-passive-new-tab-targets.spec.js",

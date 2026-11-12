@@ -144,6 +144,7 @@ try {
     'tests/browser/multiverse-tab-reuse.spec.js',
     'tests/browser/multiverse-contiguous-range-routing.spec.js',
     'tests/browser/multiverse-disjoint-chapter-post.spec.js',
+    'tests/browser/multiverse-post-failure-regressions.spec.js',
     'tests/browser/multiverse-tool-view.spec.js',
     'tests/browser/multiverse-handoff.spec.js',
     'tests/browser/blb-passive-new-tab-targets.spec.js',
