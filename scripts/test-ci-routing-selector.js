@@ -305,7 +305,8 @@ try {
   assert(result.values.changed_specs.includes('tests/browser/scripttagger-global-injection.spec.js'));
   assert(!result.values.changed_browser_specs.includes('tests/browser/source-page-button-redirect-separation.spec.js'),
     'matrix-managed source-page refresh coverage must be delegated to the reference matrix');
-  assert(result.values.changed_browser_specs.includes('tests/browser/scripttagger-global-injection.spec.js'));
+  assert(!result.values.changed_browser_specs.includes('tests/browser/scripttagger-global-injection.spec.js'),
+    'ScriptTagger regression must use its dedicated Group B step, not the generic changed-spec runner');
   assertValue(result, 'group_a_required', false, 'source-page runtime registration');
   assertValue(result, 'group_b_required', true, 'source-page runtime registration');
   assertValue(result, 'reference_required', true, 'source-page runtime registration');
