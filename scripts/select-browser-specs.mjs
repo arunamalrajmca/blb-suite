@@ -10,7 +10,7 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import {
   featureSpecs, mappedSpecs, separatelyManagedSpecs, studySessionSpecs,
-  groupAExecutionSpecs, groupBRequiredSpecs, referenceRequiredSpecs, referenceDelegatedSpecs
+  groupARequiredSpecs, groupBRequiredSpecs, referenceRequiredSpecs, referenceDelegatedSpecs
 } from "./ci-routing-registry.mjs";
 import { isNonRuntimePath } from "./ci-change-policy.mjs";
 
@@ -170,7 +170,7 @@ const values = {
   group_a_changed_browser_specs: groupAChangedBrowserSpecs.join(","),
   unmapped_specs: unmapped.join(","),
   extension_spec_required: String(full || selected.includes("tests/browser/extension.spec.js")),
-  group_a_required: String(full || [...groupAExecutionSpecs].some(path => selected.includes(path)) || unmapped.length > 0 || (!focusedSourcePageRuntimeChange && groupAChangedBrowserSpecs.length > 0)),
+  group_a_required: String(full || [...groupARequiredSpecs].some(path => selected.includes(path) && !(referenceGateRequired && referenceDelegatedSpecs.has(path)) && !studySessionSpecs.has(path)) || unmapped.length > 0 || (!focusedSourcePageRuntimeChange && groupAChangedBrowserSpecs.length > 0)),
   study_sessions_required: String(full || [...selected, ...changedBrowserSpecs].some(path => studySessionSpecs.has(path))),
   group_b_required: String(full || [...groupBRequiredSpecs].some(path => selected.includes(path))),
   reference_required: String(referenceGateRequired)
