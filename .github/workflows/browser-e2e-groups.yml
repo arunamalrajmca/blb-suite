@@ -12,6 +12,9 @@ on:
       changed_browser_specs:
         required: true
         type: string
+      group_a_changed_browser_specs:
+        required: true
+        type: string
       unmapped_specs:
         required: true
         type: string
@@ -76,47 +79,21 @@ jobs:
         if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/multiverse-tab-reuse.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/multiverse-tab-reuse.spec.js')) }}
         run: npx playwright test tests/browser/multiverse-tab-reuse.spec.js --workers=1
 
-      - name: Run every test in changed browser spec files
-        if: ${{ !cancelled() && (inputs.changed_browser_specs != '') }}
+      - name: Run every non-delegated changed browser spec
+        if: ${{ !cancelled() && inputs.group_a_changed_browser_specs != '' }}
         env:
-          CHANGED_BROWSER_SPECS: ${{ inputs.changed_browser_specs }}
-          REFERENCE_GATE_REQUIRED: ${{ inputs.browser_e2e_required }}
-          FULL_BROWSER_SUITE: ${{ inputs.full_browser_suite }}
-          SELECTED_SPECS: ${{ inputs.changed_specs }}
-          STUDY_SESSIONS_REQUIRED: ${{ inputs.study_sessions_required }}
+          GROUP_A_CHANGED_BROWSER_SPECS: ${{ inputs.group_a_changed_browser_specs }}
         shell: bash
         run: |
           set -euo pipefail
-          IFS=',' read -r -a changed_specs <<< "$CHANGED_BROWSER_SPECS"
-          specs=()
-          for spec in "${changed_specs[@]}"; do
-            case "$spec" in
-              tests/browser/feature-lifecycle-regressions.spec.js|tests/browser/study-backup-restore.spec.js|tests/browser/study-reference-capture.spec.js|tests/browser/study-session-export.spec.js|tests/browser/study-session-popup-ui-regression.spec.js)
-                if [[ "$STUDY_SESSIONS_REQUIRED" == "true" ]]; then
-                  echo "Delegating $spec to the dedicated Study Sessions job."
-                  continue
-                fi
-                ;;
-              tests/browser/redirect-source-url-patterns.spec.js|tests/browser/redirect-hostnames.spec.js|tests/browser/blb-non-kjv-redirect.spec.js|tests/browser/redirect-toggle-isolation.spec.js|tests/browser/multiverse-clipboard-reference-pattern.spec.js|tests/browser/popup-master-toggle-regression.spec.js|tests/browser/facebook-selection-parser.spec.js|tests/browser/substack-selection-parser.spec.js|tests/browser/omnibox-command-routing.spec.js|tests/browser/pdf-selection-regressions.spec.js|tests/browser/shared-regex-patterns.spec.js|tests/browser/rediscover-sagacity-button.spec.js|tests/browser/research-dom-smoke.spec.js|tests/browser/right-panel-default-expanded.spec.js|tests/browser/selection-phase-performance.spec.js|tests/browser/service-worker-lifecycle.spec.js|tests/browser/kjv-corpus-lazy-loading.spec.js|tests/browser/known-host-extension.spec.js|tests/browser/multiverse-contiguous-range-routing.spec.js|tests/browser/multiverse-disjoint-chapter-post.spec.js|tests/browser/pr-422-feature-regressions.spec.js|tests/browser/site-registration-opt-out-race.spec.js|tests/browser/source-page-button-redirect-separation.spec.js)
-                if [[ "$REFERENCE_GATE_REQUIRED" == "true" && ( "$FULL_BROWSER_SUITE" == "true" || ",$SELECTED_SPECS," == *",$spec,"* ) ]]; then
-                  echo "Delegating $spec to the required browser-e2e gate."
-                  continue
-                fi
-                ;;
-            esac
-            specs+=("$spec")
+          IFS=',' read -r -a specs <<< "$GROUP_A_CHANGED_BROWSER_SPECS"
+          total="${#specs[@]}"
+          for index in "${!specs[@]}"; do
+            spec="${specs[$index]}"
+            [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
+            printf '[%s/%s] Running %s\\n' "$((index + 1))" "$total" "$spec"
+            npx playwright test "$spec"
           done
-          if (("${#specs[@]}" > 0)); then
-            total="${#specs[@]}"
-            for index in "${!specs[@]}"; do
-              spec="${specs[$index]}"
-              [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
-              printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-              npx playwright test "$spec"
-            done
-          else
-            echo "All changed browser specs are covered by the required browser-e2e gate."
-          fi
 
       - name: Run source URL parser regressions
         if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/redirect-source-url-patterns.spec.js') && !(inputs.browser_e2e_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/redirect-source-url-patterns.spec.js')))) }}
