@@ -286,8 +286,11 @@ try {
     'background changes must select focused omnibox routing coverage');
   assert(result.values.changed_specs.includes('tests/browser/service-worker-lifecycle.spec.js'),
     'background changes must select real service-worker lifecycle coverage');
-  assert(result.values.changed_browser_specs.includes('tests/browser/omnibox-command-routing.spec.js'),
-    'the explicitly paired omnibox regression must execute');
+  assert(result.values.changed_specs.includes('tests/browser/omnibox-command-routing.spec.js'),
+    'the matrix-managed omnibox regression must execute through its focused reference batch');
+  assert(!result.values.changed_browser_specs.includes('tests/browser/omnibox-command-routing.spec.js'),
+    'the matrix-managed omnibox regression must not be duplicated in the generic changed-spec runner');
+  assertValue(result, 'reference_required', true, 'isolated background omnibox behavior');
   assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
     'isolated omnibox changes must not pull in unrelated core user-action regressions');
   console.log('PASS: isolated background omnibox changes honor focused browser coverage');
