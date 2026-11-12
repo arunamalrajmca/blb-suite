@@ -5,6 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { selectReferenceMatrix } from "../../scripts/select-reference-matrix.mjs";
+import { referenceDelegatedSpecs } from "../../scripts/ci-routing-registry.mjs";
 
 const selectorSource = readFileSync(
   new URL("../../scripts/select-browser-specs.mjs", import.meta.url),
@@ -476,10 +477,14 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
     "rediscover-sagacity-button",
     "research-dom-smoke"
   ]) {
-    assert.ok(referenceMatrix.some(entry => entry.file === "tests/browser/" + spec + ".spec.js" || entry.files?.includes("tests/browser/" + spec + ".spec.js")), "reference matrix should include " + spec);
-    assert.ok(referenceMatrix.some(entry => entry.file === "tests/browser/" + spec + ".spec.js" || entry.files?.includes("tests/browser/" + spec + ".spec.js")), "reference matrix should include " + spec);
-    assert.ok(referenceWorkflow.includes(spec + ".spec.js") || groupA.includes(spec + ".spec.js"), "selected regression must have an owning workflow: " + spec);
+    const file = "tests/browser/" + spec + ".spec.js";
+    assert.ok(referenceMatrix.some(entry => entry.file === file || entry.files?.includes(file)),
+      "reference matrix should include " + spec);
+    assert.ok(referenceDelegatedSpecs.has(file),
+      "delegated ownership must be explicit in the registry: " + spec);
   }
+  assert.ok(referenceWorkflow.includes("select-reference-matrix.mjs"));
+
   assert.match(groupA, /GROUP_A_CHANGED_BROWSER_SPECS:/);
   assert.doesNotMatch(groupA, /case "\$spec" in/);
   assert.match(groupA, /browser_e2e_required:/);
@@ -917,7 +922,7 @@ test("changed browser specs delegated to References are removed from Group A exe
     commitChange(root, "tests/browser/redirect-source-url-patterns.spec.js", "// changed reference matrix regression\\n");
     const output = select(root, base);
     assert.match(output, /reference_required=true/);
-    assert.ok(output.includes("changed_browser_specs=tests/browser/redirect-source-url-patterns.spec.js"));
+    assert.ok(output.includes("changed_browser_specs=tests/browser/redirect-toggle-isolation.spec.js"));
     assert.ok(output.includes("group_a_changed_browser_specs=" + "\n"));
     assert.match(output, /group_a_required=true/);
   });
