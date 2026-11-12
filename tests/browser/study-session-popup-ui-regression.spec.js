@@ -417,11 +417,11 @@ test('Study export: selected Study Topic exports a PDF containing its saved refe
 
   await expect.poll(async () => {
     const downloads = await allDownloads(extensionWorker);
-    return downloads.filter(item => item.state === 'complete' && /^data:application\\/pdf;base64,/.test(item.url || '')).length;
+    return downloads.filter(item => item.state === 'complete' && /^data:application\/pdf;base64,/.test(item.url || '')).length;
   }).toBeGreaterThan(0);
 
   const downloads = await allDownloads(extensionWorker);
-  const item = downloads.find(entry => entry.state === 'complete' && /^data:application\\/pdf;base64,/.test(entry.url || ''));
+  const item = downloads.find(entry => entry.state === 'complete' && /^data:application\/pdf;base64,/.test(entry.url || ''));
   expect(item).toBeDefined();
   const pdf = Buffer.from(item.url.split(',')[1], 'base64').toString('latin1');
   expect(pdf.startsWith('%PDF-1.4')).toBe(true);
