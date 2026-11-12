@@ -1,5 +1,13 @@
 /* Source-page Bible reference collection for supported commentary/reference sites. */
 globalThis.BLBSourcePageCollectorModule = Object.freeze({
+  refresh() {
+    try {
+      const refresh = globalThis.__BLBSourcePageCollectorRefresh;
+      return typeof refresh === 'function' ? refresh() : Promise.resolve();
+    } catch (_) {
+      return Promise.resolve();
+    }
+  },
   initialize({ normalizeSelectionText, parseRef, normalizeSourceBibleBook, resolveBibleReference, blbUrl, formatSourceBibleBookName, isSuiteEnabled, makeBlbMultiVerseButtonDraggable }) {
     // ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------
     {
@@ -258,6 +266,10 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
         }
     
         const ensureSourcePageButtonWhenReady = () => ensureSourcePageMultiVerseButton().catch(() => {});
+        // Keep an explicit refresh hook so an already-running content script can
+        // restore this page control after a settings-driven tab refresh without
+        // reinjecting the entire bundle into the existing document.
+        globalThis.__BLBSourcePageCollectorRefresh = ensureSourcePageButtonWhenReady;
         if (document.readyState === "loading") {
           document.addEventListener("DOMContentLoaded", ensureSourcePageButtonWhenReady, {once:true});
         } else {
