@@ -11,6 +11,52 @@ async function waitForStudyPopupReady(page) {
   await expect(page.locator('#studyTopic')).toBeEnabled();
 }
 
+test('Study Sessions auto-stop setting persists when changed in the popup', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const topic = 'Popup auto-stop setting ' + Date.now();
+  await extensionWorker.evaluate(async value => {
+    const now = new Date();
+    const date = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+    await chrome.storage.local.set({
+      masterEnabled: true,
+      studyTopics: [value],
+      studySelectedTopic: value,
+      currentStudySessionId: 'popup-auto-stop-regression',
+      studySessions: [{
+        id: 'popup-auto-stop-regression',
+        title: value,
+        date,
+        dateLabel: date,
+        refs: [],
+        strongs: [],
+        searchTerms: [],
+        notes: []
+      }]
+    });
+  }, topic);
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(page);
+  await expect(page.locator('#studyTopic')).toHaveValue(topic);
+
+  const autoStop = page.locator('#studyAutoStop');
+  await expect(autoStop).toBeVisible();
+  await autoStop.selectOption('0');
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({ studyAutoStopMinutes: 15 })).studyAutoStopMinutes
+  )).toBe(0);
+
+  await autoStop.selectOption('10');
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({ studyAutoStopMinutes: 15 })).studyAutoStopMinutes
+  )).toBe(10);
+  await page.locator('#stopTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Last Recording Stopped');
+  await page.close();
+});
+
 test('Study Sessions popup starts recording, saves a note, and stops without losing history', async ({
   context,
   extensionId,
@@ -253,48 +299,4 @@ test('Study Sessions popup exposes whole-study and date-filtered PDF downloads',
   await page.close();
 });
 
-test('Study Sessions auto-stop setting persists when changed in the popup', async ({
-  context, extensionId, extensionStorage, extensionWorker
-}) => {
-  await extensionStorage.clear();
-  const topic = 'Popup auto-stop setting ' + Date.now();
-  await extensionWorker.evaluate(async value => {
-    const now = new Date();
-    const date = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
-    await chrome.storage.local.set({
-      masterEnabled: true,
-      studyTopics: [value],
-      studySelectedTopic: value,
-      currentStudySessionId: 'popup-auto-stop-regression',
-      studySessions: [{
-        id: 'popup-auto-stop-regression',
-        title: value,
-        date,
-        dateLabel: date,
-        refs: [],
-        strongs: [],
-        searchTerms: [],
-        notes: []
-      }]
-    });
-  }, topic);
-  const page = await context.newPage();
-  await page.goto('chrome-extension://' + extensionId + '/popup.html');
-  await waitForStudyPopupReady(page);
-  await expect(page.locator('#studyTopic')).toHaveValue(topic);
 
-  const autoStop = page.locator('#studyAutoStop');
-  await expect(autoStop).toBeVisible();
-  await autoStop.selectOption('0');
-  await expect.poll(async () => extensionWorker.evaluate(async () =>
-    (await chrome.storage.local.get({ studyAutoStopMinutes: 15 })).studyAutoStopMinutes
-  )).toBe(0);
-
-  await autoStop.selectOption('10');
-  await expect.poll(async () => extensionWorker.evaluate(async () =>
-    (await chrome.storage.local.get({ studyAutoStopMinutes: 15 })).studyAutoStopMinutes
-  )).toBe(10);
-  await page.locator('#stopTopic').click();
-  await expect(page.locator('#studyStatus')).toContainText('Last Recording Stopped');
-  await page.close();
-});
