@@ -1,4 +1,5 @@
 import test from "node:test";
+import { featureSpecs, mappedSpecs, separatelyManagedSpecs } from "../../scripts/ci-routing-registry.mjs";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -82,3 +83,12 @@ for (const path of [
     assert.match(browser, /reference_required=false/, path);
   });
 }
+
+
+test("every feature-owned browser regression has an explicit CI classification", () => {
+  const classified = new Set([...mappedSpecs, ...separatelyManagedSpecs]);
+  const missing = [...new Set(featureSpecs.flatMap(group => group.specs))]
+    .filter(spec => !classified.has(spec))
+    .sort();
+  assert.deepEqual(missing, [], "feature routing must not select specs omitted from CI ownership classification");
+});
