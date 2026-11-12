@@ -241,6 +241,7 @@ test('Study Sessions auto-stop setting persists when changed in the popup', asyn
   context, extensionId, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.clear();
+  await extensionWorker.evaluate(() => chrome.storage.local.set({ masterEnabled: true }));
   const page = await context.newPage();
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
   await waitForStudyPopupReady(page);
