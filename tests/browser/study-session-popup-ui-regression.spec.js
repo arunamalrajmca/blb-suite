@@ -445,7 +445,7 @@ test('Study exports reject empty data, invalid dates, and topics without content
 
   const invalidDate = await page.evaluate(() => chrome.runtime.sendMessage({
     type: 'blbSuiteDownloadStudyDate',
-    date: '2026-02-31'
+    date: '2026/02/31'
   }));
   expect(invalidDate).toEqual({ok:false});
 
