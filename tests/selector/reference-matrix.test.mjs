@@ -24,6 +24,8 @@ test("extension.spec.js reference checks share one matrix runner without droppin
     "generic reference syntax — range forms",
     "generic aliases",
     "All 66 canonical"
+    "Same-chapter ranges — all 66 books through",
+    "Same-chapter range resolution covers all 66 books on Double-Click"
   ]) {
     assert.ok(grouped[0].grep.includes(pattern), "batched grep must preserve: " + pattern);
   }
