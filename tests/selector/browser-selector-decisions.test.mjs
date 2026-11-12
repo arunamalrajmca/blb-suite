@@ -390,7 +390,7 @@ test("source-page button refresh handler selects same-tab restoration coverage",
     assert.match(output, /full_browser_suite=false/);
     assert.match(output, /changed_specs=.*tests\/browser\/source-page-button-redirect-separation\.spec\.js/);
     assert.match(output, /group_a_required=true/);
-    assert.match(output, /reference_required=false/);
+    assert.match(output, /reference_required=true/);
   });
 });
 
