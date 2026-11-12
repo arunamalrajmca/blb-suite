@@ -96,6 +96,24 @@ for (const otherState of ['on', 'off', 'unset']) {
 }
 
 for (const feature of ['pageButton', 'doubleClick']) {
+  test(`turning popup ${feature} OFF preserves the other enabled site feature`, async ({
+    page, extensionId, extensionStorage, extensionWorker
+  }) => {
+    await preparePopup(page, extensionId, extensionStorage, extensionWorker, {
+      pageButton: true,
+      doubleClick: true
+    });
+
+    await page.locator(feature === 'pageButton' ? '#pageSetting .slider' : '#doubleSetting .slider').click();
+    await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
+      pageSelectionButtonSites: { [SITE]: feature !== 'pageButton' },
+      doubleClickBlbSites: { [SITE]: feature !== 'doubleClick' },
+      pendingSiteFeatureToggles: {}
+    });
+  });
+}
+
+for (const feature of ['pageButton', 'doubleClick']) {
   test(`denying the popup ${feature} permission leaves the other site feature unchanged`, async ({
     page, extensionId, extensionStorage, extensionWorker
   }) => {
