@@ -72,3 +72,16 @@ test('Study capture ignores MultiVerse bootstrap search terms and records an act
   await page.goto(blbOrigin + '/search/search.cfm?Criteria=grace', { waitUntil: 'domcontentloaded' });
   await expect.poll(async () => (await currentSession(extensionWorker))?.searchTerms || []).toEqual(['Grace']);
 });
+
+test("active Study Topic captures Strong's lexicon references and deduplicates repeated navigation", async ({
+  page, context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await startStudyTopic({ context, extensionId, extensionStorage });
+  await routeBlbFixture(context);
+
+  await page.goto(blbOrigin + '/lexicon/g26/kjv/tr/0-1/', { waitUntil: 'domcontentloaded' });
+  await expect.poll(async () => (await currentSession(extensionWorker))?.strongs || []).toContain('G26');
+
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await expect.poll(async () => (await currentSession(extensionWorker))?.strongs || []).toEqual(['G26']);
+});
