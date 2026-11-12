@@ -948,7 +948,7 @@ test("every protected shared-core path retains full browser coverage and all app
   const featureOwnedPaths = new Set(featureSpecs.flatMap(group => group.paths));
   const explicitlySharedCorePaths = new Set([...sharedCorePaths, ...corpusPaths]);
   const extensionRuntimePaths = readdirSync(new URL("../../extension", import.meta.url))
-    .filter(file => /\\.(?:js|html|json)$/.test(file) && !file.startsWith("icons/") && !file.startsWith("store-assets/"))
+    .filter(file => /\.(?:js|html|json)$/.test(file) && !file.startsWith("icons/") && !file.startsWith("store-assets/"))
     .map(file => "extension/" + file);
   const unclassifiedRuntimePaths = extensionRuntimePaths.filter(path =>
     !featureOwnedPaths.has(path) && !explicitlySharedCorePaths.has(path)
