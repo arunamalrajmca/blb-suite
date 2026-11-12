@@ -122,8 +122,14 @@ test('BLB permits Show on BLB only and never enables Double-click', async ({ con
     feature:'pageButton',
     otherFeatureEnabled:true
   }));
-  const storedAfterPageButton = await extensionWorker.evaluate(async () =>
-    chrome.storage.local.get({pageSelectionButtonSites:{},doubleClickBlbSites:{}})
+  const storedBeforeGrant = await extensionWorker.evaluate(async () =>
+    chrome.storage.local.get({pageSelectionButtonSites:{},doubleClickBlbSites:{},pendingSiteFeatureToggles:{}})
+  );
+  const committed = await extensionWorker.evaluate(() =>
+    commitPendingSiteFeatureTogglesForGrantedOrigins(['https://www.blueletterbible.org/*'])
+  );
+  const storedAfterGrant = await extensionWorker.evaluate(async () =>
+    chrome.storage.local.get({pageSelectionButtonSites:{},doubleClickBlbSites:{},pendingSiteFeatureToggles:{}})
   );
   const doubleClick = await messagePage.evaluate(async () => chrome.runtime.sendMessage({
     type:'blbSuitePrepareSiteFeatureToggle',
@@ -131,10 +137,13 @@ test('BLB permits Show on BLB only and never enables Double-click', async ({ con
     feature:'doubleClick',
     otherFeatureEnabled:true
   }));
-  const result = {pageButton,storedAfterPageButton,doubleClick};
-  expect(result.pageButton).toMatchObject({ok:true});
-  expect(result.storedAfterPageButton.pageSelectionButtonSites['blueletterbible.org']).toBe(true);
-  expect(result.storedAfterPageButton.doubleClickBlbSites['blueletterbible.org']).toBe(false);
+  const result = {pageButton,storedBeforeGrant,committed,storedAfterGrant,doubleClick};
+  expect(result.pageButton).toMatchObject({ok:true,pending:true});
+  expect(result.storedBeforeGrant.pageSelectionButtonSites['blueletterbible.org']).toBeUndefined();
+  expect(result.storedBeforeGrant.pendingSiteFeatureToggles['https://www.blueletterbible.org/*'].feature).toBe('pageButton');
+  expect(result.committed.committed).toEqual([{origin:'https://www.blueletterbible.org/*',feature:'pageButton'}]);
+  expect(result.storedAfterGrant.pageSelectionButtonSites['blueletterbible.org']).toBe(true);
+  expect(result.storedAfterGrant.doubleClickBlbSites['blueletterbible.org']).toBe(false);
   expect(result.doubleClick).toMatchObject({ok:false,blockedBlbDoubleClick:true});
 });
 
