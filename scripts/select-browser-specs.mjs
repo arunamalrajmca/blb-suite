@@ -131,8 +131,12 @@ for (const path of changed) {
     // This regression is deliberately matrix-managed, but test-only edits to
     // it must still execute its focused reference-matrix job. Otherwise a
     // failing reproduction can be edited without ever rerunning that test.
-    if (path === "tests/browser/source-page-button-redirect-separation.spec.js" &&
+    if ((path === "tests/browser/source-page-button-redirect-separation.spec.js" ||
+         (focusedSourcePageRuntimeChange && path === "tests/browser/scripttagger-global-injection.spec.js")) &&
         existingBrowserSpecs.has(path) && hasAddedSpecLines(path)) {
+      // Both regressions have dedicated workflow steps: the source-page
+      // refresh matrix and Group B ScriptTagger injection. Keep them out of
+      // changed_browser_specs so the dedicated jobs do not suppress themselves.
       specs.add(path);
       continue;
     }
