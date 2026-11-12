@@ -143,3 +143,43 @@ test('same-tab redirect re-enable restores source-page buttons on every register
     await expect(button, url + ' after redirect OFF').toBeVisible();
   }
 });
+
+test('source-page collector button survives a full refresh with redirects OFF and ON', async ({
+  page, extensionStorage
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+  await page.route('https://www.dailyverses.net/dailyverse', route =>
+    route.fulfill({
+      status:200,
+      contentType:'text/html',
+      body:'<!doctype html><html><head><title>Daily verse refresh test</title></head><body><main>Daily verse</main></body></html>'
+    })
+  );
+
+  await page.goto('https://www.dailyverses.net/dailyverse', {waitUntil:'domcontentloaded'});
+  const button = page.locator('#blb-suite-dailyverses-multiverse');
+  await expect(button).toBeVisible();
+
+  // Match the reported sequence: turn redirects OFF while the control remains
+  // visible, then refresh the source page. The collector is independent of the
+  // global redirect preference and must initialize in the new document.
+  await extensionStorage.set({redirectEnabled:false});
+  await expect(button).toBeVisible();
+  await page.reload({waitUntil:'domcontentloaded'});
+  await expect(button, 'button after refresh while redirects are OFF').toBeVisible();
+
+  // Re-enable redirects from the same source site. The collector button must
+  // remain present; redirect bundle activation must not replace its bundle.
+  await extensionStorage.set({redirectEnabled:true});
+  await expect(button, 'button after redirects are re-enabled').toBeVisible();
+
+  // Also verify that a second full navigation still initializes the button
+  // when redirects are ON.
+  await page.reload({waitUntil:'domcontentloaded'});
+  await expect(button, 'button after refresh while redirects are ON').toBeVisible();
+});
