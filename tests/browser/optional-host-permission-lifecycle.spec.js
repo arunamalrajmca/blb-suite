@@ -149,7 +149,7 @@ test('granting either site feature never changes the other feature setting', asy
   try {
     for (const feature of ['pageButton', 'doubleClick']) {
       for (const otherState of ['on', 'off', 'unset']) {
-        const hostname = `${feature}-${otherState}.example`;
+        const hostname = `${feature}-${otherState}.example`.toLowerCase();
         const pageSites = {};
         const doubleSites = {};
         const otherKey = feature === 'pageButton' ? 'doubleClickBlbSites' : 'pageSelectionButtonSites';
