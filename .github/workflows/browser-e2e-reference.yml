@@ -337,7 +337,10 @@ jobs:
             # Invoke Playwright once per exact file; never combine positional
             # filters, which Playwright treats as intersecting expressions.
             if [[ "$MATRIX_GREP" == ".*" ]]; then
-              npx playwright test "$spec"
+              # Match against the configured testDir explicitly; passing a repo-root path
+            # as a positional filter can produce a false-green/zero-test selection.
+            spec_name="${spec##*/}"
+            npx playwright test --test-match "**/${spec_name}"
             else
               npx playwright test "$spec" --grep "$MATRIX_GREP"
             fi
