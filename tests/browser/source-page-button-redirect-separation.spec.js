@@ -226,10 +226,58 @@ test('source-page collector button survives full refreshes around real popup tog
 
   await page.bringToFront();
   await page.reload({waitUntil:'domcontentloaded'});
-  await expect(button, 'button after refresh while redirects are OFF').toBeVisible();
+  await page.waitForTimeout(1000);
+  const offRefreshVisible = await button.isVisible().catch(() => false);
+  const offRefreshDiagnostics = await extensionWorker.evaluate(async url => {
+    const tabs = await chrome.tabs.query({url:'https://www.christianity.com/*'});
+    const tab = tabs.find(item => item.url === url) || tabs[0];
+    const settings = await chrome.storage.local.get({
+      masterEnabled:true, redirectEnabled:false,
+      pageSelectionButtonSites:{}, doubleClickBlbSites:{}
+    });
+    const registrations = await chrome.scripting.getRegisteredContentScripts();
+    const pattern = 'https://www.christianity.com/*';
+    const permission = await chrome.permissions.contains({origins:[pattern]});
+    const shouldInject = tab ? await shouldInjectContentScriptForTab(tab, settings) : false;
+    const files = tab ? contentScriptFilesForTab(tab, settings) : [];
+    let documentState = null;
+    let injectionError = null;
+    if (tab?.id != null) {
+      try {
+        const result = await chrome.scripting.executeScript({
+          target:{tabId:tab.id},
+          func:() => ({
+            href:location.href,
+            readyState:document.readyState,
+            bodyPresent:!!document.body,
+            collectorModulePresent:!!globalThis.BLBSourcePageCollectorModule,
+            buttonPresent:!!document.getElementById('blb-suite-christianity-multiverse')
+          })
+        });
+        documentState = result?.[0]?.result || null;
+      } catch (error) {
+        injectionError = String(error?.message || error);
+      }
+    }
+    return {
+      redirectEnabled:settings.redirectEnabled,
+      masterEnabled:settings.masterEnabled,
+      permission,
+      shouldInject,
+      expectedFiles:files,
+      registered:registrations.filter(item => (item.matches || []).includes(pattern)),
+      tab:tab ? {id:tab.id,url:tab.url,status:tab.status} : null,
+      documentState,
+      injectionError
+    };
+  }, sourceUrl);
+  console.log('BLB_SOURCE_PAGE_OFF_REFRESH_DIAGNOSTICS ' + JSON.stringify({
+    visible:offRefreshVisible,
+    ...offRefreshDiagnostics
+  }));
 
-  // Turn redirects ON from the same source tab context. This also exercises
-  // setRedirect(true)'s explicit blbSuiteEnsureContentScript tab handoff.
+  // Turn redirects ON from the same source tab context even if the OFF refresh
+  // lost the button. Capture whether the normal popup path repairs that loss.
   const popupOn = await openPopupForSourceTab();
   await expect(popupOn.locator('#redirectEnabled')).not.toBeChecked();
   await popupOn.locator('#redirectSetting .switch').click();
@@ -242,4 +290,6 @@ test('source-page collector button survives full refreshes around real popup tog
   await page.bringToFront();
   await page.reload({waitUntil:'domcontentloaded'});
   await expect(button, 'button after refresh while redirects are ON').toBeVisible();
+  expect(offRefreshVisible, 'button should remain present after refresh with Redirect OFF; diagnostics: ' +
+    JSON.stringify(offRefreshDiagnostics)).toBe(true);
 });
