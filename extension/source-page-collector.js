@@ -24,23 +24,29 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
               const path = url.pathname.match(/^\/study\/scriptures\/(?:ot|nt)\/([^/]+)\/(\d+)\/?$/i);
               const verses = (url.searchParams.get("id") || "").match(/^p(\d+)(?:-p?(\d+))?$/i);
               if (!path || !verses) return null;
+              const from = Number(verses[1]);
+              const to = verses[2] ? Number(verses[2]) : null;
+              if (to !== null && to < from) return null;
               return {
                 book: path[1].replace(/-/g, " "),
                 chapter: Number(path[2]),
-                from: Number(verses[1]),
-                to: verses[2] ? Number(verses[2]) : null
+                from,
+                to
               };
             }
             if (sourceSite === "sarata" && host === "sarata.com") {
               const path = url.pathname.match(/^\/bible\/(?:chapter|verses)\/([^/]+)\.(\d+)\.html$/i);
               const fragment = url.hash.match(/^#(\d+):(\d+)(?:-(\d+))?$/);
               if (!path || !fragment || Number(fragment[1]) !== Number(path[2])) return null;
+              const from = Number(fragment[2]);
+              const to = fragment[3] ? Number(fragment[3]) : null;
+              if (to !== null && to < from) return null;
               const book = path[1].replace(/-([123])$/, " $1").replace(/-/g, " ");
               return {
                 book,
                 chapter: Number(path[2]),
-                from: Number(fragment[2]),
-                to: fragment[3] ? Number(fragment[3]) : null
+                from,
+                to
               };
             }
             if (sourceSite === "mercyhouse" && host === "mercyhouseministry.com" &&
@@ -49,11 +55,14 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
               const chapter = Number(url.searchParams.get("c"));
               const verses = (url.searchParams.get("v") || "").match(/^(\d+)(?:[-–](\d+))?$/);
               if (!book || !Number.isInteger(chapter) || chapter < 1 || !verses) return null;
+              const from = Number(verses[1]);
+              const to = verses[2] ? Number(verses[2]) : null;
+              if (to !== null && to < from) return null;
               return {
                 book,
                 chapter,
-                from: Number(verses[1]),
-                to: verses[2] ? Number(verses[2]) : null
+                from,
+                to
               };
             }
             return null;
