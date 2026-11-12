@@ -147,3 +147,34 @@ test('MultiVerse post handoff stops after the second dropped message channel', a
   expect(state.status.textContent).toContain('Multi-Verse queue connection failed after retry');
   expect(state.status.textContent).toContain('second channel closed');
 });
+
+
+test('the real service-worker MultiVerse queue assigns simultaneous requests distinct FIFO slots', async ({
+  page, extensionWorker
+}) => {
+  await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  const responses = await extensionWorker.evaluate(async id => {
+    const [execution] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: async () => Promise.all(Array.from({ length: 4 }, () =>
+        chrome.runtime.sendMessage({ type: 'blbSuiteAcquireMultiVersePostSlot' })
+      ))
+    });
+    return execution?.result || [];
+  }, tabId);
+
+  expect(responses).toHaveLength(4);
+  expect(responses.every(response => response?.ok === true)).toBe(true);
+  const scheduledAt = responses.map(response => response.submitAt);
+  expect(scheduledAt.every(Number.isFinite)).toBe(true);
+  for (let index = 1; index < scheduledAt.length; index++) {
+    expect(scheduledAt[index]).toBeGreaterThan(scheduledAt[index - 1]);
+    expect(scheduledAt[index] - scheduledAt[index - 1]).toBeGreaterThanOrEqual(1500);
+  }
+});
