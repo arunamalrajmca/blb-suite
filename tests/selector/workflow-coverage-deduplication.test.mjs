@@ -44,7 +44,7 @@ test("matrix-owned changed browser specs are delegated by the central registry",
 
   assert.ok(groupsWorkflow.includes("inputs.group_a_changed_browser_specs"));
   const runnerStart = groupsWorkflow.indexOf("- name: Run every non-delegated changed browser spec");
-  const runnerEnd = groupsWorkflow.indexOf("\\n      - name:", runnerStart);
+  const runnerEnd = groupsWorkflow.indexOf(String.fromCharCode(10) + "      - name:", runnerStart);
   assert.ok(runnerStart >= 0 && runnerEnd > runnerStart, "filtered changed-spec runner must exist");
   const changedSpecRunner = groupsWorkflow.slice(runnerStart, runnerEnd);
   assert.ok(changedSpecRunner.includes('npx playwright test "${specs[@]}" --max-failures=1'));
