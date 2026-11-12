@@ -846,3 +846,19 @@ test("popup Chrome-Brave diagnostic harness does not trigger unrelated browser r
     assert.match(classification, /package_validation_required=true/);
   });
 });
+
+
+test("source-page registry changes select only the registry-driven site and click-guard regressions", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/source-page-collector-sites.js", "// source-page registry changed\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.match(output, /changed_specs=.*source-page-collector-behavior\\.spec\\.js/);
+    assert.match(output, /changed_specs=.*source-page-button-redirect-separation\\.spec\\.js/);
+    assert.match(output, /changed_specs=.*redirect-hostnames\\.spec\\.js/);
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=true/);
+    assert.match(output, /reference_required=true/);
+    assert.match(output, /study_sessions_required=false/);
+  });
+});
