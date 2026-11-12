@@ -174,6 +174,7 @@ try {
     'tests/browser/right-panel-default-expanded.spec.js',
     'tests/browser/known-host-extension.spec.js',
     'tests/browser/pr-422-feature-regressions.spec.js',
+    'tests/browser/tutorial-page-behavior.spec.js',
     'tests/browser/omnibox-boolean-operators.spec.js',
     'tests/browser/kings-bible-collector-behavior.spec.js',
     'tests/browser/webster-collector-behavior.spec.js',
