@@ -246,6 +246,10 @@ test('Study Sessions auto-stop setting persists when changed in the popup', asyn
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
   await waitForStudyPopupReady(page);
 
+  await page.locator('#studyTopic').fill('Popup auto-stop setting ' + Date.now());
+  await page.locator('#startTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Recording started');
+
   const autoStop = page.locator('#studyAutoStop');
   await expect(autoStop).toBeVisible();
   await autoStop.selectOption('0');
@@ -257,5 +261,7 @@ test('Study Sessions auto-stop setting persists when changed in the popup', asyn
   await expect.poll(async () => extensionWorker.evaluate(async () =>
     (await chrome.storage.local.get({ studyAutoStopMinutes: 15 })).studyAutoStopMinutes
   )).toBe(10);
+  await page.locator('#stopTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Last Recording Stopped');
   await page.close();
 });
