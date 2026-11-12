@@ -89,7 +89,7 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/source-page-collector.js"],
-    specs: ["tests/browser/source-page-collector-behavior.spec.js"]
+    specs: ["tests/browser/source-page-collector-behavior.spec.js", "tests/browser/source-page-button-redirect-separation.spec.js"]
   },
   {
     paths: ["extension/multiverse-copy.js"],
@@ -129,7 +129,7 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/blb-page-selection-button.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/site-feature-defaults.spec.js", "tests/browser/research-dom-smoke.spec.js", "tests/browser/known-host-extension.spec.js", "tests/browser/source-page-button-redirect-separation.spec.js"]
+    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/site-feature-defaults.spec.js", "tests/browser/research-dom-smoke.spec.js", "tests/browser/known-host-extension.spec.js"]
   },
   {
     paths: ["extension/multiverse-handoff.js"],
