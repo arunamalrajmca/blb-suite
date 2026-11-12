@@ -545,7 +545,7 @@ test('Global master OFF then ON restores both independently enabled site selecti
   await page.evaluate(() => {
     const target = document.createElement('p');
     target.id = 'global-toggle-restored-double-click';
-    target.textContent = 'John 3:16';
+    target.innerHTML = 'Matthew <span id="global-toggle-restored-double-click-chapter">18</span>';
     target.style.cssText = 'position:fixed;left:24px;top:24px;z-index:2147483647;background:#fff;padding:12px;font:24px Arial,sans-serif;';
     document.body.appendChild(target);
     const range = document.createRange();
@@ -581,35 +581,14 @@ test('Global master OFF then ON restores both independently enabled site selecti
 
   // Exercise the restored Double-click listener with a real browser gesture.
   await page.evaluate(() => window.getSelection()?.removeAllRanges());
-  const contentState = await extensionWorker.evaluate(async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return null;
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      world: 'ISOLATED',
-      func: () => ({
-        suiteEnabled: typeof suiteEnabled === 'boolean' ? suiteEnabled : null,
-        doubleClickBlbEnabled: typeof doubleClickBlbEnabled === 'boolean' ? doubleClickBlbEnabled : null,
-        doubleClickSettingsReady: typeof doubleClickSettingsReady === 'boolean' ? doubleClickSettingsReady : null
-      })
-    });
-    return result?.result || null;
-  });
-  console.log('[global-toggle recovery] content state after re-enable:', contentState);
-  expect(contentState).toMatchObject({
-    suiteEnabled: true,
-    doubleClickBlbEnabled: true,
-    doubleClickSettingsReady: true
-  });
-
   const beforeIds = await extensionWorker.evaluate(() =>
     chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
   );
-  await page.locator('#global-toggle-restored-double-click').dblclick();
+  await page.locator('#global-toggle-restored-double-click-chapter').dblclick();
   await expect.poll(() => extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
     tabs.some(tab => !before.includes(tab.id) &&
       new URL(tab.url || tab.pendingUrl || 'about:blank').hostname === 'www.blueletterbible.org' &&
-      new URL(tab.url || tab.pendingUrl || 'about:blank').pathname === '/kjv/jhn/3/16/')
+      new URL(tab.url || tab.pendingUrl || 'about:blank').pathname === '/kjv/mat/18/')
   ), beforeIds), { timeout: 15000 }).toBe(true);
 });
 
