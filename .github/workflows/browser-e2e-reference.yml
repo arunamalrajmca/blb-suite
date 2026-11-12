@@ -588,44 +588,14 @@ jobs:
           for index in "${!specs[@]}"; do
             spec="${specs[$index]}"
             [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
-            printf '[%s/%s] Inspecting Playwright discovery for %s\n' "$((index + 1))" "$total" "$spec"
-            printf 'Working directory: '; pwd
-            printf 'Checked-out commit: '; git rev-parse HEAD
-            printf 'Spec file: '; ls -l "$spec"
-            npx playwright --version
-            echo "Playwright resolved configuration:"
-            node -e "const c=require('./playwright.config.js'); console.log(JSON.stringify({testDir:c.testDir,testMatch:c.testMatch,testIgnore:c.testIgnore,projects:c.projects?.map(p=>({name:p.name,testDir:p.testDir,testMatch:p.testMatch,testIgnore:p.testIgnore}))},null,2))"
-            echo "Browser spec inventory:"
-            find tests/browser -maxdepth 1 -type f -name '*.spec.js' -printf '%f\\n' | sort | head -40
-            echo "Target spec first lines:"
-            sed -n '1,24p' "$spec"
-            echo "Direct module registration probe:"
-            node -e 'const Module=require("node:module"),path=require("node:path"),target=path.resolve("tests/browser/study-session-popup-ui-regression.spec.js"),original=Module._load,titles=[];Module._load=function(request,parent,isMain){if(request==="./fixtures"&&parent&&parent.filename===target)return {test:(title)=>titles.push(title),expect:{}};return original.apply(this,arguments)};require(target);console.log("Directly registered tests:",titles.length,titles)'
-            if [[ "$spec" == "tests/browser/study-session-popup-ui-regression.spec.js" ]]; then
-              # Enumerate the whole configured suite first. This reveals whether
-              # the failure is global discovery or the path/title filter.
-              discovery_log="$(mktemp)"
-              set +e
-              npx playwright test --config=playwright.config.js --list > "$discovery_log" 2>&1
-              discovery_status=$?
-              set -e
-              cat "$discovery_log"
-              echo "Control discovery: known Study reference-capture spec"
-              set +e
-              npx playwright test --config=playwright.config.js --list tests/browser/study-reference-capture.spec.js
-              control_discovery_status=$?
-              set -e
-              echo "Control discovery exit status: $control_discovery_status"
-              if ! grep -Fq 'study-session-popup-ui-regression.spec.js' "$discovery_log"; then
-                echo "::error::The configured Playwright suite did not enumerate the Study Sessions spec (exit $discovery_status)."
-                exit 1
-              fi
-              printf '[%s/%s] Running Study export assertions from %s\\n' "$((index + 1))" "$total" "$spec"
-              npx playwright test --config=playwright.config.js --grep '^Study export:'
-            else
-              printf '[%s/%s] Running %s\\n' "$((index + 1))" "$total" "$spec"
-              npx playwright test --config=playwright.config.js "$spec"
+            printf '[%s/%s] Checking and running %s\\n' "$((index + 1))" "$total" "$spec"
+            discovery_log="$(mktemp)"
+            npx playwright test --config=playwright.config.js --list "$spec" 2>&1 | tee "$discovery_log"
+            if ! grep -Eq 'Running [1-9][0-9]* tests?' "$discovery_log"; then
+              echo "::error::Playwright discovered no tests in $spec."
+              exit 1
             fi
+            npx playwright test --config=playwright.config.js "$spec"
           done
       - name: Upload focused behavior diagnostics
         if: ${{ !cancelled() }}
