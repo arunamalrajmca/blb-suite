@@ -599,6 +599,22 @@ jobs:
             find tests/browser -maxdepth 1 -type f -name '*.spec.js' -printf '%f\\n' | sort | head -40
             echo "Target spec first lines:"
             sed -n '1,24p' "$spec"
+            echo "Direct module registration probe:"
+            node <<'NODE'
+            const Module = require('node:module');
+            const path = require('node:path');
+            const target = path.resolve('tests/browser/study-session-popup-ui-regression.spec.js');
+            const originalLoad = Module._load;
+            const titles = [];
+            Module._load = function(request, parent, isMain) {
+              if (request === './fixtures' && parent && parent.filename === target) {
+                return { test: (title) => titles.push(title), expect: {} };
+              }
+              return originalLoad.apply(this, arguments);
+            };
+            require(target);
+            console.log('Directly registered tests:', titles.length, titles);
+            NODE
             if [[ "$spec" == "tests/browser/study-session-popup-ui-regression.spec.js" ]]; then
               # Enumerate the whole configured suite first. This reveals whether
               # the failure is global discovery or the path/title filter.
