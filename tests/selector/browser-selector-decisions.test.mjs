@@ -106,6 +106,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/right-panel-default-expanded.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/multiverse-contiguous-range-routing.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/multiverse-disjoint-chapter-post.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/multiverse-post-failure-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/performance.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/scripttagger-global-injection.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/site-feature-defaults.spec.js", "import { test } from '@playwright/test';\n");
