@@ -588,7 +588,7 @@ jobs:
           for index in "${!specs[@]}"; do
             spec="${specs[$index]}"
             [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
-            printf '[%s/%s] Checking and running %s\\n' "$((index + 1))" "$total" "$spec"
+            printf '[%s/%s] Checking and running %s\n' "$((index + 1))" "$total" "$spec"
             discovery_log="$(mktemp)"
             npx playwright test --config=playwright.config.js --list "$spec" 2>&1 | tee "$discovery_log"
             if ! grep -Eq 'Running [1-9][0-9]* tests?' "$discovery_log"; then
