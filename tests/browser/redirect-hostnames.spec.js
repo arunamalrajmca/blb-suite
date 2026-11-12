@@ -37,7 +37,7 @@ test('every production redirect hostname normalizes bare, www, and uppercase var
   const content = fs.readFileSync(path.join(root, 'extension/content.js'), 'utf8');
   const backgroundHosts = readHostnameSet(background, 'REDIRECT_HOSTNAMES');
   const contentHosts = readHostnameSet(content, 'REDIRECT_HOSTS');
-  const normalize = hostname => hostname.toLowerCase().replace(/^www\\./, '');
+  const normalize = hostname => hostname.toLowerCase().replace(/^www\./, '');
 
   // Use the production sets as the source of truth. Adding a supported
   // redirect hostname automatically adds its normalization cases here.
