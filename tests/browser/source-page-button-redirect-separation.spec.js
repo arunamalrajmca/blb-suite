@@ -1,4 +1,106 @@
-const { test, expect } = require('./fixtures');
+const { test: base, expect, chromium } = require('@playwright/test');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { execFileSync } = require('node:child_process');
+
+const sourceExtensionPath = path.resolve(__dirname, '../../extension');
+const testHosts = [
+  'https://example.com/*',
+  'https://www.facebook.com/*',
+  'https://rediscover.bible/*',
+  'https://www.rediscover.bible/*',
+  'https://sagacityweb.com/*',
+  'https://www.sagacityweb.com/*',
+  'https://thetreasuryofscriptureknowledge.com/*',
+  'https://www.thetreasuryofscriptureknowledge.com/*',
+  'https://www.sermonindex.net/*',
+  'https://x.com/*',
+  'https://www.gotquestions.org/*',
+  'https://www.dailyverses.net/*',
+  'https://www.bible.com/*',
+  'https://www.christianity.com/*',
+  'https://www.crosswalk.com/*',
+  'https://www.enduringword.com/*',
+  'https://www.churchofjesuschrist.org/*',
+  'https://mercyhouseministry.com/*',
+  'https://www.openbible.info/*',
+  'https://www.crossway.org/*',
+  'https://sarata.com/*',
+  'https://www.supplyofgrace.com/*',
+  'https://sermonindex.net/*',
+  'https://webstersdictionary1828.com/*'
+];
+
+const test = base.extend({
+  extensionPath: [async ({}, use) => {
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'blb-source-page-test-'));
+    const extensionPath = path.join(tempRoot, 'extension');
+    try {
+      fs.cpSync(sourceExtensionPath, extensionPath, {recursive:true});
+      execFileSync(process.execPath, [
+        path.resolve(__dirname, '../../scripts/generate-kjv-gzip-assets.cjs'),
+        extensionPath
+      ], {stdio:'pipe'});
+      const manifestPath = path.join(extensionPath, 'manifest.json');
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+      manifest.host_permissions = [...new Set([
+        ...(manifest.host_permissions || []),
+        ...testHosts,
+        'http://*/*',
+        'https://*/*'
+      ])];
+      // Keep source-page hosts out of static content_scripts.matches. This
+      // spec verifies production dynamic registrations, not fixture injection.
+      fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
+      await use(extensionPath);
+    } finally {
+      fs.rmSync(tempRoot, {recursive:true, force:true});
+    }
+  }, {scope:'worker'}],
+  context: async ({extensionPath}, use) => {
+    const context = await chromium.launchPersistentContext('', {
+      channel:'chromium',
+      headless:true,
+      args:[
+        '--headless=new',
+        `--disable-extensions-except=${extensionPath}`,
+        `--load-extension=${extensionPath}`,
+        '--no-first-run',
+        '--no-default-browser-check'
+      ]
+    });
+    try { await use(context); }
+    finally { await context.close(); }
+  },
+  extensionWorker: async ({context}, use) => {
+    let [worker] = context.serviceWorkers();
+    if (!worker) worker = await context.waitForEvent('serviceworker');
+    await use(worker);
+  },
+  extensionId: async ({extensionWorker}, use) => {
+    await use(extensionWorker.url().split('/')[2]);
+  },
+  extensionStorage: async ({extensionWorker}, use) => {
+    await extensionWorker.evaluate(async () => {
+      for (let attempt=0; attempt<100; attempt++) {
+        const {masterEnabled} = await chrome.storage.local.get({masterEnabled:null});
+        if (masterEnabled !== null) return;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      throw new Error('Extension storage defaults were not initialized');
+    });
+    await use({
+      set: values => extensionWorker.evaluate(data => chrome.storage.local.set(data), values),
+      clear: () => extensionWorker.evaluate(() => chrome.storage.local.clear())
+    });
+  },
+  page: async ({context}, use) => {
+    const page = await context.newPage();
+    try { await use(page); }
+    finally { await page.close().catch(() => {}); }
+  }
+});
 
 test('source-page collector button survives full refreshes around real popup toggles', async ({
   page, extensionStorage, extensionWorker, context, extensionId
