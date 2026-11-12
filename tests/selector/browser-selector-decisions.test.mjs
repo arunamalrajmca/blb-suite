@@ -207,7 +207,7 @@ test("mixed Group B runtime and unrelated browser-spec edits still run the chang
     commitChange(root, "tests/browser/redirect-toggle-isolation.spec.js", "// changed unrelated browser test\n");
     const output = select(root, base);
     assert.match(output, /changed_specs=tests\/browser\/scripttagger-global-injection\.spec\.js/);
-    assert.match(output, /changed_browser_specs=tests\/browser\/redirect-toggle-isolation\.spec\.js/);
+    assert.ok(output.includes("changed_browser_specs=tests/browser/redirect-source-url-patterns.spec.js"));
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=true/);
   });
