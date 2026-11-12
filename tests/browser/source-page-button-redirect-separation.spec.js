@@ -84,13 +84,10 @@ test('Open Bible References in BLB remains visible across redirect changes and f
   await button.evaluate(element => element.remove());
   await expect(button).toHaveCount(0);
   await extensionStorage.set({redirectEnabled:true});
-  const activation = await page.context().pages()[0].evaluate(async () => {
+  const result = await extensionWorker.evaluate(async () => {
     const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
-    return tabs[0]?.id ?? null;
-  }).catch(() => null);
-  const result = await extensionWorker.evaluate(async tabId => {
-    return tabId == null ? false : ensureContentScriptInTab(tabId);
-  }, activation);
+    return tabs[0]?.id == null ? false : ensureContentScriptInTab(tabs[0].id);
+  });
   expect(result).toBe(true);
   await expect(button).toBeVisible();
 
