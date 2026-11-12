@@ -608,6 +608,12 @@ jobs:
               discovery_status=$?
               set -e
               cat "$discovery_log"
+              echo "Control discovery: known Study reference-capture spec"
+              set +e
+              npx playwright test --config=playwright.config.js --list tests/browser/study-reference-capture.spec.js
+              control_discovery_status=$?
+              set -e
+              echo "Control discovery exit status: $control_discovery_status"
               if ! grep -Fq 'study-session-popup-ui-regression.spec.js' "$discovery_log"; then
                 echo "::error::The configured Playwright suite did not enumerate the Study Sessions spec (exit $discovery_status)."
                 exit 1
