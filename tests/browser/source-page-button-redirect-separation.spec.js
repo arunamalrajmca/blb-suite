@@ -55,7 +55,7 @@ test('Open Bible References in BLB remains visible across redirect changes and f
 }) => {
   await extensionStorage.set({
     masterEnabled:true,
-    redirectEnabled:true,
+    redirectEnabled:false,
     pageSelectionButtonSites:{},
     doubleClickBlbSites:{}
   });
@@ -149,7 +149,7 @@ test('source-page collector button survives a full refresh with redirects OFF an
 }) => {
   await extensionStorage.set({
     masterEnabled:true,
-    redirectEnabled:false,
+    redirectEnabled:true,
     pageSelectionButtonSites:{},
     doubleClickBlbSites:{}
   });
