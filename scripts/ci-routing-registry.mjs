@@ -24,6 +24,7 @@ export const featureSpecs = [
     paths: ["extension/background.js"],
     specs: [
       "tests/browser/popup-master-toggle-regression.spec.js",
+      "tests/browser/popup-site-toggle-independence.spec.js",
       "tests/browser/facebook-selection-parser.spec.js",
       "tests/browser/substack-selection-parser.spec.js",
       "tests/browser/omnibox-command-routing.spec.js",
@@ -77,7 +78,7 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/popup.html", "extension/popup.js"],
-    specs: ["tests/browser/site-feature-defaults.spec.js", "tests/browser/study-session-popup-ui-regression.spec.js", "tests/browser/study-backup-restore.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/redirect-toggle-isolation.spec.js", "tests/browser/popup-master-toggle-regression.spec.js", "tests/browser/pr-422-feature-regressions.spec.js"]
+    specs: ["tests/browser/site-feature-defaults.spec.js", "tests/browser/study-session-popup-ui-regression.spec.js", "tests/browser/study-backup-restore.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/redirect-toggle-isolation.spec.js", "tests/browser/popup-master-toggle-regression.spec.js", "tests/browser/pr-422-feature-regressions.spec.js", "tests/browser/popup-site-toggle-independence.spec.js"]
   },
   {
     paths: ["extension/kings-bible-collector.js"],
@@ -197,6 +198,7 @@ export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.
   "tests/browser/redirect-toggle-isolation.spec.js",
   "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
   "tests/browser/popup-master-toggle-regression.spec.js",
+  "tests/browser/popup-site-toggle-independence.spec.js",
   "tests/browser/facebook-selection-parser.spec.js",
   "tests/browser/substack-selection-parser.spec.js",
   "tests/browser/omnibox-command-routing.spec.js",
@@ -240,7 +242,8 @@ export const groupARequiredSpecs = new Set([
   "tests/browser/known-host-extension.spec.js",
   "tests/browser/pr-422-feature-regressions.spec.js",
   "tests/browser/tutorial-page-behavior.spec.js",
-  "tests/browser/site-feature-defaults.spec.js"
+  "tests/browser/site-feature-defaults.spec.js",
+  "tests/browser/popup-site-toggle-independence.spec.js"
 ]);
 
 export const groupBRequiredSpecs = new Set([
