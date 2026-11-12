@@ -100,3 +100,57 @@ test('Open Bible References in BLB remains visible across redirect changes and f
   await extensionStorage.set({masterEnabled:true});
   await expect(button).toBeVisible();
 });
+
+
+test('same-tab redirect re-enable refresh restores source-page buttons on every registered host', async ({
+  page, extensionWorker, extensionStorage
+}) => {
+  const cases = [
+    ['https://www.christianity.com/wiki/prayer/test-article.html', 'christianity'],
+    ['https://www.gotquestions.org/test-article.html', 'gotquestions'],
+    ['https://www.crosswalk.com/devotionals/test-article.html', 'crosswalk'],
+    ['https://www.enduringword.com/bible-commentary/genesis-1/', 'enduringword'],
+    ['https://www.rediscover.bible/articles/test-article', 'rediscover'],
+    ['https://sagacityweb.com/articles/test-article', 'sagacity'],
+    ['https://www.thetreasuryofscriptureknowledge.com/articles/test-article', 'treasury'],
+    ['https://www.dailyverses.net/dailyverse', 'dailyverses'],
+    ['https://www.churchofjesuschrist.org/study/scriptures/ot/gen/1?lang=eng', 'churchofjesuschrist'],
+    ['https://mercyhouseministry.com/articles/test-article', 'mercyhouse'],
+    ['https://www.openbible.info/topics/test-article', 'openbible'],
+    ['https://www.crossway.org/articles/test-article', 'crossway'],
+    ['https://sarata.com/bible/chapter/Genesis.1.html', 'sarata'],
+    ['https://sermonindex.net/articles/test-article', 'sermonindex']
+  ];
+
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+  await page.route('https://**/*', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>Source page refresh test</title></head><body><main>Source page</main></body></html>'
+  }));
+
+  for (const [url, siteId] of cases) {
+    await page.goto(url, {waitUntil:'domcontentloaded'});
+    const button = page.locator('#blb-suite-' + siteId + '-multiverse');
+    await expect(button, url).toBeVisible();
+
+    // The source-page collector must be recoverable on the same document when
+    // the user turns redirects back ON from this site's own popup.
+    await button.evaluate(element => element.remove());
+    await extensionStorage.set({redirectEnabled:true});
+    const activated = await extensionWorker.evaluate(async () => {
+      const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+      return tabs[0]?.id == null ? false : ensureContentScriptInTab(tabs[0].id);
+    });
+    expect(activated, url).toBe(true);
+    await expect(button, url + ' after redirect ON').toBeVisible();
+
+    await extensionStorage.set({redirectEnabled:false});
+    await expect(button, url + ' after redirect OFF').toBeVisible();
+  }
+});
