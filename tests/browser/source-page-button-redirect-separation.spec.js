@@ -145,7 +145,7 @@ test('same-tab redirect re-enable restores source-page buttons on every register
 });
 
 test('source-page collector button survives a full refresh with redirects OFF and ON', async ({
-  page, extensionStorage, extensionWorker
+  page, extensionStorage, extensionWorker, context, extensionId
 }) => {
   await extensionStorage.set({
     masterEnabled:true,
@@ -184,18 +184,30 @@ test('source-page collector button survives a full refresh with redirects OFF an
   expect(registration.runtime?.js).toContain('source-page-collector.js');
   expect(registration.runtime?.js).toContain('content.js');
 
+  // Exercise the actual popup handler, not a direct storage write. The test
+  // fixture pre-grants HTTP(S) access so the real permission request resolves
+  // without a native browser prompt.
+  const popup = await context.newPage();
+  await popup.goto('chrome-extension://' + extensionId + '/popup.html');
+  const redirectToggle = popup.locator('#redirectEnabled');
+  await expect(redirectToggle).toBeVisible();
+
   // Match the reported sequence: turn redirects OFF while the control remains
   // visible, then refresh the source page. The collector is independent of the
   // global redirect preference and must initialize in the new document.
-  await extensionStorage.set({redirectEnabled:false});
+  await redirectToggle.uncheck();
   await expect(button).toBeVisible();
+  await popup.close();
   await page.reload({waitUntil:'domcontentloaded'});
   await expect(button, 'button after refresh while redirects are OFF').toBeVisible();
 
-  // Re-enable redirects from the same source site. The collector button must
-  // remain present; redirect bundle activation must not replace its bundle.
-  await extensionStorage.set({redirectEnabled:true});
+  // Re-enable redirects from the popup while this source page is the active
+  // website tab. The collector button must remain present.
+  const reenablePopup = await context.newPage();
+  await reenablePopup.goto('chrome-extension://' + extensionId + '/popup.html');
+  await reenablePopup.locator('#redirectEnabled').check();
   await expect(button, 'button after redirects are re-enabled').toBeVisible();
+  await reenablePopup.close();
 
   // Also verify that a second full navigation still initializes the button
   // when redirects are ON.
