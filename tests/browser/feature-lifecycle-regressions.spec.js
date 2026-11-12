@@ -582,7 +582,7 @@ test('Global master OFF then ON restores both independently enabled site selecti
     tabs.some(tab => !before.includes(tab.id) &&
       /blueletterbible\\.org$/.test(new URL(tab.url || tab.pendingUrl || 'about:blank').hostname) &&
       new URL(tab.url || tab.pendingUrl || 'about:blank').pathname === '/kjv/jhn/3/16/')
-  )), beforeIds), { timeout: 15000 }).toBe(true);
+  ), beforeIds), { timeout: 15000 }).toBe(true);
 });
 
 
