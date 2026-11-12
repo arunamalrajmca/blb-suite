@@ -388,7 +388,8 @@ test("source-page collector selects direct reference collection behavior coverag
     commitChange(root, "extension/source-page-collector.js", "// changed collector\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=tests\/browser\/source-page-collector-behavior\.spec\.js/);
+    assert.match(output, /changed_specs=.*tests\/browser\/source-page-collector-behavior\.spec\.js/);
+    assert.match(output, /changed_specs=.*tests\/browser\/source-page-button-redirect-separation\.spec\.js/);
     assert.doesNotMatch(output, /changed_specs=.*tests\/browser\/extension\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
