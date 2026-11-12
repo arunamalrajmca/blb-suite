@@ -593,6 +593,12 @@ jobs:
             printf 'Checked-out commit: '; git rev-parse HEAD
             printf 'Spec file: '; ls -l "$spec"
             npx playwright --version
+            echo "Playwright resolved configuration:"
+            npx playwright test --config=playwright.config.js --show-config
+            echo "Browser spec inventory:"
+            find tests/browser -maxdepth 1 -type f -name '*.spec.js' -printf '%f\\n' | sort | head -40
+            echo "Target spec first lines:"
+            sed -n '1,24p' "$spec"
             discovery_log="$(mktemp)"
             npx playwright test --config=playwright.config.js --list "$spec" 2>&1 | tee "$discovery_log"
             if ! grep -Eq 'Total: [1-9][0-9]* tests? in [1-9][0-9]* files?' "$discovery_log"; then
