@@ -32,8 +32,10 @@ async function preparePopup(page, extensionId, extensionStorage, extensionWorker
     });
     render(await getState());
   }, permission);
-  await expect(page.locator('#pageButton')).toBeVisible();
-  await expect(page.locator('#doubleClick')).toBeVisible();
+  // The checkbox inputs are intentionally visually hidden; interact with
+  // their visible switch surfaces, matching the real popup UI.
+  await expect(page.locator('#pageSetting')).toBeVisible();
+  await expect(page.locator('#doubleSetting')).toBeVisible();
   await expect(page.locator('#pageButton')).toBeEnabled();
   await expect(page.locator('#doubleClick')).toBeEnabled();
 
@@ -63,7 +65,7 @@ for (const otherState of ['on', 'off', 'unset']) {
       doubleClick
     });
 
-    await page.locator('#pageButton').check();
+    await page.locator('#pageSetting .slider').click();
     await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
       pageSelectionButtonSites: { [SITE]: true },
       doubleClickBlbSites: doubleClick === undefined ? {} : { [SITE]: doubleClick }
@@ -82,7 +84,7 @@ for (const otherState of ['on', 'off', 'unset']) {
       doubleClick: false
     });
 
-    await page.locator('#doubleClick').check();
+    await page.locator('#doubleSetting .slider').click();
     await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
       doubleClickBlbSites: { [SITE]: true },
       pageSelectionButtonSites: pageButton === undefined ? {} : { [SITE]: pageButton }
@@ -144,8 +146,8 @@ for (const feature of ['pageButton', 'doubleClick']) {
       });
       render(await getState());
     });
-    await expect(page.locator(`#${feature}`)).toBeVisible();
-    await page.locator(`#${feature}`).check();
+    await expect(page.locator(feature === 'pageButton' ? '#pageSetting' : '#doubleSetting')).toBeVisible();
+    await page.locator(feature === 'pageButton' ? '#pageSetting .slider' : '#doubleSetting .slider').click();
     await expect.poll(() => page.evaluate(() => window.__sitePermissionRequested)).toBe(true);
 
     await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
