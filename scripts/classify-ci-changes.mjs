@@ -9,6 +9,7 @@
  */
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
+import { isNonRuntimePath, requiresPackageValidation } from "./ci-change-policy.mjs";
 
 const base = process.argv[2];
 if (!base || !/^[0-9a-f]{7,40}$/i.test(base)) {
@@ -42,49 +43,6 @@ function sameExceptVersion(path) {
     return JSON.stringify(a) === JSON.stringify(b);
   } catch { return false; }
 }
-function nonRuntimePath(path) {
-  return /^(?:docs\/|README(?:\.|$)|LICENSE(?:\.|$)|CHANGELOG(?:\.|$)|CONTRIBUTING(?:\.|$)|\.github\/(?:workflows\/|ISSUE_TEMPLATE\/|PULL_REQUEST_TEMPLATE\/)|tests\/selector\/|scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix|ci-routing-registry)\.mjs|scripts\/reference-e2e-matrix\.json$|scripts\/test-ci-routing-selector\.js)/i.test(path)
-    || /^scripts\/test-(?:cross-feature-contracts|extraction-safety-contracts|module-loading-contracts|multiverse-reference-helpers|omnibox-boolean-operators|omnibox-gibberish-filter|omnibox-search-normalization|reference-core-characterization|selection-marker-stripping|selection-text-normalization|single-word-selection-normalization|study-session-export|study-session-normalization)\.js$/i.test(path)
-    || path === "scripts/package-release.sh"
-    || path === "regression-suite/Verify-BLB-Zip.ps1"
-    || path === "scripts/validate-build.js"
-    || path === "scripts/run-validation-tests.js"
-    || path === "scripts/validation-test-manifest.json"
-    || path === "regression-suite/Run-BLB-Regression.ps1"
-    || path === "regression-suite/README.md"
-    || /^regression-suite\/tests\//.test(path)
-    || path === "scripts/test-popup-cross-browser-rendering.js"
-    || /^tests\/browser\/[^/]+\.spec\.js$/i.test(path)
-    // These store-only verifiers and their tests have dedicated workflows; they do not change extension runtime behavior.
-    || /^(?:scripts\/(?:verify-store-assets|verify-store-branding|verify-store-package|verify-store-submission-assets)\.py|tests\/test_verify_store_(?:package|submission_assets)\.py)$/i.test(path)
-    || /^(store-assets\/|assets\/store\/|extension\/(icons|store-assets)\/)/i.test(path);
-}
-
-// These paths implement or verify the policy/package checks themselves. Keep
-// package validation enabled for them even when they do not affect runtime.
-function packageValidationPath(path) {
-  return path.startsWith(".github/workflows/")
-    || path.startsWith("tests/selector/")
-    || path.startsWith("regression-suite/")
-    || path === "scripts/classify-ci-changes.mjs"
-    || path === "scripts/select-browser-specs.mjs"
-    || path === "scripts/select-reference-matrix.mjs"
-    || path === "scripts/ci-routing-registry.mjs"
-    || path === "scripts/run-validation-tests.js"
-    || path === "scripts/validation-test-manifest.json"
-    || path === "scripts/reference-e2e-matrix.json"
-    || path === "scripts/test-ci-routing-selector.js"
-    || /^scripts\/test-(?:cross-feature-contracts|extraction-safety-contracts|module-loading-contracts|multiverse-reference-helpers|omnibox-boolean-operators|omnibox-gibberish-filter|omnibox-search-normalization|reference-core-characterization|selection-marker-stripping|selection-text-normalization|single-word-selection-normalization|study-session-export|study-session-normalization)\.js$/i.test(path)
-    || path === "scripts/test-popup-cross-browser-rendering.js"
-    || path === "scripts/package-release.sh"
-    || path === "scripts/validate-build.js"
-    || path === "package.json"
-    || path === "package-lock.json"
-    || path === "extension/manifest.json"
-    || path === "playwright.config.js"
-    || path === "playwright.config.ts";
-}
-
 let runtimeChanged = false;
 let packageValidationRequired = false;
 const regressionSuiteChanged = changed.some(path =>
@@ -92,8 +50,8 @@ const regressionSuiteChanged = changed.some(path =>
 );
 const reasons = [];
 for (const path of changed) {
-  if (packageValidationPath(path)) packageValidationRequired = true;
-  if (nonRuntimePath(path)) continue;
+  if (requiresPackageValidation(path)) packageValidationRequired = true;
+  if (isNonRuntimePath(path)) continue;
   if ((path === "package.json" || path === "extension/manifest.json") && sameExceptVersion(path)) {
     // Version-only changes still need manifest/build/package validation.
     packageValidationRequired = true;
