@@ -63,7 +63,7 @@ const existingBrowserSpecs = new Set(run(["ls-tree", "-r", "--name-only", "HEAD"
 // An explicit workflow_dispatch or main push remains a full verification run.
 const changedBrowserSpecs = [];
 const specs = new Set();
-const ignoredNonRuntime = isNonRuntimePath;
+const ignoredNonRuntime = path => isNonRuntimePath(path) || path === "extension/THIRD-PARTY-NOTICES.txt";
 // Shared-core, dependency, non-version package/manifest, and unknown runtime
 // changes remain conservative and may require the full applicable browser suite.
 // Shared background changes remain broad by default. Narrow only the exact, isolated
