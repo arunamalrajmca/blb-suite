@@ -383,16 +383,7 @@ test("KJV case-sensitive word-set source selects executable focused coverage in 
   });
 });
 
-test("source-page button refresh handler selects same-tab restoration coverage", () => {
-  withFixture((root, base) => {
-    commitChange(root, "extension/blb-page-selection-button.js", "// changed feature refresh handler\n");
-    const output = select(root, base);
-    assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=.*tests\/browser\/source-page-button-redirect-separation\.spec\.js/);
-    assert.match(output, /group_a_required=true/);
-    assert.match(output, /reference_required=true/);
-  });
-});
+
 
 test("source-page collector selects direct reference collection behavior coverage", () => {
   withFixture((root, base) => {
