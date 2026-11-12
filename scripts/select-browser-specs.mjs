@@ -89,6 +89,12 @@ const ignoredNonRuntime = path =>
 const focusedOmniboxBackgroundChange = changed.length === 2
   && changed.includes("extension/background.js")
   && changed.includes("tests/browser/omnibox-command-routing.spec.js");
+const focusedSourcePageRuntimeChange = changed.filter(path =>
+  !ignoredNonRuntime(path) && !browserSpecPattern.test(path)
+).length === 1
+  && changed.includes("extension/background.js")
+  && changed.includes("tests/browser/source-page-button-redirect-separation.spec.js")
+  && changed.includes("tests/browser/scripttagger-global-injection.spec.js");
 const forceFull = alwaysFull || changed.some(path =>
   !ignoredNonRuntime(path) && (
     (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix|ci-routing-registry)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js" && path !== "scripts/test-popup-cross-browser-rendering.js" && path !== "scripts/reference-e2e-matrix.json")
@@ -98,7 +104,7 @@ const forceFull = alwaysFull || changed.some(path =>
     || path === "package-lock.json"
     || path === "playwright.config.js"
     || path === "playwright.config.ts"
-    || (path === "extension/background.js" && !focusedOmniboxBackgroundChange)
+    || (path === "extension/background.js" && !focusedOmniboxBackgroundChange && !focusedSourcePageRuntimeChange)
     || path === "extension/content.js"
     || path === "extension/reference-core.js"
     || path === "extension/regex-patterns.js"
@@ -122,13 +128,35 @@ const hasRuntimeChangeAlongsideBrowserSpec = changed.some(path =>
 );
 for (const path of changed) {
   if (browserSpecPattern.test(path)) {
+    // This regression is deliberately matrix-managed, but test-only edits to
+    // it must still execute its focused reference-matrix job. Otherwise a
+    // failing reproduction can be edited without ever rerunning that test.
+    if ((path === "tests/browser/source-page-button-redirect-separation.spec.js" ||
+         (focusedSourcePageRuntimeChange && path === "tests/browser/scripttagger-global-injection.spec.js")) &&
+        existingBrowserSpecs.has(path) && hasAddedSpecLines(path)) {
+      // Both regressions have dedicated workflow steps: the source-page
+      // refresh matrix and Group B ScriptTagger injection. Keep them out of
+      // changed_browser_specs so the dedicated jobs do not suppress themselves.
+      specs.add(path);
+      continue;
+    }
     // A test-only edit must not trigger E2E by itself, but when production code
     // changes in the same diff, run the changed spec alongside mapped coverage.
-    if (hasRuntimeChangeAlongsideBrowserSpec && existingBrowserSpecs.has(path) && hasAddedSpecLines(path)) changedBrowserSpecs.push(path);
+    if (hasRuntimeChangeAlongsideBrowserSpec && existingBrowserSpecs.has(path) &&
+        hasAddedSpecLines(path) &&
+        path !== "tests/browser/omnibox-command-routing.spec.js" &&
+        path !== "tests/browser/source-page-button-redirect-separation.spec.js") {
+      changedBrowserSpecs.push(path);
+    }
     continue;
   }
   if (ignoredNonRuntime(path)) continue;
   if ((path === "package.json" || path === "extension/manifest.json") && sameExceptVersion(path)) continue;
+  if (path === "extension/background.js" && focusedSourcePageRuntimeChange) {
+    specs.add("tests/browser/source-page-button-redirect-separation.spec.js");
+    specs.add("tests/browser/scripttagger-global-injection.spec.js");
+    continue;
+  }
   const mapped = featureSpecs.find(group => group.paths.includes(path));
   if (mapped) {
     for (const spec of mapped.specs) specs.add(spec);
@@ -182,7 +210,8 @@ const values = {
     "tests/browser/pr-422-feature-regressions.spec.js",
    
     "tests/browser/site-feature-defaults.spec.js",
-  ) || unmapped.length > 0 || changedBrowserSpecs.some(path => !studySessionSpecs.has(path))),
+  ) || unmapped.length > 0 || (!focusedSourcePageRuntimeChange &&
+    changedBrowserSpecs.some(path => !studySessionSpecs.has(path)))),
   study_sessions_required: String(full || [...selected, ...changedBrowserSpecs].some(path => studySessionSpecs.has(path))),
   group_b_required: String(has(
     "tests/browser/redirect-hostnames.spec.js",
@@ -208,7 +237,8 @@ const values = {
     "tests/browser/facebook-selection-parser.spec.js",
     "tests/browser/substack-selection-parser.spec.js",
     "tests/browser/omnibox-command-routing.spec.js",
-    "tests/browser/pdf-selection-regressions.spec.js"
+    "tests/browser/pdf-selection-regressions.spec.js",
+    "tests/browser/source-page-button-redirect-separation.spec.js"
   ))
 };
 const output = process.env.GITHUB_OUTPUT;

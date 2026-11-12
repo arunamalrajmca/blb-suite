@@ -286,11 +286,32 @@ try {
     'background changes must select focused omnibox routing coverage');
   assert(result.values.changed_specs.includes('tests/browser/service-worker-lifecycle.spec.js'),
     'background changes must select real service-worker lifecycle coverage');
-  assert(result.values.changed_browser_specs.includes('tests/browser/omnibox-command-routing.spec.js'),
-    'the explicitly paired omnibox regression must execute');
+  assert(result.values.changed_specs.includes('tests/browser/omnibox-command-routing.spec.js'),
+    'the matrix-managed omnibox regression must execute through its focused reference batch');
+  assertValue(result, 'reference_required', true, 'isolated background omnibox behavior');
   assert(!result.values.changed_specs.includes('tests/browser/e2e-core-user-actions.spec.js'),
     'isolated omnibox changes must not pull in unrelated core user-action regressions');
   console.log('PASS: isolated background omnibox changes honor focused browser coverage');
+
+  // Source-page runtime registration changes have a narrow paired regression set.
+  resetScenario(base);
+  write('extension/background.js', '// source-page runtime registration change\\n');
+  write('tests/browser/source-page-button-redirect-separation.spec.js', '// source-page refresh regression\\n');
+  write('tests/browser/scripttagger-global-injection.spec.js', '// stable collector redirect bundle regression\\n');
+  commit('change source-page runtime registration with focused regressions');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', false, 'source-page runtime registration');
+  assert(result.values.changed_specs.includes('tests/browser/source-page-button-redirect-separation.spec.js'));
+  assert(result.values.changed_specs.includes('tests/browser/scripttagger-global-injection.spec.js'));
+  assert(!result.values.changed_browser_specs.includes('tests/browser/source-page-button-redirect-separation.spec.js'),
+    'matrix-managed source-page refresh coverage must be delegated to the reference matrix');
+  assert(!result.values.changed_browser_specs.includes('tests/browser/scripttagger-global-injection.spec.js'),
+    'ScriptTagger regression must use its dedicated Group B step, not the generic changed-spec runner');
+  assertValue(result, 'group_a_required', false, 'source-page runtime registration');
+  assertValue(result, 'group_b_required', true, 'source-page runtime registration');
+  assertValue(result, 'reference_required', true, 'source-page runtime registration');
+  assert.equal(result.values.unmapped_specs, '', 'source-page focused coverage must remain fully mapped');
+  console.log('PASS: source-page runtime registration selects only its focused browser coverage');
 
   // A popup-only feature stays focused as well.
   resetScenario(base);
@@ -429,6 +450,21 @@ try {
   assert.equal(result.values.changed_specs, '', 'focused test-only changes should not select broad E2E specs');
   console.log('PASS: focused behavior spec edits avoid broad E2E groups');
 
+  // The source-page refresh regression is matrix-managed, but changes to this
+  // test alone must rerun its focused matrix job rather than silently skip it.
+  resetScenario(base);
+  write('tests/browser/source-page-button-redirect-separation.spec.js', '// source-page regression test-only edit\\n');
+  commit('change source-page refresh regression only');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', false, 'source-page focused spec only');
+  assert(result.values.changed_specs.includes('tests/browser/source-page-button-redirect-separation.spec.js'),
+    'source-page test-only edits must select the focused reference-matrix job');
+  assertValue(result, 'reference_required', true, 'source-page focused spec only');
+  assertValue(result, 'group_a_required', false, 'source-page focused spec only');
+  assertValue(result, 'group_b_required', false, 'source-page focused spec only');
+  assertValue(result, 'study_sessions_required', false, 'source-page focused spec only');
+  console.log('PASS: source-page regression edits rerun only their focused matrix coverage');
+
   // Mixed production + browser-spec edits must run the edited spec too.
   // Test-only edits stay skipped, but a runtime change must not silently skip
   // the regression test added alongside that runtime change.
@@ -450,8 +486,6 @@ try {
   commit('change background and focused registration regression');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', true, 'background plus focused registration spec');
-  assert(result.values.changed_browser_specs.includes('tests/browser/site-registration-opt-out-race.spec.js'),
-    'the focused registration race spec must run when changed alongside runtime');
   assert(!result.values.changed_browser_specs.includes('tests/browser/extension.spec.js'),
     'the broad extension spec must not be selected for this isolated regression');
   assert(result.values.changed_specs.includes('tests/browser/site-registration-opt-out-race.spec.js'),

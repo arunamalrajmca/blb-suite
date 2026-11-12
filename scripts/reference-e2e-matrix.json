@@ -84,5 +84,10 @@
     "group": "site-registration-opt-out-race",
     "file": "tests/browser/site-registration-opt-out-race.spec.js",
     "grep": ".*"
+  },
+  {
+    "group": "source-page-button-redirect-refresh",
+    "file": "tests/browser/source-page-button-redirect-separation.spec.js",
+    "grep": ".*"
   }
 ]
