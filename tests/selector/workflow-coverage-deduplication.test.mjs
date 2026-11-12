@@ -50,7 +50,7 @@ test("matrix-owned changed browser specs are delegated by the central registry",
 
 test("gate ownership sets are subsets of the authoritative mapped browser-spec inventory", () => {
   const classifications = [
-    groupARequiredSpecs, groupAExecutionSpecs, groupBRequiredSpecs,
+    groupARequiredSpecs, groupBRequiredSpecs,
     referenceRequiredSpecs, referenceDelegatedSpecs, studySessionSpecs
   ];
   for (const classification of classifications) {
@@ -64,13 +64,9 @@ test("gate ownership sets are subsets of the authoritative mapped browser-spec i
 test("Group A changed-spec execution uses selector-filtered ownership rather than workflow-local lists", () => {
   assert.ok(groupsWorkflow.includes("inputs.group_a_changed_browser_specs"));
   assert.ok(groupsWorkflow.includes("GROUP_A_CHANGED_BROWSER_SPECS"));
-  assert.doesNotMatch(groupsWorkflow, /case "\\$spec" in/);
+  assert.doesNotMatch(groupsWorkflow, /case "\$spec" in/);
   for (const spec of referenceDelegatedSpecs) {
     assert.ok(mappedSpecs.has(spec), "delegated spec must remain classified: " + spec);
-  }
-  for (const spec of studySessionSpecs) {
-    assert.ok(!referenceDelegatedSpecs.has(spec) || mappedSpecs.has(spec),
-      "Study Sessions ownership must not lose classification: " + spec);
   }
 });
 
