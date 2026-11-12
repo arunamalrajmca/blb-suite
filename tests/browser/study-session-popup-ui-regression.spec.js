@@ -170,7 +170,7 @@ test('Study Sessions History menu opens the saved Strong\'s entries and Criteria
   await page.locator('#historyStrongs').click();
   await expect(page.locator('#studyStatus')).toContainText("Opened 1 KJV Strong's entry");
   await expect.poll(async () => extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({})).some(tab => /\/lexicon\/h430\/kjv\/tr\/0-1\//i.test(tab.url || ''))
+    (await chrome.tabs.query({})).some(tab => /\/lexicon\/h430\/kjv\/wlc\/0-1\//i.test(tab.url || ''))
   )).toBe(true);
 
   await page.locator('#multiView').click();
