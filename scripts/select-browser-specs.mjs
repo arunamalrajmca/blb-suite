@@ -7,7 +7,7 @@
  * Known CI, deterministic-test, and package-only tooling changes skip browser E2E while retaining their own gates.
  */
 import { execFileSync } from "node:child_process";
-import { appendFileSync, readFileSync } from "node:fs";
+import { appendFileSync } from "node:fs";
 import { featureSpecs, mappedSpecs, separatelyManagedSpecs, studySessionSpecs } from "./ci-routing-registry.mjs";
 
 const base = process.argv[2];
@@ -44,10 +44,6 @@ if (!alwaysFull) {
 }
 
 const browserSpecPattern = new RegExp("^tests/browser/[^/]+\\.spec\\.js$");
-const matrixManagedChangedBrowserSpecs = new Set(JSON.parse(readFileSync(
-  new URL("./reference-e2e-matrix.json", import.meta.url),
-  "utf8"
-)).flatMap(entry => entry.files || (entry.file ? [entry.file] : [])));
 // A spec whose only diff is removed lines does not need to execute: runtime
 // changes are covered by mapped specs, while added/modified test content still runs.
 function hasAddedSpecLines(path) {
@@ -143,7 +139,9 @@ for (const path of changed) {
     // A test-only edit must not trigger E2E by itself, but when production code
     // changes in the same diff, run the changed spec alongside mapped coverage.
     if (hasRuntimeChangeAlongsideBrowserSpec && existingBrowserSpecs.has(path) &&
-        hasAddedSpecLines(path) && !matrixManagedChangedBrowserSpecs.has(path)) {
+        hasAddedSpecLines(path) &&
+        path !== "tests/browser/omnibox-command-routing.spec.js" &&
+        path !== "tests/browser/source-page-button-redirect-separation.spec.js") {
       changedBrowserSpecs.push(path);
     }
     continue;
