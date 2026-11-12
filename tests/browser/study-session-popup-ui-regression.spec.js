@@ -368,6 +368,7 @@ test('Study Sessions auto-stop validates intervals and independently controls it
 // Keep export regressions in the established Study Sessions spec so the existing
 // Study Sessions CI selector discovers and executes them with the rest of the suite.
 
+// Export success and rejection paths share this established Study Sessions spec.
 test('Study export: selected Study Topic exports a PDF containing its saved reference and note', async ({
   context, extensionId, extensionStorage, extensionWorker
 }) => {
