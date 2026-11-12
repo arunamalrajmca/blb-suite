@@ -16,6 +16,9 @@ test('Study Sessions auto-stop setting persists when changed in the popup', asyn
 }) => {
   await extensionStorage.clear();
   const topic = 'Popup auto-stop setting ' + Date.now();
+  const normalizedTopic = topic.split(' ').map(word =>
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  ).join(' ');
   await extensionWorker.evaluate(async value => {
     const now = new Date();
     const date = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
@@ -35,11 +38,11 @@ test('Study Sessions auto-stop setting persists when changed in the popup', asyn
         notes: []
       }]
     });
-  }, topic);
+  }, normalizedTopic);
   const page = await context.newPage();
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
   await waitForStudyPopupReady(page);
-  await expect(page.locator('#studyTopic')).toHaveValue(topic);
+  await expect(page.locator('#studyTopic')).toHaveValue(normalizedTopic);
 
   const autoStop = page.locator('#studyAutoStop');
   await expect(autoStop).toBeVisible();
