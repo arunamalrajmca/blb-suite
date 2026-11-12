@@ -91,7 +91,7 @@ jobs:
           for index in "${!specs[@]}"; do
             spec="${specs[$index]}"
             [[ -f "$spec" ]] || { echo "::error::Selected Playwright spec does not exist: $spec"; exit 1; }
-            printf '[%s/%s] Running %s\\n' "$((index + 1))" "$total" "$spec"
+            printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
             npx playwright test "$spec"
           done
 
