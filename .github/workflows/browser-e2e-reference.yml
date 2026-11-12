@@ -599,15 +599,20 @@ jobs:
             find tests/browser -maxdepth 1 -type f -name '*.spec.js' -printf '%f\\n' | sort | head -40
             echo "Target spec first lines:"
             sed -n '1,24p' "$spec"
-            discovery_log="$(mktemp)"
-            npx playwright test --config=playwright.config.js --list "$spec" 2>&1 | tee "$discovery_log"
-            if ! grep -Eq 'Total: [1-9][0-9]* tests? in [1-9][0-9]* files?' "$discovery_log"; then
-              echo "::error::Playwright discovered no tests for $spec. Full discovery diagnostics follow."
-              npx playwright test --config=playwright.config.js --list
-              exit 1
+            if [[ "$spec" == "tests/browser/study-session-popup-ui-regression.spec.js" ]]; then
+              # Select the two new export cases by their explicit title prefix.
+              discovery_log="$(mktemp)"
+              npx playwright test --config=playwright.config.js --grep '^Study export:' --list 2>&1 | tee "$discovery_log"
+              grep -Eq 'Total: [1-9][0-9]* tests? in [1-9][0-9]* files?' "$discovery_log" || {
+                echo "::error::Playwright discovered no Study export tests."
+                exit 1
+              }
+              printf '[%s/%s] Running Study export assertions from %s\\n' "$((index + 1))" "$total" "$spec"
+              npx playwright test --config=playwright.config.js --grep '^Study export:'
+            else
+              printf '[%s/%s] Running %s\\n' "$((index + 1))" "$total" "$spec"
+              npx playwright test --config=playwright.config.js "$spec"
             fi
-            printf '[%s/%s] Running %s\n' "$((index + 1))" "$total" "$spec"
-            npx playwright test --config=playwright.config.js "$spec"
           done
       - name: Upload focused behavior diagnostics
         if: ${{ !cancelled() }}
