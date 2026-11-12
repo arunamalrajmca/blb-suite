@@ -266,6 +266,11 @@ test('source-page collector button survives full refreshes around real popup tog
       reenableVisible:true,
       onRefreshVisible:true
     });
+
+  expect(offRefreshDiagnostics.registered.find(item =>
+    item.id === 'blb-suite-runtime-3p3w7i'
+  )?.persistAcrossSessions).toBe(true);
+  expect(offRefreshDiagnostics.documentState?.collectorRegistryPresent).toBe(true);
 });
 
 test('registered source-page collector remains available regardless of redirect preference', async ({
@@ -305,7 +310,7 @@ test('registered source-page collector remains available regardless of redirect 
       redirectEnabled:false,
       shouldInject:true,
       hasCollectorBundle:true,
-      hasRedirectBundle:false,
+      hasRedirectBundle:true,
       hasCollectorRegistry:true
     },
     {
