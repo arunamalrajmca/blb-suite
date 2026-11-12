@@ -540,6 +540,7 @@
       }
       if (message?.type === 'blbSuiteRefreshSiteFeatures') {
         Promise.all([
+          Promise.resolve().then(() => globalThis.BLBSourcePageCollectorModule?.refresh?.()).catch(()=>{}),
           refreshBlbPageSelectionButton().catch(()=>{}),
           refreshDoubleClickBlb().catch(()=>{})
         ]).then(() => sendResponse({ok:true})).catch(() => sendResponse({ok:false}));
