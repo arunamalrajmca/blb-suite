@@ -147,6 +147,40 @@ test('BLB permits Show on BLB only and never enables Double-click', async ({ con
   expect(result.doubleClick).toMatchObject({ok:false,blockedBlbDoubleClick:true});
 });
 
+test('a denied site-feature permission request cancels its pending opt-in', async ({ context, extensionId, extensionWorker }) => {
+  const messagePage = await createExtensionMessagePage(context, extensionId);
+  try {
+    await extensionWorker.evaluate(() => chrome.storage.local.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{}
+    }));
+    const prepared = await messagePage.evaluate(() => chrome.runtime.sendMessage({
+      type:'blbSuitePrepareSiteFeatureToggle',
+      origin:'https://example.com/*',
+      feature:'doubleClick',
+      otherFeatureEnabled:false
+    }));
+    expect(prepared).toMatchObject({ok:true,pending:true});
+    const cancelled = await messagePage.evaluate(() => chrome.runtime.sendMessage({
+      type:'blbSuiteCancelSiteFeatureToggle',
+      origin:'https://example.com/*',
+      feature:'doubleClick'
+    }));
+    expect(cancelled).toMatchObject({ok:true});
+    const stored = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{}
+    }));
+    expect(stored.doubleClickBlbSites['example.com']).toBeUndefined();
+    expect(stored.pageSelectionButtonSites['example.com']).toBeUndefined();
+    expect(stored.pendingSiteFeatureToggles).toEqual({});
+  } finally {
+    await messagePage.close();
+  }
+});
 test('BLB page selection reuses a Criteria search tab and prioritizes references', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(async () => {
     const query = `blb-suite-dedupe-${Date.now()}`;
