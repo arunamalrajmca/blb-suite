@@ -104,6 +104,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/kings-bible-collector-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/known-host-extension.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/pr-422-feature-regressions.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/tutorial-page-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/redirect-hostnames.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/blb-non-kjv-redirect.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/shared-regex-patterns.spec.js", "import { test } from '@playwright/test';\n");
@@ -985,4 +986,17 @@ test("reference-only feature ownership does not allocate Group A", () => {
     assert.match(output, /group_b_required=false/);
     assert.match(output, /reference_required=true/);
   }, selectorSource, referenceOnlyRegistry);
+});
+
+
+test("User Guide changes select dedicated theme and Run-command browser coverage", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/Tutorial.js", "// changed User Guide behavior\\n");
+    const output = select(root, base);
+    assert.match(output, /full_browser_suite=false/);
+    assert.ok(output.includes("tests/browser/tutorial-page-behavior.spec.js"));
+    assert.match(output, /group_a_required=true/);
+    assert.match(output, /group_b_required=false/);
+    assert.match(output, /reference_required=true/);
+  });
 });
