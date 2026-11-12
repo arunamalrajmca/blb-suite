@@ -73,7 +73,7 @@ test('source-page collector parses, canonicalizes, and deduplicates linked Bible
     }
   ]);
   await expect(page.locator('#blb-suite-gotquestions-multiverse-status'))
-    .toContainText('Opening 2 Bible references in BLB MultiVerse');
+    .toContainText('Opening 3 Bible references in BLB MultiVerse');
 });
 
 test('DailyVerses shows its BLB references button only on non-homepage pages', async ({
@@ -293,7 +293,7 @@ test('ChurchofJesusChrist shows its BLB references button on scripture-study pag
     }
   ]);
   await expect(page.locator('#blb-suite-churchofjesuschrist-multiverse-status'))
-    .toContainText('Opening 6 Bible references in BLB MultiVerse');
+    .toContainText('Opening 7 Bible references in BLB MultiVerse');
 });
 
 test('Mercy House shows its BLB references button on article pages and collects linked verse URLs', async ({
