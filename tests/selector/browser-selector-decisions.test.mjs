@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { selectReferenceMatrix } from "../../scripts/select-reference-matrix.mjs";
-import { referenceDelegatedSpecs } from "../../scripts/ci-routing-registry.mjs";
+import { featureSpecs, referenceDelegatedSpecs } from "../../scripts/ci-routing-registry.mjs";
 
 const selectorSource = readFileSync(
   new URL("../../scripts/select-browser-specs.mjs", import.meta.url),
@@ -945,6 +945,16 @@ test("every protected shared-core path retains full browser coverage and all app
   const corpusPaths = readdirSync(new URL("../../extension", import.meta.url))
     .filter(file => /^kjv-corpus-.*\.js$/.test(file))
     .map(file => "extension/" + file);
+  const featureOwnedPaths = new Set(featureSpecs.flatMap(group => group.paths));
+  const explicitlySharedCorePaths = new Set([...sharedCorePaths, ...corpusPaths]);
+  const extensionRuntimePaths = readdirSync(new URL("../../extension", import.meta.url))
+    .filter(file => /\\.(?:js|html|json)$/.test(file) && !file.startsWith("icons/") && !file.startsWith("store-assets/"))
+    .map(file => "extension/" + file);
+  const unclassifiedRuntimePaths = extensionRuntimePaths.filter(path =>
+    !featureOwnedPaths.has(path) && !explicitlySharedCorePaths.has(path)
+  );
+  assert.deepEqual(unclassifiedRuntimePaths, [],
+    "every extension runtime file must be feature-mapped or explicitly covered by shared-core fallback");
   for (const path of new Set([...sharedCorePaths, ...corpusPaths])) {
     withFixture((root, base) => {
       commitChange(root, path, "// shared-core change\\n");
