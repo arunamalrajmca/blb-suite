@@ -481,7 +481,7 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
     assert.match(groupA, new RegExp("tests/browser/" + spec + "\\.spec\\.js"));
   }
   assert.match(groupA, /GROUP_A_CHANGED_BROWSER_SPECS:/);
-  assert.match(groupA, /Delegating \$spec to the required browser-e2e gate/);
+  assert.doesNotMatch(groupA, /case "\$spec" in/);
   assert.match(groupA, /browser_e2e_required:/);
   assert.match(groupB, /inputs\.browser_e2e_required == 'true'/);
   assert.ok(referenceWorkflow.includes("browser_e2e_required: ${{ needs.change-detection.outputs.browser_e2e_required }}"));
