@@ -560,6 +560,26 @@ test("The King's Bible dictionary and concordance pages render the BLB reference
   }
 });
 
+
+test("Webster's 1828 dictionary entries render the exact BLB references button", async ({
+  page, extensionStorage
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+  await page.route('https://webstersdictionary1828.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>Webster entry fixture</title></head><body><main><h1>Faith</h1></main></body></html>'
+  }));
+  await page.goto('https://webstersdictionary1828.com/dictionary/Faith', {waitUntil:'domcontentloaded'});
+  await expect(page.locator('#blb-suite-webster-multiverse'))
+    .toHaveText('Open Bible References in BLB');
+});
+
 test('registered source-page collector remains available regardless of redirect preference', async ({
   extensionWorker
 }) => {
