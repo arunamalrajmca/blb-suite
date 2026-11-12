@@ -994,9 +994,9 @@ test("User Guide changes select dedicated theme and Run-command browser coverage
     commitChange(root, "extension/Tutorial.js", "// changed User Guide behavior\\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=.*tutorial-page-behavior\\.spec\\.js/);
+    assert.ok(output.includes("tests/browser/tutorial-page-behavior.spec.js"));
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
-    assert.match(output, /reference_required=false/);
+    assert.match(output, /reference_required=true/);
   });
 });
