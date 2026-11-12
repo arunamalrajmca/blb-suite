@@ -89,6 +89,10 @@ const ignoredNonRuntime = path =>
 const focusedOmniboxBackgroundChange = changed.length === 2
   && changed.includes("extension/background.js")
   && changed.includes("tests/browser/omnibox-command-routing.spec.js");
+const focusedSourcePageRuntimeChange = changed.filter(path => !ignoredNonRuntime(path)).length === 1
+  && changed.includes("extension/background.js")
+  && changed.includes("tests/browser/source-page-button-redirect-separation.spec.js")
+  && changed.includes("tests/browser/scripttagger-global-injection.spec.js");
 const forceFull = alwaysFull || changed.some(path =>
   !ignoredNonRuntime(path) && (
     (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix|ci-routing-registry)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js" && path !== "scripts/test-popup-cross-browser-rendering.js" && path !== "scripts/reference-e2e-matrix.json")
@@ -98,7 +102,7 @@ const forceFull = alwaysFull || changed.some(path =>
     || path === "package-lock.json"
     || path === "playwright.config.js"
     || path === "playwright.config.ts"
-    || (path === "extension/background.js" && !focusedOmniboxBackgroundChange)
+    || (path === "extension/background.js" && !focusedOmniboxBackgroundChange && !focusedSourcePageRuntimeChange)
     || path === "extension/content.js"
     || path === "extension/reference-core.js"
     || path === "extension/regex-patterns.js"
@@ -129,6 +133,11 @@ for (const path of changed) {
   }
   if (ignoredNonRuntime(path)) continue;
   if ((path === "package.json" || path === "extension/manifest.json") && sameExceptVersion(path)) continue;
+  if (path === "extension/background.js" && focusedSourcePageRuntimeChange) {
+    specs.add("tests/browser/source-page-button-redirect-separation.spec.js");
+    specs.add("tests/browser/scripttagger-global-injection.spec.js");
+    continue;
+  }
   const mapped = featureSpecs.find(group => group.paths.includes(path));
   if (mapped) {
     for (const spec of mapped.specs) specs.add(spec);
@@ -182,7 +191,8 @@ const values = {
     "tests/browser/pr-422-feature-regressions.spec.js",
    
     "tests/browser/site-feature-defaults.spec.js",
-  ) || unmapped.length > 0 || changedBrowserSpecs.some(path => !studySessionSpecs.has(path))),
+  ) || unmapped.length > 0 || (!focusedSourcePageRuntimeChange &&
+    changedBrowserSpecs.some(path => !studySessionSpecs.has(path))),
   study_sessions_required: String(full || [...selected, ...changedBrowserSpecs].some(path => studySessionSpecs.has(path))),
   group_b_required: String(has(
     "tests/browser/redirect-hostnames.spec.js",
@@ -208,7 +218,8 @@ const values = {
     "tests/browser/facebook-selection-parser.spec.js",
     "tests/browser/substack-selection-parser.spec.js",
     "tests/browser/omnibox-command-routing.spec.js",
-    "tests/browser/pdf-selection-regressions.spec.js"
+    "tests/browser/pdf-selection-regressions.spec.js",
+    "tests/browser/source-page-button-redirect-separation.spec.js"
   ))
 };
 const output = process.env.GITHUB_OUTPUT;

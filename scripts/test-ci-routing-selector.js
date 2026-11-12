@@ -292,6 +292,24 @@ try {
     'isolated omnibox changes must not pull in unrelated core user-action regressions');
   console.log('PASS: isolated background omnibox changes honor focused browser coverage');
 
+  // Source-page runtime registration changes have a narrow paired regression set.
+  resetScenario(base);
+  write('extension/background.js', '// source-page runtime registration change\\n');
+  write('tests/browser/source-page-button-redirect-separation.spec.js', '// source-page refresh regression\\n');
+  write('tests/browser/scripttagger-global-injection.spec.js', '// stable collector redirect bundle regression\\n');
+  commit('change source-page runtime registration with focused regressions');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', false, 'source-page runtime registration');
+  assert(result.values.changed_specs.includes('tests/browser/source-page-button-redirect-separation.spec.js'));
+  assert(result.values.changed_specs.includes('tests/browser/scripttagger-global-injection.spec.js'));
+  assert(result.values.changed_browser_specs.includes('tests/browser/source-page-button-redirect-separation.spec.js'));
+  assert(result.values.changed_browser_specs.includes('tests/browser/scripttagger-global-injection.spec.js'));
+  assertValue(result, 'group_a_required', false, 'source-page runtime registration');
+  assertValue(result, 'group_b_required', true, 'source-page runtime registration');
+  assertValue(result, 'reference_required', true, 'source-page runtime registration');
+  assert.equal(result.values.unmapped_specs, '', 'source-page focused coverage must remain fully mapped');
+  console.log('PASS: source-page runtime registration selects only its focused browser coverage');
+
   // A popup-only feature stays focused as well.
   resetScenario(base);
   write('extension/popup.js', '// changed popup feature\n');
