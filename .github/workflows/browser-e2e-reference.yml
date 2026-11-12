@@ -600,13 +600,18 @@ jobs:
             echo "Target spec first lines:"
             sed -n '1,24p' "$spec"
             if [[ "$spec" == "tests/browser/study-session-popup-ui-regression.spec.js" ]]; then
-              # Select the two new export cases by their explicit title prefix.
+              # Enumerate the whole configured suite first. This reveals whether
+              # the failure is global discovery or the path/title filter.
               discovery_log="$(mktemp)"
-              npx playwright test --config=playwright.config.js --grep '^Study export:' --list 2>&1 | tee "$discovery_log"
-              grep -Eq 'Total: [1-9][0-9]* tests? in [1-9][0-9]* files?' "$discovery_log" || {
-                echo "::error::Playwright discovered no Study export tests."
+              set +e
+              npx playwright test --config=playwright.config.js --list > "$discovery_log" 2>&1
+              discovery_status=$?
+              set -e
+              cat "$discovery_log"
+              if ! grep -Fq 'study-session-popup-ui-regression.spec.js' "$discovery_log"; then
+                echo "::error::The configured Playwright suite did not enumerate the Study Sessions spec (exit $discovery_status)."
                 exit 1
-              }
+              fi
               printf '[%s/%s] Running Study export assertions from %s\\n' "$((index + 1))" "$total" "$spec"
               npx playwright test --config=playwright.config.js --grep '^Study export:'
             else
