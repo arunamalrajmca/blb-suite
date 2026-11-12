@@ -305,3 +305,62 @@ test('Study Sessions popup exposes whole-study and date-filtered PDF downloads',
 });
 
 
+
+
+test('Study Sessions auto-stop validates intervals and independently controls its alarm lifecycle', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionWorker.evaluate(async () => {
+    await chrome.storage.local.set({
+      masterEnabled: true,
+      studyAutoStopMinutes: 15,
+      currentStudySessionId: 'auto-stop-lifecycle-regression',
+      studyLastActivityAt: Date.now(),
+      studySessions: [{
+        id: 'auto-stop-lifecycle-regression',
+        title: 'Auto Stop Lifecycle',
+        date: '2026-11-12',
+        dateLabel: '2026-11-12',
+        refs: [],
+        strongs: [],
+        searchTerms: [],
+        notes: []
+      }]
+    });
+  });
+
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(page);
+
+  const send = minutes => page.evaluate(value => new Promise(resolve => {
+    chrome.runtime.sendMessage({ type: 'blbSuiteSetStudyAutoStopMinutes', minutes: value }, resolve);
+  }), minutes);
+  const readAlarm = () => extensionWorker.evaluate(() => new Promise(resolve => {
+    chrome.alarms.get('blb-study-auto-stop', resolve);
+  }));
+
+  const invalid = await send(7);
+  expect(invalid).toMatchObject({ ok: false, error: 'Invalid auto-stop interval' });
+  expect((await extensionWorker.evaluate(() => chrome.storage.local.get('studyAutoStopMinutes'))).studyAutoStopMinutes).toBe(15);
+
+  await expect.poll(readAlarm).toMatchObject({ name: 'blb-study-auto-stop', periodInMinutes: 1 });
+  expect(await send(0)).toMatchObject({ ok: true, minutes: 0 });
+  await expect.poll(readAlarm).toBeUndefined();
+
+  expect(await send(10)).toMatchObject({ ok: true, minutes: 10 });
+  await expect.poll(readAlarm).toMatchObject({ name: 'blb-study-auto-stop', periodInMinutes: 1 });
+
+  await extensionWorker.evaluate(() => chrome.storage.local.set({ masterEnabled: false }));
+  await expect.poll(readAlarm).toBeUndefined();
+
+  await extensionWorker.evaluate(() => chrome.storage.local.set({ masterEnabled: true }));
+  await expect.poll(readAlarm).toMatchObject({ name: 'blb-study-auto-stop', periodInMinutes: 1 });
+
+  await extensionWorker.evaluate(async () => {
+    await chrome.storage.local.set({ currentStudySessionId: null });
+    await chrome.alarms.clear('blb-study-auto-stop');
+  });
+  await page.close();
+});
