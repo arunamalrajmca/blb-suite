@@ -138,6 +138,13 @@ test('current-tab activation falls back when persistent content-script registrat
 
 test('a stale redirect-rule update cannot finish after a newer OFF update', async ({ extensionWorker }) => {
   const result = await extensionWorker.evaluate(async () => {
+    // Drain startup and fixture-triggered reconciliations before instrumenting
+    // DNR. Otherwise unrelated queued installRules() calls can be mistaken
+    // for the two deliberately scheduled operations below.
+    await dynamicRulesUpdateQueue;
+    await new Promise(resolve => setTimeout(resolve, 75));
+    await dynamicRulesUpdateQueue;
+
     const originalGet = chrome.storage.local.get;
     const originalUpdate = chrome.declarativeNetRequest.updateDynamicRules;
     const updates = [];
@@ -175,6 +182,9 @@ test('a stale redirect-rule update cannot finish after a newer OFF update', asyn
     }
   });
 
-  expect(result.updates.length).toBe(2);
+  // The queue may also receive legitimate reconciliations from extension
+  // lifecycle events, so assert the final security-relevant state rather than
+  // coupling the test to an exact global update count.
+  expect(result.updates.length).toBeGreaterThanOrEqual(2);
   expect(result.finalAddRuleCount).toBe(0);
 });
