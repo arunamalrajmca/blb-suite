@@ -665,11 +665,28 @@ function toggleDownloadMenu() {
 }
 
 async function refreshStudyAutoStop() {
-  try { const response = await chrome.runtime.sendMessage({type:'blbSuiteGetStudyAutoStopMinutes'}); if (response?.ok && studyAutoStop) studyAutoStop.value = String(response.minutes); } catch (_) {}
+  try {
+    const response = await chrome.runtime.sendMessage({type:'blbSuiteGetStudyAutoStopMinutes'});
+    if (!response?.ok || !studyAutoStop) return false;
+    studyAutoStop.value = String(response.minutes);
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 async function saveStudyAutoStop() {
   const minutes = Number(studyAutoStop?.value || 15);
-  try { const response = await chrome.runtime.sendMessage({type:'blbSuiteSetStudyAutoStopMinutes', minutes}); if (!response?.ok) await refreshStudyAutoStop(); } catch (_) { await refreshStudyAutoStop(); }
+  try {
+    const response = await chrome.runtime.sendMessage({type:'blbSuiteSetStudyAutoStopMinutes', minutes});
+    if (response?.ok) {
+      setStatus('Inactivity stop setting saved.');
+      return;
+    }
+  } catch (_) {}
+  const restored = await refreshStudyAutoStop();
+  setStatus(restored
+    ? 'Unable to save the inactivity stop setting. The previous value was restored.'
+    : 'Unable to save the inactivity stop setting; the current value could not be confirmed.');
 }
 
 let studyRefreshSerial = 0;
@@ -1006,10 +1023,15 @@ async function persistTopicValue(topic) {
       type:'blbSuiteSaveStudyTopic',
       title:value
     });
-    if (!response?.ok) return;
+    if (!response?.ok) {
+      setStatus('Unable to save this Study topic. Please try again.');
+      return;
+    }
     await chrome.storage.local.set({[SELECTED_TOPIC_STORAGE_KEY]:value});
     await refreshStudyState();
-  } catch (_) {}
+  } catch (_) {
+    setStatus('Unable to save this Study topic. Please try again.');
+  }
 }
 
 topicInput.addEventListener('input', async () => {
