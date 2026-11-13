@@ -684,14 +684,19 @@ test('Study Sessions restores the saved auto-stop value when alarm refresh fails
   });
 
   const rollback = await extensionWorker.evaluate(async () => {
-    let failNextRefresh = true;
-    const result = await updateStudyAutoStopMinutes(0, async () => {
-      if (failNextRefresh) {
-        failNextRefresh = false;
-        throw new Error('simulated-alarm-refresh-failure');
+    let failNextCreate = true;
+    const realAlarms = chrome.alarms;
+    const alarms = {
+      clear:realAlarms.clear.bind(realAlarms),
+      create:(...args) => {
+        if (failNextCreate) {
+          failNextCreate = false;
+          return Promise.reject(new Error('simulated-alarm-create-failure'));
+        }
+        return realAlarms.create(...args);
       }
-      return refreshStudyAutoStopAlarm();
-    });
+    };
+    const result = await updateStudyAutoStopMinutes(0, () => refreshStudyAutoStopAlarm(alarms));
     return {
       result,
       settings:await chrome.storage.local.get({studyAutoStopMinutes:15}),
