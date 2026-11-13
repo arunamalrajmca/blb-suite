@@ -263,6 +263,57 @@ test('Study Sessions History menu opens the saved Strong\'s entries and Criteria
   await page.close();
 });
 
+test('Study Sessions History reports partial Strong's destination failures', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const topic = 'Popup partial Strong history ' + Date.now();
+  const normalizedTopic = topic.split(' ').map(word =>
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  ).join(' ');
+  await extensionWorker.evaluate(async value => {
+    const now = new Date();
+    const date = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+    await chrome.storage.local.set({
+      masterEnabled: true,
+      studyTopics: [value],
+      studySelectedTopic: value,
+      studySessions: [{
+        id: 'popup-partial-strong-history-regression',
+        title: value,
+        date,
+        dateLabel: date,
+        refs: [],
+        strongs: ['H430', 'H3068'],
+        searchTerms: [],
+        notes: []
+      }]
+    });
+  }, normalizedTopic);
+
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(page);
+  await expect.poll(() => page.locator('#studyTopic').inputValue()).toBe(normalizedTopic);
+  await page.evaluate(async () => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    const [activeTab] = await chrome.tabs.query({active:true, currentWindow:true});
+    chrome.runtime.sendMessage = (message, ...args) => {
+      if (message?.type === 'blbSuiteOpenStrongHistory') {
+        if (message.value === 'H430') return Promise.resolve({ok:false, reason:'tab-create-failed'});
+        return Promise.resolve({ok:true, tabId:activeTab.id});
+      }
+      return originalSendMessage(message, ...args);
+    };
+  });
+
+  await page.locator('#multiView').click();
+  await page.locator('#historyStrongs').click();
+  await expect(page.locator('#studyStatus')).toContainText("Opened 1 of 2 KJV Strong's entries");
+  await expect(page.locator('#studyStatus')).toContainText('Please retry the missing entries.');
+  await page.close();
+});
+
 test('Study Sessions popup exposes whole-study and date-filtered PDF downloads', async ({
   context, extensionId, extensionStorage, extensionWorker
 }) => {
