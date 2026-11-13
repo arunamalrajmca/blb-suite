@@ -9,11 +9,12 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
     doubleClickBlbSites:{},
     redirectEnabled:false
   }));
-  const createdTabIds = [];
-  const result = await extensionWorker.evaluate(async () => {
+
+  const result = await extensionWorker.evaluate(async settings => {
     const originalUpdate = chrome.contextMenus.update;
     const originalWebKnownPresent = selectionMenuKnownPresent;
     const originalPdfKnownPresent = pdfSelectionMenuKnownPresent;
+    const createdTabIds = [];
     const updates = [];
 
     try {
@@ -23,16 +24,16 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
         updates.push({id, ...details});
       };
 
-      const tabs = await chrome.tabs.query({active:true,currentWindow:true});
-      const initialTabId = tabs[0]?.id;
       const enabledTab = await chrome.tabs.create({
         url:'https://example.com/',
         active:false
       });
+      createdTabIds.push(enabledTab.id);
       const inactiveTab = await chrome.tabs.create({
         url:'about:blank',
         active:false
       });
+      createdTabIds.push(inactiveTab.id);
 
       await chrome.storage.local.set({
         masterEnabled:true,
@@ -48,16 +49,19 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
         throw new Error('Expected tab activation and update listeners to be registered');
       }
 
-      // A real tab activation must make the global web menu reflect the newly
-      // active site's explicit Show on BLB preference.
+      // A real tab activation must make both global menus reflect the active tab.
       await chrome.tabs.update(enabledTab.id, {active:true});
       for (let attempt=0; attempt<50 && !updates.some(item =>
         item.id === 'blb-suite-web-selection' && item.visible === true
       ); attempt++) {
         await new Promise(resolve => setTimeout(resolve, 50));
       }
-      const activationShowsWebMenu = updates.some(item =>
+      const activationUpdates = [...updates];
+      const activationShowsWebMenu = activationUpdates.some(item =>
         item.id === 'blb-suite-web-selection' && item.visible === true
+      );
+      const activationSynchronizesPdfMenu = activationUpdates.some(item =>
+        item.id === 'blb-suite-pdf-selection'
       );
 
       // A navigation in an inactive tab must not change global menu visibility.
@@ -71,7 +75,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       await new Promise(resolve => setTimeout(resolve, 100));
       const inactiveNavigationUpdates = [...updates];
 
-      // Navigating the active tab to a sensitive host must hide the menu.
+      // Navigating the active tab to a sensitive host must hide the web menu.
       updates.length = 0;
       await chrome.tabs.update(enabledTab.id, {url:'https://www.gov.scot/'});
       for (let attempt=0; attempt<100 && !updates.some(item =>
@@ -84,35 +88,27 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       );
 
       return {
-        initialTabId,
-        enabledTabId:enabledTab.id,
-        inactiveTabId:inactiveTab.id,
         activationShowsWebMenu,
+        activationSynchronizesPdfMenu,
         inactiveNavigationUpdates,
-        activeNavigationHidesWebMenu,
-        pdfMenuUpdatedOnActivation:updates.some(item => item.id === 'blb-suite-pdf-selection')
+        activeNavigationHidesWebMenu
       };
     } finally {
       chrome.contextMenus.update = originalUpdate;
       selectionMenuKnownPresent = originalWebKnownPresent;
       pdfSelectionMenuKnownPresent = originalPdfKnownPresent;
-    }
-  });
-
-  createdTabIds.push(result.enabledTabId, result.inactiveTabId);
-  try {
-    expect(result.activationShowsWebMenu).toBe(true);
-    expect(
-      result.inactiveNavigationUpdates.filter(item =>
-        item.id === 'blb-suite-web-selection' || item.id === 'blb-suite-pdf-selection'
-      )
-    ).toEqual([]);
-    expect(result.activeNavigationHidesWebMenu).toBe(true);
-  } finally {
-    await extensionWorker.evaluate(async ({ids, settings}) => {
-      await Promise.all(ids.map(id => chrome.tabs.remove(id).catch(() => {})));
+      await Promise.all(createdTabIds.map(id => chrome.tabs.remove(id).catch(() => {})));
       await chrome.storage.local.set(settings);
       await runtimeContentScriptReconciliationQueue;
-    }, {ids:createdTabIds,settings:previous});
-  }
+    }
+  }, previous);
+
+  expect(result.activationShowsWebMenu).toBe(true);
+  expect(result.activationSynchronizesPdfMenu).toBe(true);
+  expect(
+    result.inactiveNavigationUpdates.filter(item =>
+      item.id === 'blb-suite-web-selection' || item.id === 'blb-suite-pdf-selection'
+    )
+  ).toEqual([]);
+  expect(result.activeNavigationHidesWebMenu).toBe(true);
 });
