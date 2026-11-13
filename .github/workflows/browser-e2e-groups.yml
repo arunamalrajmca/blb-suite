@@ -231,9 +231,8 @@ jobs:
       - name: Run Study reference capture behavior regressions
         if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/study-reference-capture.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/study-reference-capture.spec.js') }}
         run: npx playwright test tests/browser/study-reference-capture.spec.js
-      - name: Run Study PDF export behavior regressions
-        if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/study-session-export.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/study-session-export.spec.js') }}
-        run: npx playwright test tests/browser/study-session-export.spec.js
+      # PDF export coverage is already included in study-session-popup-ui-regression.spec.js.
+      # Do not invoke the removed study-session-export.spec.js path.
 
   core-group-b:
     # Test execution does not need history; the selector job handles the base diff.
