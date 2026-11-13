@@ -596,15 +596,22 @@ test('a pending permission grant cannot commit either site feature after the glo
       });
     }, [pageOrigin,doubleOrigin]);
     expect(before.map(item => item.present)).toEqual([true,true]);
+    expect(before.map(item => item.feature)).toEqual(['pageButton','doubleClick']);
     expect(before.map(item => item.sensitive)).toEqual([false,false]);
 
-    const result = await extensionWorker.evaluate(origins =>
-      commitPendingSiteFeatureTogglesForGrantedOrigins(origins),
-      [pageOrigin,doubleOrigin]
+    // Exercise each granted origin independently so the regression identifies
+    // which pending feature intent, if any, survives the closed master gate.
+    const pageResult = await extensionWorker.evaluate(origin =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins([origin]), pageOrigin
+    );
+    const doubleResult = await extensionWorker.evaluate(origin =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins([origin]), doubleOrigin
     );
 
-    expect(result.committed).toEqual([]);
-    expect(result.expired).toEqual([pageOrigin,doubleOrigin]);
+    expect(pageResult.committed).toEqual([]);
+    expect(pageResult.expired).toEqual([pageOrigin]);
+    expect(doubleResult.committed).toEqual([]);
+    expect(doubleResult.expired).toEqual([doubleOrigin]);
 
     const stored = await extensionWorker.evaluate(() => chrome.storage.local.get({
       masterEnabled:true,
