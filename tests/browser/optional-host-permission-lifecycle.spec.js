@@ -547,3 +547,64 @@ test('sensitive-site restrictions and explicit site opt-outs survive permission 
     if (sensitivePage) await sensitivePage.close().catch(() => {});
   }
 });
+
+
+test('a pending permission grant cannot commit either site feature after the global master switch turns OFF', async ({
+  extensionWorker, extensionStorage
+}) => {
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{}
+  }));
+  const pageOrigin = 'https://pending-page.example/*';
+  const doubleOrigin = 'https://pending-double.example/*';
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{
+        'pending-page.example':false,
+        'pending-double.example':true
+      },
+      doubleClickBlbSites:{
+        'pending-page.example':true,
+        'pending-double.example':false
+      },
+      pendingSiteFeatureToggles:{
+        [pageOrigin]:{feature:'pageButton',requestedAt:Date.now()},
+        [doubleOrigin]:{feature:'doubleClick',requestedAt:Date.now()}
+      }
+    });
+
+    // Both prompts were initiated while enabled. The user switches the
+    // master gate OFF before Chrome reports either permission grant.
+    await extensionStorage.set({masterEnabled:false});
+    const result = await extensionWorker.evaluate(origins =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins(origins),
+      [pageOrigin,doubleOrigin]
+    );
+
+    expect(result.committed).toEqual([]);
+    expect(result.expired).toEqual([pageOrigin,doubleOrigin]);
+
+    const stored = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{}
+    }));
+    expect(stored.masterEnabled).toBe(false);
+    expect(stored.pageSelectionButtonSites).toMatchObject({
+      'pending-page.example':false,
+      'pending-double.example':true
+    });
+    expect(stored.doubleClickBlbSites).toMatchObject({
+      'pending-page.example':true,
+      'pending-double.example':false
+    });
+    expect(stored.pendingSiteFeatureToggles).toEqual({});
+  } finally {
+    await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
+  }
+});
