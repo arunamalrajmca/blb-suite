@@ -15,7 +15,9 @@ export function isNonRuntimePath(path) {
     || path === "regression-suite/README.md"
     || /^regression-suite\/tests\//.test(path)
     || path === "scripts/test-popup-cross-browser-rendering.js"
+    || path === "tests/browser/extension-test-helpers.js"
     || /^tests\/browser\/[^/]+\.spec\.js$/i.test(path)
+    || path === "tests/browser/extension-test-helpers.js"
     || /^(?:scripts\/(?:verify-store-assets|verify-store-branding|verify-store-package|verify-store-submission-assets)\.py|tests\/test_verify_store_(?:package|submission_assets)\.py)$/i.test(path)
     || /^(store-assets\/|assets\/store\/|extension\/(icons|store-assets)\/)/i.test(path);
 }
@@ -35,6 +37,7 @@ export function requiresPackageValidation(path) {
     || path === "scripts/test-ci-routing-selector.js"
     || /^scripts\/test-(?:cross-feature-contracts|extraction-safety-contracts|module-loading-contracts|multiverse-reference-helpers|omnibox-boolean-operators|omnibox-gibberish-filter|omnibox-search-normalization|reference-core-characterization|selection-marker-stripping|selection-text-normalization|single-word-selection-normalization|study-session-export|study-session-normalization)\.js$/i.test(path)
     || path === "scripts/test-popup-cross-browser-rendering.js"
+    || path === "tests/browser/extension-test-helpers.js"
     || path === "scripts/package-release.sh"
     || path === "scripts/validate-build.js"
     || path === "package.json"

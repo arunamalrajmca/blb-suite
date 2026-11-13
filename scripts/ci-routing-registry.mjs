@@ -46,7 +46,7 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/selection-text-helpers.js"],
-    specs: ["tests/browser/extension.spec.js", "tests/browser/e2e-core-user-actions.spec.js"]
+    specs: ["tests/browser/extension-reference-actions.spec.js", "tests/browser/extension-lifecycle.spec.js", "tests/browser/e2e-core-user-actions.spec.js"]
   },
   {
     paths: ["extension/study-session-export.js"],
@@ -164,7 +164,8 @@ export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.
   "tests/browser/study-backup-restore.spec.js",
   "tests/browser/study-reference-capture.spec.js",
   "tests/browser/study-session-popup-ui-regression.spec.js",
-  "tests/browser/extension.spec.js",
+  "tests/browser/extension-reference-actions.spec.js",
+  "tests/browser/extension-lifecycle.spec.js",
   "tests/browser/known-host-extension.spec.js",
   "tests/browser/pr-422-feature-regressions.spec.js",
   "tests/browser/tutorial-page-behavior.spec.js",
@@ -232,7 +233,8 @@ export const groupARequiredSpecs = new Set([
   "tests/browser/blb-draggable-button.spec.js",
   "tests/browser/audit-defect-regressions.spec.js",
   "tests/browser/case-sensitive-routing-behavior.spec.js",
-  "tests/browser/extension.spec.js",
+  "tests/browser/extension-reference-actions.spec.js",
+  "tests/browser/extension-lifecycle.spec.js",
   "tests/browser/selection-phase-performance.spec.js",
   "tests/browser/service-worker-lifecycle.spec.js",
   "tests/browser/kjv-corpus-lazy-loading.spec.js",
@@ -252,7 +254,7 @@ export const groupBRequiredSpecs = new Set([
 ]);
 
 export const referenceRequiredSpecs = new Set([
-  "tests/browser/extension.spec.js",
+  "tests/browser/extension-reference-actions.spec.js",
   "tests/browser/selection-phase-performance.spec.js",
   "tests/browser/service-worker-lifecycle.spec.js",
   "tests/browser/known-host-extension.spec.js",
