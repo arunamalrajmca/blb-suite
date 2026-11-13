@@ -30,12 +30,12 @@ export function selectReferenceMatrix(entries, { full = false, changedSpecs = ""
   const selected = new Set(String(changedSpecs).split(",").filter(Boolean));
   const changedBrowser = new Set(String(changedBrowserSpecs).split(",").filter(Boolean));
   return entries.filter(entry => {
-    const specs = entry.files || [entry.file || "tests/browser/extension.spec.js"];
+    const specs = entry.files || [entry.file || "tests/browser/extension-reference-actions.spec.js"];
     // A batched entry is selected when any included spec changes. Generic
     // extension.spec entries remain excluded when that spec itself was edited
     // alongside runtime, matching the prior step-level predicate.
     return specs.some(spec => selected.has(spec)) &&
-      (Boolean(entry.file || entry.files) || !changedBrowser.has("tests/browser/extension.spec.js"));
+      (Boolean(entry.file || entry.files) || !changedBrowser.has("tests/browser/extension-reference-actions.spec.js"));
   });
 }
 
