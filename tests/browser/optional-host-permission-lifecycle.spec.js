@@ -674,3 +674,155 @@ test('global redirect ON and OFF reconcile redirect-only runtime registrations o
     doubleClickBlbSites:{}
   });
 });
+
+
+test('permission revocation blocks all four actions on an already-open page and regrant restores them', async ({
+  page, extensionWorker, extensionStorage
+}) => {
+  const pattern = 'https://example.com/*';
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  }));
+  const beforeIds = () => extensionWorker.evaluate(() =>
+    chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+  );
+  const newBlbTabs = async ids => extensionWorker.evaluate(previousIds =>
+    chrome.tabs.query({}).then(tabs => tabs.filter(tab => !previousIds.includes(tab.id) &&
+      /^https:\/\/www\.blueletterbible\.org\/kjv\//i.test(tab.url || tab.pendingUrl || ''))
+      .map(tab => ({id:tab.id,url:tab.url || tab.pendingUrl || ''}))), ids);
+  const select = async (id, reference) => page.evaluate(({id,reference}) => {
+    const node = document.getElementById(id) || document.createElement('p');
+    node.id = id;
+    node.textContent = reference;
+    if (!node.isConnected) document.body.appendChild(node);
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+  }, {id,reference});
+  const waitForPath = async (ids, path) => {
+    await expect.poll(async () => (await newBlbTabs(ids)).some(tab => {
+      try { return new URL(tab.url).pathname === path; } catch (_) { return false; }
+    }), {timeout:12000}).toBe(true);
+    return (await newBlbTabs(ids)).find(tab => {
+      try { return new URL(tab.url).pathname === path; } catch (_) { return false; }
+    });
+  };
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      redirectEnabled:false,
+      pageSelectionButtonSites:{'example.com':true},
+      doubleClickBlbSites:{'example.com':true}
+    });
+    await page.route('https://example.com/**', route => route.fulfill({
+      status:200, contentType:'text/html',
+      body:'<!doctype html><html><head><title>Permission revocation fixture</title></head><body><main>Permission fixture</main></body></html>'
+    }));
+    await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+    await page.bringToFront();
+    const tabId = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({active:true,currentWindow:true}).then(([tab]) => tab.id)
+    );
+    expect(await extensionWorker.evaluate(id => ensureContentScriptInTab(id), tabId)).toBe(true);
+    await select('permission-revocation-initial','John 3:16');
+    const floating = page.locator('#blb-suite-page-selection-button');
+    await expect(floating).toBeVisible({timeout:10000});
+
+    // Keep the real page and its already-injected content script alive. Only
+    // the browser permission lookup changes, matching external revocation.
+    await extensionWorker.evaluate(async originPattern => {
+      globalThis.__permissionRevocationOriginalContains = chrome.permissions.contains;
+      chrome.permissions.contains = async details =>
+        details?.origins?.includes(originPattern)
+          ? false
+          : globalThis.__permissionRevocationOriginalContains(details);
+      await reconcileRuntimeContentScriptRegistrations();
+    }, pattern);
+    await expect.poll(() => extensionWorker.evaluate(id =>
+      chrome.scripting.getRegisteredContentScripts({ids:[runtimeContentScriptIdForPattern('https://example.com/*')]}).then(items => items.length),
+      tabId
+    )).toBe(0);
+
+    let ids = await beforeIds();
+    await select('permission-revocation-floating-blocked','John 3:16');
+    await floating.click();
+    await page.locator('#permission-revocation-floating-blocked').dblclick();
+    const activeTab = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({active:true,currentWindow:true}).then(([tab]) => tab)
+    );
+    const rightClickAllowed = await extensionWorker.evaluate(tab =>
+      shouldShowBlbContextMenu(tab,'John 3:16'), activeTab);
+    expect(rightClickAllowed).toBe(false);
+    await extensionWorker.evaluate(tab => handleBlbSelectionContextMenuClick({
+      menuItemId:'blb-suite-web-selection',selectionText:'John 3:16'
+    },tab), activeTab);
+    const altB = await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+    expect(altB).toMatchObject({ok:false,reason:'host-permission-revoked'});
+    await expect.poll(() => newBlbTabs(ids)).toHaveLength(0);
+
+    // Restore the exact API and reactivate the same already-open document.
+    await extensionWorker.evaluate(async originPattern => {
+      chrome.permissions.contains = globalThis.__permissionRevocationOriginalContains;
+      delete globalThis.__permissionRevocationOriginalContains;
+      await injectEnabledTabsForGrantedOrigins([originPattern]);
+    }, pattern);
+    await expect.poll(() => extensionWorker.evaluate(id =>
+      chrome.scripting.getRegisteredContentScripts({ids:[runtimeContentScriptIdForPattern('https://example.com/*')]}).then(items => items.length),
+      tabId
+    )).toBe(1);
+    await expect(floating).toBeVisible();
+
+    // Floating Button
+    ids = await beforeIds();
+    await select('permission-revocation-floating-restored','John 3:17');
+    await floating.click();
+    let opened = await waitForPath(ids,'/kjv/jhn/3/17/');
+    await extensionWorker.evaluate(id => chrome.tabs.remove(id),opened.id);
+
+    // Double-click
+    await page.bringToFront();
+    ids = await beforeIds();
+    await select('permission-revocation-double-restored','John 3:18');
+    await page.locator('#permission-revocation-double-restored').dblclick();
+    opened = await waitForPath(ids,'/kjv/jhn/3/18/');
+    await extensionWorker.evaluate(id => chrome.tabs.remove(id),opened.id);
+
+    // Right Click
+    await page.bringToFront();
+    ids = await beforeIds();
+    await select('permission-revocation-right-restored','John 3:19');
+    const currentTab = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({active:true,currentWindow:true}).then(([tab]) => tab)
+    );
+    expect(await extensionWorker.evaluate(tab => shouldShowBlbContextMenu(tab,'John 3:19'),currentTab)).toBe(true);
+    await extensionWorker.evaluate(tab => handleBlbSelectionContextMenuClick({
+      menuItemId:'blb-suite-web-selection',selectionText:'John 3:19'
+    },tab),currentTab);
+    opened = await waitForPath(ids,'/kjv/jhn/3/19/');
+    await extensionWorker.evaluate(id => chrome.tabs.remove(id),opened.id);
+
+    // Alt+B
+    await page.bringToFront();
+    ids = await beforeIds();
+    await select('permission-revocation-altb-restored','John 3:20');
+    expect(await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand())).toMatchObject({ok:true});
+    opened = await waitForPath(ids,'/kjv/jhn/3/20/');
+    await extensionWorker.evaluate(id => chrome.tabs.remove(id),opened.id);
+  } finally {
+    await extensionWorker.evaluate(async ({originPattern,settings}) => {
+      if (globalThis.__permissionRevocationOriginalContains) {
+        chrome.permissions.contains = globalThis.__permissionRevocationOriginalContains;
+        delete globalThis.__permissionRevocationOriginalContains;
+      }
+      const id = runtimeContentScriptIdForPattern(originPattern);
+      await chrome.scripting.unregisterContentScripts({ids:[id,id+'-main-world']}).catch(() => {});
+      await chrome.storage.local.set(settings);
+    }, {originPattern:pattern,settings:previous});
+  }
+});
