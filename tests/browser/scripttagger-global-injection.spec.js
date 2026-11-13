@@ -385,8 +385,13 @@ test('ScriptTagger destination creation releases its pending reservation after f
   const worker = createScriptTaggerDestinationManager({ tabs, failCreateCount: 1 });
   const url = 'https://www.blueletterbible.org/kjv/1co/13/4/';
 
-  await expect(worker.openScriptTaggerDestination(url))
-    .rejects.toThrow('transient tabs.create failure');
+  let creationError = null;
+  try {
+    await worker.openScriptTaggerDestination(url);
+  } catch (error) {
+    creationError = error;
+  }
+  expect(String(creationError)).toContain('transient tabs.create failure');
   expect(vm.runInNewContext('pendingScriptTaggerDestinations.size', worker)).toBe(0);
   expect(tabs).toHaveLength(0);
 
