@@ -222,7 +222,7 @@ for (const feature of ['pageButton', 'doubleClick']) {
           window.__resolveSitePermissionRequest = () => resolve(true);
         })
       });
-      render({master:true,siteKey:'example.com',isSensitiveSite:false,isBlbSite:false,isPdfContext:false});
+      render(await getState());
     });
 
     const featureSelector = feature === 'pageButton' ? '#pageSetting .slider' : '#doubleSetting .slider';
