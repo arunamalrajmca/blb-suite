@@ -176,13 +176,6 @@ test('a real MV3 service-worker termination is recovered by an actual Double-cli
     document.body.appendChild(target);
   });
 
-  const tabId=await page.evaluate(async () => {
-    // The page itself cannot access chrome.tabs; the extension worker below
-    // supplies the active tab ID through its privileged API.
-    return null;
-  });
-  expect(tabId).toBeNull();
-
   const browser=context.browser();
   expect(browser, 'persistent context must expose its Chromium browser').not.toBeNull();
   const cdp=await browser.newBrowserCDPSession();
