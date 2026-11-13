@@ -137,6 +137,7 @@ jobs:
         run: |
           set -euo pipefail
           specs=(
+            tests/browser/popup-site-toggle-independence.spec.js
             tests/browser/popup-master-toggle-regression.spec.js
             tests/browser/redirect-toggle-isolation.spec.js
             tests/browser/optional-host-permission-lifecycle.spec.js
