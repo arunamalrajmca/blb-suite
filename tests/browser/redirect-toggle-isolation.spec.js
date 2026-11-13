@@ -184,3 +184,61 @@ test('latest global redirect toggle choice wins when permission requests resolve
   );
   expect(stored.redirectEnabled).toBe(true);
 });
+
+
+test('failed redirect-rule refresh rolls a requested global redirect ON choice back to OFF', async ({
+  page, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({masterEnabled:true, redirectEnabled:false});
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.locator('body').evaluate(body =>
+    !body.classList.contains('popup-loading')
+  )).toBe(true);
+
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.permissions, 'request', {
+      configurable:true,
+      value:async () => true
+    });
+    Object.defineProperty(chrome.permissions, 'contains', {
+      configurable:true,
+      value:async ({origins = []}) =>
+        origins.includes('http://*/*') && origins.includes('https://*/*')
+    });
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => message?.type === 'blbSuiteRefreshRedirectRules'
+        ? Promise.resolve({ok:false, error:'dnr-update-failed'})
+        : originalSendMessage(message)
+    });
+  });
+
+  await page.evaluate(() => setRedirect(true));
+  await expect.poll(async () => extensionWorker.evaluate(() =>
+    chrome.storage.local.get({redirectEnabled:false})
+  )).toMatchObject({redirectEnabled:false});
+  await expect(page.locator('#redirectEnabled')).not.toBeChecked();
+  await expect(page.locator('#studyStatus')).toContainText(
+    'Unable to enable global redirects. The setting remains OFF'
+  );
+});
+
+
+test('background redirect-rule refresh reports a Dynamic Rules API failure', async ({
+  extensionWorker
+}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const original = chrome.declarativeNetRequest.updateDynamicRules;
+    chrome.declarativeNetRequest.updateDynamicRules = async () => {
+      throw new Error('simulated-dnr-update-failure');
+    };
+    try {
+      return await installRules();
+    } finally {
+      chrome.declarativeNetRequest.updateDynamicRules = original;
+    }
+  });
+  expect(result.ok).toBe(false);
+  expect(result.error).toContain('simulated-dnr-update-failure');
+});

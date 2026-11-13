@@ -3623,8 +3623,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'blbSuiteRefreshRedirectRules') {
     try {
-      await installRules();
-      sendResponse({ok:true});
+      sendResponse(await installRules());
     } catch (error) {
       sendResponse({ok:false, error:String(error)});
     }
@@ -3754,9 +3753,11 @@ function installRules() {
         removeRuleIds: dynamicRules.map(x=>x.id),
         addRules: data.masterEnabled !== false && data.redirectEnabled === true ? dynamicRules : []
       });
+      return {ok:true};
     })
     .catch(error => {
       console.error("KJV Scripture Tools DNR setup:", error);
+      return {ok:false, error:String(error)};
     });
   dynamicRulesUpdateQueue = operation.then(() => undefined, () => undefined);
   return operation;

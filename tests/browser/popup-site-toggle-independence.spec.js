@@ -30,6 +30,17 @@ async function preparePopup(page, extensionId, extensionStorage, extensionWorker
       configurable: true,
       value: async () => permissionResult
     });
+    // These tests isolate preference independence. The active-tab ID above is
+    // deliberately synthetic, so acknowledge the activation request here;
+    // real tab injection success/failure is covered by lifecycle integration
+    // tests rather than by this popup preference fixture.
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable: true,
+      value: message => message?.type === 'blbSuiteEnsureContentScript'
+        ? Promise.resolve({ok:true})
+        : originalSendMessage(message)
+    });
     render(await getState());
   }, permission);
   // The checkbox inputs are intentionally visually hidden; interact with
@@ -479,6 +490,14 @@ for (const resolutionOrder of [['pageButton','doubleClick'],['doubleClick','page
       const originalQuery = chrome.tabs.query.bind(chrome.tabs);
       Object.defineProperty(chrome.tabs,'query',{configurable:true,value:async info =>
         info?.active ? [{id:987654,url:'https://example.com/',title:'Example'}] : originalQuery(info)});
+      // This test exercises independent permission-intent commits, not
+      // current-document injection. The synthetic tab ID must not make the
+      // popup's post-grant activation request fail and roll back the choice.
+      const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+      Object.defineProperty(chrome.runtime,'sendMessage',{configurable:true,value:message =>
+        message?.type==='blbSuiteEnsureContentScript'
+          ? Promise.resolve({ok:true})
+          : originalSendMessage(message)});
       window.__permissionResolvers = {};
       let requestIndex = 0;
       const requestFeatures = ['pageButton','doubleClick'];
@@ -513,5 +532,38 @@ for (const resolutionOrder of [['pageButton','doubleClick'],['doubleClick','page
     expect(stored.pageSelectionButtonSites[SITE]).toBe(true);
     expect(stored.doubleClickBlbSites[SITE]).toBe(true);
     expect(stored.pendingSiteFeatureToggles).toEqual({});
+  });
+}
+
+
+for (const feature of ['pageButton', 'doubleClick']) {
+  test(`failed popup ${feature} content-script activation rolls its saved preference back to OFF`, async ({
+    page, extensionId, extensionStorage, extensionWorker
+  }) => {
+    await preparePopup(page, extensionId, extensionStorage, extensionWorker, {
+      pageButton: false,
+      doubleClick: false
+    });
+    await page.evaluate(() => {
+      const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+      Object.defineProperty(chrome.runtime, 'sendMessage', {
+        configurable: true,
+        value: message => message?.type === 'blbSuiteEnsureContentScript'
+          ? Promise.resolve({ok:false, reason:'injection-failed'})
+          : originalSendMessage(message)
+      });
+    });
+
+    await page.locator(feature === 'pageButton' ? '#pageSetting .slider' : '#doubleSetting .slider').click();
+    await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
+      pageSelectionButtonSites: { [SITE]: false },
+      doubleClickBlbSites: { [SITE]: false }
+    });
+    await expect(page.locator(feature === 'pageButton' ? '#pageButton' : '#doubleClick')).not.toBeChecked();
+    await expect(page.locator('#studyStatus')).toContainText(
+      feature === 'pageButton'
+        ? 'Unable to enable Show on BLB on this page'
+        : 'Unable to enable Double-click on this page'
+    );
   });
 }

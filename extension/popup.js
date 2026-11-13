@@ -192,6 +192,14 @@ async function pinSiteFeatureChoice(feature) {
   }
 }
 
+async function ensureSiteFeatureContentScript() {
+  const tabs = await chrome.tabs.query({active:true,currentWindow:true});
+  const tabId = tabs[0]?.id;
+  if (!Number.isInteger(tabId)) return false;
+  const response = await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
+  return response?.ok === true;
+}
+
 async function setPageButton(on) {
   const state = await getState();
   if (!state.siteKey || !state.master || state.isSensitiveSite) return;
@@ -200,7 +208,15 @@ async function setPageButton(on) {
   sites[state.siteKey] = !!on;
   await chrome.storage.local.set({pageSelectionButtonSites:sites});
   if (on) {
-    try { const tabs = await chrome.tabs.query({active:true,currentWindow:true}); const tabId = tabs[0]?.id; if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId}); } catch (_) {}
+    let activated = false;
+    try { activated = await ensureSiteFeatureContentScript(); } catch (_) {}
+    if (!activated) {
+      sites[state.siteKey] = false;
+      await chrome.storage.local.set({pageSelectionButtonSites:sites});
+      setStatus('Unable to enable Show on BLB on this page. The setting remains OFF; please try again.');
+      render(await getState());
+      return;
+    }
   }
   render(await getState());
 }
@@ -213,7 +229,15 @@ async function setDoubleClick(on) {
   sites[state.siteKey] = !!on;
   await chrome.storage.local.set({doubleClickBlbSites:sites});
   if (on) {
-    try { const tabs = await chrome.tabs.query({active:true,currentWindow:true}); const tabId = tabs[0]?.id; if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId}); } catch (_) {}
+    let activated = false;
+    try { activated = await ensureSiteFeatureContentScript(); } catch (_) {}
+    if (!activated) {
+      sites[state.siteKey] = false;
+      await chrome.storage.local.set({doubleClickBlbSites:sites});
+      setStatus('Unable to enable Double-click on this page. The setting remains OFF; please try again.');
+      render(await getState());
+      return;
+    }
   }
   render(await getState());
 }
@@ -253,8 +277,26 @@ async function setRedirect(on) {
   }
 
   if (generation !== redirectToggleGeneration) return;
-  try { await chrome.runtime.sendMessage({type:'blbSuiteRefreshRedirectRules'}); } catch (_) {}
+  let refreshResponse = null;
+  try {
+    refreshResponse = await chrome.runtime.sendMessage({type:'blbSuiteRefreshRedirectRules'});
+  } catch (_) {}
   if (generation !== redirectToggleGeneration) return;
+  if (!refreshResponse?.ok) {
+    if (on) {
+      await chrome.storage.local.set({redirectEnabled:false});
+      if (generation !== redirectToggleGeneration) return;
+      // Best-effort reconciliation after rolling back the persisted ON choice.
+      try { await chrome.runtime.sendMessage({type:'blbSuiteRefreshRedirectRules'}); } catch (_) {}
+      if (generation !== redirectToggleGeneration) return;
+      render(await getState());
+      setStatus('Unable to enable global redirects. The setting remains OFF; please try again.');
+    } else {
+      render(await getState());
+      setStatus('Global redirects are OFF, but the redirect rules could not be refreshed.');
+    }
+    return;
+  }
   if (on) {
     try {
       const tabs = await chrome.tabs.query({active:true,currentWindow:true});
@@ -623,11 +665,28 @@ function toggleDownloadMenu() {
 }
 
 async function refreshStudyAutoStop() {
-  try { const response = await chrome.runtime.sendMessage({type:'blbSuiteGetStudyAutoStopMinutes'}); if (response?.ok && studyAutoStop) studyAutoStop.value = String(response.minutes); } catch (_) {}
+  try {
+    const response = await chrome.runtime.sendMessage({type:'blbSuiteGetStudyAutoStopMinutes'});
+    if (!response?.ok || !studyAutoStop) return false;
+    studyAutoStop.value = String(response.minutes);
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 async function saveStudyAutoStop() {
   const minutes = Number(studyAutoStop?.value || 15);
-  try { const response = await chrome.runtime.sendMessage({type:'blbSuiteSetStudyAutoStopMinutes', minutes}); if (!response?.ok) await refreshStudyAutoStop(); } catch (_) { await refreshStudyAutoStop(); }
+  try {
+    const response = await chrome.runtime.sendMessage({type:'blbSuiteSetStudyAutoStopMinutes', minutes});
+    if (response?.ok) {
+      setStatus('Inactivity stop setting saved.');
+      return;
+    }
+  } catch (_) {}
+  const restored = await refreshStudyAutoStop();
+  setStatus(restored
+    ? 'Unable to save the inactivity stop setting. The previous value was restored.'
+    : 'Unable to save the inactivity stop setting; the current value could not be confirmed.');
 }
 
 let studyRefreshSerial = 0;
@@ -964,10 +1023,15 @@ async function persistTopicValue(topic) {
       type:'blbSuiteSaveStudyTopic',
       title:value
     });
-    if (!response?.ok) return;
+    if (!response?.ok) {
+      setStatus('Unable to save this Study topic. Please try again.');
+      return;
+    }
     await chrome.storage.local.set({[SELECTED_TOPIC_STORAGE_KEY]:value});
     await refreshStudyState();
-  } catch (_) {}
+  } catch (_) {
+    setStatus('Unable to save this Study topic. Please try again.');
+  }
 }
 
 topicInput.addEventListener('input', async () => {
