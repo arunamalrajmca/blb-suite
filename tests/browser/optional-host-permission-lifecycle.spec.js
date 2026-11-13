@@ -852,3 +852,82 @@ test('permission revocation blocks all four actions on an already-open page and 
     }, {originPattern:pattern,settings:previous});
   }
 });
+
+
+test('a late host-permission grant activates the original site tab even after focus moves elsewhere', async ({
+  page, context, extensionWorker, extensionStorage
+}) => {
+  const pattern = 'https://example.com/*';
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{}
+  }));
+  let otherPage;
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      redirectEnabled:false,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{}
+    });
+    await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+    const originalTabId = await extensionWorker.evaluate(url =>
+      chrome.tabs.query({url}).then(([tab]) => tab?.id), 'https://example.com/*'
+    );
+    expect(Number.isInteger(originalTabId)).toBe(true);
+
+    // Model the popup closing while its permission prompt is pending, followed
+    // by the user moving focus to a different tab before Chrome reports grant.
+    otherPage = await context.newPage();
+    await otherPage.goto('https://example.org/', {waitUntil:'domcontentloaded'});
+    const activeTab = await extensionWorker.evaluate(() =>
+      chrome.tabs.query({active:true,currentWindow:true}).then(([tab]) => tab)
+    );
+    expect(activeTab?.url).toContain('example.org');
+
+    await extensionStorage.set({
+      pendingSiteFeatureToggles:{
+        [pattern]:{feature:'pageButton',requestedAt:Date.now()}
+      }
+    });
+
+    const activation = await extensionWorker.evaluate(async originPattern => {
+      const calls = [];
+      const original = ensureContentScriptInTab;
+      globalThis.__grantActivationOriginalEnsure = original;
+      globalThis.__grantActivationCalls = calls;
+      ensureContentScriptInTab = async tabId => {
+        calls.push(tabId);
+        return true;
+      };
+      try {
+        const result = await handleGrantedHostPermissions([originPattern]);
+        return {result,calls:[...calls]};
+      } finally {
+        ensureContentScriptInTab = original;
+        delete globalThis.__grantActivationOriginalEnsure;
+        delete globalThis.__grantActivationCalls;
+      }
+    }, pattern);
+
+    expect(activation.result.committed).toEqual([
+      {origin:pattern,feature:'pageButton'}
+    ]);
+    expect(activation.calls).toContain(originalTabId);
+    expect(activation.calls).not.toContain(activeTab.id);
+
+    const saved = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      pageSelectionButtonSites:{},doubleClickBlbSites:{},pendingSiteFeatureToggles:{}
+    }));
+    expect(saved.pageSelectionButtonSites['example.com']).toBe(true);
+    expect(saved.doubleClickBlbSites['example.com']).toBeUndefined();
+    expect(saved.pendingSiteFeatureToggles).toEqual({});
+  } finally {
+    await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
+    if (otherPage) await otherPage.close().catch(() => {});
+  }
+});

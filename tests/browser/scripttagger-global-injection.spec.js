@@ -61,8 +61,10 @@ function runInjectionHelper(functionNames, { settings, tabs }) {
       snippets.push(extractFunction(name, '\nasync function injectRedirectEnabledTabs'));
     } else if (name === 'shouldInjectContentScriptForTab') {
       snippets.push(extractFunction(name, '\nchrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {'));
+    } else if (name === 'injectRedirectEnabledTabs') {
+      snippets.push(extractFunction(name, '\n// Content scripts cannot be unloaded from already-open documents'));
     } else {
-      snippets.push(extractFunction(name, '\nchrome.permissions?.onAdded'));
+      snippets.push(extractFunction(name, '\nchrome.tabs.onUpdated.addListener'));
     }
   }
   vm.runInNewContext(snippets.join('\n\n'), context);
