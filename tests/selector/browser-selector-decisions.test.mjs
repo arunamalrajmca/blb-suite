@@ -88,7 +88,8 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/blb-verse-link-navigation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/criteria-search-navigation.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/feature-lifecycle-regressions.spec.js", "import { test } from '@playwright/test';\n");
-  put(root, "tests/browser/extension.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/extension-reference-actions.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/extension-lifecycle.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/site-registration-opt-out-race.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/optional-host-permission-lifecycle.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/selection-phase-performance.spec.js", "import { test } from '@playwright/test';\\n");
