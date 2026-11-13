@@ -333,3 +333,106 @@ test('a stale redirect-rule update cannot finish after a newer OFF update', asyn
   expect(result.updates.length).toBeGreaterThanOrEqual(2);
   expect(result.finalAddRuleCount).toBe(0);
 });
+
+
+test('global OFF remains authoritative across permission revocation, regrant, and extension-update recovery without changing either site preference', async ({
+  page, extensionWorker, extensionStorage
+}) => {
+  const hostname = 'example.com';
+  const pattern = 'https://example.com/*';
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    redirectEnabled:false
+  }));
+  try {
+    await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+    const tabId = await extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+    );
+    expect(Number.isInteger(tabId)).toBe(true);
+
+    await extensionStorage.set({
+      masterEnabled:true,
+      redirectEnabled:false,
+      pageSelectionButtonSites:{[hostname]:true},
+      doubleClickBlbSites:{[hostname]:true}
+    });
+    const registered = () => extensionWorker.evaluate(async value => {
+      const id = runtimeContentScriptIdForPattern(value);
+      return (await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length > 0;
+    }, pattern);
+
+    expect(await extensionWorker.evaluate(id => ensureContentScriptInTab(id), tabId)).toBe(true);
+    await expect.poll(registered, {timeout:10000}).toBe(true);
+
+    // Global OFF must remove the shared registration while preserving both
+    // independently enabled site preferences.
+    await extensionStorage.set({masterEnabled:false});
+    await expect.poll(registered, {timeout:10000}).toBe(false);
+    let state = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}
+    }));
+    expect(state).toMatchObject({
+      masterEnabled:false,
+      pageSelectionButtonSites:{[hostname]:true},
+      doubleClickBlbSites:{[hostname]:true}
+    });
+
+    // Model Chrome's permission-revocation lookup at the API boundary and
+    // execute the production reconciliation used by permissions.onRemoved.
+    await extensionWorker.evaluate(async originPattern => {
+      const contains = chrome.permissions.contains;
+      chrome.permissions.contains = async details =>
+        details?.origins?.includes(originPattern) ? false : contains(details);
+      try {
+        await reconcileRuntimeContentScriptRegistrations();
+      } finally {
+        chrome.permissions.contains = contains;
+      }
+    }, pattern);
+    await expect.poll(registered, {timeout:10000}).toBe(false);
+
+    // Regrant while master OFF: both direct grant activation and extension
+    // update recovery must remain blocked by the global gate.
+    await extensionWorker.evaluate(originPattern =>
+      injectEnabledTabsForGrantedOrigins([originPattern]), pattern
+    );
+    const offRecovery = await extensionWorker.evaluate(() =>
+      injectConfiguredTabsAfterExtensionUpdate()
+    );
+    expect(offRecovery).toEqual({
+      eligibleTabIds:[],
+      activatedTabIds:[],
+      failedTabIds:[]
+    });
+    await expect.poll(registered, {timeout:5000}).toBe(false);
+
+    // Restoring master ON must reactivate the already-authorized tab without
+    // changing either preference or requiring the user to toggle a feature.
+    await extensionStorage.set({masterEnabled:true});
+    const recovered = await extensionWorker.evaluate(() =>
+      injectConfiguredTabsAfterExtensionUpdate()
+    );
+    expect(recovered.eligibleTabIds).toContain(tabId);
+    expect(recovered.activatedTabIds).toContain(tabId);
+    await expect.poll(registered, {timeout:10000}).toBe(true);
+
+    state = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      masterEnabled:false,pageSelectionButtonSites:{},doubleClickBlbSites:{}
+    }));
+    expect(state).toMatchObject({
+      masterEnabled:true,
+      pageSelectionButtonSites:{[hostname]:true},
+      doubleClickBlbSites:{[hostname]:true}
+    });
+  } finally {
+    await extensionWorker.evaluate(async ({originPattern,settings}) => {
+      const id = runtimeContentScriptIdForPattern(originPattern);
+      await chrome.scripting.unregisterContentScripts({ids:[id,id+'-main-world']}).catch(() => {});
+      await chrome.storage.local.set(settings);
+      await reconcileRuntimeContentScriptRegistrations().catch(() => {});
+    }, {originPattern:pattern,settings:previous});
+  }
+});
