@@ -681,34 +681,45 @@ test('Study Sessions restores the saved auto-stop value when alarm refresh fails
       }]
     });
     await refreshStudyAutoStopAlarm();
-    const originalRefresh = refreshStudyAutoStopAlarm;
+  });
+
+  const rollback = await extensionWorker.evaluate(async () => {
     let failNextRefresh = true;
-    refreshStudyAutoStopAlarm = async () => {
+    const result = await updateStudyAutoStopMinutes(0, async () => {
       if (failNextRefresh) {
         failNextRefresh = false;
         throw new Error('simulated-alarm-refresh-failure');
       }
-      return originalRefresh();
+      return refreshStudyAutoStopAlarm();
+    });
+    return {
+      result,
+      settings:await chrome.storage.local.get({studyAutoStopMinutes:15}),
+      alarm:await chrome.alarms.get('blb-study-auto-stop')
     };
   });
+  expect(rollback.result).toMatchObject({ok:false, minutes:15, restored:true});
+  expect(rollback.settings.studyAutoStopMinutes).toBe(15);
+  expect(rollback.alarm).toMatchObject({name:'blb-study-auto-stop', periodInMinutes:1});
 
   const page = await context.newPage();
   await page.goto('chrome-extension://' + extensionId + '/popup.html');
   await waitForStudyPopupReady(page);
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => message?.type === 'blbSuiteSetStudyAutoStopMinutes'
+        ? Promise.resolve({ok:false, error:'simulated-alarm-refresh-failure', minutes:15, restored:true})
+        : originalSendMessage(message)
+    });
+  });
   const autoStop = page.locator('#studyAutoStop');
   await expect(autoStop).toHaveValue('15');
   await autoStop.selectOption('0');
-
   await expect(autoStop).toHaveValue('15');
   await expect(page.locator('#studyStatus')).toContainText(
     'Unable to save the inactivity stop setting. The previous value was restored.'
   );
-  const state = await extensionWorker.evaluate(async () => ({
-    settings:await chrome.storage.local.get({studyAutoStopMinutes:15}),
-    alarm:await chrome.alarms.get('blb-study-auto-stop')
-  }));
-  expect(state.settings.studyAutoStopMinutes).toBe(15);
-  expect(state.alarm).toMatchObject({name:'blb-study-auto-stop', periodInMinutes:1});
   await page.close();
 });
-
