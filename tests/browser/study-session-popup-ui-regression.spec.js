@@ -696,7 +696,7 @@ test('Study Sessions restores the saved auto-stop value when alarm refresh fails
         return realAlarms.create(...args);
       }
     };
-    const result = await updateStudyAutoStopMinutes(0, () => refreshStudyAutoStopAlarm(alarms));
+    const result = await updateStudyAutoStopMinutes(10, () => refreshStudyAutoStopAlarm(alarms));
     return {
       result,
       settings:await chrome.storage.local.get({studyAutoStopMinutes:15}),
