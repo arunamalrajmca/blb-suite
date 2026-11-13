@@ -905,17 +905,36 @@ async function openHistoryVerseRefs() {
 async function openHistoryStrongs() {
   closeHistoryMenu();
   const history = await getSelectedTopicHistory();
-  const values = [...new Set((history.strongs || []).map(v => String(v || '').trim().toUpperCase()).filter(v => /^[GH]\d+$/.test(v)))];
+  const values = [...new Set((history.strongs || []).map(v => String(v || '').trim().toUpperCase()).filter(v => /^[GH]\\d+$/.test(v)))];
   if (!values.length) { setStatus("No KJV Strong's entries in this topic."); return; }
+
+  let opened = 0;
   let lastTabId = null;
   for (const value of values) {
-    const result = await chrome.runtime.sendMessage({type:'blbSuiteOpenStrongHistory', value, activeIfNew:false});
-    if (result?.ok && result.tabId != null) lastTabId = result.tabId;
+    try {
+      const result = await chrome.runtime.sendMessage({type:'blbSuiteOpenStrongHistory', value, activeIfNew:false});
+      if (result?.ok && result.tabId != null) {
+        opened++;
+        lastTabId = result.tabId;
+      }
+    } catch (_) {
+      // Continue so one failed destination does not prevent later entries opening.
+    }
   }
+
+  let activationFailed = false;
   if (lastTabId != null) {
-    try { await chrome.tabs.update(lastTabId, {active:true}); } catch (_) {}
+    try { await chrome.tabs.update(lastTabId, {active:true}); }
+    catch (_) { activationFailed = true; }
   }
-  setStatus(`Opened ${values.length} KJV Strong's ${values.length === 1 ? 'entry' : 'entries'}.`);
+
+  if (opened === values.length && !activationFailed) {
+    setStatus(`Opened ${opened} KJV Strong's ${opened === 1 ? 'entry' : 'entries'}.`);
+  } else if (opened > 0) {
+    setStatus(`Opened ${opened} of ${values.length} KJV Strong's entries${activationFailed ? ', but could not activate the last tab' : ''}. Please retry the missing entries.`);
+  } else {
+    setStatus("Unable to open the KJV Strong's entries. Please try again.");
+  }
 }
 
 function formatHistorySearchTerm(value) {
