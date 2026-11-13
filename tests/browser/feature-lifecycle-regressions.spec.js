@@ -653,6 +653,7 @@ test('sensitive-site policy blocks all four selection actions despite stale enab
 });
 
 
+
 test('live per-site opt-outs deactivate only their own selection actions on an already-open tab', async ({
   page, extensionStorage, extensionWorker
 }) => {
@@ -673,7 +674,7 @@ test('live per-site opt-outs deactivate only their own selection actions on an a
     if (!cue) {
       cue = document.createElement('p');
       cue.id = 'blb-live-toggle-cue';
-      cue.textContent = 'John 3:16';
+      cue.innerHTML = 'John <span>3</span>:<span id="blb-live-toggle-verse">16</span>';
       document.body.appendChild(cue);
     }
     const range = document.createRange();
@@ -683,14 +684,23 @@ test('live per-site opt-outs deactivate only their own selection actions on an a
     selection.addRange(range);
     document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
   });
-  const doubleClickBound = () => extensionWorker.evaluate(async id => {
-    const results = await chrome.scripting.executeScript({
-      target:{tabId:id},
-      world:'ISOLATED',
-      func:() => typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+  const findVerseTab = () => extensionWorker.evaluate(() => chrome.tabs.query({}).then(tabs => {
+    const tab = tabs.find(item => {
+      try { return new URL(String(item.url || item.pendingUrl || '')).pathname === '/kjv/jhn/3/16/'; }
+      catch (_) { return false; }
     });
-    return results[0]?.result === true;
-  }, tabId);
+    return tab?.id ?? null;
+  }));
+  const closeVerseTabs = () => extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({});
+    for (const tab of tabs) {
+      try {
+        if (new URL(String(tab.url || tab.pendingUrl || '')).pathname === '/kjv/jhn/3/16/') {
+          await chrome.tabs.remove(tab.id);
+        }
+      } catch (_) {}
+    }
+  });
   const contextMenuEligible = () => extensionWorker.evaluate(async id => {
     const tab = await chrome.tabs.get(id);
     return shouldShowBlbContextMenu(tab,'John 3:16');
@@ -699,7 +709,6 @@ test('live per-site opt-outs deactivate only their own selection actions on an a
   const floatingButton = page.locator('#blb-suite-page-selection-button');
   await selectCue();
   await expect(floatingButton).toBeVisible();
-  await expect.poll(doubleClickBound).toBe(true);
   await expect.poll(contextMenuEligible).toBe(true);
 
   // Turning Show on BLB OFF must remove only the floating/right-click/Alt+B
@@ -709,23 +718,30 @@ test('live per-site opt-outs deactivate only their own selection actions on an a
     doubleClickBlbSites:{'example.com':true}
   });
   await expect.poll(async () => floatingButton.isVisible().catch(() => false)).toBe(false);
-  await expect.poll(doubleClickBound).toBe(true);
   await expect.poll(contextMenuEligible).toBe(false);
   const altBWithShowOff = await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
   expect(altBWithShowOff).toMatchObject({ok:false,reason:'site-disabled'});
 
+  await page.locator('#blb-live-toggle-verse').dblclick();
+  await expect.poll(findVerseTab,{timeout:10000}).not.toBeNull();
+  await closeVerseTabs();
+
   // Reverse the preferences without navigating or reinjecting the page.
-  // Show on BLB's three entry points return, while Double-click is unbound.
+  // Show on BLB's three entry points return, while Double-click no longer opens.
   await extensionStorage.set({
     pageSelectionButtonSites:{'example.com':true},
     doubleClickBlbSites:{'example.com':false}
   });
   await selectCue();
   await expect(floatingButton).toBeVisible();
-  await expect.poll(doubleClickBound).toBe(false);
   await expect.poll(contextMenuEligible).toBe(true);
+
+  await page.locator('#blb-live-toggle-verse').dblclick();
+  await expect.poll(findVerseTab,{timeout:1500,intervals:[100,200,300]}).toBeNull();
+
   const altBWithDoubleClickOff = await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
   expect(altBWithDoubleClickOff?.reason).not.toBe('site-disabled');
+  await closeVerseTabs();
 
   const saved = await extensionWorker.evaluate(() => chrome.storage.local.get({
     pageSelectionButtonSites:{},
