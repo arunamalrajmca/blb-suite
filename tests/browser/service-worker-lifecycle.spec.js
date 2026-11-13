@@ -96,11 +96,12 @@ test('a real Chrome alarm wakes a terminated MV3 worker and auto-stops an inacti
   await extensionStorage.set({
     studyLastActivityAt:Date.now() - 6 * 60 * 1000
   });
-  // Replace the normal periodic alarm with a one-shot near-term alarm. Chrome
-  // applies its minimum alarm delay where required; the test waits for the
-  // actual alarm event rather than calling checkStudyAutoStop directly.
+  // Replace the normal periodic alarm with a one-shot alarm far enough in the
+  // future to first prove that the worker has terminated. Chrome may clamp
+  // short alarm delays to its minimum; the test waits for the actual alarm
+  // event rather than calling checkStudyAutoStop directly.
   await extensionWorker.evaluate(() => chrome.alarms.create(STUDY_AUTOSTOP_ALARM, {
-    when:Date.now() + 1000
+    when:Date.now() + 15000
   }));
   const alarm = await extensionWorker.evaluate(() =>
     chrome.alarms.get(STUDY_AUTOSTOP_ALARM)
