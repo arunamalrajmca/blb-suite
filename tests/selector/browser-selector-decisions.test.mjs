@@ -593,7 +593,12 @@ test("optional E2E workflows exclude selector-only and store-only scripts from b
     } else {
       assert.doesNotMatch(workflow, /^\s*-\s*['"]tests\/\*\*['"]/m, workflowPath + " must not add a broad tests/** trigger");
     }
-    assert.ok(workflow.includes("- '!scripts/reference-e2e-matrix.json'"), "matrix metadata should not trigger optional E2E workflows");
+    if (workflowPath.endsWith("browser-e2e-performance.yml")) {
+      assert.ok(workflow.includes("- '!scripts/reference-e2e-matrix.json'"), "performance-only workflow may ignore reference matrix edits");
+    } else {
+      assert.doesNotMatch(workflow, /!scripts\\/reference-e2e-matrix\\.json/,
+        "reference matrix edits must trigger the References workflow so full coverage can be verified");
+    }
   }
 });
 
@@ -807,6 +812,24 @@ test("workflow changes always require package validation", () => {
     assert.match(output, /runtime_changed=false/);
     assert.match(output, /package_validation_required=true/);
   });
+});
+
+test("browser E2E runner and reference-matrix edits force full browser validation", () => {
+  for (const path of [
+    ".github/workflows/browser-e2e-groups.yml",
+    ".github/workflows/browser-e2e-reference.yml",
+    "scripts/reference-e2e-matrix.json"
+  ]) {
+    withFixture((root, base) => {
+      commitChange(root, path, "// browser E2E control changed\\n");
+      const output = select(root, base);
+      assert.match(output, /full_browser_suite=true/, path);
+      assert.match(output, /group_a_required=true/, path);
+      assert.match(output, /group_b_required=true/, path);
+      assert.match(output, /reference_required=true/, path);
+      assert.match(output, /study_sessions_required=true/, path);
+    });
+  }
 });
 
 test("selector policy tests always require package validation", () => {
