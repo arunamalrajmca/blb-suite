@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { selectReferenceMatrix } from "../../scripts/select-reference-matrix.mjs";
-import { featureSpecs, referenceDelegatedSpecs } from "../../scripts/ci-routing-registry.mjs";
+import { featureSpecs, referenceDelegatedSpecs, togglePermissionSpecs } from "../../scripts/ci-routing-registry.mjs";
 
 const selectorSource = readFileSync(
   new URL("../../scripts/select-browser-specs.mjs", import.meta.url),
