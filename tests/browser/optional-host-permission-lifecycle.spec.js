@@ -1,6 +1,6 @@
 const { test, expect } = require('./fixtures');
 
-test('host-access revocation removes registrations and a later grant reactivates the preserved opt-in', async ({
+test('host-access revocation removes registrations and later grants reactivate each independently enabled site feature', async ({
   page, extensionWorker, extensionStorage
 }) => {
   const pattern = 'https://example.com/*';
@@ -11,15 +11,14 @@ test('host-access revocation removes registrations and a later grant reactivates
     redirectEnabled:false
   }));
 
-  try {
-    await extensionStorage.set({
-      masterEnabled:true,
-      pageSelectionButtonSites:{'example.com':true},
-      doubleClickBlbSites:{},
-      redirectEnabled:false
-    });
-    await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  const scenarios = [
+    { label:'Show on BLB only', pageButton:true, doubleClick:false },
+    { label:'Double-click only', pageButton:false, doubleClick:true },
+    { label:'both features', pageButton:true, doubleClick:true }
+  ];
 
+  try {
+    await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
     const tabId = await extensionWorker.evaluate(async () =>
       (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
     );
@@ -33,51 +32,60 @@ test('host-access revocation removes registrations and a later grant reactivates
       registrationId
     );
 
-    const injected = await extensionWorker.evaluate(id => ensureContentScriptInTab(id), tabId);
-    expect(injected).toBe(true);
-    await expect.poll(registrationExists, {timeout:10000}).toBe(true);
+    expect(await extensionWorker.evaluate(() => chrome.permissions.onRemoved.hasListeners())).toBe(true);
+    expect(await extensionWorker.evaluate(() => chrome.permissions.onAdded.hasListeners())).toBe(true);
 
-    const revocationListenerPresent = await extensionWorker.evaluate(() =>
-      chrome.permissions.onRemoved.hasListeners()
-    );
-    expect(revocationListenerPresent).toBe(true);
-    const grantListenerPresent = await extensionWorker.evaluate(() =>
-      chrome.permissions.onAdded.hasListeners()
-    );
-    expect(grantListenerPresent).toBe(true);
+    for (const scenario of scenarios) {
+      await extensionWorker.evaluate(async originPattern =>
+        unregisterRuntimeContentScriptForPattern(originPattern), pattern
+      );
+      await extensionStorage.set({
+        masterEnabled:true,
+        pageSelectionButtonSites:{'example.com':scenario.pageButton},
+        doubleClickBlbSites:{'example.com':scenario.doubleClick},
+        redirectEnabled:false
+      });
 
-    // Headless Chromium cannot accept Chrome's native optional-permission
-    // prompt. Simulate the post-revocation permission lookup at the API
-    // boundary, then exercise the same serialized registration reconciler
-    // that the onRemoved listener invokes.
-    await extensionWorker.evaluate(async originPattern => {
-      const originalContains = chrome.permissions.contains;
-      chrome.permissions.contains = async details =>
-        details?.origins?.includes(originPattern)
-          ? false
-          : originalContains(details);
-      try {
-        await reconcileRuntimeContentScriptRegistrations();
-      } finally {
-        chrome.permissions.contains = originalContains;
-      }
-    }, pattern);
+      const injected = await extensionWorker.evaluate(id => ensureContentScriptInTab(id), tabId);
+      expect(injected, scenario.label + ': enabled preference must register the shared content script').toBe(true);
+      await expect.poll(registrationExists, {timeout:10000}).toBe(true);
 
-    await expect.poll(registrationExists, {timeout:10000}).toBe(false);
+      // Headless Chromium cannot accept Chrome's native optional-permission
+      // prompt. Simulate the post-revocation permission lookup at the API
+      // boundary, then exercise the same serialized reconciler used by onRemoved.
+      await extensionWorker.evaluate(async originPattern => {
+        const originalContains = chrome.permissions.contains;
+        chrome.permissions.contains = async details =>
+          details?.origins?.includes(originPattern)
+            ? false
+            : originalContains(details);
+        try {
+          await reconcileRuntimeContentScriptRegistrations();
+        } finally {
+          chrome.permissions.contains = originalContains;
+        }
+      }, pattern);
 
-    const storedPreference = await extensionWorker.evaluate(async () => {
-      const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
-      return data.pageSelectionButtonSites['example.com'];
-    });
-    expect(storedPreference).toBe(true);
+      await expect.poll(registrationExists, {timeout:10000}).toBe(false);
+      const preserved = await extensionWorker.evaluate(async () => chrome.storage.local.get({
+        pageSelectionButtonSites:{}, doubleClickBlbSites:{}
+      }));
+      expect(preserved.pageSelectionButtonSites['example.com'], scenario.label + ': Show on BLB preference must survive revocation')
+        .toBe(scenario.pageButton);
+      expect(preserved.doubleClickBlbSites['example.com'], scenario.label + ': Double-click preference must survive revocation')
+        .toBe(scenario.doubleClick);
 
-    // Simulate Chrome's onAdded handler after access is restored. The original
-    // permission API is back in place, so the retained opt-in should register
-    // the content script again for the already-open tab.
-    await extensionWorker.evaluate(pattern =>
-      injectEnabledTabsForGrantedOrigins([pattern]), pattern
-    );
-    await expect.poll(registrationExists, {timeout:10000}).toBe(true);
+      // Restore the permission API and exercise the same activation path used
+      // by the onAdded handler for the already-open tab.
+      await extensionWorker.evaluate(originPattern =>
+        injectEnabledTabsForGrantedOrigins([originPattern]), pattern
+      );
+      await expect.poll(registrationExists, {timeout:10000}).toBe(true);
+
+      await extensionWorker.evaluate(async originPattern =>
+        unregisterRuntimeContentScriptForPattern(originPattern), pattern
+      );
+    }
   } finally {
     await extensionWorker.evaluate(async ({originPattern,settings}) => {
       const id=runtimeContentScriptIdForPattern(originPattern);
