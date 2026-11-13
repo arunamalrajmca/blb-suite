@@ -751,7 +751,33 @@ test('permission revocation blocks all four actions on an already-open page and 
 
     let ids = await beforeIds();
     await select('permission-revocation-floating-blocked','John 3:16');
-    await floating.click();
+    // Playwright's page console event observes extension isolated-world
+    // diagnostics as well as page-world messages; replacing window.console in
+    // page.evaluate would miss the content script's isolated execution context.
+    const permissionDiagnostics = [];
+    const capturePermissionDiagnostic = message => {
+      const text = message.text();
+      if (text.includes('KJV Scripture Tools Show on BLB')) {
+        permissionDiagnostics.push({type:message.type(),text});
+      }
+    };
+    page.on('console', capturePermissionDiagnostic);
+    try {
+      await floating.click();
+      await expect.poll(() => permissionDiagnostics.some(message =>
+        message.text.includes('host-permission-revoked')
+      ), {timeout:5000}).toBe(true);
+      expect(permissionDiagnostics.some(message =>
+        message.type === 'error' && message.text.includes('action was not completed')
+      )).toBe(false);
+      expect(permissionDiagnostics.some(message =>
+        message.type === 'info' && message.text.includes('host-permission-revoked')
+      )).toBe(true);
+    } finally {
+      page.off('console', capturePermissionDiagnostic);
+    }
+    await expect(floating).toBeVisible();
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('John 3:16');
     await page.locator('#permission-revocation-floating-blocked').dblclick();
     const activeTab = await extensionWorker.evaluate(() =>
       chrome.tabs.query({active:true,currentWindow:true}).then(([tab]) => tab)

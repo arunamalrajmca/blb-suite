@@ -257,9 +257,17 @@
           if (response?.ok === true) {
             clearBlbPageSelectionAfterAction();
           } else {
-            console.error('KJV Scripture Tools Show on BLB action was not completed: ' + JSON.stringify({
+            const diagnostic = {
               requestId, selectedText:text, response:response || null
-            }));
+            };
+            if (response?.reason === 'host-permission-revoked') {
+              // A revoked optional host grant is an expected policy denial,
+              // not a runtime failure. Keep it visible for troubleshooting
+              // without polluting the console error stream.
+              console.info('KJV Scripture Tools Show on BLB was blocked because host permission is revoked: ' + JSON.stringify(diagnostic));
+            } else {
+              console.error('KJV Scripture Tools Show on BLB action was not completed: ' + JSON.stringify(diagnostic));
+            }
             // Keep the selection and control available for a retry, but only
             // while the same live selection is still present in the document.
             if (normalizeSelectionText(getSelectedPageText()) === normalizeSelectionText(text)) {
