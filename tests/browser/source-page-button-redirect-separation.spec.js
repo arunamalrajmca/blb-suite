@@ -694,8 +694,19 @@ test('same-tab redirect re-enable restores source-page buttons on every register
   }));
 
   for (const {url, siteId} of cases) {
-    await page.goto(url, {waitUntil:'domcontentloaded'});
+    const homepage = new URL(url);
+    homepage.pathname = '/';
+    homepage.search = '';
+    homepage.hash = '';
     const button = page.locator('#blb-suite-' + siteId + '-multiverse');
+
+    // Visit the host homepage first so its runtime content-script registration
+    // is established before testing same-tab behavior on a nested content page.
+    // The homepage must remain excluded from page-button rendering.
+    await page.goto(homepage.toString(), {waitUntil:'domcontentloaded'});
+    await expect(button, homepage.toString() + ' homepage exclusion').toHaveCount(0);
+
+    await page.goto(url, {waitUntil:'domcontentloaded'});
     await expect(button, url).toBeVisible();
 
     // Simulate the missing control after the user turns redirects OFF, then
