@@ -207,7 +207,7 @@ for (const feature of ['pageButton', 'doubleClick']) {
     await expect.poll(() => page.locator('body').evaluate(body =>
       !body.classList.contains('popup-loading')
     )).toBe(true);
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       const originalQuery = chrome.tabs.query.bind(chrome.tabs);
       Object.defineProperty(chrome.tabs, 'query', {
         configurable:true,
