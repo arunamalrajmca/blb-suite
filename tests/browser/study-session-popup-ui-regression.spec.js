@@ -669,6 +669,7 @@ test('Study Sessions restores the saved auto-stop value when alarm refresh fails
     await chrome.storage.local.set({
       masterEnabled:true,
       studyAutoStopMinutes:15,
+      studySelectedTopic:'Auto Stop Alarm Rollback',
       currentStudySessionId:'auto-stop-alarm-refresh-rollback',
       studyLastActivityAt:Date.now(),
       studySessions:[{
