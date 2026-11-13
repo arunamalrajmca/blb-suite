@@ -772,6 +772,8 @@ test('permission revocation blocks all four actions on an already-open page and 
     });
     expect(permissionDiagnostics.errors.some(message => message.includes('action was not completed'))).toBe(false);
     expect(permissionDiagnostics.infos.some(message => message.includes('host-permission-revoked'))).toBe(true);
+    await expect(floating).toBeVisible();
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe('John 3:16');
     await page.locator('#permission-revocation-floating-blocked').dblclick();
     const activeTab = await extensionWorker.evaluate(() =>
       chrome.tabs.query({active:true,currentWindow:true}).then(([tab]) => tab)
