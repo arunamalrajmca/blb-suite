@@ -538,7 +538,7 @@ test("extension reference-coverage matrix skips unrelated mapped features", () =
 
   const extensionSpec = selectReferenceMatrix(entries, {
     full: false,
-    changedSpecs: "tests/browser/extension.spec.js"
+    changedSpecs: "tests/browser/extension-reference-actions.spec.js"
   });
   assert.ok(extensionSpec.some(entry => entry.group === "extension-spec-reference-coverage"));
 
@@ -646,7 +646,7 @@ test("shared background changes keep the site-registration race in its isolated 
     assert.ok(output.includes("full_browser_suite=true"));
     assert.ok(output.includes("changed_browser_specs=tests/browser/site-registration-opt-out-race.spec.js"));
     assert.ok(output.includes("tests/browser/optional-host-permission-lifecycle.spec.js"));
-    assert.ok(!output.includes("changed_browser_specs=tests/browser/extension.spec.js"));
+    assert.ok(!output.includes("changed_browser_specs=tests/browser/extension-reference-actions.spec.js"));
     assert.ok(output.includes("group_a_required=true"));
   });
 });
@@ -654,7 +654,7 @@ test("shared background changes keep the site-registration race in its isolated 
 test("deletion-only changes to a large browser spec do not rerun the removed spec", () => {
   withFixture((root, base) => {
     commitChange(root, "extension/background.js", "// shared background change\\n");
-    commitChange(root, "tests/browser/extension.spec.js", "");
+    commitChange(root, "tests/browser/extension-reference-actions.spec.js", "");
     const output = select(root, base);
     assert.ok(output.includes("full_browser_suite=true"));
     assert.ok(!output.includes("changed_browser_specs=tests/browser/extension.spec.js"));
