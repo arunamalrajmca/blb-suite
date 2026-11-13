@@ -1009,19 +1009,22 @@ async function openHistorySearchTerms() {
 
 async function clearTopicSelectionInput() {
   const wasRecording = !!studyState.recording;
+  const topicToRestore = selectedTopic() || String(studyState.recordingTopic || '').trim();
+  if (wasRecording) {
+    const response = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
+    if (!response?.ok) {
+      topicInput.value = topicToRestore;
+      setStatus('Unable to stop recording.');
+      await refreshStudyState();
+      return;
+    }
+  }
   topicInput.value = '';
   editingNoteOriginal = '';
   if (notesHelp) notesHelp.textContent = 'Auto-saves on leaving the box';
   await syncSelectedTopic('');
   closeTopicMenu();
   if (wasRecording) {
-    const response = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
-    if (!response?.ok) {
-      setStatus('Unable to stop recording.');
-      await refreshStudyState();
-      return;
-    }
-    topicInput.value = '';
     noteInput.value = '';
     setStatus('Select Start to record this topic.');
     await refreshStudyState();
