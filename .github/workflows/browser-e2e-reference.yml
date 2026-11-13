@@ -200,10 +200,13 @@ jobs:
                 tests/browser/*.spec.js)
                   if [[ -f "$path" ]]; then FOCUSED+=("$path"); fi
                   ;;
+                tests/browser/extension-test-helpers.js)
+                  FOCUSED+=(tests/browser/extension-reference-actions.spec.js tests/browser/extension-lifecycle.spec.js)
+                  ;;
               esac
             done < <(git diff --name-only --diff-filter=ACDMRT "$BASE...HEAD")
           fi
-          FOCUSED_SPECS="$(IFS=,; printf '%s' "${FOCUSED[*]}")"
+          FOCUSED_SPECS="$(printf '%s\n' "${FOCUSED[@]}" | sort -u | paste -sd, -)"
           echo "focused_specs=$FOCUSED_SPECS" >> "$GITHUB_OUTPUT"
   verse-context-regression:
     name: BROWSER E2E — generic verse-context gate
@@ -562,10 +565,43 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
           node-version: 22
+      - name: Verify split preserves every original test registration
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const assert = require('node:assert/strict');
+          const cp = require('node:child_process');
+          const fs = require('node:fs');
+          let legacy;
+          try {
+            legacy = cp.execFileSync('git', ['show', `${process.env.BASE_SHA}:tests/browser/extension.spec.js`], { encoding: 'utf8' });
+          } catch {
+            console.log('No legacy monolithic spec in the PR base; inventory comparison is not applicable.');
+            process.exit(0);
+          }
+          const split = [
+            'tests/browser/extension-reference-actions.spec.js',
+            'tests/browser/extension-lifecycle.spec.js'
+          ].map(file => fs.readFileSync(file, 'utf8')).join('\\n');
+          const registrations = source => source.split(/\\r?\\n/)
+            .map(line => line.trim())
+            .filter(line => /^test(?:\\.describe)?\\s*\\(/.test(line))
+            .sort();
+          const before = registrations(legacy);
+          const after = registrations(split);
+          assert.equal(before.length, 83, 'baseline test registration inventory changed unexpectedly');
+          assert.deepEqual(after, before, 'split suites must preserve every original test/describe registration exactly once');
+          console.log(`Preserved all ${before.length} original Playwright test/describe registrations.`);
+          NODE
       - name: Cache Playwright browsers
         uses: actions/cache@v5
         with:
