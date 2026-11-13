@@ -490,6 +490,14 @@ for (const resolutionOrder of [['pageButton','doubleClick'],['doubleClick','page
       const originalQuery = chrome.tabs.query.bind(chrome.tabs);
       Object.defineProperty(chrome.tabs,'query',{configurable:true,value:async info =>
         info?.active ? [{id:987654,url:'https://example.com/',title:'Example'}] : originalQuery(info)});
+      // This test exercises independent permission-intent commits, not
+      // current-document injection. The synthetic tab ID must not make the
+      // popup's post-grant activation request fail and roll back the choice.
+      const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+      Object.defineProperty(chrome.runtime,'sendMessage',{configurable:true,value:message =>
+        message?.type==='blbSuiteEnsureContentScript'
+          ? Promise.resolve({ok:true})
+          : originalSendMessage(message)});
       window.__permissionResolvers = {};
       let requestIndex = 0;
       const requestFeatures = ['pageButton','doubleClick'];
