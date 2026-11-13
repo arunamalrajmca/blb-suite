@@ -2037,7 +2037,7 @@ test.describe('core user-visible E2E', () => {
     )), matchedTabIds);
   }
 
-  async function setupDoubleClickReferencePage(page, extensionStorage, extensionWorker, html) {
+  async function setupDoubleClickReferencePage(page, extensionStorage, html) {
     const setupStartedAt = process.hrtime.bigint();
     const reusedDocument = page.url() === 'https://example.com/';
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
@@ -2057,17 +2057,22 @@ test.describe('core user-visible E2E', () => {
     // resolution rather than racing storage.onChanged.
     const waitForDoubleClickHandler = async () => {
       const tabUrl = page.url();
-      await expect.poll(async () => extensionWorker.evaluate(async url => {
-        const tabs = await chrome.tabs.query({});
-        const tab = tabs.find(candidate => candidate.url === url);
-        if (!tab?.id) return false;
-        const [injected] = await chrome.scripting.executeScript({
-          target: { tabId: tab.id },
-          world: 'ISOLATED',
-          func: () => typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
-        });
-        return injected?.result === true;
-      }, tabUrl), { timeout: 10000 }).toBe(true);
+      await expect.poll(async () => {
+        const workers = page.context().serviceWorkers();
+        const worker = workers[workers.length - 1]
+          || await page.context().waitForEvent('serviceworker', { timeout: 5000 });
+        return worker.evaluate(async url => {
+          const tabs = await chrome.tabs.query({});
+          const tab = tabs.find(candidate => candidate.url === url);
+          if (!tab?.id) return false;
+          const [injected] = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            world: 'ISOLATED',
+            func: () => typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+          });
+          return injected?.result === true;
+        }, tabUrl);
+      }, { timeout: 10000 }).toBe(true);
     };
 
     // The handler marker lives in the extension's isolated world, not the
