@@ -1028,10 +1028,10 @@ test('permission revocation during an in-flight registration cannot leave a pers
       await reconcileRuntimeContentScriptRegistrations();
       await runtimeContentScriptReconciliationQueue;
     });
-    // Start activation without awaiting it so the test can revoke access
-    // while Chrome's registration API is deliberately paused.
+    // Start the registration helper without awaiting it so the test can revoke
+    // access at the exact point where Chrome's registration API is paused.
     await extensionWorker.evaluate(id => {
-      globalThis.__permissionRaceActivation = ensureContentScriptInTab(id, globalThis.__permissionRacePermissionCheck);
+      globalThis.__permissionRaceActivation = registerRuntimeContentScriptForPattern({url:'https://example.com/',id}, ['content.js'], globalThis.__permissionRacePermissionCheck);
     }, tabId);
     // Wait for the actual registration call to enter its deliberate pause.
     await extensionWorker.evaluate(() => globalThis.__permissionRaceStarted);
