@@ -6587,14 +6587,17 @@ async function handleOpenBibleSelectionCommand() {
     const tabs = await chrome.tabs.query({active:true,currentWindow:true});
     const tab = tabs[0];
     if (!tab?.id) return {ok:false, reason:'no-active-tab'};
-    if (!(await hasSelectionActionPermissionForTab(tab))) return {ok:false, reason:'host-permission-revoked'};
 
-    // Alt+B is an entry point for the same Show on BLB feature as the
-    // floating button and right-click menu. Enforce both the BLB-site
-    // exclusion and the effective per-site setting before reading selection.
+    // Preserve the feature-policy result for excluded sites before checking
+    // optional host access. An enabled site with a revoked grant is still
+    // rejected below, but sensitive/disabled sites retain their established
+    // site-disabled result.
     const siteKey = pageSelectionSettingKeyFromTab(tab);
     if (!(await isPageButtonEnabledForHostname(siteKey, tab.title || ''))) {
       return {ok:false, reason:'site-disabled'};
+    }
+    if (!(await hasSelectionActionPermissionForTab(tab))) {
+      return {ok:false, reason:'host-permission-revoked'};
     }
 
     if (siteKey === BLB_HOSTNAME) {
