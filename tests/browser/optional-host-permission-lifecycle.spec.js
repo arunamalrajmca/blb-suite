@@ -963,6 +963,9 @@ test('permission revocation during an in-flight registration cannot leave a pers
       });
       await reconcileRuntimeContentScriptRegistrations();
       await runtimeContentScriptReconciliationQueue;
+      // Remove the setup registration after all settings-driven reconciliation
+      // has drained, so the activation below must create it through our gate.
+      await chrome.scripting.unregisterContentScripts({ids:[id,mainId]}).catch(() => {});
 
       const originalContains = chrome.permissions.contains;
       const originalRegister = chrome.scripting.registerContentScripts;
