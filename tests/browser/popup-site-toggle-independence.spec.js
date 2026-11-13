@@ -30,6 +30,17 @@ async function preparePopup(page, extensionId, extensionStorage, extensionWorker
       configurable: true,
       value: async () => permissionResult
     });
+    // These tests isolate preference independence. The active-tab ID above is
+    // deliberately synthetic, so acknowledge the activation request here;
+    // real tab injection success/failure is covered by lifecycle integration
+    // tests rather than by this popup preference fixture.
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable: true,
+      value: message => message?.type === 'blbSuiteEnsureContentScript'
+        ? Promise.resolve({ok:true})
+        : originalSendMessage(message)
+    });
     render(await getState());
   }, permission);
   // The checkbox inputs are intentionally visually hidden; interact with
