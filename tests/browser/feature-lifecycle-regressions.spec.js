@@ -699,7 +699,7 @@ test('Show on BLB OFF blocks Floating Button, Right Click, and Alt+B while Doubl
   await extensionStorage.set({
     masterEnabled:true,
     redirectEnabled:false,
-    pageSelectionButtonSites:{ 'example.com':false },
+    pageSelectionButtonSites:{ 'example.com':true },
     doubleClickBlbSites:{ 'example.com':true }
   });
   await page.route('https://example.com/**', route => route.fulfill({
@@ -711,7 +711,13 @@ test('Show on BLB OFF blocks Floating Button, Right Click, and Alt+B while Doubl
   await page.bringToFront();
   await page.waitForTimeout(500);
 
-  await expect(page.locator('#blb-suite-page-selection-button')).toHaveCount(0);
+  // Begin with both features active, then turn only Show on BLB OFF on the
+  // already-open page to exercise the live storage-change lifecycle.
+  await selectLifecycleReference(page, 'show-off-reference', 'John 3:16');
+  const floatingButton = page.locator('#blb-suite-page-selection-button');
+  await expect(floatingButton).toBeVisible({ timeout:10000 });
+  await extensionStorage.set({ pageSelectionButtonSites:{ 'example.com':false } });
+  await expect(floatingButton).toHaveCount(0, { timeout:10000 });
   const activeTab = await extensionWorker.evaluate(() =>
     chrome.tabs.query({ active:true, currentWindow:true }).then(([tab]) => tab)
   );
@@ -719,7 +725,6 @@ test('Show on BLB OFF blocks Floating Button, Right Click, and Alt+B while Doubl
     shouldShowBlbContextMenu(tab, 'John 3:16'), activeTab
   )).toBe(false);
 
-  await selectLifecycleReference(page, 'show-off-reference', 'John 3:16');
   const beforeBlockedActions = await extensionWorker.evaluate(() =>
     chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
   );
@@ -758,7 +763,7 @@ test('Double-click OFF blocks only Double-click while Floating Button, Right Cli
     masterEnabled:true,
     redirectEnabled:false,
     pageSelectionButtonSites:{ 'example.com':true },
-    doubleClickBlbSites:{ 'example.com':false }
+    doubleClickBlbSites:{ 'example.com':true }
   });
   await page.route('https://example.com/**', route => route.fulfill({
     status:200,
@@ -769,15 +774,28 @@ test('Double-click OFF blocks only Double-click while Floating Button, Right Cli
   await page.bringToFront();
   await page.waitForTimeout(500);
 
+  // Confirm Double-click is initially active, then turn only that feature OFF
+  // while the same external page remains open.
+  await selectLifecycleReference(page, 'double-click-before-off-reference', 'John 3:16');
+  let before = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+  );
+  await page.locator('#double-click-before-off-reference').dblclick();
+  let opened = await waitForNewBlbPath(extensionWorker, before, '/kjv/jhn/3/16/');
+  await removeBlbTab(extensionWorker, opened.id);
+  await page.bringToFront();
+  await extensionStorage.set({ doubleClickBlbSites:{ 'example.com':false } });
+  await page.waitForTimeout(300);
+
   // Floating Button: the real control appears after a live selection and opens BLB.
   await selectLifecycleReference(page, 'show-on-floating-reference', 'John 3:17');
   const floatingButton = page.locator('#blb-suite-page-selection-button');
   await expect(floatingButton).toBeVisible({ timeout:10000 });
-  let before = await extensionWorker.evaluate(() =>
+  before = await extensionWorker.evaluate(() =>
     chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
   );
   await floatingButton.click();
-  let opened = await waitForNewBlbPath(extensionWorker, before, '/kjv/jhn/3/17/');
+  opened = await waitForNewBlbPath(extensionWorker, before, '/kjv/jhn/3/17/');
   await removeBlbTab(extensionWorker, opened.id);
 
   // Right Click: invoke the registered onClicked handler with the live selection.
