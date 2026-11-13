@@ -144,10 +144,10 @@ test('a real Chrome alarm wakes a terminated MV3 worker and auto-stops an inacti
         stopped:data.currentStudySessionId === null,
         reason:data.studyPauseReason,
         topic:data.studyPausedTopic,
-        note:data.studySessions.some(session => session.title === document.documentElement.dataset.studyAlarmTopic &&
+        note:data.studySessions.some(session => session.title === expectedTopic &&
           session.notes.includes('Preserve This Note Across Worker Wake'))
       };
-    }), {timeout:50000, intervals:[250,500,1000,2000]}).toEqual({
+    }, normalizedTopic), {timeout:50000, intervals:[250,500,1000,2000]}).toEqual({
       stopped:true,
       reason:'inactivity',
       topic:normalizedTopic,
