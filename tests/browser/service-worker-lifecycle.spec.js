@@ -81,6 +81,9 @@ test('a real MV3 service-worker termination is recovered by a content-script sel
 test('a real Chrome alarm wakes a terminated MV3 worker and auto-stops an inactive Study recording', async ({
   context, extensionId, extensionStorage, extensionWorker
 }) => {
+  // The test intentionally leaves the worker stopped until its 65-second alarm is due.
+  // Allow the alarm event and persisted-state assertion to complete beyond Playwright's 60s default.
+  test.setTimeout(150000);
   await extensionStorage.set({
     masterEnabled:true,
     studyAutoStopMinutes:5
@@ -112,6 +115,7 @@ test('a real Chrome alarm wakes a terminated MV3 worker and auto-stops an inacti
   const browser = context.browser();
   expect(browser, 'persistent context must expose its Chromium browser').not.toBeNull();
   const cdp = await browser.newBrowserCDPSession();
+  let observer;
   try {
     await cdp.send('Target.setDiscoverTargets', {discover:true});
     const {targetInfos} = await cdp.send('Target.getTargets');
