@@ -223,3 +223,22 @@ test('failed redirect-rule refresh rolls a requested global redirect ON choice b
     'Unable to enable global redirects. The setting remains OFF'
   );
 });
+
+
+test('background redirect-rule refresh reports a Dynamic Rules API failure', async ({
+  extensionWorker
+}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const original = chrome.declarativeNetRequest.updateDynamicRules;
+    chrome.declarativeNetRequest.updateDynamicRules = async () => {
+      throw new Error('simulated-dnr-update-failure');
+    };
+    try {
+      return await installRules();
+    } finally {
+      chrome.declarativeNetRequest.updateDynamicRules = original;
+    }
+  });
+  expect(result.ok).toBe(false);
+  expect(result.error).toContain('simulated-dnr-update-failure');
+});
