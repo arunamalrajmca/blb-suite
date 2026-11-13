@@ -995,16 +995,18 @@ test('permission revocation during an in-flight registration cannot leave a pers
       globalThis.__permissionRaceRelease = releaseRegistration;
     }, {originPattern:pattern,id:registrationId,mainId:mainWorldId});
 
-    const activation = await extensionWorker.evaluate(id => ensureContentScriptInTab(id), tabId);
-    await extensionWorker.evaluate(() => globalThis.__permissionRaceStarted);
+    // Start activation without awaiting it so the test can revoke access
+    // while Chrome's registration API is deliberately paused.
+    await extensionWorker.evaluate(id => {
+      globalThis.__permissionRaceActivation = ensureContentScriptInTab(id);
+    }, tabId);
     // Wait for the actual registration call to enter its deliberate pause.
     await extensionWorker.evaluate(() => globalThis.__permissionRaceStarted);
     await extensionWorker.evaluate(() => globalThis.__permissionRaceRevoke());
     await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
     await extensionWorker.evaluate(() => globalThis.__permissionRaceRelease());
     const activated = await extensionWorker.evaluate(() => globalThis.__permissionRaceActivation);
-    void activation;
-    void activated;
+    expect(activated).toBe(false);
 
     const remaining = await extensionWorker.evaluate(async ids =>
       chrome.scripting.getRegisteredContentScripts({ids}), [registrationId,mainWorldId]
