@@ -596,7 +596,7 @@ test("optional E2E workflows exclude selector-only and store-only scripts from b
     if (workflowPath.endsWith("browser-e2e-performance.yml")) {
       assert.ok(workflow.includes("- '!scripts/reference-e2e-matrix.json'"), "performance-only workflow may ignore reference matrix edits");
     } else {
-      assert.doesNotMatch(workflow, /!scripts\\/reference-e2e-matrix\\.json/,
+      assert.ok(!workflow.includes("- '!scripts/reference-e2e-matrix.json'"),
         "reference matrix edits must trigger the References workflow so full coverage can be verified");
     }
   }
