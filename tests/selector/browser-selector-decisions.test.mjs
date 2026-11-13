@@ -1004,3 +1004,20 @@ test("User Guide changes select dedicated theme and Run-command browser coverage
     assert.match(output, /reference_required=true/);
   });
 });
+
+test("split extension suites retain complete CI discovery and helper routing", () => {
+  const referenceWorkflow = readFileSync(
+    new URL("../../.github/workflows/browser-e2e-reference.yml", import.meta.url),
+    "utf8"
+  );
+  const registry = readFileSync(
+    new URL("../../scripts/ci-routing-registry.mjs", import.meta.url),
+    "utf8"
+  );
+  assert.ok(registry.includes("tests/browser/extension-reference-actions.spec.js"));
+  assert.ok(registry.includes("tests/browser/extension-lifecycle.spec.js"));
+  assert.ok(referenceWorkflow.includes("tests/browser/extension-test-helpers.js)"));
+  assert.ok(referenceWorkflow.includes("FOCUSED+=(tests/browser/extension-reference-actions.spec.js tests/browser/extension-lifecycle.spec.js)"));
+  assert.ok(referenceWorkflow.includes("Verify split preserves every original test registration"));
+  assert.ok(referenceWorkflow.includes("npx playwright test --config=playwright.config.js --list"));
+});
