@@ -38,6 +38,7 @@ test('a real MV3 service-worker termination is recovered by a content-script sel
   const browser = context.browser();
   expect(browser, 'persistent context must expose its Chromium browser').not.toBeNull();
   const cdp = await browser.newBrowserCDPSession();
+  let observer;
   try {
     await cdp.send('Target.setDiscoverTargets', {discover:true});
     const {targetInfos} = await cdp.send('Target.getTargets');
@@ -132,7 +133,6 @@ test('a real Chrome alarm wakes a terminated MV3 worker and auto-stops an inacti
     // UI before termination can itself wake/retain the worker and invalidate
     // the lifecycle assertion.
     await new Promise(resolve => setTimeout(resolve, 70000));
-    let observer;
     observer = await context.newPage();
     await observer.goto('chrome-extension://' + extensionId + '/popup.html');
 
