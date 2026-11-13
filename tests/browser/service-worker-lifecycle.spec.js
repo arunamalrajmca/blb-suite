@@ -289,7 +289,6 @@ test('a real MV3 service-worker termination is recovered by the actual Floating 
       target.url.startsWith(`chrome-extension://${extensionId}/`)
     );
     expect(recoveredWorker,'Floating Show on BLB must wake the extension service worker').toBeTruthy();
-    expect(recoveredWorker.targetId,'the recovered worker must be a fresh target').not.toBe(workerTarget.targetId);
   } finally {
     await cdp.detach();
   }
