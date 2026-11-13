@@ -137,7 +137,12 @@ test('Omnibox command path remains wired', () => {
 });
 test('permission Allow/Deny/Re-Allow lifecycle remains wired', () => {
   const bg = read('background.js'), popup = read('popup.js');
-  assert(bg.includes('permissions?.onAdded') || bg.includes('onAdded?.addListener'), 'permission-added activation missing');
+  assert(bg.includes('permissions.onAdded.addListener'), 'permission-added activation missing');
+  const grantHandlerStart = bg.indexOf('async function handleGrantedHostPermissions(');
+  const grantHandlerEnd = bg.indexOf('chrome.permissions.onAdded.addListener', grantHandlerStart);
+  const grantHandler = bg.slice(grantHandlerStart, grantHandlerEnd);
+  assert(grantHandlerStart >= 0 && grantHandlerEnd > grantHandlerStart, 'ordered permission-grant handler missing');
+  assert(grantHandler.indexOf('commitPendingSiteFeatureTogglesForGrantedOrigins') < grantHandler.indexOf('injectEnabledTabsForGrantedOrigins'), 'pending preferences must commit before granted tabs are activated');
   assert(bg.includes('permissions.contains'), 'permission detection missing');
   assert(bg.includes('permissions') && bg.includes('request'), 'permission request missing');
   assert(popup.includes('chrome.permissions.request({origins:[currentSiteOrigin]})'), 'site-access permission request missing');
