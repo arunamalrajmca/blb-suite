@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
-  mappedSpecs, separatelyManagedSpecs, referenceDelegatedSpecs,
+  mappedSpecs, separatelyManagedSpecs, referenceDelegatedSpecs, togglePermissionSpecs,
   groupARequiredSpecs, groupBRequiredSpecs,
   referenceRequiredSpecs, studySessionSpecs
 } from "../../scripts/ci-routing-registry.mjs";
@@ -60,6 +60,11 @@ test("Group A core user actions and toggle/permission suites run in independent 
   for (const spec of expected) assert.ok(toggle.includes(spec), "retains " + spec);
   assert.ok(toggle.includes('npx playwright test "${{ matrix.spec }}" --max-failures=1'));
   assert.ok(toggle.includes("fail-fast: false"));
+  for (const spec of togglePermissionSpecs) {
+    assert.ok(groupARequiredSpecs.has(spec), "toggle lifecycle suite belongs to Group A: " + spec);
+    assert.ok(!matrix.some(entry => (entry.files || (entry.file ? [entry.file] : [])).includes(spec)),
+      "toggle suite must have only one CI owner, not also the References matrix: " + spec);
+  }
   assert.doesNotMatch(groupsWorkflow, /Run remaining toggle isolation and permission lifecycle regressions/);
   const summary = groupsWorkflow.slice(groupsWorkflow.indexOf("  feature-groups-summary:"));
   assert.ok(summary.includes("needs.core-user-actions.result"));
