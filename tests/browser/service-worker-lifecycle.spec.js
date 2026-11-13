@@ -133,7 +133,7 @@ test('a real Chrome alarm wakes a terminated MV3 worker and auto-stops an inacti
 
     // A storage-only read from the extension page observes the alarm handler's
     // result without issuing a runtime message to wake the worker.
-    await expect.poll(async () => observer.evaluate(async () => {
+    await expect.poll(async () => observer.evaluate(async expectedTopic => {
       const data = await chrome.storage.local.get({
         currentStudySessionId:null,
         studyPauseReason:'',
