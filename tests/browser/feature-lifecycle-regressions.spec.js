@@ -651,3 +651,238 @@ test('sensitive-site policy blocks all four selection actions despite stale enab
     })()).length
   ), beforeIds), { timeout: 3000 }).toBe(0);
 });
+
+
+async function waitForNewBlbPath(extensionWorker, beforeIds, expectedPath) {
+  let match = null;
+  await expect.poll(async () => {
+    const tabs = await extensionWorker.evaluate(() => chrome.tabs.query({}).then(items =>
+      items.map(tab => ({ id:tab.id, url:tab.url || tab.pendingUrl || '' }))
+    ));
+    match = tabs.find(tab => {
+      if (beforeIds.includes(tab.id)) return false;
+      try {
+        const url = new URL(tab.url);
+        return url.hostname === 'www.blueletterbible.org' && url.pathname === expectedPath;
+      } catch (_) { return false; }
+    }) || null;
+    return !!match;
+  }, { timeout:15000 }).toBe(true);
+  return match;
+}
+
+async function removeBlbTab(extensionWorker, tabId) {
+  await extensionWorker.evaluate(id => chrome.tabs.remove(id).catch(() => {}), tabId);
+}
+
+async function selectLifecycleReference(page, id, text) {
+  await page.evaluate(({ id, text }) => {
+    let target = document.getElementById(id);
+    if (!target) {
+      target = document.createElement('p');
+      target.id = id;
+      document.body.appendChild(target);
+    }
+    target.textContent = text;
+    const range = document.createRange();
+    range.selectNodeContents(target);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles:true }));
+  }, { id, text });
+}
+
+test('Show on BLB OFF blocks Floating Button, Right Click, and Alt+B while Double-click remains enabled', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{ 'example.com':true },
+    doubleClickBlbSites:{ 'example.com':true }
+  });
+  await page.route('https://example.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>Action gate fixture</title></head><body><main>Action gate fixture</main></body></html>'
+  }));
+  await page.goto('https://example.com/', { waitUntil:'domcontentloaded' });
+  await page.bringToFront();
+  await page.waitForTimeout(500);
+
+  // Begin with both features active, then turn only Show on BLB OFF on the
+  // already-open page to exercise the live storage-change lifecycle.
+  await selectLifecycleReference(page, 'show-off-reference', 'John 3:16');
+  const floatingButton = page.locator('#blb-suite-page-selection-button');
+  await expect(floatingButton).toBeVisible({ timeout:10000 });
+  await extensionStorage.set({ pageSelectionButtonSites:{ 'example.com':false } });
+  await expect(floatingButton).toHaveCount(0, { timeout:10000 });
+  const activeTab = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({ active:true, currentWindow:true }).then(([tab]) => tab)
+  );
+  expect(await extensionWorker.evaluate(tab =>
+    shouldShowBlbContextMenu(tab, 'John 3:16'), activeTab
+  )).toBe(false);
+
+  const beforeBlockedActions = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+  );
+  await extensionWorker.evaluate(async tab => {
+    await handleBlbSelectionContextMenuClick({
+      menuItemId:'blb-suite-web-selection',
+      selectionText:'John 3:16'
+    }, tab);
+  }, activeTab);
+  const altB = await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+  expect(altB).toMatchObject({ ok:false, reason:'site-disabled' });
+
+  const afterBlockedActions = await extensionWorker.evaluate(before => chrome.tabs.query({}).then(tabs =>
+    tabs.filter(tab => !before.includes(tab.id) && (() => {
+      try {
+        const url = new URL(tab.url || tab.pendingUrl || '');
+        return url.hostname === 'www.blueletterbible.org';
+      } catch (_) { return false; }
+    })()).length
+  ), beforeBlockedActions);
+  expect(afterBlockedActions).toBe(0);
+
+  const beforeDoubleClick = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+  );
+  await page.locator('#show-off-reference').dblclick();
+  const doubleClickTab = await waitForNewBlbPath(extensionWorker, beforeDoubleClick, '/kjv/jhn/3/16/');
+  expect(new URL(doubleClickTab.url).pathname).toBe('/kjv/jhn/3/16/');
+  await removeBlbTab(extensionWorker, doubleClickTab.id);
+});
+
+test('Double-click OFF blocks only Double-click while Floating Button, Right Click, and Alt+B remain enabled', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{ 'example.com':true },
+    doubleClickBlbSites:{ 'example.com':true }
+  });
+  await page.route('https://example.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>Action gate fixture</title></head><body><main>Action gate fixture</main></body></html>'
+  }));
+  await page.goto('https://example.com/', { waitUntil:'domcontentloaded' });
+  await page.bringToFront();
+  await page.waitForTimeout(500);
+
+  // Confirm Double-click is initially active, then turn only that feature OFF
+  // while the same external page remains open.
+  await selectLifecycleReference(page, 'double-click-before-off-reference', 'John 3:16');
+  let before = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+  );
+  await page.locator('#double-click-before-off-reference').dblclick();
+  let opened = await waitForNewBlbPath(extensionWorker, before, '/kjv/jhn/3/16/');
+  await removeBlbTab(extensionWorker, opened.id);
+  await page.bringToFront();
+  await extensionStorage.set({ doubleClickBlbSites:{ 'example.com':false } });
+  await page.waitForTimeout(300);
+
+  // Floating Button: the real control appears after a live selection and opens BLB.
+  await selectLifecycleReference(page, 'show-on-floating-reference', 'John 3:17');
+  const floatingButton = page.locator('#blb-suite-page-selection-button');
+  await expect(floatingButton).toBeVisible({ timeout:10000 });
+  before = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+  );
+  await floatingButton.click();
+  opened = await waitForNewBlbPath(extensionWorker, before, '/kjv/jhn/3/17/');
+  await removeBlbTab(extensionWorker, opened.id);
+
+  // Right Click: invoke the registered onClicked handler with the live selection.
+  await page.bringToFront();
+  await selectLifecycleReference(page, 'show-on-right-click-reference', 'John 3:18');
+  const activeTab = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({ active:true, currentWindow:true }).then(([tab]) => tab)
+  );
+  expect(await extensionWorker.evaluate(tab =>
+    shouldShowBlbContextMenu(tab, 'John 3:18'), activeTab
+  )).toBe(true);
+  before = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+  );
+  await extensionWorker.evaluate(async tab => {
+    await handleBlbSelectionContextMenuClick({
+      menuItemId:'blb-suite-web-selection',
+      selectionText:'John 3:18'
+    }, tab);
+  }, activeTab);
+  opened = await waitForNewBlbPath(extensionWorker, before, '/kjv/jhn/3/18/');
+  await removeBlbTab(extensionWorker, opened.id);
+
+  // Alt+B: call the same handler registered for the browser command.
+  await page.bringToFront();
+  await selectLifecycleReference(page, 'show-on-alt-b-reference', 'John 3:19');
+  before = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+  );
+  const altB = await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+  expect(altB).toMatchObject({ ok:true });
+  opened = await waitForNewBlbPath(extensionWorker, before, '/kjv/jhn/3/19/');
+  await removeBlbTab(extensionWorker, opened.id);
+
+  // Double-click: the disabled site preference must leave no destination tab.
+  await page.bringToFront();
+  await selectLifecycleReference(page, 'double-click-off-reference', 'John 3:20');
+  before = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+  );
+  await page.locator('#double-click-off-reference').dblclick();
+  await expect.poll(() => extensionWorker.evaluate(previous => chrome.tabs.query({}).then(tabs =>
+    tabs.some(tab => !previous.includes(tab.id) && (() => {
+      try {
+        const url = new URL(tab.url || tab.pendingUrl || '');
+        return url.hostname === 'www.blueletterbible.org';
+      } catch (_) { return false; }
+    })())
+  ), before), { timeout:1500 }).toBe(false);
+});
+
+
+test('BLB main host exposes the floating Show on BLB action while Double-click stays excluded', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{ 'blueletterbible.org':true },
+    // A stale saved value must not activate Double-click on BLB itself.
+    doubleClickBlbSites:{ 'blueletterbible.org':true }
+  });
+  await page.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>BLB main-host fixture</title></head><body><main>BLB main-host fixture</main></body></html>'
+  }));
+  await page.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil:'domcontentloaded' });
+  await page.bringToFront();
+  await page.waitForTimeout(500);
+
+  await selectLifecycleReference(page, 'blb-main-host-selection', 'John 3:17');
+  const floatingButton = page.locator('#blb-suite-page-selection-button');
+  await expect(floatingButton).toBeVisible({ timeout:10000 });
+
+  const activeTab = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({ active:true, currentWindow:true }).then(([tab]) => tab)
+  );
+  expect(await extensionWorker.evaluate(tab =>
+    shouldShowBlbContextMenu(tab, 'John 3:17'), activeTab
+  )).toBe(true);
+
+  const before = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+  );
+  await floatingButton.click();
+  const opened = await waitForNewBlbPath(extensionWorker, before, '/kjv/jhn/3/17/');
+  expect(new URL(opened.url).pathname).toBe('/kjv/jhn/3/17/');
+  await removeBlbTab(extensionWorker, opened.id);
+});
