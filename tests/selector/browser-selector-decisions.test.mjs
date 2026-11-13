@@ -1021,3 +1021,15 @@ test("split extension suites retain complete CI discovery and helper routing", (
   assert.ok(referenceWorkflow.includes("Verify split preserves every original test registration"));
   assert.ok(referenceWorkflow.includes("npx playwright test --config=playwright.config.js --list"));
 });
+
+test("selection text helper changes select both split extension suites", () => {
+  withFixture((root, base) => {
+    commitChange(root, "extension/selection-text-helpers.js", "// shared selection helper change\\n");
+    const output = select(root, base);
+    assert.ok(output.includes("full_browser_suite=false"));
+    assert.ok(output.includes("tests/browser/extension-reference-actions.spec.js"));
+    assert.ok(output.includes("tests/browser/extension-lifecycle.spec.js"));
+    assert.ok(output.includes("reference_required=true"));
+    assert.ok(output.includes("group_a_required=true"));
+  });
+});
