@@ -215,6 +215,9 @@ test("mixed Group B runtime and unrelated browser-spec edits still run the chang
     const output = select(root, base);
     assert.match(output, /changed_specs=tests\/browser\/scripttagger-global-injection\.spec\.js/);
     assert.match(output, /changed_browser_specs=.*redirect-toggle-isolation\.spec\.js/);
+    assert.ok(output.includes("group_a_changed_browser_specs=" + "\\n"),
+      "toggle matrix owns the changed toggle spec instead of running it a second time in Group A's generic changed-spec runner");
+    assert.match(output, /reference_required=false/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=true/);
   });
