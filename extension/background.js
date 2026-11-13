@@ -2750,7 +2750,7 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
 }
 
 
-async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCRIPT_FILES, hasHostAccess = hasHostAccessForTab) {
+async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCRIPT_FILES) {
   const pattern = originPatternForUrl(tab?.url);
   if (!pattern) return false;
   const id = runtimeContentScriptIdForPattern(pattern);
@@ -2761,7 +2761,7 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
   const previous = runtimeContentScriptRegistrationLocks.get(id) || Promise.resolve();
   const operation = previous
     .catch(() => {})
-    .then(() => registerRuntimeContentScriptForPattern(tab, files, hasHostAccess));
+    .then(() => registerRuntimeContentScriptForPattern(tab, files));
   runtimeContentScriptRegistrationLocks.set(id, operation);
   try {
     return await operation;
@@ -2845,7 +2845,7 @@ function reconcileRuntimeContentScriptRegistrations() {
   return operation;
 }
 
-async function ensureContentScriptInTab(tabId, hasHostAccess = hasHostAccessForTab) {
+async function ensureContentScriptInTab(tabId) {
   if (!Number.isInteger(tabId) || tabId < 0) return false;
   const existing = contentScriptInjectionLocks.get(tabId);
   if (existing) return existing;
@@ -2854,7 +2854,7 @@ async function ensureContentScriptInTab(tabId, hasHostAccess = hasHostAccessForT
     try {
       const tab = await chrome.tabs.get(tabId);
       if (!isHttpPageUrl(tab?.url)) return false;
-      if (!(await hasHostAccess(tab))) return false;
+      if (!(await hasHostAccessForTab(tab))) return false;
 
       // Read settings only after permission is confirmed. A toggle may be
       // written while Chrome's permission prompt is closing, so re-read the
@@ -2870,7 +2870,7 @@ async function ensureContentScriptInTab(tabId, hasHostAccess = hasHostAccessForT
       const files = contentScriptFilesForTab(tab, settings);
       if (!files.length) return false;
 
-      const registrationReady = await ensureRuntimeContentScriptRegistered(tab, files, hasHostAccess);
+      const registrationReady = await ensureRuntimeContentScriptRegistered(tab, files);
       if (!registrationReady) {
         // Keep the current page usable even when Chrome rejects a persistent
         // registration update. The direct executeScript path below activates
