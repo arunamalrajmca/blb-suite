@@ -660,3 +660,54 @@ test('Study Sessions topic blur reports when the topic could not be saved', asyn
   expect(stored.studySelectedTopic).not.toBe('Unsaved Topic Failure');
   await page.close();
 });
+
+test('Study Sessions restores the saved auto-stop value when alarm refresh fails', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionWorker.evaluate(async () => {
+    await chrome.storage.local.set({
+      masterEnabled:true,
+      studyAutoStopMinutes:15,
+      currentStudySessionId:'auto-stop-alarm-refresh-rollback',
+      studyLastActivityAt:Date.now(),
+      studySessions:[{
+        id:'auto-stop-alarm-refresh-rollback',
+        title:'Auto Stop Alarm Rollback',
+        date:'2026-11-13',
+        dateLabel:'13 November 2026',
+        refs:[],strongs:[],searchTerms:[],notes:[]
+      }]
+    });
+    await refreshStudyAutoStopAlarm();
+    const originalClear = chrome.alarms.clear.bind(chrome.alarms);
+    let failNextClear = true;
+    chrome.alarms.clear = name => {
+      if (failNextClear) {
+        failNextClear = false;
+        return Promise.reject(new Error('simulated-alarm-refresh-failure'));
+      }
+      return originalClear(name);
+    };
+  });
+
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(page);
+  const autoStop = page.locator('#studyAutoStop');
+  await expect(autoStop).toHaveValue('15');
+  await autoStop.selectOption('0');
+
+  await expect(autoStop).toHaveValue('15');
+  await expect(page.locator('#studyStatus')).toContainText(
+    'Unable to save the inactivity stop setting. The previous value was restored.'
+  );
+  const state = await extensionWorker.evaluate(async () => ({
+    settings:await chrome.storage.local.get({studyAutoStopMinutes:15}),
+    alarm:await chrome.alarms.get('blb-study-auto-stop')
+  }));
+  expect(state.settings.studyAutoStopMinutes).toBe(15);
+  expect(state.alarm).toMatchObject({name:'blb-study-auto-stop', periodInMinutes:1});
+  await page.close();
+});
+
