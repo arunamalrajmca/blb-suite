@@ -905,7 +905,7 @@ async function openHistoryVerseRefs() {
 async function openHistoryStrongs() {
   closeHistoryMenu();
   const history = await getSelectedTopicHistory();
-  const values = [...new Set((history.strongs || []).map(v => String(v || '').trim().toUpperCase()).filter(v => /^[GH]\\d+$/.test(v)))];
+  const values = [...new Set((history.strongs || []).map(v => String(v || '').trim().toUpperCase()).filter(v => /^[GH]\d+$/.test(v)))];
   if (!values.length) { setStatus("No KJV Strong's entries in this topic."); return; }
 
   let opened = 0;
