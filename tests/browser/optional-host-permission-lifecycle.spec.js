@@ -751,7 +751,27 @@ test('permission revocation blocks all four actions on an already-open page and 
 
     let ids = await beforeIds();
     await select('permission-revocation-floating-blocked','John 3:16');
+    // Capture only this expected permission-denial diagnostic. It must not be
+    // emitted as a generic console error, and the selected text remains retryable.
+    await page.evaluate(() => {
+      const capture = { errors:[], infos:[], originalError:console.error.bind(console), originalInfo:console.info.bind(console) };
+      window.__blbPermissionDiagnosticCapture = capture;
+      console.error = (...args) => { capture.errors.push(args.map(String).join(' ')); capture.originalError(...args); };
+      console.info = (...args) => { capture.infos.push(args.map(String).join(' ')); capture.originalInfo(...args); };
+    });
     await floating.click();
+    await expect.poll(() => page.evaluate(() =>
+      window.__blbPermissionDiagnosticCapture?.infos.length || 0
+    ), {timeout:5000}).toBeGreaterThan(0);
+    const permissionDiagnostics = await page.evaluate(() => {
+      const capture = window.__blbPermissionDiagnosticCapture;
+      console.error = capture.originalError;
+      console.info = capture.originalInfo;
+      delete window.__blbPermissionDiagnosticCapture;
+      return { errors:capture.errors, infos:capture.infos };
+    });
+    expect(permissionDiagnostics.errors.some(message => message.includes('action was not completed'))).toBe(false);
+    expect(permissionDiagnostics.infos.some(message => message.includes('host-permission-revoked'))).toBe(true);
     await page.locator('#permission-revocation-floating-blocked').dblclick();
     const activeTab = await extensionWorker.evaluate(() =>
       chrome.tabs.query({active:true,currentWindow:true}).then(([tab]) => tab)
