@@ -133,8 +133,8 @@ for (const feature of ['pageButton', 'doubleClick']) {
 }
 
 for (const feature of ['pageButton', 'doubleClick']) {
-  test(`closing the popup during the ${feature} permission request preserves only that pending choice`, async ({
-    page, extensionId, extensionStorage, extensionWorker
+  test(`closing and reopening the popup during the ${feature} permission request preserves the pending choice`, async ({
+    page, context, extensionId, extensionStorage, extensionWorker
   }) => {
     await extensionStorage.set({
       masterEnabled: true,
@@ -174,6 +174,18 @@ for (const feature of ['pageButton', 'doubleClick']) {
       }
     });
     await page.close();
+
+    // Reopening the popup must not discard or rewrite the unresolved intent.
+    const reopenedPopup = await context.newPage();
+    await reopenedPopup.goto(`chrome-extension://${extensionId}/popup.html`);
+    await expect.poll(() => reopenedPopup.locator('body').evaluate(body =>
+      !body.classList.contains('popup-loading')
+    )).toBe(true);
+    const duringReopen = await readSitePreferences(extensionWorker);
+    expect(duringReopen.pendingSiteFeatureToggles['https://example.com/*']?.feature).toBe(feature);
+    expect(duringReopen.pageSelectionButtonSites[SITE]).toBe(feature === 'doubleClick');
+    expect(duringReopen.doubleClickBlbSites[SITE]).toBe(feature === 'pageButton');
+    await reopenedPopup.close();
 
     const beforeGrant = await readSitePreferences(extensionWorker);
     expect(beforeGrant.pageSelectionButtonSites[SITE]).toBe(feature === 'doubleClick');
