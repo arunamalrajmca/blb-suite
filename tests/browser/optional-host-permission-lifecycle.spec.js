@@ -436,3 +436,114 @@ test('global OFF remains authoritative across permission revocation, regrant, an
     }, {originPattern:pattern,settings:previous});
   }
 });
+
+
+test('sensitive-site restrictions and explicit site opt-outs survive permission regrant and extension-update recovery', async ({
+  page, context, extensionWorker, extensionStorage
+}) => {
+  const optOutUrl = 'https://example.com/';
+  const sensitiveUrl = 'https://www.gov.scot/';
+  const optOutPattern = 'https://example.com/*';
+  const sensitivePattern = 'https://www.gov.scot/*';
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    redirectEnabled:false
+  }));
+  let sensitivePage;
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      redirectEnabled:false,
+      pageSelectionButtonSites:{'example.com':false,'gov.scot':true},
+      doubleClickBlbSites:{'example.com':false,'gov.scot':true}
+    });
+
+    await page.goto(optOutUrl, {waitUntil:'domcontentloaded'});
+    const optOutTabId = await extensionWorker.evaluate(async url =>
+      (await chrome.tabs.query({url}))[0]?.id
+    , optOutUrl);
+    expect(Number.isInteger(optOutTabId)).toBe(true);
+
+    sensitivePage = await context.newPage();
+    await sensitivePage.route('https://www.gov.scot/**', route => route.fulfill({
+      status:200,
+      contentType:'text/html',
+      body:'<!doctype html><html><head><title>Government test</title></head><body><p>John 3:16</p></body></html>'
+    }));
+    await sensitivePage.goto(sensitiveUrl, {waitUntil:'domcontentloaded'});
+    const sensitiveTabId = await extensionWorker.evaluate(async url =>
+      (await chrome.tabs.query({url}))[0]?.id
+    , sensitiveUrl);
+    expect(Number.isInteger(sensitiveTabId)).toBe(true);
+
+    const registrationExists = pattern => extensionWorker.evaluate(async value => {
+      const id = runtimeContentScriptIdForPattern(value);
+      return (await chrome.scripting.getRegisteredContentScripts({ids:[id]})).length > 0;
+    }, pattern);
+
+    // Seed registrations as if they were persisted by an earlier extension
+    // version before the site was opted out or classified as sensitive.
+    // This deliberately bypasses today's eligibility gates so reconciliation
+    // must clean up stale registrations rather than merely avoid new ones.
+    await extensionWorker.evaluate(async ({optOut, sensitive}) => {
+      await registerRuntimeContentScriptForPattern({url:optOut}, ['content.js']);
+      await registerRuntimeContentScriptForPattern({url:sensitive}, ['content.js']);
+    }, {optOut:optOutUrl,sensitive:sensitiveUrl});
+    await expect.poll(() => registrationExists(optOutPattern)).toBe(true);
+    await expect.poll(() => registrationExists(sensitivePattern)).toBe(true);
+
+    // Model both permissions as granted while reconciliation runs. The
+    // sensitive-site and explicit opt-out policy must still remove the stale
+    // registrations independently of host permission availability.
+    await extensionWorker.evaluate(async patterns => {
+      const originalContains = chrome.permissions.contains;
+      chrome.permissions.contains = async details =>
+        details?.origins?.some(origin => patterns.includes(origin))
+          ? true
+          : originalContains(details);
+      try {
+        await reconcileRuntimeContentScriptRegistrations();
+      } finally {
+        chrome.permissions.contains = originalContains;
+      }
+    }, [optOutPattern,sensitivePattern]);
+
+    await expect.poll(() => registrationExists(optOutPattern)).toBe(false);
+    await expect.poll(() => registrationExists(sensitivePattern)).toBe(false);
+
+    // Exercise the same activation callbacks used after a permission regrant
+    // and extension update. Neither path may recreate either registration.
+    await extensionWorker.evaluate(patterns =>
+      injectEnabledTabsForGrantedOrigins(patterns), [optOutPattern,sensitivePattern]
+    );
+    const recovered = await extensionWorker.evaluate(() =>
+      injectConfiguredTabsAfterExtensionUpdate()
+    );
+    expect(recovered.eligibleTabIds).not.toContain(optOutTabId);
+    expect(recovered.eligibleTabIds).not.toContain(sensitiveTabId);
+    expect(recovered.activatedTabIds).not.toContain(optOutTabId);
+    expect(recovered.activatedTabIds).not.toContain(sensitiveTabId);
+    expect(await extensionWorker.evaluate(id => ensureContentScriptInTab(id), optOutTabId)).toBe(false);
+    expect(await extensionWorker.evaluate(id => ensureContentScriptInTab(id), sensitiveTabId)).toBe(false);
+    await expect.poll(() => registrationExists(optOutPattern)).toBe(false);
+    await expect.poll(() => registrationExists(sensitivePattern)).toBe(false);
+
+    const saved = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      pageSelectionButtonSites:{},doubleClickBlbSites:{}
+    }));
+    expect(saved.pageSelectionButtonSites).toMatchObject({'example.com':false,'gov.scot':true});
+    expect(saved.doubleClickBlbSites).toMatchObject({'example.com':false,'gov.scot':true});
+  } finally {
+    await extensionWorker.evaluate(async ({patterns,settings}) => {
+      for (const pattern of patterns) {
+        const id = runtimeContentScriptIdForPattern(pattern);
+        await chrome.scripting.unregisterContentScripts({ids:[id,id+'-main-world']}).catch(() => {});
+      }
+      await chrome.storage.local.set(settings);
+      await reconcileRuntimeContentScriptRegistrations().catch(() => {});
+    }, {patterns:[optOutPattern,sensitivePattern],settings:previous});
+    if (sensitivePage) await sensitivePage.close().catch(() => {});
+  }
+});
