@@ -992,7 +992,7 @@ test('permission revocation during an in-flight registration cannot leave a pers
       // an uninstrumented activation before the registration gate is installed.
       await chrome.scripting.unregisterContentScripts({ids:[id,mainId]}).catch(() => {});
 
-      const originalContains = chrome.permissions.contains;
+      const originalHasHostAccess = hasHostAccessForTab;
       const originalRegister = chrome.scripting.registerContentScripts;
       let accessGranted = true;
       let signalStarted;
@@ -1000,9 +1000,11 @@ test('permission revocation during an in-flight registration cannot leave a pers
       let releaseRegistration;
       const registrationGate = new Promise(resolve => { releaseRegistration = resolve; });
 
-      chrome.permissions.contains = async details => {
-        if (details?.origins?.includes(originPattern)) return accessGranted;
-        return originalContains.call(chrome.permissions, details);
+      // Stub the shared permission check rather than assigning to Chrome's
+      // native API method, whose binding may not be writable in extension workers.
+      globalThis.hasHostAccessForTab = async candidateTab => {
+        if (originPatternForUrl(candidateTab?.url) === originPattern) return accessGranted;
+        return originalHasHostAccess(candidateTab);
       };
       chrome.scripting.registerContentScripts = async scripts => {
         if (scripts.some(script => script.id === id)) {
@@ -1014,7 +1016,7 @@ test('permission revocation during an in-flight registration cannot leave a pers
 
       globalThis.__permissionRaceRestore = () => {
         accessGranted = true;
-        chrome.permissions.contains = originalContains;
+        globalThis.hasHostAccessForTab = originalHasHostAccess;
         chrome.scripting.registerContentScripts = originalRegister;
         releaseRegistration();
       };
