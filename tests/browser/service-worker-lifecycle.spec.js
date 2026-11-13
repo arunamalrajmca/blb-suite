@@ -175,6 +175,7 @@ test('a real MV3 service-worker termination is recovered by an actual Double-cli
     target.textContent='John 3:16';
     document.body.appendChild(target);
   });
+  await page.waitForTimeout(500);
 
   const browser=context.browser();
   expect(browser, 'persistent context must expose its Chromium browser').not.toBeNull();
@@ -203,7 +204,7 @@ test('a real MV3 service-worker termination is recovered by an actual Double-cli
       const {targetInfos:current}=await cdp.send('Target.getTargets');
       return current.some(target =>
         target.type==='page' &&
-        /https:\/\/www\\.blueletterbible\\.org\/kjv\/jhn\/3\/16\//.test(target.url)
+        (() => { try { const url=new URL(target.url); return url.hostname==='www.blueletterbible.org' && url.pathname==='/kjv/jhn/3/16/'; } catch (_) { return false; } })()
       );
     },{timeout:15000,intervals:[100,200,500,1000]}).toBe(true);
 
