@@ -3151,8 +3151,30 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     try {
       const value = Number(message.minutes);
       if (value !== 0 && !STUDY_AUTOSTOP_OPTIONS.includes(value)) { sendResponse({ok:false, error:'Invalid auto-stop interval'}); return true; }
+      const previousValue = await getStudyAutoStopMinutes();
       await chrome.storage.local.set({studyAutoStopMinutes:value});
-      await refreshStudyAutoStopAlarm();
+      try {
+        await refreshStudyAutoStopAlarm();
+      } catch (error) {
+        // Keep the persisted preference and its alarm lifecycle atomic from
+        // the popup's point of view. A failed alarm refresh must not leave a
+        // new value saved while the UI reports that the old value was restored.
+        let restored = false;
+        try {
+          await chrome.storage.local.set({studyAutoStopMinutes:previousValue});
+          await refreshStudyAutoStopAlarm();
+          restored = true;
+        } catch (rollbackError) {
+          console.error('KJV Scripture Tools could not roll back the Study auto-stop setting:', String(rollbackError));
+        }
+        sendResponse({
+          ok:false,
+          error:String(error),
+          minutes:restored ? previousValue : await getStudyAutoStopMinutes(),
+          restored
+        });
+        return true;
+      }
       sendResponse({ok:true, minutes:value});
     } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
