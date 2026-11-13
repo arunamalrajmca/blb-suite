@@ -27,7 +27,7 @@ test("matrix-owned changed browser specs are delegated by the central registry",
   for (const spec of studySessionSpecs) assert.ok(groupsWorkflow.includes(spec));
   assert.ok(groupsWorkflow.includes("inputs.group_a_changed_browser_specs"));
   const start = groupsWorkflow.indexOf("- name: Run every non-delegated changed browser spec");
-  const end = groupsWorkflow.indexOf(String.fromCharCode(10) + "      - name:", start);
+  const end = groupsWorkflow.indexOf("\n      - name:", start);
   assert.ok(start >= 0 && end > start);
   const changedRunner = groupsWorkflow.slice(start, end);
   assert.ok(changedRunner.includes('npx playwright test "${specs[@]}" --max-failures=1'));
@@ -44,24 +44,22 @@ test("gate ownership sets remain subsets of the authoritative mapped inventory",
 });
 
 test("Group A core user actions and toggle/permission suites run in independent jobs", () => {
-  const core = groupsWorkflow.match(/  core-user-actions:
-([sS]*?)(?=
-  toggle-permission-lifecycle:)/);
-  assert.ok(core, "core user-action job exists");
-  assert.ok(core[1].includes("tests/browser/e2e-core-user-actions.spec.js"));
-  const toggle = groupsWorkflow.match(/  toggle-permission-lifecycle:
-([sS]*?)(?=
-  core-group-a:)/);
-  assert.ok(toggle, "parallel toggle/permission job exists");
+  const coreStart = groupsWorkflow.indexOf("  core-user-actions:\n");
+  const toggleStart = groupsWorkflow.indexOf("  toggle-permission-lifecycle:\n");
+  const groupAStart = groupsWorkflow.indexOf("  core-group-a:\n");
+  assert.ok(coreStart >= 0 && toggleStart > coreStart && groupAStart > toggleStart);
+  const core = groupsWorkflow.slice(coreStart, toggleStart);
+  const toggle = groupsWorkflow.slice(toggleStart, groupAStart);
+  assert.ok(core.includes("tests/browser/e2e-core-user-actions.spec.js"));
   const expected = [
     "tests/browser/popup-site-toggle-independence.spec.js",
     "tests/browser/popup-master-toggle-regression.spec.js",
     "tests/browser/redirect-toggle-isolation.spec.js",
     "tests/browser/optional-host-permission-lifecycle.spec.js"
   ];
-  for (const spec of expected) assert.ok(toggle[1].includes(spec), "retains " + spec);
-  assert.ok(toggle[1].includes('npx playwright test "${{ matrix.spec }}" --max-failures=1'));
-  assert.match(toggle[1], /fail-fast:s*false/);
+  for (const spec of expected) assert.ok(toggle.includes(spec), "retains " + spec);
+  assert.ok(toggle.includes('npx playwright test "${{ matrix.spec }}" --max-failures=1'));
+  assert.ok(toggle.includes("fail-fast: false"));
   assert.doesNotMatch(groupsWorkflow, /Run remaining toggle isolation and permission lifecycle regressions/);
   const summary = groupsWorkflow.slice(groupsWorkflow.indexOf("  feature-groups-summary:"));
   assert.ok(summary.includes("needs.core-user-actions.result"));
@@ -71,22 +69,21 @@ test("Group A core user actions and toggle/permission suites run in independent 
 });
 
 test("reference feature coverage is parallel and does not wait for the reference matrix", () => {
-  const feature = referenceWorkflow.match(/  browser-e2e-features:
-([sS]*?)(?=
-  grouped-browser-e2e:)/);
-  assert.ok(feature, "feature coverage job exists");
-  const block = feature[1];
-  const needs = block.match(/    needs:
-([sS]*?)(?=
-    if:)/);
-  assert.ok(needs && needs[1].includes("change-detection"));
-  assert.doesNotMatch(needs[1], /browser-e2e/);
-  assert.match(block, /fail-fast:s*false/);
-  for (const spec of ["tests/browser/extension-reference-actions.spec.js","tests/browser/extension-lifecycle.spec.js"]) {
-    assert.ok(block.includes(spec), "parallel feature matrix retains " + spec);
+  const start = referenceWorkflow.indexOf("  browser-e2e-features:\n");
+  const end = referenceWorkflow.indexOf("\n  grouped-browser-e2e:", start);
+  assert.ok(start >= 0 && end > start);
+  const feature = referenceWorkflow.slice(start, end);
+  const needsStart = feature.indexOf("    needs:\n");
+  const needsEnd = feature.indexOf("\n    if:", needsStart);
+  const needs = feature.slice(needsStart, needsEnd);
+  assert.ok(needs.includes("change-detection"));
+  assert.ok(!needs.includes("browser-e2e"));
+  assert.ok(feature.includes("fail-fast: false"));
+  for (const spec of ["tests/browser/extension-reference-actions.spec.js", "tests/browser/extension-lifecycle.spec.js"]) {
+    assert.ok(feature.includes(spec), "parallel feature matrix retains " + spec);
   }
-  assert.ok(block.includes('npx playwright test "${{ matrix.spec }}" --grep'));
-  assert.ok(block.includes("strategy.job-index"), "parallel matrix artifacts must have unique names");
+  assert.ok(feature.includes('npx playwright test "${{ matrix.spec }}" --grep'));
+  assert.ok(feature.includes("strategy.job-index"), "parallel matrix artifacts must have unique names");
 });
 
 test("split reference matrix groups preserve the former test-title coverage exactly once", () => {
