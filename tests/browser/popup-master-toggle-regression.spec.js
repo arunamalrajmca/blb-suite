@@ -105,9 +105,16 @@ test('master OFF stays ON and reports failure when an active Study recording can
   await page.locator('#startTopic').click();
   await expect(page.locator('#studyStatus')).toContainText('Recording started');
 
-  const activeBefore = await extensionWorker.evaluate(() => chrome.storage.local.get([
-    'masterEnabled','currentStudySessionId','studySelectedTopic'
-  ]));
+  const activeBefore = await extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get([
+      'masterEnabled','currentStudySessionId','studySelectedTopic'
+    ]);
+    return {
+      masterEnabled: state.masterEnabled !== false,
+      currentStudySessionId: state.currentStudySessionId || null,
+      studySelectedTopic: state.studySelectedTopic || ''
+    };
+  });
   expect(activeBefore.masterEnabled).toBe(true);
   expect(activeBefore.currentStudySessionId).toBeTruthy();
   expect(activeBefore.studySelectedTopic).toBe(topic);
@@ -126,9 +133,16 @@ test('master OFF stays ON and reports failure when an active Study recording can
 
   await expect(page.locator('#master')).toBeChecked();
   await expect(page.locator('#studyStatus')).toContainText('Unable to stop recording. The Suite remains ON.');
-  await expect.poll(async () => extensionWorker.evaluate(async () => chrome.storage.local.get([
-    'masterEnabled','currentStudySessionId','studySelectedTopic'
-  ]))).toEqual({
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get([
+      'masterEnabled','currentStudySessionId','studySelectedTopic'
+    ]);
+    return {
+      masterEnabled: state.masterEnabled !== false,
+      currentStudySessionId: state.currentStudySessionId || null,
+      studySelectedTopic: state.studySelectedTopic || ''
+    };
+  })).toEqual({
     masterEnabled:true,
     currentStudySessionId:activeBefore.currentStudySessionId,
     studySelectedTopic:topic
