@@ -2700,6 +2700,23 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
         }]);
       }
     }
+    // Permission revocation can race an in-flight register/update call. The
+    // onRemoved reconciliation may run before this registration becomes
+    // visible, so verify access again after all registrations complete and
+    // remove both worlds if the grant disappeared during the operation.
+    const latestSettings = await chrome.storage.local.get({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      redirectEnabled:false
+    });
+    const stillEligible = latestSettings.masterEnabled !== false &&
+      await hasHostAccessForTab(tab) &&
+      await shouldInjectContentScriptForTab(tab, latestSettings);
+    if (!stillEligible) {
+      await unregisterRuntimeContentScriptForPattern(pattern);
+      return false;
+    }
     return true;
   } catch (error) {
     const errorDetails = describeScriptInjectionError(error);
