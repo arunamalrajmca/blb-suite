@@ -68,7 +68,8 @@ for (const otherState of ['on', 'off', 'unset']) {
     await page.locator('#pageSetting .slider').click();
     await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
       pageSelectionButtonSites: { [SITE]: true },
-      doubleClickBlbSites: doubleClick === undefined ? {} : { [SITE]: doubleClick }
+      doubleClickBlbSites: doubleClick === undefined ? {} : { [SITE]: doubleClick },
+      pendingSiteFeatureToggles: {}
     });
     const stored = await readSitePreferences(extensionWorker);
     expect(Object.hasOwn(stored.doubleClickBlbSites, SITE)).toBe(doubleClick !== undefined);
@@ -87,7 +88,8 @@ for (const otherState of ['on', 'off', 'unset']) {
     await page.locator('#doubleSetting .slider').click();
     await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
       doubleClickBlbSites: { [SITE]: true },
-      pageSelectionButtonSites: pageButton === undefined ? {} : { [SITE]: pageButton }
+      pageSelectionButtonSites: pageButton === undefined ? {} : { [SITE]: pageButton },
+      pendingSiteFeatureToggles: {}
     });
     const stored = await readSitePreferences(extensionWorker);
     expect(Object.hasOwn(stored.pageSelectionButtonSites, SITE)).toBe(pageButton !== undefined);

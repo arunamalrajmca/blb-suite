@@ -1196,6 +1196,10 @@ async function setIndependentSiteFeature(feature, on) {
       render(await getState());
       return;
     }
+    // The permission may already have been granted, in which case Chrome
+    // does not emit onAdded. Clear this feature's durable intent after the
+    // popup itself has observed success; any other feature intent is retained.
+    await cancelPendingSiteFeatureChoice(feature);
   } else {
     await cancelPromise;
     if (generation !== siteFeatureToggleGeneration[feature]) return;
