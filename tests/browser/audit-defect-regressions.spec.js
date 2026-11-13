@@ -90,17 +90,8 @@ test('disabling the last site feature removes both persistent isolated- and MAIN
 
     try {
       const registered = await ensureRuntimeContentScriptRegistered({ url, id: 77 }, ['content.js']);
-      // Seed a legacy MAIN-world registration after the isolated-world
-      // registration is established. Otherwise ensureRuntimeContentScriptRegistered
-      // correctly cleans stale MAIN-world registrations for this non-collector host.
-      await chrome.scripting.registerContentScripts([{
-        id:mainWorldId,
-        matches:[pattern],
-        js:['redirect-christianity-main-world.js'],
-        runAt:'document_start',
-        world:'MAIN',
-        persistAcrossSessions:true
-      }]);
+      // christianity.com is a source-page collector host, so the shared
+      // registration helper creates its MAIN-world guard alongside content.js.
       const before = await chrome.scripting.getRegisteredContentScripts({ ids: [id, mainWorldId] });
       await chrome.storage.local.set({
         masterEnabled: true,
