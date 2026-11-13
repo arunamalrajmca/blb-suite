@@ -78,7 +78,14 @@ const focusedSourcePageRuntimeChange = changed.filter(path =>
   && changed.includes("extension/background.js")
   && changed.includes("tests/browser/source-page-button-redirect-separation.spec.js")
   && changed.includes("tests/browser/scripttagger-global-injection.spec.js");
-const forceFull = alwaysFull || changed.some(path =>
+const browserE2eControlFiles = new Set([
+  ".github/workflows/browser-e2e-groups.yml",
+  ".github/workflows/browser-e2e-reference.yml",
+  "scripts/reference-e2e-matrix.json"
+]);
+// Runner topology and reference-matrix edits must exercise all applicable browser groups.
+const browserE2eControlChanged = changed.some(path => browserE2eControlFiles.has(path));
+const forceFull = alwaysFull || browserE2eControlChanged || changed.some(path =>
   !ignoredNonRuntime(path) && (
     (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix|ci-routing-registry|ci-change-policy)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js" && path !== "scripts/test-popup-cross-browser-rendering.js" && path !== "scripts/reference-e2e-matrix.json")
     || path.startsWith("regression-suite/")
