@@ -1144,42 +1144,40 @@ async function cancelPendingSiteFeatureChoice(feature) {
   } catch (_) {}
 }
 
-async function setIndependentSiteFeature(feature, on) {
-  // Do not request host permissions or persist feature opt-ins on sensitive sites.
-  if (isSensitiveSiteUrl(currentSiteUrl)) { render(await getState()); return; }
-  // Start pinning the explicit choice immediately. The popup can be closed by
-  // Chrome while its permission prompt is open; waiting for getState() first
-  // delayed this durable write until after that interruption.
-  const pinPromise = on
-    ? pinSiteFeatureChoice(feature)
-    : Promise.resolve();
+const siteFeatureToggleGeneration = Object.create(null);
 
-  // permissions.request must still be invoked synchronously in the original
-  // change-handler call stack (before any await).
+async function setIndependentSiteFeature(feature, on) {
+  if (isSensitiveSiteUrl(currentSiteUrl)) { render(await getState()); return; }
+  const generation = (siteFeatureToggleGeneration[feature] || 0) + 1;
+  siteFeatureToggleGeneration[feature] = generation;
+  const pinPromise = on ? pinSiteFeatureChoice(feature) : Promise.resolve();
+  const cancelPromise = on ? Promise.resolve() : cancelPendingSiteFeatureChoice(feature);
+
+  // Keep permissions.request in the original change-handler call stack.
   let accessPromise = Promise.resolve(true);
   if (on && currentSiteOrigin) {
     try {
       accessPromise = chrome.permissions.request({origins:[currentSiteOrigin]})
-        .then(granted => granted === true)
-        .catch(() => false);
-    } catch (_) {
-      accessPromise = Promise.resolve(false);
-    }
+        .then(granted => granted === true).catch(() => false);
+    } catch (_) { accessPromise = Promise.resolve(false); }
   }
 
   const state = await getState();
+  if (generation !== siteFeatureToggleGeneration[feature]) return;
   if (!state.siteKey || !state.master || (state.isBlbSite && feature !== 'pageButton') ||
       (state.isSensitiveSite && !state.isBlbSite) || (feature === 'doubleClick' && state.isPdfContext)) {
     if (on) {
       await pinPromise;
-      await cancelPendingSiteFeatureChoice(feature);
-    }
+      if (generation === siteFeatureToggleGeneration[feature]) await cancelPendingSiteFeatureChoice(feature);
+    } else await cancelPromise;
     render(state);
     return;
   }
 
   if (on) {
     const [granted] = await Promise.all([accessPromise, pinPromise]);
+    // A later explicit OFF/newer choice wins over an older unresolved request.
+    if (generation !== siteFeatureToggleGeneration[feature]) return;
     if (!granted) {
       await cancelPendingSiteFeatureChoice(feature);
       if (feature === 'pageButton') await setPageButton(false);
@@ -1187,13 +1185,13 @@ async function setIndependentSiteFeature(feature, on) {
       render(await getState());
       return;
     }
+  } else {
+    await cancelPromise;
+    if (generation !== siteFeatureToggleGeneration[feature]) return;
   }
 
-  if (feature === 'pageButton') {
-    await setPageButton(!!on);
-  } else if (feature === 'doubleClick') {
-    await setDoubleClick(!!on);
-  }
+  if (feature === 'pageButton') await setPageButton(!!on);
+  else if (feature === 'doubleClick') await setDoubleClick(!!on);
 }
 
 async function handlePageButtonToggle(on) {
