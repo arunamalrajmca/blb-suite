@@ -181,20 +181,26 @@ test('a real MV3 service-worker termination is recovered by an actual Double-cli
   expect(browser, 'persistent context must expose its Chromium browser').not.toBeNull();
   const cdp=await browser.newBrowserCDPSession();
   try {
-    await cdp.send('Target.setDiscoverTargets',{discover:true});
-    const {targetInfos}=await cdp.send('Target.getTargets');
-    const workerTarget=targetInfos.find(target =>
-      target.type==='service_worker' &&
-      target.url.startsWith(`chrome-extension://${extensionId}/`)
-    );
-    expect(workerTarget,'extension service-worker target must be discoverable').toBeTruthy();
+    await cdp.send('ServiceWorker.enable');
+    let workerVersionId=null;
+    let workerRunningStatus='';
+    let observedStopped=false;
+    let observedRestart=false;
+    cdp.on('ServiceWorker.workerVersionUpdated', event => {
+      const version=(event.versions || []).find(item =>
+        item.scriptURL.startsWith(`chrome-extension://${extensionId}/`)
+      );
+      if (!version) return;
+      workerVersionId=version.versionId;
+      workerRunningStatus=version.runningStatus;
+      if (version.runningStatus==='stopped') observedStopped=true;
+      if (version.runningStatus==='running' && observedStopped) observedRestart=true;
+    });
+    await expect.poll(() => workerVersionId,{timeout:5000}).not.toBeNull();
 
-    const closed=await cdp.send('Target.closeTarget',{targetId:workerTarget.targetId});
-    expect(closed.success).toBe(true);
-    await expect.poll(async () => {
-      const {targetInfos:current}=await cdp.send('Target.getTargets');
-      return current.some(target => target.targetId===workerTarget.targetId);
-    },{timeout:5000}).toBe(false);
+    // Stop the actual extension worker through the CDP ServiceWorker domain.
+    await cdp.send('ServiceWorker.stopWorker',{versionId:workerVersionId});
+    await expect.poll(() => workerRunningStatus,{timeout:5000}).toBe('stopped');
 
     // This is the real page gesture and the dedicated Double-click message
     // path, not a direct call into the background handler.
@@ -213,8 +219,10 @@ test('a real MV3 service-worker termination is recovered by an actual Double-cli
       target.type==='service_worker' &&
       target.url.startsWith(`chrome-extension://${extensionId}/`)
     );
-    expect(recoveredWorker,'Double-click must wake a fresh service-worker instance').toBeTruthy();
-    expect(recoveredWorker.targetId).not.toBe(workerTarget.targetId);
+    expect(recoveredWorker,'Double-click must wake the extension service worker').toBeTruthy();
+    await expect.poll(() => workerRunningStatus,{timeout:5000}).toBe('running');
+    expect(observedStopped).toBe(true);
+    expect(observedRestart).toBe(true);
   } finally {
     await cdp.detach();
   }
