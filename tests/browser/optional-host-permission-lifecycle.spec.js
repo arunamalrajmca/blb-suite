@@ -444,7 +444,7 @@ test('sensitive-site restrictions and explicit site opt-outs survive permission 
   const optOutUrl = 'https://example.com/';
   const sensitiveUrl = 'https://www.gov.scot/';
   const optOutPattern = 'https://example.com/*';
-  const sensitivePattern = 'https://gov.scot/*';
+  const sensitivePattern = 'https://www.gov.scot/*';
   const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
     masterEnabled:true,
     pageSelectionButtonSites:{},
