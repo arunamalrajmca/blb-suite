@@ -400,3 +400,20 @@ test('ScriptTagger destination creation releases its pending reservation after f
   expect(tabs).toHaveLength(1);
   expect(vm.runInNewContext('pendingScriptTaggerDestinations.size', worker)).toBe(0);
 });
+
+
+test('ScriptTagger destination manager does not reuse a remembered tab after it navigates away', async () => {
+  const tabs = [];
+  const worker = createScriptTaggerDestinationManager({ tabs });
+  const url = 'https://www.blueletterbible.org/kjv/gal/2/20/';
+  const first = await worker.openScriptTaggerDestination(url);
+  const unrelatedUrl = 'https://example.com/an-unrelated-page';
+  Object.assign(tabs[0], { url: unrelatedUrl, pendingUrl: unrelatedUrl });
+
+  const reopened = await worker.openScriptTaggerDestination(url);
+
+  expect(reopened.id).not.toBe(first.id);
+  expect(tabs).toHaveLength(2);
+  expect(tabs[0].url).toBe(unrelatedUrl);
+  expect(tabs[1].url).toBe(url);
+});
