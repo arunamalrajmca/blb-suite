@@ -714,3 +714,58 @@ test('closing a tab clears its persisted MultiVerse reservation and pending refe
     pendingReferencesPresent:false
   });
 });
+
+test('navigating a tracked MultiVerse tab to an unrelated page clears its persisted reservation', async ({
+  context, extensionWorker, extensionStorage
+}) => {
+  await extensionStorage.set({blbSuiteMultiVerseTabSets:{}});
+
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>MultiVerse lifecycle fixture</title></head><body>MultiVerse fixture</body></html>'
+  }));
+  await context.route('https://example.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>Unrelated destination</title></head><body>Unrelated page</body></html>'
+  }));
+
+  const tabId = await extensionWorker.evaluate(async () => {
+    const tab = await chrome.tabs.create({
+      url:'https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1',
+      active:false
+    });
+    await chrome.storage.local.set({
+      blbSuiteMultiVerseTabSets:{
+        [String(tab.id)]:{key:'navigated-away-regression', updatedAt:Date.now()}
+      }
+    });
+    return tab.id;
+  });
+
+  await expect.poll(() => extensionWorker.evaluate(async id =>
+    (await chrome.tabs.get(id)).status, tabId
+  )).toBe('complete');
+
+  await extensionWorker.evaluate(id =>
+    chrome.tabs.update(id, {url:'https://example.com/unrelated'}), tabId
+  );
+
+  await expect.poll(() => extensionWorker.evaluate(async id => {
+    const tab = await chrome.tabs.get(id);
+    return {url:tab.url, status:tab.status};
+  }, tabId)).toEqual({
+    url:'https://example.com/unrelated',
+    status:'complete'
+  });
+
+  await expect.poll(() => extensionWorker.evaluate(async id => {
+    const data = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
+    return Object.prototype.hasOwnProperty.call(data.blbSuiteMultiVerseTabSets, String(id));
+  }, tabId)).toBe(false);
+
+  const finalTab = await extensionWorker.evaluate(id => chrome.tabs.get(id), tabId);
+  expect(finalTab.url).toBe('https://example.com/unrelated');
+  expect(finalTab.title).toBe('Unrelated destination');
+});
