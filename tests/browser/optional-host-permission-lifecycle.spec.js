@@ -992,7 +992,6 @@ test('permission revocation during an in-flight registration cannot leave a pers
       // an uninstrumented activation before the registration gate is installed.
       await chrome.scripting.unregisterContentScripts({ids:[id,mainId]}).catch(() => {});
 
-      const originalHasHostAccess = hasHostAccessForTab;
       const originalRegister = chrome.scripting.registerContentScripts;
       let accessGranted = true;
       let signalStarted;
@@ -1000,12 +999,10 @@ test('permission revocation during an in-flight registration cannot leave a pers
       let releaseRegistration;
       const registrationGate = new Promise(resolve => { releaseRegistration = resolve; });
 
-      // Stub the shared permission check rather than assigning to Chrome's
-      // native API method, whose binding may not be writable in extension workers.
-      globalThis.hasHostAccessForTab = async candidateTab => {
-        if (originPatternForUrl(candidateTab?.url) === originPattern) return accessGranted;
-        return originalHasHostAccess(candidateTab);
-      };
+      // Inject a per-call permission check so the test can revoke access at
+      // the exact registration boundary without modifying Chrome's native API.
+      const permissionCheck = async candidateTab =>
+        originPatternForUrl(candidateTab?.url) === originPattern ? accessGranted : true;
       chrome.scripting.registerContentScripts = async scripts => {
         if (scripts.some(script => script.id === id)) {
           signalStarted();
@@ -1016,7 +1013,6 @@ test('permission revocation during an in-flight registration cannot leave a pers
 
       globalThis.__permissionRaceRestore = () => {
         accessGranted = true;
-        globalThis.hasHostAccessForTab = originalHasHostAccess;
         chrome.scripting.registerContentScripts = originalRegister;
         releaseRegistration();
       };
@@ -1033,7 +1029,7 @@ test('permission revocation during an in-flight registration cannot leave a pers
     // Start activation without awaiting it so the test can revoke access
     // while Chrome's registration API is deliberately paused.
     await extensionWorker.evaluate(id => {
-      globalThis.__permissionRaceActivation = ensureContentScriptInTab(id);
+      globalThis.__permissionRaceActivation = ensureContentScriptInTab(id, permissionCheck);
     }, tabId);
     // Wait for the actual registration call to enter its deliberate pause.
     await extensionWorker.evaluate(() => globalThis.__permissionRaceStarted);
