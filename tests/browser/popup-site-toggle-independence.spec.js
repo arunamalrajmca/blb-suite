@@ -259,3 +259,134 @@ for (const feature of ['pageButton', 'doubleClick']) {
     });
   });
 }
+
+
+for (const feature of ['pageButton','doubleClick']) {
+  test(`an explicit OFF while ${feature} permission is pending wins over a later grant`, async ({
+    page, extensionId, extensionStorage, extensionWorker
+  }) => {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{[SITE]:false},
+      doubleClickBlbSites:{[SITE]:false},
+      pendingSiteFeatureToggles:{}
+    });
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    await expect.poll(() => page.locator('body').evaluate(body => !body.classList.contains('popup-loading'))).toBe(true);
+    await page.evaluate(async () => {
+      const originalQuery = chrome.tabs.query.bind(chrome.tabs);
+      Object.defineProperty(chrome.tabs,'query',{configurable:true,value:async info =>
+        info?.active ? [{id:987654,url:'https://example.com/',title:'Example'}] : originalQuery(info)});
+      window.__resolvePermission = null;
+      Object.defineProperty(chrome.permissions,'request',{configurable:true,value:() =>
+        new Promise(resolve => { window.__resolvePermission = resolve; })});
+      render(await getState());
+    });
+    const selector = feature==='pageButton' ? '#pageSetting .slider' : '#doubleSetting .slider';
+    await page.locator(selector).click();
+    await expect.poll(async () => (await readSitePreferences(extensionWorker)).pendingSiteFeatureToggles)
+      .toMatchObject({'https://example.com/*':{feature}});
+    await expect.poll(() => page.evaluate(() => typeof window.__resolvePermission)).toBe('function');
+
+    // The second click is an explicit OFF while the first permission request
+    // remains unresolved. It must cancel only this feature's pending intent.
+    await page.locator(selector).click();
+    await expect.poll(async () => (await readSitePreferences(extensionWorker)).pendingSiteFeatureToggles).toEqual({});
+    await page.evaluate(() => window.__resolvePermission(true));
+
+    await expect.poll(async () => {
+      const stored = await readSitePreferences(extensionWorker);
+      return {
+        page:stored.pageSelectionButtonSites[SITE],
+        double:stored.doubleClickBlbSites[SITE],
+        pending:stored.pendingSiteFeatureToggles
+      };
+    }).toEqual({page:false,double:false,pending:{}});
+  });
+}
+
+for (const feature of ['pageButton','doubleClick']) {
+  test(`a denied ${feature} permission resolving after global OFF leaves both site preferences unchanged`, async ({
+    page, extensionId, extensionStorage, extensionWorker
+  }) => {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{[SITE]:true},
+      doubleClickBlbSites:{[SITE]:false},
+      pendingSiteFeatureToggles:{}
+    });
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    await expect.poll(() => page.locator('body').evaluate(body => !body.classList.contains('popup-loading'))).toBe(true);
+    await page.evaluate(async () => {
+      const originalQuery = chrome.tabs.query.bind(chrome.tabs);
+      Object.defineProperty(chrome.tabs,'query',{configurable:true,value:async info =>
+        info?.active ? [{id:987654,url:'https://example.com/',title:'Example'}] : originalQuery(info)});
+      window.__resolvePermission = null;
+      Object.defineProperty(chrome.permissions,'request',{configurable:true,value:() =>
+        new Promise(resolve => { window.__resolvePermission = resolve; })});
+      render(await getState());
+    });
+    const selector = feature==='pageButton' ? '#pageSetting .slider' : '#doubleSetting .slider';
+    await page.locator(selector).click();
+    await expect.poll(async () => (await readSitePreferences(extensionWorker)).pendingSiteFeatureToggles)
+      .toMatchObject({'https://example.com/*':{feature}});
+    await page.locator('label.master-switch .slider').click();
+    await expect.poll(async () => extensionWorker.evaluate(async () =>
+      (await chrome.storage.local.get({masterEnabled:true})).masterEnabled
+    )).toBe(false);
+    await page.evaluate(() => window.__resolvePermission(false));
+
+    await expect.poll(async () => {
+      const stored = await readSitePreferences(extensionWorker);
+      return {
+        master:(await extensionWorker.evaluate(async () =>
+          (await chrome.storage.local.get({masterEnabled:true})).masterEnabled)),
+        page:stored.pageSelectionButtonSites[SITE],
+        double:stored.doubleClickBlbSites[SITE],
+        pending:stored.pendingSiteFeatureToggles
+      };
+    }).toEqual({master:false,page:true,double:false,pending:{}});
+  });
+}
+
+test('same-origin Show on and Double-click permission intents survive either preparation order and commit independently', async ({
+  page, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{[SITE]:false},
+    doubleClickBlbSites:{[SITE]:false},
+    pendingSiteFeatureToggles:{}
+  });
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  for (const order of [['pageButton','doubleClick'],['doubleClick','pageButton']]) {
+    await extensionStorage.set({pendingSiteFeatureToggles:{}});
+    const prepared = await page.evaluate(async features => {
+      const results = [];
+      for (const feature of features) {
+        results.push(await chrome.runtime.sendMessage({
+          type:'blbSuitePrepareSiteFeatureToggle',
+          origin:'https://example.com/*',
+          feature
+        }));
+      }
+      return results;
+    }, order);
+    expect(prepared).toEqual([{ok:true,pending:true},{ok:true,pending:true}]);
+    const pending = await readSitePreferences(extensionWorker);
+    expect(pending.pendingSiteFeatureToggles['https://example.com/*'].features).toEqual({
+      [order[0]]:expect.objectContaining({requestedAt:expect.any(Number)}),
+      [order[1]]:expect.objectContaining({requestedAt:expect.any(Number)})
+    });
+
+    const committed = await extensionWorker.evaluate(() =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins(['https://example.com/*'])
+    );
+    expect(committed.committed).toHaveLength(2);
+    expect(committed.committed.map(item => item.feature).sort()).toEqual(['doubleClick','pageButton']);
+    const stored = await readSitePreferences(extensionWorker);
+    expect(stored.pageSelectionButtonSites[SITE]).toBe(true);
+    expect(stored.doubleClickBlbSites[SITE]).toBe(true);
+    expect(stored.pendingSiteFeatureToggles).toEqual({});
+  }
+});
