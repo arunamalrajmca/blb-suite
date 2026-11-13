@@ -681,14 +681,14 @@ test('Study Sessions restores the saved auto-stop value when alarm refresh fails
       }]
     });
     await refreshStudyAutoStopAlarm();
-    const originalClear = chrome.alarms.clear.bind(chrome.alarms);
-    let failNextClear = true;
-    chrome.alarms.clear = name => {
-      if (failNextClear) {
-        failNextClear = false;
-        return Promise.reject(new Error('simulated-alarm-refresh-failure'));
+    const originalRefresh = refreshStudyAutoStopAlarm;
+    let failNextRefresh = true;
+    refreshStudyAutoStopAlarm = async () => {
+      if (failNextRefresh) {
+        failNextRefresh = false;
+        throw new Error('simulated-alarm-refresh-failure');
       }
-      return originalClear(name);
+      return originalRefresh();
     };
   });
 
