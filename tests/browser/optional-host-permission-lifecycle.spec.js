@@ -1028,3 +1028,87 @@ test('permission revocation during an in-flight registration cannot leave a pers
     }, {id:registrationId,mainId:mainWorldId,settings:previous});
   }
 });
+
+
+test('a site opt-out during an in-flight registration cannot leave the site content script enabled', async ({
+  page, extensionWorker
+}) => {
+  const pattern = 'https://example.com/*';
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  }));
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({active:true,currentWindow:true}).then(([tab]) => tab?.id)
+  );
+  const registrationId = await extensionWorker.evaluate(value =>
+    runtimeContentScriptIdForPattern(value), pattern
+  );
+  const mainWorldId = registrationId + '-main-world';
+
+  try {
+    await extensionWorker.evaluate(async ({id,mainId}) => {
+      await chrome.storage.local.set({
+        masterEnabled:true,
+        redirectEnabled:false,
+        pageSelectionButtonSites:{'example.com':true},
+        doubleClickBlbSites:{}
+      });
+      await reconcileRuntimeContentScriptRegistrations();
+      await runtimeContentScriptReconciliationQueue;
+      await chrome.scripting.unregisterContentScripts({ids:[id,mainId]}).catch(() => {});
+
+      const originalRegister = chrome.scripting.registerContentScripts;
+      let signalStarted;
+      const started = new Promise(resolve => { signalStarted = resolve; });
+      let releaseRegistration;
+      const registrationGate = new Promise(resolve => { releaseRegistration = resolve; });
+      chrome.scripting.registerContentScripts = async scripts => {
+        if (scripts.some(script => script.id === id)) {
+          signalStarted();
+          await registrationGate;
+        }
+        return originalRegister.call(chrome.scripting, scripts);
+      };
+      globalThis.__siteOptOutRestore = () => {
+        chrome.scripting.registerContentScripts = originalRegister;
+        releaseRegistration();
+      };
+      globalThis.__siteOptOutStarted = started;
+      globalThis.__siteOptOutRelease = releaseRegistration;
+    }, {id:registrationId,mainId:mainWorldId});
+
+    await extensionWorker.evaluate(id => {
+      globalThis.__siteOptOutActivation = ensureContentScriptInTab(id);
+    }, tabId);
+    await extensionWorker.evaluate(() => globalThis.__siteOptOutStarted);
+
+    await extensionWorker.evaluate(async () => {
+      await chrome.storage.local.set({
+        pageSelectionButtonSites:{'example.com':false}
+      });
+      await reconcileRuntimeContentScriptRegistrations();
+    });
+    await extensionWorker.evaluate(() => globalThis.__siteOptOutRelease());
+    const activated = await extensionWorker.evaluate(() => globalThis.__siteOptOutActivation);
+    expect(activated).toBe(false);
+
+    const remaining = await extensionWorker.evaluate(async ids =>
+      chrome.scripting.getRegisteredContentScripts({ids}), [registrationId,mainWorldId]
+    );
+    expect(remaining).toEqual([]);
+  } finally {
+    await extensionWorker.evaluate(async ({id,mainId,settings}) => {
+      globalThis.__siteOptOutRestore?.();
+      delete globalThis.__siteOptOutRestore;
+      delete globalThis.__siteOptOutStarted;
+      delete globalThis.__siteOptOutRelease;
+      await chrome.scripting.unregisterContentScripts({ids:[id,mainId]}).catch(() => {});
+      await chrome.storage.local.set(settings);
+      await reconcileRuntimeContentScriptRegistrations().catch(() => {});
+    }, {id:registrationId,mainId:mainWorldId,settings:previous});
+  }
+});
