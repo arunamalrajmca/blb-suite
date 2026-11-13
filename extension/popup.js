@@ -907,15 +907,36 @@ async function openHistoryStrongs() {
   const history = await getSelectedTopicHistory();
   const values = [...new Set((history.strongs || []).map(v => String(v || '').trim().toUpperCase()).filter(v => /^[GH]\d+$/.test(v)))];
   if (!values.length) { setStatus("No KJV Strong's entries in this topic."); return; }
+
+  let opened = 0;
   let lastTabId = null;
   for (const value of values) {
-    const result = await chrome.runtime.sendMessage({type:'blbSuiteOpenStrongHistory', value, activeIfNew:false});
-    if (result?.ok && result.tabId != null) lastTabId = result.tabId;
+    try {
+      const result = await chrome.runtime.sendMessage({type:'blbSuiteOpenStrongHistory', value, activeIfNew:false});
+      if (result?.ok && result.tabId != null) {
+        opened++;
+        lastTabId = result.tabId;
+      }
+    } catch (_) {
+      // Continue so one failed destination does not prevent later entries opening.
+    }
   }
+
+  let activationFailed = false;
   if (lastTabId != null) {
-    try { await chrome.tabs.update(lastTabId, {active:true}); } catch (_) {}
+    try { await chrome.tabs.update(lastTabId, {active:true}); }
+    catch (_) { activationFailed = true; }
   }
-  setStatus(`Opened ${values.length} KJV Strong's ${values.length === 1 ? 'entry' : 'entries'}.`);
+
+  if (opened === values.length && !activationFailed) {
+    setStatus(`Opened ${opened} KJV Strong's ${opened === 1 ? 'entry' : 'entries'}.`);
+  } else if (opened === values.length && activationFailed) {
+    setStatus(`Opened all ${opened} KJV Strong's entries, but could not activate the last tab. Please check the opened tabs.`);
+  } else if (opened > 0) {
+    setStatus(`Opened ${opened} of ${values.length} KJV Strong's entries. Please retry the missing entries.`);
+  } else {
+    setStatus("Unable to open the KJV Strong's entries. Please try again.");
+  }
 }
 
 function formatHistorySearchTerm(value) {
@@ -990,19 +1011,22 @@ async function openHistorySearchTerms() {
 
 async function clearTopicSelectionInput() {
   const wasRecording = !!studyState.recording;
+  const topicToRestore = selectedTopic() || String(studyState.recordingTopic || '').trim();
+  if (wasRecording) {
+    const response = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
+    if (!response?.ok) {
+      topicInput.value = topicToRestore;
+      setStatus('Unable to stop recording.');
+      await refreshStudyState();
+      return;
+    }
+  }
   topicInput.value = '';
   editingNoteOriginal = '';
   if (notesHelp) notesHelp.textContent = 'Auto-saves on leaving the box';
   await syncSelectedTopic('');
   closeTopicMenu();
   if (wasRecording) {
-    const response = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
-    if (!response?.ok) {
-      setStatus('Unable to stop recording.');
-      await refreshStudyState();
-      return;
-    }
-    topicInput.value = '';
     noteInput.value = '';
     setStatus('Select Start to record this topic.');
     await refreshStudyState();
