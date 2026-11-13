@@ -248,11 +248,16 @@ test('Study Sessions History menu opens the saved Strong\'s entries and Criteria
   await expect(page.locator('#studyStatus')).toContainText('Opened 1 Criteria Search tab');
   await expect.poll(async () => extensionWorker.evaluate(async () => {
     const tabs = await chrome.tabs.query({});
-    return tabs.some(tab => {
-      if (!String(tab.url || '').includes('/search/search.cfm?')) return false;
-      const criteria = new URL(tab.url).searchParams.get('Criteria') || '';
-      return criteria === '"Grace" OR "Mercy"';
-    });
+    return tabs.some(tab => [tab.url, tab.pendingUrl].some(rawUrl => {
+      const value = String(rawUrl || '');
+      if (!value.includes('/search/search.cfm?')) return false;
+      try {
+        const criteria = new URL(value).searchParams.get('Criteria') || '';
+        return criteria.toLowerCase() === 'grace or mercy';
+      } catch (_) {
+        return false;
+      }
+    }));
   })).toBe(true);
 
   await page.locator('#multiView').click();
