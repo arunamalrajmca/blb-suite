@@ -17,7 +17,6 @@ on:
       - '!scripts/classify-ci-changes.mjs'
       - '!scripts/select-browser-specs.mjs'
       - '!scripts/select-reference-matrix.mjs'
-      - '!scripts/reference-e2e-matrix.json'
       - '!scripts/test-ci-routing-selector.js'
       - '!scripts/validate-build.js'
       - '!scripts/package-release.sh'
