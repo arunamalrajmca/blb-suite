@@ -390,7 +390,7 @@ try {
         file + ' must select direct passive-target behavior coverage');
     }
     if (file === 'extension/source-page-collector.js') {
-      assert(!result.values.changed_specs.includes('tests/browser/extension.spec.js'),
+      assert(!result.values.changed_specs.includes('tests/browser/extension-reference-actions.spec.js') && !result.values.changed_specs.includes('tests/browser/extension-lifecycle.spec.js'),
         file + ' must select direct source-page collection behavior coverage');
     }
     console.log('PASS: ' + path.basename(file) + ' selects focused browser coverage');
@@ -482,7 +482,7 @@ try {
   console.log('PASS: mixed runtime and browser-spec changes run the edited regression spec');
 
   // Shared background changes must retain the dedicated site-registration race regression,
-  // without pulling the test back into the much larger extension.spec.js file.
+  // without pulling either split extension suite into the focused race run.
   resetScenario(base);
   write('extension/background.js', '// shared background registration change\\n');
   write('tests/browser/site-registration-opt-out-race.spec.js', '// focused registration race regression\\n');
