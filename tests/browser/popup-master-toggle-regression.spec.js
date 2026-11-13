@@ -96,16 +96,21 @@ test('popup theme preference persists when the popup is reopened', async ({
 test('master OFF stays ON and reports failure when an active Study recording cannot be stopped', async ({
   page, extensionId, extensionStorage, extensionWorker
 }) => {
-  await extensionStorage.set({
-    masterEnabled:true,
-    studySessions:[{id:'active-study-session',title:'Genesis',date:'2026-11-13',dateLabel:'13 November 2026',refs:[],strongs:[],searchTerms:[],notes:[]}],
-    currentStudySessionId:'active-study-session',
-    studySelectedTopic:'Genesis'
-  });
-
+  await extensionStorage.clear();
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   await expect(page.locator('#master')).toBeChecked();
-  await expect(page.locator('#studyStatus')).toContainText('Recording');
+
+  const topic = 'Stop Failure Regression ' + Date.now();
+  await page.locator('#studyTopic').fill(topic);
+  await page.locator('#startTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Recording started');
+
+  const activeBefore = await extensionWorker.evaluate(() => chrome.storage.local.get([
+    'masterEnabled','currentStudySessionId','studySelectedTopic'
+  ]));
+  expect(activeBefore.masterEnabled).toBe(true);
+  expect(activeBefore.currentStudySessionId).toBeTruthy();
+  expect(activeBefore.studySelectedTopic).toBe(topic);
 
   await page.evaluate(() => {
     const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
@@ -125,7 +130,7 @@ test('master OFF stays ON and reports failure when an active Study recording can
     'masterEnabled','currentStudySessionId','studySelectedTopic'
   ]))).toEqual({
     masterEnabled:true,
-    currentStudySessionId:'active-study-session',
-    studySelectedTopic:'Genesis'
+    currentStudySessionId:activeBefore.currentStudySessionId,
+    studySelectedTopic:topic
   });
 });
