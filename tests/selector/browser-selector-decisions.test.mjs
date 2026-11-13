@@ -101,6 +101,9 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/facebook-selection-parser.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/substack-selection-parser.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/omnibox-command-routing.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/omnibox-dictionary-routing.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/context-menu-visibility-event-lifecycle.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/bibleref-range-redirect-lifecycle.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/pdf-selection-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/redirect-source-url-patterns.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/kings-bible-collector-behavior.spec.js", "import { test } from '@playwright/test';\n");

@@ -33,7 +33,9 @@ export const featureSpecs = [
       "tests/browser/audit-defect-regressions.spec.js",
       "tests/browser/service-worker-lifecycle.spec.js",
       "tests/browser/site-registration-opt-out-race.spec.js",
-      "tests/browser/optional-host-permission-lifecycle.spec.js"
+      "tests/browser/optional-host-permission-lifecycle.spec.js",
+      "tests/browser/context-menu-visibility-event-lifecycle.spec.js",
+      "tests/browser/omnibox-dictionary-routing.spec.js"
     ]
   },
   {
@@ -62,7 +64,7 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/redirect-bibleref-ranges.js", "extension/redirect-christianity-main-world.js"],
-    specs: ["tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-hostnames.spec.js", "tests/browser/blb-non-kjv-redirect.spec.js"]
+    specs: ["tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-hostnames.spec.js", "tests/browser/blb-non-kjv-redirect.spec.js", "tests/browser/bibleref-range-redirect-lifecycle.spec.js"]
   },
   {
     paths: ["extension/source-bible-redirect.js"],
@@ -203,6 +205,9 @@ export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.
   "tests/browser/facebook-selection-parser.spec.js",
   "tests/browser/substack-selection-parser.spec.js",
   "tests/browser/omnibox-command-routing.spec.js",
+  "tests/browser/context-menu-visibility-event-lifecycle.spec.js",
+  "tests/browser/omnibox-dictionary-routing.spec.js",
+  "tests/browser/bibleref-range-redirect-lifecycle.spec.js",
   "tests/browser/pdf-selection-regressions.spec.js"
 ]);
 export const separatelyManagedSpecs = new Set(["tests/browser/multiverse-tab-reuse.spec.js", "tests/browser/performance.spec.js"]);
@@ -254,7 +259,8 @@ export const groupARequiredSpecs = new Set([
   "tests/browser/popup-site-toggle-independence.spec.js",
   "tests/browser/popup-master-toggle-regression.spec.js",
   "tests/browser/redirect-toggle-isolation.spec.js",
-  "tests/browser/optional-host-permission-lifecycle.spec.js"
+  "tests/browser/optional-host-permission-lifecycle.spec.js",
+  "tests/browser/context-menu-visibility-event-lifecycle.spec.js"
 ]);
 
 export const groupBRequiredSpecs = new Set([
@@ -279,6 +285,8 @@ export const referenceRequiredSpecs = new Set([
   "tests/browser/facebook-selection-parser.spec.js",
   "tests/browser/substack-selection-parser.spec.js",
   "tests/browser/omnibox-command-routing.spec.js",
+  "tests/browser/omnibox-dictionary-routing.spec.js",
+  "tests/browser/bibleref-range-redirect-lifecycle.spec.js",
   "tests/browser/pdf-selection-regressions.spec.js",
   "tests/browser/source-page-button-redirect-separation.spec.js"
 ]);
@@ -294,6 +302,8 @@ export const referenceDelegatedSpecs = new Set([
   "tests/browser/facebook-selection-parser.spec.js",
   "tests/browser/substack-selection-parser.spec.js",
   "tests/browser/omnibox-command-routing.spec.js",
+  "tests/browser/omnibox-dictionary-routing.spec.js",
+  "tests/browser/bibleref-range-redirect-lifecycle.spec.js",
   "tests/browser/pdf-selection-regressions.spec.js",
   "tests/browser/shared-regex-patterns.spec.js",
   "tests/browser/rediscover-sagacity-button.spec.js",

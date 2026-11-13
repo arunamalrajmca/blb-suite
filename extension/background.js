@@ -2989,16 +2989,6 @@ function isTrustedExtensionSender(sender) {
   return !!sender && sender.id === chrome.runtime.id;
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type === 'blbSuiteReopenPopup') {
-    const windowId = Number(message.windowId);
-    if (Number.isFinite(windowId) && chrome.action?.openPopup) {
-      Promise.resolve(chrome.action.openPopup({windowId})).catch(() => {});
-    }
-    return false;
-  }
-});
-
 chrome.runtime.onMessage.addListener((message, sender) => {
   if (message?.type !== 'blbSuiteMultiVerseHandoffTiming') return false;
   const entry = message.entry && typeof message.entry === 'object' ? message.entry : {};
@@ -3024,7 +3014,7 @@ function recordBlbBackgroundSelectionStage(stage, startedAt, details = {}) {
     globalThis.__blbSuiteSelectionStageTimings = rows;
   } catch (_) {}
 }
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeatureOff","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl","blbSuiteRunBCommand"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeatureOff","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
 
 // Serialize MultiVerse POST scheduling while creating all destination tabs immediately.
 // Reserve submission timestamps in one shared FIFO queue, but never sleep inside the
@@ -3240,7 +3230,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!url) { sendResponse({ok:false, reason:'invalid-strong'}); return true; }
     try {
       const result = await openBlbDestination(url, !!message.activeIfNew, !!message.activateExisting);
-      sendResponse({ok:true, value:canonicalStrongValue(message.value), tabId:result?.tab?.id ?? null});
+      sendResponse({ok:true, value:canonicalStrongValue(message.value), tabId:result?.id ?? result?.tab?.id ?? null});
     } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
@@ -3622,14 +3612,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === 'blbSuiteSetSelectionMenuVisibility') {
-    try {
-      await updateSelectionContextMenuVisibility(!!message.visible);
-      sendResponse({ok:true, visible:!!message.visible});
-    } catch (error) { sendResponse({ok:false, error:String(error)}); }
-    return true;
-  }
-
   if (message.type === 'blbSuiteCaptureStudyStrong') {
     try { sendResponse({ok:await recordStudyStrong(message.value)}); }
     catch (error) { sendResponse({ok:false, error:String(error)}); }
@@ -3716,20 +3698,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     openBlbDestination(url, !!message.activeIfNew, !!message.activateExisting).then(() => sendResponse({ok:true})).catch(error => {
       console.error('KJV Scripture Tools Background BLB URL:', error);
       sendResponse({ok:false, error:String(error)});
-    });
-    return true;
-  }
-
-  if (message.type === 'blbSuiteOpenBrowserUrl') {
-    if (!(await isSuiteEnabled())) { sendResponse({ok:false}); return; }
-    const url = String(message.url || '');
-    if (!/^(chrome|brave):\/\//i.test(url)) {
-      sendResponse({ok:false});
-      return;
-    }
-    chrome.tabs.create({url}).then(() => sendResponse({ok:true})).catch(error => {
-      console.error('KJV Scripture Tools browser URL:', error);
-      sendResponse({ok:false});
     });
     return true;
   }
