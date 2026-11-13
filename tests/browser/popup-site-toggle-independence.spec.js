@@ -515,3 +515,36 @@ for (const resolutionOrder of [['pageButton','doubleClick'],['doubleClick','page
     expect(stored.pendingSiteFeatureToggles).toEqual({});
   });
 }
+
+
+for (const feature of ['pageButton', 'doubleClick']) {
+  test(`failed popup ${feature} content-script activation rolls its saved preference back to OFF`, async ({
+    page, extensionId, extensionStorage, extensionWorker
+  }) => {
+    await preparePopup(page, extensionId, extensionStorage, extensionWorker, {
+      pageButton: false,
+      doubleClick: false
+    });
+    await page.evaluate(() => {
+      const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+      Object.defineProperty(chrome.runtime, 'sendMessage', {
+        configurable: true,
+        value: message => message?.type === 'blbSuiteEnsureContentScript'
+          ? Promise.resolve({ok:false, reason:'injection-failed'})
+          : originalSendMessage(message)
+      });
+    });
+
+    await page.locator(feature === 'pageButton' ? '#pageSetting .slider' : '#doubleSetting .slider').click();
+    await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
+      pageSelectionButtonSites: { [SITE]: false },
+      doubleClickBlbSites: { [SITE]: false }
+    });
+    await expect(page.locator(feature === 'pageButton' ? '#pageButton' : '#doubleClick')).not.toBeChecked();
+    await expect(page.locator('#studyStatus')).toContainText(
+      feature === 'pageButton'
+        ? 'Unable to enable Show on BLB on this page'
+        : 'Unable to enable Double-click on this page'
+    );
+  });
+}
