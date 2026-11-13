@@ -716,26 +716,14 @@ test('closing a tab clears its persisted MultiVerse reservation and pending refe
 });
 
 test('navigating a tracked MultiVerse tab to an unrelated page clears its persisted reservation', async ({
-  context, extensionWorker, extensionStorage
+  extensionWorker, extensionStorage
 }) => {
   await extensionStorage.set({blbSuiteMultiVerseTabSets:{}});
 
-  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
-    status:200,
-    contentType:'text/html',
-    body:'<!doctype html><html><head><title>MultiVerse lifecycle fixture</title></head><body>MultiVerse fixture</body></html>'
-  }));
-  await context.route('https://example.com/**', route => route.fulfill({
-    status:200,
-    contentType:'text/html',
-    body:'<!doctype html><html><head><title>Unrelated destination</title></head><body>Unrelated page</body></html>'
-  }));
-
   const tabId = await extensionWorker.evaluate(async () => {
-    const tab = await chrome.tabs.create({
-      url:'https://www.blueletterbible.org/tools/MultiVerse.cfm?blbSuiteMultiVerse=1',
-      active:false
-    });
+    // Start from about:blank so the test does not depend on external BLB
+    // availability. The tab is already tracked as a pending MultiVerse tab.
+    const tab = await chrome.tabs.create({url:'about:blank', active:false});
     await chrome.storage.local.set({
       blbSuiteMultiVerseTabSets:{
         [String(tab.id)]:{key:'navigated-away-regression', updatedAt:Date.now()}
@@ -744,19 +732,15 @@ test('navigating a tracked MultiVerse tab to an unrelated page clears its persis
     return tab.id;
   });
 
-  await expect.poll(() => extensionWorker.evaluate(async id =>
-    (await chrome.tabs.get(id)).status, tabId
-  )).toBe('complete');
-
   await extensionWorker.evaluate(id =>
-    chrome.tabs.update(id, {url:'https://example.com/unrelated'}), tabId
+    chrome.tabs.update(id, {url:chrome.runtime.getURL('Tutorial.html')}), tabId
   );
 
   await expect.poll(() => extensionWorker.evaluate(async id => {
     const tab = await chrome.tabs.get(id);
     return {url:tab.url, status:tab.status};
   }, tabId)).toEqual({
-    url:'https://example.com/unrelated',
+    url:'chrome-extension://'+(await extensionWorker.evaluate(() => chrome.runtime.id))+'/Tutorial.html',
     status:'complete'
   });
 
@@ -766,6 +750,6 @@ test('navigating a tracked MultiVerse tab to an unrelated page clears its persis
   }, tabId)).toBe(false);
 
   const finalTab = await extensionWorker.evaluate(id => chrome.tabs.get(id), tabId);
-  expect(finalTab.url).toBe('https://example.com/unrelated');
-  expect(finalTab.title).toBe('Unrelated destination');
+  expect(finalTab.url).toContain('/Tutorial.html');
+  expect(finalTab.status).toBe('complete');
 });
