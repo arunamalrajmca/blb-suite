@@ -461,3 +461,57 @@ for (const feature of ['pageButton','doubleClick']) {
     expect(afterGrant.pendingSiteFeatureToggles).toEqual({});
   });
 }
+
+
+for (const resolutionOrder of [['pageButton','doubleClick'],['doubleClick','pageButton']]) {
+  test(`independent same-origin permission requests commit correctly when resolved ${resolutionOrder.join(' then ')}`, async ({
+    page, extensionId, extensionStorage, extensionWorker
+  }) => {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{[SITE]:false},
+      doubleClickBlbSites:{[SITE]:false},
+      pendingSiteFeatureToggles:{}
+    });
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    await expect.poll(() => page.locator('body').evaluate(body => !body.classList.contains('popup-loading'))).toBe(true);
+    await page.evaluate(async () => {
+      const originalQuery = chrome.tabs.query.bind(chrome.tabs);
+      Object.defineProperty(chrome.tabs,'query',{configurable:true,value:async info =>
+        info?.active ? [{id:987654,url:'https://example.com/',title:'Example'}] : originalQuery(info)});
+      window.__permissionResolvers = {};
+      let requestIndex = 0;
+      const requestFeatures = ['pageButton','doubleClick'];
+      Object.defineProperty(chrome.permissions,'request',{configurable:true,value:() => {
+        const feature = requestFeatures[requestIndex++];
+        return new Promise(resolve => { window.__permissionResolvers[feature] = resolve; });
+      }});
+      render(await getState());
+    });
+
+    await page.locator('#pageSetting .slider').click();
+    await expect.poll(() => page.evaluate(() =>
+      typeof window.__permissionResolvers.pageButton === 'function'
+    )).toBe(true);
+    await page.locator('#doubleSetting .slider').click();
+    await expect.poll(() => page.evaluate(() =>
+      typeof window.__permissionResolvers.doubleClick === 'function'
+    )).toBe(true);
+    await expect.poll(async () => (await readSitePreferences(extensionWorker))
+      .pendingSiteFeatureToggles['https://example.com/*']?.features
+    ).toMatchObject({
+      pageButton:{requestedAt:expect.any(Number)},
+      doubleClick:{requestedAt:expect.any(Number)}
+    });
+
+    for (const feature of resolutionOrder) {
+      await page.evaluate(name => window.__permissionResolvers[name](true), feature);
+      const key = feature==='pageButton' ? 'pageSelectionButtonSites' : 'doubleClickBlbSites';
+      await expect.poll(async () => (await readSitePreferences(extensionWorker))[key][SITE]).toBe(true);
+    }
+    const stored = await readSitePreferences(extensionWorker);
+    expect(stored.pageSelectionButtonSites[SITE]).toBe(true);
+    expect(stored.doubleClickBlbSites[SITE]).toBe(true);
+    expect(stored.pendingSiteFeatureToggles).toEqual({});
+  });
+}
