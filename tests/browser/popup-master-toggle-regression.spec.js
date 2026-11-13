@@ -91,3 +91,41 @@ test('popup theme preference persists when the popup is reopened', async ({
   await expect(page.locator('body')).toHaveClass(/\blight\b/);
   await expect(page.locator('#themeToggle')).toHaveAttribute('aria-label', 'Switch to dark theme');
 });
+
+
+test('master OFF stays ON and reports failure when an active Study recording cannot be stopped', async ({
+  page, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    studySessions:[{id:'active-study-session',title:'Genesis',date:'2026-11-13',dateLabel:'13 November 2026',refs:[],strongs:[],searchTerms:[],notes:[]}],
+    currentStudySessionId:'active-study-session',
+    studySelectedTopic:'Genesis'
+  });
+
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect(page.locator('#master')).toBeChecked();
+  await expect(page.locator('#studyStatus')).toContainText('Recording');
+
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value: async message => message?.type === 'blbSuiteStopStudyRecording'
+        ? {ok:false, reason:'simulated-stop-failure'}
+        : originalSendMessage(message)
+    });
+  });
+
+  await page.locator('label.master-switch .slider').click();
+
+  await expect(page.locator('#master')).toBeChecked();
+  await expect(page.locator('#studyStatus')).toContainText('Unable to stop recording. The Suite remains ON.');
+  await expect.poll(async () => extensionWorker.evaluate(async () => chrome.storage.local.get([
+    'masterEnabled','currentStudySessionId','studySelectedTopic'
+  ]))).toEqual({
+    masterEnabled:true,
+    currentStudySessionId:'active-study-session',
+    studySelectedTopic:'Genesis'
+  });
+});
