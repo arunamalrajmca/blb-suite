@@ -7,27 +7,28 @@ const matrix = JSON.parse(readFileSync(
   "utf8"
 ));
 
-test("extension.spec.js reference checks share one matrix runner without dropping grep coverage", () => {
-  const grouped = matrix.filter(entry => entry.group === "extension-spec-reference-coverage");
-  assert.equal(grouped.length, 1);
-  assert.equal(grouped[0].file, undefined, "group must continue to target the default extension.spec.js");
-  assert.doesNotThrow(() => new RegExp(grouped[0].grep));
-
-  for (const pattern of [
-    "Double-click resolves any part",
-    "generic reference grammar — exhaustive token coverage — OT",
-    "generic reference grammar — exhaustive token coverage — NT",
-    "generic reference syntax — colon forms",
-    "generic reference syntax — dot forms",
-    "generic reference syntax — spaced forms",
-    "generic reference syntax — chapter forms",
-    "generic reference syntax — range forms",
-    "generic aliases",
-    "All 66 canonical",
-    "Same-chapter ranges — all 66 books through",
-    "Same-chapter range resolution covers all 66 books on Double-Click"
-  ]) {
-    assert.ok(grouped[0].grep.includes(pattern), "batched grep must preserve: " + pattern);
+test("extension reference coverage is split into disjoint parallel matrix groups without losing tests", () => {
+  const groups = matrix.filter(entry => entry.group.startsWith("extension-spec-reference"));
+  assert.equal(groups.length, 5);
+  assert.deepEqual(groups.map(entry => entry.group), [
+    "extension-spec-reference-coverage",
+    "extension-spec-reference-grammar-forms",
+    "extension-spec-reference-aliases",
+    "extension-spec-reference-canonical-books",
+    "extension-spec-reference-same-chapter-ranges"
+  ]);
+  for (const entry of groups) {
+    assert.equal(entry.file, undefined);
+    assert.doesNotThrow(() => new RegExp(entry.grep));
+  }
+  const source = readFileSync(new URL("../browser/extension-reference-actions.spec.js", import.meta.url), "utf8");
+  const titles = [...source.matchAll(/test\\('([^']+)'/g)].map(match => match[1]);
+  const previousCoverage = new RegExp("(?:Double-click resolves any part|positional context|browser token|separate lines|standalone book numbers|ordinary heading words)|(?:generic reference grammar — exhaustive token coverage — OT)|(?:generic reference grammar — exhaustive token coverage — NT)|(?:generic reference syntax — colon forms)|(?:generic reference syntax — dot forms)|(?:generic reference syntax — spaced forms)|(?:generic reference syntax — chapter forms)|(?:generic reference syntax — range forms)|(?:generic aliases|numbered aliases and Roman prefixes|standalone Roman prefixes)|(?:All 66 canonical)|(?:Same-chapter ranges — all 66 books through)|(?:Same-chapter range resolution covers all 66 books on Double-Click)");
+  const previouslySelected = titles.filter(title => previousCoverage.test(title));
+  assert.ok(previouslySelected.length >= 15, "the former large grep must resolve to its original test-title inventory");
+  for (const title of previouslySelected) {
+    const matches = groups.filter(entry => new RegExp(entry.grep).test(title));
+    assert.equal(matches.length, 1, "reference test must be selected exactly once: " + title);
   }
 });
 
