@@ -547,3 +547,89 @@ test('sensitive-site restrictions and explicit site opt-outs survive permission 
     if (sensitivePage) await sensitivePage.close().catch(() => {});
   }
 });
+
+
+test('a pending permission grant cannot commit either site feature after the global master switch turns OFF', async ({
+  extensionWorker, extensionStorage
+}) => {
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{},
+    pendingSiteFeatureToggles:{}
+  }));
+  const pageOrigin = 'https://pending-page.example/*';
+  const doubleOrigin = 'https://pending-double.example/*';
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{
+        'pending-page.example':false,
+        'pending-double.example':true
+      },
+      doubleClickBlbSites:{
+        'pending-page.example':true,
+        'pending-double.example':false
+      },
+      pendingSiteFeatureToggles:{
+        [pageOrigin]:{feature:'pageButton',requestedAt:Date.now()},
+        [doubleOrigin]:{feature:'doubleClick',requestedAt:Date.now()}
+      }
+    });
+
+    // Both prompts were initiated while enabled. The user switches the
+    // master gate OFF before Chrome reports either permission grant.
+    await extensionStorage.set({masterEnabled:false});
+    const before = await extensionWorker.evaluate(async origins => {
+      const data = await chrome.storage.local.get({pendingSiteFeatureToggles:{}});
+      return origins.map(origin => {
+        const intent = data.pendingSiteFeatureToggles[origin];
+        const hostname = new URL(origin.slice(0,-1)).hostname;
+        return {
+          origin,
+          present:!!intent,
+          feature:intent?.feature,
+          requestedAt:intent?.requestedAt,
+          sensitive:isSensitiveSiteHostname(hostname),
+          hostname
+        };
+      });
+    }, [pageOrigin,doubleOrigin]);
+    expect(before.map(item => item.present)).toEqual([true,true]);
+    expect(before.map(item => item.feature)).toEqual(['pageButton','doubleClick']);
+    expect(before.map(item => item.sensitive)).toEqual([false,false]);
+
+    // Exercise each granted origin independently so the regression identifies
+    // which pending feature intent, if any, survives the closed master gate.
+    const pageResult = await extensionWorker.evaluate(origin =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins([origin]), pageOrigin
+    );
+    const doubleResult = await extensionWorker.evaluate(origin =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins([origin]), doubleOrigin
+    );
+
+    expect(pageResult.committed).toEqual([]);
+    expect(pageResult.expired).toEqual([pageOrigin]);
+    expect(doubleResult.committed).toEqual([]);
+    expect(doubleResult.expired).toEqual([doubleOrigin]);
+
+    const stored = await extensionWorker.evaluate(() => chrome.storage.local.get({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      pendingSiteFeatureToggles:{}
+    }));
+    expect(stored.masterEnabled).toBe(false);
+    expect(stored.pageSelectionButtonSites).toMatchObject({
+      'pending-page.example':false,
+      'pending-double.example':true
+    });
+    expect(stored.doubleClickBlbSites).toMatchObject({
+      'pending-page.example':true,
+      'pending-double.example':false
+    });
+    expect(stored.pendingSiteFeatureToggles).toEqual({});
+  } finally {
+    await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
+  }
+});
