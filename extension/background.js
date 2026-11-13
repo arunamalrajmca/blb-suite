@@ -6705,9 +6705,7 @@ async function injectConfiguredTabsAfterExtensionUpdate() {
   return result;
 }
 
-chrome.permissions?.onAdded?.addListener(details => {
-  injectEnabledTabsForGrantedOrigins(details?.origins || []).catch(() => {});
-});
+
 
 // Chrome can revoke optional host access outside the extension UI. Reconcile
 // persisted registrations immediately so a site no longer retains a runtime
@@ -6875,27 +6873,20 @@ async function commitPendingSiteFeatureTogglesForGrantedOrigins(origins, now = D
   });
 }
 
+// Commit any popup intent before scanning tabs. The popup may close while
+// Chrome's permission prompt is pending, and the user may switch tabs before
+// the grant arrives. Activate every already-open tab covered by the grant;
+// checking only the currently active tab can strand the original site tab.
+async function handleGrantedHostPermissions(origins) {
+  const grantedOrigins = Array.isArray(origins) ? origins.map(String) : [];
+  if (!grantedOrigins.length) return {committed:[],expired:[]};
+  const result = await commitPendingSiteFeatureTogglesForGrantedOrigins(grantedOrigins);
+  await injectEnabledTabsForGrantedOrigins(grantedOrigins);
+  return result;
+}
+
 chrome.permissions.onAdded.addListener(permissions => {
-  const grantedOrigins = Array.isArray(permissions?.origins) ? permissions.origins : [];
-  // Only a recent pending intent for this exact granted host is committed.
-  // A denied prompt leaves no active preference, and a later unrelated grant
-  // cannot resurrect that stale opt-in after the short pending window.
-  commitPendingSiteFeatureTogglesForGrantedOrigins(grantedOrigins).then(() =>
-    chrome.tabs.query({active:true,currentWindow:true}).then(async tabs => {
-      const data = await chrome.storage.local.get({masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{}});
-      if (data.masterEnabled === false) return;
-      for (const tab of tabs) {
-        if (!tab?.id) continue;
-        const key = pageSelectionSettingKeyFromTab(tab);
-        const hasPageCollectorButton = Object.prototype.hasOwnProperty.call(
-          globalThis.BLBSourcePageCollectorSites || {}, key
-        );
-        if (key && !isSensitiveSiteUrl(tab.url) && (hasPageCollectorButton || data.pageSelectionButtonSites?.[key] === true || data.doubleClickBlbSites?.[key] === true)) {
-          await ensureContentScriptInTab(tab.id);
-        }
-      }
-    })
-  ).catch(() => {});
+  handleGrantedHostPermissions(permissions?.origins || []).catch(() => {});
 });
 
 chrome.alarms.onAlarm.addListener(alarm => {
