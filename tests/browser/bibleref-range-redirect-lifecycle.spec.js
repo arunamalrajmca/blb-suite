@@ -79,3 +79,34 @@ test('enabling global redirects activates BibleRef visible-range routing on an a
   expect(result).not.toBeNull();
   expect(new URL(result.url).pathname).toBe('/kjv/jhn/3/16-17/');
 });
+
+
+test('redirectEnabled storage changes install and remove the two BLB DNR fallback rules', async ({
+  extensionStorage,
+  extensionWorker
+}) => {
+  await extensionStorage.set({masterEnabled:true,redirectEnabled:false});
+
+  const readRuleIds = () => extensionWorker.evaluate(async () =>
+    (await chrome.declarativeNetRequest.getDynamicRules())
+      .map(rule => rule.id)
+      .sort((a,b) => a-b)
+  );
+
+  await expect.poll(readRuleIds).toEqual([]);
+
+  await extensionStorage.set({redirectEnabled:true});
+  await expect.poll(readRuleIds).toEqual([1,2]);
+
+  const enabledRules = await extensionWorker.evaluate(async () =>
+    chrome.declarativeNetRequest.getDynamicRules()
+  );
+  expect(enabledRules).toHaveLength(2);
+  expect(enabledRules.every(rule =>
+    rule.action?.type === 'redirect' &&
+    rule.condition?.resourceTypes?.includes('main_frame')
+  )).toBe(true);
+
+  await extensionStorage.set({redirectEnabled:false});
+  await expect.poll(readRuleIds).toEqual([]);
+});
