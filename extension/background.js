@@ -2516,6 +2516,15 @@ async function hasHostAccessForTab(tab) {
   catch (_) { return false; }
 }
 
+// Local files and Chromium's built-in PDF viewer use browser-managed file
+// access rather than optional HTTP(S) host permissions. Preserve their
+// existing selection workflows; enforce optional grants on ordinary web tabs.
+async function hasSelectionActionPermissionForTab(tab) {
+  const url = String(tab?.url || '');
+  if (/^file:\/\//i.test(url) || isPdfViewerTab(tab)) return true;
+  return hasHostAccessForTab(tab);
+}
+
 function isTabUnavailableError(error) {
   const message = String(error?.message || error || '');
   return /no tab with id|tab .*not found|cannot access contents of the page|frame with id [0-9]+ was removed/i.test(message);
@@ -3301,7 +3310,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Optional host access can be revoked while this document's content script
     // is still resident. Re-check the sender tab at dispatch time so neither
     // the floating Show on BLB button nor Double-click can use stale access.
-    if (!(await hasHostAccessForTab(sender?.tab))) {
+    if (!(await hasSelectionActionPermissionForTab(sender?.tab))) {
       sendResponse({ok:false, reason:'host-permission-revoked'});
       return true;
     }
@@ -6330,7 +6339,7 @@ async function shouldShowBlbContextMenu(tab, selectionText) {
   // floating Show on BLB button. Do not require a content-script visibility
   // signal or a classifier just to expose the menu item.
   if (isSensitiveSiteUrl(tab?.url || '')) return false;
-  if (!(await hasHostAccessForTab(tab))) return false;
+  if (!(await hasSelectionActionPermissionForTab(tab))) return false;
   return await isPageButtonEnabledForHostname(siteKey);
 }
 
@@ -6578,7 +6587,7 @@ async function handleOpenBibleSelectionCommand() {
     const tabs = await chrome.tabs.query({active:true,currentWindow:true});
     const tab = tabs[0];
     if (!tab?.id) return {ok:false, reason:'no-active-tab'};
-    if (!(await hasHostAccessForTab(tab))) return {ok:false, reason:'host-permission-revoked'};
+    if (!(await hasSelectionActionPermissionForTab(tab))) return {ok:false, reason:'host-permission-revoked'};
 
     // Alt+B is an entry point for the same Show on BLB feature as the
     // floating button and right-click menu. Enforce both the BLB-site
