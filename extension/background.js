@@ -2645,7 +2645,7 @@ function runtimeContentScriptIdForPattern(pattern) {
   return `blb-suite-runtime-${(hash >>> 0).toString(36)}`;
 }
 
-async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_SCRIPT_FILES) {
+async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_SCRIPT_FILES, hasHostAccess = hasHostAccessForTab) {
   const pattern = originPatternForUrl(tab?.url);
   if (!pattern || !Array.isArray(files) || !files.length || !chrome.scripting?.registerContentScripts) return false;
   const id = runtimeContentScriptIdForPattern(pattern);
@@ -2711,7 +2711,7 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
       redirectEnabled:false
     });
     const stillEligible = latestSettings.masterEnabled !== false &&
-      await hasHostAccessForTab(tab) &&
+      await hasHostAccess(tab) &&
       await shouldInjectContentScriptForTab(tab, latestSettings);
     if (!stillEligible) {
       await unregisterRuntimeContentScriptForPattern(pattern);
@@ -2750,7 +2750,7 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
 }
 
 
-async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCRIPT_FILES) {
+async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCRIPT_FILES, hasHostAccess = hasHostAccessForTab) {
   const pattern = originPatternForUrl(tab?.url);
   if (!pattern) return false;
   const id = runtimeContentScriptIdForPattern(pattern);
@@ -2761,7 +2761,7 @@ async function ensureRuntimeContentScriptRegistered(tab, files = BLB_CONTENT_SCR
   const previous = runtimeContentScriptRegistrationLocks.get(id) || Promise.resolve();
   const operation = previous
     .catch(() => {})
-    .then(() => registerRuntimeContentScriptForPattern(tab, files));
+    .then(() => registerRuntimeContentScriptForPattern(tab, files, hasHostAccess));
   runtimeContentScriptRegistrationLocks.set(id, operation);
   try {
     return await operation;
@@ -2845,7 +2845,7 @@ function reconcileRuntimeContentScriptRegistrations() {
   return operation;
 }
 
-async function ensureContentScriptInTab(tabId) {
+async function ensureContentScriptInTab(tabId, hasHostAccess = hasHostAccessForTab) {
   if (!Number.isInteger(tabId) || tabId < 0) return false;
   const existing = contentScriptInjectionLocks.get(tabId);
   if (existing) return existing;
@@ -2854,7 +2854,7 @@ async function ensureContentScriptInTab(tabId) {
     try {
       const tab = await chrome.tabs.get(tabId);
       if (!isHttpPageUrl(tab?.url)) return false;
-      if (!(await hasHostAccessForTab(tab))) return false;
+      if (!(await hasHostAccess(tab))) return false;
 
       // Read settings only after permission is confirmed. A toggle may be
       // written while Chrome's permission prompt is closing, so re-read the
@@ -2870,7 +2870,7 @@ async function ensureContentScriptInTab(tabId) {
       const files = contentScriptFilesForTab(tab, settings);
       if (!files.length) return false;
 
-      const registrationReady = await ensureRuntimeContentScriptRegistered(tab, files);
+      const registrationReady = await ensureRuntimeContentScriptRegistered(tab, files, hasHostAccess);
       if (!registrationReady) {
         // Keep the current page usable even when Chrome rejects a persistent
         // registration update. The direct executeScript path below activates
