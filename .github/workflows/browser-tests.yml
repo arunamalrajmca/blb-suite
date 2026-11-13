@@ -75,6 +75,8 @@ jobs:
         run: node scripts/validate-build.js
       - name: Run browser selector decision tests
         run: node --test tests/selector/*.test.mjs
+      - name: Run CI browser-routing inventory contract
+        run: node scripts/test-ci-routing-selector.js
       - name: Run deterministic regression gate — package
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
