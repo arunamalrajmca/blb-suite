@@ -3230,7 +3230,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (!url) { sendResponse({ok:false, reason:'invalid-strong'}); return true; }
     try {
       const result = await openBlbDestination(url, !!message.activeIfNew, !!message.activateExisting);
-      sendResponse({ok:true, value:canonicalStrongValue(message.value), tabId:result?.tab?.id ?? null});
+      sendResponse({ok:true, value:canonicalStrongValue(message.value), tabId:result?.id ?? result?.tab?.id ?? null});
     } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
