@@ -461,9 +461,9 @@ test('sensitive-site restrictions and explicit site opt-outs survive permission 
     });
 
     await page.goto(optOutUrl, {waitUntil:'domcontentloaded'});
-    const optOutTabId = await extensionWorker.evaluate(async () =>
-      (await chrome.tabs.query({url:optOutUrl}))[0]?.id
-    );
+    const optOutTabId = await extensionWorker.evaluate(async url =>
+      (await chrome.tabs.query({url}))[0]?.id
+    , optOutUrl);
     expect(Number.isInteger(optOutTabId)).toBe(true);
 
     sensitivePage = await context.newPage();
@@ -473,9 +473,9 @@ test('sensitive-site restrictions and explicit site opt-outs survive permission 
       body:'<!doctype html><html><head><title>Government test</title></head><body><p>John 3:16</p></body></html>'
     }));
     await sensitivePage.goto(sensitiveUrl, {waitUntil:'domcontentloaded'});
-    const sensitiveTabId = await extensionWorker.evaluate(async () =>
-      (await chrome.tabs.query({url:sensitiveUrl}))[0]?.id
-    );
+    const sensitiveTabId = await extensionWorker.evaluate(async url =>
+      (await chrome.tabs.query({url}))[0]?.id
+    , sensitiveUrl);
     expect(Number.isInteger(sensitiveTabId)).toBe(true);
 
     const registrationExists = pattern => extensionWorker.evaluate(async value => {
