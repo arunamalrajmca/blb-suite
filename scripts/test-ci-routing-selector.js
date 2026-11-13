@@ -164,7 +164,8 @@ try {
     'tests/browser/study-session-popup-ui-regression.spec.js',
     'tests/browser/study-backup-restore.spec.js',
     'tests/browser/feature-lifecycle-regressions.spec.js',
-    'tests/browser/extension.spec.js',
+    'tests/browser/extension-reference-actions.spec.js',
+    'tests/browser/extension-lifecycle.spec.js',
     'tests/browser/selection-phase-performance.spec.js',
     'tests/browser/service-worker-lifecycle.spec.js',
     'tests/browser/site-registration-opt-out-race.spec.js',
@@ -472,11 +473,11 @@ try {
   // the regression test added alongside that runtime change.
   resetScenario(base);
   write('extension/book-aliases.js', '// runtime alias change\n');
-  write('tests/browser/extension.spec.js', '// runtime regression test\n');
+  write('tests/browser/extension-reference-actions.spec.js', '// runtime regression test\n');
   commit('change runtime and related browser spec');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', true, 'runtime plus browser spec');
-  assert(result.values.changed_browser_specs.includes('tests/browser/extension.spec.js'),
+  assert(result.values.changed_browser_specs.includes('tests/browser/extension-reference-actions.spec.js'),
     'mixed runtime change must include its changed browser regression spec');
   console.log('PASS: mixed runtime and browser-spec changes run the edited regression spec');
 
@@ -488,7 +489,7 @@ try {
   commit('change background and focused registration regression');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', true, 'background plus focused registration spec');
-  assert(!result.values.changed_browser_specs.includes('tests/browser/extension.spec.js'),
+  assert(!result.values.changed_browser_specs.includes('tests/browser/extension-reference-actions.spec.js') && !result.values.changed_browser_specs.includes('tests/browser/extension-lifecycle.spec.js'),
     'the broad extension spec must not be selected for this isolated regression');
   assert(result.values.changed_specs.includes('tests/browser/site-registration-opt-out-race.spec.js'),
     'background changes must select the dedicated registration race coverage');
