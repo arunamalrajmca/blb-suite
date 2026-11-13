@@ -101,7 +101,7 @@ test('a real Chrome alarm wakes a terminated MV3 worker and auto-stops an inacti
   // short alarm delays to its minimum; the test waits for the actual alarm
   // event rather than calling checkStudyAutoStop directly.
   await extensionWorker.evaluate(() => chrome.alarms.create(STUDY_AUTOSTOP_ALARM, {
-    when:Date.now() + 15000
+    when:Date.now() + 65000
   }));
   const alarm = await extensionWorker.evaluate(() =>
     chrome.alarms.get(STUDY_AUTOSTOP_ALARM)
