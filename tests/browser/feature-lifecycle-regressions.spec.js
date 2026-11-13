@@ -846,3 +846,43 @@ test('Double-click OFF blocks only Double-click while Floating Button, Right Cli
     })())
   ), before), { timeout:1500 }).toBe(false);
 });
+
+
+test('BLB main host exposes the floating Show on BLB action while Double-click stays excluded', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{ 'blueletterbible.org':true },
+    // A stale saved value must not activate Double-click on BLB itself.
+    doubleClickBlbSites:{ 'blueletterbible.org':true }
+  });
+  await page.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html',
+    body:'<!doctype html><html><head><title>BLB main-host fixture</title></head><body><main>BLB main-host fixture</main></body></html>'
+  }));
+  await page.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil:'domcontentloaded' });
+  await page.bringToFront();
+  await page.waitForTimeout(500);
+
+  await selectLifecycleReference(page, 'blb-main-host-selection', 'John 3:17');
+  const floatingButton = page.locator('#blb-suite-page-selection-button');
+  await expect(floatingButton).toBeVisible({ timeout:10000 });
+
+  const activeTab = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({ active:true, currentWindow:true }).then(([tab]) => tab)
+  );
+  expect(await extensionWorker.evaluate(tab =>
+    shouldShowBlbContextMenu(tab, 'John 3:17'), activeTab
+  )).toBe(true);
+
+  const before = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
+  );
+  await floatingButton.click();
+  const opened = await waitForNewBlbPath(extensionWorker, before, '/kjv/jhn/3/17/');
+  expect(new URL(opened.url).pathname).toBe('/kjv/jhn/3/17/');
+  await removeBlbTab(extensionWorker, opened.id);
+});
