@@ -323,8 +323,8 @@ for (const feature of ['pageButton','doubleClick']) {
   }) => {
     await extensionStorage.set({
       masterEnabled:true,
-      pageSelectionButtonSites:{[SITE]:true},
-      doubleClickBlbSites:{[SITE]:false},
+      pageSelectionButtonSites:{[SITE]:feature==='doubleClick'},
+      doubleClickBlbSites:{[SITE]:feature==='pageButton'},
       pendingSiteFeatureToggles:{}
     });
     await page.goto(`chrome-extension://${extensionId}/popup.html`);
@@ -357,7 +357,12 @@ for (const feature of ['pageButton','doubleClick']) {
         double:stored.doubleClickBlbSites[SITE],
         pending:stored.pendingSiteFeatureToggles
       };
-    }).toEqual({master:false,page:true,double:false,pending:{}});
+    }).toEqual({
+      master:false,
+      page:feature==='doubleClick',
+      double:feature==='pageButton',
+      pending:{}
+    });
   });
 }
 
@@ -372,7 +377,11 @@ test('same-origin Show on and Double-click permission intents survive either pre
   });
   await page.goto(`chrome-extension://${extensionId}/popup.html`);
   for (const order of [['pageButton','doubleClick'],['doubleClick','pageButton']]) {
-    await extensionStorage.set({pendingSiteFeatureToggles:{}});
+    await extensionStorage.set({
+      pageSelectionButtonSites:{[SITE]:false},
+      doubleClickBlbSites:{[SITE]:false},
+      pendingSiteFeatureToggles:{}
+    });
     const prepared = await page.evaluate(async features => {
       const results = [];
       for (const feature of features) {
