@@ -411,3 +411,51 @@ test('same-origin Show on and Double-click permission intents survive either pre
     expect(stored.pendingSiteFeatureToggles).toEqual({});
   }
 });
+
+
+for (const feature of ['pageButton','doubleClick']) {
+  test(`an explicit ${feature} OFF is durable if the popup closes before a later permission grant`, async ({
+    page, extensionId, extensionStorage, extensionWorker
+  }) => {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{[SITE]:false},
+      doubleClickBlbSites:{[SITE]:false},
+      pendingSiteFeatureToggles:{}
+    });
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    await expect.poll(() => page.locator('body').evaluate(body => !body.classList.contains('popup-loading'))).toBe(true);
+    await page.evaluate(async () => {
+      const originalQuery = chrome.tabs.query.bind(chrome.tabs);
+      Object.defineProperty(chrome.tabs,'query',{configurable:true,value:async info =>
+        info?.active ? [{id:987654,url:'https://example.com/',title:'Example'}] : originalQuery(info)});
+      Object.defineProperty(chrome.permissions,'request',{configurable:true,value:() => new Promise(() => {})});
+      render(await getState());
+    });
+    const selector = feature==='pageButton' ? '#pageSetting .slider' : '#doubleSetting .slider';
+    await page.locator(selector).click();
+    await expect.poll(async () => (await readSitePreferences(extensionWorker)).pendingSiteFeatureToggles)
+      .toMatchObject({'https://example.com/*':{feature}});
+    await page.locator(selector).click();
+
+    await expect.poll(async () => {
+      const stored = await readSitePreferences(extensionWorker);
+      return {
+        page:stored.pageSelectionButtonSites[SITE],
+        double:stored.doubleClickBlbSites[SITE],
+        pending:stored.pendingSiteFeatureToggles
+      };
+    }).toEqual({page:false,double:false,pending:{}});
+    await page.close();
+
+    // Model the eventual permissions.onAdded callback after the popup is gone.
+    const lateGrant = await extensionWorker.evaluate(() =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins(['https://example.com/*'])
+    );
+    expect(lateGrant.committed).toEqual([]);
+    const afterGrant = await readSitePreferences(extensionWorker);
+    expect(afterGrant.pageSelectionButtonSites[SITE]).toBe(false);
+    expect(afterGrant.doubleClickBlbSites[SITE]).toBe(false);
+    expect(afterGrant.pendingSiteFeatureToggles).toEqual({});
+  });
+}
