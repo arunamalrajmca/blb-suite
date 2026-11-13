@@ -676,14 +676,21 @@ async function refreshStudyAutoStop() {
 }
 async function saveStudyAutoStop() {
   const minutes = Number(studyAutoStop?.value || 15);
+  let response = null;
   try {
-    const response = await chrome.runtime.sendMessage({type:'blbSuiteSetStudyAutoStopMinutes', minutes});
+    response = await chrome.runtime.sendMessage({type:'blbSuiteSetStudyAutoStopMinutes', minutes});
     if (response?.ok) {
       setStatus('Inactivity stop setting saved.');
       return;
     }
   } catch (_) {}
   const restored = await refreshStudyAutoStop();
+  if (response?.restored === false) {
+    setStatus(restored
+      ? `Unable to restore the previous inactivity stop setting. The current value is ${studyAutoStop.value} minutes.`
+      : 'Unable to restore the previous inactivity stop setting; the current value could not be confirmed.');
+    return;
+  }
   setStatus(restored
     ? 'Unable to save the inactivity stop setting. The previous value was restored.'
     : 'Unable to save the inactivity stop setting; the current value could not be confirmed.');
