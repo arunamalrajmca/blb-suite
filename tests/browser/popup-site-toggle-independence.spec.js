@@ -190,3 +190,72 @@ for (const feature of ['pageButton', 'doubleClick']) {
     expect(afterGrant.pendingSiteFeatureToggles).toEqual({});
   });
 }
+
+
+for (const feature of ['pageButton', 'doubleClick']) {
+  test(`turning the global master OFF during a pending popup permission request blocks a later grant for ${feature}`, async ({
+    page, extensionId, extensionStorage, extensionWorker
+  }) => {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{[SITE]:false},
+      doubleClickBlbSites:{[SITE]:false},
+      pendingSiteFeatureToggles:{}
+    });
+
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    await expect.poll(() => page.locator('body').evaluate(body =>
+      !body.classList.contains('popup-loading')
+    )).toBe(true);
+    await page.evaluate(async () => {
+      const originalQuery = chrome.tabs.query.bind(chrome.tabs);
+      Object.defineProperty(chrome.tabs, 'query', {
+        configurable:true,
+        value:async queryInfo => queryInfo?.active
+          ? [{id:987654,url:'https://example.com/',title:'Example'}]
+          : originalQuery(queryInfo)
+      });
+      window.__resolveSitePermissionRequest = null;
+      Object.defineProperty(chrome.permissions, 'request', {
+        configurable:true,
+        value:() => new Promise(resolve => {
+          window.__resolveSitePermissionRequest = () => resolve(true);
+        })
+      });
+      render(await getState());
+    });
+
+    const featureSelector = feature === 'pageButton' ? '#pageSetting .slider' : '#doubleSetting .slider';
+    await expect(page.locator(featureSelector)).toBeVisible();
+    await page.locator(featureSelector).click();
+
+    await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
+      pendingSiteFeatureToggles:{
+        'https://example.com/*':{feature}
+      }
+    });
+    await expect.poll(() => page.evaluate(() =>
+      typeof window.__resolveSitePermissionRequest === 'function'
+    )).toBe(true);
+
+    // The host permission prompt is still unresolved when the user closes
+    // the global gate from the same popup.
+    await page.locator('label.master-switch .slider').click();
+    await expect.poll(async () => extensionWorker.evaluate(async () =>
+      (await chrome.storage.local.get({masterEnabled:true})).masterEnabled
+    )).toBe(false);
+
+    // Simulate Chrome resolving the outstanding prompt after global OFF.
+    await page.evaluate(() => window.__resolveSitePermissionRequest());
+    const grantResult = await extensionWorker.evaluate(() =>
+      commitPendingSiteFeatureTogglesForGrantedOrigins(['https://example.com/*'])
+    );
+    expect(grantResult.committed).toEqual([]);
+
+    await expect.poll(async () => readSitePreferences(extensionWorker)).toMatchObject({
+      pageSelectionButtonSites:{[SITE]:false},
+      doubleClickBlbSites:{[SITE]:false},
+      pendingSiteFeatureToggles:{}
+    });
+  });
+}
