@@ -104,7 +104,7 @@ test('disabling the last site feature removes both persistent isolated- and MAIN
       await chrome.storage.local.set({
         masterEnabled: true,
         redirectEnabled: false,
-        pageSelectionButtonSites: { 'christianity.com': false },
+        pageSelectionButtonSites: { 'example.com': false },
         doubleClickBlbSites: {}
       });
 
