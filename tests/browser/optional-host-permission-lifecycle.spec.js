@@ -931,3 +931,95 @@ test('a late host-permission grant activates the original site tab even after fo
     if (otherPage) await otherPage.close().catch(() => {});
   }
 });
+
+
+test('permission revocation during an in-flight registration cannot leave a persistent content script behind', async ({
+  page, extensionWorker, extensionStorage
+}) => {
+  const pattern = 'https://example.com/*';
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  }));
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({active:true,currentWindow:true}).then(([tab]) => tab?.id)
+  );
+  const registrationId = await extensionWorker.evaluate(value =>
+    runtimeContentScriptIdForPattern(value), pattern
+  );
+  const mainWorldId = registrationId + '-main-world';
+
+  try {
+    await extensionWorker.evaluate(async ({originPattern, id, mainId}) => {
+      await chrome.scripting.unregisterContentScripts({ids:[id,mainId]}).catch(() => {});
+      await chrome.storage.local.set({
+        masterEnabled:true,
+        redirectEnabled:false,
+        pageSelectionButtonSites:{'example.com':true},
+        doubleClickBlbSites:{}
+      });
+      await reconcileRuntimeContentScriptRegistrations();
+      await runtimeContentScriptReconciliationQueue;
+
+      const originalContains = chrome.permissions.contains;
+      const originalRegister = chrome.scripting.registerContentScripts;
+      let accessGranted = true;
+      let signalStarted;
+      const started = new Promise(resolve => { signalStarted = resolve; });
+      let releaseRegistration;
+      const registrationGate = new Promise(resolve => { releaseRegistration = resolve; });
+
+      chrome.permissions.contains = async details => {
+        if (details?.origins?.includes(originPattern)) return accessGranted;
+        return originalContains.call(chrome.permissions, details);
+      };
+      chrome.scripting.registerContentScripts = async scripts => {
+        if (scripts.some(script => script.id === id)) {
+          signalStarted();
+          await registrationGate;
+        }
+        return originalRegister.call(chrome.scripting, scripts);
+      };
+
+      globalThis.__permissionRaceRestore = () => {
+        accessGranted = true;
+        chrome.permissions.contains = originalContains;
+        chrome.scripting.registerContentScripts = originalRegister;
+        releaseRegistration();
+      };
+      globalThis.__permissionRaceRevoke = () => { accessGranted = false; };
+      globalThis.__permissionRaceStarted = started;
+      globalThis.__permissionRaceRelease = releaseRegistration;
+    }, {originPattern:pattern,id:registrationId,mainId:mainWorldId});
+
+    const activation = await extensionWorker.evaluate(id => ensureContentScriptInTab(id), tabId);
+    await extensionWorker.evaluate(() => globalThis.__permissionRaceStarted);
+    // Wait for the actual registration call to enter its deliberate pause.
+    await extensionWorker.evaluate(() => globalThis.__permissionRaceStarted);
+    await extensionWorker.evaluate(() => globalThis.__permissionRaceRevoke());
+    await extensionWorker.evaluate(() => reconcileRuntimeContentScriptRegistrations());
+    await extensionWorker.evaluate(() => globalThis.__permissionRaceRelease());
+    const activated = await extensionWorker.evaluate(() => globalThis.__permissionRaceActivation);
+    void activation;
+    void activated;
+
+    const remaining = await extensionWorker.evaluate(async ids =>
+      chrome.scripting.getRegisteredContentScripts({ids}), [registrationId,mainWorldId]
+    );
+    expect(remaining).toEqual([]);
+  } finally {
+    await extensionWorker.evaluate(async ({id,mainId,settings}) => {
+      globalThis.__permissionRaceRestore?.();
+      delete globalThis.__permissionRaceRestore;
+      delete globalThis.__permissionRaceRevoke;
+      delete globalThis.__permissionRaceStarted;
+      delete globalThis.__permissionRaceRelease;
+      await chrome.scripting.unregisterContentScripts({ids:[id,mainId]}).catch(() => {});
+      await chrome.storage.local.set(settings);
+      await reconcileRuntimeContentScriptRegistrations().catch(() => {});
+    }, {id:registrationId,mainId:mainWorldId,settings:previous});
+  }
+});
