@@ -1003,6 +1003,7 @@ test('permission revocation during an in-flight registration cannot leave a pers
       // the exact registration boundary without modifying Chrome's native API.
       const permissionCheck = async candidateTab =>
         originPatternForUrl(candidateTab?.url) === originPattern ? accessGranted : true;
+      globalThis.__permissionRacePermissionCheck = permissionCheck;
       chrome.scripting.registerContentScripts = async scripts => {
         if (scripts.some(script => script.id === id)) {
           signalStarted();
@@ -1013,6 +1014,7 @@ test('permission revocation during an in-flight registration cannot leave a pers
 
       globalThis.__permissionRaceRestore = () => {
         accessGranted = true;
+        delete globalThis.__permissionRacePermissionCheck;
         chrome.scripting.registerContentScripts = originalRegister;
         releaseRegistration();
       };
@@ -1029,7 +1031,7 @@ test('permission revocation during an in-flight registration cannot leave a pers
     // Start activation without awaiting it so the test can revoke access
     // while Chrome's registration API is deliberately paused.
     await extensionWorker.evaluate(id => {
-      globalThis.__permissionRaceActivation = ensureContentScriptInTab(id, permissionCheck);
+      globalThis.__permissionRaceActivation = ensureContentScriptInTab(id, globalThis.__permissionRacePermissionCheck);
     }, tabId);
     // Wait for the actual registration call to enter its deliberate pause.
     await extensionWorker.evaluate(() => globalThis.__permissionRaceStarted);
