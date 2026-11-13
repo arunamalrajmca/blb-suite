@@ -23,6 +23,7 @@ const sourceExtensionPath = process.env.BLB_EXTENSION_PATH
 // runs may execute the base branch's workflow file, which can lag behind this PR.
 const testHosts = [
   'https://example.com/*',
+  'https://www.gov.scot/*',
   'https://www.facebook.com/*',
   'https://rediscover.bible/*',
   'https://www.rediscover.bible/*',
@@ -42,6 +43,7 @@ const testHosts = [
   'https://mercyhouseministry.com/*',
   'https://www.openbible.info/*',
   'https://www.crossway.org/*',
+  'https://crossway.org/*',
   'https://sarata.com/*',
   'https://www.supplyofgrace.com/*',
   'https://sermonindex.net/*',

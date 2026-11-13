@@ -2645,7 +2645,7 @@ function runtimeContentScriptIdForPattern(pattern) {
   return `blb-suite-runtime-${(hash >>> 0).toString(36)}`;
 }
 
-async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_SCRIPT_FILES) {
+async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_SCRIPT_FILES, hasHostAccess = hasHostAccessForTab) {
   const pattern = originPatternForUrl(tab?.url);
   if (!pattern || !Array.isArray(files) || !files.length || !chrome.scripting?.registerContentScripts) return false;
   const id = runtimeContentScriptIdForPattern(pattern);
@@ -2699,6 +2699,23 @@ async function registerRuntimeContentScriptForPattern(tab, files = BLB_CONTENT_S
           persistAcrossSessions:true
         }]);
       }
+    }
+    // Permission revocation can race an in-flight register/update call. The
+    // onRemoved reconciliation may run before this registration becomes
+    // visible, so verify access again after all registrations complete and
+    // remove both worlds if the grant disappeared during the operation.
+    const latestSettings = await chrome.storage.local.get({
+      masterEnabled:true,
+      pageSelectionButtonSites:{},
+      doubleClickBlbSites:{},
+      redirectEnabled:false
+    });
+    const stillEligible = latestSettings.masterEnabled !== false &&
+      await hasHostAccess(tab) &&
+      await shouldInjectContentScriptForTab(tab, latestSettings);
+    if (!stillEligible) {
+      await unregisterRuntimeContentScriptForPattern(pattern);
+      return false;
     }
     return true;
   } catch (error) {
