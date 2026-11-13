@@ -3295,7 +3295,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'blbSuiteOpenSelectionText' || message.type === 'blbSuiteOpenDoubleClickSelectionText') {
     const isDoubleClickAction = message.type === 'blbSuiteOpenDoubleClickSelectionText';
     if (!(await isSuiteEnabled())) {
-      sendResponse({ok:false});
+      sendResponse({ok:false, reason:'disabled'});
+      return true;
+    }
+    // Optional host access can be revoked while this document's content script
+    // is still resident. Re-check the sender tab at dispatch time so neither
+    // the floating Show on BLB button nor Double-click can use stale access.
+    if (!(await hasHostAccessForTab(sender?.tab))) {
+      sendResponse({ok:false, reason:'host-permission-revoked'});
       return true;
     }
     const text = String(message.text || '').trim();
@@ -6323,6 +6330,7 @@ async function shouldShowBlbContextMenu(tab, selectionText) {
   // floating Show on BLB button. Do not require a content-script visibility
   // signal or a classifier just to expose the menu item.
   if (isSensitiveSiteUrl(tab?.url || '')) return false;
+  if (!(await hasHostAccessForTab(tab))) return false;
   return await isPageButtonEnabledForHostname(siteKey);
 }
 
@@ -6570,6 +6578,7 @@ async function handleOpenBibleSelectionCommand() {
     const tabs = await chrome.tabs.query({active:true,currentWindow:true});
     const tab = tabs[0];
     if (!tab?.id) return {ok:false, reason:'no-active-tab'};
+    if (!(await hasHostAccessForTab(tab))) return {ok:false, reason:'host-permission-revoked'};
 
     // Alt+B is an entry point for the same Show on BLB feature as the
     // floating button and right-click menu. Enforce both the BLB-site
