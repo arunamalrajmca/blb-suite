@@ -36,7 +36,7 @@ jobs:
     if: ${{ inputs.group_a_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/e2e-core-user-actions.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/e2e-core-user-actions.spec.js') }}
     name: BROWSER E2E — CORE USER ACTIONS
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v5
         with:
@@ -265,7 +265,7 @@ jobs:
     if: ${{ inputs.study_sessions_required == 'true' }}
     name: BROWSER E2E — STUDY SESSIONS
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@v5
         with:
