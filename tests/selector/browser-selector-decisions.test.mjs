@@ -183,7 +183,7 @@ test("site-feature fail-closed behavior runs in the required gate for popup and 
     assert.match(popupOutput, /changed_specs=.*popup-site-toggle-independence\.spec\.js/);
     assert.match(popupOutput, /group_a_required=true/);
     assert.match(popupOutput, /group_b_required=false/);
-    assert.match(popupOutput, /reference_required=false/);
+    assert.match(popupOutput, /reference_required=true/);
   });
   withFixture((root, base) => {
     commitChange(root, "extension/background.js", "// changed shared background behavior\n");
@@ -215,7 +215,7 @@ test("mixed Group B runtime and unrelated browser-spec edits still run the chang
     const output = select(root, base);
     assert.match(output, /changed_specs=tests\/browser\/scripttagger-global-injection\.spec\.js/);
     assert.match(output, /changed_browser_specs=.*redirect-toggle-isolation\.spec\.js/);
-    assert.ok(output.includes("group_a_changed_browser_specs=" + "\\n"),
+    assert.ok(output.split(String.fromCharCode(10)).includes("group_a_changed_browser_specs="),
       "toggle matrix owns the changed toggle spec instead of running it a second time in Group A's generic changed-spec runner");
     assert.match(output, /reference_required=false/);
     assert.match(output, /group_a_required=true/);
@@ -475,9 +475,7 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
     "redirect-source-url-patterns",
     "redirect-hostnames",
     "blb-non-kjv-redirect",
-    "redirect-toggle-isolation",
     "multiverse-clipboard-reference-pattern",
-    "popup-master-toggle-regression",
     "facebook-selection-parser",
     "substack-selection-parser",
     "omnibox-command-routing",
@@ -493,6 +491,11 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
       "delegated ownership must be explicit in the registry: " + spec);
   }
   assert.ok(referenceWorkflow.includes("select-reference-matrix.mjs"));
+  for (const spec of togglePermissionSpecs) {
+    assert.ok(groupA.includes(spec), "Group A owns toggle/permission coverage: " + spec);
+    assert.ok(!referenceMatrix.some(entry => (entry.files || (entry.file ? [entry.file] : [])).includes(spec)),
+      "toggle/permission spec must not be duplicated in References: " + spec);
+  }
 
   assert.match(groupA, /GROUP_A_CHANGED_BROWSER_SPECS:/);
   assert.doesNotMatch(groupA, /case "\$spec" in/);
