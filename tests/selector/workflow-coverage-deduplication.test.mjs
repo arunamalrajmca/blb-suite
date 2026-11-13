@@ -68,6 +68,26 @@ test("Group A core user actions and toggle/permission suites run in independent 
   assert.ok(summary.includes('check_group "Toggle and permission lifecycle"'));
 });
 
+test("core user-action coverage is split into disjoint parallel groups without losing tests", () => {
+  const start = groupsWorkflow.indexOf("  core-user-actions:\\n");
+  const end = groupsWorkflow.indexOf("\\n  toggle-permission-lifecycle:", start);
+  assert.ok(start >= 0 && end > start);
+  const job = groupsWorkflow.slice(start, end);
+  assert.ok(job.includes("fail-fast: false"));
+  assert.ok(job.includes('npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep "${{ matrix.grep }}"'));
+  const source = readFileSync(new URL("../browser/e2e-core-user-actions.spec.js", import.meta.url), "utf8");
+  const titles = [...source.matchAll(/test[(]'([^']+)'/g)].map(match => match[1]);
+  const groups = [
+    /physical right-click preserves|failed context-menu action leaves Alt[+]B available|Alt[+]B command path opens|MultiVerse Copy button adds|normal Ctrl[+]C in MultiVerse|copying typed MultiVerse references|BLB verse links inside parse popups|single-token selection actions share positional resolution/,
+    /continuous same-chapter multi-reference selection|selection containing a reference and authored prose|chapter-only ranges expand|MultiVerse batches disjoint chapter ranges|MultiVerse parses reversed disjoint chapter ranges/,
+    /Double-Click resolves contextual chapter numbers|Double-Click preserves Facebook bidi-isolated Matthew|Double-Click numbered-list labels|Double-Click on serials above 66|Ordinary numbers without a list-label period|Double-Click anywhere in a consecutive comma-separated verse citation|Double-Click resolves references through custom and framework-generated DOM containers|Double-Click resolves partial references in Instagram-style rich text|Facebook resolves repeated references|Facebook Luke 22:26 resolves only within its own dir-auto line|Show on BLB searches the complete numbered book|Facebook book-name double-click retains Luke|Facebook book clicks use only permitted immediate context|Double-Click on Vs[.] resolves/
+  ];
+  assert.ok(titles.length >= 25, "core user-action suite inventory is substantial and must not silently shrink");
+  for (const title of titles) {
+    assert.equal(groups.filter(group => group.test(title)).length, 1, "core user-action test selected exactly once: " + title);
+  }
+});
+
 test("reference feature coverage is parallel and does not wait for the reference matrix", () => {
   const start = referenceWorkflow.indexOf("  browser-e2e-features:\n");
   const end = referenceWorkflow.indexOf("\n  grouped-browser-e2e:", start);
