@@ -506,7 +506,7 @@ try {
 
   // The reference matrix definition and runner workflows change test execution topology.
   resetScenario(base);
-  write('scripts/reference-e2e-matrix.json', '{\\"group\\":\\"test\\"}\\n');
+  write('scripts/reference-e2e-matrix.json', '{"group":"test"}\n');
   commit('change reference matrix definition');
   result = selectorResult(base);
   assertValue(result, 'full_browser_suite', true, 'reference matrix definition');
