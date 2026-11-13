@@ -69,8 +69,8 @@ test("Group A core user actions and toggle/permission suites run in independent 
 });
 
 test("core user-action coverage is split into disjoint parallel groups without losing tests", () => {
-  const start = groupsWorkflow.indexOf("  core-user-actions:\\n");
-  const end = groupsWorkflow.indexOf("\\n  toggle-permission-lifecycle:", start);
+  const start = groupsWorkflow.indexOf("  core-user-actions:" + String.fromCharCode(10));
+  const end = groupsWorkflow.indexOf(String.fromCharCode(10) + "  toggle-permission-lifecycle:", start);
   assert.ok(start >= 0 && end > start);
   const job = groupsWorkflow.slice(start, end);
   assert.ok(job.includes("fail-fast: false"));
