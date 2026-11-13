@@ -603,10 +603,10 @@ jobs:
           const split = [
             'tests/browser/extension-reference-actions.spec.js',
             'tests/browser/extension-lifecycle.spec.js'
-          ].map(file => fs.readFileSync(file, 'utf8')).join('\\n');
-          const registrations = source => source.split(/\\r?\\n/)
+          ].map(file => fs.readFileSync(file, 'utf8')).join('\n');
+          const registrations = source => source.split(/\r?\n/)
             .map(line => line.trim())
-            .filter(line => /^test(?:\\.describe)?\\s*\\(/.test(line))
+            .filter(line => /^test(?:\.describe)?\s*\(/.test(line))
             .sort();
           const before = registrations(legacy);
           const after = registrations(split);
