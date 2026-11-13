@@ -930,8 +930,10 @@ async function openHistoryStrongs() {
 
   if (opened === values.length && !activationFailed) {
     setStatus(`Opened ${opened} KJV Strong's ${opened === 1 ? 'entry' : 'entries'}.`);
+  } else if (opened === values.length && activationFailed) {
+    setStatus(`Opened all ${opened} KJV Strong's entries, but could not activate the last tab. Please check the opened tabs.`);
   } else if (opened > 0) {
-    setStatus(`Opened ${opened} of ${values.length} KJV Strong's entries${activationFailed ? ', but could not activate the last tab' : ''}. Please retry the missing entries.`);
+    setStatus(`Opened ${opened} of ${values.length} KJV Strong's entries. Please retry the missing entries.`);
   } else {
     setStatus("Unable to open the KJV Strong's entries. Please try again.");
   }
