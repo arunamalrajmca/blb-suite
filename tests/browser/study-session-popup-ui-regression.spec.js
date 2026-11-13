@@ -475,3 +475,81 @@ test('Study export: rejects empty data, malformed dates, and topics without cont
   expect(await allDownloads(extensionWorker)).toEqual([]);
   await page.close();
 });
+
+
+test('Study Sessions auto-stop reports a rejected save and restores the persisted value', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionWorker.evaluate(async () => {
+    await chrome.storage.local.set({
+      masterEnabled:true,
+      studyAutoStopMinutes:15,
+      studyTopics:['Auto Stop Failure'],
+      studySelectedTopic:'Auto Stop Failure',
+      currentStudySessionId:'auto-stop-save-failure',
+      studySessions:[{
+        id:'auto-stop-save-failure',
+        title:'Auto Stop Failure',
+        date:'2026-11-13',
+        dateLabel:'2026-11-13',
+        refs:[],strongs:[],searchTerms:[],notes:[]
+      }]
+    });
+  });
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(page);
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => message?.type === 'blbSuiteSetStudyAutoStopMinutes'
+        ? Promise.resolve({ok:false,error:'simulated-save-failure'})
+        : originalSendMessage(message)
+    });
+  });
+
+  const autoStop = page.locator('#studyAutoStop');
+  await expect(autoStop).toHaveValue('15');
+  await autoStop.selectOption('10');
+  await expect(autoStop).toHaveValue('15');
+  await expect(page.locator('#studyStatus')).toContainText(
+    'Unable to save the inactivity stop setting. The previous value was restored.'
+  );
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({studyAutoStopMinutes:15})).studyAutoStopMinutes
+  )).toBe(15);
+  await page.close();
+});
+
+test('Study Sessions topic blur reports when the topic could not be saved', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(page);
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value:message => message?.type === 'blbSuiteSaveStudyTopic'
+        ? Promise.resolve({ok:false,error:'simulated-topic-save-failure'})
+        : originalSendMessage(message)
+    });
+  });
+
+  await page.locator('#studyTopic').fill('Unsaved Topic Failure');
+  await page.locator('#studyNote').click();
+  await expect(page.locator('#studyStatus')).toContainText(
+    'Unable to save this Study topic. Please try again.'
+  );
+  const stored = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    studyTopics:[],
+    studySelectedTopic:''
+  }));
+  expect(stored.studyTopics).not.toContain('Unsaved Topic Failure');
+  expect(stored.studySelectedTopic).not.toBe('Unsaved Topic Failure');
+  await page.close();
+});
