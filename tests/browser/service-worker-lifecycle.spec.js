@@ -158,3 +158,63 @@ test('a real Chrome alarm wakes a terminated MV3 worker and auto-stops an inacti
     await observer.close();
   }
 });
+
+test('a real MV3 service-worker termination is recovered by an actual Double-click selection', async ({
+  page, context, extensionStorage, extensionId
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{'example.com':true}
+  });
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  await page.evaluate(() => {
+    const target=document.createElement('p');
+    target.id='double-click-worker-wake-reference';
+    target.textContent='John 3:16';
+    document.body.appendChild(target);
+  });
+  await page.waitForTimeout(500);
+
+  const browser=context.browser();
+  expect(browser, 'persistent context must expose its Chromium browser').not.toBeNull();
+  const cdp=await browser.newBrowserCDPSession();
+  try {
+    await cdp.send('Target.setDiscoverTargets',{discover:true});
+    const {targetInfos}=await cdp.send('Target.getTargets');
+    const workerTarget=targetInfos.find(target =>
+      target.type==='service_worker' &&
+      target.url.startsWith(`chrome-extension://${extensionId}/`)
+    );
+    expect(workerTarget,'extension service-worker target must be discoverable').toBeTruthy();
+
+    const closed=await cdp.send('Target.closeTarget',{targetId:workerTarget.targetId});
+    expect(closed.success).toBe(true);
+    await expect.poll(async () => {
+      const {targetInfos:current}=await cdp.send('Target.getTargets');
+      return current.some(target => target.targetId===workerTarget.targetId);
+    },{timeout:5000}).toBe(false);
+
+    // This is the real page gesture and the dedicated Double-click message
+    // path, not a direct call into the background handler.
+    await page.locator('#double-click-worker-wake-reference').dblclick();
+
+    await expect.poll(async () => {
+      const {targetInfos:current}=await cdp.send('Target.getTargets');
+      return current.some(target =>
+        target.type==='page' &&
+        (() => { try { const url=new URL(target.url); return url.hostname==='www.blueletterbible.org' && url.pathname==='/kjv/jhn/3/16/'; } catch (_) { return false; } })()
+      );
+    },{timeout:15000,intervals:[100,200,500,1000]}).toBe(true);
+
+    const {targetInfos:recoveredTargets}=await cdp.send('Target.getTargets');
+    const recoveredWorker=recoveredTargets.find(target =>
+      target.type==='service_worker' &&
+      target.url.startsWith(`chrome-extension://${extensionId}/`)
+    );
+    expect(recoveredWorker,'Double-click must wake the extension service worker').toBeTruthy();
+  } finally {
+    await cdp.detach();
+  }
+});
