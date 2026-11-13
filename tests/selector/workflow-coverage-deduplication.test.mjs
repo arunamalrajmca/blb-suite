@@ -93,7 +93,7 @@ test("dedicated Group A steps defer to the changed-spec runner when that file ch
     "subset grep must not rerun tests already executed from a changed extension.spec.js");
 
   const toggleStep = groupsWorkflow.match(
-    /- name: Run remaining toggle isolation and permission lifecycle regressions\\n([\\s\\S]*?)(?=\\n      - name:)/
+    /- name: Run remaining toggle isolation and permission lifecycle regressions\n([\s\S]*?)(?=\n      - name:)/
   );
   assert.ok(toggleStep, "toggle isolation and permission lifecycle step must exist");
   assert.ok(toggleStep[1].includes("tests/browser/popup-site-toggle-independence.spec.js"),
