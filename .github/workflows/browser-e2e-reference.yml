@@ -411,8 +411,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          printf 'Running feature coverage from %s\\n' "${{ matrix.spec }}"
-          npx playwright test "${{ matrix.spec }}" --grep 'MV3 service worker|popup loads|Show on BLB|Alt\\+B toggle enforcement'
+          printf 'Running feature coverage from %s\n' "${{ matrix.spec }}"
+          npx playwright test "${{ matrix.spec }}" --grep 'MV3 service worker|popup loads|Show on BLB|Alt\+B toggle enforcement'
       - name: Upload Playwright diagnostics — FEATURES
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
