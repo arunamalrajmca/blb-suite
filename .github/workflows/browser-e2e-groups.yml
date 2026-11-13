@@ -67,7 +67,7 @@ jobs:
         run: npx playwright test tests/browser/e2e-core-user-actions.spec.js
 
   toggle-permission-lifecycle:
-    if: ${{ inputs.group_a_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/popup-site-toggle-independence.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/popup-site-toggle-independence.spec.js')) }}
+    if: ${{ inputs.group_a_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/popup-site-toggle-independence.spec.js')) }}
     name: BROWSER E2E — TOGGLE/PERMISSION — ${{ matrix.spec }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
@@ -368,7 +368,7 @@ jobs:
           GROUP_A_RESULT: ${{ needs.core-group-a.result }}
           CORE_USER_ACTIONS_REQUIRED: ${{ inputs.group_a_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/e2e-core-user-actions.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/e2e-core-user-actions.spec.js') }}
           CORE_USER_ACTIONS_RESULT: ${{ needs.core-user-actions.result }}
-          TOGGLE_REQUIRED: ${{ inputs.group_a_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/popup-site-toggle-independence.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/popup-site-toggle-independence.spec.js')) }}
+          TOGGLE_REQUIRED: ${{ inputs.group_a_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/popup-site-toggle-independence.spec.js')) }}
           TOGGLE_RESULT: ${{ needs.toggle-permission-lifecycle.result }}
           STUDY_REQUIRED: ${{ inputs.study_sessions_required }}
           STUDY_RESULT: ${{ needs.core-study-sessions.result }}
