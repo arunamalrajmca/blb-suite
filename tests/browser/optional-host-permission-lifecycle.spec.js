@@ -412,12 +412,12 @@ test('global OFF remains authoritative across permission revocation, regrant, an
     // Restoring master ON must reactivate the already-authorized tab without
     // changing either preference or requiring the user to toggle a feature.
     await extensionStorage.set({masterEnabled:true});
-    await expect.poll(registered, {timeout:10000}).toBe(true);
     const recovered = await extensionWorker.evaluate(() =>
       injectConfiguredTabsAfterExtensionUpdate()
     );
     expect(recovered.eligibleTabIds).toContain(tabId);
     expect(recovered.activatedTabIds).toContain(tabId);
+    await expect.poll(registered, {timeout:10000}).toBe(true);
 
     state = await extensionWorker.evaluate(() => chrome.storage.local.get({
       masterEnabled:false,pageSelectionButtonSites:{},doubleClickBlbSites:{}
