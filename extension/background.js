@@ -2318,11 +2318,14 @@ async function openScriptTaggerDestination(url) {
     const rememberedId = scriptTaggerDestinationTabs.get(key);
     const remembered = await getLiveTabById(rememberedId);
     if (remembered?.id != null) {
-      await chrome.tabs.update(remembered.id, {active:true});
-      if (remembered.windowId != null) {
-        try { await chrome.windows.update(remembered.windowId, {focused:true}); } catch (_) {}
+      const rememberedUrl = String(remembered.pendingUrl || remembered.url || '');
+      if (canonicalScriptTaggerDestinationKey(rememberedUrl) === key) {
+        await chrome.tabs.update(remembered.id, {active:true});
+        if (remembered.windowId != null) {
+          try { await chrome.windows.update(remembered.windowId, {focused:true}); } catch (_) {}
+        }
+        return remembered;
       }
-      return remembered;
     }
     if (rememberedId != null) scriptTaggerDestinationTabs.delete(key);
 

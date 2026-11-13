@@ -295,3 +295,125 @@ test('ScriptTagger destination keys keep distinct verses separate and coalesce r
   expect(concurrent[0].id).toBe(concurrent[1].id);
   expect(tabs).toHaveLength(3);
 });
+
+
+function createScriptTaggerDestinationManager({ tabs = [], failCreateCount = 0 } = {}) {
+  const start = background.indexOf('// ScriptTagger has a stricter destination identity');
+  const end = background.indexOf('async function openBlbDestination(', start);
+  if (start < 0 || end < 0) throw new Error('Could not extract ScriptTagger destination manager');
+
+  let nextId = tabs.reduce((max, tab) => Math.max(max, Number(tab.id) || 0), 0) + 1;
+  let queue = Promise.resolve();
+  const chrome = {
+    tabs: {
+      query: async () => tabs,
+      create: async options => {
+        if (failCreateCount > 0) {
+          failCreateCount -= 1;
+          throw new Error('transient tabs.create failure');
+        }
+        const tab = {
+          id: nextId++,
+          url: options.url,
+          pendingUrl: options.url,
+          windowId: 1,
+          active: options.active
+        };
+        tabs.push(tab);
+        return tab;
+      },
+      update: async (id, changes) => {
+        const tab = tabs.find(item => item.id === id);
+        if (!tab) throw new Error('No tab with id: ' + id);
+        Object.assign(tab, changes);
+        return tab;
+      }
+    },
+    windows: { update: async () => ({ focused: true }) }
+  };
+  const context = {
+    URL,
+    URLSearchParams,
+    Map,
+    BLB_HOSTNAME: 'blueletterbible.org',
+    chrome,
+    getLiveTabById: async id => tabs.find(tab => tab.id === id) || null,
+    enqueueBlbTabCreation: operation => {
+      const result = queue.then(operation, operation);
+      queue = result.catch(() => {});
+      return result;
+    }
+  };
+  vm.runInNewContext(background.slice(start, end), context);
+  return context;
+}
+
+test('ScriptTagger destination tabs are rediscovered after an MV3 service-worker restart', async () => {
+  const tabs = [];
+  const firstWorker = createScriptTaggerDestinationManager({ tabs });
+  const url = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+  const first = await firstWorker.openScriptTaggerDestination(url);
+  expect(tabs).toHaveLength(1);
+
+  // A restarted worker has fresh in-memory destination maps but sees the
+  // same browser tabs. It must rediscover and activate the existing passage.
+  const restartedWorker = createScriptTaggerDestinationManager({ tabs });
+  const recovered = await restartedWorker.openScriptTaggerDestination(url);
+
+  expect(recovered.id).toBe(first.id);
+  expect(tabs).toHaveLength(1);
+  expect(tabs[0].active).toBe(true);
+});
+
+test('ScriptTagger destination can be reopened after its remembered tab is closed', async () => {
+  const tabs = [];
+  const worker = createScriptTaggerDestinationManager({ tabs });
+  const url = 'https://www.blueletterbible.org/kjv/rom/8/28/';
+  const first = await worker.openScriptTaggerDestination(url);
+
+  // Model Chrome removing the destination tab before the next source-link click.
+  tabs.splice(tabs.findIndex(tab => tab.id === first.id), 1);
+  const reopened = await worker.openScriptTaggerDestination(url);
+
+  expect(reopened.id).not.toBe(first.id);
+  expect(tabs).toHaveLength(1);
+  expect(tabs[0].id).toBe(reopened.id);
+});
+
+test('ScriptTagger destination creation releases its pending reservation after failure so a retry can succeed', async () => {
+  const tabs = [];
+  const worker = createScriptTaggerDestinationManager({ tabs, failCreateCount: 1 });
+  const url = 'https://www.blueletterbible.org/kjv/1co/13/4/';
+
+  let creationError = null;
+  try {
+    await worker.openScriptTaggerDestination(url);
+  } catch (error) {
+    creationError = error;
+  }
+  expect(String(creationError)).toContain('transient tabs.create failure');
+  expect(vm.runInNewContext('pendingScriptTaggerDestinations.size', worker)).toBe(0);
+  expect(tabs).toHaveLength(0);
+
+  const retried = await worker.openScriptTaggerDestination(url);
+  expect(retried.id).toBe(1);
+  expect(tabs).toHaveLength(1);
+  expect(vm.runInNewContext('pendingScriptTaggerDestinations.size', worker)).toBe(0);
+});
+
+
+test('ScriptTagger destination manager does not reuse a remembered tab after it navigates away', async () => {
+  const tabs = [];
+  const worker = createScriptTaggerDestinationManager({ tabs });
+  const url = 'https://www.blueletterbible.org/kjv/gal/2/20/';
+  const first = await worker.openScriptTaggerDestination(url);
+  const unrelatedUrl = 'https://example.com/an-unrelated-page';
+  Object.assign(tabs[0], { url: unrelatedUrl, pendingUrl: unrelatedUrl });
+
+  const reopened = await worker.openScriptTaggerDestination(url);
+
+  expect(reopened.id).not.toBe(first.id);
+  expect(tabs).toHaveLength(2);
+  expect(tabs[0].url).toBe(unrelatedUrl);
+  expect(tabs[1].url).toBe(url);
+});
