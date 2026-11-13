@@ -183,7 +183,6 @@ try {
     'tests/browser/blb-draggable-button.spec.js',
     'tests/browser/audit-defect-regressions.spec.js',
     'tests/browser/study-reference-capture.spec.js',
-    'tests/browser/study-session-export.spec.js',
     'tests/browser/case-sensitive-routing-behavior.spec.js',
     'tests/browser/kjv-corpus-lazy-loading.spec.js',
     'tests/browser/performance.spec.js',

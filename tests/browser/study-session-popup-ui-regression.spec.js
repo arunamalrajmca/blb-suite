@@ -11,6 +11,12 @@ async function waitForStudyPopupReady(page) {
   await expect(page.locator('#studyTopic')).toBeEnabled();
 }
 
+async function allDownloads(extensionWorker) {
+  return extensionWorker.evaluate(() => new Promise(resolve => {
+    chrome.downloads.search({}, items => resolve(items || []));
+  }));
+}
+
 test('Study Sessions auto-stop setting persists when changed in the popup', async ({
   context, extensionId, extensionStorage, extensionWorker
 }) => {
@@ -362,5 +368,110 @@ test('Study Sessions auto-stop validates intervals and independently controls it
     await chrome.storage.local.set({ currentStudySessionId: null });
     await chrome.alarms.clear('blb-study-auto-stop');
   });
+  await page.close();
+});
+
+// Keep export regressions in the established Study Sessions spec so the existing
+// Study Sessions CI selector discovers and executes them with the rest of the suite.
+
+// Export success and rejection paths share this established Study Sessions spec.
+// Keep the focused browser run tied to the current spec inventory.
+test('Study export: selected Study Topic exports a PDF containing its saved reference and note', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+
+  const topic = 'Export Regression ' + Date.now();
+  const note = 'Study Export Integration Note';
+  await page.locator('#studyTopic').fill(topic);
+  await expect(page.locator('#startTopic')).toBeEnabled();
+  await page.locator('#startTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Recording started');
+
+  await page.locator('#studyNote').fill(note);
+  await page.locator('#studyNote').press('Control+Enter');
+  await expect(page.locator('#studyStatus')).toContainText('Note saved to');
+
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>Study export fixture</title></head><body><main>Study export fixture</main></body></html>'
+  }));
+  const blbPage = await context.newPage();
+  await blbPage.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil: 'domcontentloaded' });
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get(['studySessions', 'currentStudySessionId']);
+    const session = state.studySessions.find(item => item.id === state.currentStudySessionId);
+    return session?.refs || [];
+  })).toContainEqual(expect.objectContaining({
+    book: 'john', chapter: 3, from: 16, to: 16, version: 'kjv'
+  }));
+
+  await blbPage.goto('https://www.blueletterbible.org/search/search.cfm?Criteria=grace', { waitUntil: 'domcontentloaded' });
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get(['studySessions', 'currentStudySessionId']);
+    const session = state.studySessions.find(item => item.id === state.currentStudySessionId);
+    return session?.searchTerms || [];
+  })).toContain('Grace');
+  await blbPage.close();
+
+  await page.locator('#downloadMenuButton').click();
+  await page.locator('#downloadTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('PDF downloaded: ' + topic);
+
+  await expect.poll(async () => {
+    const downloads = await allDownloads(extensionWorker);
+    return downloads.filter(item => item.state === 'complete' && /^data:application\/pdf;base64,/.test(item.url || '')).length;
+  }).toBeGreaterThan(0);
+
+  const downloads = await allDownloads(extensionWorker);
+  const item = downloads.find(entry => entry.state === 'complete' && /^data:application\/pdf;base64,/.test(entry.url || ''));
+  expect(item).toBeDefined();
+  const pdf = Buffer.from(item.url.split(',')[1], 'base64').toString('latin1');
+  expect(pdf.startsWith('%PDF-1.4')).toBe(true);
+  expect(pdf).toContain(topic);
+  expect(pdf).toContain('John');
+  expect(pdf).toContain(note);
+  expect(pdf).toContain('Grace');
+
+  await page.close();
+});
+
+test('Study export: rejects empty data, malformed dates, and topics without content without downloading', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+
+  const emptyWhole = await page.evaluate(() => chrome.runtime.sendMessage({
+    type: 'blbSuiteDownloadStudyWhole'
+  }));
+  expect(emptyWhole).toEqual({ok:false});
+
+  const invalidDate = await page.evaluate(() => chrome.runtime.sendMessage({
+    type: 'blbSuiteDownloadStudyDate',
+    date: '2026/02/31'
+  }));
+  expect(invalidDate).toEqual({ok:false});
+
+  const emptyTopic = 'Empty export topic ' + Date.now();
+  const normalizedEmptyTopic = emptyTopic.split(' ').map(word =>
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  ).join(' ');
+  const saved = await page.evaluate(topic => chrome.runtime.sendMessage({
+    type: 'blbSuiteSaveStudyTopic',
+    title: topic
+  }), emptyTopic);
+  expect(saved).toMatchObject({ok:true, topic:normalizedEmptyTopic});
+
+  const topicExport = await page.evaluate(topic => chrome.runtime.sendMessage({
+    type: 'blbSuiteDownloadStudyTopic',
+    topic
+  }), saved.topic);
+  expect(topicExport).toEqual({ok:false});
+  expect(await allDownloads(extensionWorker)).toEqual([]);
   await page.close();
 });

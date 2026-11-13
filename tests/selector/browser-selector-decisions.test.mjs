@@ -74,7 +74,7 @@ function fixture(selector = selectorSource, registry = registrySource) {
   put(root, "tests/browser/blb-draggable-button.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/audit-defect-regressions.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/study-reference-capture.spec.js", "import { test } from '@playwright/test';\n");
-  put(root, "tests/browser/study-session-export.spec.js", "import { test } from '@playwright/test';\n");
+  put(root, "tests/browser/study-session-popup-ui-regression.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/case-sensitive-routing-behavior.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/kjv-corpus-lazy-loading.spec.js", "import { test } from '@playwright/test';\n");
   put(root, "tests/browser/omnibox-boolean-operators.spec.js", "import { test } from '@playwright/test';\n");
@@ -221,16 +221,16 @@ test("mixed Group B runtime and unrelated browser-spec edits still run the chang
 test("mixed runtime and Study Sessions spec edits delegate the changed spec to its dedicated job", () => {
   withFixture((root, base) => {
     commitChange(root, "extension/blb-draggable-button.js", "// changed drag behavior\\n");
-    commitChange(root, "tests/browser/study-session-export.spec.js", "// adjusted Study export coverage\\n");
+    commitChange(root, "tests/browser/study-session-popup-ui-regression.spec.js", "// adjusted Study export coverage\\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.ok(output.includes("changed_browser_specs=tests/browser/study-session-export.spec.js"));
+    assert.ok(output.includes("changed_browser_specs=tests/browser/study-session-popup-ui-regression.spec.js"));
     assert.match(output, /study_sessions_required=true/);
     assert.match(output, /group_a_required=true/);
   });
   const workflow = readFileSync(new URL("../../.github/workflows/browser-e2e-groups.yml", import.meta.url), "utf8");
   assert.ok(workflow.includes("Run every non-delegated changed browser spec"));
-  assert.ok(workflow.includes("inputs.changed_browser_specs, 'tests/browser/study-session-export.spec.js'"));
+  assert.ok(workflow.includes("inputs.changed_browser_specs, 'tests/browser/study-session-popup-ui-regression.spec.js'"));
 });
 
 test("BLB auto-hyperlinker source selects its rich-clipboard browser spec", () => {
@@ -363,11 +363,11 @@ test("verse-link navigation selects direct link-target and click-routing behavio
 test("Study session export source selects its focused PDF download browser spec", () => {
   withFixture((root, base) => {
     commitChange(root, "extension/study-session-export.js", "// changed Study PDF export\n");
-    commitChange(root, "tests/browser/study-session-export.spec.js", "// updated Study export assertions\n");
+    commitChange(root, "tests/browser/study-session-popup-ui-regression.spec.js", "// updated Study export assertions\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=tests\/browser\/study-session-export\.spec\.js/);
-    assert.match(output, /changed_browser_specs=tests\/browser\/study-session-export\.spec\.js/);
+    assert.match(output, /changed_specs=tests\/browser\/study-session-popup-ui-regression\.spec\.js/);
+    assert.match(output, /changed_browser_specs=tests\/browser\/study-session-popup-ui-regression\.spec\.js/);
     assert.match(output, /group_a_required=false/);
     assert.match(output, /study_sessions_required=true/);
     assert.match(output, /group_b_required=false/);
