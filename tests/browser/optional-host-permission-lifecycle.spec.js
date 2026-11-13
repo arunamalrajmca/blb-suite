@@ -633,3 +633,44 @@ test('a pending permission grant cannot commit either site feature after the glo
     await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
   }
 });
+
+test('global redirect ON and OFF reconcile redirect-only runtime registrations on authorized tabs', async ({
+  page, extensionWorker, extensionStorage
+}) => {
+  const hostname = 'example.com';
+  const pattern = 'https://example.com/*';
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  const registration = () => extensionWorker.evaluate(async value => {
+    const id = runtimeContentScriptIdForPattern(value);
+    return chrome.scripting.getRegisteredContentScripts({ids:[id]});
+  }, pattern);
+
+  // No per-site selection preference is enabled: global redirects alone must
+  // authorize the shared runtime content-script registration.
+  await extensionStorage.set({redirectEnabled:true});
+  await expect.poll(registration, {timeout:10000}).toHaveLength(1);
+
+  // Turning redirects OFF must remove the redirect-only registration without
+  // changing the independent site-feature preferences or the master switch.
+  await extensionStorage.set({redirectEnabled:false});
+  await expect.poll(registration, {timeout:10000}).toHaveLength(0);
+  const saved = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    redirectEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  }));
+  expect(saved).toMatchObject({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+});
