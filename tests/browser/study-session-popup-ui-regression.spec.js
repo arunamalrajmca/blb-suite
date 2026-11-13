@@ -541,7 +541,7 @@ test('Study Sessions topic blur reports when the topic could not be saved', asyn
   });
 
   await page.locator('#studyTopic').fill('Unsaved Topic Failure');
-  await page.locator('#studyNote').click();
+  await page.locator('#studyTopic').press('Tab');
   await expect(page.locator('#studyStatus')).toContainText(
     'Unable to save this Study topic. Please try again.'
   );
