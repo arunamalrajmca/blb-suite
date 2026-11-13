@@ -92,9 +92,19 @@ test("dedicated Group A steps defer to the changed-spec runner when that file ch
   assert.ok(extensionStep[1].includes("!contains(inputs.changed_browser_specs, 'tests/browser/extension-lifecycle.spec.js')"),
     "lifecycle subset grep must not rerun tests already executed from a changed lifecycle spec");
 
-  const toggleStep = groupsWorkflow.match(
-    /- name: Run remaining toggle isolation and permission lifecycle regressions\n([\s\S]*?)(?=\n      - name:)/
+  const toggleJob = groupsWorkflow.match(
+    /  toggle-permission-lifecycle:\\n([\\s\\S]*?)(?=\\n  core-group-a:)/
   );
+  assert.ok(toggleJob, "parallel toggle and permission lifecycle job must exist");
+  for (const spec of [
+    "tests/browser/popup-site-toggle-independence.spec.js",
+    "tests/browser/popup-master-toggle-regression.spec.js",
+    "tests/browser/redirect-toggle-isolation.spec.js",
+    "tests/browser/optional-host-permission-lifecycle.spec.js"
+  ]) assert.ok(toggleJob[1].includes(spec), "parallel toggle job retains: " + spec);
+  assert.ok(toggleJob[1].includes('npx playwright test "${{ matrix.spec }}" --max-failures=1'));
+  assert.match(groupsWorkflow, /core-user-actions:[\\s\\S]*?npx playwright test tests\\/browser\\/e2e-core-user-actions\\.spec\\.js/);
+  assert.match(groupsWorkflow, /needs:\\n      - core-group-a\\n      - core-user-actions\\n      - toggle-permission-lifecycle/);
   assert.ok(toggleStep, "toggle isolation and permission lifecycle step must exist");
   assert.ok(toggleStep[1].includes("tests/browser/popup-site-toggle-independence.spec.js"),
     "the selected popup site-toggle independence suite must actually execute in Group A");
