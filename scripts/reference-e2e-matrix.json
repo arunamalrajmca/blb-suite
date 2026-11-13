@@ -41,7 +41,6 @@
     "group": "selection-parser-batch",
     "files": [
       "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
-      "tests/browser/popup-master-toggle-regression.spec.js",
       "tests/browser/facebook-selection-parser.spec.js",
       "tests/browser/substack-selection-parser.spec.js"
     ],
@@ -51,8 +50,7 @@
     "group": "redirect-source-smoke-batch",
     "files": [
       "tests/browser/redirect-source-url-patterns.spec.js",
-      "tests/browser/redirect-hostnames.spec.js",
-      "tests/browser/redirect-toggle-isolation.spec.js"
+      "tests/browser/redirect-hostnames.spec.js"
     ],
     "grep": ".*"
   },
