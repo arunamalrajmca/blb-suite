@@ -130,6 +130,25 @@ jobs:
         if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/case-sensitive-routing-behavior.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/case-sensitive-routing-behavior.spec.js')) }}
         run: npx playwright test tests/browser/case-sensitive-routing-behavior.spec.js
 
+      # The popup permission flow shares master, redirect, and optional-host gates.
+      # Run their existing regression suites whenever the focused site-toggle suite is selected.
+      - name: Run remaining toggle isolation and permission lifecycle regressions
+        if: ${{ !cancelled() && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/popup-site-toggle-independence.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/popup-site-toggle-independence.spec.js')) }}
+        run: |
+          set -euo pipefail
+          specs=(
+            tests/browser/popup-master-toggle-regression.spec.js
+            tests/browser/redirect-toggle-isolation.spec.js
+            tests/browser/optional-host-permission-lifecycle.spec.js
+          )
+          total="${#specs[@]}"
+          for index in "${!specs[@]}"; do
+            spec="${specs[$index]}"
+            [[ -f "$spec" ]] || { echo "::error::Selected toggle regression spec does not exist: $spec"; exit 1; }
+            printf '[%s/%s] Running %s\\n' "$((index + 1))" "$total" "$spec"
+            npx playwright test "$spec" --max-failures=1
+          done
+
       - name: Run popup site-feature defaults regressions
         if: ${{ !cancelled() && ((inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/site-feature-defaults.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/site-feature-defaults.spec.js')) }}
         run: npx playwright test tests/browser/site-feature-defaults.spec.js
