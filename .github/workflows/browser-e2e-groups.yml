@@ -62,7 +62,7 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium
       - name: Grant test-only generic host access
-        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
       - name: Run complete core user-action regressions
         run: npx playwright test tests/browser/e2e-core-user-actions.spec.js
 
@@ -104,7 +104,7 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium
       - name: Grant test-only generic host access
-        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
       - name: Run selected toggle and permission lifecycle suite
         run: npx playwright test "${{ matrix.spec }}" --max-failures=1
 
@@ -147,7 +147,7 @@ jobs:
         if: ${{ inputs.group_a_required == 'true' }}
       - name: Grant test-only generic host access
         if: ${{ inputs.group_a_required == 'true' }}
-        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
 
       # Run the dedicated MultiVerse tab-reuse regression in this existing runner.
       # Shared/unknown runtime changes retain this coverage via full_browser_suite.
@@ -291,7 +291,7 @@ jobs:
       - name: Install Playwright Chromium
         run: npx playwright install chromium
       - name: Grant test-only generic host access
-        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\\n');"
+        run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
       - name: Run Study Sessions popup UI regressions
         if: ${{ inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/study-session-popup-ui-regression.spec.js') || contains(inputs.changed_browser_specs, 'tests/browser/study-session-popup-ui-regression.spec.js') }}
         run: npx playwright test tests/browser/study-session-popup-ui-regression.spec.js
