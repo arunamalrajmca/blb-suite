@@ -229,6 +229,7 @@ test('a real MV3 service-worker termination is recovered by the actual Floating 
     doubleClickBlbSites:{}
   });
   await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  await page.waitForTimeout(500);
   await page.evaluate(() => {
     const target=document.createElement('p');
     target.id='floating-button-worker-wake-reference';
