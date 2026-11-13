@@ -417,7 +417,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
         with:
-          name: blb-suite-browser-e2e-features
+          name: blb-suite-browser-e2e-features-${{ strategy.job-index }}
           path: |
             playwright-report/
             test-results/
