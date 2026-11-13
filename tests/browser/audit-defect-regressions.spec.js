@@ -82,7 +82,7 @@ test('disabling the last site feature removes both persistent isolated- and MAIN
     doubleClickBlbSites: {}
   });
   const result = await extensionWorker.evaluate(async () => {
-    const url = 'https://example.com/example-article';
+    const url = 'https://www.christianity.com/example-article';
     const pattern = originPatternForUrl(url);
     const id = runtimeContentScriptIdForPattern(pattern);
     const mainWorldId = id + '-main-world';
