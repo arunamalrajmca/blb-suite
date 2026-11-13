@@ -34,9 +34,19 @@ on:
 jobs:
   core-user-actions:
     if: ${{ inputs.group_a_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/e2e-core-user-actions.spec.js')) && !contains(inputs.changed_browser_specs, 'tests/browser/e2e-core-user-actions.spec.js') }}
-    name: BROWSER E2E — CORE USER ACTIONS
+    name: BROWSER E2E — CORE USER ACTIONS — ${{ matrix.group }}
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - group: entrypoints-and-clipboard
+            grep: 'physical right-click preserves|failed context-menu action leaves Alt[+]B available|Alt[+]B command path opens|MultiVerse Copy button adds|normal Ctrl[+]C in MultiVerse|copying typed MultiVerse references|BLB verse links inside parse popups|single-token selection actions share positional resolution'
+          - group: multiverse-range-behavior
+            grep: 'continuous same-chapter multi-reference selection|selection containing a reference and authored prose|chapter-only ranges expand|MultiVerse batches disjoint chapter ranges|MultiVerse parses reversed disjoint chapter ranges'
+          - group: reference-context-and-dom
+            grep: 'Double-Click resolves contextual chapter numbers|Double-Click preserves Facebook bidi-isolated Matthew|Double-Click numbered-list labels|Double-Click on serials above 66|Ordinary numbers without a list-label period|Double-Click anywhere in a consecutive comma-separated verse citation|Double-Click resolves references through custom and framework-generated DOM containers|Double-Click resolves partial references in Instagram-style rich text|Facebook resolves repeated references|Facebook Luke 22:26 resolves only within its own dir-auto line|Show on BLB searches the complete numbered book|Facebook book-name double-click retains Luke|Facebook book clicks use only permitted immediate context|Double-Click on Vs[.] resolves'
     steps:
       - uses: actions/checkout@v5
         with:
@@ -64,7 +74,7 @@ jobs:
       - name: Grant test-only generic host access
         run: node -e "const fs=require('fs'); const p='extension/manifest.json'; const m=JSON.parse(fs.readFileSync(p,'utf8')); m.host_permissions=[...(m.host_permissions||[]),'https://example.com/*']; fs.writeFileSync(p, JSON.stringify(m,null,2)+'\n');"
       - name: Run complete core user-action regressions
-        run: npx playwright test tests/browser/e2e-core-user-actions.spec.js
+        run: npx playwright test tests/browser/e2e-core-user-actions.spec.js --grep "${{ matrix.grep }}"
 
   toggle-permission-lifecycle:
     if: ${{ inputs.group_a_required == 'true' && (inputs.full_browser_suite == 'true' || contains(inputs.changed_specs, 'tests/browser/popup-site-toggle-independence.spec.js')) }}
