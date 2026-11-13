@@ -2037,7 +2037,7 @@ test.describe('core user-visible E2E', () => {
     )), matchedTabIds);
   }
 
-  async function setupDoubleClickReferencePage(page, extensionStorage, html) {
+  async function setupDoubleClickReferencePage(page, extensionStorage, extensionWorker, html) {
     const setupStartedAt = process.hrtime.bigint();
     const reusedDocument = page.url() === 'https://example.com/';
     await extensionStorage.set({ masterEnabled: true, doubleClickBlbSites: { 'example.com': true } });
@@ -2055,16 +2055,31 @@ test.describe('core user-visible E2E', () => {
     // listener binding (not merely script injection or a storage write) before
     // dispatching the gesture, so this grammar test measures reference
     // resolution rather than racing storage.onChanged.
-    const doubleClickHandlerReady = () => typeof window.__blbSuiteDoubleClickBoundV2 === 'function';
+    const waitForDoubleClickHandler = async () => {
+      const tabUrl = page.url();
+      await expect.poll(async () => extensionWorker.evaluate(async url => {
+        const tabs = await chrome.tabs.query({});
+        const tab = tabs.find(candidate => candidate.url === url);
+        if (!tab?.id) return false;
+        const [injected] = await chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          world: 'ISOLATED',
+          func: () => typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+        });
+        return injected?.result === true;
+      }, tabUrl), { timeout: 10000 }).toBe(true);
+    };
+
+    // The handler marker lives in the extension's isolated world, not the
+    // page's main world. Inspect it through scripting.executeScript rather
+    // than page.waitForFunction, which can never see extension-world globals.
     try {
-      await page.waitForFunction(doubleClickHandlerReady, null, { timeout: 1500 });
+      await waitForDoubleClickHandler();
     } catch (_) {
-      // A page supplied by the fixture may already have completed its initial
-      // settings read before this test writes the site opt-in. If the
-      // storage-change refresh did not bind the listener, reload once so the
-      // content script initializes against the persisted preference.
+      // If this document completed initialization before the site opt-in was
+      // persisted, reload so the content script starts with the saved setting.
       await page.reload({ waitUntil: 'domcontentloaded' });
-      await page.waitForFunction(doubleClickHandlerReady, null, { timeout: 10000 });
+      await waitForDoubleClickHandler();
     }
 
     await page.evaluate((html) => {
