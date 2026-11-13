@@ -78,11 +78,11 @@ test('disabling the last site feature removes both persistent isolated- and MAIN
   await extensionStorage.set({
     masterEnabled: true,
     redirectEnabled: false,
-    pageSelectionButtonSites: { 'christianity.com': true },
+    pageSelectionButtonSites: { 'example.com': true },
     doubleClickBlbSites: {}
   });
   const result = await extensionWorker.evaluate(async () => {
-    const url = 'https://www.christianity.com/example-article';
+    const url = 'https://example.com/example-article';
     const pattern = originPatternForUrl(url);
     const id = runtimeContentScriptIdForPattern(pattern);
     const mainWorldId = id + '-main-world';
@@ -90,8 +90,16 @@ test('disabling the last site feature removes both persistent isolated- and MAIN
 
     try {
       const registered = await ensureRuntimeContentScriptRegistered({ url, id: 77 }, ['content.js']);
-      // christianity.com is a source-page collector host, so the shared
-      // registration helper creates its MAIN-world guard alongside content.js.
+      // Recreate a legacy MAIN-world registration alongside the isolated
+      // registration. example.com is intentionally not a source-page collector.
+      await chrome.scripting.registerContentScripts([{
+        id:mainWorldId,
+        matches:[pattern],
+        js:['redirect-christianity-main-world.js'],
+        runAt:'document_start',
+        world:'MAIN',
+        persistAcrossSessions:true
+      }]);
       const before = await chrome.scripting.getRegisteredContentScripts({ ids: [id, mainWorldId] });
       await chrome.storage.local.set({
         masterEnabled: true,
