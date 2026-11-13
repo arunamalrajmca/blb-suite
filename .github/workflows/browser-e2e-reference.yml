@@ -404,7 +404,19 @@ jobs:
       - name: Run Browser E2E — FEATURES
         env:
           BLB_EXPECTED_VERSION: ${{ steps.version.outputs.version }}
-        run: npx playwright test tests/browser/extension-reference-actions.spec.js tests/browser/extension-lifecycle.spec.js --grep 'MV3 service worker|popup loads|Show on BLB|Alt\+B toggle enforcement'
+        shell: bash
+        run: |
+          set -euo pipefail
+          specs=(
+            tests/browser/extension-reference-actions.spec.js
+            tests/browser/extension-lifecycle.spec.js
+          )
+          total="${#specs[@]}"
+          for index in "${!specs[@]}"; do
+            spec="${specs[$index]}"
+            printf '[%s/%s] Running feature coverage from %s\n' "$((index + 1))" "$total" "$spec"
+            npx playwright test "$spec" --grep 'MV3 service worker|popup loads|Show on BLB|Alt\+B toggle enforcement'
+          done
       - name: Upload Playwright diagnostics — FEATURES
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
