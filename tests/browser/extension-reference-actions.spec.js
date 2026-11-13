@@ -2055,11 +2055,17 @@ test.describe('core user-visible E2E', () => {
     // listener binding (not merely script injection or a storage write) before
     // dispatching the gesture, so this grammar test measures reference
     // resolution rather than racing storage.onChanged.
-    await page.waitForFunction(
-      () => typeof window.__blbSuiteDoubleClickBoundV2 === 'function',
-      null,
-      { timeout: 10000 }
-    );
+    const doubleClickHandlerReady = () => typeof window.__blbSuiteDoubleClickBoundV2 === 'function';
+    try {
+      await page.waitForFunction(doubleClickHandlerReady, null, { timeout: 1500 });
+    } catch (_) {
+      // A page supplied by the fixture may already have completed its initial
+      // settings read before this test writes the site opt-in. If the
+      // storage-change refresh did not bind the listener, reload once so the
+      // content script initializes against the persisted preference.
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForFunction(doubleClickHandlerReady, null, { timeout: 10000 });
+    }
 
     await page.evaluate((html) => {
       window.getSelection()?.removeAllRanges();
