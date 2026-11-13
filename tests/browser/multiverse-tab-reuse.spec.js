@@ -673,3 +673,44 @@ test('mixed chapter-only selection submits all 51 expected verses through the se
   expect(submittedPayloads[0]).toContain('1 peter 2:9-10');
   expect(countSubmittedVerses(submittedPayloads[0])).toBe(51);
 });
+
+test('closing a tab clears its persisted MultiVerse reservation and pending references', async ({
+  extensionWorker, extensionStorage
+}) => {
+  await extensionStorage.set({
+    blbSuiteMultiVerseTabSets:{},
+    blbSuitePendingMultiVerseRefsByTab:{}
+  });
+
+  const tabId = await extensionWorker.evaluate(async () => {
+    // about:blank avoids loading the handoff page, so only the real tab-removal
+    // lifecycle listener can clear the deliberately seeded per-tab state.
+    const tab = await chrome.tabs.create({url:'about:blank', active:false});
+    const key = String(tab.id);
+    await chrome.storage.local.set({
+      blbSuiteMultiVerseTabSets:{
+        [key]:{key:'closed-tab-cleanup-regression', updatedAt:Date.now()}
+      },
+      blbSuitePendingMultiVerseRefsByTab:{
+        [key]:[{book:'john', chapter:3, from:16, to:16, version:'kjv'}]
+      }
+    });
+    await chrome.tabs.remove(tab.id);
+    return tab.id;
+  });
+
+  await expect.poll(() => extensionWorker.evaluate(async id => {
+    const key = String(id);
+    const data = await chrome.storage.local.get({
+      blbSuiteMultiVerseTabSets:{},
+      blbSuitePendingMultiVerseRefsByTab:{}
+    });
+    return {
+      reservationPresent:Object.prototype.hasOwnProperty.call(data.blbSuiteMultiVerseTabSets, key),
+      pendingReferencesPresent:Object.prototype.hasOwnProperty.call(data.blbSuitePendingMultiVerseRefsByTab, key)
+    };
+  }, tabId)).toEqual({
+    reservationPresent:false,
+    pendingReferencesPresent:false
+  });
+});

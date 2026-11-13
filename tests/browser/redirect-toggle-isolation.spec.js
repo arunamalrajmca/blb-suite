@@ -1,4 +1,4 @@
-const { test, expect } = require('@playwright/test');
+const { test, expect } = require('./fixtures');
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
@@ -130,4 +130,57 @@ test.describe('independent site feature permissions and global redirects', () =>
     expect(handler).toContain('.catch(() => false)');
   });
 
+});
+
+test('latest global redirect toggle choice wins when permission requests resolve out of order', async ({
+  page, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({masterEnabled:true, redirectEnabled:false});
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect.poll(() => page.locator('body').evaluate(body =>
+    !body.classList.contains('popup-loading')
+  )).toBe(true);
+
+  await page.evaluate(() => {
+    const resolvers = [];
+    Object.defineProperty(chrome.permissions, 'request', {
+      configurable:true,
+      value:() => new Promise(resolve => resolvers.push(resolve))
+    });
+    Object.defineProperty(chrome.permissions, 'contains', {
+      configurable:true,
+      value:async ({origins = []}) =>
+        origins.includes('http://*/*') && origins.includes('https://*/*')
+    });
+    Object.defineProperty(chrome.tabs, 'query', {
+      configurable:true,
+      value:async () => []
+    });
+    window.__redirectPermissionResolvers = resolvers;
+    window.__resolveRedirectPermission = (index, granted) => resolvers[index]?.(granted);
+  });
+
+  // Keep the first ON request unresolved, then make a newer OFF -> ON choice.
+  const olderOn = page.evaluate(() => setRedirect(true));
+  await expect.poll(() => page.evaluate(() =>
+    window.__redirectPermissionResolvers.length
+  )).toBe(1);
+
+  await page.evaluate(() => setRedirect(false));
+  const newerOn = page.evaluate(() => setRedirect(true));
+  await expect.poll(() => page.evaluate(() =>
+    window.__redirectPermissionResolvers.length
+  )).toBe(2);
+
+  // Resolve the newer grant first and the older denial last. The older result
+  // must not overwrite the user's latest explicit ON choice.
+  await page.evaluate(() => window.__resolveRedirectPermission(1, true));
+  await newerOn;
+  await page.evaluate(() => window.__resolveRedirectPermission(0, false));
+  await olderOn;
+
+  const stored = await extensionWorker.evaluate(() =>
+    chrome.storage.local.get({redirectEnabled:false})
+  );
+  expect(stored.redirectEnabled).toBe(true);
 });

@@ -210,9 +210,12 @@ async function setDoubleClick(on) {
 }
 
 
+let redirectToggleGeneration = 0;
+
 async function setRedirect(on) {
+  const generation = ++redirectToggleGeneration;
   const state = await getState();
-  if (!state.master) return;
+  if (generation !== redirectToggleGeneration || !state.master) return;
 
   if (on) {
     // ScriptTagger references can appear on any website. Global redirects
@@ -220,31 +223,41 @@ async function setRedirect(on) {
     const redirectOrigins = ['http://*/*', 'https://*/*'];
 
     // Persist the user's intent before the permission prompt. Chrome may
-    // interrupt/recreate the action popup while showing a permission prompt,
-    // so waiting until after permissions.request() can lose the toggle state.
+    // interrupt/recreate the action popup while that prompt is shown, so
+    // waiting until after permissions.request() can lose the toggle state.
     await chrome.storage.local.set({redirectEnabled:true});
+    if (generation !== redirectToggleGeneration) return;
 
     const granted = await chrome.permissions.request({origins: redirectOrigins}).catch(() => false);
+    if (generation !== redirectToggleGeneration) return;
     const hasRedirectAccess = granted && await chrome.permissions.contains({origins: redirectOrigins}).catch(() => false);
+    if (generation !== redirectToggleGeneration) return;
     if (!hasRedirectAccess) {
       await chrome.storage.local.set({redirectEnabled:false});
+      if (generation !== redirectToggleGeneration) return;
       render(await getState());
       return;
     }
   } else {
     await chrome.storage.local.set({redirectEnabled:false});
+    if (generation !== redirectToggleGeneration) return;
   }
+
+  if (generation !== redirectToggleGeneration) return;
   try { await chrome.runtime.sendMessage({type:'blbSuiteRefreshRedirectRules'}); } catch (_) {}
+  if (generation !== redirectToggleGeneration) return;
   if (on) {
     try {
       const tabs = await chrome.tabs.query({active:true,currentWindow:true});
       const tabId = tabs[0]?.id;
-      if (tabId) await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
+      if (tabId && generation === redirectToggleGeneration) {
+        await chrome.runtime.sendMessage({type:'blbSuiteEnsureContentScript', tabId});
+      }
     } catch (_) {}
   }
+  if (generation !== redirectToggleGeneration) return;
   render(await getState());
 }
-
 function titleCase(value) {
   return String(value || '').trim().replace(/\s+/g,' ').split(' ').filter(Boolean)
     .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
