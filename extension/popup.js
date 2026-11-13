@@ -152,7 +152,16 @@ async function setMaster(on) {
   // is recording when the Suite is turned off, stop that recording first so
   // the UI cannot end up with a hidden active recording and no selection.
   if (!on && studyState.recording) {
-    await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'}).catch(() => {});
+    try {
+      const response = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
+      if (!response?.ok) throw new Error(response?.error || response?.reason || 'stop-rejected');
+    } catch (_) {
+      // Keep the global gate ON when the active Study recording could not be
+      // stopped. Otherwise it would become hidden and could resume on re-enable.
+      document.getElementById('master').checked = true;
+      setStatus('Unable to stop recording. The Suite remains ON. Please try again.');
+      return;
+    }
   }
   await chrome.storage.local.set({masterEnabled:on, [SELECTED_TOPIC_STORAGE_KEY]: ''});
   topicInput.value = '';

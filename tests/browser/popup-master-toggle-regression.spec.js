@@ -91,3 +91,60 @@ test('popup theme preference persists when the popup is reopened', async ({
   await expect(page.locator('body')).toHaveClass(/\blight\b/);
   await expect(page.locator('#themeToggle')).toHaveAttribute('aria-label', 'Switch to dark theme');
 });
+
+
+test('master OFF stays ON and reports failure when an active Study recording cannot be stopped', async ({
+  page, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect(page.locator('#master')).toBeChecked();
+
+  const topic = 'Stop Failure Regression ' + Date.now();
+  await page.locator('#studyTopic').fill(topic);
+  await page.locator('#startTopic').click();
+  await expect(page.locator('#studyStatus')).toContainText('Recording started');
+
+  const activeBefore = await extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get([
+      'masterEnabled','currentStudySessionId','studySelectedTopic'
+    ]);
+    return {
+      masterEnabled: state.masterEnabled !== false,
+      currentStudySessionId: state.currentStudySessionId || null,
+      studySelectedTopic: state.studySelectedTopic || ''
+    };
+  });
+  expect(activeBefore.masterEnabled).toBe(true);
+  expect(activeBefore.currentStudySessionId).toBeTruthy();
+  expect(activeBefore.studySelectedTopic).toBe(topic);
+
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value: async message => message?.type === 'blbSuiteStopStudyRecording'
+        ? {ok:false, reason:'simulated-stop-failure'}
+        : originalSendMessage(message)
+    });
+  });
+
+  await page.locator('label.master-switch .slider').click();
+
+  await expect(page.locator('#master')).toBeChecked();
+  await expect(page.locator('#studyStatus')).toContainText('Unable to stop recording. The Suite remains ON.');
+  await expect.poll(async () => extensionWorker.evaluate(async () => {
+    const state = await chrome.storage.local.get([
+      'masterEnabled','currentStudySessionId','studySelectedTopic'
+    ]);
+    return {
+      masterEnabled: state.masterEnabled !== false,
+      currentStudySessionId: state.currentStudySessionId || null,
+      studySelectedTopic: state.studySelectedTopic || ''
+    };
+  })).toEqual({
+    masterEnabled:true,
+    currentStudySessionId:activeBefore.currentStudySessionId,
+    studySelectedTopic:topic
+  });
+});
