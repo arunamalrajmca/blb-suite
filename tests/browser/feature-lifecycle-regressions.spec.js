@@ -651,3 +651,88 @@ test('sensitive-site policy blocks all four selection actions despite stale enab
     })()).length
   ), beforeIds), { timeout: 3000 }).toBe(0);
 });
+
+
+test('live per-site opt-outs deactivate only their own selection actions on an already-open tab', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{'example.com':true}
+  });
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({active:true,currentWindow:true}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  const selectCue = () => page.evaluate(() => {
+    let cue = document.getElementById('blb-live-toggle-cue');
+    if (!cue) {
+      cue = document.createElement('p');
+      cue.id = 'blb-live-toggle-cue';
+      cue.textContent = 'John 3:16';
+      document.body.appendChild(cue);
+    }
+    const range = document.createRange();
+    range.selectNodeContents(cue);
+    const selection = window.getSelection();
+    selection.removeAllRanges();
+    selection.addRange(range);
+    document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+  });
+  const doubleClickBound = () => extensionWorker.evaluate(async id => {
+    const results = await chrome.scripting.executeScript({
+      target:{tabId:id},
+      world:'ISOLATED',
+      func:() => typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+    });
+    return results[0]?.result === true;
+  }, tabId);
+  const contextMenuEligible = () => extensionWorker.evaluate(async id => {
+    const tab = await chrome.tabs.get(id);
+    return shouldShowBlbContextMenu(tab,'John 3:16');
+  }, tabId);
+
+  const floatingButton = page.locator('#blb-suite-page-selection-button');
+  await selectCue();
+  await expect(floatingButton).toBeVisible();
+  await expect.poll(doubleClickBound).toBe(true);
+  await expect.poll(contextMenuEligible).toBe(true);
+
+  // Turning Show on BLB OFF must remove only the floating/right-click/Alt+B
+  // entry points. The resident content script must keep Double-click active.
+  await extensionStorage.set({
+    pageSelectionButtonSites:{'example.com':false},
+    doubleClickBlbSites:{'example.com':true}
+  });
+  await expect.poll(async () => floatingButton.isVisible().catch(() => false)).toBe(false);
+  await expect.poll(doubleClickBound).toBe(true);
+  await expect.poll(contextMenuEligible).toBe(false);
+  const altBWithShowOff = await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+  expect(altBWithShowOff).toMatchObject({ok:false,reason:'site-disabled'});
+
+  // Reverse the preferences without navigating or reinjecting the page.
+  // Show on BLB's three entry points return, while Double-click is unbound.
+  await extensionStorage.set({
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{'example.com':false}
+  });
+  await selectCue();
+  await expect(floatingButton).toBeVisible();
+  await expect.poll(doubleClickBound).toBe(false);
+  await expect.poll(contextMenuEligible).toBe(true);
+  const altBWithDoubleClickOff = await extensionWorker.evaluate(() => handleOpenBibleSelectionCommand());
+  expect(altBWithDoubleClickOff?.reason).not.toBe('site-disabled');
+
+  const saved = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  }));
+  expect(saved).toMatchObject({
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{'example.com':false}
+  });
+});
