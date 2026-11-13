@@ -10,7 +10,8 @@ import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import {
   featureSpecs, mappedSpecs, separatelyManagedSpecs, studySessionSpecs,
-  groupARequiredSpecs, groupBRequiredSpecs, referenceRequiredSpecs, referenceDelegatedSpecs
+  groupARequiredSpecs, groupBRequiredSpecs, referenceRequiredSpecs, referenceDelegatedSpecs,
+  togglePermissionSpecs
 } from "./ci-routing-registry.mjs";
 import { isNonRuntimePath } from "./ci-change-policy.mjs";
 
@@ -78,7 +79,14 @@ const focusedSourcePageRuntimeChange = changed.filter(path =>
   && changed.includes("extension/background.js")
   && changed.includes("tests/browser/source-page-button-redirect-separation.spec.js")
   && changed.includes("tests/browser/scripttagger-global-injection.spec.js");
-const forceFull = alwaysFull || changed.some(path =>
+const browserE2eControlFiles = new Set([
+  ".github/workflows/browser-e2e-groups.yml",
+  ".github/workflows/browser-e2e-reference.yml",
+  "scripts/reference-e2e-matrix.json"
+]);
+// Runner topology and reference-matrix edits must exercise all applicable browser groups.
+const browserE2eControlChanged = changed.some(path => browserE2eControlFiles.has(path));
+const forceFull = alwaysFull || browserE2eControlChanged || changed.some(path =>
   !ignoredNonRuntime(path) && (
     (path.startsWith("scripts/") && !/^scripts\/(?:classify-ci-changes|select-browser-specs|select-reference-matrix|ci-routing-registry|ci-change-policy)\.mjs$/.test(path) && path !== "scripts/test-ci-routing-selector.js" && path !== "scripts/test-popup-cross-browser-rendering.js" && path !== "scripts/reference-e2e-matrix.json")
     || path.startsWith("regression-suite/")
@@ -159,6 +167,7 @@ const unmapped = selected.filter(path => !mappedSpecs.has(path) && !separatelyMa
 const referenceGateRequired = full || selected.some(path => referenceRequiredSpecs.has(path));
 const groupAChangedBrowserSpecs = changedBrowserSpecs.filter(path =>
   !studySessionSpecs.has(path) &&
+  !togglePermissionSpecs.has(path) &&
   !(referenceGateRequired && (full || selected.includes(path)) && referenceDelegatedSpecs.has(path))
 );
 
@@ -170,7 +179,7 @@ const values = {
   group_a_changed_browser_specs: groupAChangedBrowserSpecs.join(","),
   unmapped_specs: unmapped.join(","),
   extension_spec_required: String(full || selected.includes("tests/browser/extension-reference-actions.spec.js") || selected.includes("tests/browser/extension-lifecycle.spec.js")),
-  group_a_required: String(full || [...groupARequiredSpecs].some(path => selected.includes(path) && !studySessionSpecs.has(path)) || unmapped.length > 0 || (!focusedSourcePageRuntimeChange && groupAChangedBrowserSpecs.length > 0)),
+  group_a_required: String(full || [...groupARequiredSpecs].some(path => selected.includes(path) && !studySessionSpecs.has(path)) || unmapped.length > 0 || [...togglePermissionSpecs].some(path => changedBrowserSpecs.includes(path)) || (!focusedSourcePageRuntimeChange && groupAChangedBrowserSpecs.length > 0)),
   study_sessions_required: String(full || [...selected, ...changedBrowserSpecs].some(path => studySessionSpecs.has(path))),
   group_b_required: String(full || [...groupBRequiredSpecs].some(path => selected.includes(path))),
   reference_required: String(referenceGateRequired)

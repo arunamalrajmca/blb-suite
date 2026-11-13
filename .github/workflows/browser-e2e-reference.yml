@@ -6,6 +6,8 @@ on:
     branches: [ main ]
     paths:
       - 'extension/**'
+      - '.github/workflows/browser-e2e-reference.yml'
+      - '.github/workflows/browser-e2e-groups.yml'
       - '!extension/icons/**'
       - '!extension/store-assets/**'
       - '!extension/THIRD-PARTY-NOTICES.txt'
@@ -17,7 +19,6 @@ on:
       - '!scripts/classify-ci-changes.mjs'
       - '!scripts/select-browser-specs.mjs'
       - '!scripts/select-reference-matrix.mjs'
-      - '!scripts/reference-e2e-matrix.json'
       - '!scripts/test-ci-routing-selector.js'
       - '!scripts/validate-build.js'
       - '!scripts/package-release.sh'
@@ -265,8 +266,9 @@ jobs:
 
   browser-e2e:
     name: BROWSER E2E — References — ${{ matrix.group }}
-    needs: [change-detection, verse-context-regression]
-    if: ${{ always() && needs.change-detection.outputs.reference_matrix_required == 'true' && (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && (needs.verse-context-regression.result == 'success' || needs.change-detection.outputs.extension_spec_required == 'false' || contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js')) }}
+    # Reference-matrix batches are independent of the generic verse-context gate.
+    needs: [change-detection]
+    if: ${{ needs.change-detection.outputs.reference_matrix_required == 'true' && (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -358,15 +360,19 @@ jobs:
 
 
   browser-e2e-features:
-    name: BROWSER E2E — FEATURES
-    # Do not start feature tests until every reference group has passed.
-    # A failed reference group skips this job instead of running more tests.
+    name: BROWSER E2E — FEATURES — ${{ matrix.spec }}
+    # These feature/lifecycle checks use isolated runners and do not depend on reference-matrix state.
     needs:
       - change-detection
-      - browser-e2e
     if: ${{ (needs.change-detection.outputs.browser_e2e_required == 'true' || github.event_name == 'workflow_dispatch') && needs.change-detection.outputs.extension_spec_required == 'true' && (needs.change-detection.outputs.full_browser_suite == 'true' || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension-reference-actions.spec.js') || contains(needs.change-detection.outputs.changed_specs, 'tests/browser/extension-lifecycle.spec.js')) && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-reference-actions.spec.js') && !contains(needs.change-detection.outputs.changed_browser_specs, 'tests/browser/extension-lifecycle.spec.js') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        spec:
+          - tests/browser/extension-reference-actions.spec.js
+          - tests/browser/extension-lifecycle.spec.js
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -407,21 +413,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          specs=(
-            tests/browser/extension-reference-actions.spec.js
-            tests/browser/extension-lifecycle.spec.js
-          )
-          total="${#specs[@]}"
-          for index in "${!specs[@]}"; do
-            spec="${specs[$index]}"
-            printf '[%s/%s] Running feature coverage from %s\n' "$((index + 1))" "$total" "$spec"
-            npx playwright test "$spec" --grep 'MV3 service worker|popup loads|Show on BLB|Alt\+B toggle enforcement'
-          done
+          printf 'Running feature coverage from %s\n' "${{ matrix.spec }}"
+          npx playwright test "${{ matrix.spec }}" --grep 'MV3 service worker|popup loads|Show on BLB|Alt\+B toggle enforcement'
       - name: Upload Playwright diagnostics — FEATURES
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@v6
         with:
-          name: blb-suite-browser-e2e-features
+          name: blb-suite-browser-e2e-features-${{ strategy.job-index }}
           path: |
             playwright-report/
             test-results/

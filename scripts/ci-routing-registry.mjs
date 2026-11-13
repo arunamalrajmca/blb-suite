@@ -215,6 +215,13 @@ export const studySessionSpecs = new Set(["tests/browser/feature-lifecycle-regre
 
 // CI gate ownership. These sets drive selector outputs and are contract-tested
 // against the workflow execution/delegation steps to prevent inventory drift.
+export const togglePermissionSpecs = new Set([
+  "tests/browser/popup-site-toggle-independence.spec.js",
+  "tests/browser/popup-master-toggle-regression.spec.js",
+  "tests/browser/redirect-toggle-isolation.spec.js",
+  "tests/browser/optional-host-permission-lifecycle.spec.js"
+]);
+
 export const groupARequiredSpecs = new Set([
   "tests/browser/redirect-source-url-patterns.spec.js",
   "tests/browser/omnibox-boolean-operators.spec.js",
@@ -244,7 +251,10 @@ export const groupARequiredSpecs = new Set([
   "tests/browser/pr-422-feature-regressions.spec.js",
   "tests/browser/tutorial-page-behavior.spec.js",
   "tests/browser/site-feature-defaults.spec.js",
-  "tests/browser/popup-site-toggle-independence.spec.js"
+  "tests/browser/popup-site-toggle-independence.spec.js",
+  "tests/browser/popup-master-toggle-regression.spec.js",
+  "tests/browser/redirect-toggle-isolation.spec.js",
+  "tests/browser/optional-host-permission-lifecycle.spec.js"
 ]);
 
 export const groupBRequiredSpecs = new Set([
@@ -265,9 +275,7 @@ export const referenceRequiredSpecs = new Set([
   "tests/browser/rediscover-sagacity-button.spec.js",
   "tests/browser/research-dom-smoke.spec.js",
   "tests/browser/redirect-source-url-patterns.spec.js",
-  "tests/browser/redirect-toggle-isolation.spec.js",
   "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
-  "tests/browser/popup-master-toggle-regression.spec.js",
   "tests/browser/facebook-selection-parser.spec.js",
   "tests/browser/substack-selection-parser.spec.js",
   "tests/browser/omnibox-command-routing.spec.js",
@@ -282,9 +290,7 @@ export const referenceDelegatedSpecs = new Set([
   "tests/browser/redirect-source-url-patterns.spec.js",
   "tests/browser/redirect-hostnames.spec.js",
   "tests/browser/blb-non-kjv-redirect.spec.js",
-  "tests/browser/redirect-toggle-isolation.spec.js",
   "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
-  "tests/browser/popup-master-toggle-regression.spec.js",
   "tests/browser/facebook-selection-parser.spec.js",
   "tests/browser/substack-selection-parser.spec.js",
   "tests/browser/omnibox-command-routing.spec.js",

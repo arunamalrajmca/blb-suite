@@ -5,7 +5,7 @@ import { mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSyn
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
 import { selectReferenceMatrix } from "../../scripts/select-reference-matrix.mjs";
-import { featureSpecs, referenceDelegatedSpecs } from "../../scripts/ci-routing-registry.mjs";
+import { featureSpecs, referenceDelegatedSpecs, togglePermissionSpecs } from "../../scripts/ci-routing-registry.mjs";
 
 const selectorSource = readFileSync(
   new URL("../../scripts/select-browser-specs.mjs", import.meta.url),
@@ -181,6 +181,7 @@ test("site-feature fail-closed behavior runs in the required gate for popup and 
     assert.match(popupOutput, /changed_specs=.*redirect-toggle-isolation\.spec\.js/);
     assert.match(popupOutput, /changed_specs=.*popup-master-toggle-regression\.spec\.js/);
     assert.match(popupOutput, /changed_specs=.*popup-site-toggle-independence\.spec\.js/);
+    assert.match(popupOutput, /group_a_required=true/);
     assert.match(popupOutput, /group_b_required=false/);
     assert.match(popupOutput, /reference_required=true/);
   });
@@ -214,6 +215,9 @@ test("mixed Group B runtime and unrelated browser-spec edits still run the chang
     const output = select(root, base);
     assert.match(output, /changed_specs=tests\/browser\/scripttagger-global-injection\.spec\.js/);
     assert.match(output, /changed_browser_specs=.*redirect-toggle-isolation\.spec\.js/);
+    assert.ok(output.split(String.fromCharCode(10)).includes("group_a_changed_browser_specs="),
+      "toggle matrix owns the changed toggle spec instead of running it a second time in Group A's generic changed-spec runner");
+    assert.match(output, /reference_required=false/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=true/);
   });
@@ -471,9 +475,7 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
     "redirect-source-url-patterns",
     "redirect-hostnames",
     "blb-non-kjv-redirect",
-    "redirect-toggle-isolation",
     "multiverse-clipboard-reference-pattern",
-    "popup-master-toggle-regression",
     "facebook-selection-parser",
     "substack-selection-parser",
     "omnibox-command-routing",
@@ -489,6 +491,11 @@ test("required browser-e2e gate executes selected dedicated specs without duplic
       "delegated ownership must be explicit in the registry: " + spec);
   }
   assert.ok(referenceWorkflow.includes("select-reference-matrix.mjs"));
+  for (const spec of togglePermissionSpecs) {
+    assert.ok(groupA.includes(spec), "Group A owns toggle/permission coverage: " + spec);
+    assert.ok(!referenceMatrix.some(entry => (entry.files || (entry.file ? [entry.file] : [])).includes(spec)),
+      "toggle/permission spec must not be duplicated in References: " + spec);
+  }
 
   assert.match(groupA, /GROUP_A_CHANGED_BROWSER_SPECS:/);
   assert.doesNotMatch(groupA, /case "\$spec" in/);
@@ -593,7 +600,14 @@ test("optional E2E workflows exclude selector-only and store-only scripts from b
     } else {
       assert.doesNotMatch(workflow, /^\s*-\s*['"]tests\/\*\*['"]/m, workflowPath + " must not add a broad tests/** trigger");
     }
-    assert.ok(workflow.includes("- '!scripts/reference-e2e-matrix.json'"), "matrix metadata should not trigger optional E2E workflows");
+    if (workflowPath.endsWith("browser-e2e-performance.yml")) {
+      assert.ok(workflow.includes("- '!scripts/reference-e2e-matrix.json'"), "performance-only workflow may ignore reference matrix edits");
+    } else {
+      assert.ok(workflow.includes("- '.github/workflows/browser-e2e-reference.yml'"));
+      assert.ok(workflow.includes("- '.github/workflows/browser-e2e-groups.yml'"));
+      assert.ok(!workflow.includes("- '!scripts/reference-e2e-matrix.json'"),
+        "reference matrix edits must trigger the References workflow so full coverage can be verified");
+    }
   }
 });
 
@@ -807,6 +821,24 @@ test("workflow changes always require package validation", () => {
     assert.match(output, /runtime_changed=false/);
     assert.match(output, /package_validation_required=true/);
   });
+});
+
+test("browser E2E runner and reference-matrix edits force full browser validation", () => {
+  for (const path of [
+    ".github/workflows/browser-e2e-groups.yml",
+    ".github/workflows/browser-e2e-reference.yml",
+    "scripts/reference-e2e-matrix.json"
+  ]) {
+    withFixture((root, base) => {
+      commitChange(root, path, "// browser E2E control changed\\n");
+      const output = select(root, base);
+      assert.match(output, /full_browser_suite=true/, path);
+      assert.match(output, /group_a_required=true/, path);
+      assert.match(output, /group_b_required=true/, path);
+      assert.match(output, /reference_required=true/, path);
+      assert.match(output, /study_sessions_required=true/, path);
+    });
+  }
 });
 
 test("selector policy tests always require package validation", () => {
