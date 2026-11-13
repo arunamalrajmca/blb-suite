@@ -317,7 +317,7 @@ test('Study Sessions keeps the selected recording topic when clearing it cannot 
   await page.close();
 });
 
-test('Study Sessions History reports partial Strong's destination failures', async ({
+test("Study Sessions History reports partial Strong's destination failures", async ({
   context, extensionId, extensionStorage, extensionWorker
 }) => {
   await extensionStorage.clear();
