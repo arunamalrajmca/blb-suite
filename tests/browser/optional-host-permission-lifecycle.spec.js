@@ -943,6 +943,19 @@ test('permission revocation during an in-flight registration cannot leave a pers
     pageSelectionButtonSites:{},
     doubleClickBlbSites:{}
   }));
+  // Isolate this race from any registration activation left by an earlier
+  // test using the worker-scoped extension context.
+  await extensionWorker.evaluate(async () => {
+    await chrome.storage.local.set({
+      masterEnabled:false,
+      redirectEnabled:false,
+      pageSelectionButtonSites:{'example.com':false},
+      doubleClickBlbSites:{}
+    });
+    await Promise.all([...contentScriptInjectionLocks.values()].map(operation => operation.catch(() => {})));
+    await reconcileRuntimeContentScriptRegistrations();
+    await runtimeContentScriptReconciliationQueue;
+  });
   await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
   const tabId = await extensionWorker.evaluate(() =>
     chrome.tabs.query({active:true,currentWindow:true}).then(([tab]) => tab?.id)
@@ -1045,6 +1058,19 @@ test('a site opt-out during an in-flight registration cannot leave the site cont
     pageSelectionButtonSites:{},
     doubleClickBlbSites:{}
   }));
+  // Isolate this race from any registration activation left by an earlier
+  // test using the worker-scoped extension context.
+  await extensionWorker.evaluate(async () => {
+    await chrome.storage.local.set({
+      masterEnabled:false,
+      redirectEnabled:false,
+      pageSelectionButtonSites:{'example.com':false},
+      doubleClickBlbSites:{}
+    });
+    await Promise.all([...contentScriptInjectionLocks.values()].map(operation => operation.catch(() => {})));
+    await reconcileRuntimeContentScriptRegistrations();
+    await runtimeContentScriptReconciliationQueue;
+  });
   await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
   const tabId = await extensionWorker.evaluate(() =>
     chrome.tabs.query({active:true,currentWindow:true}).then(([tab]) => tab?.id)
