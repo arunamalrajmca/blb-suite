@@ -1095,7 +1095,7 @@ test('a site opt-out during an in-flight registration cannot leave the site cont
   try {
     await extensionWorker.evaluate(async ({id,mainId}) => {
       await chrome.storage.local.set({
-        masterEnabled:false,
+        masterEnabled:true,
         redirectEnabled:false,
         pageSelectionButtonSites:{'example.com':true},
         doubleClickBlbSites:{}
@@ -1124,13 +1124,10 @@ test('a site opt-out during an in-flight registration cannot leave the site cont
       globalThis.__siteOptOutRelease = releaseRegistration;
     }, {id:registrationId,mainId:mainWorldId});
 
-    await extensionWorker.evaluate(async () => {
-      await chrome.storage.local.set({masterEnabled:true});
-      await reconcileRuntimeContentScriptRegistrations();
-      await runtimeContentScriptReconciliationQueue;
-    });
     await extensionWorker.evaluate(id => {
-      globalThis.__siteOptOutActivation = ensureContentScriptInTab(id);
+      globalThis.__siteOptOutActivation = registerRuntimeContentScriptForPattern(
+        {url:'https://example.com/',id}, ['content.js']
+      );
     }, tabId);
     await extensionWorker.evaluate(() => globalThis.__siteOptOutStarted);
 
