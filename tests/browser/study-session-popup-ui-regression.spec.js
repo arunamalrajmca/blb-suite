@@ -251,7 +251,7 @@ test('Study Sessions History menu opens the saved Strong\'s entries and Criteria
     return tabs.some(tab => {
       if (!String(tab.url || '').includes('/search/search.cfm?')) return false;
       const criteria = new URL(tab.url).searchParams.get('Criteria') || '';
-      return criteria.toLowerCase() === 'grace or mercy';
+      return criteria === '"Grace" OR "Mercy"';
     });
   })).toBe(true);
 
