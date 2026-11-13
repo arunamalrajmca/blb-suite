@@ -75,3 +75,86 @@ test('a real MV3 service-worker termination is recovered by a content-script sel
     await cdp.detach();
   }
 });
+
+
+test('a real Chrome alarm wakes a terminated MV3 worker and auto-stops an inactive Study recording', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    studyAutoStopMinutes:5
+  });
+  const topic = 'MV3 alarm wake regression ' + Date.now();
+  const normalizedTopic = topic.split(' ').map(word =>
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  ).join(' ');
+  const started = await extensionWorker.evaluate(value =>
+    startStudyTopicFromPopup(value, 'Preserve this note across worker wake'), topic
+  );
+  expect(started).toMatchObject({ok:true, recording:true, topic:normalizedTopic});
+
+  await extensionStorage.set({
+    studyLastActivityAt:Date.now() - 6 * 60 * 1000
+  });
+  // Replace the normal periodic alarm with a one-shot near-term alarm. Chrome
+  // applies its minimum alarm delay where required; the test waits for the
+  // actual alarm event rather than calling checkStudyAutoStop directly.
+  await extensionWorker.evaluate(() => chrome.alarms.create(STUDY_AUTOSTOP_ALARM, {
+    when:Date.now() + 1000
+  }));
+  const alarm = await extensionWorker.evaluate(() =>
+    chrome.alarms.get(STUDY_AUTOSTOP_ALARM)
+  );
+  expect(alarm).toBeTruthy();
+
+  // Keep an extension page open to inspect storage without sending a runtime
+  // message that could itself wake the service worker.
+  const observer = await context.newPage();
+  await observer.goto('chrome-extension://' + extensionId + '/popup.html');
+
+  const browser = context.browser();
+  expect(browser, 'persistent context must expose its Chromium browser').not.toBeNull();
+  const cdp = await browser.newBrowserCDPSession();
+  try {
+    await cdp.send('Target.setDiscoverTargets', {discover:true});
+    const {targetInfos} = await cdp.send('Target.getTargets');
+    const workerTarget = targetInfos.find(target =>
+      target.type === 'service_worker' &&
+      target.url.startsWith(`chrome-extension://${extensionId}/`)
+    );
+    expect(workerTarget, 'extension service-worker target must be discoverable').toBeTruthy();
+
+    const closed = await cdp.send('Target.closeTarget', {targetId:workerTarget.targetId});
+    expect(closed.success).toBe(true);
+    await expect.poll(async () => {
+      const {targetInfos:currentTargets} = await cdp.send('Target.getTargets');
+      return currentTargets.some(target => target.targetId === workerTarget.targetId);
+    }, {timeout:5000}).toBe(false);
+
+    // A storage-only read from the extension page observes the alarm handler's
+    // result without issuing a runtime message to wake the worker.
+    await expect.poll(async () => observer.evaluate(async expectedTopic => {
+      const data = await chrome.storage.local.get({
+        currentStudySessionId:null,
+        studyPauseReason:'',
+        studyPausedTopic:'',
+        studySessions:[]
+      });
+      return {
+        stopped:data.currentStudySessionId === null,
+        reason:data.studyPauseReason,
+        topic:data.studyPausedTopic,
+        note:data.studySessions.some(session => session.title === expectedTopic &&
+          session.notes.includes('Preserve This Note Across Worker Wake'))
+      };
+    }, normalizedTopic), {timeout:50000, intervals:[250,500,1000,2000]}).toEqual({
+      stopped:true,
+      reason:'inactivity',
+      topic:normalizedTopic,
+      note:true
+    });
+  } finally {
+    await cdp.detach();
+    await observer.close();
+  }
+});
