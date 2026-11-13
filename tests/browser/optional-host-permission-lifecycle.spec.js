@@ -686,7 +686,6 @@ test('permission revocation blocks all four actions on an already-open page and 
     pageSelectionButtonSites:{},
     doubleClickBlbSites:{}
   }));
-  let permissionApiState = 'granted';
   const beforeIds = () => extensionWorker.evaluate(() =>
     chrome.tabs.query({}).then(tabs => tabs.map(tab => tab.id))
   );
