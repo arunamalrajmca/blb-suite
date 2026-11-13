@@ -6,6 +6,8 @@ on:
     branches: [ main ]
     paths:
       - 'extension/**'
+      - '.github/workflows/browser-e2e-reference.yml'
+      - '.github/workflows/browser-e2e-groups.yml'
       - '!extension/icons/**'
       - '!extension/store-assets/**'
       - '!extension/THIRD-PARTY-NOTICES.txt'
