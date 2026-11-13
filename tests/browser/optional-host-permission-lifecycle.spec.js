@@ -346,7 +346,6 @@ test('global OFF remains authoritative across permission revocation, regrant, an
     doubleClickBlbSites:{},
     redirectEnabled:false
   }));
-  let originalContains;
   try {
     await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
     const tabId = await extensionWorker.evaluate(async () =>
@@ -383,7 +382,6 @@ test('global OFF remains authoritative across permission revocation, regrant, an
 
     // Model Chrome's permission-revocation lookup at the API boundary and
     // execute the production reconciliation used by permissions.onRemoved.
-    originalContains = await extensionWorker.evaluate(() => chrome.permissions.contains);
     await extensionWorker.evaluate(async originPattern => {
       const contains = chrome.permissions.contains;
       chrome.permissions.contains = async details =>
