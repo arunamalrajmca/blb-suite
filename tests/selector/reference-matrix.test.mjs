@@ -38,9 +38,7 @@ test("dedicated reference specs remain covered by individual or batched matrix e
     "shared-regex-patterns",
     "redirect-source-url-patterns",
     "redirect-hostnames",
-    "redirect-toggle-isolation",
     "multiverse-clipboard-reference-pattern",
-    "popup-master-toggle-regression",
     "facebook-selection-parser",
     "substack-selection-parser",
     "omnibox-command-routing",
@@ -51,6 +49,8 @@ test("dedicated reference specs remain covered by individual or batched matrix e
   ]) {
     assert.ok(files.has("tests/browser/" + spec + ".spec.js"), "dedicated spec remains: " + spec);
   }
+  assert.ok(!files.has("tests/browser/redirect-toggle-isolation.spec.js"), "toggle isolation is owned by Group A only");
+  assert.ok(!files.has("tests/browser/popup-master-toggle-regression.spec.js"), "master-toggle lifecycle is owned by Group A only");
   const specialized = matrix.find(entry => entry.group === "specialized-reference-smoke-batch");
   assert.ok(specialized && specialized.files.length === 3, "specialized low-volume specs share one runner");
   for (const pattern of ["paired 1 & 2 Timothy whole-book shorthand reaches the final MultiVerse POST with every chapter", "Sagacity browser collector captures Matt\\. 12:37 from malformed nested BLB anchors", "D14", "D60"]) {
