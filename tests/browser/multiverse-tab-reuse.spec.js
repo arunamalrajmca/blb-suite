@@ -714,3 +714,42 @@ test('closing a tab clears its persisted MultiVerse reservation and pending refe
     pendingReferencesPresent:false
   });
 });
+
+test('navigating a tracked MultiVerse tab to an unrelated page clears its persisted reservation', async ({
+  extensionWorker, extensionStorage
+}) => {
+  await extensionStorage.set({blbSuiteMultiVerseTabSets:{}});
+
+  const tabId = await extensionWorker.evaluate(async () => {
+    // Start from about:blank so the test does not depend on external BLB
+    // availability. The tab is already tracked as a pending MultiVerse tab.
+    const tab = await chrome.tabs.create({url:'about:blank', active:false});
+    await chrome.storage.local.set({
+      blbSuiteMultiVerseTabSets:{
+        [String(tab.id)]:{key:'navigated-away-regression', updatedAt:Date.now()}
+      }
+    });
+    return tab.id;
+  });
+
+  await extensionWorker.evaluate(id =>
+    chrome.tabs.update(id, {url:chrome.runtime.getURL('Tutorial.html')}), tabId
+  );
+
+  await expect.poll(() => extensionWorker.evaluate(async id => {
+    const tab = await chrome.tabs.get(id);
+    return {url:tab.url, status:tab.status};
+  }, tabId)).toEqual({
+    url:'chrome-extension://'+(await extensionWorker.evaluate(() => chrome.runtime.id))+'/Tutorial.html',
+    status:'complete'
+  });
+
+  await expect.poll(() => extensionWorker.evaluate(async id => {
+    const data = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
+    return Object.prototype.hasOwnProperty.call(data.blbSuiteMultiVerseTabSets, String(id));
+  }, tabId)).toBe(false);
+
+  const finalTab = await extensionWorker.evaluate(id => chrome.tabs.get(id), tabId);
+  expect(finalTab.url).toContain('/Tutorial.html');
+  expect(finalTab.status).toBe('complete');
+});
