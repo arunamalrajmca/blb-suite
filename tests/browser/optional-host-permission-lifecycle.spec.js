@@ -488,8 +488,20 @@ test('sensitive-site restrictions and explicit site opt-outs survive permission 
     // This deliberately bypasses today's eligibility gates so reconciliation
     // must clean up stale registrations rather than merely avoid new ones.
     await extensionWorker.evaluate(async ({optOut, sensitive}) => {
-      await registerRuntimeContentScriptForPattern({url:optOut}, ['content.js']);
-      await registerRuntimeContentScriptForPattern({url:sensitive}, ['content.js']);
+      // Recreate registrations persisted by an older extension version.
+      // Use the Chrome API directly: the current production helper correctly
+      // refuses to register sites that are opted out or sensitive.
+      for (const url of [optOut, sensitive]) {
+        const pattern = originPatternForUrl(url);
+        const id = runtimeContentScriptIdForPattern(pattern);
+        await chrome.scripting.registerContentScripts([{
+          id,
+          matches:[pattern],
+          js:['content.js'],
+          runAt:'document_start',
+          persistAcrossSessions:true
+        }]);
+      }
     }, {optOut:optOutUrl,sensitive:sensitiveUrl});
     await expect.poll(() => registrationExists(optOutPattern)).toBe(true);
     await expect.poll(() => registrationExists(sensitivePattern)).toBe(true);
