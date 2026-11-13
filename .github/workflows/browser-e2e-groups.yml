@@ -45,8 +45,10 @@ jobs:
             grep: 'physical right-click preserves|failed context-menu action leaves Alt[+]B available|Alt[+]B command path opens|MultiVerse Copy button adds|normal Ctrl[+]C in MultiVerse|copying typed MultiVerse references|BLB verse links inside parse popups|single-token selection actions share positional resolution'
           - group: multiverse-range-behavior
             grep: 'continuous same-chapter multi-reference selection|selection containing a reference and authored prose|chapter-only ranges expand|MultiVerse batches disjoint chapter ranges|MultiVerse parses reversed disjoint chapter ranges'
-          - group: reference-context-and-dom
-            grep: 'Double-Click resolves contextual chapter numbers|Double-Click preserves Facebook bidi-isolated Matthew|Double-Click numbered-list labels|Double-Click on serials above 66|Ordinary numbers without a list-label period|Double-Click anywhere in a consecutive comma-separated verse citation|Double-Click resolves references through custom and framework-generated DOM containers|Double-Click resolves partial references in Instagram-style rich text|Facebook resolves repeated references|Facebook Luke 22:26 resolves only within its own dir-auto line|Show on BLB searches the complete numbered book|Facebook book-name double-click retains Luke|Facebook book clicks use only permitted immediate context|Double-Click on Vs[.] resolves'
+          - group: numeric-and-dom-context
+            grep: 'Double-Click resolves contextual chapter numbers|Double-Click preserves Facebook bidi-isolated Matthew|Double-Click numbered-list labels|Double-Click on serials above 66|Ordinary numbers without a list-label period|Double-Click anywhere in a consecutive comma-separated verse citation|Double-Click resolves references through custom and framework-generated DOM containers|Double-Click resolves partial references in Instagram-style rich text'
+          - group: social-and-short-reference-context
+            grep: 'Facebook resolves repeated references|Facebook Luke 22:26 resolves only within its own dir-auto line|Show on BLB searches the complete numbered book|Facebook book-name double-click retains Luke|Facebook book clicks use only permitted immediate context|Double-Click on Vs[.] resolves'
     steps:
       - uses: actions/checkout@v5
         with:
