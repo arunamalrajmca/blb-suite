@@ -181,6 +181,7 @@ test("site-feature fail-closed behavior runs in the required gate for popup and 
     assert.match(popupOutput, /changed_specs=.*redirect-toggle-isolation\.spec\.js/);
     assert.match(popupOutput, /changed_specs=.*popup-master-toggle-regression\.spec\.js/);
     assert.match(popupOutput, /changed_specs=.*popup-site-toggle-independence\.spec\.js/);
+    assert.match(popupOutput, /group_a_required=true/);
     assert.match(popupOutput, /group_b_required=false/);
     assert.match(popupOutput, /reference_required=false/);
   });
