@@ -580,6 +580,24 @@ test('a pending permission grant cannot commit either site feature after the glo
     // Both prompts were initiated while enabled. The user switches the
     // master gate OFF before Chrome reports either permission grant.
     await extensionStorage.set({masterEnabled:false});
+    const before = await extensionWorker.evaluate(async origins => {
+      const data = await chrome.storage.local.get({pendingSiteFeatureToggles:{}});
+      return origins.map(origin => {
+        const intent = data.pendingSiteFeatureToggles[origin];
+        const hostname = new URL(origin.slice(0,-1)).hostname;
+        return {
+          origin,
+          present:!!intent,
+          feature:intent?.feature,
+          requestedAt:intent?.requestedAt,
+          sensitive:isSensitiveSiteHostname(hostname),
+          hostname
+        };
+      });
+    }, [pageOrigin,doubleOrigin]);
+    expect(before.map(item => item.present)).toEqual([true,true]);
+    expect(before.map(item => item.sensitive)).toEqual([false,false]);
+
     const result = await extensionWorker.evaluate(origins =>
       commitPendingSiteFeatureTogglesForGrantedOrigins(origins),
       [pageOrigin,doubleOrigin]
