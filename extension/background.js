@@ -2998,7 +2998,7 @@ function recordBlbBackgroundSelectionStage(stage, startedAt, details = {}) {
     globalThis.__blbSuiteSelectionStageTimings = rows;
   } catch (_) {}
 }
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl","blbSuiteRunBCommand"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeatureOff","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteSetSelectionMenuVisibility","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteOpenBrowserUrl","blbSuiteRunBCommand"]);
 
 // Serialize MultiVerse POST scheduling while creating all destination tabs immediately.
 // Reserve submission timestamps in one shared FIFO queue, but never sleep inside the
@@ -3472,54 +3472,93 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const origin = String(message.origin || '');
       let originHost = '';
       try { originHost = new URL(origin).hostname; } catch (_) {}
-      if (isSensitiveSiteHostname(originHost)) { sendResponse({ok:false, blockedSensitiveSite:true}); return true; }
+      if (isSensitiveSiteHostname(originHost)) { sendResponse({ok:false,blockedSensitiveSite:true}); return true; }
       const feature = message.feature === 'pageButton' ? 'pageButton' : message.feature === 'doubleClick' ? 'doubleClick' : '';
-      const parsed = new URL(origin.endsWith('/*') ? origin.slice(0, -1) : origin);
-      if (!feature || !/^https?:$/.test(parsed.protocol)) {
-        sendResponse({ok:false});
-        return true;
-      }
+      const parsed = new URL(origin.endsWith('/*') ? origin.slice(0,-1) : origin);
+      if (!feature || !/^https?:$/.test(parsed.protocol)) { sendResponse({ok:false}); return true; }
       const key = normalizeSiteHostname(parsed.hostname);
       const blbSite = key === BLB_HOSTNAME;
       if (!key || (blbSite && feature !== 'pageButton')) {
-        sendResponse({ok:false, ...(blbSite ? {blockedBlbDoubleClick:true} : {})});
+        sendResponse({ok:false,...(blbSite ? {blockedBlbDoubleClick:true} : {})});
         return true;
       }
-      const data = await chrome.storage.local.get({masterEnabled:true,pendingSiteFeatureToggles:{}});
-      if (data.masterEnabled === false) {
-        sendResponse({ok:false});
-        return true;
-      }
-      const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
-        ? {...data.pendingSiteFeatureToggles} : {};
       const permissionOrigin = parsed.origin + '/*';
-      pending[permissionOrigin] = {
-        feature,
-        requestedAt:Date.now()
-      };
-      await chrome.storage.local.set({pendingSiteFeatureToggles:pending});
-      sendResponse({ok:true, pending:true});
-    } catch (error) {
-      sendResponse({ok:false,error:String(error)});
-    }
+      const prepared = await serializePendingSiteFeatureToggleMutation(async () => {
+        const data = await chrome.storage.local.get({masterEnabled:true,pendingSiteFeatureToggles:{}});
+        if (data.masterEnabled === false) return false;
+        const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
+          ? {...data.pendingSiteFeatureToggles} : {};
+        const entries = Object.fromEntries(pendingSiteFeatureEntries(pending[permissionOrigin]));
+        entries[feature] = {requestedAt:Date.now()};
+        pending[permissionOrigin] = serializePendingSiteFeatureEntries(Object.entries(entries));
+        await chrome.storage.local.set({pendingSiteFeatureToggles:pending});
+        return true;
+      });
+      sendResponse(prepared ? {ok:true,pending:true} : {ok:false});
+    } catch (error) { sendResponse({ok:false,error:String(error)}); }
     return true;
   }
 
   if (message.type === 'blbSuiteCancelSiteFeatureToggle') {
     try {
       const origin = String(message.origin || '');
-      const parsed = new URL(origin.endsWith('/*') ? origin.slice(0, -1) : origin);
-      if (!/^https?:$/.test(parsed.protocol)) { sendResponse({ok:false}); return true; }
+      const parsed = new URL(origin.endsWith('/*') ? origin.slice(0,-1) : origin);
+      const feature = message.feature === 'pageButton' ? 'pageButton' : message.feature === 'doubleClick' ? 'doubleClick' : '';
+      if (!feature || !/^https?:$/.test(parsed.protocol)) { sendResponse({ok:false}); return true; }
       const permissionOrigin = parsed.origin + '/*';
-      const data = await chrome.storage.local.get({pendingSiteFeatureToggles:{}});
-      const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
-        ? {...data.pendingSiteFeatureToggles} : {};
-      if (pending[permissionOrigin]?.feature === message.feature) delete pending[permissionOrigin];
-      await chrome.storage.local.set({pendingSiteFeatureToggles:pending});
+      await serializePendingSiteFeatureToggleMutation(async () => {
+        const data = await chrome.storage.local.get({pendingSiteFeatureToggles:{}});
+        const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
+          ? {...data.pendingSiteFeatureToggles} : {};
+        const entries = Object.fromEntries(pendingSiteFeatureEntries(pending[permissionOrigin]));
+        delete entries[feature];
+        const remaining = serializePendingSiteFeatureEntries(Object.entries(entries));
+        if (remaining) pending[permissionOrigin] = remaining;
+        else delete pending[permissionOrigin];
+        await chrome.storage.local.set({pendingSiteFeatureToggles:pending});
+      });
       sendResponse({ok:true});
-    } catch (error) {
-      sendResponse({ok:false,error:String(error)});
-    }
+    } catch (error) { sendResponse({ok:false,error:String(error)}); }
+    return true;
+  }
+
+  if (message.type === 'blbSuiteSetSiteFeatureOff') {
+    try {
+      const origin = String(message.origin || '');
+      const parsed = new URL(origin.endsWith('/*') ? origin.slice(0,-1) : origin);
+      const feature = message.feature === 'pageButton' ? 'pageButton' : message.feature === 'doubleClick' ? 'doubleClick' : '';
+      const key = normalizeSiteHostname(parsed.hostname);
+      if (!feature || !/^https?:$/.test(parsed.protocol) || !key ||
+          isSensitiveSiteHostname(parsed.hostname) || (key===BLB_HOSTNAME && feature!=='pageButton')) {
+        sendResponse({ok:false});
+        return true;
+      }
+      const permissionOrigin = parsed.origin + '/*';
+      await serializePendingSiteFeatureToggleMutation(async () => {
+        const data = await chrome.storage.local.get({
+          pendingSiteFeatureToggles:{},pageSelectionButtonSites:{},doubleClickBlbSites:{}
+        });
+        const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
+          ? {...data.pendingSiteFeatureToggles} : {};
+        const entries = Object.fromEntries(pendingSiteFeatureEntries(pending[permissionOrigin]));
+        delete entries[feature];
+        const remaining = serializePendingSiteFeatureEntries(Object.entries(entries));
+        if (remaining) pending[permissionOrigin]=remaining;
+        else delete pending[permissionOrigin];
+        const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
+          ? {...data.pageSelectionButtonSites} : {};
+        const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
+          ? {...data.doubleClickBlbSites} : {};
+        if (feature==='pageButton') pageSites[key]=false;
+        else doubleSites[key]=false;
+        await chrome.storage.local.set({
+          pendingSiteFeatureToggles:pending,
+          pageSelectionButtonSites:pageSites,
+          doubleClickBlbSites:doubleSites
+        });
+      });
+      sendResponse({ok:true});
+    } catch (error) { sendResponse({ok:false,error:String(error)}); }
     return true;
   }
 
@@ -6724,65 +6763,95 @@ chrome.storage.onChanged.addListener((changes, area) => {
 
 const SITE_FEATURE_PERMISSION_PENDING_TTL_MS = 5 * 60 * 1000;
 
+let pendingSiteFeatureToggleMutationQueue = Promise.resolve();
+
+function serializePendingSiteFeatureToggleMutation(operation) {
+  const result = pendingSiteFeatureToggleMutationQueue.then(operation, operation);
+  pendingSiteFeatureToggleMutationQueue = result.then(() => undefined, () => undefined);
+  return result;
+}
+
+function pendingSiteFeatureEntries(intent) {
+  if (intent?.features && typeof intent.features === 'object' && !Array.isArray(intent.features)) {
+    return Object.entries(intent.features)
+      .filter(([feature, value]) =>
+        (feature === 'pageButton' || feature === 'doubleClick') && value && typeof value === 'object');
+  }
+  if (intent?.feature === 'pageButton' || intent?.feature === 'doubleClick') {
+    return [[intent.feature, {requestedAt:intent.requestedAt}]];
+  }
+  return [];
+}
+
+function serializePendingSiteFeatureEntries(entries) {
+  const valid = Object.fromEntries(entries.filter(([feature]) =>
+    feature === 'pageButton' || feature === 'doubleClick'));
+  const values = Object.entries(valid);
+  if (!values.length) return undefined;
+  if (values.length === 1) {
+    const [feature, value] = values[0];
+    return {feature, requestedAt:value.requestedAt};
+  }
+  return {features:valid};
+}
+
 async function commitPendingSiteFeatureTogglesForGrantedOrigins(origins, now = Date.now()) {
   const grantedOrigins = new Set(Array.isArray(origins) ? origins.map(String) : []);
   if (!grantedOrigins.size) return {committed:[], expired:[]};
-  const data = await chrome.storage.local.get({
-    masterEnabled:true,
-    pageSelectionButtonSites:{},
-    doubleClickBlbSites:{},
-    pendingSiteFeatureToggles:{}
-  });
-  const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
-    ? {...data.pendingSiteFeatureToggles} : {};
-  const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
-    ? {...data.pageSelectionButtonSites} : {};
-  const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
-    ? {...data.doubleClickBlbSites} : {};
-  const committed = [];
-  const expired = [];
-
-  for (const [origin, intent] of Object.entries(pending)) {
-    const requestedAt = Number(intent?.requestedAt);
-    if (!Number.isFinite(requestedAt) || now - requestedAt > SITE_FEATURE_PERMISSION_PENDING_TTL_MS || now < requestedAt) {
-      delete pending[origin];
-      expired.push(origin);
-      continue;
-    }
-    if (!grantedOrigins.has(origin)) continue;
-    let parsed;
-    try { parsed = new URL(origin.endsWith('/*') ? origin.slice(0, -1) : origin); } catch (_) {
-      delete pending[origin];
-      expired.push(origin);
-      continue;
-    }
-    const key = normalizeSiteHostname(parsed.hostname);
-    const feature = intent?.feature;
-    if (data.masterEnabled === false || !key || isSensitiveSiteHostname(parsed.hostname) ||
-        (key === BLB_HOSTNAME && feature !== 'pageButton') ||
-        (feature !== 'pageButton' && feature !== 'doubleClick')) {
-      delete pending[origin];
-      expired.push(origin);
-      continue;
-    }
-    if (feature === 'pageButton') {
-      pageSites[key] = true;
-      if (key === BLB_HOSTNAME) doubleSites[key] = false;
-    } else {
-      doubleSites[key] = true;
-    }
-    delete pending[origin];
-    committed.push({origin,feature});
-  }
-
-  if (committed.length || expired.length) {
-    await chrome.storage.local.set({
-      pendingSiteFeatureToggles:pending,
-      pageSelectionButtonSites:pageSites,
-      doubleClickBlbSites:doubleSites
+  return serializePendingSiteFeatureToggleMutation(async () => {
+    const data = await chrome.storage.local.get({
+      masterEnabled:true,pageSelectionButtonSites:{},doubleClickBlbSites:{},pendingSiteFeatureToggles:{}
     });
-  }
-  return {committed,expired};
+    const pending = data.pendingSiteFeatureToggles && typeof data.pendingSiteFeatureToggles === 'object'
+      ? {...data.pendingSiteFeatureToggles} : {};
+    const pageSites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
+      ? {...data.pageSelectionButtonSites} : {};
+    const doubleSites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
+      ? {...data.doubleClickBlbSites} : {};
+    const committed = [];
+    const expired = [];
+
+    for (const [origin, intent] of Object.entries(pending)) {
+      const entries = Object.fromEntries(pendingSiteFeatureEntries(intent));
+      if (!Object.keys(entries).length) {
+        delete pending[origin];
+        expired.push(origin);
+        continue;
+      }
+      if (!grantedOrigins.has(origin)) continue;
+      let parsed;
+      try { parsed = new URL(origin.endsWith('/*') ? origin.slice(0,-1) : origin); }
+      catch (_) { delete pending[origin]; expired.push(origin); continue; }
+      const key = normalizeSiteHostname(parsed.hostname);
+      for (const [feature, featureIntent] of Object.entries(entries)) {
+        const requestedAt = Number(featureIntent?.requestedAt);
+        if (!Number.isFinite(requestedAt) || now-requestedAt>SITE_FEATURE_PERMISSION_PENDING_TTL_MS ||
+            now<requestedAt || data.masterEnabled===false || !key ||
+            isSensitiveSiteHostname(parsed.hostname) || (key===BLB_HOSTNAME && feature!=='pageButton')) {
+          delete entries[feature];
+          if (!expired.includes(origin)) expired.push(origin);
+          continue;
+        }
+        if (feature==='pageButton') {
+          pageSites[key]=true;
+          if (key===BLB_HOSTNAME) doubleSites[key]=false;
+        } else doubleSites[key]=true;
+        delete entries[feature];
+        committed.push({origin,feature});
+      }
+      const remaining = serializePendingSiteFeatureEntries(Object.entries(entries));
+      if (remaining) pending[origin]=remaining;
+      else delete pending[origin];
+    }
+    if (committed.length || expired.length) {
+      await chrome.storage.local.set({
+        pendingSiteFeatureToggles:pending,
+        pageSelectionButtonSites:pageSites,
+        doubleClickBlbSites:doubleSites
+      });
+    }
+    return {committed,expired};
+  });
 }
 
 chrome.permissions.onAdded.addListener(permissions => {
