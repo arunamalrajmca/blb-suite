@@ -495,15 +495,32 @@ try {
     'background changes must select the dedicated registration race coverage');
   console.log('PASS: background registration changes use isolated race coverage');
 
-  // CI selector infrastructure changes are validated by the package gate and must not launch browser E2E.
+  // Selector implementation edits remain package-validated without broad browser runs.
   resetScenario(base);
-  write('scripts/select-browser-specs.mjs', '// selector infrastructure change\n');
-  write('scripts/select-reference-matrix.mjs', '// matrix selector infrastructure change\n');
-  write('scripts/reference-e2e-matrix.json', '{\"group\":\"test\"}\n');
-  commit('change selector infrastructure');
+  write('scripts/select-browser-specs.mjs', '// selector infrastructure change\\n');
+  write('scripts/select-reference-matrix.mjs', '// matrix selector infrastructure change\\n');
+  commit('change selector implementation');
   result = selectorResult(base);
-  assertValue(result, 'full_browser_suite', false, 'selector infrastructure');
-  console.log('PASS: selector infrastructure changes do not launch browser E2E');
+  assertValue(result, 'full_browser_suite', false, 'selector implementation');
+  console.log('PASS: selector implementation changes do not launch browser E2E');
+
+  // The reference matrix definition and runner workflows change test execution topology.
+  resetScenario(base);
+  write('scripts/reference-e2e-matrix.json', '{\\"group\\":\\"test\\"}\\n');
+  commit('change reference matrix definition');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', true, 'reference matrix definition');
+  assertValue(result, 'reference_required', true, 'reference matrix definition');
+  assertValue(result, 'group_a_required', true, 'reference matrix definition');
+  console.log('PASS: reference matrix edits force complete browser validation');
+
+  resetScenario(base);
+  write('.github/workflows/browser-e2e-groups.yml', 'name: changed Group A workflow\\n');
+  commit('change browser feature runner');
+  result = selectorResult(base);
+  assertValue(result, 'full_browser_suite', true, 'browser feature workflow');
+  assertValue(result, 'reference_required', true, 'browser feature workflow');
+  console.log('PASS: browser runner workflow edits force complete browser validation');
 
   console.log('All CI routing selector contract checks passed.');
 } catch (error) {
