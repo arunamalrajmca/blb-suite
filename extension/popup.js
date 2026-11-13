@@ -1144,6 +1144,17 @@ async function cancelPendingSiteFeatureChoice(feature) {
   } catch (_) {}
 }
 
+async function persistSiteFeatureOffChoice(feature) {
+  if (!currentSiteOrigin) return;
+  try {
+    await chrome.runtime.sendMessage({
+      type:'blbSuiteSetSiteFeatureOff',
+      origin:currentSiteOrigin,
+      feature
+    });
+  } catch (_) {}
+}
+
 const siteFeatureToggleGeneration = Object.create(null);
 
 async function setIndependentSiteFeature(feature, on) {
@@ -1151,7 +1162,7 @@ async function setIndependentSiteFeature(feature, on) {
   const generation = (siteFeatureToggleGeneration[feature] || 0) + 1;
   siteFeatureToggleGeneration[feature] = generation;
   const pinPromise = on ? pinSiteFeatureChoice(feature) : Promise.resolve();
-  const cancelPromise = on ? Promise.resolve() : cancelPendingSiteFeatureChoice(feature);
+  const cancelPromise = on ? Promise.resolve() : persistSiteFeatureOffChoice(feature);
 
   // Keep permissions.request in the original change-handler call stack.
   let accessPromise = Promise.resolve(true);
