@@ -1,5 +1,7 @@
 const { test, expect } = require('./fixtures');
 
+// Keep the popup's Show on and Double-click preferences independently covered across permission lifecycles.
+
 const SITE = 'example.com';
 
 async function preparePopup(page, extensionId, extensionStorage, extensionWorker, {
