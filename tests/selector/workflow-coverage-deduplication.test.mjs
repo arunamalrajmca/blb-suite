@@ -24,7 +24,7 @@ test("matrix-owned changed browser specs are delegated by the central registry",
   const matrixOwned = new Set(matrix.flatMap(entry =>
     entry.files || (entry.file ? [entry.file] : [])
   ));
-  matrixOwned.delete("tests/browser/extension.spec.js");
+  matrixOwned.delete("tests/browser/extension-reference-actions.spec.js");
 
   assert.deepEqual([...referenceDelegatedSpecs].sort(), [...matrixOwned].sort(),
     "the registry's delegated-spec inventory must exactly match the reference matrix ownership");
@@ -89,8 +89,8 @@ test("dedicated Group A steps defer to the changed-spec runner when that file ch
     /- name: Run extension source-page and reference-context regressions\n\s+if: ([^\n]+)/
   );
   assert.ok(extensionStep, "extension source/reference regression step must exist");
-  assert.ok(extensionStep[1].includes("!contains(inputs.changed_browser_specs, 'tests/browser/extension.spec.js')"),
-    "subset grep must not rerun tests already executed from a changed extension.spec.js");
+  assert.ok(extensionStep[1].includes("!contains(inputs.changed_browser_specs, 'tests/browser/extension-lifecycle.spec.js')"),
+    "lifecycle subset grep must not rerun tests already executed from a changed lifecycle spec");
 
   const toggleStep = groupsWorkflow.match(
     /- name: Run remaining toggle isolation and permission lifecycle regressions\n([\s\S]*?)(?=\n      - name:)/
