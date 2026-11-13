@@ -108,11 +108,6 @@ test('a real Chrome alarm wakes a terminated MV3 worker and auto-stops an inacti
   );
   expect(alarm).toBeTruthy();
 
-  // Keep an extension page open to inspect storage without sending a runtime
-  // message that could itself wake the service worker.
-  const observer = await context.newPage();
-  await observer.goto('chrome-extension://' + extensionId + '/popup.html');
-
   const browser = context.browser();
   expect(browser, 'persistent context must expose its Chromium browser').not.toBeNull();
   const cdp = await browser.newBrowserCDPSession();
@@ -131,6 +126,15 @@ test('a real Chrome alarm wakes a terminated MV3 worker and auto-stops an inacti
       const {targetInfos:currentTargets} = await cdp.send('Target.getTargets');
       return currentTargets.some(target => target.targetId === workerTarget.targetId);
     }, {timeout:5000}).toBe(false);
+
+    // Let the one-shot alarm become due while no extension page is open to
+    // restart the worker. Only then open the storage observer; loading popup
+    // UI before termination can itself wake/retain the worker and invalidate
+    // the lifecycle assertion.
+    await new Promise(resolve => setTimeout(resolve, 70000));
+    let observer;
+    observer = await context.newPage();
+    await observer.goto('chrome-extension://' + extensionId + '/popup.html');
 
     // A storage-only read from the extension page observes the alarm handler's
     // result without issuing a runtime message to wake the worker.
@@ -156,7 +160,7 @@ test('a real Chrome alarm wakes a terminated MV3 worker and auto-stops an inacti
     });
   } finally {
     await cdp.detach();
-    await observer.close();
+    if (observer) await observer.close();
   }
 });
 
