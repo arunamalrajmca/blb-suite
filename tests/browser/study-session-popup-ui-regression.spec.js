@@ -263,6 +263,60 @@ test('Study Sessions History menu opens the saved Strong\'s entries and Criteria
   await page.close();
 });
 
+test('Study Sessions keeps the selected recording topic when clearing it cannot stop', async ({
+  context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const topic = 'Popup stop failure preserves topic ' + Date.now();
+  const normalizedTopic = topic.split(' ').map(word =>
+    word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
+  ).join(' ');
+  await extensionWorker.evaluate(async value => {
+    const now = new Date();
+    const date = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, '0'), String(now.getDate()).padStart(2, '0')].join('-');
+    await chrome.storage.local.set({
+      masterEnabled: true,
+      studyTopics: [value],
+      studySelectedTopic: value,
+      currentStudySessionId: 'popup-clear-stop-failure-regression',
+      studySessions: [{
+        id: 'popup-clear-stop-failure-regression',
+        title: value,
+        date,
+        dateLabel: date,
+        refs: [],
+        strongs: [],
+        searchTerms: [],
+        notes: []
+      }]
+    });
+  }, normalizedTopic);
+
+  const page = await context.newPage();
+  await page.goto('chrome-extension://' + extensionId + '/popup.html');
+  await waitForStudyPopupReady(page);
+  await expect(page.locator('#studyTopic')).toHaveValue(normalizedTopic);
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    chrome.runtime.sendMessage = (message, ...args) => {
+      if (message?.type === 'blbSuiteStopStudyRecording') {
+        return Promise.resolve({ok:false, reason:'storage-write-failed'});
+      }
+      return originalSendMessage(message, ...args);
+    };
+  });
+
+  await page.locator('#clearSelectedTopicInput').click();
+  await expect(page.locator('#studyStatus')).toContainText('Unable to stop recording.');
+  await expect(page.locator('#studyTopic')).toHaveValue(normalizedTopic);
+  const state = await extensionWorker.evaluate(() => chrome.storage.local.get([
+    'studySelectedTopic', 'currentStudySessionId'
+  ]));
+  expect(state.studySelectedTopic).toBe(normalizedTopic);
+  expect(state.currentStudySessionId).toBe('popup-clear-stop-failure-regression');
+  await page.close();
+});
+
 test('Study Sessions History reports partial Strong's destination failures', async ({
   context, extensionId, extensionStorage, extensionWorker
 }) => {
