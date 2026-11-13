@@ -2047,9 +2047,19 @@ test.describe('core user-visible E2E', () => {
     // navigating again would add a needless reload and readiness delay.
     if (page.url() !== 'https://example.com/') {
       await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-      // The double-click handler itself waits for its settings initialization
-      // and replays the event, so no fixed post-navigation sleep is needed.
     }
+
+    // The page can already be loaded before this fixture writes the per-site
+    // preference. In that case the content script may have completed its
+    // initial settings read with double-click disabled. Wait for the actual
+    // listener binding (not merely script injection or a storage write) before
+    // dispatching the gesture, so this grammar test measures reference
+    // resolution rather than racing storage.onChanged.
+    await page.waitForFunction(
+      () => typeof window.__blbSuiteDoubleClickBoundV2 === 'function',
+      null,
+      { timeout: 10000 }
+    );
 
     await page.evaluate((html) => {
       window.getSelection()?.removeAllRanges();
