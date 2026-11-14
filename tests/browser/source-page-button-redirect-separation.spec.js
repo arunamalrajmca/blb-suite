@@ -97,8 +97,11 @@ const test = base.extend({
   extensionStorage: async ({extensionWorker}, use) => {
     await extensionWorker.evaluate(async () => {
       for (let attempt=0; attempt<100; attempt++) {
-        const {masterEnabled} = await chrome.storage.local.get({masterEnabled:null});
-        if (masterEnabled !== null) return;
+        const {masterEnabled, redirectEnabled} = await chrome.storage.local.get({
+          masterEnabled:null,
+          redirectEnabled:null
+        });
+        if (masterEnabled !== null && redirectEnabled !== null) return;
         await new Promise(resolve => setTimeout(resolve, 25));
       }
       throw new Error('Extension storage defaults were not initialized');
@@ -125,6 +128,9 @@ test('source-page collector button survives full refreshes around real popup tog
     pageSelectionButtonSites:{},
     doubleClickBlbSites:{}
   });
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({redirectEnabled:null})).redirectEnabled
+  )).toBe(true);
   await page.route(sourceUrl, route =>
     route.fulfill({
       status:200,
