@@ -735,6 +735,8 @@ test('concurrent tab closures preserve every pending-reference cleanup', async (
 
     const originalGet = chrome.storage.local.get;
     let pendingReads = 0;
+    let activeReads = 0;
+    let maxConcurrentReads = 0;
     let releaseReads;
     let signalReads;
     const bothReadsStarted = new Promise(resolve => { signalReads = resolve; });
@@ -742,6 +744,8 @@ test('concurrent tab closures preserve every pending-reference cleanup', async (
     chrome.storage.local.get = async defaults => {
       if (defaults && Object.prototype.hasOwnProperty.call(defaults, 'blbSuitePendingMultiVerseRefsByTab')) {
         pendingReads++;
+        activeReads++;
+        maxConcurrentReads = Math.max(maxConcurrentReads, activeReads);
         const snapshot = await originalGet.call(chrome.storage.local, defaults);
         if (pendingReads === 1) {
           signalReads();
@@ -749,6 +753,7 @@ test('concurrent tab closures preserve every pending-reference cleanup', async (
         } else if (pendingReads === 2) {
           releaseReads();
         }
+        activeReads--;
         return snapshot;
       }
       return originalGet.call(chrome.storage.local, defaults);
@@ -766,7 +771,7 @@ test('concurrent tab closures preserve every pending-reference cleanup', async (
         firstClosedEntryPresent:Object.prototype.hasOwnProperty.call(map, firstKey),
         secondClosedEntryPresent:Object.prototype.hasOwnProperty.call(map, secondKey),
         survivorPreserved:Array.isArray(map[survivorKey]),
-        overlappingCleanupReads:pendingReads > 1
+        maxConcurrentCleanupReads:maxConcurrentReads
       };
     } finally {
       chrome.storage.local.get = originalGet;
@@ -778,7 +783,7 @@ test('concurrent tab closures preserve every pending-reference cleanup', async (
     firstClosedEntryPresent:false,
     secondClosedEntryPresent:false,
     survivorPreserved:true,
-    overlappingCleanupReads:false
+    maxConcurrentCleanupReads:1
   });
 });
 
