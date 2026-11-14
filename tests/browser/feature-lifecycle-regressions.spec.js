@@ -487,6 +487,164 @@ test('Global master OFF blocks all four selection actions while preserving site 
 });
 
 
+
+test('Study Sessions alarm creation failure rolls back a newly started recording', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    masterEnabled:true,
+    studyAutoStopMinutes:10,
+    currentStudySessionId:null,
+    studyLastActivityAt:0,
+    studyPausedTopic:'Previously Paused Topic',
+    studyPauseReason:'inactivity'
+  });
+
+  const topic = 'BLB regression failed alarm start ' + Date.now();
+  const attempt = await extensionWorker.evaluate(async value => {
+    let calls = 0;
+    const result = await startStudyTopicFromPopup(value, '', async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('simulated alarm creation failure');
+    });
+    return {result, calls};
+  }, topic);
+  const result = attempt.result;
+
+  expect(attempt.calls).toBe(2);
+  expect(result).toMatchObject({
+    ok:false,
+    restored:true,
+    alarmRestored:true,
+    recording:false
+  });
+  expect(result.error).toContain('simulated alarm creation failure');
+
+  const state = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    currentStudySessionId:null,
+    studyLastActivityAt:0,
+    studyPausedTopic:'',
+    studyPauseReason:'',
+    studySessions:[]
+  }));
+  expect(state.currentStudySessionId).toBeNull();
+  expect(state.studyLastActivityAt).toBe(0);
+  expect(state.studyPausedTopic).toBe('Previously Paused Topic');
+  expect(state.studyPauseReason).toBe('inactivity');
+  const normalizedTopic = await extensionWorker.evaluate(value => normalizeStudyTopic(value), topic);
+  expect(state.studySessions.some(session => session.title === normalizedTopic)).toBe(true);
+});
+
+
+
+test('Study Sessions preserves the prior recording state when alarm rollback also fails', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    masterEnabled:true,
+    studyAutoStopMinutes:10,
+    currentStudySessionId:null,
+    studyLastActivityAt:0,
+    studyPausedTopic:'Paused Before Failure',
+    studyPauseReason:'inactivity'
+  });
+
+  const topic = 'BLB regression persistent alarm failure ' + Date.now();
+  const result = await extensionWorker.evaluate(value =>
+    startStudyTopicFromPopup(value, '', async () => {
+      throw new Error('persistent simulated alarm failure');
+    }), topic
+  );
+
+  expect(result).toMatchObject({
+    ok:false,
+    restored:true,
+    alarmRestored:false,
+    recording:false
+  });
+  const state = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    currentStudySessionId:null,
+    studyPausedTopic:'',
+    studyPauseReason:''
+  }));
+  expect(state.currentStudySessionId).toBeNull();
+  expect(state.studyPausedTopic).toBe('Paused Before Failure');
+  expect(state.studyPauseReason).toBe('inactivity');
+});
+
+test('Study Sessions stop reports the completed stop when alarm cleanup fails', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({masterEnabled:true, studyAutoStopMinutes:0});
+  const topic = 'BLB regression stop cleanup ' + Date.now();
+  await extensionWorker.evaluate(value => startStudyTopicFromPopup(value), topic);
+
+  const result = await extensionWorker.evaluate(() =>
+    stopStudyRecording('manual', async () => {
+      throw new Error('simulated alarm clear failure');
+    })
+  );
+  expect(result).toMatchObject({ok:true, recording:false, alarmCleanupPending:true});
+  const state = await extensionWorker.evaluate(() => chrome.storage.local.get({currentStudySessionId:'unexpected', studyLastActivityAt:-1}));
+  expect(state.currentStudySessionId).toBeNull();
+  expect(state.studyLastActivityAt).toBe(0);
+});
+
+test('Study topic deletion reports success when only alarm cleanup fails', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  const topic = 'BLB regression topic cleanup ' + Date.now();
+  await extensionWorker.evaluate(value => saveStudyTopicFromPopup(value), topic);
+
+  const result = await extensionWorker.evaluate(value =>
+    clearStudyTopic(value, async () => {
+      throw new Error('simulated alarm clear failure');
+    }), topic
+  );
+  expect(result).toMatchObject({ok:true, alarmCleanupPending:true});
+  const state = await extensionWorker.evaluate(() => getStudySessions());
+  expect(state.sessions.some(session => session.title.toLowerCase() === normalizeStudyTopic(topic).toLowerCase())).toBe(false);
+});
+
+test('Study data deletion reports success when only alarm cleanup fails', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  const topic = 'BLB regression all cleanup ' + Date.now();
+  await extensionWorker.evaluate(value => startStudyTopicFromPopup(value), topic);
+
+  const result = await extensionWorker.evaluate(() =>
+    clearStudySessions(async () => {
+      throw new Error('simulated alarm clear failure');
+    })
+  );
+  expect(result).toMatchObject({ok:true, alarmCleanupPending:true});
+  const state = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    studySessions:[], currentStudySessionId:null, studyTopics:[]
+  }));
+  expect(state.studySessions).toEqual([]);
+  expect(state.currentStudySessionId).toBeNull();
+  expect(state.studyTopics).toEqual([]);
+});
+
+
+test('Study auto-stop alarm is cleared on its next tick while auto-stop is disabled', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({masterEnabled:true, studyAutoStopMinutes:0});
+  const topic = 'BLB regression disabled alarm cleanup ' + Date.now();
+  const started = await extensionWorker.evaluate(value => startStudyTopicFromPopup(value), topic);
+  expect(started).toMatchObject({ok:true, recording:true});
+  const sessionId = await extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({currentStudySessionId:null})).currentStudySessionId
+  );
+
+  await extensionWorker.evaluate(() => chrome.alarms.create(STUDY_AUTOSTOP_ALARM, {
+    delayInMinutes:1,
+    periodInMinutes:1
+  }));
+  expect(await extensionWorker.evaluate(() => chrome.alarms.get(STUDY_AUTOSTOP_ALARM))).toBeTruthy();
+
+  await extensionWorker.evaluate(() => checkStudyAutoStop());
+
+  expect(await extensionWorker.evaluate(() => chrome.alarms.get(STUDY_AUTOSTOP_ALARM))).toBeUndefined();
+  const state = await extensionWorker.evaluate(() => chrome.storage.local.get({currentStudySessionId:null}));
+  expect(state.currentStudySessionId).toBe(sessionId);
+});
+
 test('Study Sessions auto-stop alarm follows recording, settings, and master-toggle lifecycle', async ({ extensionWorker, extensionStorage }) => {
   const alarmName = 'blb-study-auto-stop';
   const readAlarm = () => extensionWorker.evaluate(name => chrome.alarms.get(name), alarmName);

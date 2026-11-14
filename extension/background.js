@@ -212,7 +212,12 @@ async function checkStudyAutoStop() {
     return;
   }
   const minutes = await getStudyAutoStopMinutes();
-  if (minutes <= 0) return;
+  if (minutes <= 0) {
+    // A failed earlier clear must be retried even while auto-stop is disabled;
+    // otherwise the orphaned periodic alarm wakes the worker forever.
+    await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM);
+    return;
+  }
   const data = await chrome.storage.local.get({currentStudySessionId:null, studyLastActivityAt:0});
   if (!data.currentStudySessionId) { await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM); return; }
   const lastActivity = Number(data.studyLastActivityAt) || 0;
@@ -318,11 +323,17 @@ async function saveStudyTopicFromPopupNow(title) {
   return {ok:true, topic};
 }
 
-async function startStudyTopicFromPopup(title, note = "") {
+async function startStudyTopicFromPopup(title, note = "", refreshAlarm = refreshStudyAutoStopAlarm) {
   const topic = normalizeStudyTopic(title);
   if (!topic) return {ok:false, reason:"empty"};
 
   const data = await getStudySessions();
+  const previousRecordingState = await chrome.storage.local.get({
+    currentStudySessionId:null,
+    studyLastActivityAt:0,
+    studyPausedTopic:'',
+    studyPauseReason:''
+  });
   const matches = data.sessions.filter(s =>
     String(s.title || "").trim().toLowerCase() === topic.toLowerCase()
   );
@@ -352,11 +363,45 @@ async function startStudyTopicFromPopup(title, note = "") {
     studyPausedTopic:'',
     studyPauseReason:''
   });
-  await refreshStudyAutoStopAlarm();
+  try {
+    await refreshAlarm();
+  } catch (error) {
+    // Do not report a failed start while leaving the session recording without
+    // its configured inactivity alarm. Restore the prior recording state and
+    // refresh its alarm before returning a failure to the popup.
+    let restored = false;
+    let alarmRestored = false;
+    try {
+      await chrome.storage.local.set({
+        currentStudySessionId:previousRecordingState.currentStudySessionId,
+        studyLastActivityAt:previousRecordingState.studyLastActivityAt,
+        studyPausedTopic:previousRecordingState.studyPausedTopic,
+        studyPauseReason:previousRecordingState.studyPauseReason
+      });
+      restored = true;
+      try {
+        await refreshAlarm();
+        alarmRestored = true;
+      } catch (rollbackError) {
+        console.error('KJV Scripture Tools could not restore the Study auto-stop alarm after a failed recording start:', String(rollbackError));
+      }
+    } catch (rollbackError) {
+      console.error('KJV Scripture Tools could not roll back a failed Study recording start:', String(rollbackError));
+    }
+    void notifyStudyUiChanged();
+    const actualState = await chrome.storage.local.get({currentStudySessionId:null});
+    return {
+      ok:false,
+      error:String(error),
+      restored,
+      alarmRestored,
+      recording:!!actualState.currentStudySessionId
+    };
+  }
   return {ok:true, topic:session.title, recording:true};
 }
 
-async function stopStudyRecording(reason = 'manual') {
+async function stopStudyRecording(reason = 'manual', clearAlarm = () => chrome.alarms.clear(STUDY_AUTOSTOP_ALARM)) {
   let pausedTopic = '';
   if (reason === 'inactivity') {
     const data = await getStudySessions();
@@ -372,8 +417,14 @@ async function stopStudyRecording(reason = 'manual') {
     studyPauseReason: reason === 'inactivity' && pausedTopic ? 'inactivity' : ''
   });
   void notifyStudyUiChanged();
-  await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM);
-  return {ok:true, recording:false, pausedReason:reason === 'inactivity' && pausedTopic ? 'inactivity' : '', pausedTopic};
+  let alarmCleanupPending = false;
+  try {
+    await clearAlarm();
+  } catch (error) {
+    alarmCleanupPending = true;
+    console.error('KJV Scripture Tools could not clear the Study auto-stop alarm after recording stopped:', String(error));
+  }
+  return {ok:true, recording:false, alarmCleanupPending, pausedReason:reason === 'inactivity' && pausedTopic ? 'inactivity' : '', pausedTopic};
 }
 
 async function addStudyNoteToTopic(topic, note) {
@@ -1054,7 +1105,7 @@ async function exportStudySessions(filterText='') {
 }
 
 
-async function clearStudyTopic(topic) {
+async function clearStudyTopic(topic, clearAlarm = () => chrome.alarms.clear(STUDY_AUTOSTOP_ALARM)) {
   const target = String(topic || '').trim().toLowerCase();
   if (!target) return {ok:false, reason:'no-topic'};
   const data = await getStudySessions();
@@ -1075,14 +1126,29 @@ async function clearStudyTopic(topic) {
     ...(pauseBelongsToDeleted ? {studyPausedTopic:'', studyPauseReason:''} : {}),
     ...(currentStillExists ? {} : {studyLastActivityAt:0})
   });
-  if (!currentStillExists) await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM);
-  return {ok:true, topic};
+  let alarmCleanupPending = false;
+  if (!currentStillExists) {
+    try {
+      await clearAlarm();
+    } catch (error) {
+      alarmCleanupPending = true;
+      console.error('KJV Scripture Tools could not clear the Study auto-stop alarm after deleting a topic:', String(error));
+    }
+  }
+  return {ok:true, topic, alarmCleanupPending};
 }
 
-async function clearStudySessions() {
+async function clearStudySessions(clearAlarm = () => chrome.alarms.clear(STUDY_AUTOSTOP_ALARM)) {
   await chrome.storage.local.remove(["studySessions", "currentStudySessionId", "studyTopics", "history", "studyLastActivityAt", "studyPausedTopic", "studyPauseReason"]);
-  await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM);
+  let alarmCleanupPending = false;
+  try {
+    await clearAlarm();
+  } catch (error) {
+    alarmCleanupPending = true;
+    console.error('KJV Scripture Tools could not clear the Study auto-stop alarm after clearing Study data:', String(error));
+  }
   void notifyStudyUiChanged();
+  return {ok:true, alarmCleanupPending};
 }
 
 // Single Unicode robustness policy for externally supplied Bible/reference input.
@@ -3159,7 +3225,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ok:false, error:'Unauthorized sender'});
       return true;
     }
-    try { await clearStudySessions(); sendResponse({ok:true}); } catch (error) { sendResponse({ok:false, error:String(error)}); }
+    try { sendResponse(await clearStudySessions()); } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
 

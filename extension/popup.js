@@ -735,7 +735,7 @@ async function startTopic() {
     // Pause keeps the topic selected so the user can resume with Play.
     const response = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
     if (!response?.ok) { setStatus('Unable to pause recording.'); return; }
-    setStatus(`Recording paused: ${topic}`);
+    setStatus(`Recording paused: ${topic}${response.alarmCleanupPending ? ' (auto-stop alarm cleanup will retry on its next tick)' : ''}`);
     await refreshStudyState();
     return;
   }
@@ -744,7 +744,13 @@ async function startTopic() {
     return;
   }
   const response = await chrome.runtime.sendMessage({type:'blbSuiteStartStudyTopic', title:topic, note:''});
-  if (!response?.ok) { setStatus('Unable to start recording.'); return; }
+  if (!response?.ok) {
+    setStatus(response?.recording
+      ? 'Recording may still be active, but its auto-stop alarm could not be confirmed. Check Study status.'
+      : 'Unable to start recording.');
+    await refreshStudyState();
+    return;
+  }
   setStatus(`Recording started: ${response.topic}`);
   await refreshStudyState();
 }
@@ -758,7 +764,7 @@ async function stopTopic() {
   noteInput.value = '';
   editingNoteOriginal = '';
   await syncSelectedTopic('');
-  setStatus(lastRecordingTopic ? `Last Recording Stopped: ${lastRecordingTopic}` : 'Last Recording Stopped.');
+  setStatus((lastRecordingTopic ? `Last Recording Stopped: ${lastRecordingTopic}` : 'Last Recording Stopped.') + (response.alarmCleanupPending ? ' Auto-stop alarm cleanup will retry on its next tick.' : ''));
   await refreshStudyState();
 }
 async function downloadTopic() {
@@ -860,7 +866,7 @@ async function clearSelectedTopic() {
   topicInput.value = '';
   noteInput.value = '';
   await syncSelectedTopic('');
-  setStatus(`Cleared: ${response.topic || topic}`);
+  setStatus(`Cleared: ${response.topic || topic}${response.alarmCleanupPending ? '. Auto-stop alarm cleanup will retry on its next tick' : ''}`);
   await refreshStudyState();
 }
 
@@ -873,7 +879,7 @@ async function clearAllTopics() {
   topicInput.value = '';
   noteInput.value = '';
   await syncSelectedTopic('');
-  setStatus('All topics cleared.');
+  setStatus(response.alarmCleanupPending ? 'All topics cleared. Auto-stop alarm cleanup will retry on its next tick.' : 'All topics cleared.');
   await refreshStudyState();
 }
 
