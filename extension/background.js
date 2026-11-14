@@ -2362,11 +2362,7 @@ async function handleReplacedTabIdentity(addedTabId, removedTabId) {
   // the surviving tab ID so the next user action reuses the same destination.
   for (const [key, id] of blbLogicalTabRegistry) {
     if (id !== removedTabId) continue;
-    if (!Array.from(blbLogicalTabRegistry.values()).includes(addedTabId)) {
-      blbLogicalTabRegistry.set(key, addedTabId);
-    } else {
-      blbLogicalTabRegistry.set(key, addedTabId);
-    }
+    blbLogicalTabRegistry.set(key, addedTabId);
   }
   if (intentionalNewBlbTabs.delete(removedTabId)) intentionalNewBlbTabs.add(addedTabId);
   for (const [key, id] of scriptTaggerDestinationTabs) {
