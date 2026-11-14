@@ -588,16 +588,23 @@ test('concurrent tabs serialize runtime script registration for the same origin'
     const pattern = originPatternForUrl(url);
     const id = runtimeContentScriptIdForPattern(pattern);
     const files = ['redirect-scripttagger.js'];
-    await chrome.scripting.unregisterContentScripts({ ids:[id] }).catch(() => {});
+    const settings = await chrome.storage.local.get({pageSelectionButtonSites:{}});
+    const previousSites = settings.pageSelectionButtonSites;
+    const siteKey = normalizeSiteHostname(BLB_HOSTNAME);
+    await chrome.storage.local.set({
+      pageSelectionButtonSites:{...previousSites,[siteKey]:true}
+    });
+    await chrome.scripting.unregisterContentScripts({ids:[id]}).catch(() => {});
     try {
       const [first, second] = await Promise.all([
-        ensureRuntimeContentScriptRegistered({ url, id:101 }, files),
-        ensureRuntimeContentScriptRegistered({ url, id:102 }, files)
+        ensureRuntimeContentScriptRegistered({url,id:101},files),
+        ensureRuntimeContentScriptRegistered({url,id:102},files)
       ]);
-      const registered = await chrome.scripting.getRegisteredContentScripts({ ids:[id] });
-      return { first, second, scripts:registered[0]?.js || [] };
+      const registered = await chrome.scripting.getRegisteredContentScripts({ids:[id]});
+      return {first,second,scripts:registered[0]?.js || []};
     } finally {
-      await chrome.scripting.unregisterContentScripts({ ids:[id] }).catch(() => {});
+      await chrome.scripting.unregisterContentScripts({ids:[id]}).catch(() => {});
+      await chrome.storage.local.set({pageSelectionButtonSites:previousSites});
     }
   });
 
