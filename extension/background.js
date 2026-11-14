@@ -212,7 +212,12 @@ async function checkStudyAutoStop() {
     return;
   }
   const minutes = await getStudyAutoStopMinutes();
-  if (minutes <= 0) return;
+  if (minutes <= 0) {
+    // A failed earlier clear must be retried even while auto-stop is disabled;
+    // otherwise the orphaned periodic alarm wakes the worker forever.
+    await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM);
+    return;
+  }
   const data = await chrome.storage.local.get({currentStudySessionId:null, studyLastActivityAt:0});
   if (!data.currentStudySessionId) { await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM); return; }
   const lastActivity = Number(data.studyLastActivityAt) || 0;
