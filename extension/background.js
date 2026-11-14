@@ -388,7 +388,7 @@ async function startStudyTopicFromPopup(title, note = "", refreshAlarm = refresh
   return {ok:true, topic:session.title, recording:true};
 }
 
-async function stopStudyRecording(reason = 'manual') {
+async function stopStudyRecording(reason = 'manual', clearAlarm = () => chrome.alarms.clear(STUDY_AUTOSTOP_ALARM)) {
   let pausedTopic = '';
   if (reason === 'inactivity') {
     const data = await getStudySessions();
@@ -404,8 +404,14 @@ async function stopStudyRecording(reason = 'manual') {
     studyPauseReason: reason === 'inactivity' && pausedTopic ? 'inactivity' : ''
   });
   void notifyStudyUiChanged();
-  await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM);
-  return {ok:true, recording:false, pausedReason:reason === 'inactivity' && pausedTopic ? 'inactivity' : '', pausedTopic};
+  let alarmCleanupPending = false;
+  try {
+    await clearAlarm();
+  } catch (error) {
+    alarmCleanupPending = true;
+    console.error('KJV Scripture Tools could not clear the Study auto-stop alarm after recording stopped:', String(error));
+  }
+  return {ok:true, recording:false, alarmCleanupPending, pausedReason:reason === 'inactivity' && pausedTopic ? 'inactivity' : '', pausedTopic};
 }
 
 async function addStudyNoteToTopic(topic, note) {
@@ -1086,7 +1092,7 @@ async function exportStudySessions(filterText='') {
 }
 
 
-async function clearStudyTopic(topic) {
+async function clearStudyTopic(topic, clearAlarm = () => chrome.alarms.clear(STUDY_AUTOSTOP_ALARM)) {
   const target = String(topic || '').trim().toLowerCase();
   if (!target) return {ok:false, reason:'no-topic'};
   const data = await getStudySessions();
@@ -1107,14 +1113,29 @@ async function clearStudyTopic(topic) {
     ...(pauseBelongsToDeleted ? {studyPausedTopic:'', studyPauseReason:''} : {}),
     ...(currentStillExists ? {} : {studyLastActivityAt:0})
   });
-  if (!currentStillExists) await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM);
-  return {ok:true, topic};
+  let alarmCleanupPending = false;
+  if (!currentStillExists) {
+    try {
+      await clearAlarm();
+    } catch (error) {
+      alarmCleanupPending = true;
+      console.error('KJV Scripture Tools could not clear the Study auto-stop alarm after deleting a topic:', String(error));
+    }
+  }
+  return {ok:true, topic, alarmCleanupPending};
 }
 
-async function clearStudySessions() {
+async function clearStudySessions(clearAlarm = () => chrome.alarms.clear(STUDY_AUTOSTOP_ALARM)) {
   await chrome.storage.local.remove(["studySessions", "currentStudySessionId", "studyTopics", "history", "studyLastActivityAt", "studyPausedTopic", "studyPauseReason"]);
-  await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM);
+  let alarmCleanupPending = false;
+  try {
+    await clearAlarm();
+  } catch (error) {
+    alarmCleanupPending = true;
+    console.error('KJV Scripture Tools could not clear the Study auto-stop alarm after clearing Study data:', String(error));
+  }
   void notifyStudyUiChanged();
+  return {ok:true, alarmCleanupPending};
 }
 
 // Single Unicode robustness policy for externally supplied Bible/reference input.
@@ -3191,7 +3212,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       sendResponse({ok:false, error:'Unauthorized sender'});
       return true;
     }
-    try { await clearStudySessions(); sendResponse({ok:true}); } catch (error) { sendResponse({ok:false, error:String(error)}); }
+    try { sendResponse(await clearStudySessions()); } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
 
