@@ -98,6 +98,14 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       const replacementTab = await chrome.tabs.create({url:'https://example.com/',active:false});
       createdTabIds.push(replacementTab.id);
       await chrome.tabs.update(replacementTab.id,{active:true});
+      // Let the real activation listener finish before isolating the explicit
+      // replacement synchronization; otherwise its asynchronous visibility
+      // update can race this direct helper invocation and invalidate its result.
+      for (let attempt=0; attempt<50 && !updates.some(item =>
+        item.id === 'blb-suite-web-selection' && item.visible === true
+      ); attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
       updates.length = 0;
       const replacementSynced = await syncSelectionMenusAfterTabReplacement(replacementTab.id);
       const replacementShowsWebMenu = updates.some(item =>
