@@ -15,6 +15,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
     const originalWebKnownPresent = selectionMenuKnownPresent;
     const originalPdfKnownPresent = pdfSelectionMenuKnownPresent;
     const createdTabIds = [];
+    const createdWindowIds = [];
     const updates = [];
 
     try {
@@ -111,6 +112,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       const originalWindowId = replacementTab.windowId;
       const otherWindow = await chrome.windows.create({url:'https://www.gov.scot/',focused:false});
       if (!otherWindow?.id) throw new Error('Could not create the secondary test window');
+      createdWindowIds.push(otherWindow.id);
       updates.length = 0;
       await chrome.windows.update(otherWindow.id,{focused:true});
       for (let attempt=0; attempt<50 && !updates.some(item =>
@@ -151,6 +153,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       selectionMenuKnownPresent = originalWebKnownPresent;
       pdfSelectionMenuKnownPresent = originalPdfKnownPresent;
       await Promise.all(createdTabIds.map(id => chrome.tabs.remove(id).catch(() => {})));
+      await Promise.all(createdWindowIds.map(id => chrome.windows.remove(id).catch(() => {})));
       await chrome.storage.local.set(settings);
       await runtimeContentScriptReconciliationQueue;
     }
