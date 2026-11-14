@@ -175,3 +175,49 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
   expect(result.focusChangeHidesWebMenu).toBe(true);
   expect(result.focusChangeShowsWebMenu).toBe(true);
 });
+
+
+test('PDF selection menu ignores stale asynchronous visibility results', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const originalUpdate = chrome.contextMenus.update;
+    const originalKnownPresent = pdfSelectionMenuKnownPresent;
+    const originalPdfViewerCheck = isPdfViewerTab;
+    const originalPageEnabled = isPageButtonEnabledForHostname;
+    const originalSuiteEnabled = isSuiteEnabled;
+    const updates = [];
+    let signalSlowStarted;
+    const slowStarted = new Promise(resolve => { signalSlowStarted = resolve; });
+    let releaseSlow;
+    const slowGate = new Promise(resolve => { releaseSlow = resolve; });
+    try {
+      pdfSelectionMenuKnownPresent = true;
+      chrome.contextMenus.update = async (id, details) => { updates.push({id,...details}); };
+      isPdfViewerTab = () => true;
+      isSuiteEnabled = async () => true;
+      isPageButtonEnabledForHostname = async hostname => {
+        if (hostname === 'slow.example') {
+          signalSlowStarted();
+          await slowGate;
+          return false;
+        }
+        return hostname === 'fast.example';
+      };
+
+      const slow = syncPdfSelectionContextMenuVisibility({url:'https://slow.example/document.pdf',title:'Slow PDF'});
+      await slowStarted;
+      await syncPdfSelectionContextMenuVisibility({url:'https://fast.example/document.pdf',title:'Fast PDF'});
+      releaseSlow();
+      await slow;
+      return [...updates];
+    } finally {
+      releaseSlow?.();
+      chrome.contextMenus.update = originalUpdate;
+      pdfSelectionMenuKnownPresent = originalKnownPresent;
+      isPdfViewerTab = originalPdfViewerCheck;
+      isPageButtonEnabledForHostname = originalPageEnabled;
+      isSuiteEnabled = originalSuiteEnabled;
+    }
+  });
+
+  expect(result).toEqual([{id:'blb-suite-pdf-selection',visible:true}]);
+});
