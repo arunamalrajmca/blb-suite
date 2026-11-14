@@ -1101,3 +1101,66 @@ test('@failure-first Double-click reports a transient destination failure and su
   });
 });
 
+test('closing remembered BLB and ScriptTagger destination tabs clears their mappings and permits fresh opens', async ({
+  extensionWorker
+}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const blbUrl = 'https://www.blueletterbible.org/kjv/jhn/3/16/';
+    const scriptTaggerUrl = 'https://www.blueletterbible.org/kjv/rom/8/28/';
+    const blbKey = canonicalBlbTabKey(blbUrl);
+    const scriptTaggerKey = canonicalScriptTaggerDestinationKey(scriptTaggerUrl);
+    const createdTabIds = [];
+
+    try {
+      const firstBlb = await openBlbDestination(blbUrl, true, true);
+      createdTabIds.push(firstBlb.id);
+      const firstScriptTagger = await openScriptTaggerDestination(scriptTaggerUrl);
+      createdTabIds.push(firstScriptTagger.id);
+
+      if (blbLogicalTabRegistry.get(blbKey) !== firstBlb.id) {
+        throw new Error('BLB destination was not recorded in its reuse registry');
+      }
+      if (scriptTaggerDestinationTabs.get(scriptTaggerKey) !== firstScriptTagger.id) {
+        throw new Error('ScriptTagger destination was not recorded in its reuse registry');
+      }
+
+      await chrome.tabs.remove(firstBlb.id);
+      await chrome.tabs.remove(firstScriptTagger.id);
+
+      // onRemoved must clear both independent registries before a later
+      // selection can accidentally reuse a closed destination.
+      for (let attempt = 0; attempt < 40; attempt++) {
+        if (!blbLogicalTabRegistry.has(blbKey) &&
+            !scriptTaggerDestinationTabs.has(scriptTaggerKey)) break;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      const mappingsCleared =
+        !blbLogicalTabRegistry.has(blbKey) &&
+        !scriptTaggerDestinationTabs.has(scriptTaggerKey);
+
+      const secondBlb = await openBlbDestination(blbUrl, true, true);
+      createdTabIds.push(secondBlb.id);
+      const secondScriptTagger = await openScriptTaggerDestination(scriptTaggerUrl);
+      createdTabIds.push(secondScriptTagger.id);
+
+      const tabs = await chrome.tabs.query({});
+      const secondBlbTab = tabs.find(tab => tab.id === secondBlb.id);
+      const secondScriptTaggerTab = tabs.find(tab => tab.id === secondScriptTagger.id);
+      return {
+        mappingsCleared,
+        blbReopenedWithFreshTab: secondBlb.id !== firstBlb.id &&
+          canonicalBlbTabKey(secondBlbTab?.url || secondBlbTab?.pendingUrl || '') === blbKey,
+        scriptTaggerReopenedWithFreshTab: secondScriptTagger.id !== firstScriptTagger.id &&
+          canonicalScriptTaggerDestinationKey(secondScriptTaggerTab?.url || secondScriptTaggerTab?.pendingUrl || '') === scriptTaggerKey
+      };
+    } finally {
+      await Promise.all(createdTabIds.map(id => chrome.tabs.remove(id).catch(() => {})));
+    }
+  });
+
+  expect(result).toEqual({
+    mappingsCleared: true,
+    blbReopenedWithFreshTab: true,
+    scriptTaggerReopenedWithFreshTab: true
+  });
+});
