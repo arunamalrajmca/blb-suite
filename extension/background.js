@@ -518,6 +518,26 @@ async function clearTrackedMultiVerseTab(tabId) {
   });
 }
 
+// Serialize pending-reference read-modify-write operations just like the
+// persisted MultiVerse reservation map. Multiple tabs can close in the same
+// turn; independent snapshots would otherwise let the last cleanup restore
+// another closed tab's stale references.
+let pendingMultiVerseRefsUpdate = Promise.resolve();
+
+function updatePendingMultiVerseRefsByTab(mutator) {
+  const run = pendingMultiVerseRefsUpdate.then(async () => {
+    const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
+    const map = data.blbSuitePendingMultiVerseRefsByTab &&
+      typeof data.blbSuitePendingMultiVerseRefsByTab === 'object'
+      ? {...data.blbSuitePendingMultiVerseRefsByTab} : {};
+    await mutator(map);
+    await chrome.storage.local.set({blbSuitePendingMultiVerseRefsByTab:map});
+    return map;
+  });
+  pendingMultiVerseRefsUpdate = run.then(() => undefined, () => undefined);
+  return run;
+}
+
 function isReservedMultiVerseTabCandidate(tab, handoffUrl) {
   const urls = [tab?.url, tab?.pendingUrl].map(value => String(value || '')).filter(Boolean);
   return urls.some(url =>
@@ -2341,12 +2361,11 @@ chrome.tabs.onRemoved.addListener(tabId => {
     if (id === tabId) scriptTaggerDestinationTabs.delete(key);
   }
   clearTrackedMultiVerseTab(tabId).catch(()=>{});
-  chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}}).then(data=>{
-    const map = data.blbSuitePendingMultiVerseRefsByTab && typeof data.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...data.blbSuitePendingMultiVerseRefsByTab} : {};
-    if (!Object.prototype.hasOwnProperty.call(map, String(tabId))) return;
+  updatePendingMultiVerseRefsByTab(map => {
     delete map[String(tabId)];
-    return chrome.storage.local.set({blbSuitePendingMultiVerseRefsByTab:map});
-  }).catch(()=>{});
+  }).catch(error => {
+    console.warn('KJV Scripture Tools pending MultiVerse reference cleanup failed:', String(error));
+  });
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
@@ -3283,10 +3302,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     try {
       const tabId = sender?.tab?.id;
       if (tabId != null) {
-        const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
-        const map = data.blbSuitePendingMultiVerseRefsByTab && typeof data.blbSuitePendingMultiVerseRefsByTab === 'object' ? {...data.blbSuitePendingMultiVerseRefsByTab} : {};
-        delete map[String(tabId)];
-        await chrome.storage.local.set({blbSuitePendingMultiVerseRefsByTab:map});
+        await updatePendingMultiVerseRefsByTab(map => {
+          delete map[String(tabId)];
+        });
       }
       sendResponse({ok:true});
     } catch (error) { sendResponse({ok:false, error:String(error)}); }
