@@ -168,14 +168,16 @@ async function getStudyAutoStopMinutes() {
   if (value === 0) return 0;
   return STUDY_AUTOSTOP_OPTIONS.includes(value) ? value : STUDY_AUTOSTOP_DEFAULT_MINUTES;
 }
-async function refreshStudyAutoStopAlarm() {
+async function refreshStudyAutoStopAlarm(alarms = chrome.alarms) {
   const master = await isSuiteEnabled();
-  await chrome.alarms.clear(STUDY_AUTOSTOP_ALARM);
+  await alarms.clear(STUDY_AUTOSTOP_ALARM);
   if (!master) return;
   const minutes = await getStudyAutoStopMinutes();
   const data = await chrome.storage.local.get({currentStudySessionId:null});
   if (!data.currentStudySessionId || minutes <= 0) return;
-  chrome.alarms.create(STUDY_AUTOSTOP_ALARM, {delayInMinutes:1, periodInMinutes:1});
+  // Alarm creation is asynchronous in supported Chrome versions. Await it so
+  // callers can detect a failed schedule and roll back/report the preference.
+  await alarms.create(STUDY_AUTOSTOP_ALARM, {delayInMinutes:1, periodInMinutes:1});
 }
 
 async function updateStudyAutoStopMinutes(value, refreshAlarm = refreshStudyAutoStopAlarm) {

@@ -248,11 +248,16 @@ test('Study Sessions History menu opens the saved Strong\'s entries and Criteria
   await expect(page.locator('#studyStatus')).toContainText('Opened 1 Criteria Search tab');
   await expect.poll(async () => extensionWorker.evaluate(async () => {
     const tabs = await chrome.tabs.query({});
-    return tabs.some(tab => {
-      if (!String(tab.url || '').includes('/search/search.cfm?')) return false;
-      const criteria = new URL(tab.url).searchParams.get('Criteria') || '';
-      return criteria.toLowerCase() === 'grace or mercy';
-    });
+    return tabs.some(tab => [tab.url, tab.pendingUrl].some(rawUrl => {
+      const value = String(rawUrl || '');
+      if (!value.includes('/search/search.cfm?')) return false;
+      try {
+        const criteria = new URL(value).searchParams.get('Criteria') || '';
+        return criteria.toLowerCase() === 'grace or mercy';
+      } catch (_) {
+        return false;
+      }
+    }));
   })).toBe(true);
 
   await page.locator('#multiView').click();
@@ -684,14 +689,19 @@ test('Study Sessions restores the saved auto-stop value when alarm refresh fails
   });
 
   const rollback = await extensionWorker.evaluate(async () => {
-    let failNextRefresh = true;
-    const result = await updateStudyAutoStopMinutes(0, async () => {
-      if (failNextRefresh) {
-        failNextRefresh = false;
-        throw new Error('simulated-alarm-refresh-failure');
+    let failNextCreate = true;
+    const realAlarms = chrome.alarms;
+    const alarms = {
+      clear:realAlarms.clear.bind(realAlarms),
+      create:(...args) => {
+        if (failNextCreate) {
+          failNextCreate = false;
+          return Promise.reject(new Error('simulated-alarm-create-failure'));
+        }
+        return realAlarms.create(...args);
       }
-      return refreshStudyAutoStopAlarm();
-    });
+    };
+    const result = await updateStudyAutoStopMinutes(10, () => refreshStudyAutoStopAlarm(alarms));
     return {
       result,
       settings:await chrome.storage.local.get({studyAutoStopMinutes:15}),

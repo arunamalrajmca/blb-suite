@@ -2047,8 +2047,44 @@ test.describe('core user-visible E2E', () => {
     // navigating again would add a needless reload and readiness delay.
     if (page.url() !== 'https://example.com/') {
       await page.goto('https://example.com/', { waitUntil: 'domcontentloaded' });
-      // The double-click handler itself waits for its settings initialization
-      // and replays the event, so no fixed post-navigation sleep is needed.
+    }
+
+    // The page can already be loaded before this fixture writes the per-site
+    // preference. In that case the content script may have completed its
+    // initial settings read with double-click disabled. Wait for the actual
+    // listener binding (not merely script injection or a storage write) before
+    // dispatching the gesture, so this grammar test measures reference
+    // resolution rather than racing storage.onChanged.
+    const waitForDoubleClickHandler = async () => {
+      const tabUrl = page.url();
+      await expect.poll(async () => {
+        const workers = page.context().serviceWorkers();
+        const worker = workers[workers.length - 1]
+          || await page.context().waitForEvent('serviceworker', { timeout: 5000 });
+        return worker.evaluate(async url => {
+          const tabs = await chrome.tabs.query({});
+          const tab = tabs.find(candidate => candidate.url === url);
+          if (!tab?.id) return false;
+          const [injected] = await chrome.scripting.executeScript({
+            target: { tabId: tab.id },
+            world: 'ISOLATED',
+            func: () => typeof window.__blbSuiteDoubleClickBoundV2 === 'function'
+          });
+          return injected?.result === true;
+        }, tabUrl);
+      }, { timeout: 10000 }).toBe(true);
+    };
+
+    // The handler marker lives in the extension's isolated world, not the
+    // page's main world. Inspect it through scripting.executeScript rather
+    // than page.waitForFunction, which can never see extension-world globals.
+    try {
+      await waitForDoubleClickHandler();
+    } catch (_) {
+      // If this document completed initialization before the site opt-in was
+      // persisted, reload so the content script starts with the saved setting.
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await waitForDoubleClickHandler();
     }
 
     await page.evaluate((html) => {
