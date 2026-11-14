@@ -2354,6 +2354,48 @@ async function createBlbTabGeneric(url, active = true, {forceNew = false} = {}) 
 }
 
 
+async function handleReplacedTabIdentity(addedTabId, removedTabId) {
+  if (!Number.isInteger(addedTabId) || !Number.isInteger(removedTabId) || addedTabId === removedTabId) return;
+
+  // Chrome can replace a prerendered tab without following the ordinary
+  // onRemoved lifecycle. Preserve extension-owned destination identities under
+  // the surviving tab ID so the next user action reuses the same destination.
+  for (const [key, id] of blbLogicalTabRegistry) {
+    if (id !== removedTabId) continue;
+    blbLogicalTabRegistry.set(key, addedTabId);
+  }
+  if (intentionalNewBlbTabs.delete(removedTabId)) intentionalNewBlbTabs.add(addedTabId);
+  for (const [key, id] of scriptTaggerDestinationTabs) {
+    if (id === removedTabId) scriptTaggerDestinationTabs.set(key, addedTabId);
+  }
+
+  await updateTrackedMultiVerseTabs(map => {
+    const previous = map[String(removedTabId)];
+    if (previous && !map[String(addedTabId)]) map[String(addedTabId)] = previous;
+    delete map[String(removedTabId)];
+  });
+  await updatePendingMultiVerseRefsByTab(map => {
+    const previous = map[String(removedTabId)];
+    if (Array.isArray(previous)) {
+      const current = Array.isArray(map[String(addedTabId)]) ? map[String(addedTabId)] : [];
+      const seen = new Set(current.map(ref => JSON.stringify(ref)));
+      map[String(addedTabId)] = [...current, ...previous.filter(ref => {
+        const key = JSON.stringify(ref);
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })];
+    }
+    delete map[String(removedTabId)];
+  });
+}
+
+chrome.tabs.onReplaced.addListener((addedTabId, removedTabId) => {
+  handleReplacedTabIdentity(addedTabId, removedTabId).catch(error => {
+    console.warn('KJV Scripture Tools replaced-tab identity migration failed:', String(error));
+  });
+});
+
 chrome.tabs.onRemoved.addListener(tabId => {
   forgetBlbTab(tabId);
   intentionalNewBlbTabs.delete(tabId);
