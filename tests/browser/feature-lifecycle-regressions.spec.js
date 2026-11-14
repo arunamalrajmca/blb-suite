@@ -487,6 +487,46 @@ test('Global master OFF blocks all four selection actions while preserving site 
 });
 
 
+
+test('Study Sessions alarm creation failure rolls back a newly started recording', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    masterEnabled:true,
+    studyAutoStopMinutes:10,
+    currentStudySessionId:null,
+    studyLastActivityAt:0,
+    studyPausedTopic:'Previously Paused Topic',
+    studyPauseReason:'inactivity'
+  });
+
+  const topic = 'BLB regression failed alarm start ' + Date.now();
+  const result = await extensionWorker.evaluate(value =>
+    startStudyTopicFromPopup(value, '', async () => {
+      throw new Error('simulated alarm creation failure');
+    }), topic
+  );
+
+  expect(result).toMatchObject({
+    ok:false,
+    restored:true,
+    recording:false
+  });
+  expect(result.error).toContain('simulated alarm creation failure');
+
+  const state = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    currentStudySessionId:null,
+    studyLastActivityAt:0,
+    studyPausedTopic:'',
+    studyPauseReason:'',
+    studySessions:[]
+  }));
+  expect(state.currentStudySessionId).toBeNull();
+  expect(state.studyLastActivityAt).toBe(0);
+  expect(state.studyPausedTopic).toBe('Previously Paused Topic');
+  expect(state.studyPauseReason).toBe('inactivity');
+  expect(state.studySessions.some(session => session.title === topic)).toBe(true);
+});
+
 test('Study Sessions auto-stop alarm follows recording, settings, and master-toggle lifecycle', async ({ extensionWorker, extensionStorage }) => {
   const alarmName = 'blb-study-auto-stop';
   const readAlarm = () => extensionWorker.evaluate(name => chrome.alarms.get(name), alarmName);
