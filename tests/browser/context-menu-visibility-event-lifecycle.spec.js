@@ -106,6 +106,33 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       const backgroundReplacementIgnored = !(await syncSelectionMenusAfterTabReplacement(inactiveTab.id));
       const backgroundReplacementUpdates = [...updates];
 
+      // Focusing a different browser window must also refresh the global menus;
+      // the active tab inside either window can remain unchanged.
+      const originalWindowId = replacementTab.windowId;
+      const otherWindow = await chrome.windows.create({url:'https://www.gov.scot/',focused:false});
+      if (!otherWindow?.id) throw new Error('Could not create the secondary test window');
+      updates.length = 0;
+      await chrome.windows.update(otherWindow.id,{focused:true});
+      for (let attempt=0; attempt<50 && !updates.some(item =>
+        item.id === 'blb-suite-web-selection' && item.visible === false
+      ); attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      const focusChangeHidesWebMenu = updates.some(item =>
+        item.id === 'blb-suite-web-selection' && item.visible === false
+      );
+      updates.length = 0;
+      await chrome.windows.update(originalWindowId,{focused:true});
+      for (let attempt=0; attempt<50 && !updates.some(item =>
+        item.id === 'blb-suite-web-selection' && item.visible === true
+      ); attempt++) {
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      const focusChangeShowsWebMenu = updates.some(item =>
+        item.id === 'blb-suite-web-selection' && item.visible === true
+      );
+      await chrome.windows.remove(otherWindow.id);
+
       return {
         activationShowsWebMenu,
         activationSynchronizesPdfMenu,
@@ -115,7 +142,9 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
         replacementShowsWebMenu,
         replacementSynchronizesPdfMenu,
         backgroundReplacementIgnored,
-        backgroundReplacementUpdates
+        backgroundReplacementUpdates,
+        focusChangeHidesWebMenu,
+        focusChangeShowsWebMenu
       };
     } finally {
       chrome.contextMenus.update = originalUpdate;
@@ -140,4 +169,6 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
   expect(result.replacementSynchronizesPdfMenu).toBe(true);
   expect(result.backgroundReplacementIgnored).toBe(true);
   expect(result.backgroundReplacementUpdates).toEqual([]);
+  expect(result.focusChangeHidesWebMenu).toBe(true);
+  expect(result.focusChangeShowsWebMenu).toBe(true);
 });
