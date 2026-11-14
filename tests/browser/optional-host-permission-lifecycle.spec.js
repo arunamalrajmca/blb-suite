@@ -969,6 +969,9 @@ test('permission revocation during an in-flight registration cannot leave a pers
     await runtimeContentScriptReconciliationQueue;
   });
   await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(() =>
+    chrome.tabs.query({active:true,currentWindow:true}).then(([tab]) => tab?.id)
+  );
   const registrationId = await extensionWorker.evaluate(value =>
     runtimeContentScriptIdForPattern(value), pattern
   );
