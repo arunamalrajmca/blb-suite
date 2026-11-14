@@ -582,7 +582,7 @@ test('Study data deletion reports success when only alarm cleanup fails', async 
   }));
   expect(state.studySessions).toEqual([]);
   expect(state.currentStudySessionId).toBeNull();
-  expect(state.studyTopics).toBeUndefined();
+  expect(state.studyTopics).toEqual([]);
 });
 
 test('Study Sessions auto-stop alarm follows recording, settings, and master-toggle lifecycle', async ({ extensionWorker, extensionStorage }) => {
