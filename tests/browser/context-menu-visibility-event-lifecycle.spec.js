@@ -87,11 +87,35 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
         item.id === 'blb-suite-web-selection' && item.visible === false
       );
 
+      // A replacement of the active tab must independently resynchronize both
+      // menus even when no subsequent activation/navigation event is observed.
+      const replacementTab = await chrome.tabs.create({url:'https://example.com/',active:false});
+      createdTabIds.push(replacementTab.id);
+      await chrome.tabs.update(replacementTab.id,{active:true});
+      updates.length = 0;
+      const replacementSynced = await syncSelectionMenusAfterTabReplacement(replacementTab.id);
+      const replacementShowsWebMenu = updates.some(item =>
+        item.id === 'blb-suite-web-selection' && item.visible === true
+      );
+      const replacementSynchronizesPdfMenu = updates.some(item =>
+        item.id === 'blb-suite-pdf-selection'
+      );
+
+      // Replacements in a background tab must not change global menu state.
+      updates.length = 0;
+      const backgroundReplacementIgnored = !(await syncSelectionMenusAfterTabReplacement(inactiveTab.id));
+      const backgroundReplacementUpdates = [...updates];
+
       return {
         activationShowsWebMenu,
         activationSynchronizesPdfMenu,
         inactiveNavigationUpdates,
-        activeNavigationHidesWebMenu
+        activeNavigationHidesWebMenu,
+        replacementSynced,
+        replacementShowsWebMenu,
+        replacementSynchronizesPdfMenu,
+        backgroundReplacementIgnored,
+        backgroundReplacementUpdates
       };
     } finally {
       chrome.contextMenus.update = originalUpdate;
@@ -111,4 +135,9 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
     )
   ).toEqual([]);
   expect(result.activeNavigationHidesWebMenu).toBe(true);
+  expect(result.replacementSynced).toBe(true);
+  expect(result.replacementShowsWebMenu).toBe(true);
+  expect(result.replacementSynchronizesPdfMenu).toBe(true);
+  expect(result.backgroundReplacementIgnored).toBe(true);
+  expect(result.backgroundReplacementUpdates).toEqual([]);
 });
