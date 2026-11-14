@@ -318,11 +318,17 @@ async function saveStudyTopicFromPopupNow(title) {
   return {ok:true, topic};
 }
 
-async function startStudyTopicFromPopup(title, note = "") {
+async function startStudyTopicFromPopup(title, note = "", refreshAlarm = refreshStudyAutoStopAlarm) {
   const topic = normalizeStudyTopic(title);
   if (!topic) return {ok:false, reason:"empty"};
 
   const data = await getStudySessions();
+  const previousRecordingState = await chrome.storage.local.get({
+    currentStudySessionId:null,
+    studyLastActivityAt:0,
+    studyPausedTopic:'',
+    studyPauseReason:''
+  });
   const matches = data.sessions.filter(s =>
     String(s.title || "").trim().toLowerCase() === topic.toLowerCase()
   );
@@ -352,7 +358,33 @@ async function startStudyTopicFromPopup(title, note = "") {
     studyPausedTopic:'',
     studyPauseReason:''
   });
-  await refreshStudyAutoStopAlarm();
+  try {
+    await refreshAlarm();
+  } catch (error) {
+    // Do not report a failed start while leaving the session recording without
+    // its configured inactivity alarm. Restore the prior recording state and
+    // refresh its alarm before returning a failure to the popup.
+    let restored = false;
+    try {
+      await chrome.storage.local.set({
+        currentStudySessionId:previousRecordingState.currentStudySessionId,
+        studyLastActivityAt:previousRecordingState.studyLastActivityAt,
+        studyPausedTopic:previousRecordingState.studyPausedTopic,
+        studyPauseReason:previousRecordingState.studyPauseReason
+      });
+      await refreshAlarm();
+      restored = true;
+    } catch (rollbackError) {
+      console.error('KJV Scripture Tools could not roll back a failed Study recording start:', String(rollbackError));
+    }
+    void notifyStudyUiChanged();
+    return {
+      ok:false,
+      error:String(error),
+      restored,
+      recording:restored && !!previousRecordingState.currentStudySessionId
+    };
+  }
   return {ok:true, topic:session.title, recording:true};
 }
 
