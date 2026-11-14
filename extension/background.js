@@ -6492,6 +6492,7 @@ let pdfSelectionMenuKnownPresent = false;
 // produce many tab events; serializing each stale snapshot delays the menu
 // update on the page the user is actually viewing.
 let webSelectionVisibilitySyncGeneration = 0;
+let pdfSelectionVisibilitySyncGeneration = 0;
 
 async function ensureWebSelectionContextMenu() {
   if (selectionMenuKnownPresent) return true;
@@ -6613,12 +6614,19 @@ async function installPdfSelectionContextMenu() {
 }
 
 async function syncPdfSelectionContextMenuVisibility(tab) {
-  if (!pdfSelectionMenuKnownPresent) return;
+  if (!pdfSelectionMenuKnownPresent) return false;
+  const generation = ++pdfSelectionVisibilitySyncGeneration;
   try {
     const enabled = !!tab && (await isSuiteEnabled()) && isPdfViewerTab(tab) &&
       (await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(tab), tab.title || ''));
+    // PDF menu visibility is global too. A slow eligibility lookup for an
+    // earlier tab must not overwrite the result for the tab now in focus.
+    if (generation !== pdfSelectionVisibilitySyncGeneration) return false;
     await chrome.contextMenus.update('blb-suite-pdf-selection', {visible: enabled});
-  } catch (_) {}
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
 chrome.tabs.onActivated.addListener(() => {
