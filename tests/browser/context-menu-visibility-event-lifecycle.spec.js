@@ -14,6 +14,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
     const originalUpdate = chrome.contextMenus.update;
     const originalWebKnownPresent = selectionMenuKnownPresent;
     const originalPdfKnownPresent = pdfSelectionMenuKnownPresent;
+    const originalSelectionPermissionCheck = hasSelectionActionPermissionForTab;
     const createdTabIds = [];
     const createdWindowIds = [];
     const updates = [];
@@ -21,6 +22,10 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
     try {
       selectionMenuKnownPresent = true;
       pdfSelectionMenuKnownPresent = true;
+      // This test isolates menu lifecycle behavior; host-grant UX is covered
+      // separately, so make the selected fixture host eligible deterministically.
+      hasSelectionActionPermissionForTab = async tab =>
+        new URL(tab?.url || 'about:blank').hostname === 'example.com';
       chrome.contextMenus.update = async (id, details) => {
         updates.push({id, ...details});
       };
@@ -152,6 +157,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       chrome.contextMenus.update = originalUpdate;
       selectionMenuKnownPresent = originalWebKnownPresent;
       pdfSelectionMenuKnownPresent = originalPdfKnownPresent;
+      hasSelectionActionPermissionForTab = originalSelectionPermissionCheck;
       await Promise.all(createdTabIds.map(id => chrome.tabs.remove(id).catch(() => {})));
       await Promise.all(createdWindowIds.map(id => chrome.windows.remove(id).catch(() => {})));
       await chrome.storage.local.set(settings);
