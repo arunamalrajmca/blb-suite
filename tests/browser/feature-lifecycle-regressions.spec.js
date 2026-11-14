@@ -621,6 +621,28 @@ test('Study data deletion reports success when only alarm cleanup fails', async 
   expect(state.studyTopics).toEqual([]);
 });
 
+
+test('Study auto-stop alarm is cleared on its next tick while auto-stop is disabled', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    masterEnabled:true,
+    studyAutoStopMinutes:0,
+    currentStudySessionId:'preserved-disabled-auto-stop-session',
+    studyLastActivityAt:Date.now() - 24 * 60 * 60 * 1000
+  });
+  await extensionWorker.evaluate(() => chrome.alarms.create(STUDY_AUTOSTOP_ALARM, {
+    delayInMinutes:1,
+    periodInMinutes:1
+  }));
+  expect(await extensionWorker.evaluate(() => chrome.alarms.get(STUDY_AUTOSTOP_ALARM))).toBeTruthy();
+
+  await extensionWorker.evaluate(() => checkStudyAutoStop());
+
+  expect(await extensionWorker.evaluate(() => chrome.alarms.get(STUDY_AUTOSTOP_ALARM))).toBeUndefined();
+  const state = await extensionWorker.evaluate(() => chrome.storage.local.get({currentStudySessionId:null}));
+  expect(state.currentStudySessionId).toBe('preserved-disabled-auto-stop-session');
+});
+
 test('Study Sessions auto-stop alarm follows recording, settings, and master-toggle lifecycle', async ({ extensionWorker, extensionStorage }) => {
   const alarmName = 'blb-study-auto-stop';
   const readAlarm = () => extensionWorker.evaluate(name => chrome.alarms.get(name), alarmName);
