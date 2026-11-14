@@ -514,6 +514,7 @@ test('Study Sessions alarm creation failure rolls back a newly started recording
   expect(result).toMatchObject({
     ok:false,
     restored:true,
+    alarmRestored:true,
     recording:false
   });
   expect(result.error).toContain('simulated alarm creation failure');
@@ -533,6 +534,41 @@ test('Study Sessions alarm creation failure rolls back a newly started recording
   expect(state.studySessions.some(session => session.title === normalizedTopic)).toBe(true);
 });
 
+
+
+test('Study Sessions preserves the prior recording state when alarm rollback also fails', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    masterEnabled:true,
+    studyAutoStopMinutes:10,
+    currentStudySessionId:null,
+    studyLastActivityAt:0,
+    studyPausedTopic:'Paused Before Failure',
+    studyPauseReason:'inactivity'
+  });
+
+  const topic = 'BLB regression persistent alarm failure ' + Date.now();
+  const result = await extensionWorker.evaluate(value =>
+    startStudyTopicFromPopup(value, '', async () => {
+      throw new Error('persistent simulated alarm failure');
+    }), topic
+  );
+
+  expect(result).toMatchObject({
+    ok:false,
+    restored:true,
+    alarmRestored:false,
+    recording:false
+  });
+  const state = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    currentStudySessionId:null,
+    studyPausedTopic:'',
+    studyPauseReason:''
+  }));
+  expect(state.currentStudySessionId).toBeNull();
+  expect(state.studyPausedTopic).toBe('Paused Before Failure');
+  expect(state.studyPauseReason).toBe('inactivity');
+});
 
 test('Study Sessions stop reports the completed stop when alarm cleanup fails', async ({ extensionWorker, extensionStorage }) => {
   await extensionStorage.clear();
