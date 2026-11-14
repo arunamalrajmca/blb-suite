@@ -715,6 +715,78 @@ test('closing a tab clears its persisted MultiVerse reservation and pending refe
   });
 });
 
+test('concurrent tab closures preserve every pending-reference cleanup', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.set({blbSuitePendingMultiVerseRefsByTab:{}});
+
+  const result = await extensionWorker.evaluate(async () => {
+    const first = await chrome.tabs.create({url:'about:blank', active:false});
+    const second = await chrome.tabs.create({url:'about:blank', active:false});
+    const survivorKey = 'surviving-tab';
+    const firstKey = String(first.id);
+    const secondKey = String(second.id);
+    const refs = [{book:'john', chapter:3, from:16, to:16, version:'kjv'}];
+    await chrome.storage.local.set({
+      blbSuitePendingMultiVerseRefsByTab:{
+        [firstKey]:refs,
+        [secondKey]:refs,
+        [survivorKey]:refs
+      }
+    });
+
+    const originalGet = chrome.storage.local.get;
+    let pendingReads = 0;
+    let activeReads = 0;
+    let maxConcurrentReads = 0;
+    let releaseReads;
+    let signalReads;
+    const bothReadsStarted = new Promise(resolve => { signalReads = resolve; });
+    const release = new Promise(resolve => { releaseReads = resolve; });
+    chrome.storage.local.get = async defaults => {
+      if (defaults && Object.prototype.hasOwnProperty.call(defaults, 'blbSuitePendingMultiVerseRefsByTab')) {
+        pendingReads++;
+        activeReads++;
+        maxConcurrentReads = Math.max(maxConcurrentReads, activeReads);
+        const snapshot = await originalGet.call(chrome.storage.local, defaults);
+        if (pendingReads === 1) {
+          signalReads();
+          await Promise.race([release, new Promise(resolve => setTimeout(resolve, 150))]);
+        } else if (pendingReads === 2) {
+          releaseReads();
+        }
+        activeReads--;
+        return snapshot;
+      }
+      return originalGet.call(chrome.storage.local, defaults);
+    };
+
+    try {
+      await Promise.all([chrome.tabs.remove(first.id), chrome.tabs.remove(second.id)]);
+      await bothReadsStarted;
+      await new Promise(resolve => setTimeout(resolve, 250));
+      const saved = await originalGet.call(chrome.storage.local, {
+        blbSuitePendingMultiVerseRefsByTab:{}
+      });
+      const map = saved.blbSuitePendingMultiVerseRefsByTab || {};
+      return {
+        firstClosedEntryPresent:Object.prototype.hasOwnProperty.call(map, firstKey),
+        secondClosedEntryPresent:Object.prototype.hasOwnProperty.call(map, secondKey),
+        survivorPreserved:Array.isArray(map[survivorKey]),
+        maxConcurrentCleanupReads:maxConcurrentReads
+      };
+    } finally {
+      chrome.storage.local.get = originalGet;
+      await Promise.all([first.id, second.id].map(id => chrome.tabs.remove(id).catch(() => {})));
+    }
+  });
+
+  expect(result).toEqual({
+    firstClosedEntryPresent:false,
+    secondClosedEntryPresent:false,
+    survivorPreserved:true,
+    maxConcurrentCleanupReads:1
+  });
+});
+
 test('navigating a tracked MultiVerse tab to an unrelated page clears its persisted reservation', async ({
   extensionWorker, extensionStorage
 }) => {
