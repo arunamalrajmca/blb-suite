@@ -1124,11 +1124,13 @@ test('a site opt-out during an in-flight registration cannot leave the site cont
       globalThis.__siteOptOutRelease = releaseRegistration;
     }, {id:registrationId,mainId:mainWorldId});
 
+    // Pass the registration ID intercepted above, not a tab ID. Otherwise
+    // the registration gate is never entered and the start signal never resolves.
     await extensionWorker.evaluate(id => {
       globalThis.__siteOptOutActivation = registerRuntimeContentScriptForPattern(
         {url:'https://example.com/',id}, ['content.js']
       );
-    }, tabId);
+    }, registrationId);
     await extensionWorker.evaluate(() => globalThis.__siteOptOutStarted);
 
     await extensionWorker.evaluate(async () => {
@@ -1146,14 +1148,22 @@ test('a site opt-out during an in-flight registration cannot leave the site cont
     );
     expect(remaining).toEqual([]);
   } finally {
-    await extensionWorker.evaluate(async ({id,mainId,settings}) => {
-      globalThis.__siteOptOutRestore?.();
-      delete globalThis.__siteOptOutRestore;
-      delete globalThis.__siteOptOutStarted;
-      delete globalThis.__siteOptOutRelease;
-      await chrome.scripting.unregisterContentScripts({ids:[id,mainId]}).catch(() => {});
-      await chrome.storage.local.set(settings);
-      await reconcileRuntimeContentScriptRegistrations().catch(() => {});
-    }, {id:registrationId,mainId:mainWorldId,settings:previous});
+    try {
+      await extensionWorker.evaluate(async ({id,mainId,settings}) => {
+        globalThis.__siteOptOutRestore?.();
+        delete globalThis.__siteOptOutRestore;
+        delete globalThis.__siteOptOutStarted;
+        delete globalThis.__siteOptOutRelease;
+        await chrome.scripting.unregisterContentScripts({ids:[id,mainId]}).catch(() => {});
+        await chrome.storage.local.set(settings);
+        await reconcileRuntimeContentScriptRegistrations().catch(() => {});
+      }, {id:registrationId,mainId:mainWorldId,settings:previous});
+    } catch (error) {
+      // Preserve the test's original failure if Playwright has already closed
+      // the worker after a timeout; otherwise surface genuine cleanup errors.
+      if (!String(error).includes('Target page, context or browser has been closed')) {
+        throw error;
+      }
+    }
   }
 });
