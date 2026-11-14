@@ -365,6 +365,7 @@ async function startStudyTopicFromPopup(title, note = "", refreshAlarm = refresh
     // its configured inactivity alarm. Restore the prior recording state and
     // refresh its alarm before returning a failure to the popup.
     let restored = false;
+    let alarmRestored = false;
     try {
       await chrome.storage.local.set({
         currentStudySessionId:previousRecordingState.currentStudySessionId,
@@ -372,17 +373,24 @@ async function startStudyTopicFromPopup(title, note = "", refreshAlarm = refresh
         studyPausedTopic:previousRecordingState.studyPausedTopic,
         studyPauseReason:previousRecordingState.studyPauseReason
       });
-      await refreshAlarm();
       restored = true;
+      try {
+        await refreshAlarm();
+        alarmRestored = true;
+      } catch (rollbackError) {
+        console.error('KJV Scripture Tools could not restore the Study auto-stop alarm after a failed recording start:', String(rollbackError));
+      }
     } catch (rollbackError) {
       console.error('KJV Scripture Tools could not roll back a failed Study recording start:', String(rollbackError));
     }
     void notifyStudyUiChanged();
+    const actualState = await chrome.storage.local.get({currentStudySessionId:null});
     return {
       ok:false,
       error:String(error),
       restored,
-      recording:restored && !!previousRecordingState.currentStudySessionId
+      alarmRestored,
+      recording:!!actualState.currentStudySessionId
     };
   }
   return {ok:true, topic:session.title, recording:true};
