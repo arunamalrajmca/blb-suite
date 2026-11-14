@@ -1108,6 +1108,48 @@ test('@failure-first Double-click reports a transient destination failure and su
   });
 });
 
+test('tab replacement preserves BLB, ScriptTagger, and MultiVerse destination identity', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  const ids = { removed: 71001, added: 71002 };
+  const result = await extensionWorker.evaluate(async ({removed, added}) => {
+    blbLogicalTabRegistry.clear();
+    intentionalNewBlbTabs.clear();
+    scriptTaggerDestinationTabs.clear();
+    rememberBlbTab('blb|kjv|john|3|16', removed);
+    intentionalNewBlbTabs.add(removed);
+    scriptTaggerDestinationTabs.set('script-tagger|kjv|jhn|3|16', removed);
+    await chrome.storage.local.set({
+      blbSuiteMultiVerseTabSets: {
+        [String(removed)]: {key:'multiverse|genesis|1', refs:[{book:'Genesis',chapter:1,from:1,to:1}]}
+      },
+      blbSuitePendingMultiVerseRefsByTab: {
+        [String(removed)]: [{book:'Genesis',chapter:1,from:1,to:1}]
+      }
+    });
+
+    await handleReplacedTabIdentity(added, removed);
+    const storage = await chrome.storage.local.get({
+      blbSuiteMultiVerseTabSets:{},
+      blbSuitePendingMultiVerseRefsByTab:{}
+    });
+    return {
+      blbTab:blbLogicalTabRegistry.get('blb|kjv|john|3|16'),
+      intentional: intentionalNewBlbTabs.has(added) && !intentionalNewBlbTabs.has(removed),
+      scriptTagger:scriptTaggerDestinationTabs.get('script-tagger|kjv|jhn|3|16'),
+      multiVerse:storage.blbSuiteMultiVerseTabSets,
+      pendingRefs:storage.blbSuitePendingMultiVerseRefsByTab
+    };
+  }, ids);
+
+  expect(result.blbTab).toBe(ids.added);
+  expect(result.intentional).toBe(true);
+  expect(result.scriptTagger).toBe(ids.added);
+  expect(result.multiVerse[String(ids.added)]).toMatchObject({key:'multiverse|genesis|1'});
+  expect(result.multiVerse[String(ids.removed)]).toBeUndefined();
+  expect(result.pendingRefs[String(ids.added)]).toHaveLength(1);
+  expect(result.pendingRefs[String(ids.removed)]).toBeUndefined();
+});
+
 test('closing remembered BLB and ScriptTagger destination tabs clears their mappings and permits fresh opens', async ({
   extensionWorker
 }) => {
