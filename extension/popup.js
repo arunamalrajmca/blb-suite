@@ -744,7 +744,13 @@ async function startTopic() {
     return;
   }
   const response = await chrome.runtime.sendMessage({type:'blbSuiteStartStudyTopic', title:topic, note:''});
-  if (!response?.ok) { setStatus('Unable to start recording.'); return; }
+  if (!response?.ok) {
+    setStatus(response?.recording
+      ? 'Recording may still be active, but its auto-stop alarm could not be confirmed. Check Study status.'
+      : 'Unable to start recording.');
+    await refreshStudyState();
+    return;
+  }
   setStatus(`Recording started: ${response.topic}`);
   await refreshStudyState();
 }
