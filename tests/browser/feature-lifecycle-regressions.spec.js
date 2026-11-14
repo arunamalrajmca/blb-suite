@@ -500,12 +500,17 @@ test('Study Sessions alarm creation failure rolls back a newly started recording
   });
 
   const topic = 'BLB regression failed alarm start ' + Date.now();
-  const result = await extensionWorker.evaluate(value =>
-    startStudyTopicFromPopup(value, '', async () => {
-      throw new Error('simulated alarm creation failure');
-    }), topic
-  );
+  const attempt = await extensionWorker.evaluate(async value => {
+    let calls = 0;
+    const result = await startStudyTopicFromPopup(value, '', async () => {
+      calls += 1;
+      if (calls === 1) throw new Error('simulated alarm creation failure');
+    });
+    return {result, calls};
+  }, topic);
+  const result = attempt.result;
 
+  expect(attempt.calls).toBe(2);
   expect(result).toMatchObject({
     ok:false,
     restored:true,
@@ -524,7 +529,8 @@ test('Study Sessions alarm creation failure rolls back a newly started recording
   expect(state.studyLastActivityAt).toBe(0);
   expect(state.studyPausedTopic).toBe('Previously Paused Topic');
   expect(state.studyPauseReason).toBe('inactivity');
-  expect(state.studySessions.some(session => session.title === topic)).toBe(true);
+  const normalizedTopic = await extensionWorker.evaluate(value => normalizeStudyTopic(value), topic);
+  expect(state.studySessions.some(session => session.title === normalizedTopic)).toBe(true);
 });
 
 test('Study Sessions auto-stop alarm follows recording, settings, and master-toggle lifecycle', async ({ extensionWorker, extensionStorage }) => {
