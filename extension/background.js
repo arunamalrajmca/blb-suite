@@ -6561,6 +6561,24 @@ async function syncWebSelectionContextMenuVisibility(tab) {
   }
 }
 
+// A prerender/instant replacement has its own tabs.onReplaced event and must
+// refresh the global menus when the replacement is the active tab. Do not let
+// a replacement in a background window change the last-focused window's menus.
+async function syncSelectionMenusAfterTabReplacement(addedTabId) {
+  const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+  const activeTab = tabs[0];
+  if (!activeTab || activeTab.id !== addedTabId) return false;
+  await Promise.all([
+    syncWebSelectionContextMenuVisibility(activeTab),
+    syncPdfSelectionContextMenuVisibility(activeTab)
+  ]);
+  return true;
+}
+
+chrome.tabs.onReplaced.addListener(addedTabId => {
+  syncSelectionMenusAfterTabReplacement(addedTabId).catch(() => {});
+});
+
 // Keep the web selection menu persistent. Its visibility is synchronized on
 // page activation/navigation/site-setting changes and directly by the content
 // script before the floating Show on BLB button is exposed. Never remove and
