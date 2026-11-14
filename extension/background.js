@@ -6632,6 +6632,17 @@ chrome.tabs.onActivated.addListener(() => {
     syncPdfSelectionContextMenuVisibility(tab).catch(() => {});
   }).catch(() => {});
 });
+
+// Changing the focused window does not necessarily activate a different tab
+// inside that window. Keep the global menus aligned with the newly focused
+// window even when no tabs.onActivated event is emitted.
+chrome.windows.onFocusChanged.addListener(() => {
+  chrome.tabs.query({active:true,lastFocusedWindow:true}).then(tabs => {
+    const tab = tabs[0];
+    syncWebSelectionContextMenuVisibility(tab).catch(() => {});
+    syncPdfSelectionContextMenuVisibility(tab).catch(() => {});
+  }).catch(() => {});
+});
 async function shouldInjectContentScriptForTab(tab, data) {
   if (!tab?.url || !isHttpPageUrl(tab.url)) return false;
   const key = normalizeSiteHostname(hostnameFromTabUrl(tab.url));
