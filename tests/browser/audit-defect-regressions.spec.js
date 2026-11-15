@@ -153,6 +153,58 @@ test('Study Sessions remains readable when persisting normalized history fails',
   expect(result.stored[0]).toBeNull();
 });
 
+test('Study Sessions clears a current-session pointer when normalization removes that session', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    studySessions: [
+      null,
+      { id: 'audit-valid-history', title: 'Valid Topic', refs: [], strongs: [], searchTerms: [], notes: [] }
+    ],
+    currentStudySessionId: 'audit-discarded-session',
+    studyLastActivityAt: 12345
+  });
+
+  const result = await extensionWorker.evaluate(async () => {
+    const state = await getStudySessions();
+    const stored = await chrome.storage.local.get([
+      'studySessions',
+      'currentStudySessionId',
+      'studyLastActivityAt'
+    ]);
+    return { state, stored };
+  });
+
+  expect(result.state.sessions).toHaveLength(1);
+  expect(result.state.currentId).toBeNull();
+  expect(result.stored.currentStudySessionId).toBeNull();
+  expect(result.stored.studyLastActivityAt).toBe(0);
+});
+
+test('Study Sessions repairs a malformed top-level history value and stale current pointer', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({
+    studySessions: { malformed: true },
+    currentStudySessionId: 'missing-session',
+    studyLastActivityAt: 98765
+  });
+
+  const result = await extensionWorker.evaluate(async () => {
+    const state = await getStudySessions();
+    const stored = await chrome.storage.local.get([
+      'studySessions',
+      'currentStudySessionId',
+      'studyLastActivityAt'
+    ]);
+    return { state, stored };
+  });
+
+  expect(result.state.sessions).toEqual([]);
+  expect(result.state.currentId).toBeNull();
+  expect(result.stored.studySessions).toEqual([]);
+  expect(result.stored.currentStudySessionId).toBeNull();
+  expect(result.stored.studyLastActivityAt).toBe(0);
+});
+
 test('disabling the last site feature removes both persistent isolated- and MAIN-world registrations', async ({ extensionWorker, extensionStorage }) => {
   await extensionStorage.clear();
   await extensionStorage.set({
