@@ -6947,8 +6947,19 @@ async function injectConfiguredTabsAfterExtensionUpdate() {
 // persisted registrations immediately so a site no longer retains a runtime
 // content-script registration after its grant is removed. Keep the explicit
 // site preference intact; a later re-grant can reactivate it through onAdded.
+async function handleHostPermissionsRemoved() {
+  try {
+    await reconcileRuntimeContentScriptRegistrations();
+  } finally {
+    // Permission loss changes the eligibility of the active tab even when
+    // its URL and focus do not change. Refresh both global selection menus
+    // immediately so a revoked site's right-click action is not left visible.
+    await syncSelectionMenusForFocusedWindow();
+  }
+}
+
 chrome.permissions?.onRemoved?.addListener(() => {
-  reconcileRuntimeContentScriptRegistrations().catch(error => {
+  handleHostPermissionsRemoved().catch(error => {
     console.warn('KJV Scripture Tools permission-revocation reconciliation failed:', String(error));
   });
 });
