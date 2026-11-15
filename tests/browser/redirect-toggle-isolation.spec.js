@@ -322,3 +322,13 @@ test('initial content-script master and redirect reads cannot override newer sto
   expect(source).toContain('redirectSettingsGeneration += 1;');
   expect(source).toContain('suiteSettingsGeneration += 1;');
 });
+
+test('source collectors recheck the current master gate after asynchronous initialization', () => {
+  const content = fs.readFileSync(path.resolve(__dirname, '../../extension/content.js'), 'utf8');
+  const kings = fs.readFileSync(path.resolve(__dirname, '../../extension/kings-bible-collector.js'), 'utf8');
+  const webster = fs.readFileSync(path.resolve(__dirname, '../../extension/webster-collector.js'), 'utf8');
+  expect(content).toContain('isSuiteEnabledNow: () => suiteEnabled');
+  expect(kings).toContain('isSuiteEnabledNow = isSuiteEnabled');
+  expect(kings).toContain('!isSuiteEnabledNow()');
+  expect(webster).toContain('if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) return;');
+});
