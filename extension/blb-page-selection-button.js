@@ -13,6 +13,7 @@
     let lastSelectionContextualText = '';
     let blbPageButtonVisible = false;
     let pageButtonMonitoring = false;
+    let pageButtonSettingsRefreshGeneration = 0;
     let pageButtonSelectionFrame = 0;
     let pageButtonValidationToken = 0;
     let pageButtonActionInProgress = false;
@@ -602,6 +603,7 @@
     });
     
     async function refreshBlbPageSelectionButton() {
+      const generation = ++pageButtonSettingsRefreshGeneration;
       try {
         if (isBlbPageButtonExcludedSite() || isSensitiveSiteUrl(location.href)) {
           disableBlbPageButtonMonitoring();
@@ -609,6 +611,7 @@
         }
         const siteKey = getPageSelectionSiteKey();
         const data = await chrome.storage.local.get({pageSelectionButtonSites:{}});
+        if (generation !== pageButtonSettingsRefreshGeneration) return;
         const sites = data.pageSelectionButtonSites && typeof data.pageSelectionButtonSites === 'object'
           ? data.pageSelectionButtonSites
           : {};
@@ -618,12 +621,14 @@
         // Keep the native context-menu item in lockstep with the exact setting that
         // controls the floating Show on BLB button.
         await safeRuntimeSendMessage({type:'blbSuiteSyncSelectionContextMenu'});
+        if (generation !== pageButtonSettingsRefreshGeneration) return;
         if (!isSuiteEnabledNow() || !shouldEnable) {
           disableBlbPageButtonMonitoring();
           return;
         }
         enableBlbPageButtonMonitoring();
       } catch (_) {
+        if (generation !== pageButtonSettingsRefreshGeneration) return;
         // Fail closed if site-feature settings or defaults cannot be read.
         disableBlbPageButtonMonitoring();
         try { await safeRuntimeSendMessage({type:'blbSuiteSyncSelectionContextMenu'}); } catch (_) {}
