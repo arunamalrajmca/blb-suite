@@ -947,18 +947,6 @@ async function recordStudyRefs(refs) {
   return added;
 }
 
-async function recordStudyNote(text) {
-  const note = String(text || '').trim();
-  if (!note) return false;
-  const data = await getStudySessions();
-  const current = data.sessions.find(s => s.id === data.currentId);
-  if (!current || String(current.title || '').trim().toLowerCase() === 'uncategorized') return false;
-  await chrome.storage.local.set({studyLastActivityAt:Date.now()});
-  if (!Array.isArray(current.notes)) current.notes = [];
-  current.notes.push(note);
-  await saveStudySessions(data.sessions, {currentStudySessionId:current.id});
-  return true;
-}
 
 async function recordStudyStrong(entry) {
   const value = canonicalStoredStrong(entry);
@@ -3173,7 +3161,7 @@ function recordBlbBackgroundSelectionStage(stage, startedAt, details = {}) {
     globalThis.__blbSuiteSelectionStageTimings = rows;
   } catch (_) {}
 }
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeatureOff","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudyNote","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeatureOff","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
 
 // Serialize MultiVerse POST scheduling while creating all destination tabs immediately.
 // Reserve submission timestamps in one shared FIFO queue, but never sleep inside the
@@ -3756,11 +3744,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === 'blbSuiteCaptureStudyNote') {
-    try { sendResponse({ok:await recordStudyNote(message.note)}); }
-    catch (error) { sendResponse({ok:false, error:String(error)}); }
-    return true;
-  }
 
   if (message.type === 'blbSuiteCaptureStudySearchTerm') {
     try { sendResponse({ok:await recordStudySearchTerm(message.term)}); }
