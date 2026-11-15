@@ -69,7 +69,7 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/study-reference-capture.js"],
-    specs: ["tests/browser/redirect-toggle-isolation.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js"]
+    specs: ["tests/browser/study-reference-capture.spec.js", "tests/browser/redirect-toggle-isolation.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js"]
   },
   {
     paths: ["extension/source-bible-redirect.js"],
