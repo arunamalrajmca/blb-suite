@@ -257,8 +257,7 @@ test('host-access revocation removes registrations and later grants reactivate e
     }
   } finally {
     await extensionWorker.evaluate(async ({originPattern,settings}) => {
-      const id=runtimeContentScriptIdForPattern(originPattern);
-      await chrome.scripting.unregisterContentScripts({ids:[id,id+'-main-world']}).catch(() => {});
+      await unregisterRuntimeContentScriptForPattern(originPattern);
       await chrome.storage.local.set(settings);
     }, {originPattern:pattern,settings:previous});
   }
@@ -598,8 +597,7 @@ test('global OFF remains authoritative across permission revocation, regrant, an
     });
   } finally {
     await extensionWorker.evaluate(async ({originPattern,settings}) => {
-      const id = runtimeContentScriptIdForPattern(originPattern);
-      await chrome.scripting.unregisterContentScripts({ids:[id,id+'-main-world']}).catch(() => {});
+      await unregisterRuntimeContentScriptForPattern(originPattern);
       await chrome.storage.local.set(settings);
       await reconcileRuntimeContentScriptRegistrations().catch(() => {});
     }, {originPattern:pattern,settings:previous});
@@ -719,8 +717,7 @@ test('sensitive-site restrictions and explicit site opt-outs survive permission 
   } finally {
     await extensionWorker.evaluate(async ({patterns,settings}) => {
       for (const pattern of patterns) {
-        const id = runtimeContentScriptIdForPattern(pattern);
-        await chrome.scripting.unregisterContentScripts({ids:[id,id+'-main-world']}).catch(() => {});
+        await unregisterRuntimeContentScriptForPattern(pattern);
       }
       await chrome.storage.local.set(settings);
       await reconcileRuntimeContentScriptRegistrations().catch(() => {});
@@ -1027,8 +1024,7 @@ test('permission revocation blocks all four actions on an already-open page and 
         chrome.permissions.contains = globalThis.__permissionRevocationOriginalContains;
         delete globalThis.__permissionRevocationOriginalContains;
       }
-      const id = runtimeContentScriptIdForPattern(originPattern);
-      await chrome.scripting.unregisterContentScripts({ids:[id,id+'-main-world']}).catch(() => {});
+      await unregisterRuntimeContentScriptForPattern(originPattern);
       await chrome.storage.local.set(settings);
     }, {originPattern:pattern,settings:previous});
   }
@@ -1151,7 +1147,7 @@ test('permission revocation during an in-flight registration cannot leave a pers
 
   try {
     await extensionWorker.evaluate(async ({originPattern, id, mainId}) => {
-      await chrome.scripting.unregisterContentScripts({ids:[id,mainId]}).catch(() => {});
+      await unregisterRuntimeContentScriptForPattern(originPattern);
       await chrome.storage.local.set({
         masterEnabled:false,
         redirectEnabled:false,
@@ -1162,7 +1158,7 @@ test('permission revocation during an in-flight registration cannot leave a pers
       await runtimeContentScriptReconciliationQueue;
       // Keep the master OFF during setup so the storage listener cannot start
       // an uninstrumented activation before the registration gate is installed.
-      await chrome.scripting.unregisterContentScripts({ids:[id,mainId]}).catch(() => {});
+      await unregisterRuntimeContentScriptForPattern(originPattern);
 
       const originalRegister = chrome.scripting.registerContentScripts;
       let accessGranted = true;
@@ -1218,16 +1214,16 @@ test('permission revocation during an in-flight registration cannot leave a pers
     );
     expect(remaining).toEqual([]);
   } finally {
-    await extensionWorker.evaluate(async ({id,mainId,settings}) => {
+    await extensionWorker.evaluate(async ({originPattern,id,mainId,settings}) => {
       globalThis.__permissionRaceRestore?.();
       delete globalThis.__permissionRaceRestore;
       delete globalThis.__permissionRaceRevoke;
       delete globalThis.__permissionRaceStarted;
       delete globalThis.__permissionRaceRelease;
-      await chrome.scripting.unregisterContentScripts({ids:[id,mainId]}).catch(() => {});
+      await unregisterRuntimeContentScriptForPattern(originPattern);
       await chrome.storage.local.set(settings);
       await reconcileRuntimeContentScriptRegistrations().catch(() => {});
-    }, {id:registrationId,mainId:mainWorldId,settings:previous});
+    }, {originPattern:pattern,id:registrationId,mainId:mainWorldId,settings:previous});
   }
 });
 
@@ -1268,7 +1264,7 @@ test('a site opt-out during an in-flight registration cannot leave the site cont
   const mainWorldId = registrationId + '-main-world';
 
   try {
-    await extensionWorker.evaluate(async ({id,mainId}) => {
+    await extensionWorker.evaluate(async ({originPattern,id,mainId}) => {
       await chrome.storage.local.set({
         masterEnabled:true,
         redirectEnabled:false,
@@ -1301,7 +1297,7 @@ test('a site opt-out during an in-flight registration cannot leave the site cont
       };
       globalThis.__siteOptOutStarted = started;
       globalThis.__siteOptOutRelease = releaseRegistration;
-    }, {id:registrationId,mainId:mainWorldId});
+    }, {originPattern:pattern,id:registrationId,mainId:mainWorldId});
 
     // Pass the registration ID intercepted above, not a tab ID. Otherwise
     // the registration gate is never entered and the start signal never resolves.
@@ -1328,15 +1324,15 @@ test('a site opt-out during an in-flight registration cannot leave the site cont
     expect(remaining).toEqual([]);
   } finally {
     try {
-      await extensionWorker.evaluate(async ({id,mainId,settings}) => {
+      await extensionWorker.evaluate(async ({originPattern,id,mainId,settings}) => {
         globalThis.__siteOptOutRestore?.();
         delete globalThis.__siteOptOutRestore;
         delete globalThis.__siteOptOutStarted;
         delete globalThis.__siteOptOutRelease;
-        await chrome.scripting.unregisterContentScripts({ids:[id,mainId]}).catch(() => {});
+        await unregisterRuntimeContentScriptForPattern(originPattern);
         await chrome.storage.local.set(settings);
         await reconcileRuntimeContentScriptRegistrations().catch(() => {});
-      }, {id:registrationId,mainId:mainWorldId,settings:previous});
+      }, {originPattern:pattern,id:registrationId,mainId:mainWorldId,settings:previous});
     } catch (error) {
       // Preserve the test's original failure if Playwright has already closed
       // the worker after a timeout; otherwise surface genuine cleanup errors.
