@@ -2178,13 +2178,13 @@ test('background extension-page messages reject content scripts and bind the Mul
       target: { tabId },
       world: 'ISOLATED',
       func: async () => ({
-        studyState: await chrome.runtime.sendMessage({ type: 'blbSuiteGetStudyUiState' }),
+        studyMutation: await chrome.runtime.sendMessage({ type: 'blbSuiteClearStudy' }),
         queueSlot: await chrome.runtime.sendMessage({ type: 'blbSuiteAcquireMultiVersePostSlot' })
       })
     });
     return result.result;
   }, sourceTabId);
-  expect(contentScriptResponses.studyState).toEqual({ ok: false, error: 'Unauthorized sender' });
+  expect(contentScriptResponses.studyMutation).toEqual({ ok: false, error: 'Unauthorized sender' });
   expect(contentScriptResponses.queueSlot).toEqual({ ok: false, error: 'Unauthorized sender' });
 
   const popupPage = await context.newPage();
