@@ -3199,9 +3199,10 @@ async function isAuthorizedContentScriptSender(sender, allowedHosts = null) {
   if (!sender || sender.id !== chrome.runtime.id ||
       !Number.isInteger(sender.tab?.id) || typeof sender.url !== 'string') return false;
   if (sender.url.startsWith(chrome.runtime.getURL(''))) return false;
-  if (!(await hasSelectionActionPermissionForTab(sender.tab))) return false;
+  const permissionTab = {...sender.tab, url:sender.url || sender.tab.url};
+  if (!(await hasSelectionActionPermissionForTab(permissionTab))) return false;
   if (!allowedHosts) return true;
-  const host = normalizeSiteHostname(hostnameFromTabUrl(sender.tab.url || sender.url));
+  const host = normalizeSiteHostname(hostnameFromTabUrl(sender.url || sender.tab.url));
   return allowedHosts.has(host);
 }
 
@@ -3212,7 +3213,7 @@ const BLB_AND_WEBSTER_CONTENT_SCRIPT_HOSTS = new Set([
 ]);
 
 function isSourceCollectorContentScriptSender(sender) {
-  const host = normalizeSiteHostname(hostnameFromTabUrl(sender?.tab?.url || sender?.url));
+  const host = normalizeSiteHostname(hostnameFromTabUrl(sender?.url || sender?.tab?.url));
   return host === BLB_HOSTNAME ||
     Object.prototype.hasOwnProperty.call(globalThis.BLBSourcePageCollectorSites || {}, host);
 }
