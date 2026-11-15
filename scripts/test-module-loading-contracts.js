@@ -378,7 +378,7 @@ if (unownedAsyncMessages.length) {
 // UI/workflow. Content scripts share the extension ID, so sender.id alone is
 // not an authorization boundary.
 const extensionPageMessageSourcesMatch = background.match(
-  /const EXTENSION_PAGE_MESSAGE_SOURCES = new Map\\(\\[([\\s\\S]*?)\\]\\);/
+  /const EXTENSION_PAGE_MESSAGE_SOURCES = new Map\(\[([\s\S]*?)\]\);/
 );
 const extensionPageSourceFiles = new Map([
   ['popup.html', 'popup.js'],
@@ -389,7 +389,7 @@ if (!extensionPageMessageSourcesMatch) {
   fail('extension-page-only background messages declare their owning page');
 } else {
   const entries = [...extensionPageMessageSourcesMatch[1].matchAll(
-    /\\[['"]([^'"]+)['"],\\s*['"]([^'"]+)['"]\\]/g
+    /\[['"]([^'"]+)['"],\s*['"]([^'"]+)['"]\]/g
   )].map(match => ({ type:match[1], page:match[2] }));
   const duplicateTypes = entries.filter((entry, index) =>
     entries.findIndex(candidate => candidate.type === entry.type) !== index
@@ -426,7 +426,7 @@ if (!extensionPageMessageSourcesMatch) {
   }
 }
 const trustedPageHelper = background.match(
-  /function isTrustedExtensionPageSender\\(sender, expectedPagePath = ''\\) \\{([\\s\\S]*?)\\n\\}/
+  /function isTrustedExtensionPageSender\(sender, expectedPagePath = ''\) \{([\s\S]*?)\n\}/
 );
 if (!trustedPageHelper ||
     !['sender.id', 'sender.url', 'chrome.runtime.getURL', 'senderUrl.origin', 'senderUrl.pathname']
