@@ -3787,9 +3787,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // The content script waits for this response before exposing the floating
     // Show on BLB button. Await the native-menu visibility update so the two
     // controls become visible atomically from the user's point of view.
-    syncWebSelectionContextMenuVisibility(sender?.tab)
-      .then(() => sendResponse({ok:true}))
-      .catch(() => sendResponse({ok:false}));
+    const isCurrent = beginSelectionMenuContextSync();
+    chrome.tabs.query({active:true,lastFocusedWindow:true}).then(tabs => {
+      if (!isCurrent() || !tabs[0]) {
+        sendResponse({ok:false});
+        return;
+      }
+      return syncWebSelectionContextMenuVisibility(tabs[0], false, isCurrent)
+        .then(() => sendResponse({ok:true}));
+    }).catch(() => sendResponse({ok:false}));
     return true;
   }
 
@@ -6945,6 +6951,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     injectRedirectEnabledTabs().catch(() => {});
   }
   if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites || changes.doubleClickBlbSites) {
+    const isCurrent = beginSelectionMenuContextSync();
     reconcileRuntimeContentScriptRegistrations().catch(error => {
       console.warn('KJV Scripture Tools runtime registration reconciliation failed:', String(error));
     });
@@ -6954,8 +6961,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
     // first-right-click race.
     chrome.tabs.query({active:true,lastFocusedWindow:true})
       .then(tabs => {
+        if (!isCurrent()) return;
         const tab = tabs[0];
-        if (tab) syncWebSelectionContextMenuVisibility(tab).catch(() => {});
+        if (tab) syncWebSelectionContextMenuVisibility(tab, false, isCurrent).catch(() => {});
       })
       .catch(() => {});
     // Preference changes must not remove/recreate the global PDF menu item.
@@ -6963,6 +6971,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     // returns after asynchronous installation/visibility synchronization.
     chrome.tabs.query({active:true,lastFocusedWindow:true})
       .then(async tabs => {
+        if (!isCurrent()) return;
         const tab = tabs[0];
         if (!tab) return;
         if (tab.id && (changes.pageSelectionButtonSites || changes.doubleClickBlbSites)) {
@@ -6975,7 +6984,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
             : (await chrome.storage.local.get({doubleClickBlbSites:{}})).doubleClickBlbSites;
           if (key && (pageSites?.[key] === true || doubleSites?.[key] === true)) await ensureContentScriptInTab(tab.id);
         }
-        await syncPdfSelectionContextMenuVisibility(tab);
+        if (isCurrent()) await syncPdfSelectionContextMenuVisibility(tab, isCurrent);
       })
       .catch(() => {});
   }
