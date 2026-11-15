@@ -69,6 +69,8 @@ test('content-script Study and MultiVerse messages enforce source hosts and curr
   extensionWorker
 }) => {
   const unrelatedPage = await context.newPage();
+  let blbPage;
+  try {
   await unrelatedPage.route('https://example.com/**', route => route.fulfill({
     status: 200,
     contentType: 'text/html',
@@ -138,7 +140,7 @@ test('content-script Study and MultiVerse messages enforce source hosts and curr
   expect(inactiveSelectionResponse).toEqual({ ok: false, reason: 'unauthorized-sender' });
   await otherActivePage.close();
 
-  const blbPage = await context.newPage();
+  blbPage = await context.newPage();
   await blbPage.route('https://www.blueletterbible.org/**', route => route.fulfill({
     status: 200,
     contentType: 'text/html',
@@ -161,6 +163,10 @@ test('content-script Study and MultiVerse messages enforce source hosts and curr
     return injected.result;
   }, blbTabId);
   expect(allowedResponse).toEqual({ ok: true, refs: null });
+  } finally {
+    await blbPage?.close().catch(() => {});
+    await unrelatedPage.close().catch(() => {});
+  }
 });
 
 test('host-access revocation removes registrations and later grants reactivate each independently enabled site feature', async ({
