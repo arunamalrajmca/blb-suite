@@ -529,7 +529,7 @@ if (!websterMultiVerseBranch.includes('isSourceCollectorContentScriptSender(send
 
 
 const activeContentSenderHelper = background.match(
-  /async function isActiveTabContentScriptSender\\(sender\\) \\{([\\s\\S]*?)\\n\\}/
+  /async function isActiveTabContentScriptSender\(sender\) \{([\s\S]*?)\n\}/
 );
 if (!activeContentSenderHelper ||
     !['isAuthorizedContentScriptSender(sender)', 'chrome.tabs.query({active:true, currentWindow:true})', 'tabs[0]?.id === sender.tab.id']
@@ -545,7 +545,7 @@ const activeSelectionTypes = [
 ];
 for (const type of activeSelectionTypes) {
   const start = background.indexOf("if (message.type === '" + type + "'");
-  const end = start < 0 ? -1 : background.indexOf("\\n  if (message.type ===", start + 1);
+  const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
   const branch = start < 0 ? '' : background.slice(start, end < 0 ? undefined : end);
   if (!branch.includes('isActiveTabContentScriptSender(sender)')) {
     fail('selection handoff message ' + type + ' is bound to its active sender tab');
@@ -553,7 +553,7 @@ for (const type of activeSelectionTypes) {
 }
 if (activeSelectionTypes.every(type => {
   const start = background.indexOf("if (message.type === '" + type + "'");
-  const end = start < 0 ? -1 : background.indexOf("\\n  if (message.type ===", start + 1);
+  const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
   return start >= 0 && background.slice(start, end < 0 ? undefined : end)
     .includes('isActiveTabContentScriptSender(sender)');
 })) {
