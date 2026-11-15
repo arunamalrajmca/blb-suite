@@ -825,3 +825,49 @@ test('navigating a tracked MultiVerse tab to an unrelated page clears its persis
   expect(finalTab.url).toContain('/Tutorial.html');
   expect(finalTab.status).toBe('complete');
 });
+
+
+test('actual MultiVerse POST handoff navigation preserves its reservation until an unrelated destination completes', async ({
+  extensionId, extensionWorker, extensionStorage
+}) => {
+  await extensionStorage.set({blbSuiteMultiVerseTabSets:{}});
+  const tabId = await extensionWorker.evaluate(async () => {
+    const tab = await chrome.tabs.create({url:'about:blank', active:false});
+    await chrome.storage.local.set({
+      blbSuiteMultiVerseTabSets:{
+        [String(tab.id)]:{key:'actual-post-handoff-lifecycle', updatedAt:Date.now()}
+      }
+    });
+    return tab.id;
+  });
+
+  const handoffUrl = 'chrome-extension://' + extensionId + '/multiverse-post.html';
+  await extensionWorker.evaluate(({id,url}) => chrome.tabs.update(id,{url}), {id:tabId,url:handoffUrl});
+  await expect.poll(() => extensionWorker.evaluate(async id => {
+    const tab = await chrome.tabs.get(id);
+    return {url:tab.url,status:tab.status};
+  }, tabId)).toEqual({url:handoffUrl,status:'complete'});
+
+  await expect.poll(() => extensionWorker.evaluate(async id => {
+    const data = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
+    return data.blbSuiteMultiVerseTabSets[String(id)]?.key || null;
+  }, tabId)).toBe('actual-post-handoff-lifecycle');
+
+  const unrelatedUrl = 'chrome-extension://' + extensionId + '/Tutorial.html';
+  await extensionWorker.evaluate(({id,url}) => chrome.tabs.update(id,{url}), {id:tabId,url:unrelatedUrl});
+  await expect.poll(() => extensionWorker.evaluate(async id => {
+    const tab = await chrome.tabs.get(id);
+    const data = await chrome.storage.local.get({blbSuiteMultiVerseTabSets:{}});
+    return {
+      url:tab.url,
+      status:tab.status,
+      reservationPresent:Object.prototype.hasOwnProperty.call(data.blbSuiteMultiVerseTabSets,String(id))
+    };
+  }, tabId)).toEqual({
+    url:unrelatedUrl,
+    status:'complete',
+    reservationPresent:false
+  });
+
+  await extensionWorker.evaluate(id => chrome.tabs.remove(id), tabId);
+});
