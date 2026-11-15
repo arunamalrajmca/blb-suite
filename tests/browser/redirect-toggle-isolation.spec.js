@@ -312,3 +312,13 @@ test('stale ScriptTagger redirect settings cannot override a newer OFF choice', 
 test('stale BibleRef range redirect settings cannot override a newer OFF choice', async () => {
   expect(await runOutOfOrderRedirectRefresh('redirect-bibleref-ranges.js', 'bibleref')).toBe(false);
 });
+
+test('initial content-script master and redirect reads cannot override newer storage events', () => {
+  const source = fs.readFileSync(path.resolve(__dirname, '../../extension/content.js'), 'utf8');
+  expect(source).toContain('let suiteSettingsGeneration = 0;');
+  expect(source).toContain('if (initialSuiteSettingsGeneration === suiteSettingsGeneration)');
+  expect(source).toContain('let redirectSettingsGeneration = 0;');
+  expect(source).toContain('if (initialRedirectSettingsGeneration !== redirectSettingsGeneration) return;');
+  expect(source).toContain('redirectSettingsGeneration += 1;');
+  expect(source).toContain('suiteSettingsGeneration += 1;');
+});
