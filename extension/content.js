@@ -682,6 +682,7 @@ globalThis.BLBSourcePageCollectorModule?.initialize({
 globalThis.BLBMultiVerseHandoffModule?.initialize({
   BLBShared,
   isSuiteEnabled,
+  isSuiteEnabledNow: () => suiteEnabled,
   resolveBibleBook
 });
 
