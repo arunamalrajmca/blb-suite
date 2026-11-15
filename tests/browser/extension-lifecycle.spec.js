@@ -1333,3 +1333,69 @@ test('source-page collector tears down prior observers and storage listeners on 
   });
   await expect(page.locator('#blb-suite-gotquestions-multiverse')).toBeVisible({ timeout: 10000 });
 });
+
+
+test('dictionary collectors clean up prior listeners and observers on bundle reinjection', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true, pageSelectionButtonSites: {}, doubleClickBlbSites: {} });
+  const cases = [
+    {
+      url: 'https://www.thekingsbible.com/dictionary/faith',
+      route: 'https://www.thekingsbible.com/**',
+      button: '#blb-suite-kingsbible-multiverse',
+      cleanupKey: '__blbKingsBibleCollectorCleanup',
+      body: '<!doctype html><html><head><title>King James Bible dictionary</title></head><body><main><a class="bible" data-bible="43003016">John 3:16</a></main></body></html>'
+    },
+    {
+      url: 'https://webstersdictionary1828.com/dictionary/faith',
+      route: 'https://webstersdictionary1828.com/**',
+      button: '#blb-suite-webster-multiverse',
+      cleanupKey: '__blbWebsterCollectorCleanup',
+      body: '<!doctype html><html><head><title>Webster dictionary</title></head><body><main><a class="bible" href="/Bible/43/3">John 3:16</a></main></body></html>'
+    }
+  ];
+
+  for (const fixture of cases) {
+    await page.route(fixture.route, route => route.fulfill({
+      status: 200, contentType: 'text/html; charset=utf-8', body: fixture.body
+    }));
+    await page.goto(fixture.url, { waitUntil: 'domcontentloaded' });
+    await expect(page.locator(fixture.button)).toBeVisible({ timeout: 10000 });
+    const tabId = await extensionWorker.evaluate(async () =>
+      (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id
+    );
+    expect(Number.isInteger(tabId)).toBe(true);
+
+    for (let iteration = 0; iteration < 2; iteration++) {
+      const wrapped = await extensionWorker.evaluate(async ({ id, cleanupKey }) => {
+        const [result] = await chrome.scripting.executeScript({
+          target: { tabId: id }, world: 'ISOLATED',
+          func: key => {
+            const cleanup = globalThis[key];
+            if (typeof cleanup !== 'function') throw new Error('Missing collector cleanup: ' + key);
+            globalThis.__blbDictionaryCollectorCleanupCalls = 0;
+            globalThis[key] = () => { globalThis.__blbDictionaryCollectorCleanupCalls++; cleanup(); };
+            return true;
+          }, args: [cleanupKey]
+        });
+        return result.result;
+      }, { id: tabId, cleanupKey: fixture.cleanupKey });
+      expect(wrapped).toBe(true);
+
+      await extensionWorker.evaluate(async id => {
+        await chrome.scripting.executeScript({ target: { tabId: id }, files: BLB_CONTENT_SCRIPT_FILES });
+      }, tabId);
+      const cleanupCalls = await extensionWorker.evaluate(async id => {
+        const [result] = await chrome.scripting.executeScript({
+          target: { tabId: id }, world: 'ISOLATED',
+          func: () => globalThis.__blbDictionaryCollectorCleanupCalls
+        });
+        return result.result;
+      }, tabId);
+      expect(cleanupCalls).toBe(1);
+      await expect(page.locator(fixture.button)).toHaveCount(1);
+    }
+
+    await page.evaluate(() => document.body.replaceWith(document.createElement('body')));
+    await expect(page.locator(fixture.button)).toBeVisible({ timeout: 10000 });
+  }
+});
