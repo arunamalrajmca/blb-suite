@@ -289,6 +289,30 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
             ensureSourcePageButtonWhenReady();
           }
         });
+
+        // Recover the collector control if a supported source page replaces its
+        // body after initial load. Observe only direct document-element changes;
+        // page-wide subtree observation is unnecessary for this fixed control.
+        let sourceButtonCheckScheduled = false;
+        const scheduleSourceButtonCheck = () => {
+          if (sourceButtonCheckScheduled) return;
+          sourceButtonCheckScheduled = true;
+          requestAnimationFrame(() => {
+            sourceButtonCheckScheduled = false;
+            if (!document.getElementById(buttonId)) ensureSourcePageButtonWhenReady();
+          });
+        };
+        const sourceBodyObserver = new MutationObserver(scheduleSourceButtonCheck);
+        const startSourceBodyObserver = () => {
+          if (document.documentElement) {
+            sourceBodyObserver.observe(document.documentElement, { childList: true });
+          }
+        };
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", startSourceBodyObserver, { once: true });
+        } else {
+          startSourceBodyObserver();
+        }
       }
     }
     

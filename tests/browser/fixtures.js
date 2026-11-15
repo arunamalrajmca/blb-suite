@@ -47,7 +47,9 @@ const testHosts = [
   'https://sarata.com/*',
   'https://www.supplyofgrace.com/*',
   'https://sermonindex.net/*',
-  'https://webstersdictionary1828.com/*'
+  'https://webstersdictionary1828.com/*',
+  'https://www.thekingsbible.com/*',
+  'https://thekingsbible.com/*'
 ];
 
 const test = base.extend({

@@ -284,6 +284,32 @@ if (kingsBibleCollectorConfig?.collectorModule === "kings-bible" && kingsBibleEn
       ensureKingsBibleButtonWhenReady();
     }
   });
+
+  // Recover the collector control if the site rebuilds its body after load.
+  // A direct-child observer on <html> catches body replacement without waking
+  // on ordinary content mutations inside the dictionary/concordance page.
+  let kingsButtonCheckScheduled = false;
+  const scheduleKingsButtonCheck = () => {
+    if (kingsButtonCheckScheduled) return;
+    kingsButtonCheckScheduled = true;
+    requestAnimationFrame(() => {
+      kingsButtonCheckScheduled = false;
+      if (!document.getElementById("blb-suite-kingsbible-multiverse")) {
+        ensureKingsBibleButtonWhenReady();
+      }
+    });
+  };
+  const kingsBodyObserver = new MutationObserver(scheduleKingsButtonCheck);
+  const startKingsBodyObserver = () => {
+    if (document.documentElement) {
+      kingsBodyObserver.observe(document.documentElement, { childList: true });
+    }
+  };
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", startKingsBodyObserver, { once: true });
+  } else {
+    startKingsBodyObserver();
+  }
 }
   }
 });
