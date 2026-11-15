@@ -155,6 +155,7 @@
     function removeBlbPageSelectionButton() {
       setBlbPageButtonVisible(false);
       const button = document.getElementById(BLB_PAGE_BUTTON_ID);
+      button?.__blbDragCleanup?.();
       button?.__blbDragVisibilityObserver?.disconnect();
       document.getElementById(BLB_PAGE_BUTTON_ID + '-reset-position')?.remove();
       button?.remove();
@@ -168,6 +169,7 @@
         // An extension reload invalidates the old content-script context but
         // can leave its DOM button behind. That button still owns the old
         // click listener, so replace it when the current bundle initializes.
+        existingButton.__blbDragCleanup?.();
         existingButton.__blbDragVisibilityObserver?.disconnect();
         existingButton.remove();
         document.getElementById(BLB_PAGE_BUTTON_ID + '-reset-position')?.remove();
