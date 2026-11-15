@@ -665,6 +665,7 @@ globalThis.BLBSourcePageCollectorModule?.initialize({
   blbUrl,
   formatSourceBibleBookName,
   isSuiteEnabled,
+  isSuiteEnabledNow: () => suiteEnabled,
   makeBlbMultiVerseButtonDraggable
 });
 
@@ -3310,6 +3311,7 @@ function getDoubleClickBlockContextReference(selectionText, target, event = null
 let doubleClickBound = false;
 let doubleClickSettingsReady = false;
 let doubleClickSettingsRefreshPromise = null;
+let doubleClickSettingsRefreshGeneration = 0;
 const recentDoubleClickDestinations = new WeakMap();
 let doubleClickRequestSequence = 0;
 const DOUBLE_CLICK_WINDOW_GUARD = '__blbSuiteDoubleClickBoundV2';
@@ -3968,6 +3970,7 @@ function disableDoubleClickBlb() {
 }
 
 async function refreshDoubleClickBlb() {
+  const generation = ++doubleClickSettingsRefreshGeneration;
   try {
     const siteKey = getPageSelectionSiteKey();
     if (siteKey === BLB_HOSTNAME || isSensitiveSiteUrl(location.href) || !suiteEnabled || !siteKey) {
@@ -3976,6 +3979,7 @@ async function refreshDoubleClickBlb() {
       return;
     }
     const data = await chrome.storage.local.get({doubleClickBlbSites:{}});
+    if (generation !== doubleClickSettingsRefreshGeneration) return;
     const sites = data.doubleClickBlbSites && typeof data.doubleClickBlbSites === 'object'
       ? data.doubleClickBlbSites : {};
     const hasExplicitPreference = Object.prototype.hasOwnProperty.call(sites, siteKey);
@@ -3983,6 +3987,8 @@ async function refreshDoubleClickBlb() {
     if (doubleClickBlbEnabled) enableDoubleClickBlb();
     else disableDoubleClickBlb();
   } catch (_) {
+    // An older failed read must not override a newer preference refresh.
+    if (generation !== doubleClickSettingsRefreshGeneration) return;
     // Fail closed if site-feature settings or defaults cannot be read.
     doubleClickBlbEnabled = false;
     disableDoubleClickBlb();

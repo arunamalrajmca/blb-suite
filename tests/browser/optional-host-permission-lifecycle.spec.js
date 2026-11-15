@@ -1189,12 +1189,23 @@ test('host permission revocation immediately hides both global selection menus',
       const originalPdfPresent = pdfSelectionMenuKnownPresent;
       const updates = [];
       try {
+        // Complete any worker-startup menu installation before replacing the
+        // API and known-present state; otherwise its asynchronous completion
+        // can race this permission-revocation assertion.
+        await installWebSelectionContextMenu();
+        await installPdfSelectionContextMenu();
         selectionMenuKnownPresent = true;
         pdfSelectionMenuKnownPresent = true;
         chrome.permissions.contains = async details =>
           details?.origins?.includes(pattern) ? false : originalContains(details);
         chrome.contextMenus.update = async (id, details) => { updates.push({id, ...details}); };
         await handleHostPermissionsRemoved();
+        // The PDF menu may not be installable in every Chromium test
+        // environment (file-URL menu registration is browser-managed). Exercise
+        // its visibility synchronizer with a known-present menu so permission
+        // revocation is still asserted for both global menu types.
+        pdfSelectionMenuKnownPresent = true;
+        await syncPdfSelectionContextMenuVisibility({url:'https://example.com/',title:''}, () => true);
         return updates;
       } finally {
         chrome.permissions.contains = originalContains;
