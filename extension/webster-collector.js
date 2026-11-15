@@ -11,7 +11,7 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
     if (websterCollectorConfig?.collectorModule === "webster") {
       async function captureWebsterWord() {
         try {
-          if (!(await isSuiteEnabled())) return;
+          if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) return;
           const active = await chrome.runtime.sendMessage({type:'blbSuiteStudyCaptureActive'});
           if (!active?.active) return;
           const parts = location.pathname.split('/').filter(Boolean);
@@ -97,13 +97,17 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
     
       // Global external redirects default OFF. Keep this handler fail-closed when storage is empty or unavailable.
       let websterRedirectEnabled = false;
+      let redirectSettingsGeneration = 0;
+      const initialRedirectSettingsGeneration = redirectSettingsGeneration;
       chrome.storage.local.get({redirectEnabled:false}).then(data=>{
-        websterRedirectEnabled = data.redirectEnabled !== false;
+        if (initialRedirectSettingsGeneration !== redirectSettingsGeneration) return;
+        websterRedirectEnabled = data.redirectEnabled === true;
       }).catch(()=>{});
-    
+
       chrome.storage.onChanged.addListener((changes, area) => {
         if (area === "local" && changes.redirectEnabled) {
-          websterRedirectEnabled = changes.redirectEnabled.newValue !== false;
+          redirectSettingsGeneration += 1;
+          websterRedirectEnabled = changes.redirectEnabled.newValue === true;
         }
       });
 
