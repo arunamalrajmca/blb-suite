@@ -34,10 +34,14 @@ test.describe('PDF selection context-menu regressions', () => {
 
     const result = await extensionWorker.evaluate(async () => {
       const originalUpdate = chrome.contextMenus.update;
+      const originalTabsQuery = chrome.tabs.query;
       const originalKnownPresent = pdfSelectionMenuKnownPresent;
       const updates = [];
       try {
         pdfSelectionMenuKnownPresent = true;
+        // Keep real activation/storage listeners from superseding these
+        // synthetic-tab assertions with the browser's unrelated active tab.
+        chrome.tabs.query = async () => [];
         chrome.contextMenus.update = async (id, details) => {
           updates.push({ id, visible: details.visible });
         };
@@ -59,6 +63,7 @@ test.describe('PDF selection context-menu regressions', () => {
         return updates;
       } finally {
         chrome.contextMenus.update = originalUpdate;
+        chrome.tabs.query = originalTabsQuery;
         pdfSelectionMenuKnownPresent = originalKnownPresent;
       }
     });
