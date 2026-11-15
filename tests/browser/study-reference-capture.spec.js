@@ -4,6 +4,7 @@ const blbOrigin = 'https://www.blueletterbible.org';
 
 async function startStudyTopic({ context, extensionId, extensionStorage }) {
   await extensionStorage.clear();
+  await extensionStorage.set({masterEnabled:true});
   const popup = await context.newPage();
   await popup.goto('chrome-extension://' + extensionId + '/popup.html');
   // A newly opened popup starts with its controls hidden while it resolves the
