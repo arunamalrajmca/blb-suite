@@ -186,6 +186,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
         replacementUpdates,
         focusChangeHidesWebMenu,
         focusChangeShowsWebMenu,
+        focusHandoffEmittedNone:focusEvents.includes(chrome.windows.WINDOW_ID_NONE),
         focusEvents,
         updates,
         originalWindowId,
@@ -230,6 +231,11 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
   expect(result.backgroundReplacementIgnored).toBe(true);
   expect(result.backgroundReplacementUpdates).toEqual([]);
   expect(result.focusChangeHidesWebMenu).toBe(true);
+  expect(result.focusedWindowId).toBe(result.originalWindowId);
+  expect(
+    result.focusHandoffEmittedNone,
+    JSON.stringify({focusEvents:result.focusEvents}, null, 2)
+  ).toBe(true);
   expect(
     result.focusChangeShowsWebMenu,
     JSON.stringify({
