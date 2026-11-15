@@ -1527,3 +1527,43 @@ test('global setting toggles clean up and recreate source collector draggable co
     return injected.result;
   }, tabId)).toBe(true);
 });
+
+
+test('BLB navigation modules rescan links added while the master switch is OFF', async ({ page, extensionStorage }) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    redirectEnabled: false,
+    pageSelectionButtonSites: {},
+    doubleClickBlbSites: {}
+  });
+  await page.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>BLB master reactivation</title></head><body><main></main></body></html>'
+  }));
+  await page.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', { waitUntil: 'domcontentloaded' });
+
+  for (let iteration = 1; iteration <= 3; iteration++) {
+    await extensionStorage.set({ masterEnabled: false });
+    await page.evaluate(index => {
+      const verse = document.createElement('div');
+      verse.id = 'bVerse_master_off_' + index;
+      verse.innerHTML = '<a id="verse-link-' + index + '" href="https://www.blueletterbible.org/kjv/jhn/3/16/">John 3:16</a>';
+      const popup = document.createElement('div');
+      popup.className = 'parse-popup';
+      popup.innerHTML = '<a id="popup-link-' + index + '" href="https://www.blueletterbible.org/lexicon/g26/kjv/tr/0-1/">Strong G26</a>';
+      document.querySelector('main').append(verse, popup);
+    }, iteration);
+
+    await expect.poll(() => page.evaluate(index => ({
+      verseTarget: document.querySelector('#verse-link-' + index)?.getAttribute('target'),
+      popupBound: document.querySelector('#popup-link-' + index)?.dataset.blbSuitePopup || null
+    }), iteration)).toEqual({ verseTarget: null, popupBound: null });
+
+    await extensionStorage.set({ masterEnabled: true });
+    await expect.poll(() => page.evaluate(index => ({
+      verseTarget: document.querySelector('#verse-link-' + index)?.getAttribute('target'),
+      popupBound: document.querySelector('#popup-link-' + index)?.dataset.blbSuitePopup || null
+    }), iteration)).toEqual({ verseTarget: '_blank', popupBound: '1' });
+  }
+});
