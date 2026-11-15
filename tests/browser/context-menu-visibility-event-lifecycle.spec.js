@@ -49,6 +49,13 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
         doubleClickBlbSites:{}
       });
       await runtimeContentScriptReconciliationQueue;
+      // The PDF menu is installed asynchronously during worker startup. Make
+      // its real installation deterministic before asserting activation
+      // synchronizes both global menu items.
+      await installPdfSelectionContextMenu();
+      if (!pdfSelectionMenuKnownPresent) {
+        throw new Error('PDF selection menu was not installed for the lifecycle test');
+      }
       await new Promise(resolve => setTimeout(resolve, 100));
       updates.length = 0;
 
@@ -58,9 +65,9 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
 
       // A real tab activation must make both global menus reflect the active tab.
       await chrome.tabs.update(enabledTab.id, {active:true});
-      for (let attempt=0; attempt<50 && !updates.some(item =>
+      for (let attempt=0; attempt<100 && (!updates.some(item =>
         item.id === 'blb-suite-web-selection' && item.visible === true
-      ); attempt++) {
+      ) || !updates.some(item => item.id === 'blb-suite-pdf-selection')); attempt++) {
         await new Promise(resolve => setTimeout(resolve, 50));
       }
       const activationUpdates = [...updates];
@@ -292,3 +299,43 @@ test('PDF selection menu ignores stale asynchronous visibility results', async (
 
   expect(result).toEqual([{id:'blb-suite-pdf-selection',visible:true}]);
 });
+
+test('web selection menu ignores stale asynchronous visibility results', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const originalUpdate = chrome.contextMenus.update;
+    const originalKnownPresent = selectionMenuKnownPresent;
+    const originalEligibilityCheck = shouldShowBlbContextMenu;
+    const updates = [];
+    let signalSlowStarted;
+    const slowStarted = new Promise(resolve => { signalSlowStarted = resolve; });
+    let releaseSlow;
+    const slowGate = new Promise(resolve => { releaseSlow = resolve; });
+    try {
+      selectionMenuKnownPresent = true;
+      chrome.contextMenus.update = async (id, details) => { updates.push({id,...details}); };
+      shouldShowBlbContextMenu = async tab => {
+        if (tab?.id === 1) {
+          signalSlowStarted();
+          await slowGate;
+          return false;
+        }
+        return tab?.id === 2;
+      };
+
+      const slow = syncWebSelectionContextMenuVisibility({id:1,url:'https://slow.example/'}, false);
+      await slowStarted;
+      await syncWebSelectionContextMenuVisibility({id:2,url:'https://fast.example/'}, false);
+      releaseSlow();
+      await slow;
+      return [...updates];
+    } finally {
+      releaseSlow?.();
+      chrome.contextMenus.update = originalUpdate;
+      selectionMenuKnownPresent = originalKnownPresent;
+      shouldShowBlbContextMenu = originalEligibilityCheck;
+    }
+  });
+
+  expect(result).toEqual([{id:'blb-suite-web-selection',visible:true}]);
+});
+
