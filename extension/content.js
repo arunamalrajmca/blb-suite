@@ -597,9 +597,10 @@ globalThis.BLBAutoHyperlinkerModule?.initialize({
 });
 
 // BLB parsing-popup navigation remains an independent feature module.
+let blbParsePopupNavigation = null;
 if (location.hostname.endsWith(BLB_HOSTNAME) &&
     !/(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)$/i.test(location.pathname)) {
-  const blbParsePopupNavigation = globalThis.BLBParsePopupModule?.initialize({
+  blbParsePopupNavigation = globalThis.BLBParsePopupModule?.initialize({
     BLB_HOSTNAME,
     BLBShared,
     isSuiteEnabledNow: () => suiteEnabled,
