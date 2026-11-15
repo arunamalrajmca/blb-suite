@@ -242,3 +242,73 @@ test('background redirect-rule refresh reports a Dynamic Rules API failure', asy
   expect(result.ok).toBe(false);
   expect(result.error).toContain('simulated-dnr-update-failure');
 });
+
+
+async function runOutOfOrderRedirectRefresh(sourcePath, kind) {
+  const source = fs.readFileSync(path.resolve(__dirname, '../../extension', sourcePath), 'utf8');
+  const reads = [];
+  let onChanged = null;
+  let clickHandler = null;
+  class FakeElement {}
+  const link = kind === 'scripttagger'
+    ? {href:'https://www.blueletterbible.org/kjv/jhn/3/16/'}
+    : {
+        href:'https://www.bibleref.com/John/3/John-3-16.html',
+        textContent:'John 3:16-17',
+        parentElement:null
+      };
+  const context = {
+    URL,
+    Element:FakeElement,
+    document:{
+      addEventListener(type, handler) {
+        if (type === 'click') clickHandler = handler;
+      }
+    },
+    chrome:{
+      storage:{
+        local:{get:() => new Promise(resolve => reads.push(resolve))},
+        onChanged:{addListener(handler) { onChanged = handler; }}
+      },
+      runtime:{sendMessage:async () => ({ok:true})}
+    },
+    window:{location:{assign() {}}},
+    console:{warn() {}}
+  };
+  vm.runInNewContext(source, context, {filename:sourcePath});
+  expect(reads).toHaveLength(1);
+
+  // Queue an older ON refresh followed by the latest OFF refresh. Resolve OFF
+  // first, then let the obsolete ON read finish last.
+  onChanged({redirectEnabled:{newValue:true}}, 'local');
+  onChanged({redirectEnabled:{newValue:false}}, 'local');
+  expect(reads).toHaveLength(3);
+  reads[2]({masterEnabled:true,redirectEnabled:false});
+  await Promise.resolve();
+  reads[0]({masterEnabled:true,redirectEnabled:false});
+  await Promise.resolve();
+  reads[1]({masterEnabled:true,redirectEnabled:true});
+  await Promise.resolve();
+  await Promise.resolve();
+
+  const target = new FakeElement();
+  target.closest = selector => kind === 'scripttagger'
+    ? (selector === 'a.BLBST_a[href]' ? link : null)
+    : (selector === 'a[href]' ? link : null);
+  const event = {
+    button:0, metaKey:false, ctrlKey:false, shiftKey:false, altKey:false,
+    target, defaultPrevented:false,
+    preventDefault() { this.defaultPrevented = true; },
+    stopImmediatePropagation() {}
+  };
+  clickHandler(event);
+  return event.defaultPrevented;
+}
+
+test('stale ScriptTagger redirect settings cannot override a newer OFF choice', async () => {
+  expect(await runOutOfOrderRedirectRefresh('redirect-scripttagger.js', 'scripttagger')).toBe(false);
+});
+
+test('stale BibleRef range redirect settings cannot override a newer OFF choice', async () => {
+  expect(await runOutOfOrderRedirectRefresh('redirect-bibleref-ranges.js', 'bibleref')).toBe(false);
+});
