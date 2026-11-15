@@ -732,7 +732,7 @@ test('Study Sessions restores the previous recording when the new recording alar
   expect(outcome.state.studySessions).toEqual(expect.arrayContaining([
     expect.objectContaining({
       title:'New Topic',
-      notes:['A note on the new topic']
+      notes:['A Note on the New Topic']
     })
   ]));
   expect(outcome.alarm).toMatchObject({
