@@ -159,3 +159,104 @@ test('source-page collector does not add its button after a pending initializati
   }, tabId);
   expect(result).toBe(false);
 });
+
+
+test('repeated per-site feature toggles do not accumulate page-selection or double-click listeners', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{'example.com':true}
+  });
+  await page.route('https://example.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>Repeated feature toggles</title></head><body><p>John 3:16</p></body></html>'
+  }));
+  await page.goto('https://example.com/repeated-feature-toggles.html', {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({url:'https://example.com/repeated-feature-toggles.html'}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+  const button = page.locator('#blb-suite-page-selection-button');
+  await expect(button).toHaveCount(1);
+
+  const instrumented = await extensionWorker.evaluate(async id => {
+    const [result] = await chrome.scripting.executeScript({
+      target:{tabId:id},
+      world:'ISOLATED',
+      func:() => {
+        const types = ['mousedown','keydown','mouseup','keyup','dblclick'];
+        const active = Object.fromEntries(types.map(type => [type, new Set()]));
+        const pageHandlers = window.__blbSuitePageButtonHandlersV2 || {};
+        for (const [type, handler] of Object.entries(pageHandlers)) {
+          if (active[type] && typeof handler === 'function') active[type].add(handler);
+        }
+        const doubleClickHandler = window.__blbSuiteDoubleClickBoundV2;
+        if (typeof doubleClickHandler === 'function') active.dblclick.add(doubleClickHandler);
+        const originalAdd = document.addEventListener;
+        const originalRemove = document.removeEventListener;
+        document.addEventListener = function(type, handler, options) {
+          if (active[type] && typeof handler === 'function') active[type].add(handler);
+          return originalAdd.call(this, type, handler, options);
+        };
+        document.removeEventListener = function(type, handler, options) {
+          if (active[type] && typeof handler === 'function') active[type].delete(handler);
+          return originalRemove.call(this, type, handler, options);
+        };
+        globalThis.__blbToggleListenerAudit = {active, originalAdd, originalRemove};
+        return Object.fromEntries(types.map(type => [type, active[type].size]));
+      }
+    });
+    return result.result;
+  }, tabId);
+  expect(instrumented).toEqual({
+    mousedown:1, keydown:1, mouseup:1, keyup:1, dblclick:1
+  });
+
+  const readActiveListeners = () => extensionWorker.evaluate(async id => {
+    const [result] = await chrome.scripting.executeScript({
+      target:{tabId:id},
+      world:'ISOLATED',
+      func:() => Object.fromEntries(
+        Object.entries(globalThis.__blbToggleListenerAudit.active).map(([type, handlers]) => [type, handlers.size])
+      )
+    });
+    return result.result;
+  }, tabId);
+
+  for (let cycle = 0; cycle < 4; cycle++) {
+    await extensionStorage.set({
+      pageSelectionButtonSites:{'example.com':false},
+      doubleClickBlbSites:{'example.com':false}
+    });
+    await expect(button).toHaveCount(0);
+    await expect.poll(readActiveListeners).toEqual({
+      mousedown:0, keydown:0, mouseup:0, keyup:0, dblclick:0
+    });
+
+    await extensionStorage.set({
+      pageSelectionButtonSites:{'example.com':true},
+      doubleClickBlbSites:{'example.com':true}
+    });
+    await expect(button).toHaveCount(1);
+    await expect.poll(readActiveListeners).toEqual({
+      mousedown:1, keydown:1, mouseup:1, keyup:1, dblclick:1
+    });
+  }
+
+  await extensionWorker.evaluate(async id => {
+    await chrome.scripting.executeScript({
+      target:{tabId:id},
+      world:'ISOLATED',
+      func:() => {
+        const audit = globalThis.__blbToggleListenerAudit;
+        if (!audit) return;
+        document.addEventListener = audit.originalAdd;
+        document.removeEventListener = audit.originalRemove;
+        delete globalThis.__blbToggleListenerAudit;
+      }
+    });
+  }, tabId);
+});
