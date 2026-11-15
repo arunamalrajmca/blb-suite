@@ -3195,6 +3195,28 @@ function isAuthorizedExtensionPageMessage(message, sender) {
   return !expectedPagePath || isTrustedExtensionPageSender(sender, expectedPagePath);
 }
 
+async function isAuthorizedContentScriptSender(sender, allowedHosts = null) {
+  if (!sender || sender.id !== chrome.runtime.id ||
+      !Number.isInteger(sender.tab?.id) || typeof sender.url !== 'string') return false;
+  if (sender.url.startsWith(chrome.runtime.getURL(''))) return false;
+  if (!(await hasSelectionActionPermissionForTab(sender.tab))) return false;
+  if (!allowedHosts) return true;
+  const host = normalizeSiteHostname(hostnameFromTabUrl(sender.tab.url || sender.url));
+  return allowedHosts.has(host);
+}
+
+const BLB_CONTENT_SCRIPT_HOSTS = new Set([BLB_HOSTNAME]);
+const BLB_AND_WEBSTER_CONTENT_SCRIPT_HOSTS = new Set([
+  BLB_HOSTNAME,
+  'webstersdictionary1828.com'
+]);
+
+function isSourceCollectorContentScriptSender(sender) {
+  const host = normalizeSiteHostname(hostnameFromTabUrl(sender?.tab?.url || sender?.url));
+  return host === BLB_HOSTNAME ||
+    Object.prototype.hasOwnProperty.call(globalThis.BLBSourcePageCollectorSites || {}, host);
+}
+
 chrome.runtime.onMessage.addListener((message, sender) => {
   if (message?.type !== 'blbSuiteMultiVerseHandoffTiming' ||
       !isTrustedExtensionPageSender(sender, 'multiverse-post.html')) return false;
@@ -3281,6 +3303,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message) return;
 
   if (message.type === 'blbSuiteOpenMultiVerseVerse') {
+    if (!(await isSuiteEnabled()) ||
+        !(await isAuthorizedContentScriptSender(sender, BLB_CONTENT_SCRIPT_HOSTS))) {
+      sendResponse({ok:false, error:'Unauthorized sender'});
+      return true;
+    }
     const url = String(message.url || '').trim();
     if (!/^https:\/\/www\.blueletterbible\.org\/kjv\/[^/]+\/\d+\/\d+(?:\/s_\d+)?\/?(?:[?#].*)?$/i.test(url)) {
       sendResponse({ok:false, reason:'invalid-kjv-url'});
@@ -3366,6 +3393,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blbSuiteGetPendingMultiVerseRefs') {
+    if (!(await isSuiteEnabled()) ||
+        !(await isAuthorizedContentScriptSender(sender, BLB_CONTENT_SCRIPT_HOSTS))) {
+      sendResponse({ok:false, error:'Unauthorized sender'});
+      return true;
+    }
     try {
       const tabId = sender?.tab?.id;
       const data = await chrome.storage.local.get({blbSuitePendingMultiVerseRefsByTab:{}});
@@ -3377,6 +3409,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blbSuiteConsumePendingMultiVerseRefs') {
+    if (!(await isSuiteEnabled()) ||
+        !(await isAuthorizedContentScriptSender(sender, BLB_CONTENT_SCRIPT_HOSTS))) {
+      sendResponse({ok:false, error:'Unauthorized sender'});
+      return true;
+    }
     try {
       const tabId = sender?.tab?.id;
       if (tabId != null) {
@@ -3390,6 +3427,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blbSuiteOpenWebsterMultiVerse') {
+    if (!(await isSuiteEnabled()) ||
+        !(await isAuthorizedContentScriptSender(sender)) ||
+        !isSourceCollectorContentScriptSender(sender)) {
+      sendResponse({ok:false, error:'Unauthorized sender'});
+      return true;
+    }
     try {
       sendResponse(await openBlbMultiVerseRefs(message.refs || [], true));
     } catch (error) { sendResponse({ok:false, error:String(error)}); }
@@ -3632,6 +3675,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blbSuiteStudyCaptureActive') {
+    if (!(await isSuiteEnabled()) ||
+        !(await isAuthorizedContentScriptSender(sender, BLB_AND_WEBSTER_CONTENT_SCRIPT_HOSTS))) {
+      sendResponse({ok:false, error:'Unauthorized sender'});
+      return true;
+    }
     try {
       const data = await getStudySessions();
       const current = data.sessions.find(s => s.id === data.currentId);
@@ -3747,6 +3795,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blbSuiteCaptureStudyRefs') {
+    if (!(await isSuiteEnabled()) ||
+        !(await isAuthorizedContentScriptSender(sender, BLB_CONTENT_SCRIPT_HOSTS))) {
+      sendResponse({ok:false, error:'Unauthorized sender'});
+      return true;
+    }
     try {
       const refs = Array.isArray(message.refs) ? message.refs : [];
       const added = await recordStudyRefs(refs);
@@ -3757,12 +3810,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 
   if (message.type === 'blbSuiteCaptureStudySearchTerm') {
+    if (!(await isSuiteEnabled()) ||
+        !(await isAuthorizedContentScriptSender(sender, BLB_AND_WEBSTER_CONTENT_SCRIPT_HOSTS))) {
+      sendResponse({ok:false, error:'Unauthorized sender'});
+      return true;
+    }
     try { sendResponse({ok:await recordStudySearchTerm(message.term)}); }
     catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
 
   if (message.type === 'blbSuiteCaptureStudyStrong') {
+    if (!(await isSuiteEnabled()) ||
+        !(await isAuthorizedContentScriptSender(sender, BLB_CONTENT_SCRIPT_HOSTS))) {
+      sendResponse({ok:false, error:'Unauthorized sender'});
+      return true;
+    }
     try { sendResponse({ok:await recordStudyStrong(message.value)}); }
     catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
@@ -3778,6 +3841,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blbSuiteSyncSelectionContextMenu') {
+    if (!(await isSuiteEnabled()) || !(await isAuthorizedContentScriptSender(sender))) {
+      sendResponse({ok:false, error:'Unauthorized sender'});
+      return true;
+    }
     // The content script waits for this response before exposing the floating
     // Show on BLB button. Await the native-menu visibility update so the two
     // controls become visible atomically from the user's point of view.
@@ -3795,6 +3862,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'blbSuiteOpenScriptTaggerUrl') {
     if (!(await isSuiteEnabled())) { sendResponse({ok:false}); return true; }
+    if (!(await isAuthorizedContentScriptSender(sender))) {
+      sendResponse({ok:false, error:'Unauthorized sender'});
+      return true;
+    }
     const url = String(message.url || '');
     if (!/^https:\/\/www\.blueletterbible\.org\//i.test(url)) { sendResponse({ok:false}); return true; }
     // ScriptTagger requires per-verse identity: the general BLB destination
@@ -3810,6 +3881,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'blbSuiteOpenBibleRefRange') {
     if (!(await isSuiteEnabled())) { sendResponse({ok:false}); return true; }
+    if (!(await isAuthorizedContentScriptSender(sender))) {
+      sendResponse({ok:false, error:'Unauthorized sender'});
+      return true;
+    }
     try {
       const source = new URL(String(message.url || ''));
       if (!['bibleref.com', 'www.bibleref.com'].includes(source.hostname.toLowerCase())) {
@@ -3848,6 +3923,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   if (message.type === 'blbSuiteOpenBackgroundUrl') {
     if (!(await isSuiteEnabled())) { sendResponse({ok:false}); return true; }
+    if (!(await isAuthorizedContentScriptSender(sender))) {
+      sendResponse({ok:false, reason:'host-permission-revoked'});
+      return true;
+    }
     const url = String(message.url || '');
     if (!/^https:\/\/www\.blueletterbible\.org\//i.test(url)) { sendResponse({ok:false}); return true; }
     openBlbDestination(url, !!message.activeIfNew, !!message.activateExisting).then(() => sendResponse({ok:true})).catch(error => {
