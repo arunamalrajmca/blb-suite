@@ -3183,6 +3183,7 @@ const EXTENSION_PAGE_MESSAGE_SOURCES = new Map([
   ['blbSuiteOpenHistorySearchTerms', 'popup.html'],
   ['blbSuiteSaveStudyTopic', 'popup.html'],
   ['blbSuiteImportStudyTestData', 'popup.html'],
+  ['blbSuiteClassifySelection', 'popup.html'],
   ['blbSuiteCancelSiteFeatureToggle', 'popup.html'],
   ['blbSuiteSetSiteFeatureOff', 'popup.html'],
   ['blbSuiteRunBCommand', 'Tutorial.html'],
