@@ -684,7 +684,9 @@ test('Study Sessions retries clearing an orphaned auto-stop alarm after recordin
         refs:[],strongs:[],searchTerms:[],notes:[]
       }]
     });
-    await refreshStudyAutoStopAlarm();
+    // Seed the real periodic alarm directly: the recovery case must start
+    // with an existing alarm, independent of the scheduler's own setup path.
+    await chrome.alarms.create('blb-study-auto-stop', {delayInMinutes:1, periodInMinutes:1});
   });
 
   const stopped = await extensionWorker.evaluate(async () => stopStudyRecording(
