@@ -25,12 +25,17 @@ test('background extension-page messages reject content scripts and bind the Mul
       world: 'ISOLATED',
       func: async () => ({
         studyMutation: await chrome.runtime.sendMessage({ type: 'blbSuiteClearStudy' }),
+        classification: await chrome.runtime.sendMessage({
+          type: 'blbSuiteClassifySelection',
+          text: 'John 3:16'
+        }),
         queueSlot: await chrome.runtime.sendMessage({ type: 'blbSuiteAcquireMultiVersePostSlot' })
       })
     });
     return result.result;
   }, sourceTabId);
   expect(contentScriptResponses.studyMutation).toEqual({ ok: false, error: 'Unauthorized sender' });
+  expect(contentScriptResponses.classification).toEqual({ ok: false, error: 'Unauthorized sender' });
   expect(contentScriptResponses.queueSlot).toEqual({ ok: false, error: 'Unauthorized sender' });
 
   const popupPage = await context.newPage();
@@ -39,6 +44,10 @@ test('background extension-page messages reject content scripts and bind the Mul
     chrome.runtime.sendMessage({ type: 'blbSuiteGetStudyUiState' })
   );
   expect(popupResponse?.ok).toBe(true);
+  const popupClassificationResponse = await popupPage.evaluate(async () =>
+    chrome.runtime.sendMessage({ type: 'blbSuiteClassifySelection', text: 'John 3:16' })
+  );
+  expect(popupClassificationResponse?.ok).toBe(true);
 
   const popupQueueResponse = await popupPage.evaluate(async () =>
     chrome.runtime.sendMessage({ type: 'blbSuiteAcquireMultiVersePostSlot' })
