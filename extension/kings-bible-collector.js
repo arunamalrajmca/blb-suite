@@ -290,7 +290,9 @@ if (kingsBibleCollectorConfig?.collectorModule === "kings-bible" && kingsBibleEn
       document.getElementById("blb-suite-kingsbible-multiverse-reset-position")?.remove();
       document.getElementById("blb-suite-kingsbible-status")?.remove();
     } else if (changes.masterEnabled?.newValue === true) {
-      ensureKingsBibleButtonWhenReady();
+      // content.js updates the cached master setting in a later storage
+      // listener; defer until that listener has applied the new value.
+      queueMicrotask(ensureKingsBibleButtonWhenReady);
     }
   };
   chrome.storage.onChanged.addListener(kingsStorageChangeListener);

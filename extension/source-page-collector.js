@@ -298,7 +298,10 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
             // Re-ensure the collector control when redirects are re-enabled.
             // Redirect preference does not gate visibility; this event only
             // repairs an already-open page if its control was lost.
-            ensureSourcePageButtonWhenReady();
+            // This listener is registered before content.js updates its cached
+            // masterEnabled state. Defer until all storage listeners have run so
+            // the enable check observes the new authoritative state.
+            queueMicrotask(ensureSourcePageButtonWhenReady);
           }
         };
         chrome.storage.onChanged.addListener(sourceStorageChangeListener);
