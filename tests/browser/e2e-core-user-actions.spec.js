@@ -2155,7 +2155,7 @@ test('Double-Click on Vs. resolves the following verse in the same article citat
 });
 
 
-test('BLB parse-popup observer binds an anchor appended directly to an existing popup', async ({
+test('BLB verse links inside parse popups bind dynamically appended anchors', async ({
   page, extensionStorage
 }) => {
   await extensionStorage.clear();
