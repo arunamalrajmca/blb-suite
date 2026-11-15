@@ -114,6 +114,21 @@ test('content-script Study and MultiVerse messages enforce source hosts and curr
   }, unrelatedTabId);
   expect(permissionRevokedResponse).toEqual({ ok: false, reason: 'host-permission-revoked' });
 
+  // A background content script must not invoke the Alt+B message path for
+  // whichever unrelated tab happens to be active.
+  const otherActivePage = await context.newPage();
+  await otherActivePage.goto('about:blank');
+  const inactiveSelectionResponse = await extensionWorker.evaluate(async tabId => {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'ISOLATED',
+      func: async () => chrome.runtime.sendMessage({ type: 'blbSuiteOpenCurrentSelection' })
+    });
+    return injected.result;
+  }, unrelatedTabId);
+  expect(inactiveSelectionResponse).toEqual({ ok: false, reason: 'unauthorized-sender' });
+  await otherActivePage.close();
+
   const blbPage = await context.newPage();
   await blbPage.route('https://www.blueletterbible.org/**', route => route.fulfill({
     status: 200,
