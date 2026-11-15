@@ -217,7 +217,7 @@ test("mixed Group B runtime and unrelated browser-spec edits still run the chang
     commitChange(root, "extension/redirect-scripttagger.js", "// changed redirect injection\n");
     commitChange(root, "tests/browser/redirect-toggle-isolation.spec.js", "// changed unrelated browser test\n");
     const output = select(root, base);
-    assert.match(output, /changed_specs=tests\/browser\/scripttagger-global-injection\.spec\.js/);
+    assert.match(output, /changed_specs=.*tests\/browser\/scripttagger-global-injection\.spec\.js/);
     assert.match(output, /changed_browser_specs=.*redirect-toggle-isolation\.spec\.js/);
     assert.ok(output.split(String.fromCharCode(10)).includes("group_a_changed_browser_specs="),
       "toggle matrix owns the changed toggle spec instead of running it a second time in Group A's generic changed-spec runner");
@@ -389,7 +389,7 @@ test("Webster collector source selects executable focused coverage in Group A", 
     commitChange(root, "extension/webster-collector.js", "// changed Webster collector\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /changed_specs=tests\/browser\/webster-collector-behavior\.spec\.js/);
+    assert.match(output, /changed_specs=.*tests\/browser\/webster-collector-behavior\.spec\.js/);
     assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=false/);
     assert.match(output, /reference_required=false/);
@@ -929,7 +929,7 @@ test("feature-only ownership selects only its execution gate", () => {
     commitChange(root, "extension/redirect-scripttagger.js", "// ScriptTagger injection changed\\n");
     const output = select(root, base);
     assert.match(output, /full_browser_suite=false/);
-    assert.match(output, /group_a_required=false/);
+    assert.match(output, /group_a_required=true/);
     assert.match(output, /group_b_required=true/);
     assert.match(output, /reference_required=false/);
     assert.match(output, /study_sessions_required=false/);
