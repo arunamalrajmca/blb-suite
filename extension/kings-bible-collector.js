@@ -14,6 +14,13 @@ globalThis.BLBKingsBibleCollector = Object.freeze({
     isSuiteEnabledNow = isSuiteEnabled,
     makeBlbMultiVerseButtonDraggable
   }) {
+    globalThis.__blbKingsBibleCollectorCleanup?.();
+    const cleanupCallbacks = [];
+    globalThis.__blbKingsBibleCollectorCleanup = () => {
+      for (const cleanup of cleanupCallbacks.splice(0)) {
+        try { cleanup(); } catch (_) {}
+      }
+    };
 // ---------- The King's Bible Dictionary/Concordance MultiVerse ----------
 const kingsBibleEntryPath = location.pathname.replace(/\/{2,}/g, "/");
 const kingsBibleEntryMatch = kingsBibleEntryPath.match(/^\/(dictionary|concordance)\/[^/]+(?:\/\d+)?\/?$/i);
@@ -275,7 +282,7 @@ if (kingsBibleCollectorConfig?.collectorModule === "kings-bible" && kingsBibleEn
   setTimeout(ensureKingsBibleButtonWhenReady, 500);
   setTimeout(ensureKingsBibleButtonWhenReady, 1500);
 
-  chrome.storage.onChanged.addListener(changes => {
+  const kingsStorageChangeListener = changes => {
     if (changes.masterEnabled?.newValue === false) {
       document.getElementById("blb-suite-kingsbible-multiverse")?.remove();
       document.getElementById("blb-suite-kingsbible-multiverse-reset-position")?.remove();
@@ -283,7 +290,9 @@ if (kingsBibleCollectorConfig?.collectorModule === "kings-bible" && kingsBibleEn
     } else if (changes.masterEnabled?.newValue === true) {
       ensureKingsBibleButtonWhenReady();
     }
-  });
+  };
+  chrome.storage.onChanged.addListener(kingsStorageChangeListener);
+  cleanupCallbacks.push(() => chrome.storage.onChanged.removeListener(kingsStorageChangeListener));
 
   // Recover the collector control if the site rebuilds its body after load.
   // A direct-child observer on <html> catches body replacement without waking
@@ -300,6 +309,7 @@ if (kingsBibleCollectorConfig?.collectorModule === "kings-bible" && kingsBibleEn
     });
   };
   const kingsBodyObserver = new MutationObserver(scheduleKingsButtonCheck);
+  cleanupCallbacks.push(() => kingsBodyObserver.disconnect());
   const startKingsBodyObserver = () => {
     if (document.documentElement) {
       kingsBodyObserver.observe(document.documentElement, { childList: true });

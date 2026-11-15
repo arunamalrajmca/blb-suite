@@ -4,6 +4,13 @@
  */
 globalThis.BLBWebsterCollectorModule = Object.freeze({
   initialize({ normalizeSelectionText, parseRef, blbUrl, isSuiteEnabled, isSuiteEnabledNow, isModifiedLinkActivation, makeBlbMultiVerseButtonDraggable }) {
+    globalThis.__blbWebsterCollectorCleanup?.();
+    const cleanupCallbacks = [];
+    globalThis.__blbWebsterCollectorCleanup = () => {
+      for (const cleanup of cleanupCallbacks.splice(0)) {
+        try { cleanup(); } catch (_) {}
+      }
+    };
     // ---------- Webster's 1828 ----------
     const websterCollectorConfig = globalThis.BLBSourcePageCollectorSites?.[
       location.hostname?.toLowerCase().replace(/^www\./, "")
@@ -119,14 +126,16 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
         websterRedirectEnabled = data.redirectEnabled === true;
       }).catch(()=>{});
 
-      chrome.storage.onChanged.addListener((changes, area) => {
+      const websterStorageChangeListener = (changes, area) => {
         if (area === "local" && changes.redirectEnabled) {
           redirectSettingsGeneration += 1;
           websterRedirectEnabled = changes.redirectEnabled.newValue === true;
         }
-      });
+      };
+      chrome.storage.onChanged.addListener(websterStorageChangeListener);
+      cleanupCallbacks.push(() => chrome.storage.onChanged.removeListener(websterStorageChangeListener));
 
-      document.addEventListener("click",e=>{
+      const websterBibleLinkClickListener = e=>{
         if (!isSuiteEnabledNow() || !websterRedirectEnabled || isModifiedLinkActivation(e)) return;
         const a=e.target.closest?.("a.bible");
         if (!a) return;
@@ -149,7 +158,9 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
         }).then(response => {
           if (response?.ok !== true) fallbackToOriginalLink();
         }).catch(fallbackToOriginalLink);
-      },true);
+      };
+      document.addEventListener("click", websterBibleLinkClickListener, true);
+      cleanupCallbacks.push(() => document.removeEventListener("click", websterBibleLinkClickListener, true));
     
       // Webster pages can restore/rebuild their body during a normal refresh.
       // Retry after DOM readiness so the button is present without requiring a
@@ -181,6 +192,7 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
       // replaces its <body>. Watching the entire Webster DOM is unnecessary and
       // would wake the extension for unrelated page mutations.
       const websterBodyObserver=new MutationObserver(scheduleWebsterButtonCheck);
+      cleanupCallbacks.push(()=>websterBodyObserver.disconnect());
       const startWebsterObserver=()=>{
         if (document.documentElement) websterBodyObserver.observe(document.documentElement,{childList:true});
       };
