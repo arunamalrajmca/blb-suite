@@ -141,7 +141,7 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/blb-page-selection-button.js"],
-    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/site-feature-defaults.spec.js", "tests/browser/research-dom-smoke.spec.js", "tests/browser/known-host-extension.spec.js"]
+    specs: ["tests/browser/e2e-core-user-actions.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js", "tests/browser/site-feature-defaults.spec.js", "tests/browser/research-dom-smoke.spec.js", "tests/browser/known-host-extension.spec.js", "tests/browser/content-feature-refresh-races.spec.js"]
   },
   {
     paths: ["extension/multiverse-handoff.js"],
