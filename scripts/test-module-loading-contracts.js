@@ -400,14 +400,17 @@ if (!extensionPageMessageSourcesMatch) {
   } else {
     pass(entries.length + ' extension-page-only messages have unique owning-page declarations');
   }
+  let extensionPageOwnershipValid = true;
   for (const { type, page } of entries) {
     if (!asyncTypes.includes(type)) {
       fail('extension-page-only message remains in the asynchronous allowlist: ' + type);
+      extensionPageOwnershipValid = false;
       continue;
     }
     const sourceFile = extensionPageSourceFiles.get(page);
     if (!sourceFile) {
       fail('extension-page-only message uses a known owning page: ' + type + ' -> ' + page);
+      extensionPageOwnershipValid = false;
       continue;
     }
     const source = read(path.posix.join('extension', sourceFile));
@@ -419,9 +422,10 @@ if (!extensionPageMessageSourcesMatch) {
     ];
     if (!fragments.some(fragment => source.includes(fragment))) {
       fail('owning extension page sends its declared message: ' + type + ' -> ' + sourceFile);
+      extensionPageOwnershipValid = false;
     }
   }
-  if (!failures.some(message => message.includes('extension-page-only message'))) {
+  if (extensionPageOwnershipValid) {
     pass(entries.length + ' extension-page-only messages match their declared runtime sender files');
   }
 }
