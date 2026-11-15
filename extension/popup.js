@@ -168,7 +168,12 @@ async function setMaster(on) {
     }
   }
   // A newer explicit toggle wins while stopping an active Study recording.
-  if (generation !== masterToggleGeneration) return;
+  if (generation !== masterToggleGeneration) {
+    // The in-flight stop may have changed Study state after the newer toggle
+    // refreshed the popup. Re-read once so its UI reflects the completed stop.
+    await refreshStudyState().catch(() => {});
+    return;
+  }
   await chrome.storage.local.set({masterEnabled:on, [SELECTED_TOPIC_STORAGE_KEY]: ''});
   if (generation !== masterToggleGeneration) return;
   topicInput.value = '';
