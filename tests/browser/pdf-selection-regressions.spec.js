@@ -32,12 +32,31 @@ test.describe('PDF selection context-menu regressions', () => {
       pageSelectionButtonSites: { '__blb_local_pdf__': true, '__blb_pdf_viewer__': true }
     });
 
+    // Let the storage.onChanged reconciliation started by the setup write
+    // finish before measuring the helper's synthetic-tab updates.
+    await extensionWorker.evaluate(async () => {
+      let previous = pdfSelectionVisibilitySyncGeneration;
+      let stableSamples = 0;
+      for (let attempt = 0; attempt < 40 && stableSamples < 3; attempt += 1) {
+        await new Promise(resolve => setTimeout(resolve, 25));
+        if (pdfSelectionVisibilitySyncGeneration === previous) stableSamples += 1;
+        else {
+          previous = pdfSelectionVisibilitySyncGeneration;
+          stableSamples = 0;
+        }
+      }
+    });
+
     const result = await extensionWorker.evaluate(async () => {
       const originalUpdate = chrome.contextMenus.update;
+      const originalTabsQuery = chrome.tabs.query;
       const originalKnownPresent = pdfSelectionMenuKnownPresent;
       const updates = [];
       try {
         pdfSelectionMenuKnownPresent = true;
+        // Keep real activation/storage listeners from superseding these
+        // synthetic-tab assertions with the browser's unrelated active tab.
+        chrome.tabs.query = async () => [];
         chrome.contextMenus.update = async (id, details) => {
           updates.push({ id, visible: details.visible });
         };
@@ -59,6 +78,7 @@ test.describe('PDF selection context-menu regressions', () => {
         return updates;
       } finally {
         chrome.contextMenus.update = originalUpdate;
+        chrome.tabs.query = originalTabsQuery;
         pdfSelectionMenuKnownPresent = originalKnownPresent;
       }
     });

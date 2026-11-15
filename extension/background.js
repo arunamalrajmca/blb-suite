@@ -3787,9 +3787,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // The content script waits for this response before exposing the floating
     // Show on BLB button. Await the native-menu visibility update so the two
     // controls become visible atomically from the user's point of view.
-    syncWebSelectionContextMenuVisibility(sender?.tab)
-      .then(() => sendResponse({ok:true}))
-      .catch(() => sendResponse({ok:false}));
+    const isCurrent = beginSelectionMenuContextSync();
+    chrome.tabs.query({active:true,lastFocusedWindow:true}).then(tabs => {
+      if (!isCurrent() || !tabs[0]) {
+        sendResponse({ok:false});
+        return;
+      }
+      return syncWebSelectionContextMenuVisibility(tabs[0], false, isCurrent)
+        .then(() => sendResponse({ok:true}));
+    }).catch(() => sendResponse({ok:false}));
     return true;
   }
 
@@ -6492,6 +6498,7 @@ let pdfSelectionMenuKnownPresent = false;
 // produce many tab events; serializing each stale snapshot delays the menu
 // update on the page the user is actually viewing.
 let webSelectionVisibilitySyncGeneration = 0;
+let pdfSelectionVisibilitySyncGeneration = 0;
 
 async function ensureWebSelectionContextMenu() {
   if (selectionMenuKnownPresent) return true;
@@ -6537,12 +6544,16 @@ async function updateSelectionContextMenuVisibility(visible) {
   }
 }
 
-async function syncWebSelectionContextMenuVisibility(tab) {
+async function syncWebSelectionContextMenuVisibility(tab, resolveCurrentActiveTab = true, isCurrent = () => true) {
   const generation = ++webSelectionVisibilitySyncGeneration;
   try {
-    // Resolve the actual active tab at execution time instead of waiting in
-    // the shared PDF/web menu-operation queue behind stale tab snapshots.
-    const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+    // Ordinary activation/navigation events resolve the active tab at
+    // execution time. A replacement handler has already verified the new
+    // active tab identity and must use that exact tab rather than re-querying
+    // during Chrome's transient replacement/focus transition.
+    const tabs = resolveCurrentActiveTab
+      ? await chrome.tabs.query({active:true,lastFocusedWindow:true})
+      : [];
     const activeTab = tabs[0] || tab;
     if (!activeTab) {
       if (generation === webSelectionVisibilitySyncGeneration) {
@@ -6552,14 +6563,45 @@ async function syncWebSelectionContextMenuVisibility(tab) {
     }
     const visible = await shouldShowBlbContextMenu(activeTab, '');
     // A newer activation/navigation may have started while eligibility was
-    // being read. Never let an older result overwrite the latest tab state.
-    if (generation !== webSelectionVisibilitySyncGeneration) return false;
+    // being read. Also verify that an ordinary sync still targets the active
+    // tab in the last-focused window before changing the global menu.
+    if (generation !== webSelectionVisibilitySyncGeneration || !isCurrent()) return false;
+    if (resolveCurrentActiveTab) {
+      const latestTabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+      if (generation !== webSelectionVisibilitySyncGeneration || !isCurrent() ||
+          latestTabs[0]?.id !== activeTab.id) return false;
+    }
     return await updateSelectionContextMenuVisibility(visible);
   } catch (_) {
-    if (generation !== webSelectionVisibilitySyncGeneration) return false;
+    if (generation !== webSelectionVisibilitySyncGeneration || !isCurrent()) return false;
     return await updateSelectionContextMenuVisibility(false);
   }
 }
+
+// A prerender/instant replacement has its own tabs.onReplaced event and must
+// refresh the global menus when the replacement is the active tab. Do not let
+// a replacement in a background window change the last-focused window's menus.
+let selectionMenuContextSyncGeneration = 0;
+function beginSelectionMenuContextSync() {
+  const generation = ++selectionMenuContextSyncGeneration;
+  return () => generation === selectionMenuContextSyncGeneration;
+}
+
+async function syncSelectionMenusAfterTabReplacement(addedTabId) {
+  const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+  const activeTab = tabs[0];
+  if (!activeTab || activeTab.id !== addedTabId) return false;
+  const isCurrent = beginSelectionMenuContextSync();
+  await Promise.all([
+    syncWebSelectionContextMenuVisibility(activeTab, false, isCurrent),
+    syncPdfSelectionContextMenuVisibility(activeTab, isCurrent)
+  ]);
+  return true;
+}
+
+chrome.tabs.onReplaced.addListener(addedTabId => {
+  syncSelectionMenusAfterTabReplacement(addedTabId).catch(() => {});
+});
 
 // Keep the web selection menu persistent. Its visibility is synchronized on
 // page activation/navigation/site-setting changes and directly by the content
@@ -6594,24 +6636,54 @@ async function installPdfSelectionContextMenu() {
   return selectionMenuOperation;
 }
 
-async function syncPdfSelectionContextMenuVisibility(tab) {
-  if (!pdfSelectionMenuKnownPresent) return;
+async function syncPdfSelectionContextMenuVisibility(tab, isCurrent = () => true) {
+  if (!pdfSelectionMenuKnownPresent) return false;
+  const generation = ++pdfSelectionVisibilitySyncGeneration;
   try {
     const enabled = !!tab && (await isSuiteEnabled()) && isPdfViewerTab(tab) &&
       (await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(tab), tab.title || ''));
+    // PDF menu visibility is global too. A slow eligibility lookup for an
+    // earlier tab must not overwrite the result for the tab now in focus.
+    if (generation !== pdfSelectionVisibilitySyncGeneration || !isCurrent()) return false;
     await chrome.contextMenus.update('blb-suite-pdf-selection', {visible: enabled});
-  } catch (_) {}
+    return true;
+  } catch (_) {
+    return false;
+  }
 }
 
-chrome.tabs.onActivated.addListener(() => {
-  // Context-menu visibility is global, so synchronize only against the active
-  // tab in the last-focused window. An activation in a background window must
-  // not hide/show the item for the window the user is currently using.
-  chrome.tabs.query({active:true,lastFocusedWindow:true}).then(tabs => {
+chrome.tabs.onActivated.addListener(activeInfo => {
+  // An activation in a background window must not control the global menus.
+  // Resolve focus first; only a confirmed activation in the focused window
+  // starts a new visibility generation.
+  chrome.windows.getLastFocused().then(focusedWindow => {
+    if (focusedWindow?.id !== activeInfo?.windowId) return;
+    const isCurrent = beginSelectionMenuContextSync();
+    chrome.tabs.query({active:true, windowId:activeInfo.windowId}).then(tabs => {
+      if (!isCurrent()) return;
+      const tab = tabs[0];
+      if (!tab) return;
+      syncWebSelectionContextMenuVisibility(tab, false, isCurrent).catch(() => {});
+      syncPdfSelectionContextMenuVisibility(tab, isCurrent).catch(() => {});
+    }).catch(() => {});
+  }).catch(() => {});
+});
+
+// Changing the focused window does not necessarily activate a different tab
+// inside that window. Keep the global menus aligned with the newly focused
+// window even when no tabs.onActivated event is emitted.
+chrome.windows.onFocusChanged.addListener(windowId => {
+  // Chrome can emit WINDOW_ID_NONE as a transient handoff between windows.
+  // It is not a new focused-window state and must not invalidate the actual
+  // destination window's in-flight synchronization.
+  if (windowId === chrome.windows.WINDOW_ID_NONE) return;
+  const isCurrent = beginSelectionMenuContextSync();
+  chrome.tabs.query({active:true, windowId}).then(tabs => {
+    if (!isCurrent()) return;
     const tab = tabs[0];
     if (!tab) return;
-    syncWebSelectionContextMenuVisibility(tab).catch(() => {});
-    syncPdfSelectionContextMenuVisibility(tab).catch(() => {});
+    syncWebSelectionContextMenuVisibility(tab, false, isCurrent).catch(() => {});
+    syncPdfSelectionContextMenuVisibility(tab, isCurrent).catch(() => {});
   }).catch(() => {});
 });
 async function shouldInjectContentScriptForTab(tab, data) {
@@ -6635,13 +6707,18 @@ async function shouldInjectContentScriptForTab(tab, data) {
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.url || changeInfo.status === 'complete') {
-    // The menu item is global, but onUpdated fires for inactive tabs too.
-    // Only let the currently active tab in the last-focused window control it.
-    chrome.tabs.query({active:true,lastFocusedWindow:true}).then(tabs => {
+    // An update query can finish after a newer focus/activation event. Only
+    // start a visibility sync if no newer context event has superseded it.
+    const observedGeneration = selectionMenuContextSyncGeneration;
+    chrome.tabs.query({active:true,lastFocusedWindow:true}).then(async tabs => {
       const activeTab = tabs[0];
-      if (activeTab?.id !== tabId) return;
-      syncWebSelectionContextMenuVisibility(activeTab).catch(() => {});
-      syncPdfSelectionContextMenuVisibility(activeTab).catch(() => {});
+      if (observedGeneration !== selectionMenuContextSyncGeneration || activeTab?.id !== tabId) return;
+      const focusedWindow = await chrome.windows.getLastFocused();
+      if (observedGeneration !== selectionMenuContextSyncGeneration ||
+          focusedWindow?.id !== activeTab.windowId) return;
+      const isCurrent = beginSelectionMenuContextSync();
+      syncWebSelectionContextMenuVisibility(activeTab, false, isCurrent).catch(() => {});
+      syncPdfSelectionContextMenuVisibility(activeTab, isCurrent).catch(() => {});
     }).catch(() => {});
   }
   if (changeInfo.status === 'complete' && tab?.url && isHttpPageUrl(tab.url)) {
@@ -6868,10 +6945,17 @@ chrome.runtime.onInstalled.addListener(async details => {
     if (Object.keys(defaults).length) await chrome.storage.local.set(defaults);
   }
   installRules();
-  installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
-    .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
+  const isCurrent = beginSelectionMenuContextSync();
+  installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,lastFocusedWindow:true})
+    .then(tabs => {
+      if (isCurrent() && tabs[0]) syncWebSelectionContextMenuVisibility(tabs[0], false, isCurrent).catch(() => {});
+    })
     .catch(() => {}));
-  installPdfSelectionContextMenu().catch(() => {});
+  installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,lastFocusedWindow:true})
+    .then(tabs => {
+      if (isCurrent() && tabs[0]) syncPdfSelectionContextMenuVisibility(tabs[0], isCurrent).catch(() => {});
+    })
+    .catch(() => {})).catch(() => {});
   if (details.reason === 'update') {
     injectConfiguredTabsAfterExtensionUpdate().catch(error => {
       console.error('KJV Scripture Tools extension-update tab reconciliation failed:', String(error));
@@ -6885,6 +6969,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     injectRedirectEnabledTabs().catch(() => {});
   }
   if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites || changes.doubleClickBlbSites) {
+    const isCurrent = beginSelectionMenuContextSync();
     reconcileRuntimeContentScriptRegistrations().catch(error => {
       console.warn('KJV Scripture Tools runtime registration reconciliation failed:', String(error));
     });
@@ -6894,8 +6979,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
     // first-right-click race.
     chrome.tabs.query({active:true,lastFocusedWindow:true})
       .then(tabs => {
+        if (!isCurrent()) return;
         const tab = tabs[0];
-        if (tab) syncWebSelectionContextMenuVisibility(tab).catch(() => {});
+        if (tab) syncWebSelectionContextMenuVisibility(tab, false, isCurrent).catch(() => {});
       })
       .catch(() => {});
     // Preference changes must not remove/recreate the global PDF menu item.
@@ -6903,6 +6989,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     // returns after asynchronous installation/visibility synchronization.
     chrome.tabs.query({active:true,lastFocusedWindow:true})
       .then(async tabs => {
+        if (!isCurrent()) return;
         const tab = tabs[0];
         if (!tab) return;
         if (tab.id && (changes.pageSelectionButtonSites || changes.doubleClickBlbSites)) {
@@ -6915,7 +7002,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
             : (await chrome.storage.local.get({doubleClickBlbSites:{}})).doubleClickBlbSites;
           if (key && (pageSites?.[key] === true || doubleSites?.[key] === true)) await ensureContentScriptInTab(tab.id);
         }
-        await syncPdfSelectionContextMenuVisibility(tab);
+        if (isCurrent()) await syncPdfSelectionContextMenuVisibility(tab, isCurrent);
       })
       .catch(() => {});
   }
@@ -7036,20 +7123,36 @@ chrome.alarms.onAlarm.addListener(alarm => {
 });
 
 chrome.runtime.onStartup.addListener(installRules);
-chrome.runtime.onStartup.addListener(() => installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
-  .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
-  .catch(() => {})));
-chrome.runtime.onStartup.addListener(() => installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
-  .then(tabs => syncPdfSelectionContextMenuVisibility(tabs[0]))
-  .catch(() => {})));
+chrome.runtime.onStartup.addListener(() => {
+  const isCurrent = beginSelectionMenuContextSync();
+  installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,lastFocusedWindow:true})
+    .then(tabs => {
+      if (isCurrent() && tabs[0]) syncWebSelectionContextMenuVisibility(tabs[0], false, isCurrent).catch(() => {});
+    })
+    .catch(() => {}));
+  installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,lastFocusedWindow:true})
+    .then(tabs => {
+      if (isCurrent() && tabs[0]) syncPdfSelectionContextMenuVisibility(tabs[0], isCurrent).catch(() => {});
+    })
+    .catch(() => {})).catch(() => {});
+});
 chrome.runtime.onStartup.addListener(() => refreshStudyAutoStopAlarm().catch(()=>{}));
 chrome.runtime.onStartup.addListener(() => schedulePersistedRuntimeContentScriptAudit());
 chrome.runtime.onInstalled.addListener(() => schedulePersistedRuntimeContentScriptAudit());
 
-installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
-  .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
+const initialSelectionMenuSyncIsCurrent = beginSelectionMenuContextSync();
+installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,lastFocusedWindow:true})
+  .then(tabs => {
+    if (initialSelectionMenuSyncIsCurrent() && tabs[0]) {
+      syncWebSelectionContextMenuVisibility(tabs[0], false, initialSelectionMenuSyncIsCurrent).catch(() => {});
+    }
+  })
   .catch(() => {}));
-installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
-  .then(tabs => syncPdfSelectionContextMenuVisibility(tabs[0]))
-  .catch(() => {}));
+installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,lastFocusedWindow:true})
+  .then(tabs => {
+    if (initialSelectionMenuSyncIsCurrent() && tabs[0]) {
+      syncPdfSelectionContextMenuVisibility(tabs[0], initialSelectionMenuSyncIsCurrent).catch(() => {});
+    }
+  })
+  .catch(() => {})).catch(() => {});
 refreshStudyAutoStopAlarm().catch(()=>{});
