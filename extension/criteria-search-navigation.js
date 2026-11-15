@@ -1,6 +1,9 @@
 // Owns Suite-managed navigation for BLB Criteria Search result links.
 (function (global) {
   function initialize({ BLB_HOSTNAME, isSuiteEnabledNow, isModifiedLinkActivation, openBlbDestinationFromContent }) {
+    global.__blbCriteriaSearchNavigationCleanup?.();
+    const listenerController = new AbortController();
+    global.__blbCriteriaSearchNavigationCleanup = () => listenerController.abort();
   // ---------- BLB Criteria Search parsing-popup bridge ----------
   // Criteria Search is excluded from the normal BLB New Tab block above because
   // its page has its own navigation handlers. Handle only its parsing-popup
@@ -34,7 +37,7 @@
         encodeURIComponent(strong);
   
       openBlbDestinationFromContent(criteriaUrl);
-    }, true);
+    }, { capture: true, signal: listenerController.signal });
   }
   
   // ---------- BLB Criteria Search ordinary verse links ----------
@@ -54,7 +57,7 @@
       e.preventDefault();
       e.stopImmediatePropagation();
       openBlbDestinationFromContent(link.href);
-    }, true);
+    }, { capture: true, signal: listenerController.signal });
   }
   }
 

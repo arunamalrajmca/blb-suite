@@ -109,9 +109,11 @@ test('BLB native-event interception remains explicitly scoped', () => {
   assert(popup.includes('stopImmediatePropagation()'), 'parse-popup override must retain event isolation');
 
   const nowrapStart = verseNavigation.indexOf('const link = event.target.closest?.("a.nowrap")');
-  const nowrapEnd = verseNavigation.indexOf('}, true);', nowrapStart);
+  const legacyCaptureEnd = verseNavigation.indexOf('}, true);', nowrapStart);
+  const abortableCaptureEnd = verseNavigation.indexOf('}, { capture: true, signal: listenerController.signal });', nowrapStart);
+  const nowrapEnd = abortableCaptureEnd >= 0 ? abortableCaptureEnd : legacyCaptureEnd;
   assert(nowrapStart >= 0 && nowrapEnd > nowrapStart, 'nowrap click handler missing from verse-link navigation module');
-  const nowrap = verseNavigation.slice(nowrapStart, nowrapEnd + 8);
+  const nowrap = verseNavigation.slice(nowrapStart, nowrapEnd + (abortableCaptureEnd >= 0 ? '}, { capture: true, signal: listenerController.signal });'.length : 8));
   assert(nowrap.includes('if (!link) return'), 'nowrap click override must reject unrelated clicks');
   assert(verseNavigation.includes('if (!isSuiteEnabledNow() || isModifiedLinkActivation(event)) return;'), 'nowrap override must preserve master-switch and modified-click behavior');
   assert(nowrap.includes('event.preventDefault()') && nowrap.includes('event.stopImmediatePropagation()'), 'nowrap override must preserve scoped native-event interception');

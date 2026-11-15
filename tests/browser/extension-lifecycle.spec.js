@@ -1399,3 +1399,74 @@ test('dictionary collectors clean up prior listeners and observers on bundle rei
     await expect(page.locator(fixture.button)).toBeVisible({ timeout: 10000 });
   }
 });
+
+
+test('BLB navigation and copy modules clean up prior observers and listeners on bundle reinjection', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    redirectEnabled: false,
+    pageSelectionButtonSites: {},
+    doubleClickBlbSites: {}
+  });
+  await page.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>BLB reinjection fixture</title></head><body><main><div id="bVerse_1"><a class="nowrap" href="https://www.blueletterbible.org/kjv/jhn/3/16/">John 3:16</a></div><div class="parse-popup"><a id="parse-popup-link" href="https://www.blueletterbible.org/lexicon/g26/kjv/tr/0-1/">Strong G26</a></div><button id="copyButton" data-clipboard-text="(John 3:16)">Copy</button></main></body></html>'
+  }));
+
+  const cases = [
+    {
+      url: 'https://www.blueletterbible.org/kjv/jhn/3/16/',
+      cleanupKeys: [
+        '__blbPassiveNewTabTargetsCleanup',
+        '__blbVerseLinkNavigationCleanup',
+        '__blbParsePopupCleanup'
+      ]
+    },
+    {
+      url: 'https://www.blueletterbible.org/search/search.cfm',
+      cleanupKeys: ['__blbCriteriaSearchNavigationCleanup']
+    },
+    {
+      url: 'https://www.blueletterbible.org/tools/MultiVerse.cfm',
+      cleanupKeys: ['__blbMultiVerseCopyCleanup']
+    }
+  ];
+
+  for (const fixture of cases) {
+    await page.goto(fixture.url, { waitUntil: 'domcontentloaded' });
+    for (const cleanupKey of fixture.cleanupKeys) {
+      for (let iteration = 0; iteration < 2; iteration++) {
+        const wrapped = await extensionWorker.evaluate(async ({ url, cleanupKey }) => {
+          const tabs = await chrome.tabs.query({ url });
+          const tabId = tabs[0]?.id;
+          if (!Number.isInteger(tabId)) throw new Error('Could not locate BLB fixture tab: ' + url);
+          const [result] = await chrome.scripting.executeScript({
+            target: { tabId },
+            world: 'ISOLATED',
+            func: key => {
+              const cleanup = globalThis[key];
+              if (typeof cleanup !== 'function') throw new Error('Missing module cleanup: ' + key);
+              globalThis.__blbReinjectionCleanupCalls = 0;
+              globalThis[key] = () => {
+                globalThis.__blbReinjectionCleanupCalls++;
+                cleanup();
+              };
+              return true;
+            },
+            args: [cleanupKey]
+          });
+          if (!result?.result) throw new Error('Could not wrap module cleanup: ' + cleanupKey);
+          await chrome.scripting.executeScript({ target: { tabId }, files: BLB_CONTENT_SCRIPT_FILES });
+          const [count] = await chrome.scripting.executeScript({
+            target: { tabId },
+            world: 'ISOLATED',
+            func: () => globalThis.__blbReinjectionCleanupCalls
+          });
+          return count?.result;
+        }, { url: fixture.url, cleanupKey });
+        expect(wrapped, cleanupKey + ' must clean up exactly one previous instance').toBe(1);
+      }
+    }
+  }
+});

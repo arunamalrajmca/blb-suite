@@ -6,11 +6,20 @@
     isModifiedLinkActivation,
     openBlbDestinationFromContent
   }) {
+    global.__blbVerseLinkNavigationCleanup?.();
     if (
       !location.hostname.endsWith(BLB_HOSTNAME) ||
       /(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)$/i.test(location.pathname)
     ) return;
 
+    const listenerController = new AbortController();
+    let observer = null, processScheduled = false, scheduledFrame = 0;
+    const pendingRoots = [];
+    global.__blbVerseLinkNavigationCleanup = () => {
+      observer?.disconnect(); listenerController.abort();
+      if (scheduledFrame) cancelAnimationFrame(scheduledFrame);
+      scheduledFrame = 0; processScheduled = false; pendingRoots.length = 0;
+    };
     function modifyLinks(container) {
       container.querySelectorAll("a").forEach(link => {
         if (!link.href) return;
@@ -28,13 +37,12 @@
       root.querySelectorAll?.('div[id^="bVerse_"], .parse-popup').forEach(modifyLinks);
     };
 
-    let processScheduled = false;
-    const pendingRoots = [];
     const scheduleProcess = (root = null) => {
       if (root) pendingRoots.push(root);
       if (processScheduled) return;
       processScheduled = true;
-      requestAnimationFrame(() => {
+      scheduledFrame = requestAnimationFrame(() => {
+        scheduledFrame = 0;
         processScheduled = false;
         if (!isSuiteEnabledNow()) { pendingRoots.length = 0; return; }
         if (!pendingRoots.length) { process(); return; }
@@ -48,7 +56,7 @@
       });
     };
 
-    const observer = new MutationObserver(mutations => {
+    observer = new MutationObserver(mutations => {
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
           if (node.nodeType === 1) scheduleProcess(node);
@@ -68,9 +76,9 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       openBlbDestinationFromContent(link.href);
-    }, true);
+    }, { capture: true, signal: listenerController.signal });
 
-    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", process);
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", process, { once: true, signal: listenerController.signal });
     else process();
   }
 

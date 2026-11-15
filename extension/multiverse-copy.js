@@ -2,6 +2,7 @@
 // Loaded before content.js; initialized after shared dependencies are defined.
 (function (root) {
   function initialize({ BLBShared, resolveBibleBook, isSuiteEnabled }) {
+    root.__blbMultiVerseCopyCleanup?.();
     // ---------- BLB MultiVerse native-copy hyperlink enhancement ----------
     // Augment BLB's native MultiVerse clipboard operation with text/html.
     // IMPORTANT: preserve BLB's native Copy button/payload while enriching the clipboard with HTML.
@@ -9,6 +10,8 @@
       location.hostname === BLBShared.hostnames.blbWww &&
       /\/tools\/MultiVerse\.cfm$/i.test(location.pathname)
     ) {
+      const listenerController = new AbortController();
+      root.__blbMultiVerseCopyCleanup = () => listenerController.abort();
       // Only enhance clipboard data when BLB's own Copy button initiates the copy.
       // A regular Ctrl+C (including copying text from the references textbox) must
       // retain the browser/BLB default behaviour.
@@ -18,7 +21,7 @@
         if (!button) return;
         nativeMultiVerseCopyPending = true;
         setTimeout(() => { nativeMultiVerseCopyPending = false; }, 0);
-      }, true);
+      }, { capture: true, signal: listenerController.signal });
     
       document.addEventListener("copy", e => {
         if (!nativeMultiVerseCopyPending) return;
@@ -114,7 +117,7 @@
     } catch (_) {
           // Leave the native MultiVerse copy operation untouched if enhancement fails.
         }
-      }, true);
+      }, { capture: true, signal: listenerController.signal });
     
     
     }
