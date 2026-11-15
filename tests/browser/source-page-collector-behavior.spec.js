@@ -599,3 +599,56 @@ test('source-page collector reports an empty-reference page without sending a Mu
     .toContainText('No linked Bible references found on this page.');
   expect(await extensionWorker.evaluate(() => globalThis.__blbEmptyCollectorRequests)).toBe(0);
 });
+
+
+test('source-page collector recreates its button after the page replaces its body', async ({
+  page, context, extensionStorage
+}) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    redirectEnabled: false,
+    pageSelectionButtonSites: { 'gotquestions.org': true },
+    doubleClickBlbSites: {}
+  });
+  await context.route('https://www.gotquestions.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>Source body fixture</title></head><body><main>Article</main></body></html>'
+  }));
+  await page.goto('https://www.gotquestions.org/body-replacement.html', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#blb-suite-gotquestions-multiverse')).toBeVisible({ timeout: 10000 });
+
+  await page.evaluate(() => {
+    document.body.remove();
+    const replacement = document.createElement('body');
+    replacement.innerHTML = '<main>Rebuilt article</main>';
+    document.documentElement.appendChild(replacement);
+  });
+  await expect(page.locator('#blb-suite-gotquestions-multiverse')).toBeVisible({ timeout: 10000 });
+});
+
+test("King's Bible collector recreates its button after the page replaces its body", async ({
+  page, context, extensionStorage
+}) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    redirectEnabled: false,
+    pageSelectionButtonSites: {},
+    doubleClickBlbSites: {}
+  });
+  await context.route('https://www.thekingsbible.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>Kings Bible body fixture</title></head><body><main>Dictionary entry</main></body></html>'
+  }));
+  await page.goto('https://www.thekingsbible.com/Dictionary/Faith', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#blb-suite-kingsbible-multiverse')).toBeVisible({ timeout: 10000 });
+
+  await page.evaluate(() => {
+    document.body.remove();
+    const replacement = document.createElement('body');
+    replacement.innerHTML = '<main>Rebuilt dictionary entry</main>';
+    document.documentElement.appendChild(replacement);
+  });
+  await expect(page.locator('#blb-suite-kingsbible-multiverse')).toBeVisible({ timeout: 10000 });
+});
