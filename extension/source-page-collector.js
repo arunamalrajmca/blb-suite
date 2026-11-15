@@ -288,7 +288,9 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
         const sourceStorageChangeListener = (changes, areaName) => {
           if (areaName !== "local") return;
           if (changes.masterEnabled?.newValue === false) {
-            document.getElementById(buttonId)?.remove();
+            const button = document.getElementById(buttonId);
+            button?.__blbDragCleanup?.();
+            button?.remove();
             document.getElementById(buttonId + "-reset-position")?.remove();
             document.getElementById(statusId)?.remove();
           } else if (changes.masterEnabled?.newValue === true ||

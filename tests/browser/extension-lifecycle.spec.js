@@ -1470,3 +1470,60 @@ test('BLB navigation and copy modules clean up prior observers and listeners on 
     }
   }
 });
+
+
+test('global setting toggles clean up and recreate source collector draggable controls', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({ masterEnabled: true });
+  await page.route('https://www.dailyverses.net/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>Collector toggle lifecycle</title></head><body><main>John 3:16</main></body></html>'
+  }));
+  await page.goto('https://www.dailyverses.net/fixture-toggle-lifecycle.html', { waitUntil: 'domcontentloaded' });
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({ url: 'https://www.dailyverses.net/fixture-toggle-lifecycle.html' }))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+  const button = page.locator('#blb-suite-dailyverses-multiverse');
+  await expect(button).toBeVisible();
+
+  const captureDraggable = async () => extensionWorker.evaluate(async id => {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: () => {
+        const button = document.getElementById('blb-suite-dailyverses-multiverse');
+        if (!button) return { present: false };
+        globalThis.__blbToggleLifecyclePreviousButton = button;
+        return { present: true, cleanupAvailable: typeof button.__blbDragCleanup === 'function' };
+      }
+    });
+    return injected.result;
+  }, tabId);
+
+  expect(await captureDraggable()).toEqual({ present: true, cleanupAvailable: true });
+  await extensionStorage.set({ masterEnabled: false });
+  await expect(button).toHaveCount(0);
+  await expect.poll(() => extensionWorker.evaluate(async id => {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: () => globalThis.__blbToggleLifecyclePreviousButton?.__blbDragCleanup === null
+    });
+    return injected.result;
+  }, tabId)).toBe(true);
+
+  await extensionStorage.set({ masterEnabled: true });
+  await expect(button).toBeVisible();
+  expect(await captureDraggable()).toEqual({ present: true, cleanupAvailable: true });
+  await extensionStorage.set({ masterEnabled: false });
+  await expect(button).toHaveCount(0);
+  await expect.poll(() => extensionWorker.evaluate(async id => {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: () => globalThis.__blbToggleLifecyclePreviousButton?.__blbDragCleanup === null
+    });
+    return injected.result;
+  }, tabId)).toBe(true);
+});

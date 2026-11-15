@@ -17,7 +17,9 @@ function makeWebsterRedirectHarness({ initialEnabled = true, response = { ok: tr
   const storageListeners = [];
   const messages = [];
   const assigned = [];
+  const cleanupCallbacks = [];
   const context = {
+    cleanupCallbacks,
     document: {
       addEventListener(type, handler) {
         if (type === 'click') clickHandler = handler;

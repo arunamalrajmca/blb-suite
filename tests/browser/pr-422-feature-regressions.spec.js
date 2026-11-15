@@ -123,7 +123,8 @@ test.describe("The King's Bible MultiVerse collector regressions", () => {
   test('creates one visible button and removes it when the master setting is disabled', () => {
     expect(kingsBibleCollectorSource).toContain('id = "blb-suite-kingsbible-multiverse"');
     expect(kingsBibleCollectorSource).toContain('document.getElementById("blb-suite-kingsbible-multiverse")');
-    expect(kingsBibleCollectorSource).toContain('document.getElementById("blb-suite-kingsbible-multiverse")?.remove()');
+    expect(kingsBibleCollectorSource).toContain('button?.__blbDragCleanup?.()');
+    expect(kingsBibleCollectorSource).toContain('button?.remove()');
     expect(kingsBibleCollectorSource).toContain('Open Bible References in BLB');
   });
 });
