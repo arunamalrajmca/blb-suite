@@ -3161,10 +3161,6 @@ function isTrustedExtensionPageSender(sender, expectedPagePath = '') {
   }
 }
 
-function isTrustedExtensionSender(sender) {
-  return isTrustedExtensionPageSender(sender, 'popup.html');
-}
-
 const EXTENSION_PAGE_MESSAGE_SOURCES = new Map([
   ['blbSuiteStopStudyRecording', 'popup.html'],
   ['blbSuitePrepareSiteFeatureToggle', 'popup.html'],
@@ -3315,46 +3311,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blbSuiteDownloadStudyTopic') {
-    if (!isTrustedExtensionSender(sender)) {
-      sendResponse({ok:false, error:'Unauthorized sender'});
-      return true;
-    }
     try { sendResponse({ok:await downloadStudyTopicFromPopup(message.topic)}); } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
 
   if (message.type === 'blbSuiteDownloadStudyWhole') {
-    if (!isTrustedExtensionSender(sender)) {
-      sendResponse({ok:false, error:'Unauthorized sender'});
-      return true;
-    }
     try { sendResponse({ok:await downloadStudyWholeFromPopup()}); } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
 
   if (message.type === 'blbSuiteDownloadStudyDate') {
-    if (!isTrustedExtensionSender(sender)) {
-      sendResponse({ok:false, error:'Unauthorized sender'});
-      return true;
-    }
     try { sendResponse({ok:await downloadStudyDateFromPopup(message.date)}); } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
 
   if (message.type === 'blbSuiteClearStudy') {
-    if (!isTrustedExtensionSender(sender)) {
-      sendResponse({ok:false, error:'Unauthorized sender'});
-      return true;
-    }
     try { sendResponse(await clearStudySessions()); } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
 
   if (message.type === 'blbSuiteClearStudyTopic') {
-    if (!isTrustedExtensionSender(sender)) {
-      sendResponse({ok:false, error:'Unauthorized sender'});
-      return true;
-    }
     try { sendResponse(await clearStudyTopic(message.topic)); } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
