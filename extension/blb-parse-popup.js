@@ -34,7 +34,10 @@
 
     const processParsePopups = (root = document) => {
       if (!isSuiteEnabledNow()) return;
-      if (root.matches?.(".parse-popup")) handleParsePopupLink(root);
+      // MutationObserver may report the anchor itself when BLB appends a new
+      // link directly into an existing popup. querySelectorAll() excludes the
+      // root node, so process matching root anchors explicitly as well.
+      if (root.matches?.("a[href]")) handleParsePopupLink(root);
       root.querySelectorAll?.(".parse-popup a[href]").forEach(handleParsePopupLink);
     };
 
