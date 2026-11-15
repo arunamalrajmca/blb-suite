@@ -666,6 +666,60 @@ test('Study Sessions topic blur reports when the topic could not be saved', asyn
   await page.close();
 });
 
+test('Study Sessions retries clearing an orphaned auto-stop alarm after recording stops', async ({
+  extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionWorker.evaluate(async () => {
+    await chrome.storage.local.set({
+      masterEnabled:true,
+      studyAutoStopMinutes:15,
+      currentStudySessionId:'recording-with-orphaned-alarm',
+      studyLastActivityAt:Date.now(),
+      studySessions:[{
+        id:'recording-with-orphaned-alarm',
+        title:'Alarm Cleanup Recovery',
+        date:'2026-11-15',
+        dateLabel:'15 November 2026',
+        refs:[],strongs:[],searchTerms:[],notes:[]
+      }]
+    });
+    await refreshStudyAutoStopAlarm();
+  });
+
+  const stopped = await extensionWorker.evaluate(async () => stopStudyRecording(
+    'manual',
+    async () => { throw new Error('simulated-alarm-clear-failure'); }
+  ));
+  expect(stopped).toMatchObject({
+    ok:true,
+    recording:false,
+    alarmCleanupPending:true,
+    pausedTopic:''
+  });
+
+  const afterStop = await extensionWorker.evaluate(async () => ({
+    state:await chrome.storage.local.get({
+      currentStudySessionId:null,
+      studyLastActivityAt:0
+    }),
+    alarm:await chrome.alarms.get('blb-study-auto-stop')
+  }));
+  expect(afterStop.state).toMatchObject({
+    currentStudySessionId:null,
+    studyLastActivityAt:0
+  });
+  expect(afterStop.alarm).toMatchObject({
+    name:'blb-study-auto-stop',
+    periodInMinutes:1
+  });
+
+  await extensionWorker.evaluate(() => checkStudyAutoStop());
+  await expect.poll(() => extensionWorker.evaluate(() =>
+    chrome.alarms.get('blb-study-auto-stop')
+  )).toBeUndefined();
+});
+
 test('Study Sessions restores the previous recording when the new recording alarm fails', async ({
   extensionStorage, extensionWorker
 }) => {
