@@ -1213,3 +1213,62 @@ test('closing remembered BLB and ScriptTagger destination tabs clears their mapp
     scriptTaggerReopenedWithFreshTab: true
   });
 });
+
+test('closing multiple MultiVerse tabs clears only their persisted reservations and pending references', async ({
+  extensionWorker
+}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const first = await chrome.tabs.create({url:'about:blank',active:false});
+    const second = await chrome.tabs.create({url:'about:blank',active:false});
+    const survivor = await chrome.tabs.create({url:'about:blank',active:false});
+    const refs = id => [{book:'Genesis',chapter:1,from:1,to:1,requestId:`close-cleanup-${id}`}];
+
+    await chrome.storage.local.set({
+      blbSuiteMultiVerseTabSets: {
+        [String(first.id)]: {key:'multiverse|genesis|1|first',refs:refs(first.id)},
+        [String(second.id)]: {key:'multiverse|genesis|1|second',refs:refs(second.id)},
+        [String(survivor.id)]: {key:'multiverse|genesis|1|survivor',refs:refs(survivor.id)}
+      },
+      blbSuitePendingMultiVerseRefsByTab: {
+        [String(first.id)]: refs(first.id),
+        [String(second.id)]: refs(second.id),
+        [String(survivor.id)]: refs(survivor.id)
+      }
+    });
+
+    // Close both destinations in the same turn. Each onRemoved callback
+    // performs asynchronous read-modify-write cleanup; the serialized queues
+    // must not let one callback restore the other tab's stale reservation.
+    await chrome.tabs.remove([first.id,second.id]);
+
+    try {
+      for (let attempt=0; attempt<80; attempt++) {
+        const data=await chrome.storage.local.get({
+          blbSuiteMultiVerseTabSets:{},
+          blbSuitePendingMultiVerseRefsByTab:{}
+        });
+        const tracked=data.blbSuiteMultiVerseTabSets || {};
+        const pending=data.blbSuitePendingMultiVerseRefsByTab || {};
+        if (!tracked[String(first.id)] && !tracked[String(second.id)] &&
+            !pending[String(first.id)] && !pending[String(second.id)]) {
+          return {
+            firstCleared:!tracked[String(first.id)] && !pending[String(first.id)],
+            secondCleared:!tracked[String(second.id)] && !pending[String(second.id)],
+            survivorPreserved:tracked[String(survivor.id)]?.key==='multiverse|genesis|1|survivor' &&
+              pending[String(survivor.id)]?.[0]?.requestId===`close-cleanup-${survivor.id}`
+          };
+        }
+        await new Promise(resolve=>setTimeout(resolve,25));
+      }
+      throw new Error('Timed out waiting for closed MultiVerse tab reservations to be removed');
+    } finally {
+      await chrome.tabs.remove(survivor.id).catch(()=>{});
+    }
+  });
+
+  expect(result).toEqual({
+    firstCleared:true,
+    secondCleared:true,
+    survivorPreserved:true
+  });
+});
