@@ -6538,12 +6538,16 @@ async function updateSelectionContextMenuVisibility(visible) {
   }
 }
 
-async function syncWebSelectionContextMenuVisibility(tab) {
+async function syncWebSelectionContextMenuVisibility(tab, resolveCurrentActiveTab = true) {
   const generation = ++webSelectionVisibilitySyncGeneration;
   try {
-    // Resolve the actual active tab at execution time instead of waiting in
-    // the shared PDF/web menu-operation queue behind stale tab snapshots.
-    const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+    // Ordinary activation/navigation events resolve the active tab at
+    // execution time. A replacement handler has already verified the new
+    // active tab identity and must use that exact tab rather than re-querying
+    // during Chrome's transient replacement/focus transition.
+    const tabs = resolveCurrentActiveTab
+      ? await chrome.tabs.query({active:true,lastFocusedWindow:true})
+      : [];
     const activeTab = tabs[0] || tab;
     if (!activeTab) {
       if (generation === webSelectionVisibilitySyncGeneration) {
@@ -6570,7 +6574,7 @@ async function syncSelectionMenusAfterTabReplacement(addedTabId) {
   const activeTab = tabs[0];
   if (!activeTab || activeTab.id !== addedTabId) return false;
   await Promise.all([
-    syncWebSelectionContextMenuVisibility(activeTab),
+    syncWebSelectionContextMenuVisibility(activeTab, false),
     syncPdfSelectionContextMenuVisibility(activeTab)
   ]);
   return true;
