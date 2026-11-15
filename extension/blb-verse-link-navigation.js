@@ -80,6 +80,7 @@
 
     if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", process, { once: true, signal: listenerController.signal });
     else process();
+    return Object.freeze({ refresh() { scheduleProcess(); } });
   }
 
   global.BLBVerseLinkNavigationModule = { initialize };

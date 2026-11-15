@@ -597,9 +597,10 @@ globalThis.BLBAutoHyperlinkerModule?.initialize({
 });
 
 // BLB parsing-popup navigation remains an independent feature module.
+let blbParsePopupNavigation = null;
 if (location.hostname.endsWith(BLB_HOSTNAME) &&
     !/(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)$/i.test(location.pathname)) {
-  globalThis.BLBParsePopupModule?.initialize({
+  blbParsePopupNavigation = globalThis.BLBParsePopupModule?.initialize({
     BLB_HOSTNAME,
     BLBShared,
     isSuiteEnabledNow: () => suiteEnabled,
@@ -609,7 +610,7 @@ if (location.hostname.endsWith(BLB_HOSTNAME) &&
 }
 
 // BLB verse-link navigation is isolated in a classic-script feature module.
-globalThis.BLBVerseLinkNavigationModule?.initialize({
+const blbVerseLinkNavigation = globalThis.BLBVerseLinkNavigationModule?.initialize({
   BLB_HOSTNAME,
   isSuiteEnabledNow: () => suiteEnabled,
   isModifiedLinkActivation,
@@ -4065,6 +4066,12 @@ chrome.storage.onChanged.addListener((changes, area) => {
     suiteSettingsGeneration += 1;
     suiteEnabled = changes.masterEnabled.newValue !== false;
     blbPassiveNewTabTargets?.refresh?.();
+    if (suiteEnabled) {
+      // Features whose observers skip DOM mutations while disabled must rescan
+      // existing BLB links when the master switch is re-enabled.
+      blbParsePopupNavigation?.refresh?.();
+      blbVerseLinkNavigation?.refresh?.();
+    }
     if (!suiteEnabled) {
       const websterButton = document.getElementById('blb-suite-webster-multiverse');
       websterButton?.__blbDragCleanup?.();
