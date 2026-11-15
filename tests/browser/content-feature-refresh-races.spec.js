@@ -285,7 +285,7 @@ test('global master toggles detach and restore the per-site double-click listene
     const [result] = await chrome.scripting.executeScript({
       target:{tabId:id}, world:'ISOLATED',
       func:() => ({
-        handler:window.__blbSuiteDoubleClickBoundV2,
+        handler:Boolean(window.__blbSuiteDoubleClickBoundV2),
         active:globalThis.__blbMasterToggleDoubleClickHandlers
           ? globalThis.__blbMasterToggleDoubleClickHandlers.size
           : null
@@ -293,7 +293,7 @@ test('global master toggles detach and restore the per-site double-click listene
     });
     return result.result;
   }, tabId);
-  await expect.poll(async () => (await readState()).handler).toBeTruthy();
+  await expect.poll(async () => (await readState()).handler).toBe(true);
 
   const initial = await extensionWorker.evaluate(async id => {
     const [result] = await chrome.scripting.executeScript({
