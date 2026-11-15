@@ -1277,7 +1277,7 @@ test('a site opt-out during an in-flight registration cannot leave the site cont
       // resolved. Drain the per-registration lock before removing the script
       // and installing the interception used by this race test.
       await Promise.all([...runtimeContentScriptRegistrationLocks.values()].map(operation => operation.catch(() => {})));
-      await chrome.scripting.unregisterContentScripts({ids:[id,mainId]}).catch(() => {});
+      await unregisterRuntimeContentScriptForPattern(originPattern);
 
       const originalRegister = chrome.scripting.registerContentScripts;
       let signalStarted;
