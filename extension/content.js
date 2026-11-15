@@ -4076,6 +4076,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
       if (location.hostname === 'webstersdictionary1828.com') globalThis.BLBWebsterCollector?.ensureButton?.();
       blbPageSelectionButton.refresh();
     }
+    // The double-click listener is a per-site resource. Reconcile it on the
+    // master switch as well as on per-site preference changes so global OFF
+    // tears it down and global ON restores it without accumulating handlers.
+    void refreshDoubleClickBlb();
   }
 
   if (changes.pageSelectionButtonSites && suiteEnabled) {
