@@ -8,18 +8,22 @@
   let masterEnabled = true;
   let redirectEnabled = false;
   let settingsReady = false;
+  let settingsRefreshGeneration = 0;
 
   const refreshSettings = async () => {
+    const generation = ++settingsRefreshGeneration;
     settingsReady = false;
     try {
       const settings = await chrome.storage.local.get({masterEnabled:true, redirectEnabled:false});
+      if (generation !== settingsRefreshGeneration) return;
       masterEnabled = settings.masterEnabled !== false;
       redirectEnabled = settings.redirectEnabled === true;
     } catch (_) {
+      if (generation !== settingsRefreshGeneration) return;
       masterEnabled = false;
       redirectEnabled = false;
     } finally {
-      settingsReady = true;
+      if (generation === settingsRefreshGeneration) settingsReady = true;
     }
   };
   void refreshSettings();

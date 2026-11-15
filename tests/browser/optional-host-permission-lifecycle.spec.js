@@ -1194,6 +1194,14 @@ test('host permission revocation immediately hides both global selection menus',
         // can race this permission-revocation assertion.
         await installWebSelectionContextMenu();
         await installPdfSelectionContextMenu();
+        // Settle startup/focus synchronization against the real permission
+        // state, then invalidate any older visibility generations before the
+        // simulated revocation begins.
+        await syncSelectionMenusForFocusedWindow();
+        await new Promise(resolve => setTimeout(resolve, 0));
+        beginSelectionMenuContextSync();
+        webSelectionVisibilitySyncGeneration += 1;
+        pdfSelectionVisibilitySyncGeneration += 1;
         selectionMenuKnownPresent = true;
         pdfSelectionMenuKnownPresent = true;
         chrome.permissions.contains = async details =>

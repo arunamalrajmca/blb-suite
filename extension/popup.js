@@ -146,7 +146,10 @@ function render(state) {
   updateStudyButtons();
 }
 
+let masterToggleGeneration = 0;
+
 async function setMaster(on) {
+  const generation = ++masterToggleGeneration;
   // Toggling the Suite gate is also a hard boundary for the current Study
   // Topic selection. Never carry a selected topic across OFF/ON. If a topic
   // is recording when the Suite is turned off, stop that recording first so
@@ -156,6 +159,7 @@ async function setMaster(on) {
       const response = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
       if (!response?.ok) throw new Error(response?.error || response?.reason || 'stop-rejected');
     } catch (_) {
+      if (generation !== masterToggleGeneration) return;
       // Keep the global gate ON when the active Study recording could not be
       // stopped. Otherwise it would become hidden and could resume on re-enable.
       document.getElementById('master').checked = true;
@@ -163,7 +167,15 @@ async function setMaster(on) {
       return;
     }
   }
+  // A newer explicit toggle wins while stopping an active Study recording.
+  if (generation !== masterToggleGeneration) {
+    // The in-flight stop may have changed Study state after the newer toggle
+    // refreshed the popup. Re-read once so its UI reflects the completed stop.
+    await refreshStudyState().catch(() => {});
+    return;
+  }
   await chrome.storage.local.set({masterEnabled:on, [SELECTED_TOPIC_STORAGE_KEY]: ''});
+  if (generation !== masterToggleGeneration) return;
   topicInput.value = '';
   noteInput.value = '';
   setStatus('Select a topic and start recording');

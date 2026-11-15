@@ -52,7 +52,7 @@ function anchor(text) {
   return { innerText: text, textContent: text };
 }
 
-function makeCapture({ hostname = 'webstersdictionary1828.com', pathname = '/dictionary/Faith', enabled = true, active = true } = {}) {
+function makeCapture({ hostname = 'webstersdictionary1828.com', pathname = '/dictionary/Faith', enabled = true, active = true, isSuiteEnabledNow = () => enabled } = {}) {
   const messages = [];
   const start = source.indexOf('async function captureWebsterWord()');
   const end = source.indexOf('captureWebsterWord();', start);
@@ -63,10 +63,11 @@ function makeCapture({ hostname = 'webstersdictionary1828.com', pathname = '/dic
     normalizeSelectionText,
     chrome: { runtime: { sendMessage: async message => {
       messages.push(message);
-      if (message.type === 'blbSuiteStudyCaptureActive') return { active };
+      if (message.type === 'blbSuiteStudyCaptureActive') return typeof active === 'function' ? active() : { active };
       return { ok: true };
     } } },
-    isSuiteEnabled: async () => enabled
+    isSuiteEnabled: async () => enabled,
+    isSuiteEnabledNow
   };
   vm.runInNewContext(source.slice(start, end) + '\nthis.__capture = captureWebsterWord;', context);
   return { capture: context.__capture, messages };
@@ -104,6 +105,29 @@ test.describe('Webster collector behavior', () => {
   });
 
 
+
+  test('does not capture a Webster word if global OFF occurs during the active Study check', async () => {
+    const activeResolvers = [];
+    let masterEnabled = true;
+    const harness = makeCapture({
+      pathname: '/dictionary/faith-and-hope',
+      active: () => new Promise(resolve => activeResolvers.push(resolve)),
+      isSuiteEnabledNow: () => masterEnabled
+    });
+
+    const capture = harness.capture();
+    for (let attempt = 0; attempt < 10 && activeResolvers.length === 0; attempt += 1) {
+      await Promise.resolve();
+    }
+    expect(activeResolvers).toHaveLength(1);
+
+    masterEnabled = false;
+    activeResolvers[0]({ active: true });
+    await capture;
+    expect(harness.messages).toEqual([
+      { type: 'blbSuiteStudyCaptureActive' }
+    ]);
+  });
 
   test('renders the collector button and opens collected references in MultiVerse', async ({ page, extensionStorage, extensionWorker }) => {
     await extensionStorage.set({

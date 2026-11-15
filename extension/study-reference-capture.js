@@ -1,7 +1,7 @@
 // Captures useful BLB Bible and Strong's destinations while a named Study Topic is active.
 // Navigation/result based: no click logging, polling, or page-wide MutationObserver.
 (function (global) {
-  function initialize({ BLB_HOSTNAME, normalizeSelectionText, isSuiteEnabled }) {
+  function initialize({ BLB_HOSTNAME, normalizeSelectionText, isSuiteEnabled, isSuiteEnabledNow = isSuiteEnabled }) {
   // // ---------- Study reference capture ----------
   // Capture only useful BLB Bible/Strong's destinations while a named Study Topic
   // is active. This is deliberately navigation/result based: no click logging,
@@ -9,9 +9,9 @@
   if (location.hostname.toLowerCase().replace(/^www\./,'') === BLB_HOSTNAME) {
     const captureStudyRefs = async () => {
       try {
-        if (!(await isSuiteEnabled())) return;
+        if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) return;
         const active = await chrome.runtime.sendMessage({type:'blbSuiteStudyCaptureActive'});
-        if (!active?.active) return;
+        if (!active?.active || !isSuiteEnabledNow()) return;
   
         const refs = new Map();
         const addUrl = href => {
@@ -55,9 +55,9 @@
   
     const captureStrong = async () => {
       try {
-        if (!(await isSuiteEnabled())) return;
+        if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) return;
         const active = await chrome.runtime.sendMessage({type:'blbSuiteStudyCaptureActive'});
-        if (!active?.active) return;
+        if (!active?.active || !isSuiteEnabledNow()) return;
         const m = location.pathname.match(/\/lexicon\/(g|h)(\d+)\//i);
         if (m) await chrome.runtime.sendMessage({type:'blbSuiteCaptureStudyStrong', value:`${m[1]}${m[2]}`});
       } catch (_) {}

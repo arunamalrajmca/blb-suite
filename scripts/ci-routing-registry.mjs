@@ -65,7 +65,7 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/redirect-bibleref-ranges.js", "extension/redirect-christianity-main-world.js"],
-    specs: ["tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-hostnames.spec.js", "tests/browser/blb-non-kjv-redirect.spec.js", "tests/browser/bibleref-range-redirect-lifecycle.spec.js"]
+    specs: ["tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-hostnames.spec.js", "tests/browser/blb-non-kjv-redirect.spec.js", "tests/browser/bibleref-range-redirect-lifecycle.spec.js", "tests/browser/redirect-toggle-isolation.spec.js"]
   },
   {
     paths: ["extension/source-bible-redirect.js"],
@@ -73,7 +73,7 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/redirect-scripttagger.js"],
-    specs: ["tests/browser/scripttagger-global-injection.spec.js"]
+    specs: ["tests/browser/scripttagger-global-injection.spec.js", "tests/browser/redirect-toggle-isolation.spec.js"]
   },
   {
     paths: ["extension/multiverse-post.html", "extension/multiverse-post.js"],
@@ -85,11 +85,11 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/kings-bible-collector.js"],
-    specs: ["tests/browser/kings-bible-collector-behavior.spec.js", "tests/browser/pr-422-feature-regressions.spec.js"]
+    specs: ["tests/browser/kings-bible-collector-behavior.spec.js", "tests/browser/pr-422-feature-regressions.spec.js", "tests/browser/redirect-toggle-isolation.spec.js"]
   },
   {
     paths: ["extension/webster-collector.js"],
-    specs: ["tests/browser/webster-collector-behavior.spec.js"]
+    specs: ["tests/browser/webster-collector-behavior.spec.js", "tests/browser/redirect-toggle-isolation.spec.js"]
   },
   {
     paths: ["extension/source-page-collector-sites.js"],
@@ -113,7 +113,7 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/study-reference-capture.js"],
-    specs: ["tests/browser/study-reference-capture.spec.js"]
+    specs: ["tests/browser/study-reference-capture.spec.js", "tests/browser/redirect-toggle-isolation.spec.js"]
   },
   {
     paths: ["extension/criteria-search-navigation.js"],

@@ -242,3 +242,128 @@ test('background redirect-rule refresh reports a Dynamic Rules API failure', asy
   expect(result.ok).toBe(false);
   expect(result.error).toContain('simulated-dnr-update-failure');
 });
+
+
+async function runOutOfOrderRedirectRefresh(sourcePath, kind) {
+  const source = fs.readFileSync(path.resolve(__dirname, '../../extension', sourcePath), 'utf8');
+  const reads = [];
+  let onChanged = null;
+  let clickHandler = null;
+  class FakeElement {}
+  const link = kind === 'scripttagger'
+    ? {href:'https://www.blueletterbible.org/kjv/jhn/3/16/'}
+    : {
+        href:'https://www.bibleref.com/John/3/John-3-16.html',
+        textContent:'John 3:16-17',
+        parentElement:null
+      };
+  const context = {
+    URL,
+    Element:FakeElement,
+    document:{
+      addEventListener(type, handler) {
+        if (type === 'click') clickHandler = handler;
+      }
+    },
+    chrome:{
+      storage:{
+        local:{get:() => new Promise(resolve => reads.push(resolve))},
+        onChanged:{addListener(handler) { onChanged = handler; }}
+      },
+      runtime:{sendMessage:async () => ({ok:true})}
+    },
+    window:{location:{assign() {}}},
+    console:{warn() {}}
+  };
+  vm.runInNewContext(source, context, {filename:sourcePath});
+  expect(reads).toHaveLength(1);
+
+  // Queue an older ON refresh followed by the latest OFF refresh. Resolve OFF
+  // first, then let the obsolete ON read finish last.
+  onChanged({redirectEnabled:{newValue:true}}, 'local');
+  onChanged({redirectEnabled:{newValue:false}}, 'local');
+  expect(reads).toHaveLength(3);
+  reads[2]({masterEnabled:true,redirectEnabled:false});
+  await Promise.resolve();
+  reads[0]({masterEnabled:true,redirectEnabled:false});
+  await Promise.resolve();
+  reads[1]({masterEnabled:true,redirectEnabled:true});
+  await Promise.resolve();
+  await Promise.resolve();
+
+  const target = new FakeElement();
+  target.closest = selector => kind === 'scripttagger'
+    ? (selector === 'a.BLBST_a[href]' ? link : null)
+    : (selector === 'a[href]' ? link : null);
+  const event = {
+    button:0, metaKey:false, ctrlKey:false, shiftKey:false, altKey:false,
+    target, defaultPrevented:false,
+    preventDefault() { this.defaultPrevented = true; },
+    stopImmediatePropagation() {}
+  };
+  clickHandler(event);
+  return event.defaultPrevented;
+}
+
+test('stale ScriptTagger redirect settings cannot override a newer OFF choice', async () => {
+  expect(await runOutOfOrderRedirectRefresh('redirect-scripttagger.js', 'scripttagger')).toBe(false);
+});
+
+test('stale BibleRef range redirect settings cannot override a newer OFF choice', async () => {
+  expect(await runOutOfOrderRedirectRefresh('redirect-bibleref-ranges.js', 'bibleref')).toBe(false);
+});
+
+test('initial content-script master and redirect reads cannot override newer storage events', () => {
+  const source = fs.readFileSync(path.resolve(__dirname, '../../extension/content.js'), 'utf8');
+  expect(source).toContain('let suiteSettingsGeneration = 0;');
+  expect(source).toContain('if (initialSuiteSettingsGeneration === suiteSettingsGeneration)');
+  expect(source).toContain('let redirectSettingsGeneration = 0;');
+  expect(source).toContain('if (initialRedirectSettingsGeneration !== redirectSettingsGeneration) return;');
+  expect(source).toContain('redirectSettingsGeneration += 1;');
+  expect(source).toContain('suiteSettingsGeneration += 1;');
+});
+
+test('source collectors recheck the current master gate after asynchronous initialization', () => {
+  const content = fs.readFileSync(path.resolve(__dirname, '../../extension/content.js'), 'utf8');
+  const kings = fs.readFileSync(path.resolve(__dirname, '../../extension/kings-bible-collector.js'), 'utf8');
+  const webster = fs.readFileSync(path.resolve(__dirname, '../../extension/webster-collector.js'), 'utf8');
+  expect(content).toContain('isSuiteEnabledNow: () => suiteEnabled');
+  expect(kings).toContain('isSuiteEnabledNow = isSuiteEnabled');
+  expect(kings).toContain('!isSuiteEnabledNow()');
+  expect(webster).toContain('if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) return;');
+});
+
+test('pending Study capture stops before recording after global OFF', async () => {
+  const source = fs.readFileSync(path.resolve(__dirname, '../../extension/study-reference-capture.js'), 'utf8');
+  const activeResolvers = [];
+  const captured = [];
+  let enabled = true;
+  const context = {
+    URL,
+    location:{
+      hostname:'www.blueletterbible.org',
+      pathname:'/kjv/jhn/3/16/',
+      href:'https://www.blueletterbible.org/kjv/jhn/3/16/'
+    },
+    document:{readyState:'complete',addEventListener(){}},
+    chrome:{
+      runtime:{
+        sendMessage:message => message?.type === 'blbSuiteStudyCaptureActive'
+          ? new Promise(resolve => activeResolvers.push(resolve))
+          : (captured.push(message), Promise.resolve({ok:true}))
+      }
+    }
+  };
+  vm.runInNewContext(source, context, {filename:'study-reference-capture.js'});
+  context.BLBStudyReferenceCaptureModule.initialize({
+    BLB_HOSTNAME:'blueletterbible.org',
+    normalizeSelectionText:value => String(value || '').trim(),
+    isSuiteEnabled:async () => true,
+    isSuiteEnabledNow:() => enabled
+  });
+  await expect.poll(() => activeResolvers.length).toBe(2);
+  enabled = false;
+  activeResolvers.forEach(resolve => resolve({active:true}));
+  for (let i=0;i<6;i++) await Promise.resolve();
+  expect(captured).toEqual([]);
+});

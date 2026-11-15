@@ -1,6 +1,6 @@
 // Hides Suite-generated MultiVerse pages until the requested results are visible.
 (function (global) {
-  function initialize({ BLBShared, isSuiteEnabled, resolveBibleBook }) {
+  function initialize({ BLBShared, isSuiteEnabled, isSuiteEnabledNow = isSuiteEnabled, resolveBibleBook }) {
     // ---------- BLB MultiVerse hand-off ----------
     // Suite-generated MultiVerse tabs must never expose BLB's bootstrap/default
     // result set. Keep the document hidden until the requested reference set is
@@ -62,6 +62,7 @@
       async function waitForExpectedMultiVerseResults(refs){
         const started=Date.now();
         while (Date.now()-started<10000) {
+          if (!isSuiteEnabledNow()) return false;
           if (hasExpectedMultiVerseResults(refs)) return true;
           await new Promise(resolve=>setTimeout(resolve,50));
         }
@@ -69,12 +70,16 @@
       }
     
       async function processPendingMultiVerseRefs() {
-        if (!(await isSuiteEnabled())) {
+        if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) {
           revealPendingMultiVerseView();
           return false;
         }
         hidePendingMultiVerseView();
         const response=await chrome.runtime.sendMessage({type:'blbSuiteGetPendingMultiVerseRefs'});
+        if (!isSuiteEnabledNow()) {
+          revealPendingMultiVerseView();
+          return false;
+        }
         const refs=response?.refs;
         if (!Array.isArray(refs) || refs.length<1) {
           revealPendingMultiVerseView();
@@ -87,6 +92,10 @@
         const started=Date.now();
         let heading=null, advancedHeading=null, verseControls=[], retrieve=null;
         while (Date.now()-started<4000) {
+          if (!isSuiteEnabledNow()) {
+            revealPendingMultiVerseView();
+            return false;
+          }
           heading=Array.from(document.querySelectorAll("h1,h2,h3,h4,h5,h6,div,td,th,label"))
             .find(el=>/^\s*multiverse retrieval\s*$/i.test((el.innerText||el.textContent||"").trim()));
           if (heading) {
@@ -128,6 +137,10 @@
         const valueStarted=Date.now();
         let actual="";
         while (Date.now()-valueStarted<1000) {
+          if (!isSuiteEnabledNow()) {
+            revealPendingMultiVerseView();
+            return false;
+          }
           actual=String(primary.value||primary.getAttribute("value")||"").trim();
           if (actual===combined) break;
           await new Promise(resolve=>setTimeout(resolve,25));
@@ -137,7 +150,15 @@
           return false;
         }
     
+        if (!isSuiteEnabledNow()) {
+          revealPendingMultiVerseView();
+          return false;
+        }
         await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+        if (!isSuiteEnabledNow()) {
+          revealPendingMultiVerseView();
+          return false;
+        }
         retrieve.dispatchEvent(new MouseEvent("mousedown",{bubbles:true,cancelable:true,view:window}));
         retrieve.dispatchEvent(new MouseEvent("mouseup",{bubbles:true,cancelable:true,view:window}));
         retrieve.click();

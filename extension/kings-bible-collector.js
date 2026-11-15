@@ -11,6 +11,7 @@ globalThis.BLBKingsBibleCollector = Object.freeze({
     resolveBibleReference,
     blbUrl,
     isSuiteEnabled,
+    isSuiteEnabledNow = isSuiteEnabled,
     makeBlbMultiVerseButtonDraggable
   }) {
 // ---------- The King's Bible Dictionary/Concordance MultiVerse ----------
@@ -248,7 +249,7 @@ if (kingsBibleCollectorConfig?.collectorModule === "kings-bible" && kingsBibleEn
   }
 
   async function ensureKingsBibleButton() {
-    if (!(await isSuiteEnabled()) || !document.body ||
+    if (!(await isSuiteEnabled()) || !isSuiteEnabledNow() || !document.body ||
         document.getElementById("blb-suite-kingsbible-multiverse")) return;
     const button = document.createElement("button");
     button.id = "blb-suite-kingsbible-multiverse";

@@ -106,18 +106,21 @@ const BLB_HOSTNAME = BLBShared.hostnames.blb;
 let suiteEnabled = false;
 let doubleClickBlbEnabled = false;
 let suiteSettingsReady = false;
+let suiteSettingsGeneration = 0;
 
 // Cache the master setting in each content-script instance. This avoids a
 // storage read on every copy/click/selection event while still reacting
 // immediately to later setting changes through chrome.storage.onChanged.
+const initialSuiteSettingsGeneration = suiteSettingsGeneration;
 const suiteSettingsReadyPromise = chrome.storage.local.get({masterEnabled:true, doubleClickBlbSites:{}}).then(data => {
-  suiteEnabled = data.masterEnabled !== false;
+  if (initialSuiteSettingsGeneration === suiteSettingsGeneration) {
+    suiteEnabled = data.masterEnabled !== false;
+  }
   suiteSettingsReady = true;
   return suiteEnabled;
 }).catch(() => {
-  // Fail closed if the master setting cannot be read. A storage failure must
-  // never temporarily activate Suite features while the extension is meant to be OFF.
-  suiteEnabled = false;
+  // Fail closed only if no newer storage event has supplied authoritative state.
+  if (initialSuiteSettingsGeneration === suiteSettingsGeneration) suiteEnabled = false;
   suiteSettingsReady = true;
   return suiteEnabled;
 });
@@ -385,9 +388,12 @@ const redirectBibleSite = globalThis.BLBSourceBibleRedirectModule.initialize({
 
 // On The King's Bible Dictionary/Concordance pages, keep the source page open.
 // Only clicked Bible-passage and Strong's links are sent to BLB in a new tab.
+let redirectSettingsGeneration = 0;
 let theKingsBibleRedirectEnabled = false;
 if (typeof chrome !== "undefined" && chrome.storage?.local) {
+  const initialRedirectSettingsGeneration = redirectSettingsGeneration;
   chrome.storage.local.get({redirectEnabled:false}).then(data => {
+    if (initialRedirectSettingsGeneration !== redirectSettingsGeneration) return;
     theKingsBibleRedirectEnabled = data.redirectEnabled === true;
   }).catch(() => {});
 }
@@ -564,9 +570,11 @@ if (["christianity.com", "gotquestions.org", "crosswalk.com", "enduringword.com"
 }
 
 if (REDIRECT_HOSTS.has(location.hostname.toLowerCase().replace(/^www\./, ''))) {
+  const initialRedirectSettingsGeneration = redirectSettingsGeneration;
   isSuiteEnabled().then(enabled => {
-    if (!enabled) return;
+    if (initialRedirectSettingsGeneration !== redirectSettingsGeneration || !enabled) return;
     return chrome.storage.local.get({redirectEnabled:false}).then(({redirectEnabled})=>{
+      if (initialRedirectSettingsGeneration !== redirectSettingsGeneration) return;
       sourceBibleRedirectEnabled = redirectEnabled === true;
       if (!redirectEnabled) return;
       if (!redirectBlbNet()) redirectBibleSite();
@@ -642,6 +650,7 @@ globalThis.BLBKingsBibleCollector.initialize({
   resolveBibleReference,
   blbUrl,
   isSuiteEnabled,
+  isSuiteEnabledNow: () => suiteEnabled,
   makeBlbMultiVerseButtonDraggable
 });
 
@@ -673,6 +682,7 @@ globalThis.BLBSourcePageCollectorModule?.initialize({
 globalThis.BLBMultiVerseHandoffModule?.initialize({
   BLBShared,
   isSuiteEnabled,
+  isSuiteEnabledNow: () => suiteEnabled,
   resolveBibleBook
 });
 
@@ -681,7 +691,8 @@ globalThis.BLBMultiVerseHandoffModule?.initialize({
 globalThis.BLBStudyReferenceCaptureModule?.initialize({
   BLB_HOSTNAME,
   normalizeSelectionText,
-  isSuiteEnabled
+  isSuiteEnabled,
+  isSuiteEnabledNow: () => suiteEnabled
 });
 
 // ---------- Double-Click BLB ----------
@@ -4045,11 +4056,13 @@ const blbPageSelectionButton = globalThis.BLBPageSelectionButtonModule.initializ
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== 'local') return;
   if (changes.redirectEnabled) {
+    redirectSettingsGeneration += 1;
     theKingsBibleRedirectEnabled = changes.redirectEnabled.newValue === true;
     sourceBibleRedirectEnabled = changes.redirectEnabled.newValue === true;
   }
 
   if (changes.masterEnabled) {
+    suiteSettingsGeneration += 1;
     suiteEnabled = changes.masterEnabled.newValue !== false;
     blbPassiveNewTabTargets?.refresh?.();
     if (!suiteEnabled) {
