@@ -6563,8 +6563,14 @@ async function syncWebSelectionContextMenuVisibility(tab, resolveCurrentActiveTa
     }
     const visible = await shouldShowBlbContextMenu(activeTab, '');
     // A newer activation/navigation may have started while eligibility was
-    // being read. Never let an older result overwrite the latest tab state.
+    // being read. Also verify that an ordinary sync still targets the active
+    // tab in the last-focused window before changing the global menu.
     if (generation !== webSelectionVisibilitySyncGeneration || !isCurrent()) return false;
+    if (resolveCurrentActiveTab) {
+      const latestTabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
+      if (generation !== webSelectionVisibilitySyncGeneration || !isCurrent() ||
+          latestTabs[0]?.id !== activeTab.id) return false;
+    }
     return await updateSelectionContextMenuVisibility(visible);
   } catch (_) {
     if (generation !== webSelectionVisibilitySyncGeneration || !isCurrent()) return false;
@@ -6701,10 +6707,15 @@ async function shouldInjectContentScriptForTab(tab, data) {
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.url || changeInfo.status === 'complete') {
-    // Ignore updates from inactive tabs before they can supersede a focus sync.
-    chrome.tabs.query({active:true,lastFocusedWindow:true}).then(tabs => {
+    // An update query can finish after a newer focus/activation event. Only
+    // start a visibility sync if no newer context event has superseded it.
+    const observedGeneration = selectionMenuContextSyncGeneration;
+    chrome.tabs.query({active:true,lastFocusedWindow:true}).then(async tabs => {
       const activeTab = tabs[0];
-      if (activeTab?.id !== tabId) return;
+      if (observedGeneration !== selectionMenuContextSyncGeneration || activeTab?.id !== tabId) return;
+      const focusedWindow = await chrome.windows.getLastFocused();
+      if (observedGeneration !== selectionMenuContextSyncGeneration ||
+          focusedWindow?.id !== activeTab.windowId) return;
       const isCurrent = beginSelectionMenuContextSync();
       syncWebSelectionContextMenuVisibility(activeTab, false, isCurrent).catch(() => {});
       syncPdfSelectionContextMenuVisibility(activeTab, isCurrent).catch(() => {});
