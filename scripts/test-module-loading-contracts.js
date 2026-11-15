@@ -414,6 +414,9 @@ if (!extensionPageMessageSourcesMatch) {
       extensionPageOwnershipValid = false;
       continue;
     }
+    // Performance-only message sources are test-owned rather than emitted by
+    // popup.js; their dedicated test-only contract above verifies that caller.
+    if (testOnlyAsyncMessageTypes.has(type)) continue;
     const sourceFile = extensionPageSourceFiles.get(page);
     if (!sourceFile) {
       fail('extension-page-only message uses a known owning page: ' + type + ' -> ' + page);
