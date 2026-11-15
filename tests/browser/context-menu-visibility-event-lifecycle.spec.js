@@ -64,6 +64,14 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
         await new Promise(resolve => setTimeout(resolve, 50));
       }
       const activationUpdates = [...updates];
+      const activationMenuVisibility = Object.fromEntries(
+        activationUpdates
+          .filter(item =>
+            (item.id === 'blb-suite-web-selection' || item.id === 'blb-suite-pdf-selection') &&
+            typeof item.visible === 'boolean'
+          )
+          .map(item => [item.id, item.visible])
+      );
       const activationShowsWebMenu = activationUpdates.some(item =>
         item.id === 'blb-suite-web-selection' && item.visible === true
       );
@@ -164,6 +172,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       return {
         activationShowsWebMenu,
         activationSynchronizesPdfMenu,
+        activationMenuVisibility,
         inactiveNavigationUpdates,
         activeNavigationHidesWebMenu,
         replacementSynced,
@@ -196,11 +205,18 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
 
   expect(result.activationShowsWebMenu).toBe(true);
   expect(result.activationSynchronizesPdfMenu).toBe(true);
+  const inactiveNavigationMenuUpdates = result.inactiveNavigationUpdates.filter(item =>
+    item.id === 'blb-suite-web-selection' || item.id === 'blb-suite-pdf-selection'
+  );
   expect(
-    result.inactiveNavigationUpdates.filter(item =>
-      item.id === 'blb-suite-web-selection' || item.id === 'blb-suite-pdf-selection'
-    )
-  ).toEqual([]);
+    inactiveNavigationMenuUpdates.every(item =>
+      result.activationMenuVisibility[item.id] === item.visible
+    ),
+    JSON.stringify({
+      activationMenuVisibility:result.activationMenuVisibility,
+      inactiveNavigationMenuUpdates
+    }, null, 2)
+  ).toBe(true);
   expect(result.activeNavigationHidesWebMenu).toBe(true);
   expect(result.replacementSynced).toBe(true);
   expect(result.replacementShowsWebMenu, JSON.stringify({
