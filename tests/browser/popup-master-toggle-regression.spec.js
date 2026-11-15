@@ -181,4 +181,5 @@ test('a newer master ON choice wins while an older OFF waits for Study stop', as
     (await chrome.storage.local.get({masterEnabled:false})).masterEnabled
   )).toBe(true);
   await expect(page.locator('#master')).toBeChecked();
+  expect(await page.evaluate(() => studyState.recording)).toBe(false);
 });
