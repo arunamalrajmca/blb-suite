@@ -449,7 +449,7 @@ if (!trustedPageHelper ||
 
 
 const authorizedContentSenderHelper = background.match(
-  /async function isAuthorizedContentScriptSender\\(sender, allowedHosts = null\\) \\{([\\s\\S]*?)\\n\\}/
+  /async function isAuthorizedContentScriptSender\(sender, allowedHosts = null\) \{([\s\S]*?)\n\}/
 );
 if (!authorizedContentSenderHelper ||
     !['sender.id', 'sender.tab?.id', 'sender.url', 'hasSelectionActionPermissionForTab']
@@ -460,7 +460,7 @@ if (!authorizedContentSenderHelper ||
 }
 
 const sourceCollectorSenderHelper = background.match(
-  /function isSourceCollectorContentScriptSender\\(sender\\) \\{([\\s\\S]*?)\\n\\}/
+  /function isSourceCollectorContentScriptSender\(sender\) \{([\s\S]*?)\n\}/
 );
 if (!sourceCollectorSenderHelper ||
     !sourceCollectorSenderHelper[1].includes('BLBSourcePageCollectorSites')) {
