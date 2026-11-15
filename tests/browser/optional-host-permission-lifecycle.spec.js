@@ -1277,6 +1277,10 @@ test('a site opt-out during an in-flight registration cannot leave the site cont
       });
       await reconcileRuntimeContentScriptRegistrations();
       await runtimeContentScriptReconciliationQueue;
+      // Reconciliation may have queued a registration after its own queue
+      // resolved. Drain the per-registration lock before removing the script
+      // and installing the interception used by this race test.
+      await Promise.all([...runtimeContentScriptRegistrationLocks.values()].map(operation => operation.catch(() => {})));
       await chrome.scripting.unregisterContentScripts({ids:[id,mainId]}).catch(() => {});
 
       const originalRegister = chrome.scripting.registerContentScripts;
