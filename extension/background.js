@@ -151,7 +151,16 @@ async function saveStudySessions(sessions, extra = {}) {
 async function getStudySessions() {
   const data = await chrome.storage.local.get({studySessions:[], currentStudySessionId:null});
   const cleaned = sanitizeStudySessions(Array.isArray(data.studySessions) ? data.studySessions : []);
-  if (cleaned.changed) await chrome.storage.local.set({studySessions:cleaned.sessions});
+  if (cleaned.changed) {
+    try {
+      await chrome.storage.local.set({studySessions:cleaned.sessions});
+    } catch (error) {
+      // A failed best-effort repair must not make otherwise readable Study
+      // history unavailable. Return the sanitized in-memory view; the next
+      // read can retry persisting the cleanup.
+      console.warn('KJV Scripture Tools could not persist normalized Study history:', String(error));
+    }
+  }
   return {
     sessions:cleaned.sessions,
     currentId: data.currentStudySessionId || null,
