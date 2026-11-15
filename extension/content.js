@@ -650,6 +650,7 @@ globalThis.BLBKingsBibleCollector.initialize({
   resolveBibleReference,
   blbUrl,
   isSuiteEnabled,
+  isSuiteEnabledNow: () => suiteEnabled,
   makeBlbMultiVerseButtonDraggable
 });
 
