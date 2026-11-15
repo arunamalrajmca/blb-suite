@@ -123,6 +123,9 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       // Focusing a different browser window must also refresh the global menus;
       // the active tab inside either window can remain unchanged.
       const originalWindowId = replacementTab.windowId;
+      const focusEvents = [];
+      const recordFocusEvent = windowId => focusEvents.push(windowId);
+      chrome.windows.onFocusChanged.addListener(recordFocusEvent);
       const otherWindow = await chrome.windows.create({url:'https://www.gov.scot/',focused:false});
       if (!otherWindow?.id) throw new Error('Could not create the secondary test window');
       createdWindowIds.push(otherWindow.id);
@@ -138,7 +141,14 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       );
       updates.length = 0;
       await chrome.windows.update(originalWindowId,{focused:true});
-      for (let attempt=0; attempt<50 && !updates.some(item =>
+      let focusedWindowId = null;
+      for (let attempt=0; attempt<100; attempt++) {
+        const focusedWindow = await chrome.windows.getLastFocused();
+        focusedWindowId = focusedWindow?.id ?? null;
+        if (focusedWindowId === originalWindowId) break;
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      for (let attempt=0; attempt<100 && !updates.some(item =>
         item.id === 'blb-suite-web-selection' && item.visible === true
       ); attempt++) {
         await new Promise(resolve => setTimeout(resolve, 50));
@@ -146,6 +156,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       const focusChangeShowsWebMenu = updates.some(item =>
         item.id === 'blb-suite-web-selection' && item.visible === true
       );
+      chrome.windows.onFocusChanged.removeListener(recordFocusEvent);
       await chrome.windows.remove(otherWindow.id);
 
       return {
@@ -159,13 +170,19 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
         backgroundReplacementIgnored,
         backgroundReplacementUpdates,
         focusChangeHidesWebMenu,
-        focusChangeShowsWebMenu
+        focusChangeShowsWebMenu,
+        focusEvents,
+        originalWindowId,
+        focusedWindowId
       };
     } finally {
       chrome.contextMenus.update = originalUpdate;
       selectionMenuKnownPresent = originalWebKnownPresent;
       pdfSelectionMenuKnownPresent = originalPdfKnownPresent;
       hasSelectionActionPermissionForTab = originalSelectionPermissionCheck;
+      if (typeof recordFocusEvent === 'function') {
+        chrome.windows.onFocusChanged.removeListener(recordFocusEvent);
+      }
       await Promise.all(createdTabIds.map(id => chrome.tabs.remove(id).catch(() => {})));
       await Promise.all(createdWindowIds.map(id => chrome.windows.remove(id).catch(() => {})));
       await chrome.storage.local.set(settings);
