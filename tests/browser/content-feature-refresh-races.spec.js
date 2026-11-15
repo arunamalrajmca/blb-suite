@@ -20,14 +20,14 @@ test('latest per-site selection settings win when content-script storage reads r
     pageSelectionButtonSites:{'example.com':true},
     doubleClickBlbSites:{'example.com':true}
   });
-  await page.route('https://www.example.com/**', route => route.fulfill({
+  await page.route('https://example.com/**', route => route.fulfill({
     status:200,
     contentType:'text/html; charset=utf-8',
     body:'<!doctype html><html><head><title>Selection feature race</title></head><body><p>John 3:16</p></body></html>'
   }));
-  await page.goto('https://www.example.com/selection-feature-race.html', {waitUntil:'domcontentloaded'});
+  await page.goto('https://example.com/selection-feature-race.html', {waitUntil:'domcontentloaded'});
   const tabId = await extensionWorker.evaluate(async () =>
-    (await chrome.tabs.query({url:'https://www.example.com/selection-feature-race.html'}))[0]?.id
+    (await chrome.tabs.query({url:'https://example.com/selection-feature-race.html'}))[0]?.id
   );
   expect(Number.isInteger(tabId)).toBe(true);
 
