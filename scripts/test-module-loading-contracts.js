@@ -305,11 +305,12 @@ if (unreferencedExtensionScripts.length) {
   pass(extensionJavaScriptFiles.length + ' packaged extension JavaScript files are accounted for by runtime entry points');
 }
 
+let asyncTypes = [];
 const asyncTypesMatch = background.match(/const ASYNC_MESSAGE_TYPES = new Set\(\[([\s\S]*?)\]\);/);
 if (!asyncTypesMatch) {
   fail('background asynchronous message allowlist remains discoverable for dispatch auditing');
 } else {
-  const asyncTypes = [...asyncTypesMatch[1].matchAll(/['"]([^'"]+)['"]/g)].map(match => match[1]);
+  asyncTypes = [...asyncTypesMatch[1].matchAll(/['"]([^'"]+)['"]/g)].map(match => match[1]);
   const dispatchSource = background.slice(asyncTypesMatch.index + asyncTypesMatch[0].length);
   const missingDispatch = asyncTypes.filter(type => !dispatchSource.includes(type));
   if (missingDispatch.length) {
@@ -318,6 +319,44 @@ if (!asyncTypesMatch) {
   } else {
     pass(asyncTypes.length + ' asynchronous message allowlist entries retain corresponding dispatch paths');
   }
+}
+
+
+// Every asynchronous background message must have a real extension-side sender.
+// Test-only entry points are listed explicitly so they cannot be mistaken for
+// production callers, and their owning regression tests must continue to exist.
+const testOnlyAsyncMessageTypes = new Map([
+  ['blbSuiteClassifySelection', 'tests/browser/performance.spec.js'],
+  ['blbSuiteOpenCurrentSelection', 'tests/browser/e2e-core-user-actions.spec.js']
+]);
+const runtimeMessageSources = extensionJavaScriptFiles
+  .filter(file => file !== 'background.js')
+  .map(file => ({ file, source: read(path.posix.join('extension', file)) }));
+for (const [type, testFile] of testOnlyAsyncMessageTypes) {
+  if (!asyncTypesMatch || !asyncTypes.includes(type)) {
+    fail('test-only message exception remains in the background allowlist: ' + type);
+  }
+  if (!fs.existsSync(path.join(root, testFile)) || !read(testFile).includes(type)) {
+    fail('test-only message exception retains its owning regression test: ' + type + ' -> ' + testFile);
+  }
+}
+const unownedAsyncMessages = asyncTypes.filter(type => {
+  if (testOnlyAsyncMessageTypes.has(type)) return false;
+  const fragments = [
+    "type:'" + type + "'",
+    "type: '" + type + "'",
+    'type:"' + type + '"',
+    'type: "' + type + '"'
+  ];
+  return !runtimeMessageSources.some(({ source }) =>
+    fragments.some(fragment => source.includes(fragment))
+  );
+});
+if (unownedAsyncMessages.length) {
+  fail('every asynchronous background message has an extension-side sender or an explicit test-only owner: '
+    + unownedAsyncMessages.join(', '));
+} else {
+  pass(asyncTypes.length + ' asynchronous background messages have runtime senders or explicit test-only owners');
 }
 
 if (failures.length) {
