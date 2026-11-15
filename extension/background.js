@@ -6569,13 +6569,20 @@ async function syncWebSelectionContextMenuVisibility(tab, resolveCurrentActiveTa
 // A prerender/instant replacement has its own tabs.onReplaced event and must
 // refresh the global menus when the replacement is the active tab. Do not let
 // a replacement in a background window change the last-focused window's menus.
+let selectionMenuContextSyncGeneration = 0;
+function beginSelectionMenuContextSync() {
+  const generation = ++selectionMenuContextSyncGeneration;
+  return () => generation === selectionMenuContextSyncGeneration;
+}
+
 async function syncSelectionMenusAfterTabReplacement(addedTabId) {
   const tabs = await chrome.tabs.query({active:true,lastFocusedWindow:true});
   const activeTab = tabs[0];
   if (!activeTab || activeTab.id !== addedTabId) return false;
+  const isCurrent = beginSelectionMenuContextSync();
   await Promise.all([
-    syncWebSelectionContextMenuVisibility(activeTab, false),
-    syncPdfSelectionContextMenuVisibility(activeTab)
+    syncWebSelectionContextMenuVisibility(activeTab, false, isCurrent),
+    syncPdfSelectionContextMenuVisibility(activeTab, isCurrent)
   ]);
   return true;
 }
@@ -6633,40 +6640,38 @@ async function syncPdfSelectionContextMenuVisibility(tab, isCurrent = () => true
   }
 }
 
-chrome.tabs.onActivated.addListener(() => {
-  // Context-menu visibility is global, so synchronize only against the active
-  // tab in the last-focused window. An activation in a background window must
-  // not hide/show the item for the window the user is currently using.
-  chrome.tabs.query({active:true,lastFocusedWindow:true}).then(tabs => {
-    const tab = tabs[0];
-    if (!tab) return;
-    syncWebSelectionContextMenuVisibility(tab).catch(() => {});
-    syncPdfSelectionContextMenuVisibility(tab).catch(() => {});
+chrome.tabs.onActivated.addListener(activeInfo => {
+  // An activation in a background window must not control the global menus.
+  // Resolve focus first; only a confirmed activation in the focused window
+  // starts a new visibility generation.
+  chrome.windows.getLastFocused().then(focusedWindow => {
+    if (focusedWindow?.id !== activeInfo?.windowId) return;
+    const isCurrent = beginSelectionMenuContextSync();
+    chrome.tabs.query({active:true, windowId:activeInfo.windowId}).then(tabs => {
+      if (!isCurrent()) return;
+      const tab = tabs[0];
+      if (!tab) return;
+      syncWebSelectionContextMenuVisibility(tab, false, isCurrent).catch(() => {});
+      syncPdfSelectionContextMenuVisibility(tab, isCurrent).catch(() => {});
+    }).catch(() => {});
   }).catch(() => {});
 });
 
 // Changing the focused window does not necessarily activate a different tab
 // inside that window. Keep the global menus aligned with the newly focused
 // window even when no tabs.onActivated event is emitted.
-let windowFocusVisibilitySyncGeneration = 0;
 chrome.windows.onFocusChanged.addListener(windowId => {
   // Chrome can emit WINDOW_ID_NONE as a transient handoff between windows.
   // It is not a new focused-window state and must not invalidate the actual
   // destination window's in-flight synchronization.
   if (windowId === chrome.windows.WINDOW_ID_NONE) return;
-  // Invalidate earlier focus lookups immediately, not only after their tab
-  // queries finish. Otherwise a slow query from the previously focused window
-  // can complete last and overwrite the newly focused window's menu state.
-  const generation = ++windowFocusVisibilitySyncGeneration;
-  const isCurrentFocus = () => generation === windowFocusVisibilitySyncGeneration;
+  const isCurrent = beginSelectionMenuContextSync();
   chrome.tabs.query({active:true, windowId}).then(tabs => {
-    if (!isCurrentFocus()) return;
+    if (!isCurrent()) return;
     const tab = tabs[0];
     if (!tab) return;
-    // Use the tab returned for this focus event and re-check its generation
-    // after asynchronous eligibility checks before changing global menus.
-    syncWebSelectionContextMenuVisibility(tab, false, isCurrentFocus).catch(() => {});
-    syncPdfSelectionContextMenuVisibility(tab, isCurrentFocus).catch(() => {});
+    syncWebSelectionContextMenuVisibility(tab, false, isCurrent).catch(() => {});
+    syncPdfSelectionContextMenuVisibility(tab, isCurrent).catch(() => {});
   }).catch(() => {});
 });
 async function shouldInjectContentScriptForTab(tab, data) {
@@ -6690,13 +6695,13 @@ async function shouldInjectContentScriptForTab(tab, data) {
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.url || changeInfo.status === 'complete') {
-    // The menu item is global, but onUpdated fires for inactive tabs too.
-    // Only let the currently active tab in the last-focused window control it.
+    // Ignore updates from inactive tabs before they can supersede a focus sync.
     chrome.tabs.query({active:true,lastFocusedWindow:true}).then(tabs => {
       const activeTab = tabs[0];
       if (activeTab?.id !== tabId) return;
-      syncWebSelectionContextMenuVisibility(activeTab).catch(() => {});
-      syncPdfSelectionContextMenuVisibility(activeTab).catch(() => {});
+      const isCurrent = beginSelectionMenuContextSync();
+      syncWebSelectionContextMenuVisibility(activeTab, false, isCurrent).catch(() => {});
+      syncPdfSelectionContextMenuVisibility(activeTab, isCurrent).catch(() => {});
     }).catch(() => {});
   }
   if (changeInfo.status === 'complete' && tab?.url && isHttpPageUrl(tab.url)) {
