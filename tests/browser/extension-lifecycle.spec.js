@@ -1293,22 +1293,36 @@ test('source-page collector tears down prior observers and storage listeners on 
   );
   expect(Number.isInteger(tabId)).toBe(true);
 
-  const first = await extensionWorker.evaluate(() => {
-    const cleanup = globalThis.__blbSourcePageCollectorCleanup;
-    if (typeof cleanup !== 'function') throw new Error('Source collector cleanup was not registered');
-    let calls = 0;
-    globalThis.__blbSourcePageCollectorCleanup = () => { calls++; cleanup(); };
-    globalThis.__blbSourceCollectorCleanupProbe = () => calls;
-    return true;
-  });
-  expect(first).toBe(true);
-
   for (let iteration = 1; iteration <= 2; iteration++) {
+    const wrapped = await extensionWorker.evaluate(async id => {
+      const [result] = await chrome.scripting.executeScript({
+        target: { tabId: id },
+        world: 'ISOLATED',
+        func: () => {
+          const cleanup = globalThis.__blbSourcePageCollectorCleanup;
+          if (typeof cleanup !== 'function') throw new Error('Source collector cleanup was not registered');
+          globalThis.__blbSourceCollectorCleanupCalls = 0;
+          globalThis.__blbSourcePageCollectorCleanup = () => {
+            globalThis.__blbSourceCollectorCleanupCalls++;
+            cleanup();
+          };
+          return true;
+        }
+      });
+      return result.result;
+    }, tabId);
+    expect(wrapped).toBe(true);
     await extensionWorker.evaluate(async id => {
       await chrome.scripting.executeScript({ target: { tabId: id }, files: BLB_CONTENT_SCRIPT_FILES });
     }, tabId);
-    const cleanupCalls = await extensionWorker.evaluate(() => globalThis.__blbSourceCollectorCleanupProbe());
-    expect(cleanupCalls).toBe(iteration);
+    const cleanupCalls = await extensionWorker.evaluate(async id => {
+      const [result] = await chrome.scripting.executeScript({
+        target: { tabId: id }, world: 'ISOLATED',
+        func: () => globalThis.__blbSourceCollectorCleanupCalls
+      });
+      return result.result;
+    }, tabId);
+    expect(cleanupCalls).toBe(1);
     await expect(page.locator('#blb-suite-gotquestions-multiverse')).toHaveCount(1);
   }
 
