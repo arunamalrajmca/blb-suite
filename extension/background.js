@@ -3297,9 +3297,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const queuedAt = Date.now();
   const tabId = sender?.tab?.id ?? null;
   console.info('[BLB MV timing]', {stage:'queue-request-received', tabId, queuedAt});
+  const respondSafely = response => {
+    try { sendResponse(response); } catch (_) {}
+  };
   grantMultiVersePostSlot(MULTIVERSE_POST_MIN_INTERVAL_MS, tabId, queuedAt).then(
-    response => sendResponse(response),
-    error => sendResponse({ok:false, error:String(error)})
+    respondSafely,
+    error => respondSafely({ok:false, error:String(error)})
   );
   return true;
 });
