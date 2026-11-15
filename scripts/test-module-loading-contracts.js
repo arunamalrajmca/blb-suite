@@ -480,7 +480,7 @@ const contentSenderPolicyMessages = [
 ];
 for (const [type, hostPolicy] of contentSenderPolicyMessages) {
   const branchStart = background.indexOf("if (message.type === '" + type + "')");
-  const branchEnd = branchStart < 0 ? -1 : background.indexOf("\\n  if (message.type ===", branchStart + 1);
+  const branchEnd = branchStart < 0 ? -1 : background.indexOf("\n  if (message.type ===", branchStart + 1);
   const branch = branchStart < 0 ? '' : background.slice(branchStart, branchEnd < 0 ? undefined : branchEnd);
   if (!branch.includes('isAuthorizedContentScriptSender(sender, ' + hostPolicy + ')')) {
     fail('content message ' + type + ' retains its expected source-host policy');
@@ -488,7 +488,7 @@ for (const [type, hostPolicy] of contentSenderPolicyMessages) {
 }
 if (contentSenderPolicyMessages.every(([type, hostPolicy]) => {
   const start = background.indexOf("if (message.type === '" + type + "')");
-  const end = start < 0 ? -1 : background.indexOf("\\n  if (message.type ===", start + 1);
+  const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
   return start >= 0 && background.slice(start, end < 0 ? undefined : end)
     .includes('isAuthorizedContentScriptSender(sender, ' + hostPolicy + ')');
 })) {
@@ -503,7 +503,7 @@ const genericContentSenderMessages = [
 ];
 for (const type of genericContentSenderMessages) {
   const start = background.indexOf("if (message.type === '" + type + "')");
-  const end = start < 0 ? -1 : background.indexOf("\\n  if (message.type ===", start + 1);
+  const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
   const branch = start < 0 ? '' : background.slice(start, end < 0 ? undefined : end);
   if (!branch.includes('isAuthorizedContentScriptSender(sender)')) {
     fail('content message ' + type + ' verifies its current tab and host permission');
@@ -511,7 +511,7 @@ for (const type of genericContentSenderMessages) {
 }
 if (genericContentSenderMessages.every(type => {
   const start = background.indexOf("if (message.type === '" + type + "')");
-  const end = start < 0 ? -1 : background.indexOf("\\n  if (message.type ===", start + 1);
+  const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
   return start >= 0 && background.slice(start, end < 0 ? undefined : end)
     .includes('isAuthorizedContentScriptSender(sender)');
 })) {
@@ -519,7 +519,7 @@ if (genericContentSenderMessages.every(type => {
 }
 const websterMultiVerseBranch = background.slice(
   background.indexOf("if (message.type === 'blbSuiteOpenWebsterMultiVerse')"),
-  background.indexOf("\\n  if (message.type ===", background.indexOf("if (message.type === 'blbSuiteOpenWebsterMultiVerse')") + 1)
+  background.indexOf("\n  if (message.type ===", background.indexOf("if (message.type === 'blbSuiteOpenWebsterMultiVerse')") + 1)
 );
 if (!websterMultiVerseBranch.includes('isSourceCollectorContentScriptSender(sender)')) {
   fail('page-wide MultiVerse collection messages verify a registered collector source');
