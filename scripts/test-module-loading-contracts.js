@@ -273,6 +273,53 @@ if (!content.includes('BLBShared.hostnames.blb') || !background.includes('BLBSha
   pass('content script and service worker retain the shared BLB identity contract');
 }
 
+
+const runtimeScriptReferences = new Set([
+  'background.js',
+  ...((manifest.content_scripts || []).flatMap(entry => entry.js || []))
+]);
+for (const htmlFile of ['extension/popup.html', 'extension/Tutorial.html', 'extension/multiverse-post.html']) {
+  const html = read(htmlFile);
+  for (const match of html.matchAll(/<script\b[^>]*\bsrc\s*=\s*['"]([^'"]+\.js)['"][^>]*>/gi)) {
+    runtimeScriptReferences.add(match[1].replace(/^\.\//, ''));
+  }
+}
+for (const match of background.matchAll(/['"]([^'"]+\.js)['"]/g)) {
+  runtimeScriptReferences.add(match[1]);
+}
+const extensionJavaScriptFiles = [];
+function collectExtensionJavaScript(directory, relative = '') {
+  for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+    const absolute = path.join(directory, entry.name);
+    const name = path.posix.join(relative, entry.name);
+    if (entry.isDirectory()) collectExtensionJavaScript(absolute, name);
+    else if (entry.isFile() && entry.name.endsWith('.js')) extensionJavaScriptFiles.push(name);
+  }
+}
+collectExtensionJavaScript(ext);
+const unreferencedExtensionScripts = extensionJavaScriptFiles.filter(file => !runtimeScriptReferences.has(file));
+if (unreferencedExtensionScripts.length) {
+  fail('every packaged extension JavaScript file has an explicit manifest, HTML, background-import, or runtime-injection reference: '
+    + unreferencedExtensionScripts.join(', '));
+} else {
+  pass(extensionJavaScriptFiles.length + ' packaged extension JavaScript files are accounted for by runtime entry points');
+}
+
+const asyncTypesMatch = background.match(/const ASYNC_MESSAGE_TYPES = new Set\(\[([\s\S]*?)\]\);/);
+if (!asyncTypesMatch) {
+  fail('background asynchronous message allowlist remains discoverable for dispatch auditing');
+} else {
+  const asyncTypes = [...asyncTypesMatch[1].matchAll(/['"]([^'"]+)['"]/g)].map(match => match[1]);
+  const dispatchSource = background.slice(asyncTypesMatch.index + asyncTypesMatch[0].length);
+  const missingDispatch = asyncTypes.filter(type => !dispatchSource.includes(type));
+  if (missingDispatch.length) {
+    fail('every asynchronous message allowlist entry has a corresponding downstream dispatch path: '
+      + missingDispatch.join(', '));
+  } else {
+    pass(asyncTypes.length + ' asynchronous message allowlist entries retain corresponding dispatch paths');
+  }
+}
+
 if (failures.length) {
   for (const message of failures) console.error('FAIL:', message);
   process.exitCode = 1;
