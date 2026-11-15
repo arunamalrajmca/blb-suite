@@ -1,5 +1,144 @@
 const { test, expect } = require('./fixtures');
 
+test('background extension-page messages reject content scripts and bind the MultiVerse queue to its owner page', async ({
+  context,
+  extensionId,
+  extensionWorker
+}) => {
+  const sourcePage = await context.newPage();
+  await sourcePage.route('https://example.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><body>sender authorization fixture</body></html>'
+  }));
+  await sourcePage.goto('https://example.com/');
+
+  const sourceTabId = await extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({});
+    return tabs.find(tab => (tab.url || '').startsWith('https://example.com/'))?.id ?? null;
+  });
+  expect(sourceTabId).not.toBeNull();
+
+  const contentScriptResponses = await extensionWorker.evaluate(async tabId => {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'ISOLATED',
+      func: async () => ({
+        studyMutation: await chrome.runtime.sendMessage({ type: 'blbSuiteClearStudy' }),
+        queueSlot: await chrome.runtime.sendMessage({ type: 'blbSuiteAcquireMultiVersePostSlot' })
+      })
+    });
+    return result.result;
+  }, sourceTabId);
+  expect(contentScriptResponses.studyMutation).toEqual({ ok: false, error: 'Unauthorized sender' });
+  expect(contentScriptResponses.queueSlot).toEqual({ ok: false, error: 'Unauthorized sender' });
+
+  const popupPage = await context.newPage();
+  await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
+  const popupResponse = await popupPage.evaluate(async () =>
+    chrome.runtime.sendMessage({ type: 'blbSuiteGetStudyUiState' })
+  );
+  expect(popupResponse?.ok).toBe(true);
+
+  const popupQueueResponse = await popupPage.evaluate(async () =>
+    chrome.runtime.sendMessage({ type: 'blbSuiteAcquireMultiVersePostSlot' })
+  );
+  expect(popupQueueResponse).toEqual({ ok: false, error: 'Unauthorized sender' });
+
+  const handoffPage = await context.newPage();
+  await handoffPage.goto(`chrome-extension://${extensionId}/multiverse-post.html`);
+  const handoffQueueResponse = await handoffPage.evaluate(async () =>
+    chrome.runtime.sendMessage({ type: 'blbSuiteAcquireMultiVersePostSlot' })
+  );
+  expect(handoffQueueResponse?.ok).toBe(true);
+  expect(Number.isFinite(handoffQueueResponse?.submitAt)).toBe(true);
+});
+
+
+test('content-script Study and MultiVerse messages enforce source hosts and current host permission', async ({
+  context,
+  extensionWorker
+}) => {
+  const unrelatedPage = await context.newPage();
+  await unrelatedPage.route('https://example.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><body>unrelated sender fixture</body></html>'
+  }));
+  await unrelatedPage.goto('https://example.com/');
+
+  const unrelatedTabId = await extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({});
+    return tabs.find(tab => (tab.url || '').startsWith('https://example.com/'))?.id ?? null;
+  });
+  expect(unrelatedTabId).not.toBeNull();
+
+  const unrelatedResponses = await extensionWorker.evaluate(async tabId => {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'ISOLATED',
+      func: async () => ({
+        pendingRefs: await chrome.runtime.sendMessage({ type: 'blbSuiteGetPendingMultiVerseRefs' }),
+        studyCapture: await chrome.runtime.sendMessage({
+          type: 'blbSuiteCaptureStudyRefs',
+          refs: [{ book: 'John', chapter: 3, from: 16, to: 16 }]
+        }),
+        collectorMultiVerse: await chrome.runtime.sendMessage({
+          type: 'blbSuiteOpenWebsterMultiVerse',
+          refs: []
+        })
+      })
+    });
+    return injected.result;
+  }, unrelatedTabId);
+  expect(unrelatedResponses.pendingRefs).toEqual({ ok: false, error: 'Unauthorized sender' });
+  expect(unrelatedResponses.studyCapture).toEqual({ ok: false, error: 'Unauthorized sender' });
+  expect(unrelatedResponses.collectorMultiVerse).toEqual({ ok: false, error: 'Unauthorized sender' });
+
+  const permissionRevokedResponse = await extensionWorker.evaluate(async tabId => {
+    const originalContains = chrome.permissions.contains;
+    chrome.permissions.contains = async () => false;
+    try {
+      const [injected] = await chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'ISOLATED',
+        func: async () => chrome.runtime.sendMessage({
+          type: 'blbSuiteOpenBackgroundUrl',
+          url: 'https://www.blueletterbible.org/kjv/jhn/3/16/'
+        })
+      });
+      return injected.result;
+    } finally {
+      chrome.permissions.contains = originalContains;
+    }
+  }, unrelatedTabId);
+  expect(permissionRevokedResponse).toEqual({ ok: false, reason: 'host-permission-revoked' });
+
+  const blbPage = await context.newPage();
+  await blbPage.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><body><main>BLB sender fixture</main></body></html>'
+  }));
+  await blbPage.goto('https://www.blueletterbible.org/kjv/jhn/3/16/');
+
+  const blbTabId = await extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({});
+    return tabs.find(tab => (tab.url || '').startsWith('https://www.blueletterbible.org/kjv/jhn/3/16/'))?.id ?? null;
+  });
+  expect(blbTabId).not.toBeNull();
+
+  const allowedResponse = await extensionWorker.evaluate(async tabId => {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'ISOLATED',
+      func: async () => chrome.runtime.sendMessage({ type: 'blbSuiteGetPendingMultiVerseRefs' })
+    });
+    return injected.result;
+  }, blbTabId);
+  expect(allowedResponse).toEqual({ ok: true, refs: null });
+});
+
 test('host-access revocation removes registrations and later grants reactivate each independently enabled site feature', async ({
   page, extensionWorker, extensionStorage
 }) => {
@@ -1230,144 +1369,4 @@ test('host permission revocation immediately hides both global selection menus',
   } finally {
     await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
   }
-});
-
-
-test('background extension-page messages reject content scripts and bind the MultiVerse queue to its owner page', async ({
-  context,
-  extensionId,
-  extensionWorker
-}) => {
-  const sourcePage = await context.newPage();
-  await sourcePage.route('https://example.com/**', route => route.fulfill({
-    status: 200,
-    contentType: 'text/html',
-    body: '<!doctype html><html><body>sender authorization fixture</body></html>'
-  }));
-  await sourcePage.goto('https://example.com/');
-
-  const sourceTabId = await extensionWorker.evaluate(async () => {
-    const tabs = await chrome.tabs.query({});
-    return tabs.find(tab => (tab.url || '').startsWith('https://example.com/'))?.id ?? null;
-  });
-  expect(sourceTabId).not.toBeNull();
-
-  const contentScriptResponses = await extensionWorker.evaluate(async tabId => {
-    const [result] = await chrome.scripting.executeScript({
-      target: { tabId },
-      world: 'ISOLATED',
-      func: async () => ({
-        studyMutation: await chrome.runtime.sendMessage({ type: 'blbSuiteClearStudy' }),
-        queueSlot: await chrome.runtime.sendMessage({ type: 'blbSuiteAcquireMultiVersePostSlot' })
-      })
-    });
-    return result.result;
-  }, sourceTabId);
-  expect(contentScriptResponses.studyMutation).toEqual({ ok: false, error: 'Unauthorized sender' });
-  expect(contentScriptResponses.queueSlot).toEqual({ ok: false, error: 'Unauthorized sender' });
-
-  const popupPage = await context.newPage();
-  await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
-  const popupResponse = await popupPage.evaluate(async () =>
-    chrome.runtime.sendMessage({ type: 'blbSuiteGetStudyUiState' })
-  );
-  expect(popupResponse?.ok).toBe(true);
-
-  const popupQueueResponse = await popupPage.evaluate(async () =>
-    chrome.runtime.sendMessage({ type: 'blbSuiteAcquireMultiVersePostSlot' })
-  );
-  expect(popupQueueResponse).toEqual({ ok: false, error: 'Unauthorized sender' });
-
-  const handoffPage = await context.newPage();
-  await handoffPage.goto(`chrome-extension://${extensionId}/multiverse-post.html`);
-  const handoffQueueResponse = await handoffPage.evaluate(async () =>
-    chrome.runtime.sendMessage({ type: 'blbSuiteAcquireMultiVersePostSlot' })
-  );
-  expect(handoffQueueResponse?.ok).toBe(true);
-  expect(Number.isFinite(handoffQueueResponse?.submitAt)).toBe(true);
-});
-
-
-test('content-script Study and MultiVerse messages enforce source hosts and current host permission', async ({
-  context,
-  extensionWorker
-}) => {
-  const unrelatedPage = await context.newPage();
-  await unrelatedPage.route('https://example.com/**', route => route.fulfill({
-    status: 200,
-    contentType: 'text/html',
-    body: '<!doctype html><html><body>unrelated sender fixture</body></html>'
-  }));
-  await unrelatedPage.goto('https://example.com/');
-
-  const unrelatedTabId = await extensionWorker.evaluate(async () => {
-    const tabs = await chrome.tabs.query({});
-    return tabs.find(tab => (tab.url || '').startsWith('https://example.com/'))?.id ?? null;
-  });
-  expect(unrelatedTabId).not.toBeNull();
-
-  const unrelatedResponses = await extensionWorker.evaluate(async tabId => {
-    const [injected] = await chrome.scripting.executeScript({
-      target: { tabId },
-      world: 'ISOLATED',
-      func: async () => ({
-        pendingRefs: await chrome.runtime.sendMessage({ type: 'blbSuiteGetPendingMultiVerseRefs' }),
-        studyCapture: await chrome.runtime.sendMessage({
-          type: 'blbSuiteCaptureStudyRefs',
-          refs: [{ book: 'John', chapter: 3, from: 16, to: 16 }]
-        }),
-        collectorMultiVerse: await chrome.runtime.sendMessage({
-          type: 'blbSuiteOpenWebsterMultiVerse',
-          refs: []
-        })
-      })
-    });
-    return injected.result;
-  }, unrelatedTabId);
-  expect(unrelatedResponses.pendingRefs).toEqual({ ok: false, error: 'Unauthorized sender' });
-  expect(unrelatedResponses.studyCapture).toEqual({ ok: false, error: 'Unauthorized sender' });
-  expect(unrelatedResponses.collectorMultiVerse).toEqual({ ok: false, error: 'Unauthorized sender' });
-
-  const permissionRevokedResponse = await extensionWorker.evaluate(async tabId => {
-    const originalContains = chrome.permissions.contains;
-    chrome.permissions.contains = async () => false;
-    try {
-      const [injected] = await chrome.scripting.executeScript({
-        target: { tabId },
-        world: 'ISOLATED',
-        func: async () => chrome.runtime.sendMessage({
-          type: 'blbSuiteOpenBackgroundUrl',
-          url: 'https://www.blueletterbible.org/kjv/jhn/3/16/'
-        })
-      });
-      return injected.result;
-    } finally {
-      chrome.permissions.contains = originalContains;
-    }
-  }, unrelatedTabId);
-  expect(permissionRevokedResponse).toEqual({ ok: false, reason: 'host-permission-revoked' });
-
-  const blbPage = await context.newPage();
-  await blbPage.route('https://www.blueletterbible.org/**', route => route.fulfill({
-    status: 200,
-    contentType: 'text/html',
-    body: '<!doctype html><html><body><main>BLB sender fixture</main></body></html>'
-  }));
-  await blbPage.goto('https://www.blueletterbible.org/kjv/jhn/3/16/');
-
-  const blbTabId = await extensionWorker.evaluate(async () => {
-    const tabs = await chrome.tabs.query({});
-    return tabs.find(tab => (tab.url || '').startsWith('https://www.blueletterbible.org/kjv/jhn/3/16/'))?.id ?? null;
-  });
-  expect(blbTabId).not.toBeNull();
-
-  const allowedResponse = await extensionWorker.evaluate(async tabId => {
-    const [injected] = await chrome.scripting.executeScript({
-      target: { tabId },
-      world: 'ISOLATED',
-      func: async () => chrome.runtime.sendMessage({ type: 'blbSuiteGetPendingMultiVerseRefs' })
-    });
-    return injected.result;
-  }, blbTabId);
-  expect(allowedResponse).toEqual({ ok: true, refs: null });
 });
