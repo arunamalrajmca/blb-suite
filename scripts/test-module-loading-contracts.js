@@ -527,6 +527,39 @@ if (!websterMultiVerseBranch.includes('isSourceCollectorContentScriptSender(send
   pass('page-wide MultiVerse collection messages verify a registered collector source');
 }
 
+
+const activeContentSenderHelper = background.match(
+  /async function isActiveTabContentScriptSender\\(sender\\) \\{([\\s\\S]*?)\\n\\}/
+);
+if (!activeContentSenderHelper ||
+    !['isAuthorizedContentScriptSender(sender)', 'chrome.tabs.query({active:true, currentWindow:true})', 'tabs[0]?.id === sender.tab.id']
+      .every(fragment => activeContentSenderHelper[1].includes(fragment))) {
+  fail('selection handoff messages are restricted to the active authorized content tab');
+} else {
+  pass('selection handoff messages are restricted to the active authorized content tab');
+}
+const activeSelectionTypes = [
+  'blbSuiteOpenCurrentSelection',
+  'blbSuiteOpenSelectionText',
+  'blbSuiteOpenDoubleClickSelectionText'
+];
+for (const type of activeSelectionTypes) {
+  const start = background.indexOf("if (message.type === '" + type + "'");
+  const end = start < 0 ? -1 : background.indexOf("\\n  if (message.type ===", start + 1);
+  const branch = start < 0 ? '' : background.slice(start, end < 0 ? undefined : end);
+  if (!branch.includes('isActiveTabContentScriptSender(sender)')) {
+    fail('selection handoff message ' + type + ' is bound to its active sender tab');
+  }
+}
+if (activeSelectionTypes.every(type => {
+  const start = background.indexOf("if (message.type === '" + type + "'");
+  const end = start < 0 ? -1 : background.indexOf("\\n  if (message.type ===", start + 1);
+  return start >= 0 && background.slice(start, end < 0 ? undefined : end)
+    .includes('isActiveTabContentScriptSender(sender)');
+})) {
+  pass(activeSelectionTypes.length + ' selection handoff message types are bound to the active sender tab');
+}
+
 if (failures.length) {
   for (const message of failures) console.error('FAIL:', message);
   process.exitCode = 1;
