@@ -149,8 +149,12 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       const focusChangeHidesWebMenu = updates.some(item =>
         item.id === 'blb-suite-web-selection' && item.visible === false
       );
+      // Closing the temporary focused window deterministically returns focus
+      // to the original browser window in headless Chromium. A direct
+      // windows.update({focused:true}) can be ignored by the window manager
+      // during the transient WINDOW_ID_NONE handoff.
       updates.length = 0;
-      await chrome.windows.update(originalWindowId,{focused:true});
+      await chrome.windows.remove(otherWindow.id);
       let focusedWindowId = null;
       for (let attempt=0; attempt<100; attempt++) {
         const focusedWindow = await chrome.windows.getLastFocused();
@@ -167,7 +171,6 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
         item.id === 'blb-suite-web-selection' && item.visible === true
       );
       chrome.windows.onFocusChanged.removeListener(recordFocusEvent);
-      await chrome.windows.remove(otherWindow.id);
 
       return {
         activationShowsWebMenu,
