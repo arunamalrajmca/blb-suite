@@ -3206,6 +3206,16 @@ async function isAuthorizedContentScriptSender(sender, allowedHosts = null) {
   return allowedHosts.has(host);
 }
 
+async function isActiveTabContentScriptSender(sender) {
+  if (!(await isAuthorizedContentScriptSender(sender))) return false;
+  try {
+    const tabs = await chrome.tabs.query({active:true, currentWindow:true});
+    return tabs[0]?.id === sender.tab.id;
+  } catch (_) {
+    return false;
+  }
+}
+
 const BLB_CONTENT_SCRIPT_HOSTS = new Set([BLB_HOSTNAME]);
 const BLB_AND_WEBSTER_CONTENT_SCRIPT_HOSTS = new Set([
   BLB_HOSTNAME,
@@ -3494,6 +3504,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blbSuiteOpenCurrentSelection') {
+    if (!(await isActiveTabContentScriptSender(sender))) {
+      sendResponse({ok:false, reason:'unauthorized-sender'});
+      return true;
+    }
     // Use the same guarded handler as the registered Alt+B command. Returning
     // its result makes the handoff deterministic for callers and regression
     // tests instead of acknowledging the message before tab creation finishes.
@@ -3516,8 +3530,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // Optional host access can be revoked while this document's content script
     // is still resident. Re-check the sender tab at dispatch time so neither
     // the floating Show on BLB button nor Double-click can use stale access.
-    if (!(await hasSelectionActionPermissionForTab(sender?.tab))) {
+    if (!(await isAuthorizedContentScriptSender(sender))) {
       sendResponse({ok:false, reason:'host-permission-revoked'});
+      return true;
+    }
+    if (!(await isActiveTabContentScriptSender(sender))) {
+      sendResponse({ok:false, reason:'unauthorized-sender'});
       return true;
     }
     const text = String(message.text || '').trim();
