@@ -60,6 +60,7 @@
     });
     parsePopupObserver.observe(document.documentElement, { childList: true, subtree: true });
     processParsePopups();
+    return Object.freeze({ refresh() { processParsePopups(); } });
   }
 
   global.BLBParsePopupModule = { initialize };
