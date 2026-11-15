@@ -6538,7 +6538,7 @@ async function updateSelectionContextMenuVisibility(visible) {
   }
 }
 
-async function syncWebSelectionContextMenuVisibility(tab, resolveCurrentActiveTab = true) {
+async function syncWebSelectionContextMenuVisibility(tab, resolveCurrentActiveTab = true, isCurrent = () => true) {
   const generation = ++webSelectionVisibilitySyncGeneration;
   try {
     // Ordinary activation/navigation events resolve the active tab at
@@ -6558,10 +6558,10 @@ async function syncWebSelectionContextMenuVisibility(tab, resolveCurrentActiveTa
     const visible = await shouldShowBlbContextMenu(activeTab, '');
     // A newer activation/navigation may have started while eligibility was
     // being read. Never let an older result overwrite the latest tab state.
-    if (generation !== webSelectionVisibilitySyncGeneration) return false;
+    if (generation !== webSelectionVisibilitySyncGeneration || !isCurrent()) return false;
     return await updateSelectionContextMenuVisibility(visible);
   } catch (_) {
-    if (generation !== webSelectionVisibilitySyncGeneration) return false;
+    if (generation !== webSelectionVisibilitySyncGeneration || !isCurrent()) return false;
     return await updateSelectionContextMenuVisibility(false);
   }
 }
@@ -6617,7 +6617,7 @@ async function installPdfSelectionContextMenu() {
   return selectionMenuOperation;
 }
 
-async function syncPdfSelectionContextMenuVisibility(tab) {
+async function syncPdfSelectionContextMenuVisibility(tab, isCurrent = () => true) {
   if (!pdfSelectionMenuKnownPresent) return false;
   const generation = ++pdfSelectionVisibilitySyncGeneration;
   try {
@@ -6625,7 +6625,7 @@ async function syncPdfSelectionContextMenuVisibility(tab) {
       (await isPageButtonEnabledForHostname(pageSelectionSettingKeyFromTab(tab), tab.title || ''));
     // PDF menu visibility is global too. A slow eligibility lookup for an
     // earlier tab must not overwrite the result for the tab now in focus.
-    if (generation !== pdfSelectionVisibilitySyncGeneration) return false;
+    if (generation !== pdfSelectionVisibilitySyncGeneration || !isCurrent()) return false;
     await chrome.contextMenus.update('blb-suite-pdf-selection', {visible: enabled});
     return true;
   } catch (_) {
@@ -6648,18 +6648,22 @@ chrome.tabs.onActivated.addListener(() => {
 // Changing the focused window does not necessarily activate a different tab
 // inside that window. Keep the global menus aligned with the newly focused
 // window even when no tabs.onActivated event is emitted.
+let windowFocusVisibilitySyncGeneration = 0;
 chrome.windows.onFocusChanged.addListener(windowId => {
-  // Chrome emits WINDOW_ID_NONE while focus is moving between windows. Ignore
-  // that transient state and query the explicitly focused window so an earlier
-  // focus event cannot resolve against a later last-focused window.
+  // Invalidate earlier focus lookups immediately, not only after their tab
+  // queries finish. Otherwise a slow query from the previously focused window
+  // can complete last and overwrite the newly focused window's menu state.
+  const generation = ++windowFocusVisibilitySyncGeneration;
   if (windowId === chrome.windows.WINDOW_ID_NONE) return;
+  const isCurrentFocus = () => generation === windowFocusVisibilitySyncGeneration;
   chrome.tabs.query({active:true, windowId}).then(tabs => {
+    if (!isCurrentFocus()) return;
     const tab = tabs[0];
     if (!tab) return;
-    // Use the tab returned for this focus event. Re-querying lastFocusedWindow
-    // here can race a subsequent focus transition and restore the wrong menu.
-    syncWebSelectionContextMenuVisibility(tab, false).catch(() => {});
-    syncPdfSelectionContextMenuVisibility(tab).catch(() => {});
+    // Use the tab returned for this focus event and re-check its generation
+    // after asynchronous eligibility checks before changing global menus.
+    syncWebSelectionContextMenuVisibility(tab, false, isCurrentFocus).catch(() => {});
+    syncPdfSelectionContextMenuVisibility(tab, isCurrentFocus).catch(() => {});
   }).catch(() => {});
 });
 async function shouldInjectContentScriptForTab(tab, data) {
