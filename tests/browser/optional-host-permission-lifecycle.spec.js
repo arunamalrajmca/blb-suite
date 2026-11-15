@@ -1134,7 +1134,10 @@ test('permission revocation during an in-flight registration cannot leave a pers
       doubleClickBlbSites:{}
     });
     await Promise.all([...contentScriptInjectionLocks.values()].map(operation => operation.catch(() => {})));
+    await Promise.all([...runtimeContentScriptRegistrationLocks.values()].map(operation => operation.catch(() => {})));
     await reconcileRuntimeContentScriptRegistrations();
+    await runtimeContentScriptReconciliationQueue;
+    await Promise.all([...runtimeContentScriptRegistrationLocks.values()].map(operation => operation.catch(() => {})));
     await runtimeContentScriptReconciliationQueue;
   });
   await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
@@ -1249,7 +1252,10 @@ test('a site opt-out during an in-flight registration cannot leave the site cont
       doubleClickBlbSites:{}
     });
     await Promise.all([...contentScriptInjectionLocks.values()].map(operation => operation.catch(() => {})));
+    await Promise.all([...runtimeContentScriptRegistrationLocks.values()].map(operation => operation.catch(() => {})));
     await reconcileRuntimeContentScriptRegistrations();
+    await runtimeContentScriptReconciliationQueue;
+    await Promise.all([...runtimeContentScriptRegistrationLocks.values()].map(operation => operation.catch(() => {})));
     await runtimeContentScriptReconciliationQueue;
   });
   await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
