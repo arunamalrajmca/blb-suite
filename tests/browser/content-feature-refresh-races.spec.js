@@ -260,3 +260,137 @@ test('repeated per-site feature toggles do not accumulate page-selection or doub
     });
   }, tabId);
 });
+
+
+test('global master toggles detach and restore the per-site double-click listener exactly once', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{'example.com':true}
+  });
+  await page.route('https://example.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>Master toggle double-click lifecycle</title></head><body><p>John 3:16</p></body></html>'
+  }));
+  await page.goto('https://example.com/master-toggle-double-click.html', {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({url:'https://example.com/master-toggle-double-click.html'}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  const readState = () => extensionWorker.evaluate(async id => {
+    const [result] = await chrome.scripting.executeScript({
+      target:{tabId:id}, world:'ISOLATED',
+      func:() => ({
+        handler:window.__blbSuiteDoubleClickBoundV2,
+        active:globalThis.__blbMasterToggleDoubleClickHandlers
+          ? globalThis.__blbMasterToggleDoubleClickHandlers.size
+          : null
+      })
+    });
+    return result.result;
+  }, tabId);
+  await expect.poll(async () => (await readState()).handler).toBeTruthy();
+
+  const initial = await extensionWorker.evaluate(async id => {
+    const [result] = await chrome.scripting.executeScript({
+      target:{tabId:id}, world:'ISOLATED',
+      func:() => {
+        const handler = window.__blbSuiteDoubleClickBoundV2;
+        const active = new Set(typeof handler === 'function' ? [handler] : []);
+        const add = document.addEventListener;
+        const remove = document.removeEventListener;
+        document.addEventListener = function(type, callback, options) {
+          if (type === 'dblclick' && typeof callback === 'function') active.add(callback);
+          return add.call(this, type, callback, options);
+        };
+        document.removeEventListener = function(type, callback, options) {
+          if (type === 'dblclick' && typeof callback === 'function') active.delete(callback);
+          return remove.call(this, type, callback, options);
+        };
+        globalThis.__blbMasterToggleDoubleClickHandlers = active;
+        globalThis.__blbMasterToggleDoubleClickRestore = () => {
+          document.addEventListener = add;
+          document.removeEventListener = remove;
+          delete globalThis.__blbMasterToggleDoubleClickHandlers;
+          delete globalThis.__blbMasterToggleDoubleClickRestore;
+        };
+        return active.size;
+      }
+    });
+    return result.result;
+  }, tabId);
+  expect(initial).toBe(1);
+
+  const activeCount = () => extensionWorker.evaluate(async id => {
+    const [result] = await chrome.scripting.executeScript({
+      target:{tabId:id}, world:'ISOLATED',
+      func:() => globalThis.__blbMasterToggleDoubleClickHandlers?.size ?? -1
+    });
+    return result.result;
+  }, tabId);
+
+  for (let cycle = 0; cycle < 4; cycle++) {
+    await extensionStorage.set({masterEnabled:false});
+    await expect.poll(activeCount).toBe(0);
+    await extensionStorage.set({masterEnabled:true});
+    await expect.poll(activeCount).toBe(1);
+  }
+
+  await extensionWorker.evaluate(async id => {
+    await chrome.scripting.executeScript({
+      target:{tabId:id}, world:'ISOLATED',
+      func:() => globalThis.__blbMasterToggleDoubleClickRestore?.()
+    });
+  }, tabId);
+});
+
+
+test('repeated global master toggles recreate one source collector control and clean up the previous drag handlers', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({masterEnabled:true});
+  await page.route('https://www.dailyverses.net/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>Repeated source collector master toggle</title></head><body><main>John 3:16</main></body></html>'
+  }));
+  await page.goto('https://www.dailyverses.net/repeated-master-toggle.html', {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({url:'https://www.dailyverses.net/repeated-master-toggle.html'}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+  const button = page.locator('#blb-suite-dailyverses-multiverse');
+  await expect(button).toHaveCount(1);
+
+  for (let cycle = 0; cycle < 4; cycle++) {
+    const previous = await extensionWorker.evaluate(async id => {
+      const [result] = await chrome.scripting.executeScript({
+        target:{tabId:id}, world:'ISOLATED',
+        func:() => {
+          const button = document.getElementById('blb-suite-dailyverses-multiverse');
+          globalThis.__blbRepeatedMasterTogglePrevious = button;
+          return Boolean(button && typeof button.__blbDragCleanup === 'function');
+        }
+      });
+      return result.result;
+    }, tabId);
+    expect(previous).toBe(true);
+
+    await extensionStorage.set({masterEnabled:false});
+    await expect(button).toHaveCount(0);
+    await expect.poll(() => extensionWorker.evaluate(async id => {
+      const [result] = await chrome.scripting.executeScript({
+        target:{tabId:id}, world:'ISOLATED',
+        func:() => globalThis.__blbRepeatedMasterTogglePrevious?.__blbDragCleanup === null
+      });
+      return result.result;
+    }, tabId)).toBe(true);
+
+    await extensionStorage.set({masterEnabled:true});
+    await expect(button).toHaveCount(1);
+  }
+});
