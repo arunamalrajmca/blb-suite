@@ -116,8 +116,9 @@ test.describe('Webster collector behavior', () => {
     });
 
     const capture = harness.capture();
-    await Promise.resolve();
-    await Promise.resolve();
+    for (let attempt = 0; attempt < 10 && activeResolvers.length === 0; attempt += 1) {
+      await Promise.resolve();
+    }
     expect(activeResolvers).toHaveLength(1);
 
     masterEnabled = false;
