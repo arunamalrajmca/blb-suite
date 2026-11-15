@@ -6945,10 +6945,17 @@ chrome.runtime.onInstalled.addListener(async details => {
     if (Object.keys(defaults).length) await chrome.storage.local.set(defaults);
   }
   installRules();
-  installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
-    .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
+  const isCurrent = beginSelectionMenuContextSync();
+  installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,lastFocusedWindow:true})
+    .then(tabs => {
+      if (isCurrent() && tabs[0]) syncWebSelectionContextMenuVisibility(tabs[0], false, isCurrent).catch(() => {});
+    })
     .catch(() => {}));
-  installPdfSelectionContextMenu().catch(() => {});
+  installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,lastFocusedWindow:true})
+    .then(tabs => {
+      if (isCurrent() && tabs[0]) syncPdfSelectionContextMenuVisibility(tabs[0], isCurrent).catch(() => {});
+    })
+    .catch(() => {})).catch(() => {});
   if (details.reason === 'update') {
     injectConfiguredTabsAfterExtensionUpdate().catch(error => {
       console.error('KJV Scripture Tools extension-update tab reconciliation failed:', String(error));
@@ -7116,20 +7123,36 @@ chrome.alarms.onAlarm.addListener(alarm => {
 });
 
 chrome.runtime.onStartup.addListener(installRules);
-chrome.runtime.onStartup.addListener(() => installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
-  .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
-  .catch(() => {})));
-chrome.runtime.onStartup.addListener(() => installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
-  .then(tabs => syncPdfSelectionContextMenuVisibility(tabs[0]))
-  .catch(() => {})));
+chrome.runtime.onStartup.addListener(() => {
+  const isCurrent = beginSelectionMenuContextSync();
+  installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,lastFocusedWindow:true})
+    .then(tabs => {
+      if (isCurrent() && tabs[0]) syncWebSelectionContextMenuVisibility(tabs[0], false, isCurrent).catch(() => {});
+    })
+    .catch(() => {}));
+  installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,lastFocusedWindow:true})
+    .then(tabs => {
+      if (isCurrent() && tabs[0]) syncPdfSelectionContextMenuVisibility(tabs[0], isCurrent).catch(() => {});
+    })
+    .catch(() => {})).catch(() => {});
+});
 chrome.runtime.onStartup.addListener(() => refreshStudyAutoStopAlarm().catch(()=>{}));
 chrome.runtime.onStartup.addListener(() => schedulePersistedRuntimeContentScriptAudit());
 chrome.runtime.onInstalled.addListener(() => schedulePersistedRuntimeContentScriptAudit());
 
-installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
-  .then(tabs => syncWebSelectionContextMenuVisibility(tabs[0]))
+const initialSelectionMenuSyncIsCurrent = beginSelectionMenuContextSync();
+installWebSelectionContextMenu().then(() => chrome.tabs.query({active:true,lastFocusedWindow:true})
+  .then(tabs => {
+    if (initialSelectionMenuSyncIsCurrent() && tabs[0]) {
+      syncWebSelectionContextMenuVisibility(tabs[0], false, initialSelectionMenuSyncIsCurrent).catch(() => {});
+    }
+  })
   .catch(() => {}));
-installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,currentWindow:true})
-  .then(tabs => syncPdfSelectionContextMenuVisibility(tabs[0]))
-  .catch(() => {}));
+installPdfSelectionContextMenu().then(() => chrome.tabs.query({active:true,lastFocusedWindow:true})
+  .then(tabs => {
+    if (initialSelectionMenuSyncIsCurrent() && tabs[0]) {
+      syncPdfSelectionContextMenuVisibility(tabs[0], initialSelectionMenuSyncIsCurrent).catch(() => {});
+    }
+  })
+  .catch(() => {})).catch(() => {});
 refreshStudyAutoStopAlarm().catch(()=>{});
