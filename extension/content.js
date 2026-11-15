@@ -680,7 +680,7 @@ globalThis.BLBSourcePageCollectorModule?.initialize({
 });
 
 // MultiVerse hand-off runs as a dedicated feature module.
-globalThis.BLBMultiVerseHandoffModule?.initialize({
+const blbMultiVerseHandoff = globalThis.BLBMultiVerseHandoffModule?.initialize({
   BLBShared,
   isSuiteEnabled,
   isSuiteEnabledNow: () => suiteEnabled,
@@ -4072,6 +4072,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
       blbParsePopupNavigation?.refresh?.();
       blbVerseLinkNavigation?.refresh?.();
       blbStudyReferenceCapture?.refresh?.();
+      blbMultiVerseHandoff?.refresh?.();
     }
     if (!suiteEnabled) {
       const websterButton = document.getElementById('blb-suite-webster-multiverse');
