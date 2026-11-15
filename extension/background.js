@@ -3147,12 +3147,57 @@ async function ensureContentScriptInTab(tabId) {
     }
   }
 }
-function isTrustedExtensionSender(sender) {
-  return !!sender && sender.id === chrome.runtime.id;
+function isTrustedExtensionPageSender(sender, expectedPagePath = '') {
+  if (!sender || sender.id !== chrome.runtime.id || typeof sender.url !== 'string') return false;
+  try {
+    const senderUrl = new URL(sender.url);
+    const extensionUrl = new URL(chrome.runtime.getURL(''));
+    if (senderUrl.origin !== extensionUrl.origin) return false;
+    if (!expectedPagePath) return true;
+    const expectedUrl = new URL(chrome.runtime.getURL(expectedPagePath));
+    return senderUrl.pathname === expectedUrl.pathname;
+  } catch (_) {
+    return false;
+  }
+}
+
+const EXTENSION_PAGE_MESSAGE_SOURCES = new Map([
+  ['blbSuiteStopStudyRecording', 'popup.html'],
+  ['blbSuitePrepareSiteFeatureToggle', 'popup.html'],
+  ['blbSuiteEnsureContentScript', 'popup.html'],
+  ['blbSuiteRefreshRedirectRules', 'popup.html'],
+  ['blbSuiteGetStudyAutoStopMinutes', 'popup.html'],
+  ['blbSuiteSetStudyAutoStopMinutes', 'popup.html'],
+  ['blbSuiteGetStudyUiState', 'popup.html'],
+  ['blbSuiteStartStudyTopic', 'popup.html'],
+  ['blbSuiteDownloadStudyTopic', 'popup.html'],
+  ['blbSuiteUpdateStudyNoteToTopic', 'popup.html'],
+  ['blbSuiteAddStudyNoteToTopic', 'popup.html'],
+  ['blbSuiteDownloadStudyWhole', 'popup.html'],
+  ['blbSuiteDownloadStudyDate', 'popup.html'],
+  ['blbSuiteClearStudyTopic', 'popup.html'],
+  ['blbSuiteClearStudy', 'popup.html'],
+  ['blbSuiteStudyTopicHistory', 'popup.html'],
+  ['blbSuiteStudyTopicMultiVerse', 'popup.html'],
+  ['blbSuiteOpenStrongHistory', 'popup.html'],
+  ['blbSuiteOpenHistorySearchTerms', 'popup.html'],
+  ['blbSuiteSaveStudyTopic', 'popup.html'],
+  ['blbSuiteImportStudyTestData', 'popup.html'],
+  ['blbSuiteCancelSiteFeatureToggle', 'popup.html'],
+  ['blbSuiteSetSiteFeatureOff', 'popup.html'],
+  ['blbSuiteRunBCommand', 'Tutorial.html'],
+  ['blbSuiteMultiVerseHandoffTiming', 'multiverse-post.html'],
+  ['blbSuiteAcquireMultiVersePostSlot', 'multiverse-post.html']
+]);
+
+function isAuthorizedExtensionPageMessage(message, sender) {
+  const expectedPagePath = EXTENSION_PAGE_MESSAGE_SOURCES.get(message?.type);
+  return !expectedPagePath || isTrustedExtensionPageSender(sender, expectedPagePath);
 }
 
 chrome.runtime.onMessage.addListener((message, sender) => {
-  if (message?.type !== 'blbSuiteMultiVerseHandoffTiming') return false;
+  if (message?.type !== 'blbSuiteMultiVerseHandoffTiming' ||
+      !isTrustedExtensionPageSender(sender, 'multiverse-post.html')) return false;
   const entry = message.entry && typeof message.entry === 'object' ? message.entry : {};
   console.info('[BLB MV timing]', 'handoff' +
     ' tabId=' + (sender?.tab?.id ?? 'null') +
@@ -3212,6 +3257,10 @@ function grantMultiVersePostSlot(minimumIntervalMs, tabId = null, queuedAt = Dat
 }
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type !== 'blbSuiteAcquireMultiVersePostSlot') return false;
+  if (!isTrustedExtensionPageSender(sender, 'multiverse-post.html')) {
+    sendResponse({ok:false, error:'Unauthorized sender'});
+    return false;
+  }
   const queuedAt = Date.now();
   const tabId = sender?.tab?.id ?? null;
   console.info('[BLB MV timing]', {stage:'queue-request-received', tabId, queuedAt});
@@ -3224,6 +3273,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || !ASYNC_MESSAGE_TYPES.has(message.type)) return false;
+  if (!isAuthorizedExtensionPageMessage(message, sender)) {
+    sendResponse({ok:false, error:'Unauthorized sender'});
+    return false;
+  }
   (async () => {
   if (!message) return;
 
@@ -3258,46 +3311,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.type === 'blbSuiteDownloadStudyTopic') {
-    if (!isTrustedExtensionSender(sender)) {
-      sendResponse({ok:false, error:'Unauthorized sender'});
-      return true;
-    }
     try { sendResponse({ok:await downloadStudyTopicFromPopup(message.topic)}); } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
 
   if (message.type === 'blbSuiteDownloadStudyWhole') {
-    if (!isTrustedExtensionSender(sender)) {
-      sendResponse({ok:false, error:'Unauthorized sender'});
-      return true;
-    }
     try { sendResponse({ok:await downloadStudyWholeFromPopup()}); } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
 
   if (message.type === 'blbSuiteDownloadStudyDate') {
-    if (!isTrustedExtensionSender(sender)) {
-      sendResponse({ok:false, error:'Unauthorized sender'});
-      return true;
-    }
     try { sendResponse({ok:await downloadStudyDateFromPopup(message.date)}); } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
 
   if (message.type === 'blbSuiteClearStudy') {
-    if (!isTrustedExtensionSender(sender)) {
-      sendResponse({ok:false, error:'Unauthorized sender'});
-      return true;
-    }
     try { sendResponse(await clearStudySessions()); } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
 
   if (message.type === 'blbSuiteClearStudyTopic') {
-    if (!isTrustedExtensionSender(sender)) {
-      sendResponse({ok:false, error:'Unauthorized sender'});
-      return true;
-    }
     try { sendResponse(await clearStudyTopic(message.topic)); } catch (error) { sendResponse({ok:false, error:String(error)}); }
     return true;
   }
