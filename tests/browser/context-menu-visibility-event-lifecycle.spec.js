@@ -49,6 +49,13 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
         doubleClickBlbSites:{}
       });
       await runtimeContentScriptReconciliationQueue;
+      // The PDF menu is installed asynchronously during worker startup. Make
+      // its real installation deterministic before asserting activation
+      // synchronizes both global menu items.
+      await installPdfSelectionContextMenu();
+      if (!pdfSelectionMenuKnownPresent) {
+        throw new Error('PDF selection menu was not installed for the lifecycle test');
+      }
       await new Promise(resolve => setTimeout(resolve, 100));
       updates.length = 0;
 
