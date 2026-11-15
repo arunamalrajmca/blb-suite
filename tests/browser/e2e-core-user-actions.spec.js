@@ -2153,3 +2153,57 @@ test('Double-Click on Vs. resolves the following verse in the same article citat
   expect(new URL(destination.pendingUrl || destination.url).pathname).toBe('/kjv/1th/5/17/');
   await removeTabById(extensionWorker, destination.id);
 });
+
+test('background extension-page messages reject content scripts and bind the MultiVerse queue to its owner page', async ({
+  context,
+  extensionId,
+  extensionWorker
+}) => {
+  const sourcePage = await context.newPage();
+  await sourcePage.route('https://example.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html',
+    body: '<!doctype html><html><body>sender authorization fixture</body></html>'
+  }));
+  await sourcePage.goto('https://example.com/');
+
+  const sourceTabId = await extensionWorker.evaluate(async () => {
+    const tabs = await chrome.tabs.query({});
+    return tabs.find(tab => (tab.url || '').startsWith('https://example.com/'))?.id ?? null;
+  });
+  expect(sourceTabId).not.toBeNull();
+
+  const contentScriptResponses = await extensionWorker.evaluate(async tabId => {
+    const [result] = await chrome.scripting.executeScript({
+      target: { tabId },
+      world: 'ISOLATED',
+      func: async () => ({
+        studyState: await chrome.runtime.sendMessage({ type: 'blbSuiteGetStudyUiState' }),
+        queueSlot: await chrome.runtime.sendMessage({ type: 'blbSuiteAcquireMultiVersePostSlot' })
+      })
+    });
+    return result.result;
+  }, sourceTabId);
+  expect(contentScriptResponses.studyState).toEqual({ ok: false, error: 'Unauthorized sender' });
+  expect(contentScriptResponses.queueSlot).toEqual({ ok: false, error: 'Unauthorized sender' });
+
+  const popupPage = await context.newPage();
+  await popupPage.goto(`chrome-extension://${extensionId}/popup.html`);
+  const popupResponse = await popupPage.evaluate(async () =>
+    chrome.runtime.sendMessage({ type: 'blbSuiteGetStudyUiState' })
+  );
+  expect(popupResponse?.ok).toBe(true);
+
+  const popupQueueResponse = await popupPage.evaluate(async () =>
+    chrome.runtime.sendMessage({ type: 'blbSuiteAcquireMultiVersePostSlot' })
+  );
+  expect(popupQueueResponse).toEqual({ ok: false, error: 'Unauthorized sender' });
+
+  const handoffPage = await context.newPage();
+  await handoffPage.goto(`chrome-extension://${extensionId}/multiverse-post.html`);
+  const handoffQueueResponse = await handoffPage.evaluate(async () =>
+    chrome.runtime.sendMessage({ type: 'blbSuiteAcquireMultiVersePostSlot' })
+  );
+  expect(handoffQueueResponse?.ok).toBe(true);
+  expect(Number.isFinite(handoffQueueResponse?.submitAt)).toBe(true);
+});
