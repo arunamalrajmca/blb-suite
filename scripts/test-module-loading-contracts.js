@@ -414,6 +414,9 @@ if (!extensionPageMessageSourcesMatch) {
       extensionPageOwnershipValid = false;
       continue;
     }
+    // Performance-only message sources are test-owned rather than emitted by
+    // popup.js; their dedicated test-only contract above verifies that caller.
+    if (testOnlyAsyncMessageTypes.has(type)) continue;
     const sourceFile = extensionPageSourceFiles.get(page);
     if (!sourceFile) {
       fail('extension-page-only message uses a known owning page: ' + type + ' -> ' + page);
@@ -445,6 +448,140 @@ if (!trustedPageHelper ||
   fail('trusted extension-page sender validation checks extension identity, URL origin, and exact page path');
 } else {
   pass('trusted extension-page sender validation checks extension identity, URL origin, and exact page path');
+}
+
+
+const authorizedContentSenderHelper = background.match(
+  /async function isAuthorizedContentScriptSender\(sender, allowedHosts = null\) \{([\s\S]*?)\n\}/
+);
+if (!authorizedContentSenderHelper ||
+    !['sender.id', 'sender.tab?.id', 'sender.url', 'hasSelectionActionPermissionForTab']
+      .every(fragment => authorizedContentSenderHelper[1].includes(fragment))) {
+  fail('content-script messages verify extension identity, tab context, and current host permission');
+} else {
+  pass('content-script messages verify extension identity, tab context, and current host permission');
+}
+
+const sourceCollectorSenderHelper = background.match(
+  /function isSourceCollectorContentScriptSender\(sender\) \{([\s\S]*?)\n\}/
+);
+if (!sourceCollectorSenderHelper ||
+    !sourceCollectorSenderHelper[1].includes('BLBSourcePageCollectorSites')) {
+  fail('page-wide MultiVerse collection messages are restricted to registered collector hosts');
+} else {
+  pass('page-wide MultiVerse collection messages are restricted to registered collector hosts');
+}
+
+const contentSenderPolicyMessages = [
+  ['blbSuiteOpenMultiVerseVerse', 'BLB_CONTENT_SCRIPT_HOSTS'],
+  ['blbSuiteGetPendingMultiVerseRefs', 'BLB_CONTENT_SCRIPT_HOSTS'],
+  ['blbSuiteConsumePendingMultiVerseRefs', 'BLB_CONTENT_SCRIPT_HOSTS'],
+  ['blbSuiteStudyCaptureActive', 'BLB_AND_WEBSTER_CONTENT_SCRIPT_HOSTS'],
+  ['blbSuiteCaptureStudyRefs', 'BLB_CONTENT_SCRIPT_HOSTS'],
+  ['blbSuiteCaptureStudySearchTerm', 'BLB_AND_WEBSTER_CONTENT_SCRIPT_HOSTS'],
+  ['blbSuiteCaptureStudyStrong', 'BLB_CONTENT_SCRIPT_HOSTS']
+];
+for (const [type, hostPolicy] of contentSenderPolicyMessages) {
+  const branchStart = background.indexOf("if (message.type === '" + type + "')");
+  const branchEnd = branchStart < 0 ? -1 : background.indexOf("\n  if (message.type ===", branchStart + 1);
+  const branch = branchStart < 0 ? '' : background.slice(branchStart, branchEnd < 0 ? undefined : branchEnd);
+  if (!branch.includes('isAuthorizedContentScriptSender(sender, ' + hostPolicy + ')')) {
+    fail('content message ' + type + ' retains its expected source-host policy');
+  }
+}
+if (contentSenderPolicyMessages.every(([type, hostPolicy]) => {
+  const start = background.indexOf("if (message.type === '" + type + "')");
+  const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
+  return start >= 0 && background.slice(start, end < 0 ? undefined : end)
+    .includes('isAuthorizedContentScriptSender(sender, ' + hostPolicy + ')');
+})) {
+  pass(contentSenderPolicyMessages.length + ' BLB/Study content messages retain their expected source-host policies');
+}
+const genericContentSenderMessages = [
+  'blbSuiteOpenWebsterMultiVerse',
+  'blbSuiteSyncSelectionContextMenu',
+  'blbSuiteOpenBackgroundUrl',
+  'blbSuiteOpenBibleRefRange',
+  'blbSuiteOpenScriptTaggerUrl'
+];
+for (const type of genericContentSenderMessages) {
+  const start = background.indexOf("if (message.type === '" + type + "')");
+  const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
+  const branch = start < 0 ? '' : background.slice(start, end < 0 ? undefined : end);
+  if (!branch.includes('isAuthorizedContentScriptSender(sender)')) {
+    fail('content message ' + type + ' verifies its current tab and host permission');
+  }
+}
+if (genericContentSenderMessages.every(type => {
+  const start = background.indexOf("if (message.type === '" + type + "')");
+  const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
+  return start >= 0 && background.slice(start, end < 0 ? undefined : end)
+    .includes('isAuthorizedContentScriptSender(sender)');
+})) {
+  pass(genericContentSenderMessages.length + ' generic content-script navigation/menu messages verify current host permission');
+}
+const websterMultiVerseBranch = background.slice(
+  background.indexOf("if (message.type === 'blbSuiteOpenWebsterMultiVerse')"),
+  background.indexOf("\n  if (message.type ===", background.indexOf("if (message.type === 'blbSuiteOpenWebsterMultiVerse')") + 1)
+);
+if (!websterMultiVerseBranch.includes('isSourceCollectorContentScriptSender(sender)')) {
+  fail('page-wide MultiVerse collection messages verify a registered collector source');
+} else {
+  pass('page-wide MultiVerse collection messages verify a registered collector source');
+}
+
+
+const activeContentSenderHelper = background.match(
+  /async function isActiveTabContentScriptSender\(sender\) \{([\s\S]*?)\n\}/
+);
+if (!activeContentSenderHelper ||
+    !['isAuthorizedContentScriptSender(sender)', 'chrome.tabs.query({active:true, currentWindow:true})', 'tabs[0]?.id === sender.tab.id']
+      .every(fragment => activeContentSenderHelper[1].includes(fragment))) {
+  fail('selection handoff messages are restricted to the active authorized content tab');
+} else {
+  pass('selection handoff messages are restricted to the active authorized content tab');
+}
+const activeSelectionTypes = [
+  'blbSuiteOpenCurrentSelection',
+  'blbSuiteOpenSelectionText',
+  'blbSuiteOpenDoubleClickSelectionText'
+];
+function activeSelectionBranchStart(type) {
+  if (type === 'blbSuiteOpenDoubleClickSelectionText') {
+    return background.indexOf("if (message.type === 'blbSuiteOpenSelectionText' || message.type === '" + type + "')");
+  }
+  return background.indexOf("if (message.type === '" + type + "'");
+}
+for (const type of activeSelectionTypes) {
+  const start = activeSelectionBranchStart(type);
+  const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
+  const branch = start < 0 ? '' : background.slice(start, end < 0 ? undefined : end);
+  if (!branch.includes('isActiveTabContentScriptSender(sender)')) {
+    fail('selection handoff message ' + type + ' is bound to its active sender tab');
+  }
+}
+if (activeSelectionTypes.every(type => {
+  const start = activeSelectionBranchStart(type);
+  const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
+  return start >= 0 && background.slice(start, end < 0 ? undefined : end)
+    .includes('isActiveTabContentScriptSender(sender)');
+})) {
+  pass(activeSelectionTypes.length + ' selection handoff message types are bound to the active sender tab');
+}
+
+
+const queueListenerStart = background.indexOf(
+  "chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {",
+  background.indexOf('function grantMultiVersePostSlot')
+);
+const queueListenerEnd = queueListenerStart < 0 ? -1 : background.indexOf("\n});", queueListenerStart);
+const queueListener = queueListenerStart < 0 ? '' : background.slice(queueListenerStart, queueListenerEnd < 0 ? undefined : queueListenerEnd);
+if (!queueListener.includes('const respondSafely = response =>') ||
+    !queueListener.includes('try { sendResponse(response); } catch (_) {}') ||
+    !queueListener.includes('error => respondSafely({ok:false, error:String(error)})')) {
+  fail('MultiVerse queue replies safely handle success, rejection, and a closed sender channel');
+} else {
+  pass('MultiVerse queue replies safely handle success, rejection, and a closed sender channel');
 }
 
 if (failures.length) {
