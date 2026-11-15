@@ -6680,8 +6680,10 @@ async function syncSelectionMenusForFocusedWindow() {
   if (!isCurrent()) return;
   const tab = tabs[0];
   if (!tab) return;
-  syncWebSelectionContextMenuVisibility(tab, false, isCurrent).catch(() => {});
-  syncPdfSelectionContextMenuVisibility(tab, isCurrent).catch(() => {});
+  await Promise.all([
+    syncWebSelectionContextMenuVisibility(tab, false, isCurrent),
+    syncPdfSelectionContextMenuVisibility(tab, isCurrent)
+  ]);
 }
 
 chrome.windows.onFocusChanged.addListener(windowId => {
