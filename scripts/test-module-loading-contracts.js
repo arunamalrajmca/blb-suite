@@ -373,6 +373,69 @@ if (unownedAsyncMessages.length) {
   pass(asyncTypes.length + ' asynchronous background messages have runtime senders or explicit test-only owners');
 }
 
+
+// Extension-page-only operations must be bound to the page that owns their
+// UI/workflow. Content scripts share the extension ID, so sender.id alone is
+// not an authorization boundary.
+const extensionPageMessageSourcesMatch = background.match(
+  /const EXTENSION_PAGE_MESSAGE_SOURCES = new Map\\(\\[([\\s\\S]*?)\\]\\);/
+);
+const extensionPageSourceFiles = new Map([
+  ['popup.html', 'popup.js'],
+  ['Tutorial.html', 'Tutorial.js'],
+  ['multiverse-post.html', 'multiverse-post.js']
+]);
+if (!extensionPageMessageSourcesMatch) {
+  fail('extension-page-only background messages declare their owning page');
+} else {
+  const entries = [...extensionPageMessageSourcesMatch[1].matchAll(
+    /\\[['"]([^'"]+)['"],\\s*['"]([^'"]+)['"]\\]/g
+  )].map(match => ({ type:match[1], page:match[2] }));
+  const duplicateTypes = entries.filter((entry, index) =>
+    entries.findIndex(candidate => candidate.type === entry.type) !== index
+  );
+  if (duplicateTypes.length) {
+    fail('extension-page message ownership entries are unique: '
+      + [...new Set(duplicateTypes.map(entry => entry.type))].join(', '));
+  } else {
+    pass(entries.length + ' extension-page-only messages have unique owning-page declarations');
+  }
+  for (const { type, page } of entries) {
+    if (!asyncTypes.includes(type)) {
+      fail('extension-page-only message remains in the asynchronous allowlist: ' + type);
+      continue;
+    }
+    const sourceFile = extensionPageSourceFiles.get(page);
+    if (!sourceFile) {
+      fail('extension-page-only message uses a known owning page: ' + type + ' -> ' + page);
+      continue;
+    }
+    const source = read(path.posix.join('extension', sourceFile));
+    const fragments = [
+      "type:'" + type + "'",
+      "type: '" + type + "'",
+      'type:"' + type + '"',
+      'type: "' + type + '"'
+    ];
+    if (!fragments.some(fragment => source.includes(fragment))) {
+      fail('owning extension page sends its declared message: ' + type + ' -> ' + sourceFile);
+    }
+  }
+  if (!failures.some(message => message.includes('extension-page-only message'))) {
+    pass(entries.length + ' extension-page-only messages match their declared runtime sender files');
+  }
+}
+const trustedPageHelper = background.match(
+  /function isTrustedExtensionPageSender\\(sender, expectedPagePath = ''\\) \\{([\\s\\S]*?)\\n\\}/
+);
+if (!trustedPageHelper ||
+    !['sender.id', 'sender.url', 'chrome.runtime.getURL', 'senderUrl.origin', 'senderUrl.pathname']
+      .every(fragment => trustedPageHelper[1].includes(fragment))) {
+  fail('trusted extension-page sender validation checks extension identity, URL origin, and exact page path');
+} else {
+  pass('trusted extension-page sender validation checks extension identity, URL origin, and exact page path');
+}
+
 if (failures.length) {
   for (const message of failures) console.error('FAIL:', message);
   process.exitCode = 1;
