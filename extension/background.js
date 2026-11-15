@@ -3176,7 +3176,7 @@ function recordBlbBackgroundSelectionStage(stage, startedAt, details = {}) {
     globalThis.__blbSuiteSelectionStageTimings = rows;
   } catch (_) {}
 }
-const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeatureOff","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenCaseSensitiveMultiVerse","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteOpenStrong","blbSuiteImportStudyTestData","blbSuiteValidateSelection","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
+const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuiteCancelSiteFeatureToggle","blbSuiteSetSiteFeatureOff","blbSuiteOpenMultiVerseVerse","blbSuiteGetStudyUiState","blbSuiteSaveStudyTopic","blbSuiteStartStudyTopic","blbSuiteDownloadStudyTopic","blbSuiteDownloadStudyWhole","blbSuiteDownloadStudyDate","blbSuiteClearStudy","blbSuiteClearStudyTopic","blbSuiteGetStudyAutoStopMinutes","blbSuiteSetStudyAutoStopMinutes","blbSuiteAddStudyNoteToTopic","blbSuiteUpdateStudyNoteToTopic","blbSuiteStudyTopicMultiVerse","blbSuiteGetPendingMultiVerseRefs","blbSuiteConsumePendingMultiVerseRefs","blbSuiteOpenWebsterMultiVerse","blbSuiteStudyTopicHistory","blbSuiteOpenStrongHistory","blbSuiteOpenHistorySearchTerms","blbSuiteImportStudyTestData","blbSuiteClassifySelection","blbSuiteOpenCurrentSelection","blbSuiteOpenSelectionText","blbSuiteOpenDoubleClickSelectionText","blbSuiteStudyCaptureActive","blbSuiteStopStudyRecording","blbSuiteEnsureContentScript","blbSuiteCaptureStudyRefs","blbSuiteCaptureStudySearchTerm","blbSuiteCaptureStudyStrong","blbSuiteRefreshRedirectRules","blbSuiteSyncSelectionContextMenu","blbSuiteOpenBackgroundUrl","blbSuiteOpenBibleRefRange","blbSuiteOpenScriptTaggerUrl","blbSuiteRunBCommand"]);
 
 // Serialize MultiVerse POST scheduling while creating all destination tabs immediately.
 // Reserve submission timestamps in one shared FIFO queue, but never sleep inside the
@@ -3356,22 +3356,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === 'blbSuiteOpenCaseSensitiveMultiVerse') {
-    const url = String(message.url || '');
-    if (!/^https:\/\/www\.blueletterbible\.org\/tools\/MultiVerse\.cfm\?/i.test(url)) {
-      sendResponse({ok:false, reason:'invalid-multiverse-url'}); return true;
-    }
-    if (url.length > 7000) {
-      sendResponse({ok:false, reason:'multiverse-url-too-large'}); return true;
-    }
-    try {
-      const result = await openBlbDestination(url, true, true);
-      sendResponse({ok:true, tabId:result?.tab?.id ?? null});
-    } catch (error) { sendResponse({ok:false, error:String(error)}); }
-    return true;
-  }
-
-
   if (message.type === 'blbSuiteOpenWebsterMultiVerse') {
     try {
       sendResponse(await openBlbMultiVerseRefs(message.refs || [], true));
@@ -3406,17 +3390,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
-  if (message.type === 'blbSuiteOpenStrong') {
-    const url = resolveStrongDestinationUrl(message.value);
-    if (!url) { sendResponse({ok:false, reason:'invalid-strong'}); return true; }
-    try {
-      await openBlbDestination(url, !!message.activeIfNew, !!message.activateExisting);
-      await recordStudyStrong(message.value);
-      sendResponse({ok:true, value:canonicalStrongValue(message.value)});
-    } catch (error) { sendResponse({ok:false, error:String(error)}); }
-    return true;
-  }
-
   if (message.type === 'blbSuiteImportStudyTestData') {
     try {
       const added = await seedStudyTestData();
@@ -3424,16 +3397,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     } catch (error) {
       console.error('KJV Scripture Tools: unable to import study test data:', error);
       sendResponse({ok:false, error:String(error)});
-    }
-    return true;
-  }
-
-  if (message.type === 'blbSuiteValidateSelection') {
-    try {
-      const decision = await classifySelectionForBlb(String(message.text || '').trim());
-      sendResponse({ok:true, valid:decision.valid === true, type:decision.type || ''});
-    } catch (error) {
-      sendResponse({ok:false, valid:false, error:String(error)});
     }
     return true;
   }
