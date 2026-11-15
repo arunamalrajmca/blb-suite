@@ -377,3 +377,73 @@ test('disabled Suite does not hide or process a generated MultiVerse page', asyn
     pending: null
   });
 });
+
+
+test('MultiVerse handoff resumes pending retrieval when the master switch is re-enabled', async ({ page, context }) => {
+  await context.route('https://example.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: `<!doctype html><html><head><title>Reactivated MultiVerse handoff</title></head><body>
+      <h2>MultiVerse Retrieval</h2>
+      <input id="references" type="text">
+      <input id="retrieve" type="button" value="Retrieve">
+      <div id="results"><a href="${DEFAULT_RESULT_URL}">Genesis 1:1</a></div>
+      <script>
+        window.retrieveCount = 0;
+        document.querySelector('#retrieve').addEventListener('click', () => {
+          window.retrieveCount++;
+          setTimeout(() => {
+            document.querySelector('#results').innerHTML =
+              '<a href="${EXPECTED_RESULT_URL}">John 3:16</a>';
+          }, 100);
+        });
+      </script>
+    </body></html>`
+  }));
+  await page.goto(HANDOFF_URL, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    window.masterEnabled = false;
+    window.handoffMessages = [];
+    Object.defineProperty(window, 'chrome', {
+      configurable: true,
+      value: { runtime: { sendMessage: async message => {
+        window.handoffMessages.push(message.type);
+        if (message.type === 'blbSuiteGetPendingMultiVerseRefs') {
+          return { ok: true, refs: [{ book: 'John', chapter: 3, from: 16, to: 16 }] };
+        }
+        return { ok: true };
+      } } }
+    });
+  });
+  await page.addScriptTag({ path: path.join(__dirname, '../../extension/multiverse-handoff.js') });
+  await page.evaluate(() => {
+    window.handoff = window.BLBMultiVerseHandoffModule.initialize({
+      BLBShared: { hostnames: { blbWww: 'example.com' } },
+      isSuiteEnabled: async () => window.masterEnabled,
+      isSuiteEnabledNow: () => window.masterEnabled,
+      resolveBibleBook: book => book === 'John' ? { urlKey: 'jhn' } : null
+    });
+  });
+
+  await expect.poll(() => page.evaluate(() => ({
+    messages: window.handoffMessages,
+    visibility: document.documentElement.style.visibility,
+    retrieveCount: window.retrieveCount || 0
+  }))).toEqual({ messages: [], visibility: '', retrieveCount: 0 });
+
+  await page.evaluate(() => {
+    window.masterEnabled = true;
+    return window.handoff.refresh();
+  });
+  await expect.poll(() => page.evaluate(() => ({
+    retrieveCount: window.retrieveCount,
+    result: Boolean(document.querySelector('a[href*="/kjv/jhn/3/16/"]')),
+    visibility: document.documentElement.style.visibility,
+    pending: document.documentElement.dataset.blbSuiteMultiVersePending || null
+  })), { timeout: 5000 }).toEqual({
+    retrieveCount: 1,
+    result: true,
+    visibility: '',
+    pending: null
+  });
+});
