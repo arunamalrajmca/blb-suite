@@ -73,6 +73,55 @@ function makeWebsterRedirectHarness({ initialEnabled = true, response = { ok: tr
   };
 }
 
+
+test('Study Sessions sanitization skips malformed stored records and preserves valid topic history', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({ studySessions: [
+    null,
+    'not-a-session',
+    [],
+    {
+      id: 'audit-normalization-first',
+      title: 'Legacy Topic',
+      refs: [{ book: 'Not a Bible Book', chapter: 1, from: 1, to: 1 }],
+      strongs: ['g0001', 'invalid'],
+      searchTerms: ['  Grace   Alone ', 'grace alone'],
+      notes: ['jesus', '  grace   alone ']
+    },
+    {
+      id: 'audit-normalization-second',
+      title: 'legacy topic',
+      refs: [],
+      strongs: ['G1'],
+      searchTerms: ['GRACE ALONE'],
+      notes: ['GRACE ALONE']
+    }
+  ] });
+
+  const result = await extensionWorker.evaluate(async () => {
+    const state = await getStudySessions();
+    const stored = await chrome.storage.local.get('studySessions');
+    return { sessions: state.sessions, persisted: stored.studySessions };
+  });
+
+  expect(result.sessions).toHaveLength(2);
+  expect(result.sessions[0]).toMatchObject({
+    id: 'audit-normalization-first',
+    refs: [],
+    strongs: ['G1'],
+    searchTerms: ['Grace Alone'],
+    notes: ['Grace Alone']
+  });
+  expect(result.sessions[1]).toMatchObject({
+    id: 'audit-normalization-second',
+    refs: [],
+    strongs: [],
+    searchTerms: [],
+    notes: []
+  });
+  expect(result.persisted).toEqual(result.sessions);
+});
+
 test('disabling the last site feature removes both persistent isolated- and MAIN-world registrations', async ({ extensionWorker, extensionStorage }) => {
   await extensionStorage.clear();
   await extensionStorage.set({

@@ -34,8 +34,13 @@
     }
     
     function sanitizeStudySessions(sessions) {
-      const list = Array.isArray(sessions) ? sessions : [];
-      let changed = false;
+      // Storage can contain legacy or partially corrupted entries. Discard
+      // non-session values before reading session fields so one bad record
+      // cannot prevent the remaining Study history from loading.
+      const list = Array.isArray(sessions)
+        ? sessions.filter(session => session && typeof session === 'object' && !Array.isArray(session))
+        : [];
+      let changed = !Array.isArray(sessions) || list.length !== sessions.length;
     
       // These maps deliberately span all sessions belonging to the same Study Topic.
       // This prevents repeated captures of the same item from separate recording
