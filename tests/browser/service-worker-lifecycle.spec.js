@@ -371,3 +371,78 @@ test('a real MV3 service-worker termination is recovered by navigation on a conf
     await cdp.detach();
   }
 });
+
+test('a replaced MV3 tab migrates extension-owned destination and MultiVerse state', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const addedTabId = 940001;
+    const removedTabId = 940002;
+    const logicalKey = 'lifecycle-replaced-tab-test';
+    const scriptTaggerKey = 'script-tagger|lifecycle-replaced-tab-test';
+    const storageKeys = ['blbSuiteMultiVerseTabSets', 'blbSuitePendingMultiVerseRefsByTab'];
+    const previousStorage = await chrome.storage.local.get(storageKeys);
+    const hadTracked = Object.prototype.hasOwnProperty.call(previousStorage, storageKeys[0]);
+    const hadPending = Object.prototype.hasOwnProperty.call(previousStorage, storageKeys[1]);
+    const previousLogical = blbLogicalTabRegistry.get(logicalKey);
+    const hadLogical = blbLogicalTabRegistry.has(logicalKey);
+    const previousIntentional = intentionalNewBlbTabs.has(removedTabId);
+    const previousScriptTagger = scriptTaggerDestinationTabs.get(scriptTaggerKey);
+    const hadScriptTagger = scriptTaggerDestinationTabs.has(scriptTaggerKey);
+
+    const currentRef = {book:'John', chapter:3, from:16, to:16};
+    const retainedRef = {book:'Acts', chapter:2, from:1, to:1};
+    const migratedRef = {book:'Romans', chapter:8, from:1, to:2};
+    try {
+      blbLogicalTabRegistry.set(logicalKey, removedTabId);
+      intentionalNewBlbTabs.add(removedTabId);
+      scriptTaggerDestinationTabs.set(scriptTaggerKey, removedTabId);
+      await chrome.storage.local.set({
+        blbSuiteMultiVerseTabSets: {
+          [String(removedTabId)]: {destination:'multiverse', batch:3}
+        },
+        blbSuitePendingMultiVerseRefsByTab: {
+          [String(removedTabId)]: [currentRef, migratedRef],
+          [String(addedTabId)]: [currentRef, retainedRef]
+        }
+      });
+
+      await handleReplacedTabIdentity(addedTabId, removedTabId);
+      const stored = await chrome.storage.local.get(storageKeys);
+      return {
+        logicalTabId: blbLogicalTabRegistry.get(logicalKey),
+        intentionalNew: intentionalNewTabState(),
+        scriptTaggerTabId: scriptTaggerDestinationTabs.get(scriptTaggerKey),
+        tracked: stored.blbSuiteMultiVerseTabSets,
+        pending: stored.blbSuitePendingMultiVerseRefsByTab
+      };
+      function intentionalNewTabState() {
+        return intentionalNewBlbTabs.has(addedTabId) && !intentionalNewBlbTabs.has(removedTabId);
+      }
+    } finally {
+      if (hadLogical) blbLogicalTabRegistry.set(logicalKey, previousLogical);
+      else blbLogicalTabRegistry.delete(logicalKey);
+      if (previousIntentional) intentionalNewBlbTabs.add(removedTabId);
+      else intentionalNewBlbTabs.delete(removedTabId);
+      intentionalNewBlbTabs.delete(addedTabId);
+      if (hadScriptTagger) scriptTaggerDestinationTabs.set(scriptTaggerKey, previousScriptTagger);
+      else scriptTaggerDestinationTabs.delete(scriptTaggerKey);
+      if (hadTracked) await chrome.storage.local.set({blbSuiteMultiVerseTabSets:previousStorage.blbSuiteMultiVerseTabSets});
+      else await chrome.storage.local.remove(storageKeys[0]);
+      if (hadPending) await chrome.storage.local.set({blbSuitePendingMultiVerseRefsByTab:previousStorage.blbSuitePendingMultiVerseRefsByTab});
+      else await chrome.storage.local.remove(storageKeys[1]);
+    }
+  });
+
+  expect(result.logicalTabId).toBe(940001);
+  expect(result.intentionalNew).toBe(true);
+  expect(result.scriptTaggerTabId).toBe(940001);
+  expect(result.tracked).toEqual({
+    '940001': {destination:'multiverse', batch:3}
+  });
+  expect(result.pending).toEqual({
+    '940001': [
+      {book:'John', chapter:3, from:16, to:16},
+      {book:'Acts', chapter:2, from:1, to:1},
+      {book:'Romans', chapter:8, from:1, to:2}
+    ]
+  });
+});
