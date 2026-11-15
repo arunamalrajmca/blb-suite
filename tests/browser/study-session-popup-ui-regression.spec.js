@@ -666,6 +666,81 @@ test('Study Sessions topic blur reports when the topic could not be saved', asyn
   await page.close();
 });
 
+test('Study Sessions restores the previous recording when the new recording alarm fails', async ({
+  extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionWorker.evaluate(async () => {
+    await chrome.storage.local.set({
+      masterEnabled:true,
+      studyAutoStopMinutes:15,
+      studySelectedTopic:'Existing Topic',
+      currentStudySessionId:'existing-recording-before-alarm-failure',
+      studyLastActivityAt:1700000000000,
+      studyPausedTopic:'Previously Paused Topic',
+      studyPauseReason:'manual',
+      studyTopics:['Existing Topic'],
+      studySessions:[{
+        id:'existing-recording-before-alarm-failure',
+        title:'Existing Topic',
+        date:'2026-11-15',
+        dateLabel:'15 November 2026',
+        refs:[],strongs:[],searchTerms:[],notes:[]
+      }]
+    });
+    await refreshStudyAutoStopAlarm();
+  });
+
+  const outcome = await extensionWorker.evaluate(async () => {
+    let failNextRefresh = true;
+    const result = await startStudyTopicFromPopup('New Topic', 'A note on the new topic', async () => {
+      if (failNextRefresh) {
+        failNextRefresh = false;
+        throw new Error('simulated-recording-alarm-create-failure');
+      }
+      return refreshStudyAutoStopAlarm();
+    });
+    const state = await chrome.storage.local.get({
+      currentStudySessionId:null,
+      studyLastActivityAt:0,
+      studyPausedTopic:'',
+      studyPauseReason:'',
+      studySessions:[],
+      studyTopics:[]
+    });
+    return {
+      result,
+      state,
+      alarm:await chrome.alarms.get('blb-study-auto-stop')
+    };
+  });
+
+  expect(outcome.result).toMatchObject({
+    ok:false,
+    restored:true,
+    alarmRestored:true,
+    recording:true
+  });
+  expect(outcome.result.error).toContain('simulated-recording-alarm-create-failure');
+  expect(outcome.state).toMatchObject({
+    currentStudySessionId:'existing-recording-before-alarm-failure',
+    studyLastActivityAt:1700000000000,
+    studyPausedTopic:'Previously Paused Topic',
+    studyPauseReason:'manual'
+  });
+  expect(outcome.state.studyTopics).toContain('New Topic');
+  expect(outcome.state.studySessions).toEqual(expect.arrayContaining([
+    expect.objectContaining({
+      title:'New Topic',
+      notes:['A Note on the New Topic']
+    })
+  ]));
+  expect(outcome.alarm).toMatchObject({
+    name:'blb-study-auto-stop',
+    periodInMinutes:1
+  });
+});
+
 test('Study Sessions restores the saved auto-stop value when alarm refresh fails', async ({
   context, extensionId, extensionStorage, extensionWorker
 }) => {
