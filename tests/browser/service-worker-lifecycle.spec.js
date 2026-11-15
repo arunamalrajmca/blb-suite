@@ -446,3 +446,64 @@ test('a replaced MV3 tab migrates extension-owned destination and MultiVerse sta
     ]
   });
 });
+
+
+test('closing multiple MultiVerse tabs concurrently removes every persisted tab record', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const keys = ['blbSuiteMultiVerseTabSets', 'blbSuitePendingMultiVerseRefsByTab'];
+    const previous = await chrome.storage.local.get(keys);
+    const hadTracked = Object.prototype.hasOwnProperty.call(previous, keys[0]);
+    const hadPending = Object.prototype.hasOwnProperty.call(previous, keys[1]);
+    const sentinelId = '940099';
+    const created = [];
+    try {
+      const first = await chrome.tabs.create({url:'about:blank', active:false});
+      const second = await chrome.tabs.create({url:'about:blank', active:false});
+      created.push(first.id, second.id);
+      const firstId = String(first.id);
+      const secondId = String(second.id);
+      await chrome.storage.local.set({
+        blbSuiteMultiVerseTabSets: {
+          [firstId]: {key:'concurrent-close-first', batch:1},
+          [secondId]: {key:'concurrent-close-second', batch:2},
+          [sentinelId]: {key:'unrelated-live-tab', batch:3}
+        },
+        blbSuitePendingMultiVerseRefsByTab: {
+          [firstId]: [{book:'John', chapter:3, from:16, to:16}],
+          [secondId]: [{book:'Romans', chapter:8, from:1, to:2}],
+          [sentinelId]: [{book:'Acts', chapter:2, from:1, to:1}]
+        }
+      });
+
+      await Promise.all(created.map(tabId => chrome.tabs.remove(tabId)));
+      const deadline = Date.now() + 5000;
+      let stored;
+      do {
+        stored = await chrome.storage.local.get(keys);
+        const tracked = stored.blbSuiteMultiVerseTabSets || {};
+        const pending = stored.blbSuitePendingMultiVerseRefsByTab || {};
+        if (!tracked[firstId] && !tracked[secondId] && !pending[firstId] && !pending[secondId]) break;
+        await new Promise(resolve => setTimeout(resolve, 25));
+      } while (Date.now() < deadline);
+
+      return {
+        tracked: stored.blbSuiteMultiVerseTabSets,
+        pending: stored.blbSuitePendingMultiVerseRefsByTab,
+        removedIds: created
+      };
+    } finally {
+      await Promise.all(created.map(tabId => chrome.tabs.remove(tabId).catch(() => {})));
+      if (hadTracked) await chrome.storage.local.set({blbSuiteMultiVerseTabSets:previous.blbSuiteMultiVerseTabSets});
+      else await chrome.storage.local.remove(keys[0]);
+      if (hadPending) await chrome.storage.local.set({blbSuitePendingMultiVerseRefsByTab:previous.blbSuitePendingMultiVerseRefsByTab});
+      else await chrome.storage.local.remove(keys[1]);
+    }
+  });
+
+  expect(result.tracked).toEqual({
+    '940099': {key:'unrelated-live-tab', batch:3}
+  });
+  expect(result.pending).toEqual({
+    '940099': [{book:'Acts', chapter:2, from:1, to:1}]
+  });
+});
