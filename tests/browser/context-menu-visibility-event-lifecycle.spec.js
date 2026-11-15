@@ -58,9 +58,9 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
 
       // A real tab activation must make both global menus reflect the active tab.
       await chrome.tabs.update(enabledTab.id, {active:true});
-      for (let attempt=0; attempt<50 && !updates.some(item =>
+      for (let attempt=0; attempt<100 && (!updates.some(item =>
         item.id === 'blb-suite-web-selection' && item.visible === true
-      ); attempt++) {
+      ) || !updates.some(item => item.id === 'blb-suite-pdf-selection')); attempt++) {
         await new Promise(resolve => setTimeout(resolve, 50));
       }
       const activationUpdates = [...updates];
