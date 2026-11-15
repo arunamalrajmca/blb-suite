@@ -394,3 +394,67 @@ test('repeated global master toggles recreate one source collector control and c
     await expect(button).toHaveCount(1);
   }
 });
+
+
+test('repeated global master toggles recreate one dictionary collector control without stale drag handlers', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  const cases = [
+    {
+      url:'https://www.thekingsbible.com/dictionary/faith',
+      route:'https://www.thekingsbible.com/**',
+      button:'#blb-suite-kingsbible-multiverse',
+      id:'blb-suite-kingsbible-multiverse',
+      body:'<!doctype html><html><head><title>King James Bible dictionary</title></head><body><main><a class="bible" data-bible="43003016">John 3:16</a></main></body></html>'
+    },
+    {
+      url:'https://webstersdictionary1828.com/dictionary/faith',
+      route:'https://webstersdictionary1828.com/**',
+      button:'#blb-suite-webster-multiverse',
+      id:'blb-suite-webster-multiverse',
+      body:'<!doctype html><html><head><title>Webster dictionary</title></head><body><main><a class="bible" href="/Bible/43/3">John 3:16</a></main></body></html>'
+    }
+  ];
+
+  for (const fixture of cases) {
+    await extensionStorage.set({masterEnabled:true});
+    await page.route(fixture.route, route => route.fulfill({
+      status:200, contentType:'text/html; charset=utf-8', body:fixture.body
+    }));
+    await page.goto(fixture.url, {waitUntil:'domcontentloaded'});
+    const tabId = await extensionWorker.evaluate(async url =>
+      (await chrome.tabs.query({url}))[0]?.id
+    , fixture.url);
+    expect(Number.isInteger(tabId)).toBe(true);
+    const button = page.locator(fixture.button);
+    await expect(button).toHaveCount(1);
+
+    for (let cycle = 0; cycle < 4; cycle++) {
+      const previous = await extensionWorker.evaluate(async ({id, buttonId}) => {
+        const [result] = await chrome.scripting.executeScript({
+          target:{tabId:id}, world:'ISOLATED',
+          func:buttonId => {
+            const control = document.getElementById(buttonId);
+            globalThis.__blbRepeatedDictionaryMasterTogglePrevious = control;
+            return Boolean(control && typeof control.__blbDragCleanup === 'function');
+          }, args:[buttonId]
+        });
+        return result.result;
+      }, {id:tabId,buttonId:fixture.id});
+      expect(previous).toBe(true);
+
+      await extensionStorage.set({masterEnabled:false});
+      await expect(button).toHaveCount(0);
+      await expect.poll(() => extensionWorker.evaluate(async id => {
+        const [result] = await chrome.scripting.executeScript({
+          target:{tabId:id}, world:'ISOLATED',
+          func:() => globalThis.__blbRepeatedDictionaryMasterTogglePrevious?.__blbDragCleanup === null
+        });
+        return result.result;
+      }, tabId)).toBe(true);
+
+      await extensionStorage.set({masterEnabled:true});
+      await expect(button).toHaveCount(1);
+    }
+  }
+});
