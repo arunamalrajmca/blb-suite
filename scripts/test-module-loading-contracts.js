@@ -312,12 +312,26 @@ if (!asyncTypesMatch) {
 } else {
   asyncTypes = [...asyncTypesMatch[1].matchAll(/['"]([^'"]+)['"]/g)].map(match => match[1]);
   const dispatchSource = background.slice(asyncTypesMatch.index + asyncTypesMatch[0].length);
-  const missingDispatch = asyncTypes.filter(type => !dispatchSource.includes(type));
+  const duplicateTypes = asyncTypes.filter((type, index) => asyncTypes.indexOf(type) !== index);
+  if (duplicateTypes.length) {
+    fail('asynchronous message allowlist entries are unique: ' + [...new Set(duplicateTypes)].join(', '));
+  } else {
+    pass(asyncTypes.length + ' asynchronous message allowlist entries are unique');
+  }
+
+  // A substring match is not enough: comments, diagnostics, or sender-side
+  // strings can mention a message name without the background dispatching it.
+  // Require an actual equality/inequality comparison against message.type.
+  const dispatchedTypes = new Set(
+    [...dispatchSource.matchAll(/message(?:\\?\\.|\\.)type\\s*(?:===|!==)\\s*['"]([^'"]+)['"]/g)]
+      .map(match => match[1])
+  );
+  const missingDispatch = asyncTypes.filter(type => !dispatchedTypes.has(type));
   if (missingDispatch.length) {
-    fail('every asynchronous message allowlist entry has a corresponding downstream dispatch path: '
+    fail('every asynchronous message allowlist entry has an explicit message.type dispatch comparison: '
       + missingDispatch.join(', '));
   } else {
-    pass(asyncTypes.length + ' asynchronous message allowlist entries retain corresponding dispatch paths');
+    pass(asyncTypes.length + ' asynchronous message allowlist entries retain explicit dispatch comparisons');
   }
 }
 
