@@ -204,3 +204,27 @@ test('Study capture rejects inactive topics and master-OFF state across passage,
   await page.goto(blbOrigin + '/lexicon/g26/kjv/tr/0-1/', { waitUntil: 'domcontentloaded' });
   await expect.poll(async () => (await currentSession(extensionWorker))?.strongs || []).toContain('G26');
 });
+
+
+test('Study capture resumes on the current BLB page when the master switch is re-enabled', async ({
+  page, context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await startStudyTopic({ context, extensionId, extensionStorage });
+  await routeBlbFixture(context);
+  await extensionStorage.set({ masterEnabled: false });
+  await page.goto(blbOrigin + '/kjv/jhn/3/16/', { waitUntil: 'domcontentloaded' });
+
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({ masterEnabled: true })).masterEnabled
+  )).toBe(false);
+  await expect.poll(async () => (await currentSession(extensionWorker))?.refs || []).toEqual([]);
+
+  // No navigation occurs after re-enabling: the current page itself must be
+  // reprocessed so the active Study Topic does not miss this passage.
+  await extensionStorage.set({ masterEnabled: true });
+  await expect.poll(async () => (await currentSession(extensionWorker))?.refs || []).toContainEqual(
+    expect.objectContaining({
+      book: 'john', chapter: 3, from: 16, to: 16, version: 'kjv', text: 'john 3:16'
+    })
+  );
+});
