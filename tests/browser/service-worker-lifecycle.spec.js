@@ -302,3 +302,54 @@ test('a real MV3 service-worker termination is recovered by the actual Floating 
     await cdp.detach();
   }
 });
+
+
+test('a real MV3 service-worker termination is recovered by navigation on a configured site', async ({
+  page, context, extensionStorage, extensionId
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{}
+  });
+  await page.goto('https://example.com/?blb-worker-recovery=initial', {waitUntil:'domcontentloaded'});
+  const floatingButton=page.locator('#blb-suite-page-selection-button');
+  await expect(floatingButton).toBeVisible({timeout:10000});
+
+  const browser=context.browser();
+  expect(browser,'persistent context must expose its Chromium browser').not.toBeNull();
+  const cdp=await browser.newBrowserCDPSession();
+  try {
+    await cdp.send('Target.setDiscoverTargets',{discover:true});
+    const {targetInfos}=await cdp.send('Target.getTargets');
+    const workerTarget=targetInfos.find(target =>
+      target.type==='service_worker' &&
+      target.url.startsWith(`chrome-extension://${extensionId}/`)
+    );
+    expect(workerTarget,'extension service-worker target must be discoverable').toBeTruthy();
+
+    const closed=await cdp.send('Target.closeTarget',{targetId:workerTarget.targetId});
+    expect(closed.success).toBe(true);
+    await expect.poll(async () => {
+      const {targetInfos:current}=await cdp.send('Target.getTargets');
+      return current.some(target => target.targetId===workerTarget.targetId);
+    },{timeout:5000}).toBe(false);
+
+    // A real top-level navigation emits tabs.onUpdated while the extension
+    // worker is stopped. The configured site must recover its content script
+    // and floating action without a popup, runtime message, or manual reload.
+    await page.goto('https://example.com/?blb-worker-recovery=navigated', {waitUntil:'domcontentloaded'});
+    await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({timeout:15000});
+
+    await expect.poll(async () => {
+      const {targetInfos:current}=await cdp.send('Target.getTargets');
+      return current.some(target =>
+        target.type==='service_worker' &&
+        target.url.startsWith(`chrome-extension://${extensionId}/`)
+      );
+    },{timeout:10000,intervals:[100,200,500]}).toBe(true);
+  } finally {
+    await cdp.detach();
+  }
+});
