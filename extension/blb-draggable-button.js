@@ -149,16 +149,30 @@
     }).catch(() => placeReset());
   
     let viewportListenersAttached = true;
+    let cleanedUp = false;
+    const cleanup = () => {
+      if (cleanedUp) return;
+      cleanedUp = true;
+      visibilityObserver.disconnect();
+      reset.remove();
+      if (viewportListenersAttached) {
+        window.removeEventListener("resize", onViewportChange);
+        window.removeEventListener("scroll", onViewportChange, true);
+        window.visualViewport?.removeEventListener("resize", onViewportChange);
+        viewportListenersAttached = false;
+      }
+      try {
+        if (pointerStart && button.hasPointerCapture(pointerStart.id)) {
+          button.releasePointerCapture(pointerStart.id);
+        }
+      } catch (_) {}
+      pointerStart = null;
+      if (button.__blbDragCleanup === cleanup) button.__blbDragCleanup = null;
+    };
+    button.__blbDragCleanup = cleanup;
     const onViewportChange = () => {
       if (!button.isConnected) {
-        reset.remove();
-        visibilityObserver.disconnect();
-        if (viewportListenersAttached) {
-          window.removeEventListener("resize", onViewportChange);
-          window.removeEventListener("scroll", onViewportChange, true);
-          window.visualViewport?.removeEventListener("resize", onViewportChange);
-          viewportListenersAttached = false;
-        }
+        cleanup();
         return;
       }
       // A selection-driven button is hidden between selections; do not convert
