@@ -115,6 +115,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       const replacementSynchronizesPdfMenu = updates.some(item =>
         item.id === 'blb-suite-pdf-selection'
       );
+      const replacementUpdates = [...updates];
 
       // Replacements in a background tab must not change global menu state.
       updates.length = 0;
@@ -170,6 +171,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
         replacementSynchronizesPdfMenu,
         backgroundReplacementIgnored,
         backgroundReplacementUpdates,
+        replacementUpdates,
         focusChangeHidesWebMenu,
         focusChangeShowsWebMenu,
         focusEvents,
@@ -201,7 +203,10 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
   ).toEqual([]);
   expect(result.activeNavigationHidesWebMenu).toBe(true);
   expect(result.replacementSynced).toBe(true);
-  expect(result.replacementShowsWebMenu, JSON.stringify({replacementSynced:result.replacementSynced, updates:result.updates}, null, 2)).toBe(true);
+  expect(result.replacementShowsWebMenu, JSON.stringify({
+    replacementSynced:result.replacementSynced,
+    replacementUpdates:result.replacementUpdates
+  }, null, 2)).toBe(true);
   expect(result.replacementSynchronizesPdfMenu).toBe(true);
   expect(result.backgroundReplacementIgnored).toBe(true);
   expect(result.backgroundReplacementUpdates).toEqual([]);
