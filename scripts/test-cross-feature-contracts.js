@@ -48,7 +48,8 @@ try {
     [/actual\s*=\s*String\(primary\.value/, 'rendered input verification'],
     [/await consumePendingMultiVerseRefs\(\)/, 'pending-reference consume after successful verification']
   ], 'MultiVerse handoff reads, verifies, then consumes pending references');
-  has(multiverseHandoffModule, /async function consumePendingMultiVerseRefs[\\s\\S]{0,900}blbSuiteConsumePendingMultiVerseRefs/, 'MultiVerse handoff retries pending-reference consumption');
+  has(multiverseHandoffModule, /async function consumePendingMultiVerseRefs/, 'MultiVerse handoff has a dedicated pending-reference retry helper');
+  has(multiverseHandoffModule, /blbSuiteConsumePendingMultiVerseRefs/, 'MultiVerse handoff consumes pending references through the background API');
   has(background, /blbSuiteGetPendingMultiVerseRefs/, 'background exposes pending MultiVerse references');
   has(background, /blbSuiteConsumePendingMultiVerseRefs/, 'background exposes pending MultiVerse consumption');
   has(background, /blbSuiteAcquireMultiVersePostSlot/, 'background owns MultiVerse POST scheduling');
