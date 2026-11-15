@@ -12,6 +12,7 @@ export const featureSpecs = [
     paths: ["extension/content.js"],
     specs: [
       "tests/browser/redirect-toggle-isolation.spec.js",
+      "tests/browser/content-feature-refresh-races.spec.js",
       "tests/browser/multiverse-clipboard-reference-pattern.spec.js",
       "tests/browser/selection-phase-performance.spec.js"
     ]
@@ -100,7 +101,7 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/source-page-collector.js"],
-    specs: ["tests/browser/source-page-collector-behavior.spec.js", "tests/browser/source-page-button-redirect-separation.spec.js"]
+    specs: ["tests/browser/source-page-collector-behavior.spec.js", "tests/browser/source-page-button-redirect-separation.spec.js", "tests/browser/content-feature-refresh-races.spec.js"]
   },
   {
     paths: ["extension/multiverse-copy.js"],
@@ -163,6 +164,7 @@ export const mappedSpecs = new Set(["tests/browser/redirect-source-url-patterns.
   "tests/browser/optional-host-permission-lifecycle.spec.js",
   "tests/browser/kings-bible-collector-behavior.spec.js",
   "tests/browser/feature-lifecycle-regressions.spec.js",
+  "tests/browser/content-feature-refresh-races.spec.js",
   "tests/browser/study-backup-restore.spec.js",
   "tests/browser/study-reference-capture.spec.js",
   "tests/browser/study-session-popup-ui-regression.spec.js",
@@ -260,7 +262,8 @@ export const groupARequiredSpecs = new Set([
   "tests/browser/popup-master-toggle-regression.spec.js",
   "tests/browser/redirect-toggle-isolation.spec.js",
   "tests/browser/optional-host-permission-lifecycle.spec.js",
-  "tests/browser/context-menu-visibility-event-lifecycle.spec.js"
+  "tests/browser/context-menu-visibility-event-lifecycle.spec.js",
+  "tests/browser/content-feature-refresh-races.spec.js"
 ]);
 
 export const groupBRequiredSpecs = new Set([
