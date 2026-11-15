@@ -323,7 +323,7 @@ if (!asyncTypesMatch) {
   // strings can mention a message name without the background dispatching it.
   // Require an actual equality/inequality comparison against message.type.
   const dispatchedTypes = new Set(
-    [...dispatchSource.matchAll(/message(?:\\?\\.|\\.)type\\s*(?:===|!==)\\s*['"]([^'"]+)['"]/g)]
+    [...dispatchSource.matchAll(/message(?:\?\.|\.)type\s*(?:===|!==)\s*['"]([^'"]+)['"]/g)]
       .map(match => match[1])
   );
   const missingDispatch = asyncTypes.filter(type => !dispatchedTypes.has(type));
