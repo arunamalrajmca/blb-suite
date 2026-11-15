@@ -2156,10 +2156,15 @@ test('Double-Click on Vs. resolves the following verse in the same article citat
 
 
 test('BLB verse links inside parse popups bind dynamically appended anchors', async ({
-  page, extensionStorage
+  page, context, extensionStorage
 }) => {
   await extensionStorage.clear();
   await extensionStorage.set({ masterEnabled: true });
+  await context.route('https://www.blueletterbible.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>BLB parse popup fixture</title></head><body>BLB fixture</body></html>'
+  }));
   await page.goto('https://www.blueletterbible.org/kjv/jhn/3/16/', {
     waitUntil: 'domcontentloaded'
   });
