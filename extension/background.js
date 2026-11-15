@@ -6650,11 +6650,14 @@ chrome.tabs.onActivated.addListener(() => {
 // window even when no tabs.onActivated event is emitted.
 let windowFocusVisibilitySyncGeneration = 0;
 chrome.windows.onFocusChanged.addListener(windowId => {
+  // Chrome can emit WINDOW_ID_NONE as a transient handoff between windows.
+  // It is not a new focused-window state and must not invalidate the actual
+  // destination window's in-flight synchronization.
+  if (windowId === chrome.windows.WINDOW_ID_NONE) return;
   // Invalidate earlier focus lookups immediately, not only after their tab
   // queries finish. Otherwise a slow query from the previously focused window
   // can complete last and overwrite the newly focused window's menu state.
   const generation = ++windowFocusVisibilitySyncGeneration;
-  if (windowId === chrome.windows.WINDOW_ID_NONE) return;
   const isCurrentFocus = () => generation === windowFocusVisibilitySyncGeneration;
   chrome.tabs.query({active:true, windowId}).then(tabs => {
     if (!isCurrentFocus()) return;
