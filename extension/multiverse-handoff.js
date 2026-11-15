@@ -69,6 +69,21 @@
         return false;
       }
     
+      async function consumePendingMultiVerseRefs() {
+        let lastError = null;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const response = await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'});
+            if (response?.ok === true) return true;
+            lastError = new Error(response?.error || 'Unable to clear pending MultiVerse references');
+          } catch (error) {
+            lastError = error;
+          }
+          if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        throw lastError || new Error('Unable to clear pending MultiVerse references');
+      }
+
       async function processPendingMultiVerseRefs() {
         if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) {
           revealPendingMultiVerseView();
@@ -154,7 +169,7 @@
           revealPendingMultiVerseView();
           return false;
         }
-        await chrome.runtime.sendMessage({type:'blbSuiteConsumePendingMultiVerseRefs'}).catch(()=>{});
+        await consumePendingMultiVerseRefs();
         if (!isSuiteEnabledNow()) {
           revealPendingMultiVerseView();
           return false;

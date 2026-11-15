@@ -224,6 +224,122 @@ test('MultiVerse handoff reveals the page when retrieval never returns the reque
   });
 });
 
+
+test('MultiVerse handoff retries pending-reference consumption before retrieving results', async ({ page, context }) => {
+  await context.route('https://example.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: `<!doctype html><html><head><title>Consume retry</title></head><body>
+      <h2>MultiVerse Retrieval</h2>
+      <input id="references" type="text">
+      <input id="retrieve" type="button" value="Retrieve">
+      <div id="results"></div>
+      <script>
+        window.retrieveCount = 0;
+        document.querySelector('#retrieve').addEventListener('click', () => {
+          window.retrieveCount++;
+          setTimeout(() => {
+            document.querySelector('#results').innerHTML =
+              '<a href="https://www.blueletterbible.org/kjv/jhn/3/16/">John 3:16</a>';
+          }, 150);
+        });
+      </script>
+    </body></html>`
+  }));
+  await page.goto(HANDOFF_URL, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    window.__consumeAttempts = 0;
+    Object.defineProperty(window, 'chrome', {
+      configurable: true,
+      value: { runtime: { sendMessage: async message => {
+        if (message.type === 'blbSuiteGetPendingMultiVerseRefs') {
+          return { ok: true, refs: [{ book: 'John', chapter: 3, from: 16, to: 16 }] };
+        }
+        if (message.type === 'blbSuiteConsumePendingMultiVerseRefs') {
+          window.__consumeAttempts++;
+          if (window.__consumeAttempts === 1) {
+            return { ok: false, error: 'simulated pending-reference storage write failure' };
+          }
+        }
+        return { ok: true };
+      } } }
+    });
+  });
+  await page.addScriptTag({ path: path.join(__dirname, '../../extension/multiverse-handoff.js') });
+  await page.evaluate(() => window.BLBMultiVerseHandoffModule.initialize({
+    BLBShared: { hostnames: { blbWww: 'example.com' } },
+    isSuiteEnabled: async () => true,
+    resolveBibleBook: book => book === 'John' ? { urlKey: 'jhn' } : null
+  }));
+
+  await expect.poll(() => page.evaluate(() => ({
+    consumeAttempts: window.__consumeAttempts,
+    retrieveCount: window.retrieveCount,
+    visibility: document.documentElement.style.visibility,
+    pending: document.documentElement.dataset.blbSuiteMultiVersePending || null,
+    expectedResultPresent: Boolean(document.querySelector('a[href*="/kjv/jhn/3/16/"]'))
+  })), { timeout: 5000 }).toEqual({
+    consumeAttempts: 2,
+    retrieveCount: 1,
+    visibility: '',
+    pending: null,
+    expectedResultPresent: true
+  });
+});
+
+test('MultiVerse handoff does not retrieve while pending-reference consumption keeps failing', async ({ page, context }) => {
+  await context.route('https://example.com/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: `<!doctype html><html><head><title>Consume failure</title></head><body>
+      <h2>MultiVerse Retrieval</h2>
+      <input id="references" type="text">
+      <input id="retrieve" type="button" value="Retrieve">
+      <div id="results"></div>
+      <script>
+        window.retrieveCount = 0;
+        document.querySelector('#retrieve').addEventListener('click', () => window.retrieveCount++);
+      </script>
+    </body></html>`
+  }));
+  await page.goto(HANDOFF_URL, { waitUntil: 'domcontentloaded' });
+  await page.evaluate(() => {
+    window.__consumeAttempts = 0;
+    Object.defineProperty(window, 'chrome', {
+      configurable: true,
+      value: { runtime: { sendMessage: async message => {
+        if (message.type === 'blbSuiteGetPendingMultiVerseRefs') {
+          return { ok: true, refs: [{ book: 'John', chapter: 3, from: 16, to: 16 }] };
+        }
+        if (message.type === 'blbSuiteConsumePendingMultiVerseRefs') {
+          window.__consumeAttempts++;
+          return { ok: false, error: 'simulated persistent pending-reference storage failure' };
+        }
+        return { ok: true };
+      } } }
+    });
+  });
+  await page.addScriptTag({ path: path.join(__dirname, '../../extension/multiverse-handoff.js') });
+  await page.evaluate(() => window.BLBMultiVerseHandoffModule.initialize({
+    BLBShared: { hostnames: { blbWww: 'example.com' } },
+    isSuiteEnabled: async () => true,
+    resolveBibleBook: book => book === 'John' ? { urlKey: 'jhn' } : null
+  }));
+
+  await expect.poll(() => page.evaluate(() => ({
+    consumeAttempts: window.__consumeAttempts,
+    retrieveCount: window.retrieveCount,
+    visibility: document.documentElement.style.visibility,
+    pending: document.documentElement.dataset.blbSuiteMultiVersePending || null
+  })), { timeout: 5000 }).toEqual({
+    consumeAttempts: 2,
+    retrieveCount: 0,
+    visibility: '',
+    pending: null
+  });
+});
+
+
 test('disabled Suite does not hide or process a generated MultiVerse page', async ({ page, context }) => {
   await context.route('https://example.com/**', route => route.fulfill({
     status: 200,
