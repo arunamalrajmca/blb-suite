@@ -332,3 +332,38 @@ test('source collectors recheck the current master gate after asynchronous initi
   expect(kings).toContain('!isSuiteEnabledNow()');
   expect(webster).toContain('if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) return;');
 });
+
+test('pending Study capture stops before recording after global OFF', async () => {
+  const source = fs.readFileSync(path.resolve(__dirname, '../../extension/study-reference-capture.js'), 'utf8');
+  const activeResolvers = [];
+  const captured = [];
+  let enabled = true;
+  const context = {
+    URL,
+    location:{
+      hostname:'www.blueletterbible.org',
+      pathname:'/kjv/jhn/3/16/',
+      href:'https://www.blueletterbible.org/kjv/jhn/3/16/'
+    },
+    document:{readyState:'complete',addEventListener(){}},
+    chrome:{
+      runtime:{
+        sendMessage:message => message?.type === 'blbSuiteStudyCaptureActive'
+          ? new Promise(resolve => activeResolvers.push(resolve))
+          : (captured.push(message), Promise.resolve({ok:true}))
+      }
+    }
+  };
+  vm.runInNewContext(source, context, {filename:'study-reference-capture.js'});
+  context.BLBStudyReferenceCaptureModule.initialize({
+    BLB_HOSTNAME:'blueletterbible.org',
+    normalizeSelectionText:value => String(value || '').trim(),
+    isSuiteEnabled:async () => true,
+    isSuiteEnabledNow:() => enabled
+  });
+  await expect.poll(() => activeResolvers.length).toBe(2);
+  enabled = false;
+  activeResolvers.forEach(resolve => resolve({active:true}));
+  for (let i=0;i<6;i++) await Promise.resolve();
+  expect(captured).toEqual([]);
+});
