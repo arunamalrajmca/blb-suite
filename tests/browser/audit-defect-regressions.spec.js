@@ -122,6 +122,37 @@ test('Study Sessions sanitization skips malformed stored records and preserves v
   expect(result.persisted).toEqual(result.sessions);
 });
 
+
+test('Study Sessions remains readable when persisting normalized history fails', async ({ extensionWorker, extensionStorage }) => {
+  await extensionStorage.clear();
+  await extensionStorage.set({ studySessions: [
+    null,
+    { id: 'audit-normalization-write-failure', title: 'Readable Topic', refs: [], strongs: [], searchTerms: [], notes: [] }
+  ] });
+
+  const result = await extensionWorker.evaluate(async () => {
+    const originalSet = chrome.storage.local.set.bind(chrome.storage.local);
+    chrome.storage.local.set = async values => {
+      if (Object.prototype.hasOwnProperty.call(values || {}, 'studySessions')) {
+        throw new Error('injected Study normalization write failure');
+      }
+      return originalSet(values);
+    };
+    try {
+      const state = await getStudySessions();
+      const stored = await chrome.storage.local.get('studySessions');
+      return { sessions: state.sessions, stored: stored.studySessions };
+    } finally {
+      chrome.storage.local.set = originalSet;
+    }
+  });
+
+  expect(result.sessions).toHaveLength(1);
+  expect(result.sessions[0].id).toBe('audit-normalization-write-failure');
+  expect(result.stored).toHaveLength(2);
+  expect(result.stored[0]).toBeNull();
+});
+
 test('disabling the last site feature removes both persistent isolated- and MAIN-world registrations', async ({ extensionWorker, extensionStorage }) => {
   await extensionStorage.clear();
   await extensionStorage.set({
