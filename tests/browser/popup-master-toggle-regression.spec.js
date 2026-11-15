@@ -148,3 +148,37 @@ test('master OFF stays ON and reports failure when an active Study recording can
     studySelectedTopic:topic
   });
 });
+
+test('a newer master ON choice wins while an older OFF waits for Study stop', async ({
+  page, extensionId, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({masterEnabled:true, studySelectedTopic:'Genesis'});
+  await page.goto(`chrome-extension://${extensionId}/popup.html`);
+  await expect(page.locator('#master')).toBeChecked();
+
+  await page.evaluate(() => {
+    const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+    const pending = [];
+    Object.defineProperty(chrome.runtime, 'sendMessage', {
+      configurable:true,
+      value: message => message?.type === 'blbSuiteStopStudyRecording'
+        ? new Promise(resolve => pending.push(resolve))
+        : originalSendMessage(message)
+    });
+    window.__pendingStudyStops = pending;
+    studyState.recording = true;
+    studyState.recordingTopic = 'Genesis';
+  });
+
+  const olderOff = page.evaluate(() => setMaster(false));
+  await expect.poll(() => page.evaluate(() => window.__pendingStudyStops.length)).toBe(1);
+
+  await page.evaluate(() => setMaster(true));
+  await page.evaluate(() => window.__pendingStudyStops[0]({ok:true}));
+  await olderOff;
+
+  await expect.poll(async () => extensionWorker.evaluate(async () =>
+    (await chrome.storage.local.get({masterEnabled:false})).masterEnabled
+  )).toBe(true);
+  await expect(page.locator('#master')).toBeChecked();
+});
