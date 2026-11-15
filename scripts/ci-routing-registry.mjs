@@ -85,11 +85,11 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/kings-bible-collector.js"],
-    specs: ["tests/browser/kings-bible-collector-behavior.spec.js", "tests/browser/pr-422-feature-regressions.spec.js"]
+    specs: ["tests/browser/kings-bible-collector-behavior.spec.js", "tests/browser/pr-422-feature-regressions.spec.js", "tests/browser/redirect-toggle-isolation.spec.js"]
   },
   {
     paths: ["extension/webster-collector.js"],
-    specs: ["tests/browser/webster-collector-behavior.spec.js"]
+    specs: ["tests/browser/webster-collector-behavior.spec.js", "tests/browser/redirect-toggle-isolation.spec.js"]
   },
   {
     paths: ["extension/source-page-collector-sites.js"],
