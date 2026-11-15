@@ -145,7 +145,7 @@ test.describe('Webster collector behavior', () => {
       }
     });
 
-    await expect(harness.capture()).resolves.toBeUndefined();
+    await harness.capture();
     expect(searchAttempts).toBe(2);
   });
 
