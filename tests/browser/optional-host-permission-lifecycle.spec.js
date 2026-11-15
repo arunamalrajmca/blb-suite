@@ -1167,3 +1167,48 @@ test('a site opt-out during an in-flight registration cannot leave the site cont
     }
   }
 });
+
+
+test('host permission revocation immediately hides both global selection menus', async ({ page, extensionWorker, extensionStorage }) => {
+  const originPattern = 'https://example.com/*';
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true, pageSelectionButtonSites:{}, doubleClickBlbSites:{}, redirectEnabled:false
+  }));
+  await extensionStorage.set({
+    masterEnabled:true,
+    redirectEnabled:false,
+    pageSelectionButtonSites:{'example.com':true},
+    doubleClickBlbSites:{'example.com':true}
+  });
+  await page.goto('https://example.com/', {waitUntil:'domcontentloaded'});
+  try {
+    const result = await extensionWorker.evaluate(async pattern => {
+      const originalContains = chrome.permissions.contains;
+      const originalUpdate = chrome.contextMenus.update;
+      const originalWebPresent = selectionMenuKnownPresent;
+      const originalPdfPresent = pdfSelectionMenuKnownPresent;
+      const updates = [];
+      try {
+        selectionMenuKnownPresent = true;
+        pdfSelectionMenuKnownPresent = true;
+        chrome.permissions.contains = async details =>
+          details?.origins?.includes(pattern) ? false : originalContains(details);
+        chrome.contextMenus.update = async (id, details) => { updates.push({id, ...details}); };
+        await handleHostPermissionsRemoved();
+        return updates;
+      } finally {
+        chrome.permissions.contains = originalContains;
+        chrome.contextMenus.update = originalUpdate;
+        selectionMenuKnownPresent = originalWebPresent;
+        pdfSelectionMenuKnownPresent = originalPdfPresent;
+      }
+    }, originPattern);
+
+    expect(result).toEqual(expect.arrayContaining([
+      {id:'blb-suite-web-selection', visible:false},
+      {id:'blb-suite-pdf-selection', visible:false}
+    ]));
+  } finally {
+    await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
+  }
+});
