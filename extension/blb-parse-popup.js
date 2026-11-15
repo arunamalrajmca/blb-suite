@@ -7,15 +7,25 @@
     isModifiedLinkActivation,
     openBlbDestinationFromContent
   }) {
+    global.__blbParsePopupCleanup?.();
     if (
       !location.hostname.endsWith(BLB_HOSTNAME) ||
       /(?:\/search\/(?:search|preSearch)\.cfm|\/tools\/MultiVerse\.cfm)$/i.test(location.pathname)
     ) return;
 
+    const listenerController = new AbortController();
+    const boundLinks = new Set();
+    let parsePopupObserver = null;
+    global.__blbParsePopupCleanup = () => {
+      parsePopupObserver?.disconnect(); listenerController.abort();
+      for (const link of boundLinks) delete link.dataset.blbSuitePopup;
+      boundLinks.clear();
+    };
     const handleParsePopupLink = link => {
       if (!link || !link.href || !link.closest?.(".parse-popup")) return;
       if (link.dataset.blbSuitePopup) return;
       link.dataset.blbSuitePopup = "1";
+      boundLinks.add(link);
       link.addEventListener("click", event => {
         if (!isSuiteEnabledNow() || isModifiedLinkActivation(event)) return;
         event.preventDefault();
@@ -29,7 +39,7 @@
             `${BLBShared.urls.blbSearch}?Criteria=${match[0].split("/").pop()}`;
           openBlbDestinationFromContent(criteriaUrl);
         }
-      }, true);
+      }, { capture: true, signal: listenerController.signal });
     };
 
     const processParsePopups = (root = document) => {
@@ -41,7 +51,7 @@
       root.querySelectorAll?.(".parse-popup a[href]").forEach(handleParsePopupLink);
     };
 
-    const parsePopupObserver = new MutationObserver(mutations => {
+    parsePopupObserver = new MutationObserver(mutations => {
       for (const mutation of mutations) {
         for (const node of mutation.addedNodes) {
           if (node.nodeType === 1) processParsePopups(node);
