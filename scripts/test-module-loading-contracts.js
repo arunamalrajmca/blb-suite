@@ -280,11 +280,11 @@ const runtimeScriptReferences = new Set([
 ]);
 for (const htmlFile of ['extension/popup.html', 'extension/Tutorial.html', 'extension/multiverse-post.html']) {
   const html = read(htmlFile);
-  for (const match of html.matchAll(/<script\\b[^>]*\\bsrc\\s*=\\s*['"]([^'"]+\\.js)['"][^>]*>/gi)) {
-    runtimeScriptReferences.add(match[1].replace(/^\\.\\//, ''));
+  for (const match of html.matchAll(/<script\b[^>]*\bsrc\s*=\s*['"]([^'"]+\.js)['"][^>]*>/gi)) {
+    runtimeScriptReferences.add(match[1].replace(/^\.\//, ''));
   }
 }
-for (const match of background.matchAll(/['"]([^'"]+\\.js)['"]/g)) {
+for (const match of background.matchAll(/['"]([^'"]+\.js)['"]/g)) {
   runtimeScriptReferences.add(match[1]);
 }
 const extensionJavaScriptFiles = [];
@@ -305,7 +305,7 @@ if (unreferencedExtensionScripts.length) {
   pass(extensionJavaScriptFiles.length + ' packaged extension JavaScript files are accounted for by runtime entry points');
 }
 
-const asyncTypesMatch = background.match(/const ASYNC_MESSAGE_TYPES = new Set\\(\\[([\\s\\S]*?)\\]\\);/);
+const asyncTypesMatch = background.match(/const ASYNC_MESSAGE_TYPES = new Set\(\[([\s\S]*?)\]\);/);
 if (!asyncTypesMatch) {
   fail('background asynchronous message allowlist remains discoverable for dispatch auditing');
 } else {
