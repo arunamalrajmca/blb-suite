@@ -689,7 +689,7 @@ globalThis.BLBMultiVerseHandoffModule?.initialize({
 
 
 // Study capture is isolated in a classic-script feature module.
-globalThis.BLBStudyReferenceCaptureModule?.initialize({
+const blbStudyReferenceCapture = globalThis.BLBStudyReferenceCaptureModule?.initialize({
   BLB_HOSTNAME,
   normalizeSelectionText,
   isSuiteEnabled,
@@ -4071,6 +4071,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
       // existing BLB links when the master switch is re-enabled.
       blbParsePopupNavigation?.refresh?.();
       blbVerseLinkNavigation?.refresh?.();
+      blbStudyReferenceCapture?.refresh?.();
     }
     if (!suiteEnabled) {
       const websterButton = document.getElementById('blb-suite-webster-multiverse');

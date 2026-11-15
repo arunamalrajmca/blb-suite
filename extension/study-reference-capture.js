@@ -81,6 +81,7 @@
     const runStudyCapture = () => { captureStudyRefs(); captureStrong(); };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded',runStudyCapture,{once:true});
     else runStudyCapture();
+    return Object.freeze({ refresh: runStudyCapture });
   }
   }
 
