@@ -52,17 +52,19 @@ function anchor(text) {
   return { innerText: text, textContent: text };
 }
 
-function makeCapture({ hostname = 'webstersdictionary1828.com', pathname = '/dictionary/Faith', enabled = true, active = true, isSuiteEnabledNow = () => enabled } = {}) {
+function makeCapture({ hostname = 'webstersdictionary1828.com', pathname = '/dictionary/Faith', enabled = true, active = true, isSuiteEnabledNow = () => enabled, sendMessage } = {}) {
   const messages = [];
   const start = source.indexOf('async function captureWebsterWord()');
   const end = source.indexOf('captureWebsterWord();', start);
   expect(start, 'Webster word capture must exist').toBeGreaterThan(-1);
-  expect(end, 'Webster word capture invocation boundary must exist').toBeGreaterThan(start);
+  expect(end, 'Webster capture invocation boundary must exist').toBeGreaterThan(start);
   const context = {
     location: { hostname, pathname },
     normalizeSelectionText,
+    setTimeout,
     chrome: { runtime: { sendMessage: async message => {
       messages.push(message);
+      if (sendMessage) return sendMessage(message);
       if (message.type === 'blbSuiteStudyCaptureActive') return typeof active === 'function' ? active() : { active };
       return { ok: true };
     } } },
@@ -105,6 +107,47 @@ test.describe('Webster collector behavior', () => {
   });
 
 
+
+  test('retries a dropped Webster Study search-term message and captures the word', async () => {
+    let searchAttempts = 0;
+    const harness = makeCapture({
+      pathname: '/dictionary/faith-and-hope',
+      sendMessage: async message => {
+        if (message.type === 'blbSuiteStudyCaptureActive') return { active: true };
+        if (message.type === 'blbSuiteCaptureStudySearchTerm') {
+          searchAttempts += 1;
+          if (searchAttempts === 1) throw new Error('The message port closed before a response was received.');
+        }
+        return { ok: true };
+      }
+    });
+
+    await harness.capture();
+    expect(searchAttempts).toBe(2);
+    expect(harness.messages).toEqual([
+      { type: 'blbSuiteStudyCaptureActive' },
+      { type: 'blbSuiteCaptureStudySearchTerm', term: 'faith and hope' },
+      { type: 'blbSuiteCaptureStudySearchTerm', term: 'faith and hope' }
+    ]);
+  });
+
+  test('stops retrying a Webster Study search-term message after the second failure', async () => {
+    let searchAttempts = 0;
+    const harness = makeCapture({
+      pathname: '/dictionary/faith',
+      sendMessage: async message => {
+        if (message.type === 'blbSuiteStudyCaptureActive') return { active: true };
+        if (message.type === 'blbSuiteCaptureStudySearchTerm') {
+          searchAttempts += 1;
+          throw new Error('simulated persistent Study capture message failure');
+        }
+        return { ok: true };
+      }
+    });
+
+    await harness.capture();
+    expect(searchAttempts).toBe(2);
+  });
 
   test('does not capture a Webster word if global OFF occurs during the active Study check', async () => {
     const activeResolvers = [];
