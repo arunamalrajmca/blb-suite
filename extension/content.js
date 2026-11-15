@@ -4066,7 +4066,9 @@ chrome.storage.onChanged.addListener((changes, area) => {
     suiteEnabled = changes.masterEnabled.newValue !== false;
     blbPassiveNewTabTargets?.refresh?.();
     if (!suiteEnabled) {
-      document.getElementById('blb-suite-webster-multiverse')?.remove();
+      const websterButton = document.getElementById('blb-suite-webster-multiverse');
+      websterButton?.__blbDragCleanup?.();
+      websterButton?.remove();
       document.getElementById('blb-suite-webster-multiverse-reset-position')?.remove();
       document.getElementById('blb-suite-webster-status')?.remove();
       blbPageSelectionButton.disable();
