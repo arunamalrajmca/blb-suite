@@ -679,6 +679,9 @@ test('Study Sessions retries clearing an orphaned auto-stop alarm after recordin
       currentStudySessionId:null,
       studyLastActivityAt:0
     });
+    // Let the storage.onChanged alarm refresh caused by the stopped state
+    // finish before planting the deliberately orphaned alarm.
+    await new Promise(resolve => setTimeout(resolve, 100));
     await chrome.alarms.create('blb-study-auto-stop', {delayInMinutes:1, periodInMinutes:1});
   });
 
