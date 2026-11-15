@@ -690,7 +690,8 @@ globalThis.BLBMultiVerseHandoffModule?.initialize({
 globalThis.BLBStudyReferenceCaptureModule?.initialize({
   BLB_HOSTNAME,
   normalizeSelectionText,
-  isSuiteEnabled
+  isSuiteEnabled,
+  isSuiteEnabledNow: () => suiteEnabled
 });
 
 // ---------- Double-Click BLB ----------
