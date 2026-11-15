@@ -385,6 +385,10 @@ const extensionPageSourceFiles = new Map([
   ['Tutorial.html', 'Tutorial.js'],
   ['multiverse-post.html', 'multiverse-post.js']
 ]);
+const standaloneExtensionPageMessageConditions = new Map([
+  ['blbSuiteMultiVerseHandoffTiming', "message?.type !== 'blbSuiteMultiVerseHandoffTiming'"],
+  ['blbSuiteAcquireMultiVersePostSlot', "message?.type !== 'blbSuiteAcquireMultiVersePostSlot'"]
+]);
 if (!extensionPageMessageSourcesMatch) {
   fail('extension-page-only background messages declare their owning page');
 } else {
@@ -402,8 +406,11 @@ if (!extensionPageMessageSourcesMatch) {
   }
   let extensionPageOwnershipValid = true;
   for (const { type, page } of entries) {
-    if (!asyncTypes.includes(type)) {
-      fail('extension-page-only message remains in the asynchronous allowlist: ' + type);
+    const standaloneCondition = standaloneExtensionPageMessageConditions.get(type);
+    const hasDispatch = asyncTypes.includes(type) ||
+      (standaloneCondition && background.includes(standaloneCondition));
+    if (!hasDispatch) {
+      fail('extension-page-only message has a registered background dispatch path: ' + type);
       extensionPageOwnershipValid = false;
       continue;
     }
