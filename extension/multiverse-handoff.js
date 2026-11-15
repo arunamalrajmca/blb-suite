@@ -186,13 +186,25 @@
         return true;
       }
     
-      const tryProcess=()=>processPendingMultiVerseRefs().catch(()=>revealPendingMultiVerseView());
+      let processingPromise = null;
+      const tryProcess=()=>{
+        if (processingPromise) return processingPromise;
+        processingPromise = processPendingMultiVerseRefs()
+          .catch(()=>revealPendingMultiVerseView())
+          .finally(()=>{ processingPromise = null; });
+        return processingPromise;
+      };
       if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",tryProcess,{once:true});
       else void tryProcess();
+      return Object.freeze({ refresh: () => {
+        if (isSuiteEnabledNow()) return tryProcess();
+        revealPendingMultiVerseView();
+        return Promise.resolve(false);
+      } });
     }
     
     
     
   }
-  global.BLBMultiVerseHandoffModule = { initialize };
+  global.BLBMultiVerseHandoffModule = Object.freeze({ initialize });
 })(globalThis);
