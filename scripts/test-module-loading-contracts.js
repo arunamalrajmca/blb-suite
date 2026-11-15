@@ -305,11 +305,12 @@ if (unreferencedExtensionScripts.length) {
   pass(extensionJavaScriptFiles.length + ' packaged extension JavaScript files are accounted for by runtime entry points');
 }
 
+let asyncTypes = [];
 const asyncTypesMatch = background.match(/const ASYNC_MESSAGE_TYPES = new Set\(\[([\s\S]*?)\]\);/);
 if (!asyncTypesMatch) {
   fail('background asynchronous message allowlist remains discoverable for dispatch auditing');
 } else {
-  const asyncTypes = [...asyncTypesMatch[1].matchAll(/['"]([^'"]+)['"]/g)].map(match => match[1]);
+  asyncTypes = [...asyncTypesMatch[1].matchAll(/['"]([^'"]+)['"]/g)].map(match => match[1]);
   const dispatchSource = background.slice(asyncTypesMatch.index + asyncTypesMatch[0].length);
   const missingDispatch = asyncTypes.filter(type => !dispatchSource.includes(type));
   if (missingDispatch.length) {
@@ -341,7 +342,23 @@ for (const [type, testFile] of testOnlyAsyncMessageTypes) {
 }
 const unownedAsyncMessages = asyncTypes.filter(type => {
   if (testOnlyAsyncMessageTypes.has(type)) return false;
-  const escaped = type.replace(/[.*+?^\u0024{}()|[\]\\\\]/g, '\\\\
+  const fragments = [
+    "type:'" + type + "'",
+    "type: '" + type + "'",
+    'type:"' + type + '"',
+    'type: "' + type + '"'
+  ];
+  return !runtimeMessageSources.some(({ source }) =>
+    fragments.some(fragment => source.includes(fragment))
+  );
+});
+if (unownedAsyncMessages.length) {
+  fail('every asynchronous background message has an extension-side sender or an explicit test-only owner: '
+    + unownedAsyncMessages.join(', '));
+} else {
+  pass(asyncTypes.length + ' asynchronous background messages have runtime senders or explicit test-only owners');
+}
+
 if (failures.length) {');
   const senderPattern = new RegExp('\\\\btype\\\\s*:\\\\s*([\'\\"])' + escaped + '\\\\1');
   return !runtimeMessageSources.some(({ source }) => senderPattern.test(source));
