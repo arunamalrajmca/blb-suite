@@ -167,6 +167,40 @@ test.describe('Study Sessions backup and restore', () => {
   });
 
 
+
+  test('reports a Study backup restore storage failure without changing saved data', async ({ context, extensionId, extensionWorker, extensionStorage }) => {
+    await extensionStorage.clear();
+    const page = await openPopup(context, extensionId);
+    const existingTopic = 'Storage failure existing topic ' + Date.now();
+    await send(page, { type: 'blbSuiteStartStudyTopic', title: existingTopic, note: 'Keep existing Study data' });
+    const before = await readStudyBackupData(extensionWorker);
+    const replacement = {
+      studyTopics: [{ title: 'Replacement topic', notes: ['Replacement note'] }],
+      studySelectedTopic: 'Replacement topic',
+      studySessions: [],
+      studyAutoStopMinutes: 30
+    };
+
+    await page.evaluate(() => {
+      window.confirm = () => true;
+      const storage = chrome.storage.local;
+      const originalSet = storage.set;
+      storage.set = () => Promise.reject(new Error('simulated Study backup storage write failure'));
+      window.__restoreStudyBackupStorageSet = () => { storage.set = originalSet; };
+    });
+
+    try {
+      await page.locator('#studyBackupFile').setInputFiles(backupFile(replacement));
+      await expect(page.locator('#studyStatus')).toContainText('Unable to read or restore this backup file.');
+      expect(await readStudyBackupData(extensionWorker)).toEqual(before);
+      await expect(page.locator('#importStudyBackup')).toBeEnabled();
+      expect(await page.locator('#studyBackupFile').inputValue()).toBe('');
+    } finally {
+      await page.evaluate(() => window.__restoreStudyBackupStorageSet?.());
+      await page.close();
+    }
+  });
+
   test('preserves saved Study topics, sessions, and notes when the popup is reopened', async ({ context, extensionId, extensionWorker, extensionStorage }) => {
     await extensionStorage.clear();
     let page = await openPopup(context, extensionId);
