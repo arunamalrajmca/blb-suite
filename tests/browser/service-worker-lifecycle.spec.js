@@ -314,8 +314,26 @@ test('a real MV3 service-worker termination is recovered by navigation on a conf
     doubleClickBlbSites:{}
   });
   await page.goto('https://example.com/?blb-worker-recovery=initial', {waitUntil:'domcontentloaded'});
-  const floatingButton=page.locator('#blb-suite-page-selection-button');
-  await expect(floatingButton).toBeVisible({timeout:10000});
+
+  const selectReferenceAndShowFloatingAction = async () => {
+    await page.evaluate(() => {
+      const target=document.createElement('p');
+      target.id='navigation-worker-wake-reference';
+      target.textContent='John 3:16';
+      document.body.appendChild(target);
+      const range=document.createRange();
+      range.selectNodeContents(target);
+      const selection=window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      document.dispatchEvent(new MouseEvent('mouseup',{bubbles:true}));
+    });
+    await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({timeout:10000});
+  };
+
+  // The floating action is selection-dependent: first prove that the site's
+  // saved Show on BLB preference is active before terminating the worker.
+  await selectReferenceAndShowFloatingAction();
 
   const browser=context.browser();
   expect(browser,'persistent context must expose its Chromium browser').not.toBeNull();
@@ -337,18 +355,18 @@ test('a real MV3 service-worker termination is recovered by navigation on a conf
     },{timeout:5000}).toBe(false);
 
     // A real top-level navigation emits tabs.onUpdated while the extension
-    // worker is stopped. The configured site must recover its content script
-    // and floating action without a popup, runtime message, or manual reload.
+    // worker is stopped. Verify that this event wakes a fresh worker before
+    // exercising the selection-dependent content-script UI on the new page.
     await page.goto('https://example.com/?blb-worker-recovery=navigated', {waitUntil:'domcontentloaded'});
-    await expect(page.locator('#blb-suite-page-selection-button')).toBeVisible({timeout:15000});
-
     await expect.poll(async () => {
       const {targetInfos:current}=await cdp.send('Target.getTargets');
       return current.some(target =>
         target.type==='service_worker' &&
         target.url.startsWith(`chrome-extension://${extensionId}/`)
       );
-    },{timeout:10000,intervals:[100,200,500]}).toBe(true);
+    },{timeout:15000,intervals:[100,200,500,1000]}).toBe(true);
+
+    await selectReferenceAndShowFloatingAction();
   } finally {
     await cdp.detach();
   }
