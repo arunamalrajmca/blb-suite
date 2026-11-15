@@ -260,3 +260,67 @@ test('repeated per-site feature toggles do not accumulate page-selection or doub
     });
   }, tabId);
 });
+
+test('repeated global master toggles recreate exactly one collector control across supported collector sites', async ({
+  page, extensionStorage
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  });
+
+  const fixtures = [
+    {
+      url:'https://www.dailyverses.net/fixture-global-toggle.html',
+      route:'https://www.dailyverses.net/**',
+      button:'#blb-suite-dailyverses-multiverse',
+      reset:'#blb-suite-dailyverses-multiverse-reset-position',
+      body:'<!doctype html><html><head><title>Daily verses toggle</title></head><body><main>John 3:16</main></body></html>'
+    },
+    {
+      url:'https://www.thekingsbible.com/dictionary/faith',
+      route:'https://www.thekingsbible.com/**',
+      button:'#blb-suite-kingsbible-multiverse',
+      reset:'#blb-suite-kingsbible-multiverse-reset-position',
+      body:'<!doctype html><html><head><title>King James Bible dictionary</title></head><body><main><a class="bible" data-bible="43003016">John 3:16</a></main></body></html>'
+    },
+    {
+      url:'https://webstersdictionary1828.com/dictionary/faith',
+      route:'https://webstersdictionary1828.com/**',
+      button:'#blb-suite-webster-multiverse',
+      reset:'#blb-suite-webster-multiverse-reset-position',
+      body:'<!doctype html><html><head><title>Webster dictionary</title></head><body><main><a class="bible" href="/Bible/43/3">John 3:16</a></main></body></html>'
+    }
+  ];
+
+  for (const fixture of fixtures) {
+    await page.route(fixture.route, route => route.fulfill({
+      status:200,
+      contentType:'text/html; charset=utf-8',
+      body:fixture.body
+    }));
+    await page.goto(fixture.url, {waitUntil:'domcontentloaded'});
+    const button = page.locator(fixture.button);
+    await expect(button).toHaveCount(1, {timeout:10000});
+    await expect(button).toBeVisible();
+
+    for (let cycle = 0; cycle < 4; cycle++) {
+      await extensionStorage.set({masterEnabled:false});
+      await expect(button).toHaveCount(0);
+      await expect(page.locator(fixture.reset)).toHaveCount(0);
+
+      await extensionStorage.set({masterEnabled:true});
+      await expect(button).toHaveCount(1, {timeout:10000});
+      await expect(button).toBeVisible();
+      await expect(page.locator(fixture.reset)).toHaveCount(1);
+
+      // Replacing the body must recover one control, not preserve a detached
+      // control or create a second one through accumulated observers.
+      await page.evaluate(() => document.body.replaceWith(document.createElement('body')));
+      await expect(button).toHaveCount(1, {timeout:10000});
+      await expect(page.locator(fixture.reset)).toHaveCount(1);
+    }
+  }
+});
+
