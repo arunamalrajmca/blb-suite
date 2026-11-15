@@ -566,6 +566,21 @@ if (activeSelectionTypes.every(type => {
   pass(activeSelectionTypes.length + ' selection handoff message types are bound to the active sender tab');
 }
 
+
+const queueListenerStart = background.indexOf(
+  "chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {",
+  background.indexOf('function grantMultiVersePostSlot')
+);
+const queueListenerEnd = queueListenerStart < 0 ? -1 : background.indexOf("\\n});", queueListenerStart);
+const queueListener = queueListenerStart < 0 ? '' : background.slice(queueListenerStart, queueListenerEnd < 0 ? undefined : queueListenerEnd);
+if (!queueListener.includes('const respondSafely = response =>') ||
+    !queueListener.includes('try { sendResponse(response); } catch (_) {}') ||
+    !queueListener.includes('error => respondSafely({ok:false, error:String(error)})')) {
+  fail('MultiVerse queue replies safely handle success, rejection, and a closed sender channel');
+} else {
+  pass('MultiVerse queue replies safely handle success, rejection, and a closed sender channel');
+}
+
 if (failures.length) {
   for (const message of failures) console.error('FAIL:', message);
   process.exitCode = 1;
