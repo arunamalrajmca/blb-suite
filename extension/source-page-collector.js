@@ -1,6 +1,6 @@
 /* Source-page Bible reference collection for supported commentary/reference sites. */
 globalThis.BLBSourcePageCollectorModule = Object.freeze({
-  initialize({ normalizeSelectionText, parseRef, normalizeSourceBibleBook, resolveBibleReference, blbUrl, formatSourceBibleBookName, isSuiteEnabled, makeBlbMultiVerseButtonDraggable }) {
+  initialize({ normalizeSelectionText, parseRef, normalizeSourceBibleBook, resolveBibleReference, blbUrl, formatSourceBibleBookName, isSuiteEnabled, isSuiteEnabledNow = isSuiteEnabled, makeBlbMultiVerseButtonDraggable }) {
     // ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------
     {
       const host = location.hostname.toLowerCase().replace(/^www\./, "");
@@ -250,7 +250,7 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
         }
     
         async function ensureSourcePageMultiVerseButton() {
-          if (!(await isSuiteEnabled()) || !document.body || document.getElementById(buttonId)) return;
+          if (!(await isSuiteEnabled()) || !isSuiteEnabledNow() || !document.body || document.getElementById(buttonId)) return;
           const button = document.createElement("button");
           button.id = buttonId;
           button.type = "button";
