@@ -71,7 +71,7 @@
     const captureStrong = async () => {
       try {
         if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) return;
-        const active = await chrome.runtime.sendMessage({type:'blbSuiteStudyCaptureActive'});
+        const active = await sendStudyCaptureMessage({type:'blbSuiteStudyCaptureActive'});
         if (!active?.active || !isSuiteEnabledNow()) return;
         const m = location.pathname.match(/\/lexicon\/(g|h)(\d+)\//i);
         if (m) await sendStudyCaptureMessage({type:'blbSuiteCaptureStudyStrong', value:`${m[1]}${m[2]}`});
