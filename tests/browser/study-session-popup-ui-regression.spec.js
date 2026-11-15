@@ -666,6 +666,48 @@ test('Study Sessions topic blur reports when the topic could not be saved', asyn
   await page.close();
 });
 
+test('Study Sessions retries clearing an orphaned auto-stop alarm after recording stops', async ({
+  extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  await extensionWorker.evaluate(async () => {
+    // This is the persisted state left behind when stopping a recording
+    // succeeds but Chrome rejects the alarm-clear operation.
+    await chrome.storage.local.set({
+      masterEnabled:true,
+      studyAutoStopMinutes:15,
+      currentStudySessionId:null,
+      studyLastActivityAt:0
+    });
+    // Let the storage.onChanged alarm refresh caused by the stopped state
+    // finish before planting the deliberately orphaned alarm.
+    await new Promise(resolve => setTimeout(resolve, 100));
+    await chrome.alarms.create('blb-study-auto-stop', {delayInMinutes:1, periodInMinutes:1});
+  });
+
+  const orphanBeforeRetry = await extensionWorker.evaluate(async () => ({
+    state:await chrome.storage.local.get({
+      currentStudySessionId:'unexpected-recording',
+      studyLastActivityAt:-1
+    }),
+    alarm:await chrome.alarms.get('blb-study-auto-stop')
+  }));
+  expect(orphanBeforeRetry.state).toMatchObject({
+    currentStudySessionId:null,
+    studyLastActivityAt:0
+  });
+  expect(orphanBeforeRetry.alarm).toMatchObject({
+    name:'blb-study-auto-stop',
+    periodInMinutes:1
+  });
+
+  // The next alarm wake must retry cleanup even though no recording remains.
+  await extensionWorker.evaluate(() => checkStudyAutoStop());
+  await expect.poll(() => extensionWorker.evaluate(() =>
+    chrome.alarms.get('blb-study-auto-stop')
+  )).toBeUndefined();
+});
+
 test('Study Sessions restores the previous recording when the new recording alarm fails', async ({
   extensionStorage, extensionWorker
 }) => {
