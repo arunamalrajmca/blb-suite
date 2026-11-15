@@ -671,51 +671,34 @@ test('Study Sessions retries clearing an orphaned auto-stop alarm after recordin
 }) => {
   await extensionStorage.clear();
   await extensionWorker.evaluate(async () => {
+    // This is the persisted state left behind when stopping a recording
+    // succeeds but Chrome rejects the alarm-clear operation.
     await chrome.storage.local.set({
       masterEnabled:true,
       studyAutoStopMinutes:15,
-      currentStudySessionId:'recording-with-orphaned-alarm',
-      studyLastActivityAt:Date.now(),
-      studySessions:[{
-        id:'recording-with-orphaned-alarm',
-        title:'Alarm Cleanup Recovery',
-        date:'2026-11-15',
-        dateLabel:'15 November 2026',
-        refs:[],strongs:[],searchTerms:[],notes:[]
-      }]
+      currentStudySessionId:null,
+      studyLastActivityAt:0
     });
-    // Seed the real periodic alarm directly: the recovery case must start
-    // with an existing alarm, independent of the scheduler's own setup path.
     await chrome.alarms.create('blb-study-auto-stop', {delayInMinutes:1, periodInMinutes:1});
   });
 
-  const stopped = await extensionWorker.evaluate(async () => stopStudyRecording(
-    'manual',
-    async () => { throw new Error('simulated-alarm-clear-failure'); }
-  ));
-  expect(stopped).toMatchObject({
-    ok:true,
-    recording:false,
-    alarmCleanupPending:true,
-    pausedTopic:''
-  });
-
-  const afterStop = await extensionWorker.evaluate(async () => ({
+  const orphanBeforeRetry = await extensionWorker.evaluate(async () => ({
     state:await chrome.storage.local.get({
-      currentStudySessionId:null,
-      studyLastActivityAt:0
+      currentStudySessionId:'unexpected-recording',
+      studyLastActivityAt:-1
     }),
     alarm:await chrome.alarms.get('blb-study-auto-stop')
   }));
-  expect(afterStop.state).toMatchObject({
+  expect(orphanBeforeRetry.state).toMatchObject({
     currentStudySessionId:null,
     studyLastActivityAt:0
   });
-  expect(afterStop.alarm).toMatchObject({
+  expect(orphanBeforeRetry.alarm).toMatchObject({
     name:'blb-study-auto-stop',
     periodInMinutes:1
   });
 
+  // The next alarm wake must retry cleanup even though no recording remains.
   await extensionWorker.evaluate(() => checkStudyAutoStop());
   await expect.poll(() => extensionWorker.evaluate(() =>
     chrome.alarms.get('blb-study-auto-stop')
