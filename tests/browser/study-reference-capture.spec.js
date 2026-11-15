@@ -123,7 +123,7 @@ test('Study capture retries a dropped runtime message and persists the passage',
 
         globalThis.BLBStudyReferenceCaptureModule.initialize({
           BLB_HOSTNAME: 'blueletterbible.org',
-          normalizeSelectionText: value => String(value || '').trim().replace(/\\s+/g, ' '),
+          normalizeSelectionText: value => String(value || '').trim().replace(/\s+/g, ' '),
           isSuiteEnabled: async () => true,
           isSuiteEnabledNow: () => true
         });
