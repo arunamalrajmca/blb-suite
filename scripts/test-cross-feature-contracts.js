@@ -71,6 +71,9 @@ try {
   // to Study data, never silently restoring global/site settings.
   has(popup, /type:\s*['"]blbSuiteGetStudyUiState['"]/, 'popup retrieves Study Sessions state from background');
   has(background, /blbSuiteGetStudyUiState/, 'background retains Study Sessions state API');
+  assert.doesNotMatch(background, /blbSuiteCaptureStudyNote|recordStudyNote\(/,
+    'unreferenced Study note capture protocol must not remain in the background');
+  console.log('PASS: obsolete Study note capture handler and recorder are absent');
   has(popup, /const STUDY_BACKUP_KEYS = \['studySessions', 'studyTopics', 'studySelectedTopic', 'studyAutoStopMinutes'\]/, 'Study backup has an explicit allowlist of Study-only storage keys');
   assert.doesNotMatch(popup.match(/const STUDY_BACKUP_KEYS = \[[^\]]*\]/)?.[0] || '', /masterEnabled|pageSelectionButtonSites|doubleClickBlbSites|redirectEnabled/, 'Study backup must not include global/site settings');
   console.log('PASS: Study backup excludes extension-wide and per-site settings');
