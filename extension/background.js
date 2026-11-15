@@ -150,10 +150,16 @@ async function saveStudySessions(sessions, extra = {}) {
 
 async function getStudySessions() {
   const data = await chrome.storage.local.get({studySessions:[], currentStudySessionId:null});
-  const cleaned = sanitizeStudySessions(Array.isArray(data.studySessions) ? data.studySessions : []);
-  if (cleaned.changed) {
+  const cleaned = sanitizeStudySessions(data.studySessions);
+  const storedCurrentId = data.currentStudySessionId || null;
+  const currentIdIsStale = !!storedCurrentId &&
+    !cleaned.sessions.some(session => session.id === storedCurrentId);
+  if (cleaned.changed || currentIdIsStale) {
     try {
-      await chrome.storage.local.set({studySessions:cleaned.sessions});
+      await chrome.storage.local.set({
+        studySessions:cleaned.sessions,
+        ...(currentIdIsStale ? {currentStudySessionId:null, studyLastActivityAt:0} : {})
+      });
     } catch (error) {
       // A failed best-effort repair must not make otherwise readable Study
       // history unavailable. Return the sanitized in-memory view; the next
@@ -163,7 +169,7 @@ async function getStudySessions() {
   }
   return {
     sessions:cleaned.sessions,
-    currentId: data.currentStudySessionId || null,
+    currentId: currentIdIsStale ? null : storedCurrentId,
     savedTopics: Array.isArray(data.studyTopics) ? data.studyTopics : []
   };
 }
