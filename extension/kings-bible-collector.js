@@ -284,7 +284,9 @@ if (kingsBibleCollectorConfig?.collectorModule === "kings-bible" && kingsBibleEn
 
   const kingsStorageChangeListener = changes => {
     if (changes.masterEnabled?.newValue === false) {
-      document.getElementById("blb-suite-kingsbible-multiverse")?.remove();
+      const button = document.getElementById("blb-suite-kingsbible-multiverse");
+      button?.__blbDragCleanup?.();
+      button?.remove();
       document.getElementById("blb-suite-kingsbible-multiverse-reset-position")?.remove();
       document.getElementById("blb-suite-kingsbible-status")?.remove();
     } else if (changes.masterEnabled?.newValue === true) {
