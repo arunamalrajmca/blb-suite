@@ -3637,7 +3637,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const data = await getStudySessions();
       const current = data.sessions.find(s => s.id === data.currentId);
       sendResponse({ok:true, active:!!current && String(current.title || '').trim().toLowerCase() !== 'uncategorized', recordingTopic:current?.title || ''});
-    } catch (_) { sendResponse({ok:true, active:false, recordingTopic:''}); }
+    } catch (error) { sendResponse({ok:false, error:String(error), active:false, recordingTopic:''}); }
     return true;
   }
 

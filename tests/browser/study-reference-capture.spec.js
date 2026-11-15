@@ -88,6 +88,65 @@ test("active Study Topic captures Strong's lexicon references and deduplicates r
 });
 
 
+
+test('Study capture retries a dropped runtime message and persists the passage', async ({
+  page, context, extensionId, extensionStorage, extensionWorker
+}) => {
+  await routeBlbFixture(context);
+  await page.goto(blbOrigin + '/kjv/jhn/3/16/', { waitUntil: 'domcontentloaded' });
+  await startStudyTopic({ context, extensionId, extensionStorage });
+
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  const result = await extensionWorker.evaluate(async id => {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: async () => {
+        const originalSendMessage = chrome.runtime.sendMessage.bind(chrome.runtime);
+        let captureAttempts = 0;
+        Object.defineProperty(chrome.runtime, 'sendMessage', {
+          configurable: true,
+          value: (message, ...args) => {
+            if (message?.type === 'blbSuiteCaptureStudyRefs') {
+              captureAttempts++;
+              if (captureAttempts === 1) {
+                return Promise.reject(new Error('The message port closed before a response was received.'));
+              }
+            }
+            return originalSendMessage(message, ...args);
+          }
+        });
+
+        globalThis.BLBStudyReferenceCaptureModule.initialize({
+          BLB_HOSTNAME: 'blueletterbible.org',
+          normalizeSelectionText: value => String(value || '').trim().replace(/\s+/g, ' '),
+          isSuiteEnabled: async () => true,
+          isSuiteEnabledNow: () => true
+        });
+        await new Promise(resolve => setTimeout(resolve, 350));
+        return { captureAttempts };
+      }
+    });
+    return injected?.result;
+  }, tabId);
+
+  expect(result.captureAttempts).toBe(2);
+  await expect.poll(async () => (await currentSession(extensionWorker))?.refs || []).toContainEqual(
+    expect.objectContaining({
+      book: 'john',
+      chapter: 3,
+      from: 16,
+      to: 16,
+      version: 'kjv'
+    })
+  );
+});
+
+
 test('Study capture rejects inactive topics and master-OFF state across passage, search, and Strong’s routes', async ({
   page, context, extensionId, extensionStorage, extensionWorker
 }) => {
