@@ -13,7 +13,7 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
         try {
           if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) return;
           const active = await chrome.runtime.sendMessage({type:'blbSuiteStudyCaptureActive'});
-          if (!active?.active) return;
+          if (!active?.active || !isSuiteEnabledNow()) return;
           const parts = location.pathname.split('/').filter(Boolean);
           if (parts.length !== 2 || parts[0].toLowerCase() !== 'dictionary') return;
           const word = normalizeSelectionText(decodeURIComponent(parts[1]).replace(/[-_]+/g,' '));
