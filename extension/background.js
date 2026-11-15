@@ -6648,10 +6648,17 @@ chrome.tabs.onActivated.addListener(() => {
 // Changing the focused window does not necessarily activate a different tab
 // inside that window. Keep the global menus aligned with the newly focused
 // window even when no tabs.onActivated event is emitted.
-chrome.windows.onFocusChanged.addListener(() => {
-  chrome.tabs.query({active:true,lastFocusedWindow:true}).then(tabs => {
+chrome.windows.onFocusChanged.addListener(windowId => {
+  // Chrome emits WINDOW_ID_NONE while focus is moving between windows. Ignore
+  // that transient state and query the explicitly focused window so an earlier
+  // focus event cannot resolve against a later last-focused window.
+  if (windowId === chrome.windows.WINDOW_ID_NONE) return;
+  chrome.tabs.query({active:true, windowId}).then(tabs => {
     const tab = tabs[0];
-    syncWebSelectionContextMenuVisibility(tab).catch(() => {});
+    if (!tab) return;
+    // Use the tab returned for this focus event. Re-querying lastFocusedWindow
+    // here can race a subsequent focus transition and restore the wrong menu.
+    syncWebSelectionContextMenuVisibility(tab, false).catch(() => {});
     syncPdfSelectionContextMenuVisibility(tab).catch(() => {});
   }).catch(() => {});
 });
