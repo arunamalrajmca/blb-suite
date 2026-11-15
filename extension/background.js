@@ -6672,11 +6672,28 @@ chrome.tabs.onActivated.addListener(activeInfo => {
 // Changing the focused window does not necessarily activate a different tab
 // inside that window. Keep the global menus aligned with the newly focused
 // window even when no tabs.onActivated event is emitted.
+async function syncSelectionMenusForFocusedWindow() {
+  const focusedWindow = await chrome.windows.getLastFocused();
+  if (!focusedWindow?.id) return;
+  const isCurrent = beginSelectionMenuContextSync();
+  const tabs = await chrome.tabs.query({active:true, windowId:focusedWindow.id});
+  if (!isCurrent()) return;
+  const tab = tabs[0];
+  if (!tab) return;
+  syncWebSelectionContextMenuVisibility(tab, false, isCurrent).catch(() => {});
+  syncPdfSelectionContextMenuVisibility(tab, isCurrent).catch(() => {});
+}
+
 chrome.windows.onFocusChanged.addListener(windowId => {
-  // Chrome can emit WINDOW_ID_NONE as a transient handoff between windows.
-  // It is not a new focused-window state and must not invalidate the actual
-  // destination window's in-flight synchronization.
-  if (windowId === chrome.windows.WINDOW_ID_NONE) return;
+  // During a window close Chrome can emit WINDOW_ID_NONE without a subsequent
+  // event for the window that receives focus. Resolve the actual last-focused
+  // window after the handoff so the global menus do not remain stale.
+  if (windowId === chrome.windows.WINDOW_ID_NONE) {
+    setTimeout(() => {
+      syncSelectionMenusForFocusedWindow().catch(() => {});
+    }, 50);
+    return;
+  }
   const isCurrent = beginSelectionMenuContextSync();
   chrome.tabs.query({active:true, windowId}).then(tabs => {
     if (!isCurrent()) return;
