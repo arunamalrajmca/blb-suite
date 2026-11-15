@@ -665,6 +665,7 @@ globalThis.BLBSourcePageCollectorModule?.initialize({
   blbUrl,
   formatSourceBibleBookName,
   isSuiteEnabled,
+  isSuiteEnabledNow: () => suiteEnabled,
   makeBlbMultiVerseButtonDraggable
 });
 
