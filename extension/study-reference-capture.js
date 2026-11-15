@@ -1,6 +1,21 @@
 // Captures useful BLB Bible and Strong's destinations while a named Study Topic is active.
 // Navigation/result based: no click logging, polling, or page-wide MutationObserver.
 (function (global) {
+  async function sendStudyCaptureMessage(message) {
+    let lastError = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const response = await chrome.runtime.sendMessage(message);
+        if (response?.ok !== false) return response;
+        lastError = new Error(response.error || 'Study capture request was rejected');
+      } catch (error) {
+        lastError = error;
+      }
+      if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    throw lastError || new Error('Study capture message failed');
+  }
+
   function initialize({ BLB_HOSTNAME, normalizeSelectionText, isSuiteEnabled, isSuiteEnabledNow = isSuiteEnabled }) {
   // // ---------- Study reference capture ----------
   // Capture only useful BLB Bible/Strong's destinations while a named Study Topic
@@ -10,7 +25,7 @@
     const captureStudyRefs = async () => {
       try {
         if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) return;
-        const active = await chrome.runtime.sendMessage({type:'blbSuiteStudyCaptureActive'});
+        const active = await sendStudyCaptureMessage({type:'blbSuiteStudyCaptureActive'});
         if (!active?.active || !isSuiteEnabledNow()) return;
   
         const refs = new Map();
@@ -42,14 +57,14 @@
           // History.
           if (currentUrl.searchParams.get('blbSuiteMultiVerse') === '1') return;
           const criteria = normalizeSelectionText(String(currentUrl.searchParams.get('Criteria') || '').replace(/\+/g, ' '));
-          if (criteria) await chrome.runtime.sendMessage({type:'blbSuiteCaptureStudySearchTerm', term:criteria});
+          if (criteria) await sendStudyCaptureMessage({type:'blbSuiteCaptureStudySearchTerm', term:criteria});
           return;
         }
   
         // Current Bible page / redirected Bible page only. Search and MultiVerse
         // result lists are deliberately not bulk-captured.
         addUrl(location.href);
-        if (refs.size) await chrome.runtime.sendMessage({type:'blbSuiteCaptureStudyRefs', refs:[...refs.values()]});
+        if (refs.size) await sendStudyCaptureMessage({type:'blbSuiteCaptureStudyRefs', refs:[...refs.values()]});
       } catch (_) {}
     };
   
@@ -59,7 +74,7 @@
         const active = await chrome.runtime.sendMessage({type:'blbSuiteStudyCaptureActive'});
         if (!active?.active || !isSuiteEnabledNow()) return;
         const m = location.pathname.match(/\/lexicon\/(g|h)(\d+)\//i);
-        if (m) await chrome.runtime.sendMessage({type:'blbSuiteCaptureStudyStrong', value:`${m[1]}${m[2]}`});
+        if (m) await sendStudyCaptureMessage({type:'blbSuiteCaptureStudyStrong', value:`${m[1]}${m[2]}`});
       } catch (_) {}
     };
   
