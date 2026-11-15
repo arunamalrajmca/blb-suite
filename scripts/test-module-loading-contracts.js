@@ -571,7 +571,7 @@ const queueListenerStart = background.indexOf(
   "chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {",
   background.indexOf('function grantMultiVersePostSlot')
 );
-const queueListenerEnd = queueListenerStart < 0 ? -1 : background.indexOf("\\n});", queueListenerStart);
+const queueListenerEnd = queueListenerStart < 0 ? -1 : background.indexOf("\n});", queueListenerStart);
 const queueListener = queueListenerStart < 0 ? '' : background.slice(queueListenerStart, queueListenerEnd < 0 ? undefined : queueListenerEnd);
 if (!queueListener.includes('const respondSafely = response =>') ||
     !queueListener.includes('try { sendResponse(response); } catch (_) {}') ||
