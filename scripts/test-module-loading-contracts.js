@@ -359,17 +359,6 @@ if (unownedAsyncMessages.length) {
   pass(asyncTypes.length + ' asynchronous background messages have runtime senders or explicit test-only owners');
 }
 
-if (failures.length) {');
-  const senderPattern = new RegExp('\\\\btype\\\\s*:\\\\s*([\'\\"])' + escaped + '\\\\1');
-  return !runtimeMessageSources.some(({ source }) => senderPattern.test(source));
-});
-if (unownedAsyncMessages.length) {
-  fail('every asynchronous background message has an extension-side sender or an explicit test-only owner: '
-    + unownedAsyncMessages.join(', '));
-} else {
-  pass(asyncTypes.length + ' asynchronous background messages have runtime senders or explicit test-only owners');
-}
-
 if (failures.length) {
   for (const message of failures) console.error('FAIL:', message);
   process.exitCode = 1;
