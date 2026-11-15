@@ -1272,3 +1272,64 @@ test('closing multiple MultiVerse tabs clears only their persisted reservations 
     survivorPreserved:true
   });
 });
+
+
+test('source-page collector tears down prior observers and storage listeners on bundle reinjection', async ({ page, extensionStorage, extensionWorker }) => {
+  await extensionStorage.set({
+    masterEnabled: true,
+    pageSelectionButtonSites: { 'gotquestions.org': true },
+    doubleClickBlbSites: {}
+  });
+  await page.route('https://www.gotquestions.org/**', route => route.fulfill({
+    status: 200,
+    contentType: 'text/html; charset=utf-8',
+    body: '<!doctype html><html><head><title>Collector reinjection</title></head><body><main>John 3:16</main></body></html>'
+  }));
+  await page.goto('https://www.gotquestions.org/fixture-article.html', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('#blb-suite-gotquestions-multiverse')).toBeVisible();
+
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({ active: true, currentWindow: true }))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  for (let iteration = 1; iteration <= 2; iteration++) {
+    const wrapped = await extensionWorker.evaluate(async id => {
+      const [result] = await chrome.scripting.executeScript({
+        target: { tabId: id },
+        world: 'ISOLATED',
+        func: () => {
+          const cleanup = globalThis.__blbSourcePageCollectorCleanup;
+          if (typeof cleanup !== 'function') throw new Error('Source collector cleanup was not registered');
+          globalThis.__blbSourceCollectorCleanupCalls = 0;
+          globalThis.__blbSourcePageCollectorCleanup = () => {
+            globalThis.__blbSourceCollectorCleanupCalls++;
+            cleanup();
+          };
+          return true;
+        }
+      });
+      return result.result;
+    }, tabId);
+    expect(wrapped).toBe(true);
+    await extensionWorker.evaluate(async id => {
+      await chrome.scripting.executeScript({ target: { tabId: id }, files: BLB_CONTENT_SCRIPT_FILES });
+    }, tabId);
+    const cleanupCalls = await extensionWorker.evaluate(async id => {
+      const [result] = await chrome.scripting.executeScript({
+        target: { tabId: id }, world: 'ISOLATED',
+        func: () => globalThis.__blbSourceCollectorCleanupCalls
+      });
+      return result.result;
+    }, tabId);
+    expect(cleanupCalls).toBe(1);
+    await expect(page.locator('#blb-suite-gotquestions-multiverse')).toHaveCount(1);
+  }
+
+  // The replacement observer must still recover the control after the site
+  // replaces <body>; teardown must not disable the active collector instance.
+  await page.evaluate(() => {
+    document.body.replaceWith(document.createElement('body'));
+  });
+  await expect(page.locator('#blb-suite-gotquestions-multiverse')).toBeVisible({ timeout: 10000 });
+});

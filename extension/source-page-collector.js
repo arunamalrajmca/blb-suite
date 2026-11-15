@@ -1,6 +1,16 @@
 /* Source-page Bible reference collection for supported commentary/reference sites. */
 globalThis.BLBSourcePageCollectorModule = Object.freeze({
   initialize({ normalizeSelectionText, parseRef, normalizeSourceBibleBook, resolveBibleReference, blbUrl, formatSourceBibleBookName, isSuiteEnabled, isSuiteEnabledNow = isSuiteEnabled, makeBlbMultiVerseButtonDraggable }) {
+    // A failed or stale content-script refresh can reinject this module into
+    // the same isolated world. Tear down its previous document-scoped hooks
+    // before registering replacements.
+    globalThis.__blbSourcePageCollectorCleanup?.();
+    const cleanupCallbacks = [];
+    globalThis.__blbSourcePageCollectorCleanup = () => {
+      for (const cleanup of cleanupCallbacks.splice(0)) {
+        try { cleanup(); } catch (_) {}
+      }
+    };
     // ---------- Christianity.com, GotQuestions.org, Crosswalk.com, and EnduringWord.com MultiVerse collection ----------
     {
       const host = location.hostname.toLowerCase().replace(/^www\./, "");
@@ -275,7 +285,7 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
         setTimeout(ensureSourcePageButtonWhenReady, 500);
         setTimeout(ensureSourcePageButtonWhenReady, 1500);
     
-        chrome.storage.onChanged.addListener((changes, areaName) => {
+        const sourceStorageChangeListener = (changes, areaName) => {
           if (areaName !== "local") return;
           if (changes.masterEnabled?.newValue === false) {
             document.getElementById(buttonId)?.remove();
@@ -288,7 +298,9 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
             // repairs an already-open page if its control was lost.
             ensureSourcePageButtonWhenReady();
           }
-        });
+        };
+        chrome.storage.onChanged.addListener(sourceStorageChangeListener);
+        cleanupCallbacks.push(() => chrome.storage.onChanged.removeListener(sourceStorageChangeListener));
 
         // Recover the collector control if a supported source page replaces its
         // body after initial load. Observe only direct document-element changes;
@@ -303,6 +315,7 @@ globalThis.BLBSourcePageCollectorModule = Object.freeze({
           });
         };
         const sourceBodyObserver = new MutationObserver(scheduleSourceButtonCheck);
+        cleanupCallbacks.push(() => sourceBodyObserver.disconnect());
         const startSourceBodyObserver = () => {
           if (document.documentElement) {
             sourceBodyObserver.observe(document.documentElement, { childList: true });
