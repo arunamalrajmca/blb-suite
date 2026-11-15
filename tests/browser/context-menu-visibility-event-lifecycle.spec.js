@@ -12,15 +12,12 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
 
   const result = await extensionWorker.evaluate(async settings => {
     const originalUpdate = chrome.contextMenus.update;
-    const originalSyncWeb = syncWebSelectionContextMenuVisibility;
-    const originalSyncPdf = syncPdfSelectionContextMenuVisibility;
     const originalWebKnownPresent = selectionMenuKnownPresent;
     const originalPdfKnownPresent = pdfSelectionMenuKnownPresent;
     const originalSelectionPermissionCheck = hasSelectionActionPermissionForTab;
     const createdTabIds = [];
     const createdWindowIds = [];
     const updates = [];
-    const syncCalls = [];
     let recordFocusEvent;
 
     try {
@@ -30,25 +27,6 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       // separately, so make the selected fixture host eligible deterministically.
       hasSelectionActionPermissionForTab = async tab =>
         new URL(tab?.url || 'about:blank').hostname === 'example.com';
-      syncWebSelectionContextMenuVisibility = async (...args) => {
-        syncCalls.push({
-          menu:'web',
-          tabId:args[0]?.id ?? null,
-          tabUrl:args[0]?.url || '',
-          resolveCurrentActiveTab:args[1] ?? true,
-          stack:new Error().stack
-        });
-        return originalSyncWeb(...args);
-      };
-      syncPdfSelectionContextMenuVisibility = async (...args) => {
-        syncCalls.push({
-          menu:'pdf',
-          tabId:args[0]?.id ?? null,
-          tabUrl:args[0]?.url || '',
-          stack:new Error().stack
-        });
-        return originalSyncPdf(...args);
-      };
       chrome.contextMenus.update = async (id, details) => {
         updates.push({id, ...details, stack:new Error().stack});
       };
@@ -163,7 +141,6 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
         item.id === 'blb-suite-web-selection' && item.visible === false
       );
       updates.length = 0;
-      syncCalls.length = 0;
       await chrome.windows.update(originalWindowId,{focused:true});
       let focusedWindowId = null;
       for (let attempt=0; attempt<100; attempt++) {
@@ -196,15 +173,12 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
         focusChangeHidesWebMenu,
         focusChangeShowsWebMenu,
         focusEvents,
-        syncCalls,
         updates,
         originalWindowId,
         focusedWindowId
       };
     } finally {
       chrome.contextMenus.update = originalUpdate;
-      syncWebSelectionContextMenuVisibility = originalSyncWeb;
-      syncPdfSelectionContextMenuVisibility = originalSyncPdf;
       selectionMenuKnownPresent = originalWebKnownPresent;
       pdfSelectionMenuKnownPresent = originalPdfKnownPresent;
       hasSelectionActionPermissionForTab = originalSelectionPermissionCheck;
@@ -227,7 +201,7 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
   ).toEqual([]);
   expect(result.activeNavigationHidesWebMenu).toBe(true);
   expect(result.replacementSynced).toBe(true);
-  expect(result.replacementShowsWebMenu).toBe(true);
+  expect(result.replacementShowsWebMenu, JSON.stringify({replacementSynced:result.replacementSynced, updates:result.updates}, null, 2)).toBe(true);
   expect(result.replacementSynchronizesPdfMenu).toBe(true);
   expect(result.backgroundReplacementIgnored).toBe(true);
   expect(result.backgroundReplacementUpdates).toEqual([]);
@@ -238,7 +212,6 @@ test('tab activation and active-tab navigation synchronize the global web/PDF se
       focusEvents:result.focusEvents,
       originalWindowId:result.originalWindowId,
       focusedWindowId:result.focusedWindowId,
-      syncCalls:result.syncCalls,
       updates:result.updates
     }, null, 2)
   ).toBe(true);
