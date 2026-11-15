@@ -324,3 +324,78 @@ test('repeated global master toggles recreate exactly one collector control acro
   }
 });
 
+
+
+test('repeated global master toggles disable and restore exactly one double-click listener', async ({
+  page, extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.set({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{'example.com':true}
+  });
+  await page.route('https://example.com/**', route => route.fulfill({
+    status:200,
+    contentType:'text/html; charset=utf-8',
+    body:'<!doctype html><html><head><title>Master double-click toggle</title></head><body><p>John 3:16</p></body></html>'
+  }));
+  await page.goto('https://example.com/master-double-click-toggle.html', {waitUntil:'domcontentloaded'});
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({url:'https://example.com/master-double-click-toggle.html'}))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  const instrumented = await extensionWorker.evaluate(async id => {
+    const [result] = await chrome.scripting.executeScript({
+      target:{tabId:id},
+      world:'ISOLATED',
+      func:() => {
+        const active = new Set();
+        const handler = window.__blbSuiteDoubleClickBoundV2;
+        if (typeof handler === 'function') active.add(handler);
+        const originalAdd = document.addEventListener;
+        const originalRemove = document.removeEventListener;
+        document.addEventListener = function(type, listener, options) {
+          if (type === 'dblclick' && typeof listener === 'function') active.add(listener);
+          return originalAdd.call(this, type, listener, options);
+        };
+        document.removeEventListener = function(type, listener, options) {
+          if (type === 'dblclick' && typeof listener === 'function') active.delete(listener);
+          return originalRemove.call(this, type, listener, options);
+        };
+        globalThis.__blbMasterDoubleClickAudit = {active, originalAdd, originalRemove};
+        return active.size;
+      }
+    });
+    return result.result;
+  }, tabId);
+  expect(instrumented).toBe(1);
+
+  const readListenerCount = () => extensionWorker.evaluate(async id => {
+    const [result] = await chrome.scripting.executeScript({
+      target:{tabId:id},
+      world:'ISOLATED',
+      func:() => globalThis.__blbMasterDoubleClickAudit?.active.size ?? -1
+    });
+    return result.result;
+  }, tabId);
+
+  for (let cycle = 0; cycle < 4; cycle++) {
+    await extensionStorage.set({masterEnabled:false});
+    await expect.poll(readListenerCount).toBe(0);
+    await extensionStorage.set({masterEnabled:true});
+    await expect.poll(readListenerCount).toBe(1);
+  }
+
+  await extensionWorker.evaluate(async id => chrome.scripting.executeScript({
+    target:{tabId:id},
+    world:'ISOLATED',
+    func:() => {
+      const audit = globalThis.__blbMasterDoubleClickAudit;
+      if (!audit) return;
+      document.addEventListener = audit.originalAdd;
+      document.removeEventListener = audit.originalRemove;
+      delete globalThis.__blbMasterDoubleClickAudit;
+    }
+  }), tabId);
+});

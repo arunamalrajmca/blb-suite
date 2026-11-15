@@ -4076,6 +4076,8 @@ chrome.storage.onChanged.addListener((changes, area) => {
       if (location.hostname === 'webstersdictionary1828.com') globalThis.BLBWebsterCollector?.ensureButton?.();
       blbPageSelectionButton.refresh();
     }
+    // The global master switch gates the independent per-site Double-click feature too.
+    void refreshDoubleClickBlb();
   }
 
   if (changes.pageSelectionButtonSites && suiteEnabled) {
