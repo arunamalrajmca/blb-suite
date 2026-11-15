@@ -10,15 +10,30 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
     ];
     if (websterCollectorConfig?.collectorModule === "webster") {
       async function captureWebsterWord() {
+        async function sendCaptureMessage(message) {
+          let lastError = null;
+          for (let attempt = 0; attempt < 2; attempt++) {
+            try {
+              const response = await chrome.runtime.sendMessage(message);
+              if (response?.ok !== false) return response;
+              lastError = new Error(response.error || 'Webster Study capture request was rejected');
+            } catch (error) {
+              lastError = error;
+            }
+            if (attempt === 0) await new Promise(resolve => setTimeout(resolve, 100));
+          }
+          throw lastError || new Error('Webster Study capture message failed');
+        }
+
         try {
           if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) return;
-          const active = await chrome.runtime.sendMessage({type:'blbSuiteStudyCaptureActive'});
+          const active = await sendCaptureMessage({type:'blbSuiteStudyCaptureActive'});
           if (!active?.active || !isSuiteEnabledNow()) return;
           const parts = location.pathname.split('/').filter(Boolean);
           if (parts.length !== 2 || parts[0].toLowerCase() !== 'dictionary') return;
           const word = normalizeSelectionText(decodeURIComponent(parts[1]).replace(/[-_]+/g,' '));
           if (!word || /^(search|index|browse|title-page)$/i.test(word)) return;
-          await chrome.runtime.sendMessage({type:'blbSuiteCaptureStudySearchTerm', term:word});
+          await sendCaptureMessage({type:'blbSuiteCaptureStudySearchTerm', term:word});
         } catch (_) {}
       }
       captureWebsterWord();
