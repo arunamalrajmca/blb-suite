@@ -292,3 +292,43 @@ test('PDF selection menu ignores stale asynchronous visibility results', async (
 
   expect(result).toEqual([{id:'blb-suite-pdf-selection',visible:true}]);
 });
+
+test('web selection menu ignores stale asynchronous visibility results', async ({extensionWorker}) => {
+  const result = await extensionWorker.evaluate(async () => {
+    const originalUpdate = chrome.contextMenus.update;
+    const originalKnownPresent = selectionMenuKnownPresent;
+    const originalEligibilityCheck = shouldShowBlbContextMenu;
+    const updates = [];
+    let signalSlowStarted;
+    const slowStarted = new Promise(resolve => { signalSlowStarted = resolve; });
+    let releaseSlow;
+    const slowGate = new Promise(resolve => { releaseSlow = resolve; });
+    try {
+      selectionMenuKnownPresent = true;
+      chrome.contextMenus.update = async (id, details) => { updates.push({id,...details}); };
+      shouldShowBlbContextMenu = async tab => {
+        if (tab?.id === 1) {
+          signalSlowStarted();
+          await slowGate;
+          return false;
+        }
+        return tab?.id === 2;
+      };
+
+      const slow = syncWebSelectionContextMenuVisibility({id:1,url:'https://slow.example/'}, false);
+      await slowStarted;
+      await syncWebSelectionContextMenuVisibility({id:2,url:'https://fast.example/'}, false);
+      releaseSlow();
+      await slow;
+      return [...updates];
+    } finally {
+      releaseSlow?.();
+      chrome.contextMenus.update = originalUpdate;
+      selectionMenuKnownPresent = originalKnownPresent;
+      shouldShowBlbContextMenu = originalEligibilityCheck;
+    }
+  });
+
+  expect(result).toEqual([{id:'blb-suite-web-selection',visible:true}]);
+});
+
