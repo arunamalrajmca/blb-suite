@@ -68,10 +68,6 @@ export const featureSpecs = [
     specs: ["tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-hostnames.spec.js", "tests/browser/blb-non-kjv-redirect.spec.js", "tests/browser/bibleref-range-redirect-lifecycle.spec.js", "tests/browser/redirect-toggle-isolation.spec.js"]
   },
   {
-    paths: ["extension/study-reference-capture.js"],
-    specs: ["tests/browser/study-reference-capture.spec.js", "tests/browser/redirect-toggle-isolation.spec.js", "tests/browser/feature-lifecycle-regressions.spec.js"]
-  },
-  {
     paths: ["extension/source-bible-redirect.js"],
     specs: ["tests/browser/redirect-source-url-patterns.spec.js", "tests/browser/redirect-hostnames.spec.js"]
   },
@@ -117,7 +113,7 @@ export const featureSpecs = [
   },
   {
     paths: ["extension/study-reference-capture.js"],
-    specs: ["tests/browser/study-reference-capture.spec.js"]
+    specs: ["tests/browser/study-reference-capture.spec.js", "tests/browser/redirect-toggle-isolation.spec.js"]
   },
   {
     paths: ["extension/criteria-search-navigation.js"],
