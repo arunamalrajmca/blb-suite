@@ -543,8 +543,14 @@ const activeSelectionTypes = [
   'blbSuiteOpenSelectionText',
   'blbSuiteOpenDoubleClickSelectionText'
 ];
+function activeSelectionBranchStart(type) {
+  if (type === 'blbSuiteOpenDoubleClickSelectionText') {
+    return background.indexOf("if (message.type === 'blbSuiteOpenSelectionText' || message.type === '" + type + "')");
+  }
+  return background.indexOf("if (message.type === '" + type + "'");
+}
 for (const type of activeSelectionTypes) {
-  const start = background.indexOf("if (message.type === '" + type + "'");
+  const start = activeSelectionBranchStart(type);
   const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
   const branch = start < 0 ? '' : background.slice(start, end < 0 ? undefined : end);
   if (!branch.includes('isActiveTabContentScriptSender(sender)')) {
@@ -552,7 +558,7 @@ for (const type of activeSelectionTypes) {
   }
 }
 if (activeSelectionTypes.every(type => {
-  const start = background.indexOf("if (message.type === '" + type + "'");
+  const start = activeSelectionBranchStart(type);
   const end = start < 0 ? -1 : background.indexOf("\n  if (message.type ===", start + 1);
   return start >= 0 && background.slice(start, end < 0 ? undefined : end)
     .includes('isActiveTabContentScriptSender(sender)');
