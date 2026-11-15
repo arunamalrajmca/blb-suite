@@ -169,6 +169,7 @@ try {
     'tests/browser/feature-lifecycle-regressions.spec.js',
     'tests/browser/extension-reference-actions.spec.js',
     'tests/browser/extension-lifecycle.spec.js',
+    'tests/browser/content-feature-refresh-races.spec.js',
     'tests/browser/selection-phase-performance.spec.js',
     'tests/browser/service-worker-lifecycle.spec.js',
     'tests/browser/site-registration-opt-out-race.spec.js',
