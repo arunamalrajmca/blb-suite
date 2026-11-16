@@ -399,3 +399,76 @@ test('repeated global master toggles disable and restore exactly one double-clic
     }
   }), tabId);
 });
+
+
+test('per-site feature changes activate every already-open tab on the matching host', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
+    masterEnabled:true,
+    pageSelectionButtonSites:{},
+    doubleClickBlbSites:{}
+  }));
+  let secondPage;
+  try {
+    await extensionStorage.set({
+      masterEnabled:true,
+      pageSelectionButtonSites:{'example.com':false},
+      doubleClickBlbSites:{'example.com':false}
+    });
+    const fixture = '<!doctype html><html><head><title>Multi-tab site toggle</title></head><body><p>John 3:16</p></body></html>';
+    await page.route('https://example.com/**', route => route.fulfill({
+      status:200, contentType:'text/html; charset=utf-8', body:fixture
+    }));
+    await page.goto('https://example.com/site-toggle-first.html', {waitUntil:'domcontentloaded'});
+    secondPage = await context.newPage();
+    await secondPage.route('https://example.com/**', route => route.fulfill({
+      status:200, contentType:'text/html; charset=utf-8', body:fixture
+    }));
+    await secondPage.goto('https://example.com/site-toggle-second.html', {waitUntil:'domcontentloaded'});
+    await secondPage.bringToFront();
+
+    const tabIds = await extensionWorker.evaluate(async () => {
+      const tabs = await chrome.tabs.query({});
+      return tabs.filter(tab => /^https:\/\/example\.com\/site-toggle-/.test(tab.url || ''))
+        .map(tab => tab.id);
+    });
+    expect(tabIds).toHaveLength(2);
+
+    // Both pages were opened while the site features were OFF, and neither
+    // should have a resident content script yet.
+    for (const tabId of tabIds) {
+      await expect.poll(() => isolatedTabState(extensionWorker, tabId)).toEqual({
+        floatingButtonPresent:false,
+        doubleClickEnabled:false
+      });
+    }
+
+    await extensionStorage.set({
+      pageSelectionButtonSites:{'example.com':true},
+      doubleClickBlbSites:{'example.com':true}
+    });
+    for (const tabId of tabIds) {
+      await expect.poll(() => isolatedTabState(extensionWorker, tabId), {timeout:15000}).toEqual({
+        floatingButtonPresent:true,
+        doubleClickEnabled:true
+      });
+    }
+
+    // Disabling the preferences must also reach both resident content-script
+    // instances without requiring either document to navigate or gain focus.
+    await extensionStorage.set({
+      pageSelectionButtonSites:{'example.com':false},
+      doubleClickBlbSites:{'example.com':false}
+    });
+    for (const tabId of tabIds) {
+      await expect.poll(() => isolatedTabState(extensionWorker, tabId)).toEqual({
+        floatingButtonPresent:false,
+        doubleClickEnabled:false
+      });
+    }
+  } finally {
+    await extensionWorker.evaluate(settings => chrome.storage.local.set(settings), previous);
+    await secondPage?.close().catch(() => {});
+  }
+});
