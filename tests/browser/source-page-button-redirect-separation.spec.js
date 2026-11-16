@@ -762,6 +762,8 @@ test('source Bible redirect activates on the same page when the Suite master swi
     });
     return result?.result === true;
   }, sourceTabId)).toBe(true);
+  // Allow the content script to finish registering its storage-change listener.
+  await page.waitForTimeout(500);
   await expect(page).toHaveURL(sourceUrl);
 
   const before = await extensionWorker.evaluate(async () =>
