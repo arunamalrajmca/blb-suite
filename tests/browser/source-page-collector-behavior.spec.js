@@ -666,15 +666,18 @@ test('source-page collector reinjection cancels pending DOM-ready observer start
 
   let releaseParser;
   const parserGate = new Promise(resolve => { releaseParser = resolve; });
-  await context.route('https://www.gotquestions.org/startup-hold.js', async route => {
-    await parserGate;
-    await route.fulfill({status:200,contentType:'application/javascript',body:'window.__startupHoldReleased=true;'});
+  await context.route('https://www.gotquestions.org/**', async route => {
+    if (new URL(route.request().url()).pathname === '/startup-hold.js') {
+      await parserGate;
+      await route.fulfill({status:200,contentType:'application/javascript',body:'window.__startupHoldReleased=true;'});
+      return;
+    }
+    await route.fulfill({
+      status:200,
+      contentType:'text/html; charset=utf-8',
+      body:'<!doctype html><html><head><title>Collector startup lifecycle</title><script src="/startup-hold.js"></script></head><body><main>John 3:16</main></body></html>'
+    });
   });
-  await context.route('https://www.gotquestions.org/**', route => route.fulfill({
-    status:200,
-    contentType:'text/html; charset=utf-8',
-    body:'<!doctype html><html><head><title>Collector startup lifecycle</title><script src="/startup-hold.js"></script></head><body><main>John 3:16</main></body></html>'
-  }));
 
   try {
     await page.goto('https://www.gotquestions.org/startup-lifecycle.html', {waitUntil:'commit'});
