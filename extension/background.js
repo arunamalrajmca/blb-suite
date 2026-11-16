@@ -3355,6 +3355,9 @@ const ASYNC_MESSAGE_TYPES = new Set(["blbSuitePrepareSiteFeatureToggle","blbSuit
 // Each handoff page waits until its reserved timestamp before submitting its POST.
 const MULTIVERSE_POST_MIN_INTERVAL_MS = 1500;
 const MULTIVERSE_POST_LAST_SCHEDULED_KEY = 'blbSuiteLastMultiVersePostScheduledAt';
+// Prefer session-scoped state, but retain a durable fallback for Chromium
+// builds that expose storage.local without storage.session.
+const MULTIVERSE_POST_SCHEDULE_STORAGE = chrome.storage.session || chrome.storage.local;
 let lastMultiVersePostScheduledAt = 0;
 let pendingMultiVersePostSlot = Promise.resolve();
 
@@ -3369,13 +3372,13 @@ let pendingMultiVersePostSlot = Promise.resolve();
 function grantMultiVersePostSlot(minimumIntervalMs, tabId = null, queuedAt = Date.now()) {
   const slot = pendingMultiVersePostSlot.then(async () => {
     const queueStartedAt = Date.now();
-    const stored = await chrome.storage.session.get({[MULTIVERSE_POST_LAST_SCHEDULED_KEY]:0});
+    const stored = await MULTIVERSE_POST_SCHEDULE_STORAGE.get({[MULTIVERSE_POST_LAST_SCHEDULED_KEY]:0});
     const persistedLastScheduledAt = Number(stored[MULTIVERSE_POST_LAST_SCHEDULED_KEY]) || 0;
     const previousScheduledAt = Math.max(lastMultiVersePostScheduledAt, persistedLastScheduledAt);
     const scheduledAt = Math.max(queueStartedAt, previousScheduledAt + minimumIntervalMs);
     const intervalWaitMs = scheduledAt - queueStartedAt;
     lastMultiVersePostScheduledAt = scheduledAt;
-    await chrome.storage.session.set({[MULTIVERSE_POST_LAST_SCHEDULED_KEY]:scheduledAt});
+    await MULTIVERSE_POST_SCHEDULE_STORAGE.set({[MULTIVERSE_POST_LAST_SCHEDULED_KEY]:scheduledAt});
     console.info(
       '[BLB MV timing] stage=queue-slot-reserved' +
       ' tabId=' + tabId +
