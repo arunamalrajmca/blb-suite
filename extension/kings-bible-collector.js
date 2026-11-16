@@ -21,6 +21,14 @@ globalThis.BLBKingsBibleCollector = Object.freeze({
         try { cleanup(); } catch (_) {}
       }
     };
+    const addStartupListener = (eventName, listener) => {
+      document.addEventListener(eventName, listener, { once:true });
+      cleanupCallbacks.push(() => document.removeEventListener(eventName, listener));
+    };
+    const scheduleStartupRetry = (callback, delay) => {
+      const timer = setTimeout(callback, delay);
+      cleanupCallbacks.push(() => clearTimeout(timer));
+    };
 // ---------- The King's Bible Dictionary/Concordance MultiVerse ----------
 const kingsBibleEntryPath = location.pathname.replace(/\/{2,}/g, "/");
 const kingsBibleEntryMatch = kingsBibleEntryPath.match(/^\/(dictionary|concordance)\/[^/]+(?:\/\d+)?\/?$/i);
@@ -275,12 +283,12 @@ if (kingsBibleCollectorConfig?.collectorModule === "kings-bible" && kingsBibleEn
 
   const ensureKingsBibleButtonWhenReady = () => ensureKingsBibleButton().catch(() => {});
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", ensureKingsBibleButtonWhenReady, {once: true});
+    addStartupListener("DOMContentLoaded", ensureKingsBibleButtonWhenReady);
   } else {
     ensureKingsBibleButtonWhenReady();
   }
-  setTimeout(ensureKingsBibleButtonWhenReady, 500);
-  setTimeout(ensureKingsBibleButtonWhenReady, 1500);
+  scheduleStartupRetry(ensureKingsBibleButtonWhenReady, 500);
+  scheduleStartupRetry(ensureKingsBibleButtonWhenReady, 1500);
 
   const kingsStorageChangeListener = changes => {
     if (changes.masterEnabled?.newValue === false) {
@@ -320,7 +328,7 @@ if (kingsBibleCollectorConfig?.collectorModule === "kings-bible" && kingsBibleEn
     }
   };
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", startKingsBodyObserver, { once: true });
+    addStartupListener("DOMContentLoaded", startKingsBodyObserver);
   } else {
     startKingsBodyObserver();
   }

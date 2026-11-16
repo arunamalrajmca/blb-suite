@@ -1,4 +1,7 @@
 const { test, expect } = require('./fixtures');
+const fs = require('node:fs');
+const path = require('node:path');
+const vm = require('node:vm');
 
 test('source-page collector parses, canonicalizes, and deduplicates linked Bible references', async ({
   page, context, extensionStorage, extensionWorker
@@ -651,4 +654,78 @@ test("King's Bible collector recreates its button after the page replaces its bo
     document.documentElement.appendChild(replacement);
   });
   await expect(page.locator('#blb-suite-kingsbible-multiverse')).toBeVisible({ timeout: 10000 });
+});
+
+
+
+test('collector startup registrations are cancelled by reinjection cleanup', async () => {
+  const modules = [
+    'source-page-collector.js',
+    'kings-bible-collector.js',
+    'webster-collector.js'
+  ];
+
+  for (const moduleName of modules) {
+    const source = fs.readFileSync(
+      path.resolve(__dirname, '../../extension', moduleName),
+      'utf8'
+    );
+    const helperMatch = source.match(
+      /    const addStartupListener = \(eventName, listener\) => \{[\s\S]*?    const scheduleStartupRetry = \(callback, delay\) => \{[\s\S]*?\n    \};/
+    );
+    expect(helperMatch, moduleName + ' startup helpers').not.toBeNull();
+
+    const listeners = new Map();
+    const activeTimers = new Set();
+    const clearedTimers = [];
+    let nextTimerId = 0;
+    const document = {
+      addEventListener(eventName, listener) {
+        const entries = listeners.get(eventName) || new Set();
+        entries.add(listener);
+        listeners.set(eventName, entries);
+      },
+      removeEventListener(eventName, listener) {
+        listeners.get(eventName)?.delete(listener);
+      }
+    };
+    const sandbox = {
+      document,
+      setTimeout(callback, delay) {
+        const timer = { id: ++nextTimerId, callback, delay };
+        activeTimers.add(timer);
+        return timer;
+      },
+      clearTimeout(timer) {
+        clearedTimers.push(timer);
+        activeTimers.delete(timer);
+      }
+    };
+
+    vm.runInNewContext(`
+      const cleanupCallbacks = [];
+      globalThis.cleanup = () => {
+        for (const cleanup of cleanupCallbacks.splice(0)) {
+          try { cleanup(); } catch (_) {}
+        }
+      };
+      ${helperMatch[0]}
+      const onReady = () => {};
+      addStartupListener('DOMContentLoaded', onReady);
+      scheduleStartupRetry(() => {}, 500);
+      scheduleStartupRetry(() => {}, 1500);
+    `, sandbox, { filename: moduleName });
+
+    expect(listeners.get('DOMContentLoaded')?.size, moduleName + ' pending DOM-ready listener')
+      .toBe(1);
+    expect(activeTimers.size, moduleName + ' pending startup retries').toBe(2);
+
+    sandbox.cleanup();
+
+    expect(listeners.get('DOMContentLoaded')?.size, moduleName + ' listener after cleanup')
+      .toBe(0);
+    expect(activeTimers.size, moduleName + ' timers after cleanup').toBe(0);
+    expect(clearedTimers.map(timer => timer.delay).sort((a, b) => a - b))
+      .toEqual([500, 1500]);
+  }
 });

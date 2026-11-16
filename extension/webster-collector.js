@@ -11,6 +11,14 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
         try { cleanup(); } catch (_) {}
       }
     };
+    const addStartupListener = (eventName, listener) => {
+      document.addEventListener(eventName, listener, { once:true });
+      cleanupCallbacks.push(() => document.removeEventListener(eventName, listener));
+    };
+    const scheduleStartupRetry = (callback, delay) => {
+      const timer = setTimeout(callback, delay);
+      cleanupCallbacks.push(() => clearTimeout(timer));
+    };
     // ---------- Webster's 1828 ----------
     const websterCollectorConfig = globalThis.BLBSourcePageCollectorSites?.[
       location.hostname?.toLowerCase().replace(/^www\./, "")
@@ -102,7 +110,7 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
       }
     
       async function addWebsterMultiVerseButton() {
-        if (!(await isSuiteEnabled())) return;
+        if (!(await isSuiteEnabled()) || !isSuiteEnabledNow()) return;
         if (!document.body || document.getElementById("blb-suite-webster-multiverse")) return;
         const mount=document.body || document.documentElement;
         if (!mount) return;
@@ -172,13 +180,13 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
       };
       globalThis.BLBWebsterCollector = Object.freeze({ ensureButton: ensureWebsterButton });
       if (document.readyState==="loading") {
-        document.addEventListener("DOMContentLoaded",ensureWebsterButton,{once:true});
+        addStartupListener("DOMContentLoaded", ensureWebsterButton);
       } else {
         ensureWebsterButton();
       }
-      setTimeout(ensureWebsterButton,250);
-      setTimeout(ensureWebsterButton,1000);
-      setTimeout(ensureWebsterButton,2000);
+      scheduleStartupRetry(ensureWebsterButton, 250);
+      scheduleStartupRetry(ensureWebsterButton, 1000);
+      scheduleStartupRetry(ensureWebsterButton, 2000);
       let websterButtonCheckScheduled=false;
       const scheduleWebsterButtonCheck=()=>{
         if (websterButtonCheckScheduled) return;
@@ -196,7 +204,7 @@ globalThis.BLBWebsterCollectorModule = Object.freeze({
       const startWebsterObserver=()=>{
         if (document.documentElement) websterBodyObserver.observe(document.documentElement,{childList:true});
       };
-      if (document.readyState==="loading") document.addEventListener("DOMContentLoaded",startWebsterObserver,{once:true});
+      if (document.readyState==="loading") addStartupListener("DOMContentLoaded", startWebsterObserver);
       else startWebsterObserver();
     }
     
