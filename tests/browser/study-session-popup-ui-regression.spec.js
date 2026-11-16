@@ -120,6 +120,69 @@ test('Study Sessions popup starts recording, saves a note, and stops without los
   await page.close();
 });
 
+test('Study note autosaves from a cleared recording cannot write into a restarted topic', async ({
+  extensionStorage, extensionWorker
+}) => {
+  await extensionStorage.clear();
+  const outcome = await extensionWorker.evaluate(async () => {
+    const topic = 'Cross Popup Note Race';
+    const oldSessionId = 'cleared-study-session-before-restart';
+    await chrome.storage.local.set({
+      masterEnabled:true,
+      studyAutoStopMinutes:0,
+      studyTopics:[topic],
+      studySelectedTopic:topic,
+      currentStudySessionId:oldSessionId,
+      studyLastActivityAt:Date.now(),
+      studySessions:[{
+        id:oldSessionId,
+        title:topic,
+        date:'2026-11-16',
+        dateLabel:'16 November 2026',
+        refs:[],strongs:[],searchTerms:[],notes:['Original Note']
+      }]
+    });
+
+    const cleared = await clearStudyTopic(topic);
+    if (!cleared.ok) throw new Error('Could not clear the original Study topic');
+
+    const restarted = await startStudyTopicFromPopup(topic);
+    if (!restarted.ok) throw new Error('Could not restart the cleared Study topic');
+    const afterRestart = await chrome.storage.local.get({
+      currentStudySessionId:null,
+      studySessions:[]
+    });
+    const newSessionId = afterRestart.currentStudySessionId;
+    if (!newSessionId || newSessionId === oldSessionId) {
+      throw new Error('Restart did not create a distinct Study session');
+    }
+
+    // Simulate delayed blur/autosave messages from another popup whose UI
+    // still refers to the session that was deleted before this restart.
+    const staleAdd = await addStudyNoteToTopic(topic, 'Stale note from old popup', oldSessionId);
+    const staleUpdate = await updateStudyNoteToTopic(topic, 'Original Note', 'Stale edit from old popup', oldSessionId);
+    const afterStaleWrites = await chrome.storage.local.get({studySessions:[]});
+    const currentAfterStaleWrites = afterStaleWrites.studySessions.find(session => session.id === newSessionId);
+
+    const validAdd = await addStudyNoteToTopic(topic, 'Current session note', newSessionId);
+    const finalState = await chrome.storage.local.get({studySessions:[]});
+    const currentFinal = finalState.studySessions.find(session => session.id === newSessionId);
+    return {
+      staleAdd,
+      staleUpdate,
+      currentAfterStaleWrites,
+      validAdd,
+      currentFinal
+    };
+  });
+
+  expect(outcome.staleAdd).toMatchObject({ok:false, reason:'stale-session'});
+  expect(outcome.staleUpdate).toMatchObject({ok:false, reason:'stale-session'});
+  expect(outcome.currentAfterStaleWrites.notes).toEqual([]);
+  expect(outcome.validAdd).toMatchObject({ok:true, topic:'Cross Popup Note Race'});
+  expect(outcome.currentFinal.notes).toEqual(['Current session note']);
+});
+
 test('Study Sessions popup pauses and restarts the selected recording without creating duplicate history', async ({
   context, extensionId, extensionStorage, extensionWorker
 }) => {
