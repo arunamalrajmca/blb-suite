@@ -84,3 +84,88 @@ test('BLB copy formatting resumes on the same page after the global master switc
   expect(copiedAfterReenable.html).toContain('href="https://www.blueletterbible.org/kjv/John/3/16/"');
   expect(copiedAfterReenable.html).toContain('href="https://www.blueletterbible.org/kjv/Romans/8/1-3/"');
 });
+
+
+test('BLB clipboard hyperlinker cancels delayed registration and restores its wrapper on reinjection', async ({
+  page, context, extensionStorage, extensionWorker
+}) => {
+  await openBlbFixture({ page, context, extensionStorage }, true);
+  const tabId = await extensionWorker.evaluate(async () =>
+    (await chrome.tabs.query({ url: 'https://www.blueletterbible.org/kjv/jhn/3/16/' }))[0]?.id
+  );
+  expect(Number.isInteger(tabId)).toBe(true);
+
+  const result = await extensionWorker.evaluate(async id => {
+    const [injected] = await chrome.scripting.executeScript({
+      target: { tabId: id },
+      world: 'ISOLATED',
+      func: async () => {
+        const clipboard = navigator.clipboard;
+        const originalWriteText = clipboard.writeText;
+        const originalAdd = document.addEventListener.bind(document);
+        const originalRemove = document.removeEventListener.bind(document);
+        const trackedCopyListeners = new Set();
+        document.addEventListener = (type, listener, options) => {
+          if (type === 'copy' && listener?.name === 'copyHandler') {
+            trackedCopyListeners.add(listener);
+            options?.signal?.addEventListener('abort', () => trackedCopyListeners.delete(listener), { once: true });
+          }
+          return originalAdd(type, listener, options);
+        };
+        document.removeEventListener = (type, listener, options) => {
+          if (type === 'copy') trackedCopyListeners.delete(listener);
+          return originalRemove(type, listener, options);
+        };
+
+        let resolveFirstSettings;
+        const pendingSettings = new Promise(resolve => { resolveFirstSettings = resolve; });
+        const dependencies = {
+          BLBShared: {
+            hostnames: { blb: 'blueletterbible.org' },
+            urls: { blbHome: 'https://www.blueletterbible.org/' }
+          },
+          isSuiteEnabledNow: () => true,
+          isSuiteEnabled: async () => true,
+          suiteSettingsReadyPromise: pendingSettings
+        };
+
+        const first = globalThis.BLBAutoHyperlinkerModule.initialize(dependencies);
+        first.cleanup();
+        resolveFirstSettings(true);
+        await Promise.resolve();
+        await Promise.resolve();
+        const delayedRegistrationCount = trackedCopyListeners.size;
+        const restoredAfterFirstCleanup = clipboard.writeText === originalWriteText;
+
+        const second = globalThis.BLBAutoHyperlinkerModule.initialize({
+          ...dependencies,
+          suiteSettingsReadyPromise: Promise.resolve(true)
+        });
+        await Promise.resolve();
+        await Promise.resolve();
+        const activeRegistrationCount = trackedCopyListeners.size;
+        const wrapperInstalled = clipboard.writeText !== originalWriteText;
+        second.cleanup();
+
+        Object.defineProperty(document, 'addEventListener', { configurable: true, value: originalAdd });
+        Object.defineProperty(document, 'removeEventListener', { configurable: true, value: originalRemove });
+        return {
+          delayedRegistrationCount,
+          restoredAfterFirstCleanup,
+          activeRegistrationCount,
+          wrapperInstalled,
+          restoredAfterSecondCleanup: clipboard.writeText === originalWriteText
+        };
+      }
+    });
+    return injected.result;
+  }, tabId);
+
+  expect(result).toEqual({
+    delayedRegistrationCount: 0,
+    restoredAfterFirstCleanup: true,
+    activeRegistrationCount: 1,
+    wrapperInstalled: true,
+    restoredAfterSecondCleanup: true
+  });
+});
