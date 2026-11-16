@@ -1198,8 +1198,23 @@ chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === 'blbSuiteStudyUiChanged') refreshStudyState();
 });
 
+let popupSettingsRefreshGeneration = 0;
+async function refreshPopupSettingsFromStorage() {
+  const generation = ++popupSettingsRefreshGeneration;
+  try {
+    const state = await getState();
+    if (generation === popupSettingsRefreshGeneration) render(state);
+  } catch (_) {}
+}
+
+chrome.permissions.onAdded.addListener(() => { void refreshPopupSettingsFromStorage(); });
+chrome.permissions.onRemoved.addListener(() => { void refreshPopupSettingsFromStorage(); });
+
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName !== 'local') return;
+  if (changes.masterEnabled || changes.redirectEnabled || changes.pageSelectionButtonSites || changes.doubleClickBlbSites) {
+    void refreshPopupSettingsFromStorage();
+  }
   if (changes[SELECTED_TOPIC_STORAGE_KEY]) {
     clearActionStatus();
     topicInput.value = titleCase(changes[SELECTED_TOPIC_STORAGE_KEY].newValue || '');

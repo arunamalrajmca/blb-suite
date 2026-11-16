@@ -465,6 +465,7 @@ test('a stale redirect permission result in another popup cannot overwrite the l
 
   await secondPopup.evaluate(() => window.__permissionResolvers[0](true));
   await newerOn;
+  await expect(page.locator('#redirectEnabled')).toBeChecked();
   await page.evaluate(() => window.__permissionResolvers[0](false));
   await olderOn;
 
