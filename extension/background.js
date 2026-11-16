@@ -3071,7 +3071,7 @@ async function ensureContentScriptInTab(tabId) {
       if (files.includes('content.js')) {
         try {
           await chrome.tabs.sendMessage(tabId, {type:'blbSuiteHostPermissionRestored'}).catch(() => {});
-            const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
+          const response = await chrome.tabs.sendMessage(tabId, {type:'blbSuiteRefreshSiteFeatures'});
           if (response?.ok === true) {
             if (files.includes('redirect-scripttagger.js')) {
               try {
