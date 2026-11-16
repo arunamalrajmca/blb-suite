@@ -836,8 +836,12 @@ async function saveStudyNote() {
   const note = noteInput.value.trim();
   if (!note) return;
   const topic = selectedTopic();
+  // Bind this autosave to the recording that was active when the popup loaded
+  // its Study state. A delayed request must not write into a later recording
+  // that happens to reuse the same topic name after a clear/restart.
+  const sessionId = studyState.currentSession?.id || '';
   if (editingNoteOriginal) {
-    const response = await chrome.runtime.sendMessage({type:'blbSuiteUpdateStudyNoteToTopic', topic, originalNote:editingNoteOriginal, note});
+    const response = await chrome.runtime.sendMessage({type:'blbSuiteUpdateStudyNoteToTopic', topic, sessionId, originalNote:editingNoteOriginal, note});
     if (!response?.ok) {
       if (response?.reason === 'not-recording') setStatus('Start recording this topic before updating notes.');
       else if (response?.reason === 'note-not-found') setStatus('Original note was not found.');
@@ -849,7 +853,7 @@ async function saveStudyNote() {
     await refreshStudyState();
     return;
   }
-  const response = await chrome.runtime.sendMessage({type:'blbSuiteAddStudyNoteToTopic', topic, note});
+  const response = await chrome.runtime.sendMessage({type:'blbSuiteAddStudyNoteToTopic', topic, sessionId, note});
   if (!response?.ok) {
     if (response?.reason === 'not-recording') setStatus('Start recording this topic before saving notes.');
     return;
