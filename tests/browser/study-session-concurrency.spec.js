@@ -25,7 +25,7 @@ test('concurrent Study captures preserve every reference, Strong\'s entry, and s
   expect(result.outcomes).toEqual([true, true, true, true, 1, 1]);
   expect(result.session.strongs).toEqual(['G26', 'H430']);
   expect(result.session.searchTerms).toEqual(['Grace', 'Mercy']);
-  expect(result.session.refs.map(ref => ref.text).sort()).toEqual(['John 3:16', 'Romans 8:28']);
+  expect(result.session.refs.map(ref => ref.text).sort()).toEqual(['john 3:16', 'romans 8:28']);
 });
 
 test('concurrent Study notes and capture operations do not overwrite one another', async ({
