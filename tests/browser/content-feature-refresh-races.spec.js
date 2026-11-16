@@ -480,14 +480,16 @@ test('a newer site-feature enable is retried when an older tab activation is alr
   const previous = await extensionWorker.evaluate(() => chrome.storage.local.get({
     masterEnabled:true,
     pageSelectionButtonSites:{},
-    doubleClickBlbSites:{}
+    doubleClickBlbSites:{},
+    redirectEnabled:false
   }));
   let instrumentationInstalled = false;
   try {
     await extensionStorage.set({
       masterEnabled:true,
       pageSelectionButtonSites:{'example.com':false},
-      doubleClickBlbSites:{'example.com':false}
+      doubleClickBlbSites:{'example.com':false},
+      redirectEnabled:false
     });
     // A previous test may have left a persistent optional-host registration.
     // Remove it so this fixture genuinely starts without a resident content script.
