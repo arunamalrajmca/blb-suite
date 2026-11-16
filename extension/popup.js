@@ -150,6 +150,8 @@ let masterToggleGeneration = 0;
 
 async function setMaster(on) {
   const generation = ++masterToggleGeneration;
+  const topicEditGenerationAtStart = topicInputEditGeneration;
+  const noteEditGenerationAtStart = noteInputEditGeneration;
   // The service worker serializes global-gate changes across popup instances.
   // It stops Study recording before committing OFF, preventing a stale OFF
   // request from racing a newer ON request issued by another popup.
@@ -168,13 +170,10 @@ async function setMaster(on) {
     setStatus('Unable to stop recording. The Suite remains ON. Please try again.');
     return;
   }
-  topicInput.value = '';
-  noteInput.value = '';
+  clearStudyPopupInputsIfUnchanged(topicEditGenerationAtStart, noteEditGenerationAtStart);
   setStatus('Select a topic and start recording');
   render(await getState());
   await refreshStudyState();
-  topicInput.value = '';
-  noteInput.value = '';
   updateStudyButtons();
 }async function pinSiteFeatureChoice(feature) {
   // Hand the preference to the service worker before opening Chrome's host
@@ -428,6 +427,18 @@ function formatDisplayDate(iso) {
   return m ? `${m[2]}/${m[3]}/${m[1]}` : '';
 }
 
+
+function clearStudyPopupInputsIfUnchanged(topicEditGenerationAtStart, noteEditGenerationAtStart) {
+  if (topicInputEditGeneration === topicEditGenerationAtStart) {
+    topicInput.value = '';
+    topicInputEditGeneration++;
+    topicInputEdited = false;
+  }
+  if (noteInputEditGeneration === noteEditGenerationAtStart) {
+    noteInput.value = '';
+    editingNoteOriginal = '';
+  }
+}
 
 let topicHighlightIndex = -1;
 
@@ -821,12 +832,12 @@ async function startTopic() {
 
 async function stopTopic() {
   if (!studyState.recording) return;
+  const topicEditGenerationAtStart = topicInputEditGeneration;
+  const noteEditGenerationAtStart = noteInputEditGeneration;
   const lastRecordingTopic = String(studyState.recordingTopic || selectedTopic() || '').trim();
   const response = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
   if (!response?.ok) { setStatus('Unable to stop recording.'); return; }
-  topicInput.value = '';
-  noteInput.value = '';
-  editingNoteOriginal = '';
+  clearStudyPopupInputsIfUnchanged(topicEditGenerationAtStart, noteEditGenerationAtStart);
   await syncSelectedTopic('');
   setStatus((lastRecordingTopic ? `Last Recording Stopped: ${lastRecordingTopic}` : 'Last Recording Stopped.') + (response.alarmCleanupPending ? ' Auto-stop alarm cleanup will retry on its next tick.' : ''));
   await refreshStudyState();
@@ -925,6 +936,8 @@ async function clearSelectedTopic() {
   const topic = selectedTopic();
   if (!topic || !findTopicKey(topic)) { setStatus('Select a saved topic first.'); return; }
   const isRecordingSelected = !!studyState.recording && String(studyState.recordingTopic || '').toLowerCase() === topic.toLowerCase();
+  const topicEditGenerationAtStart = topicInputEditGeneration;
+  const noteEditGenerationAtStart = noteInputEditGeneration;
   if (isRecordingSelected) {
     if (!confirm(`“${topic}” is recording. Export a Study backup to keep its notes and references. Stop and delete?`)) return;
     const stopResponse = await chrome.runtime.sendMessage({type:'blbSuiteStopStudyRecording'});
@@ -934,8 +947,7 @@ async function clearSelectedTopic() {
   }
   const response = await chrome.runtime.sendMessage({type:'blbSuiteClearStudyTopic', topic});
   if (!response?.ok) { setStatus('Unable to clear the selected topic.'); return; }
-  topicInput.value = '';
-  noteInput.value = '';
+  clearStudyPopupInputsIfUnchanged(topicEditGenerationAtStart, noteEditGenerationAtStart);
   await syncSelectedTopic('');
   setStatus(`Cleared: ${response.topic || topic}${response.alarmCleanupPending ? '. Auto-stop alarm cleanup will retry on its next tick' : ''}`);
   await refreshStudyState();
@@ -945,10 +957,11 @@ async function clearAllTopics() {
   closeClearMenu();
   closeTopicMenu();
   if (!confirm('Delete all Study data? Export a backup first to keep a copy. Continue?')) return;
+  const topicEditGenerationAtStart = topicInputEditGeneration;
+  const noteEditGenerationAtStart = noteInputEditGeneration;
   const response = await chrome.runtime.sendMessage({type:'blbSuiteClearStudy'});
   if (!response?.ok) { setStatus('Unable to clear Study Sessions.'); return; }
-  topicInput.value = '';
-  noteInput.value = '';
+  clearStudyPopupInputsIfUnchanged(topicEditGenerationAtStart, noteEditGenerationAtStart);
   await syncSelectedTopic('');
   setStatus(response.alarmCleanupPending ? 'All topics cleared. Auto-stop alarm cleanup will retry on its next tick.' : 'All topics cleared.');
   await refreshStudyState();
@@ -1094,6 +1107,8 @@ async function openHistorySearchTerms() {
 }
 
 async function clearTopicSelectionInput() {
+  const topicEditGenerationAtStart = topicInputEditGeneration;
+  const noteEditGenerationAtStart = noteInputEditGeneration;
   const wasRecording = !!studyState.recording;
   const topicToRestore = selectedTopic() || String(studyState.recordingTopic || '').trim();
   if (wasRecording) {
@@ -1105,13 +1120,17 @@ async function clearTopicSelectionInput() {
       return;
     }
   }
-  topicInput.value = '';
-  editingNoteOriginal = '';
+  if (topicInputEditGeneration === topicEditGenerationAtStart) {
+    topicInput.value = '';
+    topicInputEditGeneration++;
+    topicInputEdited = false;
+  }
+  if (noteInputEditGeneration === noteEditGenerationAtStart) editingNoteOriginal = '';
   if (notesHelp) notesHelp.textContent = 'Auto-saves on leaving the box';
   await syncSelectedTopic('');
   closeTopicMenu();
   if (wasRecording) {
-    noteInput.value = '';
+    if (noteInputEditGeneration === noteEditGenerationAtStart) noteInput.value = '';
     setStatus('Select Start to record this topic.');
     await refreshStudyState();
   } else {
