@@ -673,15 +673,22 @@ test('Study Sessions retries clearing an orphaned auto-stop alarm after recordin
   await extensionWorker.evaluate(async () => {
     // This is the persisted state left behind when stopping a recording
     // succeeds but Chrome rejects the alarm-clear operation.
+    const refreshGenerationBefore = studyAutoStopAlarmRefreshGeneration;
     await chrome.storage.local.set({
       masterEnabled:true,
       studyAutoStopMinutes:15,
       currentStudySessionId:null,
       studyLastActivityAt:0
     });
-    // Let the storage.onChanged alarm refresh caused by the stopped state
-    // finish before planting the deliberately orphaned alarm.
-    await new Promise(resolve => setTimeout(resolve, 100));
+    // Wait for the actual storage-change refresh, rather than guessing how
+    // long its asynchronous alarm cleanup will take.
+    for (let attempt = 0; attempt < 100 && studyAutoStopAlarmRefreshGeneration === refreshGenerationBefore; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 10));
+    }
+    if (studyAutoStopAlarmRefreshGeneration === refreshGenerationBefore) {
+      throw new Error('Study auto-stop alarm refresh did not observe the stopped recording state');
+    }
+    await studyAutoStopAlarmRefreshPromise;
     await chrome.alarms.create('blb-study-auto-stop', {delayInMinutes:1, periodInMinutes:1});
   });
 
